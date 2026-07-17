@@ -104,6 +104,64 @@ func TestProjectFindsUsageAcrossImportedAlias(t *testing.T) {
 	}
 }
 
+func TestProjectReferenceIndexRebuildsAfterUpdate(t *testing.T) {
+	project, fixture := openAliasedProject(t)
+	usePath := filepath.Join(fixture, "use.ts")
+
+	resolveOriginal := func(needle string) typefacts.SymbolID {
+		t.Helper()
+		location := locationOf(t, usePath, needle)
+		location.EndByte = location.StartByte + len("localCount")
+		alias, err := project.SymbolAt(context.Background(), location)
+		if err != nil {
+			t.Fatal(err)
+		}
+		original, err := project.ResolveAlias(context.Background(), alias)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return original
+	}
+
+	initial := resolveOriginal("localCount()")
+	initialReferences, err := project.References(context.Background(), initial)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(initialReferences) != 1 {
+		t.Fatalf("initial references = %#v, want one", initialReferences)
+	}
+
+	updated := "import { count as localCount } from './source';\nlocalCount();\nlocalCount();\n"
+	if _, err := project.Update(context.Background(), []typefacts.FileChange{{
+		Path: usePath, Version: 1, Source: []byte(updated),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	updatedStart := strings.Index(updated, "localCount();")
+	updatedAlias, err := project.SymbolAt(context.Background(), typefacts.Location{
+		Path: usePath, StartByte: updatedStart, EndByte: updatedStart + len("localCount"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedOriginal, err := project.ResolveAlias(context.Background(), updatedAlias)
+	if err != nil {
+		t.Fatal(err)
+	}
+	updatedReferences, err := project.References(context.Background(), updatedOriginal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(updatedReferences) != 2 {
+		t.Fatalf("updated references = %#v, want two", updatedReferences)
+	}
+	if updatedReferences[0].StartByte >= updatedReferences[1].StartByte {
+		t.Fatalf("updated references are not source ordered: %#v", updatedReferences)
+	}
+}
+
 func TestProjectResolvesCallTargetAndReturnType(t *testing.T) {
 	project, fixture := openAliasedProject(t)
 
