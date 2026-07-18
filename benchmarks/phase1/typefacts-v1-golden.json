@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "projectId": "golden-project",
+  "generation": 7,
+  "round": 1,
+  "table": {
+    "schema": 1,
+    "generation": 7,
+    "projectId": "golden-project",
+    "sources": [
+      {
+        "Path": "/workspace/App.tsx",
+        "Source": "ZXhwb3J0IGNvbnN0IHZpZXcgPSA8ZGl2IC8+Ow=="
+      }
+    ],
+    "entities": [],
+    "symbols": [],
+    "files": []
+  }
+}

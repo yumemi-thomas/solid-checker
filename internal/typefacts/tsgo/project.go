@@ -4,12 +4,16 @@ package tsgo
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/microsoft/typescript-go/shim/ast"
@@ -44,7 +48,52 @@ type project struct {
 	symbolsByID map[typefacts.SymbolID]*ast.Symbol
 	nextType    uint64
 	idsByType   map[*checker.Type]typefacts.TypeID
-	references  map[*ast.Symbol][]typefacts.Location
+	// references is the current generation's reference index, keyed by
+	// durable SymbolID; nil until the first References query of a
+	// generation. It is a merged view of referenceFiles, so rebuilding it
+	// after an update only re-scans files without a retained contribution.
+	references map[typefacts.SymbolID][]typefacts.Location
+	// referenceRefreshPaths are affected source files removed from an
+	// already-materialized merged index. They are rescanned lazily at the
+	// old reference-closure point, after semantic entity resolution, so
+	// generation-scoped symbol counter minting keeps its established order.
+	referenceRefreshPaths map[string]struct{}
+	// referenceChangedSymbols is the exact union of canonical symbols
+	// removed from and added to refreshed per-file contributions. The
+	// companion flag distinguishes a known-empty delta from an unavailable
+	// delta after a first build or broad invalidation.
+	referenceChangedSymbols map[typefacts.SymbolID]struct{}
+	referenceDeltaExact     bool
+	// referenceFiles carries per-file reference contributions across
+	// generations. An entry is retained only while every SymbolID it
+	// contains is durable, so its locations stay attributable after an
+	// update. Update drops the affected set on the incremental path and
+	// clears wholesale on full rebuilds, mirroring sourceFactsMemo.
+	referenceFiles map[string]*fileReferences
+	// sourceFactsMemo carries per-file Source* facts across generations. An
+	// entry is stored only when every symbol identity it contains is durable,
+	// so its facts stay resolvable after an update. Update drops the affected
+	// set on the incremental path and clears the memo on full rebuilds.
+	sourceFactsMemo map[string]*fileFactsMemo
+	// durableRefs maps a durable SymbolID back to its declaration so the
+	// symbol can be re-resolved lazily in a later generation.
+	durableRefs map[typefacts.SymbolID]durableSymbolRef
+	// filesByName is a generation-scoped index of program files keyed by
+	// their cleaned file name. Program.GetSourceFile does not round-trip
+	// virtual bundled-lib names (bundled:/… is resolved against the working
+	// directory), so durable re-resolution of lib-declared symbols falls
+	// back to this index. Nil until the first fallback of a generation.
+	filesByName map[string]*ast.SourceFile
+	// declarationShapes caches diagnostic-free exported contracts for the
+	// accepted program generation. Incremental updates need only emit the
+	// candidate generation's shape; semantically affected files are evicted
+	// and broad rebuilds clear the cache.
+	declarationShapes map[string]declarationShape
+	// exportedIdentities assigns module-visible target symbols a
+	// span-insensitive identity derived from declaring path and symbol name.
+	// Module-scope export uniqueness makes this deterministic across process
+	// restart while nested/non-exported symbols keep span-based identities.
+	exportedIdentities map[*ast.Symbol]preservedExportIdentity
 }
 
 // OpenProject loads and binds the TypeScript project at configPath.
@@ -59,18 +108,53 @@ func OpenProject(ctx context.Context, configPath string) (typefacts.Project, err
 		return nil, err
 	}
 
-	return &project{
-		configPath:  absConfigPath,
-		fs:          fs,
-		versions:    make(map[string]uint64),
-		program:     program,
-		checker:     typeChecker,
-		release:     release,
-		generation:  1,
-		idsBySymbol: make(map[*ast.Symbol]typefacts.SymbolID),
-		symbolsByID: make(map[typefacts.SymbolID]*ast.Symbol),
-		idsByType:   make(map[*checker.Type]typefacts.TypeID),
-	}, nil
+	opened := &project{
+		configPath:      absConfigPath,
+		fs:              fs,
+		versions:        make(map[string]uint64),
+		program:         program,
+		checker:         typeChecker,
+		release:         release,
+		generation:      1,
+		idsBySymbol:     make(map[*ast.Symbol]typefacts.SymbolID),
+		symbolsByID:     make(map[typefacts.SymbolID]*ast.Symbol),
+		idsByType:       make(map[*checker.Type]typefacts.TypeID),
+		sourceFactsMemo: make(map[string]*fileFactsMemo),
+		durableRefs:     make(map[typefacts.SymbolID]durableSymbolRef),
+	}
+	opened.exportedIdentities = collectExportedIdentities(program, typeChecker)
+	return opened, nil
+}
+
+// singleCheckerPool serves this adapter's one retained checker. UpdateProgram
+// inherits it through program options, so incremental updates construct one
+// checker instead of the default pool's four.
+type singleCheckerPool struct {
+	program *compiler.Program
+	once    sync.Once
+	checker *checker.Checker
+	lock    *sync.Mutex
+}
+
+func newSingleCheckerPool(program *compiler.Program) compiler.CheckerPool {
+	return &singleCheckerPool{program: program}
+}
+
+func (p *singleCheckerPool) GetChecker(ctx context.Context, file *ast.SourceFile) (*checker.Checker, func()) {
+	p.once.Do(func() {
+		p.checker, p.lock = checker.NewChecker(p.program, nil)
+	})
+	if file != nil {
+		// Program.Emit asks for a file-affine checker and its declaration
+		// resolver takes the checker's internal mutex itself. Returning the
+		// lifetime lease here would deadlock on that reentrant lock. All
+		// adapter entry points are already serialized by project.mu, and a
+		// targeted emit processes one source file, so match the compiler's
+		// built-in pool by making file-affine access non-exclusive.
+		return p.checker, func() {}
+	}
+	p.lock.Lock()
+	return p.checker, sync.OnceFunc(p.lock.Unlock)
 }
 
 func buildProgram(ctx context.Context, configPath string, fs vfs.FS) (*compiler.Program, *checker.Checker, func(), error) {
@@ -88,8 +172,13 @@ func buildProgram(ctx context.Context, configPath string, fs vfs.FS) (*compiler.
 	}
 
 	program := compiler.NewProgram(compiler.ProgramOptions{
-		Config:                      config,
-		SingleThreaded:              core.TSTrue,
+		Config: config,
+		// Parse and bind in parallel, but keep exactly one checker: this
+		// adapter acquires a single checker for the project's lifetime, and
+		// the default non-single-threaded pool constructs four checkers on
+		// every program update, tripling editor-path allocation.
+		SingleThreaded:              core.TSFalse,
+		CreateCheckerPool:           newSingleCheckerPool,
 		Host:                        host,
 		UseSourceOfProjectReference: true,
 	})
@@ -151,6 +240,7 @@ func (p *project) SourceFiles(ctx context.Context) ([]typefacts.SourceFile, erro
 }
 
 func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (typefacts.AffectedSet, error) {
+	updateStarted := time.Now()
 	if err := ctx.Err(); err != nil {
 		return typefacts.AffectedSet{}, err
 	}
@@ -160,6 +250,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 		return typefacts.AffectedSet{}, ErrClosed
 	}
 
+	stageStarted := time.Now()
 	candidateFS := p.fs.clone()
 	candidateVersions := make(map[string]uint64, len(p.versions)+len(changes))
 	for path, version := range p.versions {
@@ -192,12 +283,35 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	if len(changedPaths) == 0 {
 		return typefacts.AffectedSet{Files: []string{}}, nil
 	}
+	overlayDuration := time.Since(stageStarted)
 
 	oldProgram := p.program
+	var oldShape declarationShape
+	var oldShapeOK bool
+	oldShapeCached := false
+	stageStarted = time.Now()
+	if incremental && incrementalPath != "" {
+		oldShape, oldShapeCached = p.declarationShapes[incrementalPath]
+		oldShapeOK = oldShapeCached
+		if !oldShapeCached {
+			oldShape, p.checker, p.release, oldShapeOK = declarationShapeFor(
+				ctx,
+				oldProgram,
+				p.checker,
+				p.release,
+				incrementalPath,
+			)
+		}
+		if err := ctx.Err(); err != nil {
+			return typefacts.AffectedSet{}, err
+		}
+	}
+	oldShapeDuration := time.Since(stageStarted)
 	var program *compiler.Program
 	var typeChecker *checker.Checker
 	var release func()
 	var err error
+	stageStarted = time.Now()
 	if incremental && incrementalPath != "" {
 		program, typeChecker, release, err = updateProgram(ctx, oldProgram, p.configPath, candidateFS, incrementalPath)
 	} else {
@@ -206,6 +320,32 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	if err != nil {
 		return typefacts.AffectedSet{}, err
 	}
+	programDuration := time.Since(stageStarted)
+	semanticCutoff := false
+	var newShape declarationShape
+	var newShapeOK bool
+	var currentExports map[*ast.Symbol]preservedExportIdentity
+	stageStarted = time.Now()
+	if oldShapeOK {
+		newShape, typeChecker, release, newShapeOK = declarationShapeFor(
+			ctx,
+			program,
+			typeChecker,
+			release,
+			incrementalPath,
+		)
+		if newShapeOK {
+			currentExports = declarationExportIdentities(newShape)
+			_, semanticCutoff = preserveExportIdentities(oldShape, newShape)
+		}
+		if err := ctx.Err(); err != nil {
+			if release != nil {
+				release()
+			}
+			return typefacts.AffectedSet{}, err
+		}
+	}
+	newShapeDuration := time.Since(stageStarted)
 	if p.release != nil {
 		p.release()
 	}
@@ -215,16 +355,363 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.fs = candidateFS
 	p.versions = candidateVersions
 	p.generation++
+	if incremental && incrementalPath != "" && newShapeOK {
+		for symbol, identity := range p.exportedIdentities {
+			if identity.ref.path == incrementalPath {
+				delete(p.exportedIdentities, symbol)
+			}
+		}
+		for symbol, identity := range currentExports {
+			p.exportedIdentities[symbol] = identity
+		}
+	} else {
+		p.exportedIdentities = collectExportedIdentities(program, typeChecker)
+	}
 	clear(p.idsBySymbol)
 	clear(p.symbolsByID)
 	clear(p.idsByType)
-	p.references = nil
+	for symbol, preserved := range currentExports {
+		p.idsBySymbol[symbol] = preserved.id
+		p.symbolsByID[preserved.id] = symbol
+		p.durableRefs[preserved.id] = preserved.ref
+	}
+	p.filesByName = nil
 	p.nextSymbol = 0
 	p.nextType = 0
 
-	affected := affectedFiles(changedPaths, oldProgram, program)
+	stageStarted = time.Now()
+	var affected []string
+	if semanticCutoff {
+		// A diagnostic-free declaration emit proves that the module's
+		// exported TypeScript shape is unchanged, and every external export
+		// slot was paired bijectively with its prior canonical ID. Retained
+		// importer facts can therefore keep those IDs even when declaration
+		// spans inside the edited module moved.
+		affected = append([]string(nil), changedPaths...)
+	} else {
+		affected = affectedFiles(changedPaths, oldProgram, program)
+	}
 	sort.Strings(affected)
+	affectedDuration := time.Since(stageStarted)
+	stageStarted = time.Now()
+	if incremental && incrementalPath != "" {
+		// Source facts and reference contributions of files outside the
+		// affected set survive the generation: their text is unchanged and
+		// every durable identity they reference declares in an unchanged
+		// file (a changed declaring file would have put the referencing
+		// file in the affected set). Files that left the program are
+		// evicted now, not when they are next queried, so an entry cannot
+		// go stale while its file is outside the program and be reused if
+		// the file later re-enters.
+		dropped := make(map[string]struct{}, len(affected))
+		for _, path := range affected {
+			dropped[path] = struct{}{}
+		}
+		retained := func(path string) bool {
+			if _, hit := dropped[path]; hit {
+				return false
+			}
+			return program.GetSourceFile(path) != nil
+		}
+		for key, memo := range p.sourceFactsMemo {
+			if !retained(memo.absPath) {
+				delete(p.sourceFactsMemo, key)
+			}
+		}
+		// When the merged index has already been materialized and the
+		// affected set is small, update it from the same per-file fragments
+		// instead of concatenating all unchanged files again. Large affected
+		// sets retain the simpler full-index rebuild path.
+		// A second update before the pending fragments are rescanned cannot
+		// safely compose an exact symbol delta. Fall back instead of silently
+		// dropping the earlier generation's refresh paths.
+		incrementalReferences := p.references != nil && len(affected) <= 64 && len(p.referenceRefreshPaths) == 0
+		refreshReferencePaths := make(map[string]struct{}, len(affected))
+		changedReferenceSymbols := make(map[typefacts.SymbolID]struct{})
+		for path, entry := range p.referenceFiles {
+			// A non-durable entry holds generation-scoped counter IDs no
+			// later generation can resolve; fail closed and re-scan.
+			if !retained(path) || !entry.durable {
+				if incrementalReferences {
+					for id := range entry.refs {
+						changedReferenceSymbols[id] = struct{}{}
+						locations := p.references[id]
+						kept := locations[:0]
+						for _, location := range locations {
+							if filepath.Clean(location.Path) != path {
+								kept = append(kept, location)
+							}
+						}
+						if len(kept) == 0 {
+							delete(p.references, id)
+						} else {
+							p.references[id] = kept
+						}
+					}
+					if sourceFile := program.GetSourceFile(path); sourceFile != nil && !sourceFile.IsDeclarationFile {
+						refreshReferencePaths[path] = struct{}{}
+					}
+				}
+				delete(p.referenceFiles, path)
+			}
+		}
+		if incrementalReferences {
+			p.referenceRefreshPaths = refreshReferencePaths
+			p.referenceChangedSymbols = changedReferenceSymbols
+			p.referenceDeltaExact = true
+		} else {
+			p.references = nil
+			p.referenceRefreshPaths = nil
+			p.referenceChangedSymbols = nil
+			p.referenceDeltaExact = false
+		}
+	} else {
+		// Full rebuilds (deletes, tsconfig changes, multi-file updates) can
+		// change resolution outside the module graph; fail closed.
+		clear(p.sourceFactsMemo)
+		p.references = nil
+		p.referenceRefreshPaths = nil
+		p.referenceChangedSymbols = nil
+		p.referenceDeltaExact = false
+		p.referenceFiles = nil
+	}
+	if p.declarationShapes == nil {
+		p.declarationShapes = make(map[string]declarationShape)
+	}
+	if incremental && incrementalPath != "" {
+		for _, path := range affected {
+			delete(p.declarationShapes, filepath.Clean(path))
+		}
+		if newShapeOK {
+			p.declarationShapes[incrementalPath] = newShape
+		}
+	} else {
+		clear(p.declarationShapes)
+	}
+	invalidationDuration := time.Since(stageStarted)
+	if os.Getenv("SOLID_TYPEFACTS_TIMINGS") != "" {
+		fmt.Fprintf(os.Stderr,
+			"{\"typefactsUpdate\":{\"totalNs\":%d,\"overlayNs\":%d,\"oldShapeNs\":%d,\"oldShapeCached\":%t,\"programNs\":%d,\"newShapeNs\":%d,\"affectedNs\":%d,\"invalidationNs\":%d}}\n",
+			time.Since(updateStarted), overlayDuration, oldShapeDuration, oldShapeCached,
+			programDuration, newShapeDuration, affectedDuration, invalidationDuration)
+	}
 	return typefacts.AffectedSet{Files: affected}, nil
+}
+
+type declarationShape struct {
+	signature [sha256.Size]byte
+	exports   []declarationExport
+	imports   []string
+}
+
+type declarationExport struct {
+	name   string
+	id     typefacts.SymbolID
+	ref    durableSymbolRef
+	symbol *ast.Symbol
+}
+
+type preservedExportIdentity struct {
+	id  typefacts.SymbolID
+	ref durableSymbolRef
+}
+
+func declarationExportIdentities(shape declarationShape) map[*ast.Symbol]preservedExportIdentity {
+	identities := make(map[*ast.Symbol]preservedExportIdentity, len(shape.exports))
+	for _, exported := range shape.exports {
+		identities[exported.symbol] = preservedExportIdentity{id: exported.id, ref: exported.ref}
+	}
+	return identities
+}
+
+// preserveExportIdentities proves that two module generations expose the same
+// declaration contract and pairs their canonical target symbols by external
+// export name. Export IDs are derived from declaring module path and symbol
+// name, so an equal result is reproducible after process restart. Any
+// non-bijective pairing fails closed.
+func preserveExportIdentities(previous declarationShape, next declarationShape) (map[*ast.Symbol]preservedExportIdentity, bool) {
+	if previous.signature != next.signature ||
+		len(previous.exports) != len(next.exports) ||
+		len(previous.imports) != len(next.imports) {
+		return nil, false
+	}
+	for index := range previous.imports {
+		if previous.imports[index] != next.imports[index] {
+			return nil, false
+		}
+	}
+	preserved := make(map[*ast.Symbol]preservedExportIdentity, len(next.exports))
+	symbolByID := make(map[typefacts.SymbolID]*ast.Symbol, len(next.exports))
+	for index := range previous.exports {
+		oldExport := previous.exports[index]
+		newExport := next.exports[index]
+		if oldExport.name != newExport.name ||
+			oldExport.id != newExport.id ||
+			newExport.symbol == nil {
+			return nil, false
+		}
+		if existing, ok := preserved[newExport.symbol]; ok && existing.id != newExport.id {
+			return nil, false
+		}
+		if existing, ok := symbolByID[newExport.id]; ok && existing != newExport.symbol {
+			return nil, false
+		}
+		preserved[newExport.symbol] = preservedExportIdentity{id: newExport.id, ref: newExport.ref}
+		symbolByID[newExport.id] = newExport.symbol
+	}
+	return preserved, true
+}
+
+func declarationShapeFor(
+	ctx context.Context,
+	program *compiler.Program,
+	typeChecker *checker.Checker,
+	release func(),
+	path string,
+) (declarationShape, *checker.Checker, func(), bool) {
+	sourceFile := program.GetSourceFile(path)
+	if sourceFile == nil || !ast.IsExternalModule(sourceFile) || hasGlobalOrModuleAugmentation(sourceFile) {
+		return declarationShape{}, typeChecker, release, false
+	}
+
+	var declarationText string
+	var writeDiagnostics bool
+	if release != nil {
+		release()
+	}
+	result := program.Emit(ctx, compiler.EmitOptions{
+		TargetSourceFile: sourceFile,
+		EmitOnly:         compiler.EmitOnlyForcedDts,
+		WriteFile: func(_ string, text string, data *compiler.WriteFileData) error {
+			if data != nil && (len(data.Diagnostics) != 0 || data.SkippedDtsWrite) {
+				writeDiagnostics = true
+			}
+			if declarationText != "" {
+				// A source file should produce one declaration output. A
+				// second output is not part of this slice's proof.
+				writeDiagnostics = true
+				return nil
+			}
+			declarationText = text
+			return nil
+		},
+	})
+	// Emit acquires the program's checker from the same single-checker pool.
+	// The project mutex excludes external users while the lifetime lease is
+	// temporarily released. Reacquire even after cancellation so the
+	// retained project remains usable if this update is rejected.
+	typeChecker, release = program.GetTypeChecker(context.WithoutCancel(ctx))
+	if typeChecker == nil {
+		return declarationShape{}, nil, nil, false
+	}
+	if ctx.Err() != nil || result == nil || result.EmitSkipped ||
+		len(result.Diagnostics) != 0 || writeDiagnostics || declarationText == "" {
+		return declarationShape{}, typeChecker, release, false
+	}
+
+	exports, ok := exportedDurableSymbols(typeChecker, sourceFile)
+	if !ok {
+		return declarationShape{}, typeChecker, release, false
+	}
+	imports, ok := resolvedImportPaths(program, sourceFile)
+	if !ok {
+		return declarationShape{}, typeChecker, release, false
+	}
+	return declarationShape{
+		signature: sha256.Sum256([]byte(declarationText)),
+		exports:   exports,
+		imports:   imports,
+	}, typeChecker, release, true
+}
+
+func hasGlobalOrModuleAugmentation(sourceFile *ast.SourceFile) bool {
+	unsafe := false
+	var visit func(*ast.Node) bool
+	visit = func(node *ast.Node) bool {
+		if ast.IsExternalModuleAugmentation(node) || ast.IsGlobalScopeAugmentation(node) {
+			unsafe = true
+			return true
+		}
+		node.ForEachChild(visit)
+		return unsafe
+	}
+	for _, statement := range sourceFile.Statements.Nodes {
+		if visit(statement) {
+			return true
+		}
+	}
+	return false
+}
+
+func exportedDurableSymbols(typeChecker *checker.Checker, sourceFile *ast.SourceFile) ([]declarationExport, bool) {
+	if sourceFile.Symbol == nil {
+		return nil, false
+	}
+	moduleExports := typeChecker.GetExportsOfModule(sourceFile.Symbol)
+	exports := make([]declarationExport, 0, len(moduleExports))
+	for _, moduleExport := range moduleExports {
+		name := moduleExport.Name
+		symbol := moduleExport
+		if symbol.Flags&ast.SymbolFlagsAlias != 0 {
+			symbol = typeChecker.GetAliasedSymbol(symbol)
+		}
+		if symbol == nil {
+			return nil, false
+		}
+		ref, ok := durableRefFor(symbol)
+		if !ok {
+			return nil, false
+		}
+		exports = append(exports, declarationExport{
+			name:   name,
+			id:     ref.exportedID(),
+			ref:    ref,
+			symbol: symbol,
+		})
+	}
+	sort.Slice(exports, func(i, j int) bool { return exports[i].name < exports[j].name })
+	for index := 1; index < len(exports); index++ {
+		if exports[index-1].name == exports[index].name {
+			return nil, false
+		}
+	}
+	return exports, true
+}
+
+func collectExportedIdentities(program *compiler.Program, typeChecker *checker.Checker) map[*ast.Symbol]preservedExportIdentity {
+	identities := make(map[*ast.Symbol]preservedExportIdentity)
+	for _, sourceFile := range program.SourceFiles() {
+		if !ast.IsExternalModule(sourceFile) {
+			continue
+		}
+		exports, ok := exportedDurableSymbols(typeChecker, sourceFile)
+		if !ok {
+			continue
+		}
+		for _, exported := range exports {
+			if existing, ok := identities[exported.symbol]; ok && existing.id != exported.id {
+				// The same target reached through incompatible deterministic
+				// identities is not safe to canonicalize globally.
+				delete(identities, exported.symbol)
+				continue
+			}
+			identities[exported.symbol] = preservedExportIdentity{id: exported.id, ref: exported.ref}
+		}
+	}
+	return identities
+}
+
+func resolvedImportPaths(program *compiler.Program, sourceFile *ast.SourceFile) ([]string, bool) {
+	imports := make([]string, 0, len(sourceFile.Imports()))
+	for _, specifier := range sourceFile.Imports() {
+		resolved := program.GetResolvedModuleFromModuleSpecifier(sourceFile, specifier)
+		if resolved == nil {
+			return nil, false
+		}
+		imports = append(imports, filepath.Clean(resolved.ResolvedFileName))
+	}
+	sort.Strings(imports)
+	return imports, true
 }
 
 func affectedFiles(changedPaths []string, programs ...*compiler.Program) []string {
@@ -323,7 +810,7 @@ func (p *project) ResolveAlias(ctx context.Context, id typefacts.SymbolID) (type
 	if p.closed {
 		return "", ErrClosed
 	}
-	symbol, ok := p.symbolsByID[id]
+	symbol, ok := p.symbolFor(id)
 	if !ok {
 		return "", fmt.Errorf("%w: symbol %s", typefacts.ErrNotFound, id)
 	}
@@ -346,7 +833,7 @@ func (p *project) Declarations(ctx context.Context, id typefacts.SymbolID) ([]ty
 	if p.closed {
 		return nil, ErrClosed
 	}
-	symbol, ok := p.symbolsByID[id]
+	symbol, ok := p.symbolFor(id)
 	if !ok {
 		return nil, fmt.Errorf("%w: symbol %s", typefacts.ErrNotFound, id)
 	}
@@ -385,57 +872,184 @@ func (p *project) References(ctx context.Context, id typefacts.SymbolID) ([]type
 	if p.closed {
 		return nil, ErrClosed
 	}
-	target, ok := p.symbolsByID[id]
+	target, ok := p.symbolFor(id)
 	if !ok {
+		// A durable ID whose declaration no longer re-resolves fails closed
+		// here, before any retained index entry could answer for it.
 		return nil, fmt.Errorf("%w: symbol %s", typefacts.ErrNotFound, id)
 	}
-	target = p.canonicalSymbol(target)
+	canonical := p.idFor(p.canonicalSymbol(target))
 
-	if p.references == nil {
-		p.references = p.buildReferenceIndex()
-	}
-	return append([]typefacts.Location(nil), p.references[target]...), nil
+	p.ensureReferenceIndex()
+	return append([]typefacts.Location(nil), p.references[canonical]...), nil
 }
 
-// buildReferenceIndex resolves every non-declaration identifier once for the
-// current program generation. Update invalidates the index when it installs a
-// new TypeScript program.
-func (p *project) buildReferenceIndex() map[*ast.Symbol][]typefacts.Location {
-	references := make(map[*ast.Symbol][]typefacts.Location)
-	for _, sourceFile := range p.program.SourceFiles() {
-		if sourceFile.IsDeclarationFile {
+// ReferencesBatch is the closure-oriented counterpart of References. TS-Go's
+// reference index is already retained as per-file fragments; resolving a
+// batch here merges those fragments once and amortizes the project lock,
+// durable-ID lookup, alias canonicalization, and slice allocation.
+func (p *project) ReferencesBatch(ctx context.Context, ids []typefacts.SymbolID) (map[typefacts.SymbolID][]typefacts.Location, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, ErrClosed
+	}
+	p.ensureReferenceIndex()
+	result := make(map[typefacts.SymbolID][]typefacts.Location, len(ids))
+	for _, id := range ids {
+		target, ok := p.symbolFor(id)
+		if !ok {
 			continue
 		}
-		var visit func(*ast.Node) bool
-		visit = func(node *ast.Node) bool {
-			if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) {
-				symbol := p.checker.GetSymbolAtLocation(node)
-				if symbol != nil {
-					symbol = p.canonicalSymbol(symbol)
-					references[symbol] = append(references[symbol], typefacts.Location{
-						Path:      filepath.Clean(sourceFile.FileName()),
-						StartByte: scanner.SkipTrivia(sourceFile.Text(), node.Pos()),
-						EndByte:   node.End(),
-					})
-				}
-			}
-			node.ForEachChild(visit)
-			return false
+		canonical := p.idFor(p.canonicalSymbol(target))
+		result[id] = append([]typefacts.Location(nil), p.references[canonical]...)
+	}
+	return result, nil
+}
+
+// ChangedReferences exposes the retained reference index's generation-stable
+// invalidation set. It never consumes the delta: cancelled analyses and
+// retries in the same generation observe the same answer.
+func (p *project) ChangedReferences(ctx context.Context) ([]typefacts.SymbolID, bool, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, false, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, false, ErrClosed
+	}
+	p.ensureReferenceIndex()
+	if !p.referenceDeltaExact {
+		return nil, false, nil
+	}
+	ids := make([]typefacts.SymbolID, 0, len(p.referenceChangedSymbols))
+	for id := range p.referenceChangedSymbols {
+		ids = append(ids, id)
+	}
+	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+	return ids, true, nil
+}
+
+func (p *project) ensureReferenceIndex() {
+	if p.references == nil {
+		p.references = p.buildReferenceIndex()
+		p.referenceRefreshPaths = nil
+		return
+	}
+	if len(p.referenceRefreshPaths) == 0 {
+		return
+	}
+	paths := make([]string, 0, len(p.referenceRefreshPaths))
+	for path := range p.referenceRefreshPaths {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	touched := make(map[typefacts.SymbolID]struct{})
+	for _, path := range paths {
+		sourceFile := p.program.GetSourceFile(path)
+		if sourceFile == nil || sourceFile.IsDeclarationFile {
+			continue
 		}
-		for _, statement := range sourceFile.Statements.Nodes {
-			visit(statement)
+		entry := p.scanFileReferences(path, sourceFile)
+		p.referenceFiles[path] = entry
+		for id, locations := range entry.refs {
+			touched[id] = struct{}{}
+			if p.referenceDeltaExact {
+				p.referenceChangedSymbols[id] = struct{}{}
+			}
+			p.references[id] = append(p.references[id], locations...)
 		}
 	}
-	for symbol, locations := range references {
+	for id := range touched {
+		locations := p.references[id]
 		sort.Slice(locations, func(i, j int) bool {
 			if locations[i].Path != locations[j].Path {
 				return locations[i].Path < locations[j].Path
 			}
-			return locations[i].StartByte < locations[j].StartByte
+			if locations[i].StartByte != locations[j].StartByte {
+				return locations[i].StartByte < locations[j].StartByte
+			}
+			return locations[i].EndByte < locations[j].EndByte
 		})
-		references[symbol] = locations
+	}
+	p.referenceRefreshPaths = nil
+}
+
+// fileReferences is one file's contribution to the reference index: every
+// resolvable non-declaration identifier in the file, grouped by the durable
+// SymbolID of its alias-canonicalized symbol, each group in ascending byte
+// order. durable reports whether every grouped ID is durable; an entry with
+// generation-scoped counter IDs cannot outlive its generation.
+type fileReferences struct {
+	refs    map[typefacts.SymbolID][]typefacts.Location
+	durable bool
+}
+
+// buildReferenceIndex merges the per-file contributions into the current
+// generation's reference index, scanning only files without a retained
+// entry (Update already evicted the affected set and departed files).
+// Merging in path order, with each per-file group already in byte order,
+// preserves the References ordering contract (path, then start byte)
+// without a global sort.
+func (p *project) buildReferenceIndex() map[typefacts.SymbolID][]typefacts.Location {
+	if p.referenceFiles == nil {
+		p.referenceFiles = make(map[string]*fileReferences)
+	}
+	sourceFiles := p.program.SourceFiles()
+	paths := make([]string, 0, len(sourceFiles))
+	for _, sourceFile := range sourceFiles {
+		if sourceFile.IsDeclarationFile {
+			continue
+		}
+		path := filepath.Clean(sourceFile.FileName())
+		paths = append(paths, path)
+		if _, ok := p.referenceFiles[path]; !ok {
+			p.referenceFiles[path] = p.scanFileReferences(path, sourceFile)
+		}
+	}
+	sort.Strings(paths)
+	references := make(map[typefacts.SymbolID][]typefacts.Location)
+	for _, path := range paths {
+		for id, locations := range p.referenceFiles[path].refs {
+			references[id] = append(references[id], locations...)
+		}
 	}
 	return references
+}
+
+// scanFileReferences resolves every non-declaration identifier in one file.
+func (p *project) scanFileReferences(path string, sourceFile *ast.SourceFile) *fileReferences {
+	entry := &fileReferences{refs: make(map[typefacts.SymbolID][]typefacts.Location), durable: true}
+	var visit func(*ast.Node) bool
+	visit = func(node *ast.Node) bool {
+		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) {
+			if symbol := p.checker.GetSymbolAtLocation(node); symbol != nil {
+				id := p.idFor(p.canonicalSymbol(symbol))
+				if !durableSymbolID(id) {
+					entry.durable = false
+				}
+				entry.refs[id] = append(entry.refs[id], typefacts.Location{
+					Path:      path,
+					StartByte: scanner.SkipTrivia(sourceFile.Text(), node.Pos()),
+					EndByte:   node.End(),
+				})
+			}
+		}
+		node.ForEachChild(visit)
+		return false
+	}
+	for _, statement := range sourceFile.Statements.Nodes {
+		visit(statement)
+	}
+	for id, locations := range entry.refs {
+		sort.Slice(locations, func(i, j int) bool { return locations[i].StartByte < locations[j].StartByte })
+		entry.refs[id] = locations
+	}
+	return entry
 }
 
 func (p *project) TypeAt(ctx context.Context, location typefacts.Location) (typefacts.TypeID, error) {
@@ -570,6 +1184,64 @@ func (p *project) ResolvedCall(ctx context.Context, location typefacts.Location)
 	}, nil
 }
 
+// fileFactsMemo is one file's source-fact memo entry. Each fact set is
+// stored only when every symbol identity it carries is durable, so a reused
+// set never hands out an ID the current generation cannot resolve.
+type fileFactsMemo struct {
+	absPath      string
+	calls        []typefacts.SourceCall
+	hasCalls     bool
+	bindings     []typefacts.SourceBinding
+	hasBindings  bool
+	functions    []typefacts.SourceFunction
+	hasFunctions bool
+	async        []typefacts.AsyncFunctionFact
+	hasAsync     bool
+}
+
+// memoFor returns the memo entry for a Source* path argument, keyed by the
+// argument itself so memoized facts repeat the caller's own path form, with
+// the normalized path retained for affected-set eviction.
+func (p *project) memoFor(path string) *fileFactsMemo {
+	if memo, ok := p.sourceFactsMemo[path]; ok {
+		return memo
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return nil
+	}
+	memo := &fileFactsMemo{absPath: filepath.Clean(absPath)}
+	p.sourceFactsMemo[path] = memo
+	return memo
+}
+
+func sourceCallsDurable(calls []typefacts.SourceCall) bool {
+	for _, call := range calls {
+		if !durableSymbolID(call.Target) {
+			return false
+		}
+	}
+	return true
+}
+
+func sourceBindingsDurable(bindings []typefacts.SourceBinding) bool {
+	for _, binding := range bindings {
+		if !durableSymbolID(binding.Initializer.Target) {
+			return false
+		}
+	}
+	return true
+}
+
+func asyncFactsDurable(facts []typefacts.AsyncFunctionFact) bool {
+	for _, fact := range facts {
+		if !durableSymbolID(fact.Symbol) || !durableSymbolID(fact.Target) {
+			return false
+		}
+	}
+	return true
+}
+
 func (p *project) SourceCalls(ctx context.Context, path string) ([]typefacts.SourceCall, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -578,6 +1250,10 @@ func (p *project) SourceCalls(ctx context.Context, path string) ([]typefacts.Sou
 	defer p.mu.Unlock()
 	if p.closed {
 		return nil, ErrClosed
+	}
+	memo := p.memoFor(path)
+	if memo != nil && memo.hasCalls {
+		return append([]typefacts.SourceCall(nil), memo.calls...), nil
 	}
 	sourceFile, err := p.sourceFileFor(typefacts.Location{Path: path})
 	if err != nil {
@@ -597,6 +1273,10 @@ func (p *project) SourceCalls(ctx context.Context, path string) ([]typefacts.Sou
 	for _, statement := range sourceFile.Statements.Nodes {
 		visit(statement)
 	}
+	if memo != nil && sourceCallsDurable(calls) {
+		memo.calls = calls
+		memo.hasCalls = true
+	}
 	return calls, nil
 }
 
@@ -608,6 +1288,10 @@ func (p *project) SourceBindings(ctx context.Context, path string) ([]typefacts.
 	defer p.mu.Unlock()
 	if p.closed {
 		return nil, ErrClosed
+	}
+	memo := p.memoFor(path)
+	if memo != nil && memo.hasBindings {
+		return append([]typefacts.SourceBinding(nil), memo.bindings...), nil
 	}
 	sourceFile, err := p.sourceFileFor(typefacts.Location{Path: path})
 	if err != nil {
@@ -631,6 +1315,10 @@ func (p *project) SourceBindings(ctx context.Context, path string) ([]typefacts.
 	for _, statement := range sourceFile.Statements.Nodes {
 		visit(statement)
 	}
+	if memo != nil && sourceBindingsDurable(bindings) {
+		memo.bindings = bindings
+		memo.hasBindings = true
+	}
 	return bindings, nil
 }
 
@@ -642,6 +1330,10 @@ func (p *project) SourceFunctions(ctx context.Context, path string) ([]typefacts
 	defer p.mu.Unlock()
 	if p.closed {
 		return nil, ErrClosed
+	}
+	memo := p.memoFor(path)
+	if memo != nil && memo.hasFunctions {
+		return append([]typefacts.SourceFunction(nil), memo.functions...), nil
 	}
 	sourceFile, err := p.sourceFileFor(typefacts.Location{Path: path})
 	if err != nil {
@@ -677,6 +1369,10 @@ func (p *project) SourceFunctions(ctx context.Context, path string) ([]typefacts
 	for _, statement := range sourceFile.Statements.Nodes {
 		visit(statement)
 	}
+	if memo != nil {
+		memo.functions = functions
+		memo.hasFunctions = true
+	}
 	return functions, nil
 }
 
@@ -688,6 +1384,10 @@ func (p *project) SourceAsyncFunctions(ctx context.Context, path string) ([]type
 	defer p.mu.Unlock()
 	if p.closed {
 		return nil, ErrClosed
+	}
+	memo := p.memoFor(path)
+	if memo != nil && memo.hasAsync {
+		return append([]typefacts.AsyncFunctionFact(nil), memo.async...), nil
 	}
 	sourceFile, err := p.sourceFileFor(typefacts.Location{Path: path})
 	if err != nil {
@@ -735,6 +1435,10 @@ func (p *project) SourceAsyncFunctions(ctx context.Context, path string) ([]type
 	}
 	for _, statement := range sourceFile.Statements.Nodes {
 		visit(statement)
+	}
+	if memo != nil && asyncFactsDurable(facts) {
+		memo.async = facts
+		memo.hasAsync = true
 	}
 	return facts, nil
 }
@@ -981,18 +1685,138 @@ func (p *project) Close() error {
 	clear(p.idsBySymbol)
 	clear(p.symbolsByID)
 	clear(p.idsByType)
+	clear(p.sourceFactsMemo)
+	clear(p.durableRefs)
+	p.references = nil
+	p.referenceRefreshPaths = nil
+	p.referenceChangedSymbols = nil
+	p.referenceDeltaExact = false
+	p.referenceFiles = nil
+	p.filesByName = nil
+	p.declarationShapes = nil
+	p.exportedIdentities = nil
 	return nil
+}
+
+// durableSymbolRef is the durable symbol identity: the name span of the
+// symbol's first declaration plus the symbol's name. It survives program
+// rebuilds while that declaration is unchanged.
+type durableSymbolRef struct {
+	path      string
+	startByte int
+	endByte   int
+	name      string
+}
+
+func durableRefFor(symbol *ast.Symbol) (durableSymbolRef, bool) {
+	if len(symbol.Declarations) == 0 {
+		return durableSymbolRef{}, false
+	}
+	node := symbol.Declarations[0]
+	sourceFile := ast.GetSourceFileOfNode(node)
+	if sourceFile == nil {
+		return durableSymbolRef{}, false
+	}
+	nameNode := node.Name()
+	if nameNode == nil {
+		nameNode = node
+	}
+	return durableSymbolRef{
+		path:      filepath.Clean(sourceFile.FileName()),
+		startByte: scanner.SkipTrivia(sourceFile.Text(), nameNode.Pos()),
+		endByte:   nameNode.End(),
+		name:      symbol.Name,
+	}, true
+}
+
+func (ref durableSymbolRef) id() typefacts.SymbolID {
+	digest := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d\x00%d\x00%s", ref.path, ref.startByte, ref.endByte, ref.name)))
+	return typefacts.SymbolID("symbol:h:" + hex.EncodeToString(digest[:12]))
+}
+
+func (ref durableSymbolRef) exportedID() typefacts.SymbolID {
+	digest := sha256.Sum256([]byte(fmt.Sprintf("export\x00%s\x00%s", ref.path, ref.name)))
+	return typefacts.SymbolID("symbol:h:" + hex.EncodeToString(digest[:12]))
+}
+
+// durableSymbolID reports whether id can outlive the generation that minted
+// it. The empty ID is durable: it is a constant, not a handle.
+func durableSymbolID(id typefacts.SymbolID) bool {
+	return typefacts.DurableSymbolID(id)
 }
 
 func (p *project) idFor(symbol *ast.Symbol) typefacts.SymbolID {
 	if id, ok := p.idsBySymbol[symbol]; ok {
 		return id
 	}
+	if exported, ok := p.exportedIdentities[symbol]; ok {
+		if existing, taken := p.symbolsByID[exported.id]; !taken || existing == symbol {
+			p.idsBySymbol[symbol] = exported.id
+			p.symbolsByID[exported.id] = symbol
+			p.durableRefs[exported.id] = exported.ref
+			return exported.id
+		}
+	}
+	if ref, ok := durableRefFor(symbol); ok {
+		id := ref.id()
+		if existing, taken := p.symbolsByID[id]; !taken || existing == symbol {
+			p.idsBySymbol[symbol] = id
+			p.symbolsByID[id] = symbol
+			p.durableRefs[id] = ref
+			return id
+		}
+	}
 	p.nextSymbol++
 	id := typefacts.SymbolID(fmt.Sprintf("symbol:%d:%d", p.generation, p.nextSymbol))
 	p.idsBySymbol[symbol] = id
 	p.symbolsByID[id] = symbol
 	return id
+}
+
+// symbolFor resolves id in the current generation, lazily re-resolving a
+// durable ID minted in an earlier generation through its declaration. A
+// failed re-resolution reports not-found, exactly as a stale ID always has.
+func (p *project) symbolFor(id typefacts.SymbolID) (*ast.Symbol, bool) {
+	if symbol, ok := p.symbolsByID[id]; ok {
+		return symbol, true
+	}
+	ref, ok := p.durableRefs[id]
+	if !ok {
+		return nil, false
+	}
+	sourceFile := p.program.GetSourceFile(ref.path)
+	if sourceFile == nil {
+		if p.filesByName == nil {
+			p.filesByName = make(map[string]*ast.SourceFile)
+			for _, file := range p.program.SourceFiles() {
+				p.filesByName[filepath.Clean(file.FileName())] = file
+			}
+		}
+		sourceFile = p.filesByName[ref.path]
+	}
+	if sourceFile == nil || ref.startByte >= ref.endByte || ref.endByte > len(sourceFile.Text()) {
+		return nil, false
+	}
+	node := deepestNodeAt(ast.GetNodeAtPosition(sourceFile, ref.startByte, false), ref.startByte)
+	if node == nil {
+		return nil, false
+	}
+	symbol := p.checker.GetSymbolAtLocation(node)
+	if symbol == nil {
+		return nil, false
+	}
+	if resolved, ok := durableRefFor(symbol); !ok || resolved != ref {
+		return nil, false
+	}
+	if canonical, ok := p.idsBySymbol[symbol]; ok && canonical != id {
+		// A shape-equivalent update may deliberately preserve an older
+		// canonical ID for this symbol. A historical span-derived ID must
+		// not displace that choice if it is queried later.
+		return nil, false
+	}
+	p.idsBySymbol[symbol] = id
+	p.symbolsByID[id] = symbol
+	return symbol, true
 }
 
 func (p *project) canonicalSymbol(symbol *ast.Symbol) *ast.Symbol {

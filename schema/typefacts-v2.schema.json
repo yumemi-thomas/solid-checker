@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solid-check.dev/schema/typefacts-v2.schema.json",
+  "title": "TypeFactsSchema v2 (closure request)",
+  "oneOf": [
+    { "$ref": "#/$defs/closureRequest" },
+    { "$ref": "#/$defs/closureResponse" }
+  ],
+  "$defs": {
+    "closureRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "projectId", "generation", "rulesetVersion"],
+      "properties": {
+        "schema": { "const": 2 },
+        "projectId": { "type": "string", "minLength": 1 },
+        "generation": { "type": "integer", "minimum": 1 },
+        "rulesetVersion": { "const": 1 },
+        "compilerSpans": { "type": "array", "maxItems": 1000000 }
+      }
+    },
+    "closureResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "projectId", "generation", "table"],
+      "properties": {
+        "schema": { "const": 2 },
+        "projectId": { "type": "string", "minLength": 1 },
+        "generation": { "type": "integer", "minimum": 1 },
+        "table": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["schema", "projectId", "generation", "sources", "entities", "symbols", "files"],
+          "properties": {
+            "schema": { "const": 2 },
+            "projectId": { "type": "string", "minLength": 1 },
+            "generation": { "type": "integer", "minimum": 1 },
+            "sources": { "type": "array", "maxItems": 1000000 },
+            "entities": { "type": "array", "maxItems": 1000000 },
+            "symbols": { "type": "array", "maxItems": 1000000 },
+            "files": { "type": "array", "maxItems": 1000000 }
+          }
+        }
+      }
+    }
+  },
+  "x-wire": {
+    "encoding": "RFC 8949 deterministic CBOR",
+    "framing": "uint32 little-endian byte length followed by one CBOR item",
+    "optionalFields": "omitted, never null",
+    "duplicateFields": "error",
+    "unknownFields": "error",
+    "limits": "typefacts-codec-limits.json"
+  },
+  "x-invariants": {
+    "sources": "digests only (sha256:<64 hex>); source bytes never cross the seam; digest mismatch fails the generation",
+    "symbols": "canonical reference storage: a symbol with aliasTarget must omit references; lookups chase alias edges",
+    "request": "compilerSpans sorted by path, startByte, endByte; ruleset version mismatch fails closed",
+    "response": "one closed table per generation; a closure gap fails the analysis closed naming the missing key"
+  }
+}

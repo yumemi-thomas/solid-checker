@@ -13,6 +13,10 @@ var ErrNotFound = errors.New("type fact not found")
 type OpenProjectFunc func(context.Context, string) (Project, error)
 
 // SymbolID is an opaque identity stable for one Project analysis version.
+// Implementations may keep an ID resolvable across updates while its
+// declaration is unchanged (durable symbol identity); holders must treat
+// cross-update resolution as best-effort — it either answers for the same
+// declaration or reports ErrNotFound, never a different symbol.
 type SymbolID string
 
 // TypeID is an opaque identity stable for one Project analysis version.

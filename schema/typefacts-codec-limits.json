@@ -1,0 +1,12 @@
+{
+  "codec": "deterministic-cbor-rfc8949-section-4.2",
+  "framing": "uint32-little-endian-length-prefix",
+  "maxMessageBytes": 67108864,
+  "maxGenerationBytes": 67108864,
+  "maxNestedLevels": 32,
+  "maxCollectionLength": 1000000,
+  "duplicateFields": "error",
+  "unknownFields": "error",
+  "indefiniteLengths": "forbidden",
+  "tags": "forbidden"
+}

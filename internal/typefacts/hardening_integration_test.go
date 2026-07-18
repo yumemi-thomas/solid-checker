@@ -277,7 +277,7 @@ func TestProjectHonorsCanceledContexts(t *testing.T) {
 	}
 }
 
-func TestProjectOpaqueIdentitiesCannotBeReusedAcrossUpdates(t *testing.T) {
+func TestProjectDurableIdentitiesNeverMisresolveAcrossUpdates(t *testing.T) {
 	root := t.TempDir()
 	writeProjectFile(t, root, "tsconfig.json", `{"compilerOptions":{"strict":true},"include":["*.ts"]}`)
 	writeProjectFile(t, root, "source.ts", "export const value = 1;\n")
@@ -286,25 +286,38 @@ func TestProjectOpaqueIdentitiesCannotBeReusedAcrossUpdates(t *testing.T) {
 	location := locationOf(t, path, "value =")
 	location.EndByte = location.StartByte + len("value")
 
-	oldID, err := project.SymbolAt(context.Background(), location)
+	heldID, err := project.SymbolAt(context.Background(), location)
 	if err != nil {
 		t.Fatal(err)
 	}
+
+	// An update that leaves the declaration name unmoved keeps the durable
+	// identity resolvable, and it resolves to the same declaration.
 	_, err = project.Update(context.Background(), []typefacts.FileChange{{
 		Path: path, Version: 1, Source: []byte("export const value = 2;\n"),
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	newID, err := project.SymbolAt(context.Background(), location)
+	declarations, err := project.Declarations(context.Background(), heldID)
+	if err != nil {
+		t.Fatalf("Declarations(held ID) after unmoved-declaration update: %v", err)
+	}
+	if len(declarations) != 1 || declarations[0].Name != "value" {
+		t.Fatalf("held ID resolved to %+v, want the value declaration", declarations)
+	}
+
+	// An update that replaces the declaration at that span must fail closed:
+	// the held identity reports not-found rather than resolving to the new,
+	// different symbol.
+	_, err = project.Update(context.Background(), []typefacts.FileChange{{
+		Path: path, Version: 2, Source: []byte("export const other = 3;\n"),
+	}})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if oldID == newID {
-		t.Fatalf("opaque identity %q was reused after Update", oldID)
-	}
-	if _, err := project.Declarations(context.Background(), oldID); !errors.Is(err, typefacts.ErrNotFound) {
-		t.Fatalf("Declarations(old ID) error = %v, want ErrNotFound", err)
+	if _, err := project.Declarations(context.Background(), heldID); !errors.Is(err, typefacts.ErrNotFound) {
+		t.Fatalf("Declarations(held ID) after declaration replacement error = %v, want ErrNotFound", err)
 	}
 }
 

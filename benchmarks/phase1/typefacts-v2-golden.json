@@ -1,0 +1,126 @@
+{
+  "schema": 2,
+  "projectId": "golden-project",
+  "generation": 7,
+  "table": {
+    "schema": 2,
+    "generation": 7,
+    "projectId": "golden-project",
+    "sources": [
+      {
+        "path": "/workspace/App.tsx",
+        "sha256": "sha256:22cfa7384af6fcb5754b7ef853ea90e100c9c7046aed95556453a173a06fec1d"
+      }
+    ],
+    "entities": [
+      {
+        "location": { "path": "/workspace/App.tsx", "startByte": 13, "endByte": 17 },
+        "symbol": "symbol:7:1"
+      },
+      {
+        "location": { "path": "/workspace/App.tsx", "startByte": 21, "endByte": 27 },
+        "symbol": "symbol:7:2",
+        "typeDescriptor": {
+          "text": "Accessor<number>",
+          "originModule": "solid-js",
+          "aliasDeclarations": [
+            {
+              "name": "Accessor",
+              "kind": "type-alias",
+              "location": { "path": "/workspace/node_modules/solid-js/types.d.ts", "startByte": 100, "endByte": 108 }
+            }
+          ]
+        },
+        "resolvedCall": {
+          "target": "symbol:7:3",
+          "returnTypeText": "number"
+        }
+      }
+    ],
+    "symbols": [
+      {
+        "id": "symbol:7:1",
+        "declarations": [
+          {
+            "name": "view",
+            "kind": "const",
+            "location": { "path": "/workspace/App.tsx", "startByte": 13, "endByte": 17 }
+          }
+        ],
+        "references": [
+          { "path": "/workspace/App.tsx", "startByte": 40, "endByte": 44 }
+        ]
+      },
+      {
+        "id": "symbol:7:2",
+        "aliasTarget": "symbol:7:3",
+        "declarations": [
+          {
+            "name": "count",
+            "kind": "import",
+            "location": { "path": "/workspace/App.tsx", "startByte": 21, "endByte": 27 }
+          }
+        ]
+      },
+      {
+        "id": "symbol:7:3",
+        "declarations": [
+          {
+            "name": "count",
+            "kind": "const",
+            "location": { "path": "/workspace/store.ts", "startByte": 30, "endByte": 35 }
+          }
+        ],
+        "references": [
+          { "path": "/workspace/App.tsx", "startByte": 21, "endByte": 27 },
+          { "path": "/workspace/store.ts", "startByte": 60, "endByte": 65 }
+        ]
+      }
+    ],
+    "files": [
+      {
+        "path": "/workspace/App.tsx",
+        "calls": [
+          {
+            "location": { "path": "/workspace/App.tsx", "startByte": 21, "endByte": 29 },
+            "callee": { "path": "/workspace/App.tsx", "startByte": 21, "endByte": 27 },
+            "target": "symbol:7:3"
+          }
+        ],
+        "bindings": [
+          {
+            "array": true,
+            "names": [
+              { "path": "/workspace/App.tsx", "startByte": 13, "endByte": 17 }
+            ],
+            "initializer": {
+              "location": { "path": "/workspace/App.tsx", "startByte": 21, "endByte": 29 },
+              "callee": { "path": "/workspace/App.tsx", "startByte": 21, "endByte": 27 },
+              "target": "symbol:7:3"
+            }
+          }
+        ],
+        "functions": [
+          {
+            "name": { "path": "/workspace/App.tsx", "startByte": 50, "endByte": 53 },
+            "body": { "path": "/workspace/App.tsx", "startByte": 56, "endByte": 80 },
+            "parameters": [
+              { "path": "/workspace/App.tsx", "startByte": 54, "endByte": 55 }
+            ],
+            "exported": true
+          }
+        ],
+        "asyncFunctions": [
+          {
+            "expression": { "path": "/workspace/App.tsx", "startByte": 56, "endByte": 80 },
+            "symbol": "symbol:7:1",
+            "canReturnAsync": true,
+            "callsAfterAwait": [
+              { "path": "/workspace/App.tsx", "startByte": 70, "endByte": 78 }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

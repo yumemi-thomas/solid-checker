@@ -1,0 +1,10 @@
+{
+  "schema": 2,
+  "projectId": "golden-project",
+  "generation": 7,
+  "rulesetVersion": 1,
+  "compilerSpans": [
+    { "path": "/workspace/App.tsx", "startByte": 21, "endByte": 27 },
+    { "path": "/workspace/App.tsx", "startByte": 40, "endByte": 44 }
+  ]
+}
