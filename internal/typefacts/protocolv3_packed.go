@@ -10,7 +10,7 @@ import (
 // Packed v3 full-frame encoding. This is deliberately an opaque byte string
 // at the lifecycle seam: callers either receive a validated FactTableV2 or an
 // error, and none of the columnar representation leaks into analysis code.
-const packedFactTableVersion = 1
+const packedFactTableVersion = 2
 
 type packedWriter struct {
 	bytes []byte
@@ -93,12 +93,18 @@ func PackedFactTableV3From(table FactTableV2) ([]byte, error) {
 	w.u64(uint64(len(compact.Strings)))
 	previous := ""
 	for _, value := range compact.Strings {
-		prefix := commonStringPrefix(previous, value)
-		suffix := value[prefix:]
-		w.u64(uint64(prefix))
-		w.u64(uint64(len(suffix)))
-		w.raw([]byte(suffix))
-		previous = value
+		if digest, ok := packedHashedSymbol(value); ok {
+			w.u64(1)
+			w.raw(digest)
+		} else {
+			w.u64(0)
+			prefix := commonStringPrefix(previous, value)
+			suffix := value[prefix:]
+			w.u64(uint64(prefix))
+			w.u64(uint64(len(suffix)))
+			w.raw([]byte(suffix))
+			previous = value
+		}
 	}
 
 	w.u64(uint64(len(compact.Sources)))
@@ -190,6 +196,18 @@ func PackedFactTableV3From(table FactTableV2) ([]byte, error) {
 		}
 	}
 	return w.bytes, nil
+}
+
+func packedHashedSymbol(symbol string) ([]byte, bool) {
+	const prefix = "symbol:h:"
+	if !strings.HasPrefix(symbol, prefix) || len(symbol) != len(prefix)+24 {
+		return nil, false
+	}
+	raw := make([]byte, 12)
+	if _, err := hex.Decode(raw, []byte(symbol[len(prefix):])); err != nil {
+		return nil, false
+	}
+	return raw, true
 }
 
 func commonStringPrefix(left, right string) int {

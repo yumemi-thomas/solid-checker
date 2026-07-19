@@ -382,7 +382,7 @@ pub struct CompactFactTable {
     pub files: Vec<CompactFileFact>,
 }
 
-const PACKED_FACT_TABLE_VERSION: u64 = 1;
+const PACKED_FACT_TABLE_VERSION: u64 = 2;
 const PACKED_COLLECTION_LIMIT: usize = 1_000_000;
 
 struct PackedCursor<'a> {
@@ -541,19 +541,39 @@ fn decode_packed_strings(cursor: &mut PackedCursor<'_>) -> Result<Vec<String>, S
     let mut strings = Vec::with_capacity(count);
     let mut previous = Vec::<u8>::new();
     for _ in 0..count {
-        let prefix = usize::try_from(cursor.u64()?)
-            .map_err(|_| "packed string prefix overflows usize".to_owned())?;
-        if prefix > previous.len() {
-            return Err("packed string prefix exceeds previous string".into());
-        }
-        let suffix_length = usize::try_from(cursor.u64()?)
-            .map_err(|_| "packed string length overflows usize".to_owned())?;
-        let mut bytes = previous[..prefix].to_vec();
-        bytes.extend_from_slice(cursor.raw(suffix_length)?);
-        let value = String::from_utf8(bytes.clone())
-            .map_err(|_| "packed string is not UTF-8".to_owned())?;
+        let tag = cursor.u64()?;
+        let (value, next_previous) = match tag {
+            0 => {
+                let prefix = usize::try_from(cursor.u64()?)
+                    .map_err(|_| "packed string prefix overflows usize".to_owned())?;
+                if prefix > previous.len() {
+                    return Err("packed string prefix exceeds previous string".into());
+                }
+                let suffix_length = usize::try_from(cursor.u64()?)
+                    .map_err(|_| "packed string length overflows usize".to_owned())?;
+                let mut bytes = previous[..prefix].to_vec();
+                bytes.extend_from_slice(cursor.raw(suffix_length)?);
+                let value = String::from_utf8(bytes.clone())
+                    .map_err(|_| "packed string is not UTF-8".to_owned())?;
+                (value, Some(bytes))
+            }
+            1 => {
+                const HEX: &[u8; 16] = b"0123456789abcdef";
+                let raw = cursor.raw(12)?;
+                let mut value = String::with_capacity(33);
+                value.push_str("symbol:h:");
+                for byte in raw {
+                    value.push(HEX[usize::from(byte >> 4)] as char);
+                    value.push(HEX[usize::from(byte & 0x0f)] as char);
+                }
+                (value, None)
+            }
+            other => return Err(format!("packed string has unknown encoding tag {other}")),
+        };
         strings.push(value);
-        previous = bytes;
+        if let Some(bytes) = next_previous {
+            previous = bytes;
+        }
     }
     Ok(strings)
 }
@@ -1008,9 +1028,9 @@ mod tests {
 
     #[test]
     fn packed_table_decoder_is_strict_and_direct() {
-        // version, schema, generation, one empty string, then four empty
-        // top-level collections.
-        let valid = [1, 2, 1, 1, 0, 0, 0, 0, 0, 0];
+        // version, schema, generation, one prefix-coded empty string, then
+        // four empty top-level collections.
+        let valid = [2, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0];
         let table = decode_packed_fact_table(&valid, "/p/tsconfig.json".into()).unwrap();
         assert_eq!(table.schema, 2);
         assert_eq!(table.generation, 1);
