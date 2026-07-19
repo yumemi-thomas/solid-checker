@@ -43,6 +43,7 @@ type LifecycleRequest struct {
 	StructuralSpans    []LocationV2       `cbor:"structuralSpans,omitempty" json:"structuralSpans,omitempty"`
 	CompilerSpans      []LocationV2       `cbor:"compilerSpans,omitempty" json:"compilerSpans,omitempty"`
 	Demands            []EntityDemand     `cbor:"demands,omitempty" json:"demands,omitempty"`
+	CompactDemands     *CompactDemandsV3  `cbor:"compactDemands,omitempty" json:"compactDemands,omitempty"`
 	StateToken         string             `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`
 	ResetState         bool               `cbor:"resetState,omitempty" json:"resetState,omitempty"`
 	RemovedDemandPaths []string           `cbor:"removedDemandPaths,omitempty" json:"removedDemandPaths,omitempty"`
@@ -75,19 +76,20 @@ type LifecycleTimings struct {
 }
 
 type LifecycleResponse struct {
-	Schema     uint64            `cbor:"schema" json:"schema"`
-	RequestID  uint64            `cbor:"requestId" json:"requestId"`
-	ProjectID  string            `cbor:"projectId" json:"projectId"`
-	Generation uint64            `cbor:"generation" json:"generation"`
-	OK         bool              `cbor:"ok" json:"ok"`
-	Table      *FactTableV2      `cbor:"table,omitempty" json:"table,omitempty"`
-	TableDelta *FactTableDeltaV3 `cbor:"tableDelta,omitempty" json:"tableDelta,omitempty"`
-	TableMode  string            `cbor:"tableMode,omitempty" json:"tableMode,omitempty"`
-	StateToken string            `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`
-	Affected   []string          `cbor:"affected,omitempty" json:"affected,omitempty"`
-	Sources    []SourceFileV3    `cbor:"sources,omitempty" json:"sources,omitempty"`
-	Timings    *LifecycleTimings `cbor:"timings,omitempty" json:"timings,omitempty"`
-	Error      *LifecycleError   `cbor:"error,omitempty" json:"error,omitempty"`
+	Schema       uint64              `cbor:"schema" json:"schema"`
+	RequestID    uint64              `cbor:"requestId" json:"requestId"`
+	ProjectID    string              `cbor:"projectId" json:"projectId"`
+	Generation   uint64              `cbor:"generation" json:"generation"`
+	OK           bool                `cbor:"ok" json:"ok"`
+	Table        *FactTableV2        `cbor:"table,omitempty" json:"table,omitempty"`
+	CompactTable *CompactFactTableV3 `cbor:"compactTable,omitempty" json:"compactTable,omitempty"`
+	TableDelta   *FactTableDeltaV3   `cbor:"tableDelta,omitempty" json:"tableDelta,omitempty"`
+	TableMode    string              `cbor:"tableMode,omitempty" json:"tableMode,omitempty"`
+	StateToken   string              `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`
+	Affected     []string            `cbor:"affected,omitempty" json:"affected,omitempty"`
+	Sources      []SourceFileV3      `cbor:"sources,omitempty" json:"sources,omitempty"`
+	Timings      *LifecycleTimings   `cbor:"timings,omitempty" json:"timings,omitempty"`
+	Error        *LifecycleError     `cbor:"error,omitempty" json:"error,omitempty"`
 }
 
 const (

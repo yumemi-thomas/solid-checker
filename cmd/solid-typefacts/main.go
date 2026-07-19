@@ -4,7 +4,6 @@ package main
 
 import (
 	"bufio"
-	"cmp"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -14,9 +13,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
-	"slices"
-	"sort"
-	"strconv"
 	"sync"
 	"time"
 
@@ -101,15 +97,14 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 		return fmt.Errorf("open TS-Go project: %w", err)
 	}
 	stageTrace("open", time.Since(started))
-	closure, err := typefacts.NewClosureProject(backend, false)
+	session, err := typefacts.NewSession(backend, projectID, false)
 	if err != nil {
-		_ = backend.Close()
 		return err
 	}
-	defer closure.Close()
+	defer session.Close()
 
 	reader := bufio.NewReader(input)
-	responder := &closureResponder{ctx: ctx, closure: closure, projectID: projectID, generation: 1}
+	responder := &closureResponder{session: session}
 	return serve(ctx, responder, reader, writer)
 }
 
@@ -122,24 +117,11 @@ type responder interface {
 }
 
 type closureResponder struct {
-	ctx        context.Context
-	closure    *typefacts.ClosureProject
-	projectID  string
-	generation uint64
-	retained   retainedProtocolState
-}
-
-type retainedProtocolState struct {
-	token   uint64
-	demands map[string][]typefacts.EntityDemand
-	table   *typefacts.FactTable
+	session *typefacts.Session
 }
 
 func (r *closureResponder) v2(ctx context.Context, request typefacts.ClosureRequest) (typefacts.ClosureResponse, error) {
-	if filepath.Clean(request.ProjectID) != r.projectID {
-		return typefacts.ClosureResponse{}, typefacts.ErrGenerationMismatch
-	}
-	value, err := r.closure.ClosureResponseFor(ctx, request)
+	value, err := r.session.Closure(ctx, request)
 	if err != nil {
 		return typefacts.ClosureResponse{}, fmt.Errorf("materialize closure: %w", err)
 	}
@@ -153,7 +135,25 @@ func (r *closureResponder) v3(ctx context.Context, request typefacts.LifecycleRe
 	case typefacts.LifecycleAnalyze:
 		crashOnMarker("SOLID_TYPEFACTS_CRASH_BEFORE_ANALYZE")
 	}
-	return lifecycleResponse(ctx, r.closure, r.projectID, &r.generation, &r.retained, request)
+	started := time.Now()
+	response := r.session.Lifecycle(ctx, request)
+	diagnostics := r.session.Diagnostics(request.RequestID)
+	if diagnostics.Updated {
+		stageTrace("update", time.Since(started))
+	}
+	if diagnostics.Analyzed {
+		stats := diagnostics.Closure
+		stageTrace("analyze", diagnostics.OperationDuration)
+		stageTrace("analyze-materialize", stats.BuildDuration)
+		stageTrace("analyze-async", stats.AsyncDuration)
+		stageTrace("analyze-demand", stats.DemandDuration)
+		stageTrace("analyze-symbols", stats.SymbolDuration)
+		if os.Getenv("SOLID_TYPEFACTS_TIMINGS") != "" {
+			fmt.Fprintf(os.Stderr, "{\"typefactsRetention\":{\"retained\":%d,\"recomputed\":%d,\"suppressionRecompute\":%t}}\n",
+				stats.Retention.RetainedFiles, stats.Retention.RecomputedFiles, stats.Retention.SuppressionRecompute)
+		}
+	}
+	return response
 }
 
 // crashOnMarker terminates the service when the named environment variable
@@ -389,227 +389,6 @@ func (q *queue[T]) close() {
 	defer q.mu.Unlock()
 	q.closed = true
 	q.cond.Broadcast()
-}
-
-func lifecycleResponse(ctx context.Context, closure *typefacts.ClosureProject, projectID string, generation *uint64, retained *retainedProtocolState, request typefacts.LifecycleRequest) typefacts.LifecycleResponse {
-	response := typefacts.LifecycleResponse{
-		Schema: typefacts.TypeFactsSchemaVersionV3, RequestID: request.RequestID,
-		ProjectID: projectID, Generation: *generation,
-	}
-	fail := func(code string, err error) typefacts.LifecycleResponse {
-		response.Error = &typefacts.LifecycleError{Code: code, Message: err.Error()}
-		return response
-	}
-	if err := typefacts.ValidateLifecycleRequest(request); err != nil {
-		return fail("invalid-request", err)
-	}
-	if filepath.Clean(request.ProjectID) != projectID {
-		return fail("project-mismatch", typefacts.ErrGenerationMismatch)
-	}
-	switch request.Operation {
-	case typefacts.LifecycleOpen:
-		if request.Generation != *generation {
-			return fail("generation-mismatch", typefacts.ErrGenerationMismatch)
-		}
-	case typefacts.LifecycleUpdate:
-		if request.Generation != *generation+1 {
-			return fail("generation-mismatch", typefacts.ErrGenerationMismatch)
-		}
-		updateStarted := time.Now()
-		changes := make([]typefacts.FileChange, 0, len(request.Changes))
-		for _, change := range request.Changes {
-			changes = append(changes, typefacts.FileChange{
-				Path: change.Path, Version: change.Version, Source: change.Source, Deleted: change.Deleted,
-			})
-		}
-		affected, err := closure.Update(ctx, changes)
-		if err != nil {
-			return fail("update-failed", err)
-		}
-		stageTrace("update", time.Since(updateStarted))
-		*generation = request.Generation
-		response.Generation = *generation
-		response.Affected = affected.Files
-	case typefacts.LifecycleAnalyze:
-		if request.Generation != *generation {
-			return fail("generation-mismatch", typefacts.ErrGenerationMismatch)
-		}
-		stateful := request.ResetState || request.StateToken != "" || len(request.RemovedDemandPaths) != 0
-		nextDemands := retained.demands
-		if stateful {
-			expected := ""
-			if retained.token != 0 {
-				expected = strconv.FormatUint(retained.token, 10)
-			}
-			if !request.ResetState && request.StateToken != expected {
-				return fail("state-mismatch", typefacts.ErrGenerationMismatch)
-			}
-			nextDemands = applyDemandChanges(retained.demands, request.Demands, request.RemovedDemandPaths, request.ResetState)
-			if !request.ResetState &&
-				len(request.Demands) == 0 &&
-				len(request.RemovedDemandPaths) == 0 &&
-				retained.table != nil &&
-				retained.table.Generation == *generation {
-				response.TableMode = typefacts.TableModeReuse
-				response.StateToken = expected
-				response.Timings = &typefacts.LifecycleTimings{}
-				response.OK = true
-				return response
-			}
-		}
-		analyzeStarted := time.Now()
-		buildSequence := closure.Stats().BuildSequence
-		var analyzed typefacts.ClosureResponse
-		var analyzedTable *typefacts.FactTable
-		var err error
-		if stateful {
-			analyzedTable, err = closure.DemandTableForGroups(
-				ctx,
-				*generation,
-				demandGroups(nextDemands),
-				demandChangedPaths(request.Demands, request.RemovedDemandPaths),
-			)
-		} else if len(request.Demands) != 0 {
-			analyzed, err = closure.DemandResponseFor(ctx, projectID, *generation, request.Demands)
-		} else {
-			spans := append(append([]typefacts.LocationV2(nil), request.StructuralSpans...), request.CompilerSpans...)
-			slices.SortFunc(spans, func(a, b typefacts.LocationV2) int {
-				return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.StartByte, b.StartByte), cmp.Compare(a.EndByte, b.EndByte))
-			})
-			v2 := typefacts.ClosureRequest{Schema: 2, ProjectID: projectID, Generation: *generation, RulesetVersion: 1, CompilerSpans: spans}
-			analyzed, err = closure.ClosureResponseFor(ctx, v2)
-		}
-		if err != nil {
-			return fail("analysis-failed", err)
-		}
-		if err := ctx.Err(); err != nil {
-			return fail("analysis-cancelled", err)
-		}
-		stageTrace("analyze", time.Since(analyzeStarted))
-		stats := closure.Stats()
-		materialized := stats.BuildSequence != buildSequence
-		response.Timings = &typefacts.LifecycleTimings{
-			AnalyzeNs:    uint64(time.Since(analyzeStarted)),
-			Materialized: materialized,
-		}
-		if materialized {
-			response.Timings.AsyncNs = uint64(stats.AsyncDuration)
-			response.Timings.DemandNs = uint64(stats.DemandDuration)
-			response.Timings.AssemblyNs = uint64(stats.AssemblyDuration)
-			response.Timings.SortNs = uint64(stats.SortDuration)
-			response.Timings.CloseSymbolsNs = uint64(stats.CloseDuration)
-			response.Timings.PrepareNs = uint64(stats.PrepareDuration)
-			response.Timings.RetainedFiles = uint64(stats.Retention.RetainedFiles)
-			response.Timings.RecomputedFiles = uint64(stats.Retention.RecomputedFiles)
-			response.Timings.NonDurableFiles = uint64(stats.Retention.NonDurableFiles)
-		}
-		stageTrace("analyze-materialize", stats.BuildDuration)
-		stageTrace("analyze-async", stats.AsyncDuration)
-		stageTrace("analyze-demand", stats.DemandDuration)
-		stageTrace("analyze-symbols", stats.SymbolDuration)
-		if os.Getenv("SOLID_TYPEFACTS_TIMINGS") != "" {
-			fmt.Fprintf(os.Stderr, "{\"typefactsRetention\":{\"retained\":%d,\"recomputed\":%d,\"suppressionRecompute\":%t}}\n",
-				stats.Retention.RetainedFiles, stats.Retention.RecomputedFiles, stats.Retention.SuppressionRecompute)
-		}
-		if stateful {
-			nextToken := retained.token + 1
-			response.StateToken = strconv.FormatUint(nextToken, 10)
-			if request.ResetState || retained.table == nil || stats.Retention.NonDurableFiles != 0 {
-				response.TableMode = typefacts.TableModeFull
-				table := typefacts.FactTableV2From(*analyzedTable, projectID, *generation)
-				response.Table = &table
-			} else {
-				delta := typefacts.DiffFactTablesV3FromInternal(*retained.table, *analyzedTable, *generation)
-				if retained.table.Generation == analyzedTable.Generation && delta.Empty() {
-					response.TableMode = typefacts.TableModeReuse
-				} else {
-					response.TableMode = typefacts.TableModeDelta
-					response.TableDelta = &delta
-				}
-			}
-			retained.token = nextToken
-			retained.demands = nextDemands
-			table := *analyzedTable
-			retained.table = &table
-		} else {
-			response.Table = &analyzed.Table
-		}
-	case typefacts.LifecycleSources:
-		if request.Generation != *generation {
-			return fail("generation-mismatch", typefacts.ErrGenerationMismatch)
-		}
-		sources, err := closure.SourceFiles(ctx)
-		if err != nil {
-			return fail("sources-failed", err)
-		}
-		response.Sources = make([]typefacts.SourceFileV3, 0, len(sources))
-		for _, source := range sources {
-			response.Sources = append(response.Sources, typefacts.SourceFileV3{
-				Path: source.Path, Source: source.Source,
-			})
-		}
-	case typefacts.LifecycleCancel:
-		// Requests are currently processed serially; cancellation is
-		// acknowledged for an already completed or not-yet-started request.
-	case typefacts.LifecycleClose:
-		response.OK = true
-		return response
-	}
-	response.OK = true
-	return response
-}
-
-func applyDemandChanges(previous map[string][]typefacts.EntityDemand, changes []typefacts.EntityDemand, removed []string, reset bool) map[string][]typefacts.EntityDemand {
-	next := make(map[string][]typefacts.EntityDemand)
-	if !reset {
-		for path, demands := range previous {
-			next[path] = demands
-		}
-	}
-	changed := make(map[string][]typefacts.EntityDemand)
-	for _, demand := range changes {
-		path := filepath.Clean(demand.Location.Path)
-		changed[path] = append(changed[path], demand)
-	}
-	for path, demands := range changed {
-		next[path] = demands
-	}
-	for _, path := range removed {
-		delete(next, filepath.Clean(path))
-	}
-	return next
-}
-
-func demandGroups(grouped map[string][]typefacts.EntityDemand) []typefacts.DemandGroup {
-	paths := make([]string, 0, len(grouped))
-	for path := range grouped {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	result := make([]typefacts.DemandGroup, 0, len(paths))
-	for _, path := range paths {
-		result = append(result, typefacts.DemandGroup{
-			Path:    path,
-			Demands: grouped[path],
-		})
-	}
-	return result
-}
-
-func demandChangedPaths(changes []typefacts.EntityDemand, removed []string) []string {
-	changed := make(map[string]struct{}, len(removed)+1)
-	for _, demand := range changes {
-		changed[filepath.Clean(demand.Location.Path)] = struct{}{}
-	}
-	for _, path := range removed {
-		changed[filepath.Clean(path)] = struct{}{}
-	}
-	paths := make([]string, 0, len(changed))
-	for path := range changed {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	return paths
 }
 
 func readFrame(reader io.Reader) ([]byte, error) {

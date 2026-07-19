@@ -290,14 +290,14 @@ func (p *ClosureProject) Update(ctx context.Context, changes []FileChange) (Affe
 	for _, change := range changes {
 		delete(p.scanSeeds, filepath.Clean(change.Path))
 	}
-	if len(affected.Files) != 0 {
-		invalidPaths := make(map[string]struct{}, len(affected.Files)+len(changes))
-		for _, path := range affected.Files {
-			invalidPaths[filepath.Clean(path)] = struct{}{}
-		}
-		for _, change := range changes {
-			invalidPaths[filepath.Clean(change.Path)] = struct{}{}
-		}
+	invalidPaths := make(map[string]struct{}, len(affected.Files)+len(changes))
+	for _, path := range affected.Files {
+		invalidPaths[filepath.Clean(path)] = struct{}{}
+	}
+	for _, change := range changes {
+		invalidPaths[filepath.Clean(change.Path)] = struct{}{}
+	}
+	if len(invalidPaths) != 0 {
 		for id, fact := range p.symbolFacts {
 			for _, declaration := range fact.Declarations {
 				if _, invalid := invalidPaths[filepath.Clean(declaration.Location.Path)]; invalid {
@@ -307,25 +307,27 @@ func (p *ClosureProject) Update(ctx context.Context, changes []FileChange) (Affe
 				}
 			}
 		}
-		p.table = nil
-		p.previousDemandTable = p.demandTable
-		p.demandTable = nil
-		p.transportChangedPaths = invalidPaths
-		p.closedSyms = nil
-		p.fullTier = nil
-		// refDemand keys are generation-scoped; keeping them across
-		// generations is unbounded growth, not information.
-		p.refDemand = nil
-		// Retained contributions survive except the affected set; a
-		// departed file must be evicted now, not when next queried.
-		for _, path := range affected.Files {
-			delete(p.retained, filepath.Clean(path))
-		}
-		for _, change := range changes {
-			delete(p.retained, filepath.Clean(change.Path))
-		}
-		p.generation++
 	}
+	p.table = nil
+	p.previousDemandTable = p.demandTable
+	p.demandTable = nil
+	p.transportChangedPaths = invalidPaths
+	p.closedSyms = nil
+	p.fullTier = nil
+	// refDemand keys are generation-scoped; keeping them across
+	// generations is unbounded growth, not information.
+	p.refDemand = nil
+	// Retained contributions survive except the affected set; a
+	// departed file must be evicted now, not when next queried.
+	for _, path := range affected.Files {
+		delete(p.retained, filepath.Clean(path))
+	}
+	for _, change := range changes {
+		delete(p.retained, filepath.Clean(change.Path))
+	}
+	// Every accepted protocol update advances exactly one generation, even
+	// when the backend reports no affected source files.
+	p.generation++
 	return affected, nil
 }
 

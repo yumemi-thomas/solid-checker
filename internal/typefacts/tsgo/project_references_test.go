@@ -76,16 +76,16 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 		t.Fatalf("references violate the ordering contract: %+v", references)
 	}
 	cleanA, cleanB := filepath.Clean(aPath), filepath.Clean(bPath)
-	entryA, entryB := proj.referenceFiles[cleanA], proj.referenceFiles[cleanB]
+	entryA, entryB := proj.referenceIndex.files[cleanA], proj.referenceIndex.files[cleanB]
 	if entryA == nil || entryB == nil {
-		t.Fatalf("expected per-file contributions for a.ts and b.ts, got %v", proj.referenceFiles)
+		t.Fatalf("expected per-file contributions for a.ts and b.ts, got %v", proj.referenceIndex.files)
 	}
 
 	t.Run("unrelated update keeps contributions and answers", func(t *testing.T) {
 		if _, err := opened.Update(ctx, []typefacts.FileChange{{Path: cPath, Version: 1, Source: []byte("export const unrelated = 2;\n")}}); err != nil {
 			t.Fatal(err)
 		}
-		if proj.referenceFiles[cleanA] != entryA || proj.referenceFiles[cleanB] != entryB {
+		if proj.referenceIndex.files[cleanA] != entryA || proj.referenceIndex.files[cleanB] != entryB {
 			t.Fatal("contributions of unaffected files did not survive an unrelated update")
 		}
 		reused, err := opened.References(ctx, target)
@@ -101,10 +101,10 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 		if _, err := opened.Update(ctx, []typefacts.FileChange{{Path: bPath, Version: 1, Source: []byte("export function makeThing(): number {\n  return 2;\n}\nexport const local = makeThing();\n")}}); err != nil {
 			t.Fatal(err)
 		}
-		if proj.referenceFiles[cleanA] != entryA {
+		if proj.referenceIndex.files[cleanA] != entryA {
 			t.Fatal("contribution of a.ts did not survive a shape-preserving edit")
 		}
-		if _, ok := proj.referenceFiles[cleanB]; ok {
+		if _, ok := proj.referenceIndex.files[cleanB]; ok {
 			t.Fatal("contribution of b.ts survived its own edit")
 		}
 		recomputed, err := opened.References(ctx, target)
@@ -115,10 +115,10 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 		if !reflect.DeepEqual(recomputed, references) {
 			t.Fatalf("recomputed references diverged:\nbefore %+v\nafter  %+v", references, recomputed)
 		}
-		if refreshed := proj.referenceFiles[cleanB]; refreshed == nil || refreshed == entryB {
+		if refreshed := proj.referenceIndex.files[cleanB]; refreshed == nil || refreshed == entryB {
 			t.Fatal("contribution of b.ts was not lazily replaced after its own edit")
 		}
-		if proj.referenceFiles[filepath.Clean(cPath)] == nil {
+		if proj.referenceIndex.files[filepath.Clean(cPath)] == nil {
 			t.Fatal("expected the unaffected c.ts contribution to be retained")
 		}
 
@@ -145,7 +145,7 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 		if _, err := opened.References(ctx, target); err != nil {
 			t.Fatal(err)
 		}
-		if len(proj.referenceFiles) == 0 {
+		if len(proj.referenceIndex.files) == 0 {
 			t.Fatal("expected contributions before the multi-file update")
 		}
 		_, err := opened.Update(ctx, []typefacts.FileChange{
@@ -155,8 +155,8 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(proj.referenceFiles) != 0 {
-			t.Fatalf("expected no contributions after a full rebuild, found %d", len(proj.referenceFiles))
+		if len(proj.referenceIndex.files) != 0 {
+			t.Fatalf("expected no contributions after a full rebuild, found %d", len(proj.referenceIndex.files))
 		}
 		rebuilt, err := opened.References(ctx, target)
 		if err != nil {
@@ -253,7 +253,7 @@ func TestReferencesDropFileThatLeftProgram(t *testing.T) {
 		t.Fatal(err)
 	}
 	proj := opened.(*project)
-	if _, ok := proj.referenceFiles[filepath.Clean(depPath)]; ok {
+	if _, ok := proj.referenceIndex.files[filepath.Clean(depPath)]; ok {
 		t.Fatal("reference contribution of a departed file survived the update")
 	}
 	// The source-fact memo evicts departed files the same way: dep.ts must

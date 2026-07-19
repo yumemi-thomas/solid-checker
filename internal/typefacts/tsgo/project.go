@@ -34,42 +34,21 @@ var ErrClosed = errors.New("type facts project is closed")
 var _ typefacts.Project = (*project)(nil)
 
 type project struct {
-	mu          sync.Mutex
-	configPath  string
-	fs          *overlayFS
-	versions    map[string]uint64
-	program     *compiler.Program
-	checker     *checker.Checker
-	release     func()
-	closed      bool
-	generation  uint64
-	nextSymbol  uint64
-	idsBySymbol map[*ast.Symbol]typefacts.SymbolID
-	symbolsByID map[typefacts.SymbolID]*ast.Symbol
-	nextType    uint64
-	idsByType   map[*checker.Type]typefacts.TypeID
-	// references is the current generation's reference index, keyed by
-	// durable SymbolID; nil until the first References query of a
-	// generation. It is a merged view of referenceFiles, so rebuilding it
-	// after an update only re-scans files without a retained contribution.
-	references map[typefacts.SymbolID][]typefacts.Location
-	// referenceRefreshPaths are affected source files removed from an
-	// already-materialized merged index. They are rescanned lazily at the
-	// old reference-closure point, after semantic entity resolution, so
-	// generation-scoped symbol counter minting keeps its established order.
-	referenceRefreshPaths map[string]struct{}
-	// referenceChangedSymbols is the exact union of canonical symbols
-	// removed from and added to refreshed per-file contributions. The
-	// companion flag distinguishes a known-empty delta from an unavailable
-	// delta after a first build or broad invalidation.
-	referenceChangedSymbols map[typefacts.SymbolID]struct{}
-	referenceDeltaExact     bool
-	// referenceFiles carries per-file reference contributions across
-	// generations. An entry is retained only while every SymbolID it
-	// contains is durable, so its locations stay attributable after an
-	// update. Update drops the affected set on the incremental path and
-	// clears wholesale on full rebuilds, mirroring sourceFactsMemo.
-	referenceFiles map[string]*fileReferences
+	mu             sync.Mutex
+	configPath     string
+	fs             *overlayFS
+	versions       map[string]uint64
+	program        *compiler.Program
+	checker        *checker.Checker
+	release        func()
+	closed         bool
+	generation     uint64
+	nextSymbol     uint64
+	idsBySymbol    map[*ast.Symbol]typefacts.SymbolID
+	symbolsByID    map[typefacts.SymbolID]*ast.Symbol
+	nextType       uint64
+	idsByType      map[*checker.Type]typefacts.TypeID
+	referenceIndex referenceIndex
 	// sourceFactsMemo carries per-file Source* facts across generations. An
 	// entry is stored only when every symbol identity it contains is durable,
 	// so its facts stay resolvable after an update. Update drops the affected
@@ -418,62 +397,12 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 				delete(p.sourceFactsMemo, key)
 			}
 		}
-		// When the merged index has already been materialized and the
-		// affected set is small, update it from the same per-file fragments
-		// instead of concatenating all unchanged files again. Large affected
-		// sets retain the simpler full-index rebuild path.
-		// A second update before the pending fragments are rescanned cannot
-		// safely compose an exact symbol delta. Fall back instead of silently
-		// dropping the earlier generation's refresh paths.
-		incrementalReferences := p.references != nil && len(affected) <= 64 && len(p.referenceRefreshPaths) == 0
-		refreshReferencePaths := make(map[string]struct{}, len(affected))
-		changedReferenceSymbols := make(map[typefacts.SymbolID]struct{})
-		for path, entry := range p.referenceFiles {
-			// A non-durable entry holds generation-scoped counter IDs no
-			// later generation can resolve; fail closed and re-scan.
-			if !retained(path) || !entry.durable {
-				if incrementalReferences {
-					for id := range entry.refs {
-						changedReferenceSymbols[id] = struct{}{}
-						locations := p.references[id]
-						kept := locations[:0]
-						for _, location := range locations {
-							if filepath.Clean(location.Path) != path {
-								kept = append(kept, location)
-							}
-						}
-						if len(kept) == 0 {
-							delete(p.references, id)
-						} else {
-							p.references[id] = kept
-						}
-					}
-					if sourceFile := program.GetSourceFile(path); sourceFile != nil && !sourceFile.IsDeclarationFile {
-						refreshReferencePaths[path] = struct{}{}
-					}
-				}
-				delete(p.referenceFiles, path)
-			}
-		}
-		if incrementalReferences {
-			p.referenceRefreshPaths = refreshReferencePaths
-			p.referenceChangedSymbols = changedReferenceSymbols
-			p.referenceDeltaExact = true
-		} else {
-			p.references = nil
-			p.referenceRefreshPaths = nil
-			p.referenceChangedSymbols = nil
-			p.referenceDeltaExact = false
-		}
+		p.referenceIndex.invalidate(program, affected, retained)
 	} else {
 		// Full rebuilds (deletes, tsconfig changes, multi-file updates) can
 		// change resolution outside the module graph; fail closed.
 		clear(p.sourceFactsMemo)
-		p.references = nil
-		p.referenceRefreshPaths = nil
-		p.referenceChangedSymbols = nil
-		p.referenceDeltaExact = false
-		p.referenceFiles = nil
+		p.referenceIndex.reset()
 	}
 	if p.declarationShapes == nil {
 		p.declarationShapes = make(map[string]declarationShape)
@@ -863,195 +792,6 @@ func (p *project) Declarations(ctx context.Context, id typefacts.SymbolID) ([]ty
 	return declarations, nil
 }
 
-func (p *project) References(ctx context.Context, id typefacts.SymbolID) ([]typefacts.Location, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		return nil, ErrClosed
-	}
-	target, ok := p.symbolFor(id)
-	if !ok {
-		// A durable ID whose declaration no longer re-resolves fails closed
-		// here, before any retained index entry could answer for it.
-		return nil, fmt.Errorf("%w: symbol %s", typefacts.ErrNotFound, id)
-	}
-	canonical := p.idFor(p.canonicalSymbol(target))
-
-	p.ensureReferenceIndex()
-	return append([]typefacts.Location(nil), p.references[canonical]...), nil
-}
-
-// ReferencesBatch is the closure-oriented counterpart of References. TS-Go's
-// reference index is already retained as per-file fragments; resolving a
-// batch here merges those fragments once and amortizes the project lock,
-// durable-ID lookup, alias canonicalization, and slice allocation.
-func (p *project) ReferencesBatch(ctx context.Context, ids []typefacts.SymbolID) (map[typefacts.SymbolID][]typefacts.Location, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		return nil, ErrClosed
-	}
-	p.ensureReferenceIndex()
-	result := make(map[typefacts.SymbolID][]typefacts.Location, len(ids))
-	for _, id := range ids {
-		target, ok := p.symbolFor(id)
-		if !ok {
-			continue
-		}
-		canonical := p.idFor(p.canonicalSymbol(target))
-		result[id] = append([]typefacts.Location(nil), p.references[canonical]...)
-	}
-	return result, nil
-}
-
-// ChangedReferences exposes the retained reference index's generation-stable
-// invalidation set. It never consumes the delta: cancelled analyses and
-// retries in the same generation observe the same answer.
-func (p *project) ChangedReferences(ctx context.Context) ([]typefacts.SymbolID, bool, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, false, err
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		return nil, false, ErrClosed
-	}
-	p.ensureReferenceIndex()
-	if !p.referenceDeltaExact {
-		return nil, false, nil
-	}
-	ids := make([]typefacts.SymbolID, 0, len(p.referenceChangedSymbols))
-	for id := range p.referenceChangedSymbols {
-		ids = append(ids, id)
-	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
-	return ids, true, nil
-}
-
-func (p *project) ensureReferenceIndex() {
-	if p.references == nil {
-		p.references = p.buildReferenceIndex()
-		p.referenceRefreshPaths = nil
-		return
-	}
-	if len(p.referenceRefreshPaths) == 0 {
-		return
-	}
-	paths := make([]string, 0, len(p.referenceRefreshPaths))
-	for path := range p.referenceRefreshPaths {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	touched := make(map[typefacts.SymbolID]struct{})
-	for _, path := range paths {
-		sourceFile := p.program.GetSourceFile(path)
-		if sourceFile == nil || sourceFile.IsDeclarationFile {
-			continue
-		}
-		entry := p.scanFileReferences(path, sourceFile)
-		p.referenceFiles[path] = entry
-		for id, locations := range entry.refs {
-			touched[id] = struct{}{}
-			if p.referenceDeltaExact {
-				p.referenceChangedSymbols[id] = struct{}{}
-			}
-			p.references[id] = append(p.references[id], locations...)
-		}
-	}
-	for id := range touched {
-		locations := p.references[id]
-		sort.Slice(locations, func(i, j int) bool {
-			if locations[i].Path != locations[j].Path {
-				return locations[i].Path < locations[j].Path
-			}
-			if locations[i].StartByte != locations[j].StartByte {
-				return locations[i].StartByte < locations[j].StartByte
-			}
-			return locations[i].EndByte < locations[j].EndByte
-		})
-	}
-	p.referenceRefreshPaths = nil
-}
-
-// fileReferences is one file's contribution to the reference index: every
-// resolvable non-declaration identifier in the file, grouped by the durable
-// SymbolID of its alias-canonicalized symbol, each group in ascending byte
-// order. durable reports whether every grouped ID is durable; an entry with
-// generation-scoped counter IDs cannot outlive its generation.
-type fileReferences struct {
-	refs    map[typefacts.SymbolID][]typefacts.Location
-	durable bool
-}
-
-// buildReferenceIndex merges the per-file contributions into the current
-// generation's reference index, scanning only files without a retained
-// entry (Update already evicted the affected set and departed files).
-// Merging in path order, with each per-file group already in byte order,
-// preserves the References ordering contract (path, then start byte)
-// without a global sort.
-func (p *project) buildReferenceIndex() map[typefacts.SymbolID][]typefacts.Location {
-	if p.referenceFiles == nil {
-		p.referenceFiles = make(map[string]*fileReferences)
-	}
-	sourceFiles := p.program.SourceFiles()
-	paths := make([]string, 0, len(sourceFiles))
-	for _, sourceFile := range sourceFiles {
-		if sourceFile.IsDeclarationFile {
-			continue
-		}
-		path := filepath.Clean(sourceFile.FileName())
-		paths = append(paths, path)
-		if _, ok := p.referenceFiles[path]; !ok {
-			p.referenceFiles[path] = p.scanFileReferences(path, sourceFile)
-		}
-	}
-	sort.Strings(paths)
-	references := make(map[typefacts.SymbolID][]typefacts.Location)
-	for _, path := range paths {
-		for id, locations := range p.referenceFiles[path].refs {
-			references[id] = append(references[id], locations...)
-		}
-	}
-	return references
-}
-
-// scanFileReferences resolves every non-declaration identifier in one file.
-func (p *project) scanFileReferences(path string, sourceFile *ast.SourceFile) *fileReferences {
-	entry := &fileReferences{refs: make(map[typefacts.SymbolID][]typefacts.Location), durable: true}
-	var visit func(*ast.Node) bool
-	visit = func(node *ast.Node) bool {
-		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) {
-			if symbol := p.checker.GetSymbolAtLocation(node); symbol != nil {
-				id := p.idFor(p.canonicalSymbol(symbol))
-				if !durableSymbolID(id) {
-					entry.durable = false
-				}
-				entry.refs[id] = append(entry.refs[id], typefacts.Location{
-					Path:      path,
-					StartByte: scanner.SkipTrivia(sourceFile.Text(), node.Pos()),
-					EndByte:   node.End(),
-				})
-			}
-		}
-		node.ForEachChild(visit)
-		return false
-	}
-	for _, statement := range sourceFile.Statements.Nodes {
-		visit(statement)
-	}
-	for id, locations := range entry.refs {
-		sort.Slice(locations, func(i, j int) bool { return locations[i].StartByte < locations[j].StartByte })
-		entry.refs[id] = locations
-	}
-	return entry
-}
-
 func (p *project) TypeAt(ctx context.Context, location typefacts.Location) (typefacts.TypeID, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
@@ -1233,15 +973,6 @@ func sourceBindingsDurable(bindings []typefacts.SourceBinding) bool {
 	return true
 }
 
-func asyncFactsDurable(facts []typefacts.AsyncFunctionFact) bool {
-	for _, fact := range facts {
-		if !durableSymbolID(fact.Symbol) || !durableSymbolID(fact.Target) {
-			return false
-		}
-	}
-	return true
-}
-
 func (p *project) SourceCalls(ctx context.Context, path string) ([]typefacts.SourceCall, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -1376,211 +1107,6 @@ func (p *project) SourceFunctions(ctx context.Context, path string) ([]typefacts
 	return functions, nil
 }
 
-func (p *project) SourceAsyncFunctions(ctx context.Context, path string) ([]typefacts.AsyncFunctionFact, error) {
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		return nil, ErrClosed
-	}
-	memo := p.memoFor(path)
-	if memo != nil && memo.hasAsync {
-		return append([]typefacts.AsyncFunctionFact(nil), memo.async...), nil
-	}
-	sourceFile, err := p.sourceFileFor(typefacts.Location{Path: path})
-	if err != nil {
-		return nil, err
-	}
-	facts := make([]typefacts.AsyncFunctionFact, 0)
-	var visit func(*ast.Node) bool
-	visit = func(node *ast.Node) bool {
-		if ast.IsArrowFunction(node) || ast.IsFunctionExpression(node) || ast.IsFunctionDeclaration(node) {
-			body, symbol := asyncFunctionBodyAndSymbol(p, node)
-			if body != nil {
-				fact := typefacts.AsyncFunctionFact{
-					Expression: typefacts.Location{Path: path, StartByte: scanner.SkipTrivia(sourceFile.Text(), node.Pos()), EndByte: node.End()},
-					Symbol:     symbol, CanReturnAsync: ast.HasSyntacticModifier(node, ast.ModifierFlagsAsync),
-				}
-				if !fact.CanReturnAsync {
-					functionType := p.checker.GetTypeAtLocation(node)
-					for _, signature := range p.checker.GetSignaturesOfType(functionType, checker.SignatureKindCall) {
-						if asyncReturnType(p.checker, p.checker.GetReturnTypeOfSignature(signature)) {
-							fact.CanReturnAsync = true
-							break
-						}
-					}
-				}
-				state := asyncFlowState{reachable: true}
-				scanAsyncFlow(p, path, sourceFile, body, body, &state, &fact.CallsAfterAwait)
-				facts = append(facts, fact)
-			}
-		} else if ast.IsVariableDeclaration(node) {
-			declaration := node.AsVariableDeclaration()
-			if ast.IsIdentifier(declaration.Name()) && declaration.Initializer != nil && ast.IsIdentifier(declaration.Initializer) {
-				alias := p.checker.GetSymbolAtLocation(declaration.Name())
-				target := p.checker.GetSymbolAtLocation(declaration.Initializer)
-				if alias != nil && target != nil {
-					facts = append(facts, typefacts.AsyncFunctionFact{
-						Expression: typefacts.Location{Path: path, StartByte: scanner.SkipTrivia(sourceFile.Text(), declaration.Initializer.Pos()), EndByte: declaration.Initializer.End()},
-						Symbol:     p.idFor(p.canonicalSymbol(alias)),
-						Target:     p.idFor(p.canonicalSymbol(target)),
-					})
-				}
-			}
-		}
-		node.ForEachChild(visit)
-		return false
-	}
-	for _, statement := range sourceFile.Statements.Nodes {
-		visit(statement)
-	}
-	if memo != nil && asyncFactsDurable(facts) {
-		memo.async = facts
-		memo.hasAsync = true
-	}
-	return facts, nil
-}
-
-func asyncFunctionBodyAndSymbol(p *project, node *ast.Node) (*ast.Node, typefacts.SymbolID) {
-	var body, name *ast.Node
-	switch {
-	case ast.IsArrowFunction(node):
-		body = node.AsArrowFunction().Body
-		if parent := node.Parent; parent != nil && ast.IsVariableDeclaration(parent) {
-			name = parent.AsVariableDeclaration().Name()
-		}
-	case ast.IsFunctionExpression(node):
-		body = node.AsFunctionExpression().Body
-	case ast.IsFunctionDeclaration(node):
-		body = node.AsFunctionDeclaration().Body
-		name = node.AsFunctionDeclaration().Name()
-	}
-	if name != nil {
-		if symbol := p.checker.GetSymbolAtLocation(name); symbol != nil {
-			return body, p.idFor(p.canonicalSymbol(symbol))
-		}
-	}
-	return body, ""
-}
-
-func asyncReturnType(typeChecker *checker.Checker, returnType *checker.Type) bool {
-	if returnType == nil {
-		return false
-	}
-	if awaited := checker.Checker_getAwaitedType(typeChecker, returnType); awaited != nil && !checker.Checker_isTypeIdenticalTo(typeChecker, returnType, awaited) {
-		return true
-	}
-	if symbol := checker.Type_symbol(returnType); symbol != nil {
-		return symbol.Name == "AsyncIterable" || symbol.Name == "AsyncIterator"
-	}
-	return false
-}
-
-type asyncFlowState struct {
-	awaited   bool
-	reachable bool
-}
-
-func scanAsyncFlow(p *project, path string, sourceFile *ast.SourceFile, root, node *ast.Node, state *asyncFlowState, calls *[]typefacts.Location) {
-	if node == nil || !state.reachable {
-		return
-	}
-	if node != root && (ast.IsArrowFunction(node) || ast.IsFunctionExpression(node) || ast.IsFunctionDeclaration(node)) {
-		return
-	}
-	if ast.IsBlock(node) {
-		for _, statement := range node.AsBlock().Statements.Nodes {
-			scanAsyncFlow(p, path, sourceFile, root, statement, state, calls)
-			if !state.reachable {
-				break
-			}
-		}
-		return
-	}
-	if ast.IsIfStatement(node) {
-		statement := node.AsIfStatement()
-		scanAsyncFlow(p, path, sourceFile, root, statement.Expression, state, calls)
-		thenState, elseState := *state, *state
-		scanAsyncFlow(p, path, sourceFile, root, statement.ThenStatement, &thenState, calls)
-		if statement.ElseStatement != nil {
-			scanAsyncFlow(p, path, sourceFile, root, statement.ElseStatement, &elseState, calls)
-		}
-		*state = mergeAsyncBranches(thenState, elseState)
-		return
-	}
-	if ast.IsConditionalExpression(node) {
-		expression := node.AsConditionalExpression()
-		scanAsyncFlow(p, path, sourceFile, root, expression.Condition, state, calls)
-		trueState, falseState := *state, *state
-		scanAsyncFlow(p, path, sourceFile, root, expression.WhenTrue, &trueState, calls)
-		scanAsyncFlow(p, path, sourceFile, root, expression.WhenFalse, &falseState, calls)
-		*state = mergeAsyncBranches(trueState, falseState)
-		return
-	}
-	if ast.IsTryStatement(node) {
-		statement := node.AsTryStatement()
-		tryState, catchState := *state, *state
-		scanAsyncFlow(p, path, sourceFile, root, statement.TryBlock, &tryState, calls)
-		if statement.CatchClause != nil {
-			scanAsyncFlow(p, path, sourceFile, root, statement.CatchClause.AsCatchClause().Block, &catchState, calls)
-		} else {
-			catchState = tryState
-		}
-		*state = mergeAsyncBranches(tryState, catchState)
-		if statement.FinallyBlock != nil {
-			scanAsyncFlow(p, path, sourceFile, root, statement.FinallyBlock, state, calls)
-		}
-		return
-	}
-	if ast.IsIterationStatement(node, true) {
-		entry := *state
-		loopState := entry
-		node.ForEachChild(func(child *ast.Node) bool {
-			scanAsyncFlow(p, path, sourceFile, root, child, &loopState, calls)
-			return false
-		})
-		state.awaited, state.reachable = entry.awaited, entry.reachable
-		return
-	}
-	if ast.IsAwaitExpression(node) {
-		node.ForEachChild(func(child *ast.Node) bool {
-			scanAsyncFlow(p, path, sourceFile, root, child, state, calls)
-			return false
-		})
-		state.awaited = true
-		return
-	}
-	if ast.IsCallExpression(node) && state.awaited {
-		if call, ok := p.sourceCallFact(path, sourceFile, node); ok {
-			*calls = append(*calls, call.Callee)
-		}
-	}
-	if ast.IsReturnStatement(node) || ast.IsThrowStatement(node) {
-		node.ForEachChild(func(child *ast.Node) bool {
-			scanAsyncFlow(p, path, sourceFile, root, child, state, calls)
-			return false
-		})
-		state.reachable = false
-		return
-	}
-	node.ForEachChild(func(child *ast.Node) bool {
-		scanAsyncFlow(p, path, sourceFile, root, child, state, calls)
-		return false
-	})
-}
-
-func mergeAsyncBranches(left, right asyncFlowState) asyncFlowState {
-	if !left.reachable {
-		return right
-	}
-	if !right.reachable {
-		return left
-	}
-	return asyncFlowState{reachable: true, awaited: left.awaited && right.awaited}
-}
-
 func sourceFunctionFact(path, source string, name, body *ast.Node, parameters []*ast.Node, owner *ast.Node) typefacts.SourceFunction {
 	parameterLocations := make([]typefacts.Location, 0, len(parameters))
 	for _, parameter := range parameters {
@@ -1687,11 +1213,7 @@ func (p *project) Close() error {
 	clear(p.idsByType)
 	clear(p.sourceFactsMemo)
 	clear(p.durableRefs)
-	p.references = nil
-	p.referenceRefreshPaths = nil
-	p.referenceChangedSymbols = nil
-	p.referenceDeltaExact = false
-	p.referenceFiles = nil
+	p.referenceIndex.reset()
 	p.filesByName = nil
 	p.declarationShapes = nil
 	p.exportedIdentities = nil

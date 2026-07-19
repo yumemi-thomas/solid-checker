@@ -329,6 +329,30 @@ pub fn decode_trusted<T: DeserializeOwned>(encoded: &[u8]) -> Result<T, TypeFact
     ciborium::from_reader(encoded).map_err(|error| TypeFactsError::Codec(error.to_string()))
 }
 
+/// Write one length-prefixed payload using the TypeFacts u32-LE frame codec.
+pub fn write_frame(writer: &mut impl Write, payload: &[u8]) -> Result<(), TypeFactsError> {
+    enforce_limit(payload.len())?;
+    let length = u32::try_from(payload.len()).map_err(|_| TypeFactsError::MessageLimit {
+        actual: payload.len(),
+        limit: u32::MAX as usize,
+    })?;
+    writer.write_all(&length.to_le_bytes())?;
+    writer.write_all(payload)?;
+    writer.flush()?;
+    Ok(())
+}
+
+/// Read one length-prefixed payload using the TypeFacts u32-LE frame codec.
+pub fn read_frame(reader: &mut impl Read) -> Result<Vec<u8>, TypeFactsError> {
+    let mut prefix = [0_u8; 4];
+    reader.read_exact(&mut prefix)?;
+    let length = u32::from_le_bytes(prefix) as usize;
+    enforce_limit(length)?;
+    let mut payload = vec![0_u8; length];
+    reader.read_exact(&mut payload)?;
+    Ok(payload)
+}
+
 pub struct FramedTransport<S> {
     stream: S,
 }
@@ -348,23 +372,11 @@ impl<S> FramedTransport<S> {
 impl<S: Read + Write> FramedTransport<S> {
     pub fn send<Request: Serialize>(&mut self, request: &Request) -> Result<(), TypeFactsError> {
         let encoded = encode(request)?;
-        let length = u32::try_from(encoded.len()).map_err(|_| TypeFactsError::MessageLimit {
-            actual: encoded.len(),
-            limit: u32::MAX as usize,
-        })?;
-        self.stream.write_all(&length.to_le_bytes())?;
-        self.stream.write_all(&encoded)?;
-        self.stream.flush()?;
-        Ok(())
+        write_frame(&mut self.stream, &encoded)
     }
 
     pub fn receive<Response: DeserializeOwned>(&mut self) -> Result<Response, TypeFactsError> {
-        let mut prefix = [0_u8; 4];
-        self.stream.read_exact(&mut prefix)?;
-        let response_len = u32::from_le_bytes(prefix) as usize;
-        enforce_limit(response_len)?;
-        let mut response = vec![0_u8; response_len];
-        self.stream.read_exact(&mut response)?;
+        let response = read_frame(&mut self.stream)?;
         decode(&response)
     }
 
@@ -730,6 +742,18 @@ mod tests {
                 r#async: false,
                 structural_accessor: false,
             }],
+            compact_demands: Some(v3::CompactDemands {
+                groups: vec![v3::CompactDemandGroup(
+                    1,
+                    vec![v3::CompactDemand(
+                        v3::DEMAND_FLAG_SYMBOL | v3::DEMAND_FLAG_REFERENCES,
+                        1,
+                        2,
+                        vec![v3::CompactLocation(1, 1, 2)],
+                    )],
+                )],
+                strings: vec![String::new(), "a.ts".into()],
+            }),
             state_token: "9".into(),
             reset_state: false,
             removed_demand_paths: vec!["old.ts".into()],
@@ -739,6 +763,242 @@ mod tests {
             encode_sidecar_request(&request).unwrap(),
             encode(&request).unwrap()
         );
+    }
+
+    #[test]
+    fn compact_demands_and_table_round_trip() {
+        let location = |path: &str, start: u64, end: u64| Location {
+            path: path.into(),
+            start_byte: start,
+            end_byte: end,
+        };
+        let demands = vec![
+            v3::EntityDemand {
+                location: location("a.ts", 1, 4),
+                query_location: None,
+                symbol: true,
+                type_descriptor: false,
+                resolved_call: false,
+                references: true,
+                r#async: false,
+                structural_accessor: false,
+            },
+            v3::EntityDemand {
+                location: location("a.ts", 5, 9),
+                query_location: Some(location("a.ts", 6, 8)),
+                symbol: true,
+                type_descriptor: true,
+                resolved_call: true,
+                references: false,
+                r#async: true,
+                structural_accessor: true,
+            },
+            v3::EntityDemand {
+                location: location("b.ts", 2, 8),
+                query_location: None,
+                symbol: false,
+                type_descriptor: false,
+                resolved_call: false,
+                references: false,
+                r#async: true,
+                structural_accessor: false,
+            },
+        ];
+        let compact = v3::compact_demands(&demands);
+        let decoded: v3::CompactDemands = decode(&encode(&compact).unwrap()).unwrap();
+        assert_eq!(decoded, compact);
+        assert_eq!(decoded.groups.len(), 2);
+        assert_eq!(decoded.strings[0], "");
+
+        let table = FactTable {
+            schema: 2,
+            generation: 3,
+            project_id: "project".into(),
+            sources: vec![SourceDigest {
+                path: "a.ts".into(),
+                sha256: solid_facts_core::SourceHash::of("src"),
+            }],
+            entities: vec![
+                EntityFact {
+                    location: location("a.ts", 1, 4),
+                    symbol: "symbol:h:1".into(),
+                    type_descriptor: None,
+                    resolved_call: None,
+                },
+                EntityFact {
+                    location: location("a.ts", 5, 9),
+                    symbol: String::new(),
+                    type_descriptor: Some(TypeDescriptor {
+                        text: "Accessor<number>".into(),
+                        origin_module: "solid-js".into(),
+                        alias_declarations: vec![Declaration {
+                            name: "Accessor".into(),
+                            kind: "TypeAlias".into(),
+                            location: location("d.ts", 10, 30),
+                        }],
+                    }),
+                    resolved_call: Some(ResolvedCall {
+                        target: "symbol:h:1".into(),
+                        return_type_text: "() => number".into(),
+                    }),
+                },
+            ],
+            symbols: vec![SymbolFact {
+                id: "symbol:h:1".into(),
+                alias_target: String::new(),
+                declarations: vec![Declaration {
+                    name: "count".into(),
+                    kind: "Variable".into(),
+                    location: location("a.ts", 1, 4),
+                }],
+                references: vec![location("a.ts", 1, 4), location("b.ts", 2, 8)],
+            }],
+            files: vec![FileFact {
+                path: "a.ts".into(),
+                calls: vec![SourceCall {
+                    location: location("a.ts", 2, 8),
+                    callee: location("a.ts", 2, 7),
+                    arguments: vec![location("a.ts", 7, 8)],
+                    target: "symbol:h:1".into(),
+                }],
+                bindings: vec![SourceBinding {
+                    array: true,
+                    names: vec![location("a.ts", 0, 1)],
+                    initializer: SourceCall {
+                        location: location("a.ts", 2, 8),
+                        callee: location("a.ts", 2, 7),
+                        arguments: vec![],
+                        target: String::new(),
+                    },
+                }],
+                functions: vec![SourceFunction {
+                    name: location("a.ts", 20, 25),
+                    body: location("a.ts", 26, 40),
+                    parameters: vec![location("a.ts", 21, 22)],
+                    exported: true,
+                    r#async: false,
+                    arrow: true,
+                }],
+                async_functions: vec![AsyncFunctionFact {
+                    expression: location("a.ts", 26, 40),
+                    symbol: "symbol:h:2".into(),
+                    target: "symbol:h:1".into(),
+                    can_return_async: true,
+                    calls_after_await: vec![location("a.ts", 30, 34)],
+                }],
+            }],
+        };
+        // Build the compact table the way the Go service does: grouped by
+        // path with one dictionary, then prove expansion is lossless after a
+        // codec round trip.
+        let compact_table = v3::CompactFactTable {
+            schema: table.schema,
+            generation: table.generation,
+            project_id: table.project_id.clone(),
+            strings: vec![
+                "".into(),
+                "a.ts".into(),
+                "symbol:h:1".into(),
+                "Accessor<number>".into(),
+                "solid-js".into(),
+                "Accessor".into(),
+                "TypeAlias".into(),
+                "d.ts".into(),
+                "() => number".into(),
+                "count".into(),
+                "Variable".into(),
+                "b.ts".into(),
+                "symbol:h:2".into(),
+            ],
+            sources: vec![v3::CompactSourceDigest(1, solid_facts_core::SourceHash::of("src"))],
+            entity_files: vec![v3::CompactEntityFile(
+                1,
+                vec![
+                    v3::CompactEntityFact(1, 4, 2, vec![], vec![]),
+                    v3::CompactEntityFact(
+                        5,
+                        9,
+                        0,
+                        vec![v3::CompactTypeDescriptor(
+                            3,
+                            4,
+                            vec![v3::CompactDeclaration(
+                                5,
+                                6,
+                                v3::CompactLocation(7, 10, 30),
+                            )],
+                        )],
+                        vec![v3::CompactCall(2, 8)],
+                    ),
+                ],
+            )],
+            symbols: vec![v3::CompactSymbolFact(
+                2,
+                0,
+                vec![v3::CompactDeclaration(
+                    9,
+                    10,
+                    v3::CompactLocation(1, 1, 4),
+                )],
+                vec![
+                    v3::CompactLocation(1, 1, 4),
+                    v3::CompactLocation(11, 2, 8),
+                ],
+            )],
+            files: vec![v3::CompactFileFact(
+                1,
+                vec![v3::CompactSourceCall(
+                    v3::CompactLocation(1, 2, 8),
+                    v3::CompactLocation(1, 2, 7),
+                    vec![v3::CompactLocation(1, 7, 8)],
+                    2,
+                )],
+                vec![v3::CompactSourceBinding(
+                    v3::BINDING_FLAG_ARRAY,
+                    vec![v3::CompactLocation(1, 0, 1)],
+                    v3::CompactSourceCall(
+                        v3::CompactLocation(1, 2, 8),
+                        v3::CompactLocation(1, 2, 7),
+                        vec![],
+                        0,
+                    ),
+                )],
+                vec![v3::CompactSourceFunction(
+                    v3::CompactLocation(1, 20, 25),
+                    v3::CompactLocation(1, 26, 40),
+                    vec![v3::CompactLocation(1, 21, 22)],
+                    v3::FUNCTION_FLAG_EXPORTED | v3::FUNCTION_FLAG_ARROW,
+                )],
+                vec![v3::CompactAsyncFunction(
+                    v3::CompactLocation(1, 26, 40),
+                    12,
+                    2,
+                    v3::ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC,
+                    vec![v3::CompactLocation(1, 30, 34)],
+                )],
+            )],
+        };
+        let decoded: v3::CompactFactTable = decode(&encode(&compact_table).unwrap()).unwrap();
+        assert_eq!(decoded.expand().unwrap(), table);
+
+        let broken = v3::CompactFactTable {
+            sources: vec![v3::CompactSourceDigest(99, solid_facts_core::SourceHash::of("src"))],
+            ..compact_table
+        };
+        assert!(broken.expand().is_err());
+    }
+
+    #[test]
+    fn frame_codec_round_trips_and_rejects_oversized_prefixes() {
+        let mut framed = Vec::new();
+        write_frame(&mut framed, b"payload").unwrap();
+        assert_eq!(read_frame(&mut framed.as_slice()).unwrap(), b"payload");
+
+        let oversized = u32::try_from(MAX_MESSAGE_BYTES + 1).unwrap().to_le_bytes();
+        assert!(matches!(
+            read_frame(&mut oversized.as_slice()),
+            Err(TypeFactsError::MessageLimit { .. })
+        ));
     }
 
     #[test]

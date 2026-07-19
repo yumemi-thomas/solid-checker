@@ -5,7 +5,6 @@ import (
 
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/microsoft/typescript-go/shim/scanner"
 	"github.com/yumemi-thomas/solid-check/internal/typefacts"
 )
 
@@ -62,16 +61,8 @@ func (p *project) SourceFileFacts(ctx context.Context, path string) (typefacts.F
 					facts.Functions = append(facts.Functions, function)
 				}
 			}
-			if ast.IsIdentifier(declaration.Name()) && declaration.Initializer != nil && ast.IsIdentifier(declaration.Initializer) {
-				alias := p.checker.GetSymbolAtLocation(declaration.Name())
-				target := p.checker.GetSymbolAtLocation(declaration.Initializer)
-				if alias != nil && target != nil {
-					facts.AsyncFunctions = append(facts.AsyncFunctions, typefacts.AsyncFunctionFact{
-						Expression: typefacts.Location{Path: path, StartByte: scanner.SkipTrivia(sourceFile.Text(), declaration.Initializer.Pos()), EndByte: declaration.Initializer.End()},
-						Symbol:     p.idFor(p.canonicalSymbol(alias)),
-						Target:     p.idFor(p.canonicalSymbol(target)),
-					})
-				}
+			if fact, ok := p.asyncAliasFact(path, sourceFile, node); ok {
+				facts.AsyncFunctions = append(facts.AsyncFunctions, fact)
 			}
 		}
 		if ast.IsFunctionDeclaration(node) {
@@ -80,24 +71,8 @@ func (p *project) SourceFileFacts(ctx context.Context, path string) (typefacts.F
 				facts.Functions = append(facts.Functions, sourceFunctionFact(path, sourceFile.Text(), declaration.Name(), declaration.Body, declaration.Parameters.Nodes, node))
 			}
 		}
-		if ast.IsArrowFunction(node) || ast.IsFunctionExpression(node) || ast.IsFunctionDeclaration(node) {
-			body, symbol := asyncFunctionBodyAndSymbol(p, node)
-			if body != nil {
-				fact := typefacts.AsyncFunctionFact{
-					Expression: typefacts.Location{Path: path, StartByte: scanner.SkipTrivia(sourceFile.Text(), node.Pos()), EndByte: node.End()},
-					Symbol:     symbol, CanReturnAsync: ast.HasSyntacticModifier(node, ast.ModifierFlagsAsync),
-				}
-				if !fact.CanReturnAsync {
-					functionType := p.checker.GetTypeAtLocation(node)
-					for _, signature := range p.checker.GetSignaturesOfType(functionType, checker.SignatureKindCall) {
-						if asyncReturnType(p.checker, p.checker.GetReturnTypeOfSignature(signature)) {
-							fact.CanReturnAsync = true
-							break
-						}
-					}
-				}
-				state := asyncFlowState{reachable: true}
-				scanAsyncFlow(p, path, sourceFile, body, body, &state, &fact.CallsAfterAwait)
+		if isAsyncFunctionNode(node) {
+			if fact, ok := p.asyncFunctionFact(path, sourceFile, node); ok {
 				facts.AsyncFunctions = append(facts.AsyncFunctions, fact)
 			}
 		}
