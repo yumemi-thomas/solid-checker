@@ -2,12 +2,19 @@ package tsgo
 
 import (
 	"context"
+	"path/filepath"
+	"sort"
 
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/checker"
 	"github.com/microsoft/typescript-go/shim/scanner"
 	"github.com/yumemi-thomas/solid-check/internal/typefacts"
 )
+
+type asyncLocationKey struct {
+	startByte int
+	endByte   int
+}
 
 func asyncFactsDurable(facts []typefacts.AsyncFunctionFact) bool {
 	for _, fact := range facts {
@@ -16,6 +23,153 @@ func asyncFactsDurable(facts []typefacts.AsyncFunctionFact) bool {
 		}
 	}
 	return true
+}
+
+// AsyncFunctionsAt performs the production semantic lookup: each location
+// selects an inline/containing function, or follows an identifier through
+// local variable aliases to its function declaration. One checker lock covers
+// the complete batch, and per-location results survive unchanged generations.
+func (p *project) AsyncFunctionsAt(ctx context.Context, locations []typefacts.Location) ([]typefacts.AsyncFunctionFact, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, ErrClosed
+	}
+	facts := make([]typefacts.AsyncFunctionFact, 0, len(locations))
+	seen := make(map[asyncFactKey]struct{}, len(locations))
+	for _, location := range locations {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		location.Path = filepath.Clean(location.Path)
+		memo := p.memoFor(location.Path)
+		key := asyncLocationKey{startByte: location.StartByte, endByte: location.EndByte}
+		var selected []typefacts.AsyncFunctionFact
+		if memo != nil && memo.asyncAt != nil {
+			selected = memo.asyncAt[key]
+		}
+		if selected == nil {
+			sourceFile, err := p.sourceFileFor(location)
+			if err != nil {
+				return nil, err
+			}
+			selected = p.asyncFunctionsAtLocation(location, sourceFile)
+			if memo != nil && asyncFactsDurable(selected) {
+				if memo.asyncAt == nil {
+					memo.asyncAt = make(map[asyncLocationKey][]typefacts.AsyncFunctionFact)
+				}
+				memo.asyncAt[key] = append([]typefacts.AsyncFunctionFact{}, selected...)
+			}
+		}
+		for _, fact := range selected {
+			key := asyncFactKey{
+				path:      filepath.Clean(fact.Expression.Path),
+				startByte: fact.Expression.StartByte,
+				endByte:   fact.Expression.EndByte,
+				symbol:    fact.Symbol,
+				target:    fact.Target,
+			}
+			if _, exists := seen[key]; exists {
+				continue
+			}
+			seen[key] = struct{}{}
+			fact.Expression.Path = key.path
+			for index := range fact.CallsAfterAwait {
+				fact.CallsAfterAwait[index].Path = filepath.Clean(fact.CallsAfterAwait[index].Path)
+			}
+			facts = append(facts, fact)
+		}
+	}
+	sort.Slice(facts, func(i, j int) bool {
+		left, right := facts[i], facts[j]
+		if left.Expression.Path != right.Expression.Path {
+			return left.Expression.Path < right.Expression.Path
+		}
+		if left.Expression.StartByte != right.Expression.StartByte {
+			return left.Expression.StartByte < right.Expression.StartByte
+		}
+		if left.Expression.EndByte != right.Expression.EndByte {
+			return left.Expression.EndByte < right.Expression.EndByte
+		}
+		if left.Symbol != right.Symbol {
+			return left.Symbol < right.Symbol
+		}
+		return left.Target < right.Target
+	})
+	return facts, nil
+}
+
+type asyncFactKey struct {
+	path      string
+	startByte int
+	endByte   int
+	symbol    typefacts.SymbolID
+	target    typefacts.SymbolID
+}
+
+func (p *project) asyncFunctionsAtLocation(location typefacts.Location, sourceFile *ast.SourceFile) []typefacts.AsyncFunctionFact {
+	node := deepestNodeAt(ast.GetNodeAtPosition(sourceFile, location.StartByte, false), location.StartByte)
+	if node == nil {
+		return nil
+	}
+	var facts []typefacts.AsyncFunctionFact
+	if ast.IsIdentifier(node) {
+		p.appendAsyncSymbolFacts(&facts, p.checker.GetSymbolAtLocation(node), 0)
+		return facts
+	}
+	for owner := node; owner != nil; owner = owner.Parent {
+		if isAsyncFunctionNode(owner) {
+			if fact, ok := p.asyncFunctionFact(location.Path, sourceFile, owner); ok {
+				facts = append(facts, fact)
+			}
+			break
+		}
+	}
+	return facts
+}
+
+func (p *project) appendAsyncSymbolFacts(facts *[]typefacts.AsyncFunctionFact, symbol *ast.Symbol, depth int) {
+	if symbol == nil || depth > 32 {
+		return
+	}
+	declaration := symbol.ValueDeclaration
+	if declaration == nil {
+		return
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil {
+		return
+	}
+	path := filepath.Clean(sourceFile.FileName())
+	if isAsyncFunctionNode(declaration) {
+		if fact, ok := p.asyncFunctionFact(path, sourceFile, declaration); ok {
+			*facts = append(*facts, fact)
+		}
+		return
+	}
+	if !ast.IsVariableDeclaration(declaration) {
+		return
+	}
+	variable := declaration.AsVariableDeclaration()
+	if fact, ok := p.asyncAliasFact(path, sourceFile, declaration); ok {
+		*facts = append(*facts, fact)
+	}
+	initializer := variable.Initializer
+	if initializer == nil {
+		return
+	}
+	if isAsyncFunctionNode(initializer) {
+		if fact, ok := p.asyncFunctionFact(path, sourceFile, initializer); ok {
+			*facts = append(*facts, fact)
+		}
+		return
+	}
+	if ast.IsIdentifier(initializer) {
+		p.appendAsyncSymbolFacts(facts, p.checker.GetSymbolAtLocation(initializer), depth+1)
+	}
 }
 
 func (p *project) SourceAsyncFunctions(ctx context.Context, path string) ([]typefacts.AsyncFunctionFact, error) {

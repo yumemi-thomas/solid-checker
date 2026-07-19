@@ -100,6 +100,15 @@ type AsyncFunctionDiscoverer interface {
 	SourceAsyncFunctions(context.Context, string) ([]AsyncFunctionFact, error)
 }
 
+// AsyncFunctionLookup is the demand-shaped async/control-flow capability used
+// by retained semantic analysis. Implementations return only function and
+// local-alias facts relevant at the requested locations; the legacy
+// AsyncFunctionDiscoverer remains the compatibility surface for whole-file
+// protocol materialization.
+type AsyncFunctionLookup interface {
+	AsyncFunctionsAt(context.Context, []Location) ([]AsyncFunctionFact, error)
+}
+
 // Location identifies a UTF-8 byte range in original source.
 type Location struct {
 	Path      string

@@ -937,6 +937,7 @@ type fileFactsMemo struct {
 	hasFunctions bool
 	async        []typefacts.AsyncFunctionFact
 	hasAsync     bool
+	asyncAt      map[asyncLocationKey][]typefacts.AsyncFunctionFact
 }
 
 // memoFor returns the memo entry for a Source* path argument, keyed by the

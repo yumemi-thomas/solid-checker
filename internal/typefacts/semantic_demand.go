@@ -274,26 +274,18 @@ func materializeSemanticDemand(
 		ProjectID:  "semantic-demand",
 		Sources:    sources,
 	}
-	asyncPaths := make(map[string]struct{})
-	for _, demand := range demands {
-		if demand.Async {
-			asyncPaths[filepath.Clean(demand.Location.Path)] = struct{}{}
-		}
-	}
 	stages := semanticDemandStages{}
 	started := time.Now()
+	asyncByPath, err := asyncFunctionsForDemands(ctx, backend, demands)
+	if err != nil {
+		return nil, nil, nil, stages, err
+	}
 	for _, source := range sources {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, nil, stages, err
 		}
 		path := filepath.Clean(source.Path)
-		var asyncFunctions []AsyncFunctionFact
-		if _, demanded := asyncPaths[path]; demanded {
-			asyncFunctions, err = backend.SourceAsyncFunctions(ctx, path)
-			if err != nil {
-				return nil, nil, nil, stages, err
-			}
-		}
+		asyncFunctions := asyncByPath[path]
 		for _, function := range asyncFunctions {
 			builder.enqueueSymbol(function.Symbol)
 			builder.enqueueSymbol(function.Target)
@@ -388,6 +380,50 @@ func materializeEntityDemands(ctx context.Context, builder *closureBuilder, dema
 		}
 	}
 	return nil
+}
+
+func asyncFunctionsForDemands(
+	ctx context.Context,
+	backend ClosureBackend,
+	demands []EntityDemand,
+) (map[string][]AsyncFunctionFact, error) {
+	locations := make([]Location, 0)
+	demandedPaths := make(map[string]struct{})
+	for _, demand := range demands {
+		if !demand.Async {
+			continue
+		}
+		location := demand.Location
+		location.Path = filepath.Clean(location.Path)
+		locations = append(locations, location)
+		demandedPaths[location.Path] = struct{}{}
+	}
+	byPath := make(map[string][]AsyncFunctionFact, len(demandedPaths))
+	if lookup, ok := backend.(AsyncFunctionLookup); ok {
+		facts, err := lookup.AsyncFunctionsAt(ctx, locations)
+		if err != nil {
+			return nil, err
+		}
+		for _, fact := range facts {
+			path := filepath.Clean(fact.Expression.Path)
+			fact.Expression.Path = path
+			byPath[path] = append(byPath[path], fact)
+		}
+		return byPath, nil
+	}
+	paths := make([]string, 0, len(demandedPaths))
+	for path := range demandedPaths {
+		paths = append(paths, path)
+	}
+	sort.Strings(paths)
+	for _, path := range paths {
+		facts, err := backend.SourceAsyncFunctions(ctx, path)
+		if err != nil {
+			return nil, err
+		}
+		byPath[path] = facts
+	}
+	return byPath, nil
 }
 
 type semanticDemandStages struct {

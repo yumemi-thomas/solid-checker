@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/yumemi-thomas/solid-check/internal/typefacts"
@@ -142,5 +143,82 @@ function customStream(value: CustomStream): CustomStream { return value; }
 			switchSiblingCalls,
 			switchDominatedCalls,
 		)
+	}
+}
+
+func TestProjectLooksUpOnlyDemandedAsyncFunctionsAndAliases(t *testing.T) {
+	root := t.TempDir()
+	writeProjectFile(t, root, "tsconfig.json", `{"compilerOptions":{"strict":true,"target":"ES2022"},"include":["*.ts"]}`)
+	source := `
+declare function consume(callback: () => unknown): void;
+declare function after(): void;
+const unused = async () => Promise.resolve("unused");
+const selected = () => Promise.resolve("selected");
+const alias = selected;
+consume(alias);
+consume(() => Promise.resolve("inline"));
+async function awaited() {
+  await Promise.resolve();
+  after();
+}
+`
+	path := filepath.Join(root, "lookup.ts")
+	writeProjectFile(t, root, "lookup.ts", source)
+	project := openProject(t, root)
+	lookup, ok := project.(typefacts.AsyncFunctionLookup)
+	if !ok {
+		t.Fatal("project does not expose demand-shaped async lookup")
+	}
+	location := func(needle string) typefacts.Location {
+		t.Helper()
+		start := strings.Index(source, needle)
+		if start < 0 {
+			t.Fatalf("%q not found in fixture", needle)
+		}
+		return typefacts.Location{Path: path, StartByte: start, EndByte: start + len(needle)}
+	}
+	locations := []typefacts.Location{
+		location("alias);"),
+		location("() => Promise.resolve(\"inline\")"),
+		location("await Promise.resolve()"),
+	}
+	locations[0].EndByte = locations[0].StartByte + len("alias")
+	facts, err := lookup.AsyncFunctionsAt(context.Background(), locations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := lookup.AsyncFunctionsAt(context.Background(), locations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(facts, again) {
+		t.Fatalf("memoized lookup changed facts:\nfirst  %#v\nsecond %#v", facts, again)
+	}
+	var expressions []string
+	var afterCalls int
+	for _, fact := range facts {
+		expressions = append(expressions, source[fact.Expression.StartByte:fact.Expression.EndByte])
+		for _, call := range fact.CallsAfterAwait {
+			if source[call.StartByte:call.EndByte] == "after" {
+				afterCalls++
+			}
+		}
+	}
+	joined := strings.Join(expressions, "\n")
+	for _, wanted := range []string{
+		`() => Promise.resolve("selected")`,
+		"selected",
+		`() => Promise.resolve("inline")`,
+		"async function awaited()",
+	} {
+		if !strings.Contains(joined, wanted) {
+			t.Fatalf("lookup facts omit %q: %#v", wanted, expressions)
+		}
+	}
+	if strings.Contains(joined, "unused") {
+		t.Fatalf("lookup classified unrelated function: %#v", expressions)
+	}
+	if afterCalls != 1 {
+		t.Fatalf("after-await calls = %d, want 1; facts=%#v", afterCalls, facts)
 	}
 }

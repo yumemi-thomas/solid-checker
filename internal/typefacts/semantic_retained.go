@@ -247,28 +247,26 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 		symbolFactsBuffer:      p.symbolScratch,
 		symbolOrderBuffer:      table.Symbols,
 	}
-	asyncPaths := make(map[string]struct{})
+	var asyncDemands []EntityDemand
 	for index := range groups {
 		for _, demand := range groups[index].demands {
 			if demand.Async {
-				asyncPaths[filepath.Clean(demand.Location.Path)] = struct{}{}
+				asyncDemands = append(asyncDemands, demand)
 			}
 		}
 	}
 	stages := semanticDemandStages{}
 	started := time.Now()
+	asyncByPath, err := asyncFunctionsForDemands(ctx, p.backend, asyncDemands)
+	if err != nil {
+		return nil, nil, nil, stages, retention, err
+	}
 	for _, source := range sources {
 		if err := ctx.Err(); err != nil {
 			return nil, nil, nil, stages, retention, err
 		}
 		path := filepath.Clean(source.Path)
-		var asyncFunctions []AsyncFunctionFact
-		if _, demanded := asyncPaths[path]; demanded {
-			asyncFunctions, err = p.backend.SourceAsyncFunctions(ctx, path)
-			if err != nil {
-				return nil, nil, nil, stages, retention, err
-			}
-		}
+		asyncFunctions := asyncByPath[path]
 		for _, function := range asyncFunctions {
 			builder.enqueueSymbol(function.Symbol)
 			builder.enqueueSymbol(function.Target)
