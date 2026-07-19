@@ -98,6 +98,15 @@ func DurableSymbolID(id SymbolID) bool {
 	return id == "" || strings.HasPrefix(string(id), "symbol:h:")
 }
 
+func durableAsyncFunctions(facts []AsyncFunctionFact) bool {
+	for _, fact := range facts {
+		if !DurableSymbolID(fact.Symbol) || !DurableSymbolID(fact.Target) {
+			return false
+		}
+	}
+	return true
+}
+
 func symbolSetsEqual(left, right map[SymbolID]struct{}) bool {
 	if len(left) != len(right) {
 		return false
@@ -247,19 +256,88 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 		symbolFactsBuffer:      p.symbolScratch,
 		symbolOrderBuffer:      table.Symbols,
 	}
-	var asyncDemands []EntityDemand
+	var asyncGroups []demandGroup
 	for index := range groups {
+		var asyncDemands []EntityDemand
 		for _, demand := range groups[index].demands {
 			if demand.Async {
 				asyncDemands = append(asyncDemands, demand)
 			}
 		}
+		if len(asyncDemands) != 0 {
+			asyncGroups = append(asyncGroups, demandGroup{
+				path:    groups[index].path,
+				demands: asyncDemands,
+			})
+		}
 	}
 	stages := semanticDemandStages{}
 	started := time.Now()
-	asyncByPath, err := asyncFunctionsForDemands(ctx, p.backend, asyncDemands)
+	refreshAllAsync := p.asyncFiles == nil || p.transportChangedPaths == nil
+	refreshAsyncPaths := make(map[string]struct{})
+	var refreshAsyncDemands []EntityDemand
+	asyncByPath := make(map[string][]AsyncFunctionFact, len(asyncGroups))
+	for _, group := range asyncGroups {
+		_, changed := p.transportChangedPaths[group.path]
+		cached, cachedOK := p.asyncFiles[group.path]
+		if refreshAllAsync || changed || !cachedOK {
+			refreshAsyncPaths[group.path] = struct{}{}
+			refreshAsyncDemands = append(refreshAsyncDemands, group.demands...)
+			continue
+		}
+		asyncByPath[group.path] = cached
+		retention.RetainedAsyncFiles++
+	}
+	refreshedAsync, err := asyncFunctionsForDemands(ctx, p.backend, refreshAsyncDemands)
 	if err != nil {
 		return nil, nil, nil, stages, retention, err
+	}
+	crossPathAsync := false
+	for path := range refreshedAsync {
+		if _, expected := refreshAsyncPaths[path]; !expected {
+			crossPathAsync = true
+			break
+		}
+	}
+	if crossPathAsync && !refreshAllAsync {
+		refreshAllAsync = true
+		refreshAsyncPaths = make(map[string]struct{}, len(asyncGroups))
+		refreshAsyncDemands = refreshAsyncDemands[:0]
+		asyncByPath = make(map[string][]AsyncFunctionFact, len(asyncGroups))
+		retention.RetainedAsyncFiles = 0
+		for _, group := range asyncGroups {
+			refreshAsyncPaths[group.path] = struct{}{}
+			refreshAsyncDemands = append(refreshAsyncDemands, group.demands...)
+		}
+		refreshedAsync, err = asyncFunctionsForDemands(ctx, p.backend, refreshAsyncDemands)
+		if err != nil {
+			return nil, nil, nil, stages, retention, err
+		}
+	}
+	for path := range refreshAsyncPaths {
+		asyncByPath[path] = nil
+	}
+	for path, facts := range refreshedAsync {
+		asyncByPath[path] = facts
+	}
+	retention.RecomputedAsyncFiles = len(refreshAsyncPaths)
+	nextAsyncFiles := make(map[string][]AsyncFunctionFact, len(asyncGroups))
+	cacheableAsync := true
+	for _, group := range asyncGroups {
+		facts := asyncByPath[group.path]
+		if !durableAsyncFunctions(facts) {
+			cacheableAsync = false
+			continue
+		}
+		nextAsyncFiles[group.path] = facts
+	}
+	if crossPathAsync {
+		cacheableAsync = false
+	}
+	if cacheableAsync {
+		p.asyncFiles = nextAsyncFiles
+	} else {
+		p.asyncFiles = nil
 	}
 	for _, source := range sources {
 		if err := ctx.Err(); err != nil {
@@ -521,6 +599,8 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 type ClosureRetention struct {
 	RetainedFiles         int  `json:"retainedFiles"`
 	RecomputedFiles       int  `json:"recomputedFiles"`
+	RetainedAsyncFiles    int  `json:"retainedAsyncFiles,omitempty"`
+	RecomputedAsyncFiles  int  `json:"recomputedAsyncFiles,omitempty"`
 	NonDurableFiles       int  `json:"nonDurableFiles,omitempty"`
 	SuppressionRecompute  bool `json:"suppressionRecompute,omitempty"`
 	CachedSymbolFacts     int  `json:"cachedSymbolFacts,omitempty"`

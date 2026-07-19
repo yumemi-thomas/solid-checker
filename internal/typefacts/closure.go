@@ -163,7 +163,11 @@ type ClosureProject struct {
 	// sorts genuinely new symbols instead of re-sorting the complete table.
 	symbolOrder   []SymbolID
 	symbolScratch []SymbolFact
-	demandSeed    maphash.Seed
+	// asyncFiles retains complete durable async-function contributions by
+	// demand path. Exact changed-path manifests let ordinary edits query only
+	// changed files; cross-file selections fall back to a full async batch.
+	asyncFiles map[string][]AsyncFunctionFact
+	demandSeed maphash.Seed
 }
 
 // fileClosureContribution is one file's share of the semantic demand
@@ -266,6 +270,7 @@ func (p *ClosureProject) DropTable() {
 	p.symbolFacts = nil
 	p.symbolReferences = nil
 	p.symbolScratch = nil
+	p.asyncFiles = nil
 }
 
 // EncodeTable returns the current generation's table in the deterministic

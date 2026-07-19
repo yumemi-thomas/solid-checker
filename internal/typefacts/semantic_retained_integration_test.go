@@ -147,6 +147,7 @@ func TestRetainedDemandClosureMatchesFreshMaterialization(t *testing.T) {
 
 	generation := uint64(1)
 	retainedSeen := false
+	asyncCacheSeen := false
 	symbolCacheSeen := false
 	referenceCacheSeen := false
 	for step, change := range script {
@@ -185,6 +186,9 @@ func TestRetainedDemandClosureMatchesFreshMaterialization(t *testing.T) {
 		stats := incremental.Stats()
 		if stats.Retention.RetainedFiles > 0 {
 			retainedSeen = true
+		}
+		if stats.Retention.RetainedAsyncFiles > 0 {
+			asyncCacheSeen = true
 		}
 		if stats.Retention.CachedSymbolFacts > 0 {
 			symbolCacheSeen = true
@@ -285,6 +289,9 @@ func TestRetainedDemandClosureMatchesFreshMaterialization(t *testing.T) {
 	}
 	if !retainedSeen {
 		t.Fatal("the edit script never exercised retention; the test is vacuous")
+	}
+	if !asyncCacheSeen {
+		t.Fatal("the edit script never reused unchanged async file facts; the async-cache parity check is vacuous")
 	}
 	if !symbolCacheSeen {
 		t.Fatal("the edit script never reused a durable symbol fact; the symbol-cache parity check is vacuous")
