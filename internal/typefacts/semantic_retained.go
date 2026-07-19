@@ -240,24 +240,31 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 	table.Sources = sources
 	table.Files = table.Files[:0]
 	table.Entities = table.Entities[:0]
-	table.Symbols = table.Symbols[:0]
+	// A recycled table may own chunks still shared by the immediately
+	// preceding generation. Never reuse its flat symbol backing array.
+	table.Symbols = nil
+	table.symbols = nil
 	table.transport = nil
 	builder := &closureBuilder{
-		backend:                p.backend,
-		entities:               make(map[Location]*EntityFact),
-		symbolSeen:             make(map[SymbolID]struct{}),
-		fullTier:               make(map[SymbolID]struct{}),
-		descriptors:            make(map[SymbolID]*TypeDescriptor),
-		cleanPaths:             make(map[string]string),
-		referencesOnlyFullTier: true,
-		cachedSymbolFacts:      p.symbolFacts,
-		cachedReferences:       p.symbolReferences,
-		cachedSymbolOrder:      p.symbolOrder,
-		symbolFactsBuffer:      p.symbolScratch,
-		symbolOrderBuffer:      table.Symbols,
+		backend:                 p.backend,
+		entities:                make(map[Location]*EntityFact),
+		symbolSeen:              make(map[SymbolID]struct{}),
+		fullTier:                make(map[SymbolID]struct{}),
+		descriptors:             make(map[SymbolID]*TypeDescriptor),
+		cleanPaths:              make(map[string]string),
+		referencesOnlyFullTier:  true,
+		cachedSymbolFacts:       p.symbolFacts,
+		cachedReferences:        p.symbolReferences,
+		cachedSymbolOrder:       p.symbolOrder,
+		symbolFactsBuffer:       p.symbolScratch,
+		symbolOrderBuffer:       table.Symbols,
+		removedSymbolCandidates: retainedSymbolCandidates(p.previousDemandTable, p.transportChangedPaths),
 	}
 	if p.previousDemandTable != nil {
-		builder.cachedCanonicalSymbols = p.previousDemandTable.Symbols
+		builder.cachedCanonicalStore = p.previousDemandTable.symbols
+		if builder.cachedCanonicalStore == nil {
+			builder.cachedCanonicalStore = newSymbolFactStore(p.previousDemandTable.Symbols)
+		}
 	}
 	var asyncGroups []demandGroup
 	for index := range groups {
@@ -544,12 +551,17 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 		return nil, nil, nil, stages, retention, err
 	}
 	p.symbolScratch = builder.symbolFactsBuffer
+	symbolStore := builder.closedSymbolStore
+	if symbolStore == nil {
+		symbolStore = newSymbolFactStore(symbols)
+	}
 	stages.close = time.Since(started)
 	retention.CachedSymbolFacts = builder.cachedSymbolHits
 	retention.RecomputedSymbolFacts = builder.recomputedSymbolFacts
 	retention.CachedReferenceFacts = builder.cachedReferenceHits
 	retention.RecomputedReferences = builder.recomputedReferences
 	retention.PatchedSymbolRows = builder.patchedSymbolRows
+	retention.SharedSymbolChunks = builder.sharedSymbolChunks
 	nextSymbolFacts := p.symbolFacts
 	if nextSymbolFacts == nil {
 		nextSymbolFacts = make(map[SymbolID]SymbolFact, len(symbols))
@@ -559,13 +571,13 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 			delete(nextSymbolFacts, id)
 		}
 	}
-	for _, fact := range symbols {
+	symbolStore.Range(func(fact SymbolFact) {
 		// Only declaration-backed durable identities are safe across
 		// generations. A declaration-less synthetic symbol may change its
 		// alias meaning without giving Update a path by which to evict it.
 		if !DurableSymbolID(fact.ID) || !DurableSymbolID(fact.AliasTarget) || len(fact.Declarations) == 0 {
 			delete(nextSymbolFacts, fact.ID)
-			continue
+			return
 		}
 		if _, changed := builder.changedSymbolIDs[fact.ID]; changed {
 			nextSymbolFacts[fact.ID] = SymbolFact{
@@ -574,18 +586,21 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 				Declarations: fact.Declarations,
 			}
 		}
-	}
+	})
 	p.symbolFacts = nextSymbolFacts
 	p.symbolReferences = builder.closedReferences
-	if cap(p.symbolOrder) < len(symbols) {
-		p.symbolOrder = make([]SymbolID, len(symbols))
+	if cap(p.symbolOrder) < symbolStore.Len() {
+		p.symbolOrder = make([]SymbolID, symbolStore.Len())
 	} else {
-		p.symbolOrder = p.symbolOrder[:len(symbols)]
+		p.symbolOrder = p.symbolOrder[:symbolStore.Len()]
 	}
-	for index := range symbols {
-		p.symbolOrder[index] = symbols[index].ID
-	}
+	symbolIndex := 0
+	symbolStore.Range(func(fact SymbolFact) {
+		p.symbolOrder[symbolIndex] = fact.ID
+		symbolIndex++
+	})
 	table.Symbols = symbols
+	table.symbols = symbolStore
 	table.Entities = entities
 	table.transport = transportManifest(p.previousDemandTable, table, builder, p.transportChangedPaths)
 	p.spareDemandTable = p.previousDemandTable
@@ -612,4 +627,5 @@ type ClosureRetention struct {
 	CachedReferenceFacts  int  `json:"cachedReferenceFacts,omitempty"`
 	RecomputedReferences  int  `json:"recomputedReferences,omitempty"`
 	PatchedSymbolRows     int  `json:"patchedSymbolRows,omitempty"`
+	SharedSymbolChunks    int  `json:"sharedSymbolChunks,omitempty"`
 }

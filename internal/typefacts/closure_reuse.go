@@ -51,9 +51,10 @@ func MeasureReuseFloor(ctx context.Context, backend Project, fused FileFactsDisc
 	}
 
 	// 1. Identity remap for symbols declared in unaffected files.
-	remap := make(map[SymbolID]SymbolID, len(previous.Symbols))
+	symbols := previous.symbolFactsSlice()
+	remap := make(map[SymbolID]SymbolID, len(symbols))
 	started := time.Now()
-	for _, fact := range previous.Symbols {
+	for _, fact := range symbols {
 		report.RemapCandidates++
 		if len(fact.Declarations) == 0 {
 			report.RemapNoDecl++
@@ -81,7 +82,7 @@ func MeasureReuseFloor(ctx context.Context, backend Project, fused FileFactsDisc
 
 	// 2. Per-generation reference index cost (paid once by any design).
 	started = time.Now()
-	for _, fact := range previous.Symbols {
+	for _, fact := range symbols {
 		if target, ok := remap[fact.ID]; ok {
 			if _, err := full.References(ctx, target); err != nil && !errors.Is(err, ErrNotFound) {
 				return report, err
@@ -94,7 +95,7 @@ func MeasureReuseFloor(ctx context.Context, backend Project, fused FileFactsDisc
 	// 3. Reference recompute for carried-over symbols whose previous lists
 	// intersect affected files (their lists may have changed).
 	started = time.Now()
-	for _, fact := range previous.Symbols {
+	for _, fact := range symbols {
 		target, ok := remap[fact.ID]
 		if !ok || len(fact.References) == 0 {
 			continue

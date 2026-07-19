@@ -175,9 +175,9 @@ func FactTableV2From(table FactTable, projectID string, generation uint64) FactT
 	for _, entity := range table.Entities {
 		result.Entities = append(result.Entities, entityFactV2(entity))
 	}
-	for _, symbol := range table.Symbols {
+	table.rangeSymbolFacts(func(symbol SymbolFact) {
 		result.Symbols = append(result.Symbols, symbolFactV2(symbol))
-	}
+	})
 	for _, file := range table.Files {
 		result.Files = append(result.Files, fileFactV2(file))
 	}

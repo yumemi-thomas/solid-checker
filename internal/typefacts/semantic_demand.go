@@ -161,7 +161,7 @@ func (p *ClosureProject) materializeDemandTableLocked(
 		Generation:       generation,
 		Files:            len(table.Files),
 		Entities:         len(table.Entities),
-		Symbols:          len(table.Symbols),
+		Symbols:          table.symbolFactsCount(),
 		FullTierSymbols:  len(full),
 		BuildDuration:    time.Since(started),
 		AsyncDuration:    stages.async,
@@ -183,13 +183,14 @@ func (p *ClosureProject) materializeDemandTableLocked(
 				calls++
 			}
 		}
-		for _, symbol := range table.Symbols {
+		table.rangeSymbolFacts(func(symbol SymbolFact) {
 			references += len(symbol.References)
-		}
-		fmt.Fprintf(os.Stderr, "{\"typefactsCounts\":{\"entities\":%d,\"symbols\":%d,\"descriptors\":%d,\"calls\":%d,\"references\":%d,\"cachedSymbolFacts\":%d,\"recomputedSymbolFacts\":%d,\"cachedReferenceFacts\":%d,\"recomputedReferences\":%d}}\n",
-			len(table.Entities), len(table.Symbols), descriptors, calls, references,
+		})
+		fmt.Fprintf(os.Stderr, "{\"typefactsCounts\":{\"entities\":%d,\"symbols\":%d,\"descriptors\":%d,\"calls\":%d,\"references\":%d,\"cachedSymbolFacts\":%d,\"recomputedSymbolFacts\":%d,\"cachedReferenceFacts\":%d,\"recomputedReferences\":%d,\"patchedSymbolRows\":%d,\"sharedSymbolChunks\":%d}}\n",
+			len(table.Entities), table.symbolFactsCount(), descriptors, calls, references,
 			retention.CachedSymbolFacts, retention.RecomputedSymbolFacts,
-			retention.CachedReferenceFacts, retention.RecomputedReferences)
+			retention.CachedReferenceFacts, retention.RecomputedReferences,
+			retention.PatchedSymbolRows, retention.SharedSymbolChunks)
 	}
 	return nil
 }

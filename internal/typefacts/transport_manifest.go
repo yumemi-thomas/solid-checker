@@ -7,6 +7,31 @@ import (
 
 const transportManifestPathLimit = 64
 
+func retainedSymbolCandidates(table *FactTable, changedPaths map[string]struct{}) map[SymbolID]struct{} {
+	candidates := make(map[SymbolID]struct{})
+	if table == nil {
+		return candidates
+	}
+	for path := range changedPaths {
+		collectPathSymbols(table, filepath.Clean(path), candidates)
+	}
+	queue := make([]SymbolID, 0, len(candidates))
+	for id := range candidates {
+		queue = append(queue, id)
+	}
+	for index := 0; index < len(queue); index++ {
+		fact, ok := table.canonicalSymbol(queue[index])
+		if !ok || fact.AliasTarget == "" {
+			continue
+		}
+		if _, seen := candidates[fact.AliasTarget]; !seen {
+			candidates[fact.AliasTarget] = struct{}{}
+			queue = append(queue, fact.AliasTarget)
+		}
+	}
+	return candidates
+}
+
 // transportManifest records the exact rows which may differ from the
 // immediately preceding semantic-demand table. It is private implementation
 // metadata: the frozen wire schema remains unchanged.
@@ -44,7 +69,7 @@ func transportManifest(previous, next *FactTable, builder *closureBuilder, chang
 	for index := 0; index < len(queue); index++ {
 		id := queue[index]
 		for _, table := range []*FactTable{previous, next} {
-			if fact, ok := canonicalSymbolFact(table.Symbols, id); ok && fact.AliasTarget != "" {
+			if fact, ok := table.canonicalSymbol(id); ok && fact.AliasTarget != "" {
 				if _, seen := manifest.symbolIDs[fact.AliasTarget]; !seen {
 					manifest.symbolIDs[fact.AliasTarget] = struct{}{}
 					queue = append(queue, fact.AliasTarget)

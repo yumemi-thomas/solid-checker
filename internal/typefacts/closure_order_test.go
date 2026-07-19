@@ -42,7 +42,7 @@ func TestOrderSymbolFactsReusesCanonicalOrderAcrossDelta(t *testing.T) {
 	}
 }
 
-func TestPatchCanonicalSymbolsCopiesPreviousOrderAndChangesOnlyDeltaRows(t *testing.T) {
+func TestPatchCanonicalSymbolStoreChangesOnlyDeltaRows(t *testing.T) {
 	oldReference := Location{Path: "old.ts", StartByte: 1, EndByte: 2}
 	newReference := Location{Path: "new.ts", StartByte: 3, EndByte: 4}
 	previous := []SymbolFact{
@@ -66,17 +66,18 @@ func TestPatchCanonicalSymbolsCopiesPreviousOrderAndChangesOnlyDeltaRows(t *test
 		fullTier:               map[SymbolID]struct{}{"a": {}, "b": {}},
 		referencesOnlyFullTier: true,
 		cachedReferences:       cachedReferences,
-		cachedCanonicalSymbols: previous,
+		cachedCanonicalStore:   newSymbolFactStore(previous),
 		changedSymbolIDs:       map[SymbolID]struct{}{"b": {}},
 	}
 
-	got, ok, err := builder.patchCanonicalSymbols(context.Background(), current)
+	store, ok, err := builder.patchCanonicalSymbolStore(context.Background(), current)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !ok {
 		t.Fatal("stable canonical table did not take the retained patch path")
 	}
+	got := store.symbolFactsSlice()
 	want := []SymbolFact{
 		{ID: "a", Declarations: []Declaration{{Location: oldReference}}, References: []Location{oldReference}},
 		{ID: "b", Declarations: []Declaration{{Location: newReference}}, References: []Location{newReference}},

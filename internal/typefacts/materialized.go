@@ -91,6 +91,7 @@ type FactTable struct {
 	Files      []FileFact   `cbor:"files" json:"files"`
 	runtime    *factTableRuntime
 	transport  *factTableTransportChanges
+	symbols    *symbolFactStore
 }
 
 type factTableTransportChanges struct {
@@ -120,10 +121,11 @@ type entityPoint struct {
 // Prepare builds process-local lookup indexes after constructing or decoding a
 // table. The indexes are excluded from the wire representation.
 func (t *FactTable) Prepare() {
+	symbols := t.symbolFactsSlice()
 	runtime := &factTableRuntime{
 		entities:         make(map[string][]EntityFact),
 		entitiesAt:       make(map[entityPoint][]EntityFact),
-		symbols:          make(map[SymbolID]SymbolFact, len(t.Symbols)),
+		symbols:          make(map[SymbolID]SymbolFact, len(symbols)),
 		files:            make(map[string]FileFact, len(t.Files)),
 		symbolOrigins:    make(map[SymbolID][]Location),
 		accessedEntities: make(map[Location]EntityDemand),
@@ -141,12 +143,12 @@ func (t *FactTable) Prepare() {
 			runtime.symbolOrigins[entity.ResolvedCall.Target] = []Location{entity.Location}
 		}
 	}
-	for _, fact := range t.Symbols {
+	for _, fact := range symbols {
 		runtime.symbols[fact.ID] = fact
 	}
-	for range len(t.Symbols) + 1 {
+	for range len(symbols) + 1 {
 		changed := false
-		for _, fact := range t.Symbols {
+		for _, fact := range symbols {
 			if fact.AliasTarget == "" || len(runtime.symbolOrigins[fact.ID]) == 0 {
 				continue
 			}
@@ -188,6 +190,7 @@ func (t *FactTable) ReleaseWireStorage() {
 	}
 	t.Entities = nil
 	t.Symbols = nil
+	t.symbols = nil
 	t.Files = nil
 }
 
@@ -355,11 +358,11 @@ func (t FactTable) symbol(ctx context.Context, id SymbolID) (SymbolFact, error) 
 		}
 		return fact, nil
 	}
-	index := sort.Search(len(t.Symbols), func(index int) bool { return t.Symbols[index].ID >= id })
-	if index == len(t.Symbols) || t.Symbols[index].ID != id {
+	fact, ok := t.canonicalSymbol(id)
+	if !ok {
 		return SymbolFact{}, fmt.Errorf("%w: symbol %s", ErrNotFound, id)
 	}
-	return t.Symbols[index], nil
+	return fact, nil
 }
 
 func (t FactTable) SourceCalls(ctx context.Context, path string) ([]SourceCall, error) {

@@ -60,8 +60,8 @@ func DiffFactTablesV3FromInternal(previous, next FactTable, generation uint64) F
 		&delta.RemovedFilePaths,
 	)
 	diffCanonicalRows(
-		previous.Symbols,
-		next.Symbols,
+		previous.symbolFactsSlice(),
+		next.symbolFactsSlice(),
 		func(value SymbolFact) string { return string(value.ID) },
 		func(left, right SymbolFact) bool { return reflect.DeepEqual(left, right) },
 		symbolFactV2,
@@ -100,8 +100,8 @@ func diffFactTablesV3FromManifest(previous, next FactTable, generation uint64, m
 	}
 	sort.Strings(symbolKeys)
 	diffCanonicalSymbolCandidates(
-		previous.Symbols,
-		next.Symbols,
+		previous,
+		next,
 		symbolKeys,
 		sortedStringKeys(manifest.sourcePaths),
 		&delta.Symbols,
@@ -124,7 +124,7 @@ func diffFactTablesV3FromManifest(previous, next FactTable, generation uint64, m
 }
 
 func diffCanonicalSymbolCandidates(
-	previous, next []SymbolFact,
+	previous, next FactTable,
 	keys []string,
 	referencePaths []string,
 	changed *[]SymbolFactV2,
@@ -133,8 +133,8 @@ func diffCanonicalSymbolCandidates(
 ) {
 	for _, candidate := range keys {
 		id := SymbolID(candidate)
-		left, leftOK := canonicalSymbolFact(previous, id)
-		right, rightOK := canonicalSymbolFact(next, id)
+		left, leftOK := previous.canonicalSymbol(id)
+		right, rightOK := next.canonicalSymbol(id)
 		switch {
 		case leftOK && !rightOK:
 			*removed = append(*removed, candidate)

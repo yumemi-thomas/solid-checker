@@ -710,23 +710,26 @@ type closureBuilder struct {
 	// v1-shaped tables still carry references for every symbol, so today
 	// the assignment is observational — the measure-demand-closure harness
 	// verifies demanded references stay inside the full tier.
-	fullTier               map[SymbolID]struct{}
-	descriptors            map[SymbolID]*TypeDescriptor
-	referencesOnlyFullTier bool
-	cachedSymbolFacts      map[SymbolID]SymbolFact
-	cachedReferences       map[SymbolID][]Location
-	cachedSymbolOrder      []SymbolID
-	cachedCanonicalSymbols []SymbolFact
-	symbolFactsBuffer      []SymbolFact
-	symbolOrderBuffer      []SymbolFact
-	closedReferences       map[SymbolID][]Location
-	cachedSymbolHits       int
-	recomputedSymbolFacts  int
-	cachedReferenceHits    int
-	recomputedReferences   int
-	patchedSymbolRows      int
-	changedSymbolIDs       map[SymbolID]struct{}
-	referenceChangesExact  bool
+	fullTier                map[SymbolID]struct{}
+	descriptors             map[SymbolID]*TypeDescriptor
+	referencesOnlyFullTier  bool
+	cachedSymbolFacts       map[SymbolID]SymbolFact
+	cachedReferences        map[SymbolID][]Location
+	cachedSymbolOrder       []SymbolID
+	cachedCanonicalStore    *symbolFactStore
+	symbolFactsBuffer       []SymbolFact
+	symbolOrderBuffer       []SymbolFact
+	closedSymbolStore       *symbolFactStore
+	closedReferences        map[SymbolID][]Location
+	cachedSymbolHits        int
+	recomputedSymbolFacts   int
+	cachedReferenceHits     int
+	recomputedReferences    int
+	patchedSymbolRows       int
+	sharedSymbolChunks      int
+	changedSymbolIDs        map[SymbolID]struct{}
+	removedSymbolCandidates map[SymbolID]struct{}
+	referenceChangesExact   bool
 }
 
 func (b *closureBuilder) seedCompilerSpan(ctx context.Context, span Location, sources []SourceFile) error {
@@ -1273,17 +1276,18 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 	}
 	fullTierDuration := time.Since(started)
 	started = time.Now()
-	if patched, ok, err := b.patchCanonicalSymbols(ctx, facts); err != nil {
+	if patched, ok, err := b.patchCanonicalSymbolStore(ctx, facts); err != nil {
 		return nil, err
 	} else if ok {
+		b.closedSymbolStore = patched
 		referencesDuration := time.Since(started)
 		if os.Getenv("SOLID_TYPEFACTS_TIMINGS") != "" {
 			fmt.Fprintf(os.Stderr,
 				"{\"typefactsCloseSymbols\":{\"factsNs\":%d,\"fullTierNs\":%d,\"referencesNs\":%d,\"sortNs\":0,\"initialSymbols\":%d,\"symbols\":%d,\"fullTier\":%d,\"references\":%d}}\n",
 				factsDuration, fullTierDuration, referencesDuration,
-				initialSymbolCount, len(patched), len(b.fullTier), len(b.closedReferences))
+				initialSymbolCount, patched.Len(), len(b.fullTier), len(b.closedReferences))
 		}
-		return patched, nil
+		return nil, nil
 	}
 	factByID := make(map[SymbolID]*SymbolFact, len(facts))
 	for index := range facts {
@@ -1453,14 +1457,13 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 	return facts, nil
 }
 
-// patchCanonicalSymbols is the retained-session fast path. The previous
-// canonical table is immutable while transport deltas are calculated, so it
-// is copied into the spare table and only rows named by exact backend deltas
-// are patched. Small symbol-universe changes merge into the preceding order;
-// an unexplained reference-tier change falls back to the general closure path.
-func (b *closureBuilder) patchCanonicalSymbols(ctx context.Context, facts []SymbolFact) ([]SymbolFact, bool, error) {
-	previous := b.cachedCanonicalSymbols
-	if len(previous) == 0 || b.cachedReferences == nil {
+// patchCanonicalSymbolStore is the retained-session fast path. It patches
+// immutable chunks named by exact symbol/reference deltas and shares every
+// untouched chunk with the preceding generation. An unexplained
+// reference-tier change falls back to the general closure path.
+func (b *closureBuilder) patchCanonicalSymbolStore(ctx context.Context, facts []SymbolFact) (*symbolFactStore, bool, error) {
+	previous := b.cachedCanonicalStore
+	if previous == nil || previous.Len() == 0 || b.cachedReferences == nil {
 		return nil, false, nil
 	}
 	batched, batchedOK := b.backend.(ReferenceBatchDiscoverer)
@@ -1497,82 +1500,34 @@ func (b *closureBuilder) patchCanonicalSymbols(ctx context.Context, facts []Symb
 		b.changedSymbolIDs[id] = struct{}{}
 	}
 
-	findPrevious := func(id SymbolID) (int, bool) {
-		index := sort.Search(len(previous), func(index int) bool {
-			return previous[index].ID >= id
-		})
-		return index, index < len(previous) && previous[index].ID == id
-	}
-	changedFacts := make(map[SymbolID]SymbolFact, len(b.changedSymbolIDs))
-	added := make([]SymbolFact, 0, len(b.changedSymbolIDs))
+	patches := make(map[SymbolID]SymbolFact, len(b.changedSymbolIDs))
 	for index := range facts {
 		fact := facts[index]
 		if _, changed := b.changedSymbolIDs[fact.ID]; !changed {
 			continue
 		}
-		changedFacts[fact.ID] = fact
-		if _, present := findPrevious(fact.ID); !present {
-			added = append(added, fact)
+		if retained, present := previous.Get(fact.ID); present {
+			fact.References = retained.References
 		}
-	}
-	sort.Slice(added, func(i, j int) bool { return added[i].ID < added[j].ID })
-
-	output := b.symbolOrderBuffer[:0]
-	if cap(output) < len(facts) {
-		output = make([]SymbolFact, 0, len(facts))
-	}
-	left, right := 0, 0
-	for left < len(previous) || right < len(added) {
-		for left < len(previous) {
-			if _, present := b.symbolSeen[previous[left].ID]; present {
-				break
-			}
-			delete(b.cachedReferences, previous[left].ID)
-			left++
-		}
-		if left == len(previous) {
-			output = append(output, added[right:]...)
-			break
-		}
-		if right < len(added) && added[right].ID < previous[left].ID {
-			output = append(output, added[right])
-			b.patchedSymbolRows++
-			right++
-			continue
-		}
-		fact := previous[left]
-		if changed, ok := changedFacts[fact.ID]; ok {
-			references := fact.References
-			fact = changed
-			fact.References = references
-			b.patchedSymbolRows++
-		}
-		output = append(output, fact)
-		left++
-	}
-	if len(output) != len(facts) {
-		return nil, false, nil
-	}
-	find := func(id SymbolID) (int, bool) {
-		index := sort.Search(len(output), func(index int) bool {
-			return output[index].ID >= id
-		})
-		return index, index < len(output) && output[index].ID == id
+		patches[fact.ID] = fact
 	}
 
 	refreshSet := make(map[SymbolID]struct{}, len(changedReferences)+len(b.changedSymbolIDs))
 	for id := range b.changedSymbolIDs {
-		outputIndex, present := find(id)
+		fact, present := patches[id]
+		if !present {
+			fact, present = previous.Get(id)
+		}
 		if !present {
 			continue
 		}
-		fact := &output[outputIndex]
 		eligible := fact.AliasTarget == ""
 		if eligible && b.referencesOnlyFullTier {
 			_, eligible = b.fullTier[id]
 		}
 		if !eligible {
 			fact.References = nil
+			patches[id] = fact
 			delete(b.cachedReferences, id)
 			continue
 		}
@@ -1595,17 +1550,31 @@ func (b *closureBuilder) patchCanonicalSymbols(ctx context.Context, facts []Symb
 	}
 	b.recomputedReferences += len(refresh)
 	for _, id := range refresh {
-		outputIndex, present := find(id)
+		fact, present := patches[id]
+		if !present {
+			fact, present = previous.Get(id)
+		}
 		if !present {
 			continue
 		}
-		output[outputIndex].References = references[id]
+		fact.References = references[id]
+		patches[id] = fact
 		b.cachedReferences[id] = references[id]
+	}
+
+	next, shared, removed, complete := previous.Patch(b.symbolSeen, patches, b.removedSymbolCandidates)
+	if !complete {
+		return nil, false, nil
+	}
+	for _, id := range removed {
+		delete(b.cachedReferences, id)
 	}
 	b.cachedReferenceHits += len(b.cachedReferences) - len(refresh)
 	b.closedReferences = b.cachedReferences
 	b.symbolFactsBuffer = facts[:0]
-	return output, true, nil
+	b.patchedSymbolRows = len(patches)
+	b.sharedSymbolChunks = shared
+	return next, true, nil
 }
 
 // orderSymbolFacts preserves canonical ID ordering while avoiding a complete
