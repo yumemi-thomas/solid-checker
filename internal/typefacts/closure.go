@@ -716,6 +716,7 @@ type closureBuilder struct {
 	cachedSymbolFacts      map[SymbolID]SymbolFact
 	cachedReferences       map[SymbolID][]Location
 	cachedSymbolOrder      []SymbolID
+	cachedCanonicalSymbols []SymbolFact
 	symbolFactsBuffer      []SymbolFact
 	symbolOrderBuffer      []SymbolFact
 	closedReferences       map[SymbolID][]Location
@@ -723,6 +724,7 @@ type closureBuilder struct {
 	recomputedSymbolFacts  int
 	cachedReferenceHits    int
 	recomputedReferences   int
+	patchedSymbolRows      int
 	changedSymbolIDs       map[SymbolID]struct{}
 	referenceChangesExact  bool
 }
@@ -1271,6 +1273,18 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 	}
 	fullTierDuration := time.Since(started)
 	started = time.Now()
+	if patched, ok, err := b.patchCanonicalSymbols(ctx, facts); err != nil {
+		return nil, err
+	} else if ok {
+		referencesDuration := time.Since(started)
+		if os.Getenv("SOLID_TYPEFACTS_TIMINGS") != "" {
+			fmt.Fprintf(os.Stderr,
+				"{\"typefactsCloseSymbols\":{\"factsNs\":%d,\"fullTierNs\":%d,\"referencesNs\":%d,\"sortNs\":0,\"initialSymbols\":%d,\"symbols\":%d,\"fullTier\":%d,\"references\":%d}}\n",
+				factsDuration, fullTierDuration, referencesDuration,
+				initialSymbolCount, len(patched), len(b.fullTier), len(b.closedReferences))
+		}
+		return patched, nil
+	}
 	factByID := make(map[SymbolID]*SymbolFact, len(facts))
 	for index := range facts {
 		fact := &facts[index]
@@ -1437,6 +1451,161 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 			initialSymbolCount, len(facts), len(b.fullTier), len(b.closedReferences))
 	}
 	return facts, nil
+}
+
+// patchCanonicalSymbols is the retained-session fast path. The previous
+// canonical table is immutable while transport deltas are calculated, so it
+// is copied into the spare table and only rows named by exact backend deltas
+// are patched. Small symbol-universe changes merge into the preceding order;
+// an unexplained reference-tier change falls back to the general closure path.
+func (b *closureBuilder) patchCanonicalSymbols(ctx context.Context, facts []SymbolFact) ([]SymbolFact, bool, error) {
+	previous := b.cachedCanonicalSymbols
+	if len(previous) == 0 || b.cachedReferences == nil {
+		return nil, false, nil
+	}
+	batched, batchedOK := b.backend.(ReferenceBatchDiscoverer)
+	changes, changesOK := b.backend.(ReferenceChangeDiscoverer)
+	if !batchedOK || !changesOK {
+		return nil, false, nil
+	}
+	for index := range facts {
+		fact := &facts[index]
+		eligible := fact.AliasTarget == ""
+		if eligible && b.referencesOnlyFullTier {
+			_, eligible = b.fullTier[fact.ID]
+		}
+		_, previouslyEligible := b.cachedReferences[fact.ID]
+		if eligible != previouslyEligible {
+			if _, changed := b.changedSymbolIDs[fact.ID]; !changed {
+				return nil, false, nil
+			}
+		}
+	}
+
+	changedReferences, exact, err := changes.ChangedReferences(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	if !exact {
+		return nil, false, nil
+	}
+	b.referenceChangesExact = true
+	for _, id := range changedReferences {
+		if b.changedSymbolIDs == nil {
+			b.changedSymbolIDs = make(map[SymbolID]struct{})
+		}
+		b.changedSymbolIDs[id] = struct{}{}
+	}
+
+	findPrevious := func(id SymbolID) (int, bool) {
+		index := sort.Search(len(previous), func(index int) bool {
+			return previous[index].ID >= id
+		})
+		return index, index < len(previous) && previous[index].ID == id
+	}
+	changedFacts := make(map[SymbolID]SymbolFact, len(b.changedSymbolIDs))
+	added := make([]SymbolFact, 0, len(b.changedSymbolIDs))
+	for index := range facts {
+		fact := facts[index]
+		if _, changed := b.changedSymbolIDs[fact.ID]; !changed {
+			continue
+		}
+		changedFacts[fact.ID] = fact
+		if _, present := findPrevious(fact.ID); !present {
+			added = append(added, fact)
+		}
+	}
+	sort.Slice(added, func(i, j int) bool { return added[i].ID < added[j].ID })
+
+	output := b.symbolOrderBuffer[:0]
+	if cap(output) < len(facts) {
+		output = make([]SymbolFact, 0, len(facts))
+	}
+	left, right := 0, 0
+	for left < len(previous) || right < len(added) {
+		for left < len(previous) {
+			if _, present := b.symbolSeen[previous[left].ID]; present {
+				break
+			}
+			delete(b.cachedReferences, previous[left].ID)
+			left++
+		}
+		if left == len(previous) {
+			output = append(output, added[right:]...)
+			break
+		}
+		if right < len(added) && added[right].ID < previous[left].ID {
+			output = append(output, added[right])
+			b.patchedSymbolRows++
+			right++
+			continue
+		}
+		fact := previous[left]
+		if changed, ok := changedFacts[fact.ID]; ok {
+			references := fact.References
+			fact = changed
+			fact.References = references
+			b.patchedSymbolRows++
+		}
+		output = append(output, fact)
+		left++
+	}
+	if len(output) != len(facts) {
+		return nil, false, nil
+	}
+	find := func(id SymbolID) (int, bool) {
+		index := sort.Search(len(output), func(index int) bool {
+			return output[index].ID >= id
+		})
+		return index, index < len(output) && output[index].ID == id
+	}
+
+	refreshSet := make(map[SymbolID]struct{}, len(changedReferences)+len(b.changedSymbolIDs))
+	for id := range b.changedSymbolIDs {
+		outputIndex, present := find(id)
+		if !present {
+			continue
+		}
+		fact := &output[outputIndex]
+		eligible := fact.AliasTarget == ""
+		if eligible && b.referencesOnlyFullTier {
+			_, eligible = b.fullTier[id]
+		}
+		if !eligible {
+			fact.References = nil
+			delete(b.cachedReferences, id)
+			continue
+		}
+		if _, cached := b.cachedReferences[id]; !cached {
+			refreshSet[id] = struct{}{}
+		}
+	}
+	for _, id := range changedReferences {
+		if _, eligible := b.cachedReferences[id]; eligible {
+			refreshSet[id] = struct{}{}
+		}
+	}
+	refresh := make([]SymbolID, 0, len(refreshSet))
+	for id := range refreshSet {
+		refresh = append(refresh, id)
+	}
+	references, err := batched.ReferencesBatch(ctx, refresh)
+	if err != nil {
+		return nil, false, err
+	}
+	b.recomputedReferences += len(refresh)
+	for _, id := range refresh {
+		outputIndex, present := find(id)
+		if !present {
+			continue
+		}
+		output[outputIndex].References = references[id]
+		b.cachedReferences[id] = references[id]
+	}
+	b.cachedReferenceHits += len(b.cachedReferences) - len(refresh)
+	b.closedReferences = b.cachedReferences
+	b.symbolFactsBuffer = facts[:0]
+	return output, true, nil
 }
 
 // orderSymbolFacts preserves canonical ID ordering while avoiding a complete

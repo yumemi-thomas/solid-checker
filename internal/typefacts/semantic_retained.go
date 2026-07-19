@@ -256,6 +256,9 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 		symbolFactsBuffer:      p.symbolScratch,
 		symbolOrderBuffer:      table.Symbols,
 	}
+	if p.previousDemandTable != nil {
+		builder.cachedCanonicalSymbols = p.previousDemandTable.Symbols
+	}
 	var asyncGroups []demandGroup
 	for index := range groups {
 		var asyncDemands []EntityDemand
@@ -546,6 +549,7 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 	retention.RecomputedSymbolFacts = builder.recomputedSymbolFacts
 	retention.CachedReferenceFacts = builder.cachedReferenceHits
 	retention.RecomputedReferences = builder.recomputedReferences
+	retention.PatchedSymbolRows = builder.patchedSymbolRows
 	nextSymbolFacts := p.symbolFacts
 	if nextSymbolFacts == nil {
 		nextSymbolFacts = make(map[SymbolID]SymbolFact, len(symbols))
@@ -607,4 +611,5 @@ type ClosureRetention struct {
 	RecomputedSymbolFacts int  `json:"recomputedSymbolFacts,omitempty"`
 	CachedReferenceFacts  int  `json:"cachedReferenceFacts,omitempty"`
 	RecomputedReferences  int  `json:"recomputedReferences,omitempty"`
+	PatchedSymbolRows     int  `json:"patchedSymbolRows,omitempty"`
 }

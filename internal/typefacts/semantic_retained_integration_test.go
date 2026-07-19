@@ -150,6 +150,7 @@ func TestRetainedDemandClosureMatchesFreshMaterialization(t *testing.T) {
 	asyncCacheSeen := false
 	symbolCacheSeen := false
 	referenceCacheSeen := false
+	patchedSymbolRowsSeen := false
 	for step, change := range script {
 		if _, err := incremental.Update(ctx, []typefacts.FileChange{change}); err != nil {
 			t.Fatal(err)
@@ -195,6 +196,9 @@ func TestRetainedDemandClosureMatchesFreshMaterialization(t *testing.T) {
 		}
 		if stats.Retention.CachedReferenceFacts > 0 {
 			referenceCacheSeen = true
+		}
+		if stats.Retention.PatchedSymbolRows > 0 {
+			patchedSymbolRowsSeen = true
 		}
 
 		// The fresh oracle: a new project that receives every overlay up
@@ -298,5 +302,8 @@ func TestRetainedDemandClosureMatchesFreshMaterialization(t *testing.T) {
 	}
 	if !referenceCacheSeen {
 		t.Fatal("the edit script never reused an unchanged reference list; the reference-delta parity check is vacuous")
+	}
+	if !patchedSymbolRowsSeen {
+		t.Fatal("the edit script never patched a retained canonical symbol table; the row-retention parity check is vacuous")
 	}
 }
