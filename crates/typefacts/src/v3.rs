@@ -135,6 +135,9 @@ pub struct Error {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SourceFile {
     pub path: String,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub local: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub source: Vec<u8>,
 }
 

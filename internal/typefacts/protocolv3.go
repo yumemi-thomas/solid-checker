@@ -57,7 +57,8 @@ type LifecycleError struct {
 
 type SourceFileV3 struct {
 	Path   string `cbor:"path" json:"path"`
-	Source []byte `cbor:"source" json:"source"`
+	Source []byte `cbor:"source,omitempty" json:"source,omitempty"`
+	Local  bool   `cbor:"local,omitempty" json:"local,omitempty"`
 }
 
 type LifecycleTimings struct {

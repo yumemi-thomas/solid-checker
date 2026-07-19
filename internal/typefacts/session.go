@@ -25,6 +25,7 @@ type Session struct {
 	projectID           string
 	retained            retainedSessionState
 	retainedDiagnostics SessionDiagnostics
+	inlineSources       map[string]struct{}
 	closed              bool
 	closeErr            error
 }
@@ -58,7 +59,11 @@ func NewSession(backend Project, projectID string, fallback bool) (*Session, err
 		_ = backend.Close()
 		return nil, err
 	}
-	return &Session{closure: closure, projectID: projectID}, nil
+	return &Session{
+		closure:       closure,
+		projectID:     projectID,
+		inlineSources: make(map[string]struct{}),
+	}, nil
 }
 
 func (s *Session) Closure(ctx context.Context, request ClosureRequest) (ClosureResponse, error) {
@@ -125,6 +130,14 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		affected, err := s.closure.Update(ctx, changes)
 		if err != nil {
 			return fail("update-failed", err)
+		}
+		for _, change := range changes {
+			path := filepath.Clean(change.Path)
+			if change.Deleted {
+				delete(s.inlineSources, path)
+			} else {
+				s.inlineSources[path] = struct{}{}
+			}
 		}
 		s.retainedDiagnostics = SessionDiagnostics{
 			RequestID:         request.RequestID,
@@ -259,9 +272,15 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		}
 		response.Sources = make([]SourceFileV3, 0, len(sources))
 		for _, source := range sources {
-			response.Sources = append(response.Sources, SourceFileV3{
-				Path: source.Path, Source: source.Source,
-			})
+			if _, inline := s.inlineSources[filepath.Clean(source.Path)]; inline {
+				response.Sources = append(response.Sources, SourceFileV3{
+					Path: source.Path, Source: source.Source,
+				})
+			} else {
+				response.Sources = append(response.Sources, SourceFileV3{
+					Path: source.Path, Local: true,
+				})
+			}
 		}
 	case LifecycleCancel:
 		// Cancellation is delivered through the active request's context by

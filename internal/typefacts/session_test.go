@@ -86,6 +86,39 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	}
 }
 
+func TestSessionReturnsLocalDescriptorsAndInlinesOverlayPaths(t *testing.T) {
+	t.Parallel()
+	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	initial := session.Lifecycle(context.Background(), lifecycleRequest(1, LifecycleSources, 1))
+	if !initial.OK || len(initial.Sources) != 1 {
+		t.Fatalf("initial sources response = %+v", initial)
+	}
+	if !initial.Sources[0].Local || len(initial.Sources[0].Source) != 0 {
+		t.Fatalf("disk source was not returned as a local descriptor: %+v", initial.Sources[0])
+	}
+
+	updateRequest := lifecycleRequest(2, LifecycleUpdate, 2)
+	updateRequest.Changes = []FileChangeV3{{
+		Path: "/project/source.ts", Version: 1, Source: []byte("export const value = 2\n"),
+	}}
+	update := session.Lifecycle(context.Background(), updateRequest)
+	if !update.OK {
+		t.Fatalf("update response = %+v", update)
+	}
+	updated := session.Lifecycle(context.Background(), lifecycleRequest(3, LifecycleSources, 2))
+	if !updated.OK || len(updated.Sources) != 1 {
+		t.Fatalf("updated sources response = %+v", updated)
+	}
+	if updated.Sources[0].Local || len(updated.Sources[0].Source) == 0 {
+		t.Fatalf("overlay source was not inlined: %+v", updated.Sources[0])
+	}
+}
+
 func TestSessionCancellationDoesNotCommitRetainedState(t *testing.T) {
 	t.Parallel()
 	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", false)
