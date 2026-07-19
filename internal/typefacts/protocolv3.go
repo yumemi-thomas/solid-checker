@@ -84,6 +84,7 @@ type LifecycleResponse struct {
 	OK            bool                `cbor:"ok" json:"ok"`
 	Table         *FactTableV2        `cbor:"table,omitempty" json:"table,omitempty"`
 	CompactTable  *CompactFactTableV3 `cbor:"compactTable,omitempty" json:"compactTable,omitempty"`
+	PackedTable   []byte              `cbor:"packedTable,omitempty" json:"packedTable,omitempty"`
 	TableDelta    *FactTableDeltaV3   `cbor:"tableDelta,omitempty" json:"tableDelta,omitempty"`
 	TableMode     string              `cbor:"tableMode,omitempty" json:"tableMode,omitempty"`
 	StateToken    string              `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`

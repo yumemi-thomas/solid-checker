@@ -192,6 +192,8 @@ pub struct Response {
     pub table: Option<FactTable>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub compact_table: Option<CompactFactTable>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub packed_table: Vec<u8>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub table_delta: Option<FactTableDelta>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -378,6 +380,358 @@ pub struct CompactFactTable {
     pub entity_files: Vec<CompactEntityFile>,
     pub symbols: Vec<CompactSymbolFact>,
     pub files: Vec<CompactFileFact>,
+}
+
+const PACKED_FACT_TABLE_VERSION: u64 = 1;
+const PACKED_COLLECTION_LIMIT: usize = 1_000_000;
+
+struct PackedCursor<'a> {
+    input: &'a [u8],
+    offset: usize,
+}
+
+#[derive(Default)]
+struct PackedLocationState {
+    path: usize,
+    start: u64,
+    valid: bool,
+}
+
+impl<'a> PackedCursor<'a> {
+    fn new(input: &'a [u8]) -> Self {
+        Self { input, offset: 0 }
+    }
+
+    fn u64(&mut self) -> Result<u64, String> {
+        let mut value = 0u64;
+        for shift in (0..=63).step_by(7) {
+            let byte = *self
+                .input
+                .get(self.offset)
+                .ok_or_else(|| "packed table is truncated".to_owned())?;
+            self.offset += 1;
+            if shift == 63 && byte > 1 {
+                return Err("packed table integer overflow".into());
+            }
+            value |= u64::from(byte & 0x7f) << shift;
+            if byte & 0x80 == 0 {
+                return Ok(value);
+            }
+        }
+        Err("packed table integer overflow".into())
+    }
+
+    fn signed(&mut self) -> Result<i64, String> {
+        let value = self.u64()?;
+        Ok(((value >> 1) as i64) ^ -((value & 1) as i64))
+    }
+
+    fn count(&mut self, label: &str) -> Result<usize, String> {
+        let count = usize::try_from(self.u64()?)
+            .map_err(|_| format!("packed {label} count overflows usize"))?;
+        if count > PACKED_COLLECTION_LIMIT {
+            return Err(format!(
+                "packed {label} count {count} exceeds {PACKED_COLLECTION_LIMIT}"
+            ));
+        }
+        Ok(count)
+    }
+
+    fn raw(&mut self, length: usize) -> Result<&'a [u8], String> {
+        let end = self
+            .offset
+            .checked_add(length)
+            .ok_or_else(|| "packed table range overflow".to_owned())?;
+        let bytes = self
+            .input
+            .get(self.offset..end)
+            .ok_or_else(|| "packed table is truncated".to_owned())?;
+        self.offset = end;
+        Ok(bytes)
+    }
+
+    fn string_index(&mut self, strings: &[String], label: &str) -> Result<String, String> {
+        let index = usize::try_from(self.u64()?)
+            .map_err(|_| format!("packed {label} string index overflows usize"))?;
+        strings
+            .get(index)
+            .cloned()
+            .ok_or_else(|| format!("packed {label} string index {index} is out of range"))
+    }
+
+    fn location(
+        &mut self,
+        strings: &[String],
+        state: &mut PackedLocationState,
+    ) -> Result<Location, String> {
+        let path_token = self.u64()?;
+        let (path, start) = if path_token & 1 == 1 {
+            if path_token != 1 || !state.valid {
+                return Err("packed location has invalid repeated-path marker".into());
+            }
+            let start = add_signed(state.start, self.signed()?, "location start")?;
+            (state.path, start)
+        } else {
+            let path = usize::try_from(path_token >> 1)
+                .map_err(|_| "packed location path index overflows usize".to_owned())?;
+            if path >= strings.len() {
+                return Err(format!("packed location path index {path} is out of range"));
+            }
+            (path, self.u64()?)
+        };
+        let end = start
+            .checked_add(self.u64()?)
+            .ok_or_else(|| "packed location end overflow".to_owned())?;
+        state.path = path;
+        state.start = start;
+        state.valid = true;
+        Ok(Location {
+            path: strings[path].clone(),
+            start_byte: start,
+            end_byte: end,
+        })
+    }
+
+    fn locations(&mut self, strings: &[String]) -> Result<Vec<Location>, String> {
+        let count = self.count("locations")?;
+        let mut locations = Vec::with_capacity(count);
+        let mut state = PackedLocationState::default();
+        for _ in 0..count {
+            locations.push(self.location(strings, &mut state)?);
+        }
+        Ok(locations)
+    }
+
+    fn declarations(&mut self, strings: &[String]) -> Result<Vec<Declaration>, String> {
+        let count = self.count("declarations")?;
+        let mut declarations = Vec::with_capacity(count);
+        let mut state = PackedLocationState::default();
+        for _ in 0..count {
+            declarations.push(Declaration {
+                name: self.string_index(strings, "declaration name")?,
+                kind: self.string_index(strings, "declaration kind")?,
+                location: self.location(strings, &mut state)?,
+            });
+        }
+        Ok(declarations)
+    }
+
+    fn source_call(&mut self, strings: &[String]) -> Result<SourceCall, String> {
+        let mut state = PackedLocationState::default();
+        Ok(SourceCall {
+            location: self.location(strings, &mut state)?,
+            callee: self.location(strings, &mut state)?,
+            arguments: self.locations(strings)?,
+            target: self.string_index(strings, "source call target")?,
+        })
+    }
+}
+
+fn add_signed(base: u64, delta: i64, label: &str) -> Result<u64, String> {
+    if delta >= 0 {
+        base.checked_add(delta as u64)
+    } else {
+        base.checked_sub(delta.unsigned_abs())
+    }
+    .ok_or_else(|| format!("packed {label} delta overflow"))
+}
+
+fn decode_packed_strings(cursor: &mut PackedCursor<'_>) -> Result<Vec<String>, String> {
+    let count = cursor.count("strings")?;
+    let mut strings = Vec::with_capacity(count);
+    let mut previous = Vec::<u8>::new();
+    for _ in 0..count {
+        let prefix = usize::try_from(cursor.u64()?)
+            .map_err(|_| "packed string prefix overflows usize".to_owned())?;
+        if prefix > previous.len() {
+            return Err("packed string prefix exceeds previous string".into());
+        }
+        let suffix_length = usize::try_from(cursor.u64()?)
+            .map_err(|_| "packed string length overflows usize".to_owned())?;
+        let mut bytes = previous[..prefix].to_vec();
+        bytes.extend_from_slice(cursor.raw(suffix_length)?);
+        let value = String::from_utf8(bytes.clone())
+            .map_err(|_| "packed string is not UTF-8".to_owned())?;
+        strings.push(value);
+        previous = bytes;
+    }
+    Ok(strings)
+}
+
+fn raw_digest(bytes: &[u8]) -> Result<SourceHash, String> {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    if bytes.len() != 32 {
+        return Err("packed source digest must be 32 bytes".into());
+    }
+    let mut value = String::with_capacity(71);
+    value.push_str("sha256:");
+    for byte in bytes {
+        value.push(HEX[usize::from(byte >> 4)] as char);
+        value.push(HEX[usize::from(byte & 0x0f)] as char);
+    }
+    SourceHash::parse(value).map_err(|error| error.to_string())
+}
+
+/// Decodes the opaque v3 cold frame directly into the retained fact table.
+/// No intermediate compact rows or second full-table expansion are created.
+pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<FactTable, String> {
+    let mut cursor = PackedCursor::new(input);
+    let version = cursor.u64()?;
+    if version != PACKED_FACT_TABLE_VERSION {
+        return Err(format!("unsupported packed table version {version}"));
+    }
+    let schema = cursor.u64()?;
+    let generation = cursor.u64()?;
+    let strings = decode_packed_strings(&mut cursor)?;
+
+    let source_count = cursor.count("sources")?;
+    let mut sources = Vec::with_capacity(source_count);
+    for _ in 0..source_count {
+        sources.push(SourceDigest {
+            path: cursor.string_index(&strings, "source path")?,
+            sha256: raw_digest(cursor.raw(32)?)?,
+        });
+    }
+
+    let entity_file_count = cursor.count("entity files")?;
+    let mut entities = Vec::new();
+    for _ in 0..entity_file_count {
+        let path = cursor.string_index(&strings, "entity path")?;
+        let count = cursor.count("entities")?;
+        let mut previous_start = 0;
+        for _ in 0..count {
+            let start = add_signed(previous_start, cursor.signed()?, "entity start")?;
+            let end = start
+                .checked_add(cursor.u64()?)
+                .ok_or_else(|| "packed entity end overflow".to_owned())?;
+            let symbol = cursor.string_index(&strings, "entity symbol")?;
+            let flags = cursor.u64()?;
+            if flags & !3 != 0 {
+                return Err(format!("packed entity has unknown flags {flags}"));
+            }
+            let type_descriptor = if flags & 1 != 0 {
+                Some(TypeDescriptor {
+                    text: cursor.string_index(&strings, "type text")?,
+                    origin_module: cursor.string_index(&strings, "origin module")?,
+                    alias_declarations: cursor.declarations(&strings)?,
+                })
+            } else {
+                None
+            };
+            let resolved_call = if flags & 2 != 0 {
+                Some(ResolvedCall {
+                    target: cursor.string_index(&strings, "resolved target")?,
+                    return_type_text: cursor.string_index(&strings, "return type")?,
+                })
+            } else {
+                None
+            };
+            entities.push(EntityFact {
+                location: Location {
+                    path: path.clone(),
+                    start_byte: start,
+                    end_byte: end,
+                },
+                symbol,
+                type_descriptor,
+                resolved_call,
+            });
+            previous_start = start;
+        }
+    }
+
+    let symbol_count = cursor.count("symbols")?;
+    let mut symbols = Vec::with_capacity(symbol_count);
+    for _ in 0..symbol_count {
+        symbols.push(SymbolFact {
+            id: cursor.string_index(&strings, "symbol id")?,
+            alias_target: cursor.string_index(&strings, "alias target")?,
+            declarations: cursor.declarations(&strings)?,
+            references: cursor.locations(&strings)?,
+        });
+    }
+
+    let file_count = cursor.count("files")?;
+    let mut files = Vec::with_capacity(file_count);
+    for _ in 0..file_count {
+        let path = cursor.string_index(&strings, "file path")?;
+        let call_count = cursor.count("calls")?;
+        let mut calls = Vec::with_capacity(call_count);
+        for _ in 0..call_count {
+            calls.push(cursor.source_call(&strings)?);
+        }
+        let binding_count = cursor.count("bindings")?;
+        let mut bindings = Vec::with_capacity(binding_count);
+        for _ in 0..binding_count {
+            let flags = cursor.u64()?;
+            if flags & !BINDING_FLAG_ARRAY != 0 {
+                return Err(format!("packed binding has unknown flags {flags}"));
+            }
+            bindings.push(SourceBinding {
+                array: flags & BINDING_FLAG_ARRAY != 0,
+                names: cursor.locations(&strings)?,
+                initializer: cursor.source_call(&strings)?,
+            });
+        }
+        let function_count = cursor.count("functions")?;
+        let mut functions = Vec::with_capacity(function_count);
+        for _ in 0..function_count {
+            let mut state = PackedLocationState::default();
+            let name = cursor.location(&strings, &mut state)?;
+            let body = cursor.location(&strings, &mut state)?;
+            let parameters = cursor.locations(&strings)?;
+            let flags = cursor.u64()?;
+            if flags & !(FUNCTION_FLAG_EXPORTED | FUNCTION_FLAG_ASYNC | FUNCTION_FLAG_ARROW) != 0 {
+                return Err(format!("packed function has unknown flags {flags}"));
+            }
+            functions.push(SourceFunction {
+                name,
+                body,
+                parameters,
+                exported: flags & FUNCTION_FLAG_EXPORTED != 0,
+                r#async: flags & FUNCTION_FLAG_ASYNC != 0,
+                arrow: flags & FUNCTION_FLAG_ARROW != 0,
+            });
+        }
+        let async_count = cursor.count("async functions")?;
+        let mut async_functions = Vec::with_capacity(async_count);
+        for _ in 0..async_count {
+            let mut state = PackedLocationState::default();
+            let expression = cursor.location(&strings, &mut state)?;
+            let symbol = cursor.string_index(&strings, "async symbol")?;
+            let target = cursor.string_index(&strings, "async target")?;
+            let flags = cursor.u64()?;
+            if flags & !ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0 {
+                return Err(format!("packed async function has unknown flags {flags}"));
+            }
+            async_functions.push(AsyncFunctionFact {
+                expression,
+                symbol,
+                target,
+                can_return_async: flags & ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0,
+                calls_after_await: cursor.locations(&strings)?,
+            });
+        }
+        files.push(FileFact {
+            path,
+            calls,
+            bindings,
+            functions,
+            async_functions,
+        });
+    }
+    if cursor.offset != input.len() {
+        return Err("packed table has trailing bytes".into());
+    }
+    Ok(FactTable {
+        schema,
+        generation,
+        project_id,
+        sources: sources.into(),
+        entities: entities.into(),
+        symbols: symbols.into(),
+        files: files.into(),
+    })
 }
 
 struct StringTable<'a> {
@@ -641,7 +995,7 @@ impl CompactFactTable {
 mod tests {
     use sha2::{Digest, Sha256};
 
-    use super::TYPE_FACTS_SCHEMA_SHA256;
+    use super::{TYPE_FACTS_SCHEMA_SHA256, decode_packed_fact_table};
 
     #[test]
     fn handshake_hash_matches_frozen_schema() {
@@ -650,5 +1004,26 @@ mod tests {
             Sha256::digest(include_bytes!("../../../schema/typefacts-v2.schema.json"))
         );
         assert_eq!(actual, TYPE_FACTS_SCHEMA_SHA256);
+    }
+
+    #[test]
+    fn packed_table_decoder_is_strict_and_direct() {
+        // version, schema, generation, one empty string, then four empty
+        // top-level collections.
+        let valid = [1, 2, 1, 1, 0, 0, 0, 0, 0, 0];
+        let table = decode_packed_fact_table(&valid, "/p/tsconfig.json".into()).unwrap();
+        assert_eq!(table.schema, 2);
+        assert_eq!(table.generation, 1);
+        assert_eq!(table.project_id, "/p/tsconfig.json");
+        assert!(table.sources.is_empty());
+        assert!(table.entities.is_empty());
+        assert!(table.symbols.is_empty());
+        assert!(table.files.is_empty());
+
+        assert!(decode_packed_fact_table(&valid[..valid.len() - 1], "/p".into()).is_err());
+        assert!(decode_packed_fact_table(&[2, 2, 1], "/p".into()).is_err());
+        let mut trailing = valid.to_vec();
+        trailing.push(0);
+        assert!(decode_packed_fact_table(&trailing, "/p".into()).is_err());
     }
 }

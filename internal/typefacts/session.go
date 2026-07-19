@@ -246,8 +246,11 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 			response.StateToken = nextTokenText
 			if request.ResetState || s.retained.table == nil || stats.Retention.NonDurableFiles != 0 {
 				response.TableMode = TableModeFull
-				compact := CompactFactTableV3From(FactTableV2From(*analyzedTable, s.projectID, generation))
-				response.CompactTable = &compact
+				packed, err := PackedFactTableV3From(FactTableV2From(*analyzedTable, s.projectID, generation))
+				if err != nil {
+					return fail("assembly-failed", err)
+				}
+				response.PackedTable = packed
 			} else {
 				delta := DiffFactTablesV3FromInternal(*s.retained.table, *analyzedTable, generation)
 				if s.retained.table.Generation == analyzedTable.Generation && delta.Empty() {

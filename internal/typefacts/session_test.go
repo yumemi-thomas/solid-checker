@@ -48,13 +48,10 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	firstRequest := lifecycleRequest(2, LifecycleAnalyze, 1)
 	firstRequest.ResetState = true
 	first := session.Lifecycle(context.Background(), firstRequest)
-	if !first.OK || first.TableMode != TableModeFull || first.StateToken != "1" || first.CompactTable == nil || first.Table != nil {
+	if !first.OK || first.TableMode != TableModeFull || first.StateToken != "1" || len(first.PackedTable) == 0 || first.CompactTable != nil || first.Table != nil {
 		t.Fatalf("initial analyze response = %+v", first)
 	}
-	firstTable, err := first.CompactTable.Expand()
-	if err != nil {
-		t.Fatal(err)
-	}
+	firstTable := FactTableV2From(*session.retained.table, session.projectID, 1)
 
 	reuseRequest := lifecycleRequest(3, LifecycleAnalyze, 1)
 	reuseRequest.StateToken = first.StateToken
