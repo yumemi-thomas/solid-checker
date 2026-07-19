@@ -1,10 +1,12 @@
 package typefacts
 
 import (
+	"bufio"
 	"cmp"
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -26,6 +28,7 @@ type Session struct {
 	retained            retainedSessionState
 	retainedDiagnostics SessionDiagnostics
 	inlineSources       map[string]struct{}
+	sourceArenaPath     string
 	closed              bool
 	closeErr            error
 }
@@ -270,18 +273,13 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		if err != nil {
 			return fail("sources-failed", err)
 		}
-		response.Sources = make([]SourceFileV3, 0, len(sources))
-		for _, source := range sources {
-			if _, inline := s.inlineSources[filepath.Clean(source.Path)]; inline {
-				response.Sources = append(response.Sources, SourceFileV3{
-					Path: source.Path, Source: source.Source,
-				})
-			} else {
-				response.Sources = append(response.Sources, SourceFileV3{
-					Path: source.Path, Local: true,
-				})
-			}
+		arena, descriptors, lengths, err := s.writeSourceArena(sources)
+		if err != nil {
+			return fail("sources-failed", err)
 		}
+		response.SourceArena = arena
+		response.Sources = descriptors
+		response.SourceLengths = lengths
 	case LifecycleCancel:
 		// Cancellation is delivered through the active request's context by
 		// the transport adapter. This operation acknowledges that delivery.
@@ -304,8 +302,58 @@ func (s *Session) Close() error {
 		return s.closeErr
 	}
 	s.closed = true
-	s.closeErr = s.closure.Close()
+	s.closeErr = errors.Join(s.closure.Close(), removeSourceArena(s.sourceArenaPath))
 	return s.closeErr
+}
+
+func (s *Session) writeSourceArena(sources []SourceFile) (string, []SourceFileV3, []uint64, error) {
+	if err := removeSourceArena(s.sourceArenaPath); err != nil {
+		return "", nil, nil, err
+	}
+	s.sourceArenaPath = ""
+	file, err := os.CreateTemp("", "solid-typefacts-sources-*")
+	if err != nil {
+		return "", nil, nil, err
+	}
+	path := file.Name()
+	keep := false
+	defer func() {
+		_ = file.Close()
+		if !keep {
+			_ = os.Remove(path)
+		}
+	}()
+	writer := bufio.NewWriterSize(file, 1<<20)
+	descriptors := make([]SourceFileV3, 0, len(sources))
+	lengths := make([]uint64, 0, len(sources))
+	for _, source := range sources {
+		length := uint64(len(source.Source))
+		if _, err := writer.Write(source.Source); err != nil {
+			return "", nil, nil, err
+		}
+		descriptors = append(descriptors, SourceFileV3{Path: source.Path})
+		lengths = append(lengths, length)
+	}
+	if err := writer.Flush(); err != nil {
+		return "", nil, nil, err
+	}
+	if err := file.Close(); err != nil {
+		return "", nil, nil, err
+	}
+	keep = true
+	s.sourceArenaPath = path
+	return path, descriptors, lengths, nil
+}
+
+func removeSourceArena(path string) error {
+	if path == "" {
+		return nil
+	}
+	err := os.Remove(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	return err
 }
 
 func applySessionDemandChanges(previous map[string][]EntityDemand, changes []EntityDemand, removed []string, reset bool) map[string][]EntityDemand {

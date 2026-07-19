@@ -202,6 +202,10 @@ pub struct Response {
     pub affected: Vec<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub sources: Vec<SourceFile>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub source_arena: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub source_lengths: Vec<u64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub timings: Option<ServerTimings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -242,15 +246,12 @@ const fn is_false(value: &bool) -> bool {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct CompactLocation(pub u64, pub u64, pub u64);
 
-/// `[flags, startByte, endByte, query-location-or-empty]`. Optional row
-/// elements encode as zero-or-one-element arrays because the deterministic
-/// CBOR contract forbids null.
+/// `[path-index, packed demand rows]`. Each byte string stores unsigned
+/// LEB128 rows as `(flags << 1 | hasQuery, startDelta, length)`, followed by
+/// `(queryPath, queryStart, queryLength)` when present. Starts are delta-coded
+/// within the enclosing path group.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct CompactDemand(pub u64, pub u64, pub u64, pub Vec<CompactLocation>);
-
-/// `[path-index, demand rows]`.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-pub struct CompactDemandGroup(pub u64, pub Vec<CompactDemand>);
+pub struct CompactDemandGroup(pub u64, pub Vec<u8>);
 
 /// The compact form of a full demand snapshot.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -266,6 +267,14 @@ pub const DEMAND_FLAG_TYPE_DESCRIPTOR: u64 = 1 << 2;
 pub const DEMAND_FLAG_RESOLVED_CALL: u64 = 1 << 3;
 pub const DEMAND_FLAG_ASYNC: u64 = 1 << 4;
 pub const DEMAND_FLAG_STRUCTURAL_ACCESSOR: u64 = 1 << 5;
+
+fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
+    while value >= 0x80 {
+        output.push((value as u8) | 0x80);
+        value >>= 7;
+    }
+    output.push(value as u8);
+}
 
 /// `[name-index, kind-index, location]`.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -412,10 +421,15 @@ fn lookup(strings: &[String], index: u64) -> Result<&str, String> {
 pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
     let mut strings = StringTable::new();
     let mut groups: Vec<CompactDemandGroup> = Vec::new();
+    let mut previous_start = 0;
     for demand in demands {
         let path = strings.intern(demand.location.path.as_str());
-        if groups.last().is_none_or(|group| group.0 != path) {
+        if groups
+            .last()
+            .is_none_or(|group| group.0 != path || demand.location.start_byte < previous_start)
+        {
             groups.push(CompactDemandGroup(path, Vec::new()));
+            previous_start = 0;
         }
         let mut flags = 0;
         if demand.symbol {
@@ -436,25 +450,29 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.structural_accessor {
             flags |= DEMAND_FLAG_STRUCTURAL_ACCESSOR;
         }
-        let query = demand
-            .query_location
-            .as_ref()
-            .map(|query| {
-                CompactLocation(
-                    strings.intern(query.path.as_str()),
-                    query.start_byte,
-                    query.end_byte,
-                )
-            })
-            .into_iter()
-            .collect();
         let group = groups.last_mut().expect("group pushed above");
-        group.1.push(CompactDemand(
-            flags,
-            demand.location.start_byte,
-            demand.location.end_byte,
-            query,
-        ));
+        let has_query = u64::from(demand.query_location.is_some());
+        push_uvarint(&mut group.1, (flags << 1) | has_query);
+        push_uvarint(
+            &mut group.1,
+            demand.location.start_byte.saturating_sub(previous_start),
+        );
+        push_uvarint(
+            &mut group.1,
+            demand
+                .location
+                .end_byte
+                .saturating_sub(demand.location.start_byte),
+        );
+        previous_start = demand.location.start_byte;
+        if let Some(query) = &demand.query_location {
+            push_uvarint(&mut group.1, strings.intern(query.path.as_str()));
+            push_uvarint(&mut group.1, query.start_byte);
+            push_uvarint(
+                &mut group.1,
+                query.end_byte.saturating_sub(query.start_byte),
+            );
+        }
     }
     CompactDemands {
         groups,
@@ -611,10 +629,10 @@ impl CompactFactTable {
             schema: self.schema,
             generation: self.generation,
             project_id: self.project_id,
-            sources,
-            entities,
-            symbols,
-            files,
+            sources: sources.into(),
+            entities: entities.into(),
+            symbols: symbols.into(),
+            files: files.into(),
         })
     }
 }

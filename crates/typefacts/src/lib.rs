@@ -6,6 +6,7 @@
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use solid_facts_core::{Generation, SourceHash};
 use std::io::{Read, Write};
+use std::sync::Arc;
 use thiserror::Error;
 
 pub mod v3;
@@ -152,10 +153,10 @@ pub struct FactTable {
     pub schema: u64,
     pub generation: u64,
     pub project_id: String,
-    pub sources: Vec<SourceDigest>,
-    pub entities: Vec<EntityFact>,
-    pub symbols: Vec<SymbolFact>,
-    pub files: Vec<FileFact>,
+    pub sources: Arc<Vec<SourceDigest>>,
+    pub entities: Arc<Vec<EntityFact>>,
+    pub symbols: Arc<Vec<SymbolFact>>,
+    pub files: Arc<Vec<FileFact>>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -278,7 +279,7 @@ impl ClosureResponse {
         {
             return Err(TypeFactsError::SourceOrder);
         }
-        for symbol in &self.table.symbols {
+        for symbol in self.table.symbols.iter() {
             if !symbol.alias_target.is_empty() && !symbol.references.is_empty() {
                 return Err(TypeFactsError::AliasReferences(symbol.id.clone()));
             }
@@ -397,16 +398,16 @@ impl<S: Read + Write> FramedTransport<S> {
 }
 
 fn validate_table_locations(table: &FactTable) -> Result<(), TypeFactsError> {
-    for entity in &table.entities {
+    for entity in table.entities.iter() {
         validate_location("entity", &entity.location)?;
     }
-    for symbol in &table.symbols {
+    for symbol in table.symbols.iter() {
         for declaration in &symbol.declarations {
             validate_location("declaration", &declaration.location)?;
         }
         validate_locations("symbol reference", &symbol.references)?;
     }
-    for file in &table.files {
+    for file in table.files.iter() {
         for call in &file.calls {
             validate_location("source call", &call.location)?;
             validate_location("source callee", &call.callee)?;
@@ -743,15 +744,7 @@ mod tests {
                 structural_accessor: false,
             }],
             compact_demands: Some(v3::CompactDemands {
-                groups: vec![v3::CompactDemandGroup(
-                    1,
-                    vec![v3::CompactDemand(
-                        v3::DEMAND_FLAG_SYMBOL | v3::DEMAND_FLAG_REFERENCES,
-                        1,
-                        2,
-                        vec![v3::CompactLocation(1, 1, 2)],
-                    )],
-                )],
+                groups: vec![v3::CompactDemandGroup(1, vec![7, 1, 1, 1, 1, 1])],
                 strings: vec![String::new(), "a.ts".into()],
             }),
             state_token: "9".into(),
@@ -817,7 +810,8 @@ mod tests {
             sources: vec![SourceDigest {
                 path: "a.ts".into(),
                 sha256: solid_facts_core::SourceHash::of("src"),
-            }],
+            }]
+            .into(),
             entities: vec![
                 EntityFact {
                     location: location("a.ts", 1, 4),
@@ -842,7 +836,8 @@ mod tests {
                         return_type_text: "() => number".into(),
                     }),
                 },
-            ],
+            ]
+            .into(),
             symbols: vec![SymbolFact {
                 id: "symbol:h:1".into(),
                 alias_target: String::new(),
@@ -852,7 +847,8 @@ mod tests {
                     location: location("a.ts", 1, 4),
                 }],
                 references: vec![location("a.ts", 1, 4), location("b.ts", 2, 8)],
-            }],
+            }]
+            .into(),
             files: vec![FileFact {
                 path: "a.ts".into(),
                 calls: vec![SourceCall {
@@ -886,7 +882,8 @@ mod tests {
                     can_return_async: true,
                     calls_after_await: vec![location("a.ts", 30, 34)],
                 }],
-            }],
+            }]
+            .into(),
         };
         // Build the compact table the way the Go service does: grouped by
         // path with one dictionary, then prove expansion is lossless after a
@@ -910,7 +907,10 @@ mod tests {
                 "b.ts".into(),
                 "symbol:h:2".into(),
             ],
-            sources: vec![v3::CompactSourceDigest(1, solid_facts_core::SourceHash::of("src"))],
+            sources: vec![v3::CompactSourceDigest(
+                1,
+                solid_facts_core::SourceHash::of("src"),
+            )],
             entity_files: vec![v3::CompactEntityFile(
                 1,
                 vec![
@@ -922,11 +922,7 @@ mod tests {
                         vec![v3::CompactTypeDescriptor(
                             3,
                             4,
-                            vec![v3::CompactDeclaration(
-                                5,
-                                6,
-                                v3::CompactLocation(7, 10, 30),
-                            )],
+                            vec![v3::CompactDeclaration(5, 6, v3::CompactLocation(7, 10, 30))],
                         )],
                         vec![v3::CompactCall(2, 8)],
                     ),
@@ -935,15 +931,8 @@ mod tests {
             symbols: vec![v3::CompactSymbolFact(
                 2,
                 0,
-                vec![v3::CompactDeclaration(
-                    9,
-                    10,
-                    v3::CompactLocation(1, 1, 4),
-                )],
-                vec![
-                    v3::CompactLocation(1, 1, 4),
-                    v3::CompactLocation(11, 2, 8),
-                ],
+                vec![v3::CompactDeclaration(9, 10, v3::CompactLocation(1, 1, 4))],
+                vec![v3::CompactLocation(1, 1, 4), v3::CompactLocation(11, 2, 8)],
             )],
             files: vec![v3::CompactFileFact(
                 1,
@@ -982,7 +971,10 @@ mod tests {
         assert_eq!(decoded.expand().unwrap(), table);
 
         let broken = v3::CompactFactTable {
-            sources: vec![v3::CompactSourceDigest(99, solid_facts_core::SourceHash::of("src"))],
+            sources: vec![v3::CompactSourceDigest(
+                99,
+                solid_facts_core::SourceHash::of("src"),
+            )],
             ..compact_table
         };
         assert!(broken.expand().is_err());
@@ -1012,8 +1004,8 @@ mod tests {
                 schema: 2,
                 generation: 1,
                 project_id: "project".into(),
-                sources: vec![],
-                entities: vec![],
+                sources: vec![].into(),
+                entities: vec![].into(),
                 symbols: vec![SymbolFact {
                     id: "s1".into(),
                     alias_target: "s2".into(),
@@ -1023,8 +1015,9 @@ mod tests {
                         start_byte: 0,
                         end_byte: 1,
                     }],
-                }],
-                files: vec![],
+                }]
+                .into(),
+                files: vec![].into(),
             },
         };
         assert!(matches!(

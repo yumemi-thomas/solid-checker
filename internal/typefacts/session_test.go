@@ -3,6 +3,7 @@ package typefacts
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 )
 
@@ -86,7 +87,7 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	}
 }
 
-func TestSessionReturnsLocalDescriptorsAndInlinesOverlayPaths(t *testing.T) {
+func TestSessionReturnsSourcesThroughOneSharedArena(t *testing.T) {
 	t.Parallel()
 	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", false)
 	if err != nil {
@@ -98,8 +99,12 @@ func TestSessionReturnsLocalDescriptorsAndInlinesOverlayPaths(t *testing.T) {
 	if !initial.OK || len(initial.Sources) != 1 {
 		t.Fatalf("initial sources response = %+v", initial)
 	}
-	if !initial.Sources[0].Local || len(initial.Sources[0].Source) != 0 {
-		t.Fatalf("disk source was not returned as a local descriptor: %+v", initial.Sources[0])
+	initialArena, err := os.ReadFile(initial.SourceArena)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := initialArena[:initial.SourceLengths[0]]; string(got) != "export const value = 1\n" {
+		t.Fatalf("initial arena source = %q", got)
 	}
 
 	updateRequest := lifecycleRequest(2, LifecycleUpdate, 2)
@@ -114,8 +119,12 @@ func TestSessionReturnsLocalDescriptorsAndInlinesOverlayPaths(t *testing.T) {
 	if !updated.OK || len(updated.Sources) != 1 {
 		t.Fatalf("updated sources response = %+v", updated)
 	}
-	if updated.Sources[0].Local || len(updated.Sources[0].Source) == 0 {
-		t.Fatalf("overlay source was not inlined: %+v", updated.Sources[0])
+	updatedArena, err := os.ReadFile(updated.SourceArena)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := updatedArena[:updated.SourceLengths[0]]; string(got) != "export const value = 1\n" {
+		t.Fatalf("updated arena source = %q", got)
 	}
 }
 
