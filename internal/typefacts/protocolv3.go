@@ -105,19 +105,29 @@ type EntityFileV3 struct {
 	Entities []EntityFactV2 `cbor:"entities" json:"entities"`
 }
 
+// SymbolReferenceFileV3 replaces one symbol's references for one source path.
+// It avoids retransmitting project-wide reference lists when an edit changes
+// locations in only one file.
+type SymbolReferenceFileV3 struct {
+	ID         string       `cbor:"id" json:"id"`
+	Path       string       `cbor:"path" json:"path"`
+	References []LocationV2 `cbor:"references,omitempty" json:"references,omitempty"`
+}
+
 // FactTableDeltaV3 transforms the table identified by the request's state
 // token into the response generation. Collections remain canonically ordered
 // after application.
 type FactTableDeltaV3 struct {
-	Generation         uint64           `cbor:"generation" json:"generation"`
-	Sources            []SourceDigestV2 `cbor:"sources,omitempty" json:"sources,omitempty"`
-	RemovedSourcePaths []string         `cbor:"removedSourcePaths,omitempty" json:"removedSourcePaths,omitempty"`
-	EntityFiles        []EntityFileV3   `cbor:"entityFiles,omitempty" json:"entityFiles,omitempty"`
-	RemovedEntityPaths []string         `cbor:"removedEntityPaths,omitempty" json:"removedEntityPaths,omitempty"`
-	Symbols            []SymbolFactV2   `cbor:"symbols,omitempty" json:"symbols,omitempty"`
-	RemovedSymbolIDs   []string         `cbor:"removedSymbolIds,omitempty" json:"removedSymbolIds,omitempty"`
-	Files              []FileFactV2     `cbor:"files,omitempty" json:"files,omitempty"`
-	RemovedFilePaths   []string         `cbor:"removedFilePaths,omitempty" json:"removedFilePaths,omitempty"`
+	Generation           uint64                  `cbor:"generation" json:"generation"`
+	Sources              []SourceDigestV2        `cbor:"sources,omitempty" json:"sources,omitempty"`
+	RemovedSourcePaths   []string                `cbor:"removedSourcePaths,omitempty" json:"removedSourcePaths,omitempty"`
+	EntityFiles          []EntityFileV3          `cbor:"entityFiles,omitempty" json:"entityFiles,omitempty"`
+	RemovedEntityPaths   []string                `cbor:"removedEntityPaths,omitempty" json:"removedEntityPaths,omitempty"`
+	Symbols              []SymbolFactV2          `cbor:"symbols,omitempty" json:"symbols,omitempty"`
+	RemovedSymbolIDs     []string                `cbor:"removedSymbolIds,omitempty" json:"removedSymbolIds,omitempty"`
+	SymbolReferenceFiles []SymbolReferenceFileV3 `cbor:"symbolReferenceFiles,omitempty" json:"symbolReferenceFiles,omitempty"`
+	Files                []FileFactV2            `cbor:"files,omitempty" json:"files,omitempty"`
+	RemovedFilePaths     []string                `cbor:"removedFilePaths,omitempty" json:"removedFilePaths,omitempty"`
 }
 
 func ValidateLifecycleRequest(request LifecycleRequest) error {

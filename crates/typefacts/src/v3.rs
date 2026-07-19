@@ -104,6 +104,15 @@ pub struct EntityFileDelta {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SymbolReferenceFileDelta {
+    pub id: String,
+    pub path: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub references: Vec<Location>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FactTableDelta {
     pub generation: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -118,6 +127,8 @@ pub struct FactTableDelta {
     pub symbols: Vec<SymbolFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub removed_symbol_ids: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbol_reference_files: Vec<SymbolReferenceFileDelta>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub files: Vec<FileFact>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]

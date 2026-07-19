@@ -108,3 +108,47 @@ func TestInternalFactTableDeltaMatchesFullConversion(t *testing.T) {
 		previous = freshInternal
 	}
 }
+
+func TestManifestDeltaDoesNotReplaceSharedReferenceRow(t *testing.T) {
+	reference := func(path string, start int) Location {
+		return Location{Path: path, StartByte: start, EndByte: start + 1}
+	}
+	base := FactTable{
+		Schema: 1, Generation: 1, ProjectID: "shared-references",
+		Symbols: []SymbolFact{{
+			ID: "shared",
+			References: []Location{
+				reference("a.ts", 1),
+				reference("b.ts", 1),
+			},
+		}},
+	}
+	edit := FactTable{
+		Schema: 1, Generation: 2, ProjectID: "shared-references",
+		Symbols: []SymbolFact{{
+			ID: "shared",
+			References: []Location{
+				reference("a.ts", 3),
+				reference("b.ts", 1),
+			},
+		}},
+	}
+	builder := &closureBuilder{
+		referenceChangesExact: true,
+		changedSymbolIDs:      map[SymbolID]struct{}{"shared": {}},
+	}
+	edit.transport = transportManifest(&base, &edit, builder, map[string]struct{}{"a.ts": {}})
+
+	delta := DiffFactTablesV3FromInternal(base, edit, edit.Generation)
+	if len(delta.Symbols) != 0 {
+		t.Fatalf("delta replaced %d complete shared symbol rows", len(delta.Symbols))
+	}
+	if len(delta.SymbolReferenceFiles) != 1 {
+		t.Fatalf("reference file deltas = %d, want 1", len(delta.SymbolReferenceFiles))
+	}
+	retained := ApplyFactTableDeltaV3(FactTableV2From(base, base.ProjectID, base.Generation), delta)
+	fresh := FactTableV2From(edit, edit.ProjectID, edit.Generation)
+	if !reflect.DeepEqual(retained, fresh) {
+		t.Fatalf("reference-file delta differs from fresh table\nretained: %#v\nfresh: %#v", retained, fresh)
+	}
+}

@@ -99,14 +99,13 @@ func diffFactTablesV3FromManifest(previous, next FactTable, generation uint64, m
 		symbolKeys = append(symbolKeys, string(id))
 	}
 	sort.Strings(symbolKeys)
-	diffCanonicalCandidates(
+	diffCanonicalSymbolCandidates(
 		previous.Symbols,
 		next.Symbols,
 		symbolKeys,
-		func(value SymbolFact) string { return string(value.ID) },
-		func(left, right SymbolFact) bool { return reflect.DeepEqual(left, right) },
-		symbolFactV2,
+		sortedStringKeys(manifest.sourcePaths),
 		&delta.Symbols,
+		&delta.SymbolReferenceFiles,
 		&delta.RemovedSymbolIDs,
 	)
 	for _, path := range sortedStringKeys(manifest.entityPaths) {
@@ -122,6 +121,66 @@ func diffFactTablesV3FromManifest(previous, next FactTable, generation uint64, m
 		}
 	}
 	return delta
+}
+
+func diffCanonicalSymbolCandidates(
+	previous, next []SymbolFact,
+	keys []string,
+	referencePaths []string,
+	changed *[]SymbolFactV2,
+	referenceFiles *[]SymbolReferenceFileV3,
+	removed *[]string,
+) {
+	for _, candidate := range keys {
+		id := SymbolID(candidate)
+		left, leftOK := canonicalSymbolFact(previous, id)
+		right, rightOK := canonicalSymbolFact(next, id)
+		switch {
+		case leftOK && !rightOK:
+			*removed = append(*removed, candidate)
+		case rightOK && !leftOK:
+			*changed = append(*changed, symbolFactV2(right))
+		case rightOK && (left.AliasTarget != right.AliasTarget || !reflect.DeepEqual(left.Declarations, right.Declarations)):
+			*changed = append(*changed, symbolFactV2(right))
+		case rightOK:
+			diffSymbolReferenceFiles(candidate, left.References, right.References, referencePaths, referenceFiles)
+		}
+	}
+}
+
+func diffSymbolReferenceFiles(
+	id string,
+	previous, next []Location,
+	paths []string,
+	changed *[]SymbolReferenceFileV3,
+) {
+	for _, path := range paths {
+		previousReferences := canonicalReferencesForPath(previous, path)
+		nextReferences := canonicalReferencesForPath(next, path)
+		if reflect.DeepEqual(previousReferences, nextReferences) {
+			continue
+		}
+		references := make([]LocationV2, 0, len(nextReferences))
+		for _, reference := range nextReferences {
+			references = append(references, locationV2(reference))
+		}
+		*changed = append(*changed, SymbolReferenceFileV3{
+			ID:         id,
+			Path:       path,
+			References: references,
+		})
+	}
+}
+
+func canonicalReferencesForPath(references []Location, path string) []Location {
+	start := sort.Search(len(references), func(index int) bool {
+		return references[index].Path >= path
+	})
+	end := start
+	for end < len(references) && references[end].Path == path {
+		end++
+	}
+	return references[start:end]
 }
 
 func sortedStringKeys(values map[string]struct{}) []string {
@@ -268,6 +327,7 @@ func (delta FactTableDeltaV3) Empty() bool {
 		len(delta.RemovedEntityPaths) == 0 &&
 		len(delta.Symbols) == 0 &&
 		len(delta.RemovedSymbolIDs) == 0 &&
+		len(delta.SymbolReferenceFiles) == 0 &&
 		len(delta.Files) == 0 &&
 		len(delta.RemovedFilePaths) == 0
 }
@@ -310,6 +370,26 @@ func ApplyFactTableDeltaV3(previous FactTableV2, delta FactTableDeltaV3) FactTab
 	result.Sources = applyByKey(previous.Sources, delta.Sources, delta.RemovedSourcePaths, func(value SourceDigestV2) string { return value.Path })
 	result.Files = applyByKey(previous.Files, delta.Files, delta.RemovedFilePaths, func(value FileFactV2) string { return value.Path })
 	result.Symbols = applyByKey(previous.Symbols, delta.Symbols, delta.RemovedSymbolIDs, func(value SymbolFactV2) string { return value.ID })
+	for _, replacement := range delta.SymbolReferenceFiles {
+		index := slices.IndexFunc(result.Symbols, func(symbol SymbolFactV2) bool {
+			return symbol.ID == replacement.ID
+		})
+		if index < 0 {
+			continue
+		}
+		symbol := &result.Symbols[index]
+		symbol.References = slices.DeleteFunc(symbol.References, func(reference LocationV2) bool {
+			return reference.Path == replacement.Path
+		})
+		symbol.References = append(symbol.References, replacement.References...)
+		slices.SortFunc(symbol.References, func(left, right LocationV2) int {
+			return cmp.Or(
+				cmp.Compare(left.Path, right.Path),
+				cmp.Compare(left.StartByte, right.StartByte),
+				cmp.Compare(left.EndByte, right.EndByte),
+			)
+		})
+	}
 
 	replaced := make(map[string]struct{}, len(delta.EntityFiles)+len(delta.RemovedEntityPaths))
 	for _, file := range delta.EntityFiles {
