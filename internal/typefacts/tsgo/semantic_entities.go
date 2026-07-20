@@ -6,7 +6,7 @@ import (
 
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/yumemi-thomas/solid-check/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
 )
 
 // SemanticEntities resolves the experimental demand payload under one checker

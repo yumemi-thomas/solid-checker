@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-check/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
 )
 
 // The source-fact memo and durable symbol identity are exercised through the

@@ -7,9 +7,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-check/internal/typefacts"
-	"github.com/yumemi-thomas/solid-check/internal/typefacts/tsgo"
-	"github.com/yumemi-thomas/solid-check/internal/wirecbor"
+	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/internal/typefacts/tsgo"
+	"github.com/yumemi-thomas/solid-checker/internal/wirecbor"
 )
 
 // realisticDemands mirrors the shape of the Rust session's demand list: a

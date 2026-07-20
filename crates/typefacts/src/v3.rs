@@ -10,9 +10,9 @@ use crate::{
 
 pub const TYPE_FACTS_SCHEMA_V3: u64 = 3;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:6a35b7da27fa097f43cde6ea474e2d64b80823a468593e7044ffb25bb33f8e44";
+    "sha256:fae64229118d84de0ba1ddaf7562f81691c15e1faa38add05a11f7060d6666df";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
-pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("SOLID_CHECK_BUILD_ID") {
+pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("SOLID_CHECKER_BUILD_ID") {
     Some(value) => value,
     None => "dev",
 };

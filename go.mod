@@ -1,4 +1,4 @@
-module github.com/yumemi-thomas/solid-check
+module github.com/yumemi-thomas/solid-checker
 
 go 1.26
 

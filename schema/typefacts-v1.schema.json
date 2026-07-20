@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://solid-check.dev/schema/typefacts-v1.schema.json",
+  "$id": "https://solid-checker.dev/schema/typefacts-v1.schema.json",
   "title": "TypeFactsSchema v1",
   "type": "object",
   "additionalProperties": false,

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-check/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
 )
 
 func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {

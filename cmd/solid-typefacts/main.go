@@ -16,15 +16,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yumemi-thomas/solid-check/internal/typefacts"
-	"github.com/yumemi-thomas/solid-check/internal/typefacts/tsgo"
-	"github.com/yumemi-thomas/solid-check/internal/wirecbor"
+	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
+	"github.com/yumemi-thomas/solid-checker/internal/typefacts/tsgo"
+	"github.com/yumemi-thomas/solid-checker/internal/wirecbor"
 )
 
 var buildID = "dev"
 
 // stageTrace reports a service-side stage duration on stderr when
-// SOLID_TYPEFACTS_TIMINGS is set, mirroring the CLI's SOLID_CHECK_TIMINGS.
+// SOLID_TYPEFACTS_TIMINGS is set, mirroring the CLI's SOLID_CHECKER_TIMINGS.
 func stageTrace(stage string, elapsed time.Duration) {
 	if os.Getenv("SOLID_TYPEFACTS_TIMINGS") == "" {
 		return
