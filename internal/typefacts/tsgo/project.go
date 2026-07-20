@@ -81,6 +81,7 @@ func OpenProject(ctx context.Context, configPath string) (typefacts.Project, err
 	if err != nil {
 		return nil, fmt.Errorf("resolve tsconfig path: %w", err)
 	}
+	absConfigPath = normalizeTypeScriptPath(absConfigPath)
 	fs := newOverlayFS(bundled.WrapFS(osvfs.FS()))
 	program, typeChecker, release, err := buildProgram(ctx, absConfigPath, fs)
 	if err != nil {
@@ -103,6 +104,13 @@ func OpenProject(ctx context.Context, configPath string) (typefacts.Project, err
 	}
 	opened.exportedIdentities = collectExportedIdentities(program, typeChecker)
 	return opened, nil
+}
+
+// TypeScript paths always use forward slashes, including on Windows. The
+// underlying OS filesystem accepts them, while TypeScript-Go's path and VFS
+// helpers do not consistently treat backslashes as directory separators.
+func normalizeTypeScriptPath(path string) string {
+	return strings.ReplaceAll(path, `\`, "/")
 }
 
 // singleCheckerPool serves this adapter's one retained checker. UpdateProgram
