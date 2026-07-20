@@ -111,7 +111,11 @@ func OpenProject(ctx context.Context, configPath string) (typefacts.Project, err
 // underlying OS filesystem accepts them, while TypeScript-Go's path and VFS
 // helpers do not consistently treat backslashes as directory separators.
 func normalizeTypeScriptPath(path string) string {
-	return strings.ReplaceAll(path, `\`, "/")
+	path = strings.ReplaceAll(path, `\`, "/")
+	if strings.HasPrefix(path, "//?/UNC/") {
+		return "//" + strings.TrimPrefix(path, "//?/UNC/")
+	}
+	return strings.TrimPrefix(path, "//?/")
 }
 
 func typeScriptPathDir(fileName string) string {
