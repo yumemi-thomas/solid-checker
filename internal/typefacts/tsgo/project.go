@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -113,6 +114,10 @@ func normalizeTypeScriptPath(path string) string {
 	return strings.ReplaceAll(path, `\`, "/")
 }
 
+func typeScriptPathDir(fileName string) string {
+	return path.Dir(normalizeTypeScriptPath(fileName))
+}
+
 // singleCheckerPool serves this adapter's one retained checker. UpdateProgram
 // inherits it through program options, so incremental updates construct one
 // checker instead of the default pool's four.
@@ -145,11 +150,11 @@ func (p *singleCheckerPool) GetChecker(ctx context.Context, file *ast.SourceFile
 }
 
 func buildProgram(ctx context.Context, configPath string, fs vfs.FS) (*compiler.Program, *checker.Checker, func(), error) {
-	cwd := filepath.Dir(configPath)
+	cwd := typeScriptPathDir(configPath)
 	host := compiler.NewCompilerHost(cwd, fs, bundled.LibPath(), nil, nil)
 	config, diagnostics := tsoptions.GetParsedCommandLineOfConfigFile(configPath, &core.CompilerOptions{}, nil, host, nil)
 	if len(diagnostics) != 0 {
-		return nil, nil, nil, fmt.Errorf("parse tsconfig: %d diagnostic(s)", len(diagnostics))
+		return nil, nil, nil, fmt.Errorf("parse tsconfig: %s", formatDiagnostics(diagnostics))
 	}
 	if config == nil {
 		return nil, nil, nil, errors.New("parse tsconfig: no configuration returned")
@@ -183,12 +188,20 @@ func updateProgram(ctx context.Context, oldProgram *compiler.Program, configPath
 	if oldFile == nil {
 		return buildProgram(ctx, configPath, fs)
 	}
-	host := compiler.NewCompilerHost(filepath.Dir(configPath), fs, bundled.LibPath(), nil, nil)
+	host := compiler.NewCompilerHost(typeScriptPathDir(configPath), fs, bundled.LibPath(), nil, nil)
 	program, _, _ := oldProgram.UpdateProgram(oldFile.Path(), host, nil)
 	if program == nil {
 		return nil, nil, nil, errors.New("update TypeScript program")
 	}
 	return finishProgram(ctx, program)
+}
+
+func formatDiagnostics(diagnostics []*ast.Diagnostic) string {
+	messages := make([]string, len(diagnostics))
+	for index, diagnostic := range diagnostics {
+		messages[index] = fmt.Sprintf("TS%d: %s", diagnostic.Code(), diagnostic.String())
+	}
+	return strings.Join(messages, "; ")
 }
 
 func finishProgram(ctx context.Context, program *compiler.Program) (*compiler.Program, *checker.Checker, func(), error) {
