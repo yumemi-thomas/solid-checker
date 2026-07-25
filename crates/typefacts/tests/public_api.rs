@@ -1,4 +1,4 @@
-use typefacts::{Cancellation, Session, SessionError};
+use typefacts::{Cancellation, ExchangeTimings, Session, SessionError, TableChanges};
 
 #[test]
 fn cancellation_is_part_of_the_public_session_api() {
@@ -11,6 +11,8 @@ fn cancellation_is_part_of_the_public_session_api() {
     }
 
     assert_clone::<Cancellation>();
+    assert_clone::<ExchangeTimings>();
+    assert_clone::<TableChanges>();
     let _ = assert_handle;
     let _ = assert_result;
 }

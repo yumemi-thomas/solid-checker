@@ -68,6 +68,11 @@ fn public_session_owns_the_retained_process_lifecycle() {
     let first = session.analyze(&AnalysisDemand::default()).unwrap();
     assert_eq!(first.generation, 1);
     assert_eq!(first.project_id, project.to_string_lossy());
+    let timings = session.take_last_exchange_timings().unwrap();
+    assert!(!timings.roundtrip.is_zero());
+    assert!(timings.response_bytes > 0);
+    assert!(timings.server_materialized);
+    assert!(session.take_last_table_changes().is_some());
 
     let changed_path = project.parent().unwrap().join("unrelated.ts");
     let changed_source = fs::read(&changed_path).unwrap();
@@ -81,6 +86,8 @@ fn public_session_owns_the_retained_process_lifecycle() {
         .unwrap();
     let second = session.analyze(&AnalysisDemand::default()).unwrap();
     assert_eq!(second.generation, 2);
+    assert!(session.take_last_exchange_timings().is_some());
+    assert!(session.take_last_table_changes().is_some());
     session.close().unwrap();
 }
 

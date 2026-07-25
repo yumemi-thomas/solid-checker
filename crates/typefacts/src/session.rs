@@ -10,7 +10,7 @@ use std::{
         mpsc,
     },
     thread::JoinHandle,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 use thiserror::Error;
@@ -66,6 +66,35 @@ pub struct AnalysisDemand {
     pub structural_spans: Vec<Location>,
     pub compiler_spans: Vec<Location>,
     pub entities: Vec<EntityDemand>,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ExchangeTimings {
+    pub roundtrip: Duration,
+    pub request_send: Duration,
+    pub request_bytes: u64,
+    pub response_decode: Duration,
+    pub response_bytes: u64,
+    pub server_request_decode: Duration,
+    pub server_analyze: Duration,
+    pub server_async: Duration,
+    pub server_demand: Duration,
+    pub server_assembly: Duration,
+    pub server_sort: Duration,
+    pub server_close_symbols: Duration,
+    pub server_prepare: Duration,
+    pub server_materialized: bool,
+    pub server_retained_files: u64,
+    pub server_recomputed_files: u64,
+    pub server_non_durable_files: u64,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct TableChanges {
+    pub unchanged: bool,
+    pub entity_paths: Vec<String>,
+    pub symbol_ids: Vec<String>,
+    pub file_paths: Vec<String>,
 }
 
 #[derive(Debug, Error)]
@@ -233,8 +262,15 @@ impl Connection {
                         break;
                     }
                 };
+                let decode_started = Instant::now();
                 let response = match decode_trusted::<Response>(&payload) {
-                    Ok(response) => response,
+                    Ok(mut response) => {
+                        response.client_decode_ns =
+                            u64::try_from(decode_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
+                        response.client_response_bytes =
+                            u64::try_from(payload.len()).unwrap_or(u64::MAX);
+                        response
+                    }
                     Err(error) => {
                         fail_pending(&reader_pending, error.to_string());
                         break;
@@ -270,8 +306,11 @@ impl Connection {
             .lock()
             .map_err(|_| SessionError::Process("pending response map is poisoned".into()))?
             .insert(request_id, sender);
+        let sent_at = Instant::now();
+        let mut request_bytes = 0;
         let result = (|| {
             let payload = encode_sidecar_request(&request)?;
+            request_bytes = u64::try_from(payload.len() + 4).unwrap_or(u64::MAX);
             let mut writer = self
                 .writer
                 .lock()
@@ -279,6 +318,7 @@ impl Connection {
             write_frame(&mut *writer, &payload)?;
             Ok::<(), SessionError>(())
         })();
+        let request_send = sent_at.elapsed();
         if let Err(error) = result {
             if let Ok(mut pending) = self.pending.lock() {
                 pending.remove(&request_id);
@@ -295,7 +335,12 @@ impl Connection {
         if cancellable {
             self.clear_active_request(request_id);
         }
-        let response = response?;
+        let mut response = response?;
+        response.client_roundtrip_ns =
+            u64::try_from(sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
+        response.client_request_send_ns =
+            u64::try_from(request_send.as_nanos()).unwrap_or(u64::MAX);
+        response.client_request_bytes = request_bytes;
         if response.request_id != request_id {
             return Err(SessionError::InvalidResponse(
                 "request identity mismatch".into(),
@@ -355,6 +400,8 @@ pub struct Session {
     state_token: String,
     retained_demands: HashMap<String, Vec<EntityDemand>>,
     retained_table: Option<FactTable>,
+    last_exchange_timings: Option<ExchangeTimings>,
+    last_table_changes: Option<TableChanges>,
     closed: bool,
 }
 
@@ -383,6 +430,8 @@ impl Session {
             state_token: String::new(),
             retained_demands: HashMap::new(),
             retained_table: None,
+            last_exchange_timings: None,
+            last_table_changes: None,
             closed: false,
         };
         session.exchange(request(
@@ -407,6 +456,14 @@ impl Session {
         self.connection
             .as_ref()
             .map(|connection| connection.cancellation_handle(self.project_id.clone()))
+    }
+
+    pub fn take_last_exchange_timings(&mut self) -> Option<ExchangeTimings> {
+        self.last_exchange_timings.take()
+    }
+
+    pub fn take_last_table_changes(&mut self) -> Option<TableChanges> {
+        self.last_table_changes.take()
     }
 
     pub fn analyze(&mut self, demand: &AnalysisDemand) -> Result<FactTable, SessionError> {
@@ -501,6 +558,8 @@ impl Session {
         analyze.reset_state = reset_state;
         analyze.removed_demand_paths = removed_demand_paths;
         let mut response = self.exchange(analyze)?;
+        self.last_exchange_timings = Some(exchange_timings(&response));
+        self.last_table_changes = Some(table_changes(&response)?);
         let table = match response.table_mode.as_str() {
             "full" => {
                 if !response.packed_table.is_empty() {
@@ -635,6 +694,82 @@ fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
         reset_state: false,
         removed_demand_paths: Vec::new(),
         cancel_request_id: 0,
+    }
+}
+
+fn exchange_timings(response: &Response) -> ExchangeTimings {
+    let server = response.timings.unwrap_or_default();
+    ExchangeTimings {
+        roundtrip: Duration::from_nanos(response.client_roundtrip_ns),
+        request_send: Duration::from_nanos(response.client_request_send_ns),
+        request_bytes: response.client_request_bytes,
+        response_decode: Duration::from_nanos(response.client_decode_ns),
+        response_bytes: response.client_response_bytes,
+        server_request_decode: Duration::from_nanos(server.request_decode_ns),
+        server_analyze: Duration::from_nanos(server.analyze_ns),
+        server_async: Duration::from_nanos(server.r#async_ns),
+        server_demand: Duration::from_nanos(server.demand_ns),
+        server_assembly: Duration::from_nanos(server.assembly_ns),
+        server_sort: Duration::from_nanos(server.sort_ns),
+        server_close_symbols: Duration::from_nanos(server.close_symbols_ns),
+        server_prepare: Duration::from_nanos(server.prepare_ns),
+        server_materialized: server.materialized,
+        server_retained_files: server.retained_files,
+        server_recomputed_files: server.recomputed_files,
+        server_non_durable_files: server.non_durable_files,
+    }
+}
+
+fn table_changes(response: &Response) -> Result<TableChanges, SessionError> {
+    match response.table_mode.as_str() {
+        "reuse" => Ok(TableChanges {
+            unchanged: true,
+            ..TableChanges::default()
+        }),
+        "delta" => {
+            let delta = response.table_delta.as_ref().ok_or_else(|| {
+                SessionError::InvalidResponse("delta response has no delta".into())
+            })?;
+            let mut entity_paths = delta
+                .entity_files
+                .iter()
+                .map(|file| file.path.clone())
+                .chain(delta.removed_entity_paths.iter().cloned())
+                .collect::<Vec<_>>();
+            let mut symbol_ids = delta
+                .symbols
+                .iter()
+                .map(|symbol| symbol.id.clone())
+                .chain(
+                    delta
+                        .symbol_reference_files
+                        .iter()
+                        .map(|references| references.id.clone()),
+                )
+                .chain(delta.removed_symbol_ids.iter().cloned())
+                .collect::<Vec<_>>();
+            let mut file_paths = delta
+                .files
+                .iter()
+                .map(|file| file.path.clone())
+                .chain(delta.removed_file_paths.iter().cloned())
+                .collect::<Vec<_>>();
+            entity_paths.sort();
+            entity_paths.dedup();
+            symbol_ids.sort();
+            symbol_ids.dedup();
+            file_paths.sort();
+            file_paths.dedup();
+            let unchanged =
+                entity_paths.is_empty() && symbol_ids.is_empty() && file_paths.is_empty();
+            Ok(TableChanges {
+                unchanged,
+                entity_paths,
+                symbol_ids,
+                file_paths,
+            })
+        }
+        _ => Ok(TableChanges::default()),
     }
 }
 

@@ -13,7 +13,9 @@ use thiserror::Error;
 mod session;
 pub mod v3;
 
-pub use session::{AnalysisDemand, Cancellation, Producer, Session, SessionError};
+pub use session::{
+    AnalysisDemand, Cancellation, ExchangeTimings, Producer, Session, SessionError, TableChanges,
+};
 
 pub const TYPE_FACTS_SCHEMA: u64 = 2;
 pub const EXPANSION_RULESET: u64 = 1;
