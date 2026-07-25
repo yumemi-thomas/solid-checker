@@ -5,7 +5,7 @@ use std::{
     path::{Path, PathBuf},
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     sync::{
-        Arc, Mutex,
+        Arc, Mutex, Weak,
         atomic::{AtomicU64, Ordering},
         mpsc,
     },
@@ -120,8 +120,40 @@ struct Connection {
     child: Child,
     writer: Arc<Mutex<BufWriter<ChildStdin>>>,
     pending: PendingResponses,
-    next_request_id: AtomicU64,
+    next_request_id: Arc<AtomicU64>,
+    active_request_id: Arc<AtomicU64>,
     reader: Option<JoinHandle<()>>,
+}
+
+/// A thread-safe handle that asks the producer to cancel the active analysis.
+#[derive(Clone)]
+pub struct Cancellation {
+    writer: Weak<Mutex<BufWriter<ChildStdin>>>,
+    next_request_id: Arc<AtomicU64>,
+    active_request_id: Arc<AtomicU64>,
+    project_id: String,
+}
+
+impl Cancellation {
+    pub fn cancel_active(&self) -> Result<bool, SessionError> {
+        let target = self.active_request_id.load(Ordering::Acquire);
+        if target == 0 {
+            return Ok(false);
+        }
+        let Some(writer) = self.writer.upgrade() else {
+            return Ok(false);
+        };
+        let request_id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
+        let mut request = request(Operation::Cancel, &self.project_id, 1);
+        request.request_id = request_id;
+        request.cancel_request_id = target;
+        let payload = encode_sidecar_request(&request)?;
+        let mut writer = writer
+            .lock()
+            .map_err(|_| SessionError::Process("producer writer is poisoned".into()))?;
+        write_frame(&mut *writer, &payload)?;
+        Ok(true)
+    }
 }
 
 impl Connection {
@@ -220,7 +252,8 @@ impl Connection {
             child,
             writer,
             pending,
-            next_request_id: AtomicU64::new(1),
+            next_request_id: Arc::new(AtomicU64::new(1)),
+            active_request_id: Arc::new(AtomicU64::new(0)),
             reader: Some(reader),
         })
     }
@@ -228,6 +261,10 @@ impl Connection {
     fn exchange(&self, mut request: Request) -> Result<Response, SessionError> {
         request.request_id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
         let request_id = request.request_id;
+        let cancellable = request.operation == Operation::Analyze;
+        if cancellable {
+            self.active_request_id.store(request_id, Ordering::Release);
+        }
         let (sender, receiver) = mpsc::sync_channel(1);
         self.pending
             .lock()
@@ -246,12 +283,19 @@ impl Connection {
             if let Ok(mut pending) = self.pending.lock() {
                 pending.remove(&request_id);
             }
+            if cancellable {
+                self.clear_active_request(request_id);
+            }
             return Err(error);
         }
         let response = receiver
             .recv()
             .map_err(|_| SessionError::Process("producer response channel closed".into()))?
-            .map_err(SessionError::Process)?;
+            .map_err(SessionError::Process);
+        if cancellable {
+            self.clear_active_request(request_id);
+        }
+        let response = response?;
         if response.request_id != request_id {
             return Err(SessionError::InvalidResponse(
                 "request identity mismatch".into(),
@@ -267,6 +311,21 @@ impl Connection {
             });
         }
         Ok(response)
+    }
+
+    fn cancellation_handle(&self, project_id: String) -> Cancellation {
+        Cancellation {
+            writer: Arc::downgrade(&self.writer),
+            next_request_id: Arc::clone(&self.next_request_id),
+            active_request_id: Arc::clone(&self.active_request_id),
+            project_id,
+        }
+    }
+
+    fn clear_active_request(&self, request_id: u64) {
+        self.active_request_id
+            .compare_exchange(request_id, 0, Ordering::AcqRel, Ordering::Acquire)
+            .ok();
     }
 
     fn terminate(&mut self) {
@@ -341,6 +400,13 @@ impl Session {
     #[must_use]
     pub const fn generation(&self) -> u64 {
         self.generation
+    }
+
+    #[must_use]
+    pub fn cancellation_handle(&self) -> Option<Cancellation> {
+        self.connection
+            .as_ref()
+            .map(|connection| connection.cancellation_handle(self.project_id.clone()))
     }
 
     pub fn analyze(&mut self, demand: &AnalysisDemand) -> Result<FactTable, SessionError> {
