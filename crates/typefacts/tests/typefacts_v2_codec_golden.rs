@@ -1,6 +1,6 @@
 use std::{fs, path::PathBuf};
 
-use solid_ts_facts::{ClosureRequest, ClosureResponse, decode, encode};
+use typefacts::{ClosureRequest, ClosureResponse, decode, encode};
 
 fn golden(name: &str) -> Vec<u8> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");

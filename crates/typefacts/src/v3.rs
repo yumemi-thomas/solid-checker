@@ -1,18 +1,18 @@
 use std::collections::HashMap;
 
 use serde::{Deserialize, Serialize};
-use solid_facts_core::SourceHash;
 
 use crate::{
     AsyncFunctionFact, Declaration, EntityFact, FactTable, FileFact, Location, ResolvedCall,
-    SourceBinding, SourceCall, SourceDigest, SourceFunction, SymbolFact, TypeDescriptor,
+    SourceBinding, SourceCall, SourceDigest, SourceFunction, SourceHash, SymbolFact,
+    TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V3: u64 = 3;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
     "sha256:fae64229118d84de0ba1ddaf7562f81691c15e1faa38add05a11f7060d6666df";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
-pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("SOLID_CHECKER_BUILD_ID") {
+pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
 };

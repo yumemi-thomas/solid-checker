@@ -4,18 +4,82 @@
 //! owned by `solid-ast-facts`; no regex or TypeScript AST shape is reproduced.
 
 use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use solid_facts_core::{Generation, SourceHash};
+use sha2::{Digest, Sha256};
+use std::fmt;
 use std::io::{Read, Write};
 use std::sync::Arc;
 use thiserror::Error;
 
+mod session;
 pub mod v3;
+
+pub use session::{AnalysisDemand, Producer, Session, SessionError};
 
 pub const TYPE_FACTS_SCHEMA: u64 = 2;
 pub const EXPANSION_RULESET: u64 = 1;
 pub const MAX_MESSAGE_BYTES: usize = 64 << 20;
 pub const MAX_NESTING_DEPTH: usize = 32;
 pub const MAX_COLLECTION_LENGTH: usize = 1_000_000;
+pub const SHA256_PREFIX: &str = "sha256:";
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct SourceHash(String);
+
+impl SourceHash {
+    #[must_use]
+    pub fn of(source: &str) -> Self {
+        Self(format!(
+            "{SHA256_PREFIX}{:x}",
+            Sha256::digest(source.as_bytes())
+        ))
+    }
+
+    pub fn parse(value: impl Into<String>) -> Result<Self, TypeFactsError> {
+        let value = value.into();
+        let digest = value
+            .strip_prefix(SHA256_PREFIX)
+            .ok_or_else(|| TypeFactsError::SourceHash(value.clone()))?;
+        if digest.len() != 64
+            || !digest
+                .as_bytes()
+                .iter()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err(TypeFactsError::SourceHash(value));
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
+}
+
+impl fmt::Display for SourceHash {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.0)
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct Generation(u64);
+
+impl Generation {
+    pub fn new(value: u64) -> Result<Self, TypeFactsError> {
+        if value == 0 {
+            return Err(TypeFactsError::Generation);
+        }
+        Ok(Self(value))
+    }
+
+    #[must_use]
+    pub const fn get(self) -> u64 {
+        self.0
+    }
+}
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -197,6 +261,8 @@ pub enum TypeFactsError {
     ProjectIdentity,
     #[error("generation identity is invalid")]
     Generation,
+    #[error("source hash is not canonical sha256: {0:?}")]
+    SourceHash(String),
     #[error("response identity does not match request")]
     IdentityMismatch,
     #[error("compiler spans are not in canonical order")]
@@ -809,7 +875,7 @@ mod tests {
             project_id: "project".into(),
             sources: vec![SourceDigest {
                 path: "a.ts".into(),
-                sha256: solid_facts_core::SourceHash::of("src"),
+                sha256: SourceHash::of("src"),
             }]
             .into(),
             entities: vec![
@@ -907,10 +973,7 @@ mod tests {
                 "b.ts".into(),
                 "symbol:h:2".into(),
             ],
-            sources: vec![v3::CompactSourceDigest(
-                1,
-                solid_facts_core::SourceHash::of("src"),
-            )],
+            sources: vec![v3::CompactSourceDigest(1, SourceHash::of("src"))],
             entity_files: vec![v3::CompactEntityFile(
                 1,
                 vec![
@@ -971,10 +1034,7 @@ mod tests {
         assert_eq!(decoded.expand().unwrap(), table);
 
         let broken = v3::CompactFactTable {
-            sources: vec![v3::CompactSourceDigest(
-                99,
-                solid_facts_core::SourceHash::of("src"),
-            )],
+            sources: vec![v3::CompactSourceDigest(99, SourceHash::of("src"))],
             ..compact_table
         };
         assert!(broken.expand().is_err());

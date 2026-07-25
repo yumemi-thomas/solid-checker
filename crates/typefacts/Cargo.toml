@@ -1,6 +1,6 @@
 [package]
-name = "solid-ts-facts"
-version = "0.1.0"
+name = "typefacts"
+version.workspace = true
 edition.workspace = true
 license.workspace = true
 publish.workspace = true
@@ -9,8 +9,5 @@ rust-version.workspace = true
 [dependencies]
 ciborium.workspace = true
 serde.workspace = true
-solid-facts-core = { path = "../solid-facts-core" }
-thiserror.workspace = true
-
-[dev-dependencies]
 sha2.workspace = true
+thiserror.workspace = true
