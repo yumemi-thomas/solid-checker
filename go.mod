@@ -1,4 +1,4 @@
-module github.com/yumemi-thomas/typefacts
+module github.com/yumemi-thomas/solid-ts-facts
 
 go 1.26
 

@@ -1,4 +1,4 @@
-# Type Facts
+# Solid TS Facts
 
 Type Facts provides compiler-independent semantic facts about a configured
 TypeScript project. This repository owns both sides of the protocol:

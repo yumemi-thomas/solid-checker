@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumemi-thomas/typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 )
 
 func TestProjectDiscoversSemanticAsyncFunctionsAndPostAwaitCalls(t *testing.T) {

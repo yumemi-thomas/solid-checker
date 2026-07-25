@@ -9,7 +9,7 @@ import (
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/compiler"
 	"github.com/microsoft/typescript-go/shim/scanner"
-	"github.com/yumemi-thomas/typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 )
 
 // referenceIndex owns the generation-scoped merged index, its reusable

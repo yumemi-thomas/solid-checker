@@ -9,7 +9,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/yumemi-thomas/typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 )
 
 func writeProject(t *testing.T, dir string) func(name, source string) string {

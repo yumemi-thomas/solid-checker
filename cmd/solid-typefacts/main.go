@@ -16,9 +16,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/yumemi-thomas/typefacts/internal/typefacts"
-	"github.com/yumemi-thomas/typefacts/internal/typefacts/tsgo"
-	"github.com/yumemi-thomas/typefacts/internal/wirecbor"
+	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts/tsgo"
+	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
 )
 
 var buildID = "dev"

@@ -5,7 +5,7 @@ import (
 
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/checker"
-	"github.com/yumemi-thomas/typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 )
 
 // SourceFileFacts fuses the SourceCalls, SourceBindings, SourceFunctions,
