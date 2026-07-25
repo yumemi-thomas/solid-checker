@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
-	"github.com/yumemi-thomas/solid-checker/internal/wirecbor"
+	"github.com/yumemi-thomas/typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/typefacts/internal/wirecbor"
 )
 
 func TestMarshalIsCoreDeterministic(t *testing.T) {

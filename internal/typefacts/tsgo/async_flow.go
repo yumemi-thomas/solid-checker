@@ -8,7 +8,7 @@ import (
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/checker"
 	"github.com/microsoft/typescript-go/shim/scanner"
-	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
+	"github.com/yumemi-thomas/typefacts/internal/typefacts"
 )
 
 type asyncLocationKey struct {

@@ -5,12 +5,12 @@ import "testing"
 func TestNormalizeTypeScriptPath(t *testing.T) {
 	t.Parallel()
 
-	const windowsPath = `\\?\D:\a\solid-checker\solid-checker\internal\reactiveir\testdata\tracer-corrected\tsconfig.json`
-	const want = `D:/a/solid-checker/solid-checker/fixtures/projects/tracer-corrected/tsconfig.json`
+	const windowsPath = `\\?\D:\a\typefacts\typefacts\fixtures\project\tsconfig.json`
+	const want = `D:/a/typefacts/typefacts/fixtures/project/tsconfig.json`
 	if got := normalizeTypeScriptPath(windowsPath); got != want {
 		t.Fatalf("normalizeTypeScriptPath(%q) = %q, want %q", windowsPath, got, want)
 	}
-	const wantDirectory = `D:/a/solid-checker/solid-checker/fixtures/projects/tracer-corrected`
+	const wantDirectory = `D:/a/typefacts/typefacts/fixtures/project`
 	if got := typeScriptPathDir(windowsPath); got != wantDirectory {
 		t.Fatalf("typeScriptPathDir(%q) = %q, want %q", windowsPath, got, wantDirectory)
 	}

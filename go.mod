@@ -1,4 +1,4 @@
-module github.com/yumemi-thomas/solid-checker
+module github.com/yumemi-thomas/typefacts
 
 go 1.26
 

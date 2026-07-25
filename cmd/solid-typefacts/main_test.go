@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
-	"github.com/yumemi-thomas/solid-checker/internal/wirecbor"
+	"github.com/yumemi-thomas/typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/typefacts/internal/wirecbor"
 )
 
 // orderedResponder mimics the generation discipline of the real service: an

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-checker/internal/wirecbor"
+	"github.com/yumemi-thomas/typefacts/internal/wirecbor"
 )
 
 func TestPackedFactTableIsDeterministicAndSmallerThanCompact(t *testing.T) {

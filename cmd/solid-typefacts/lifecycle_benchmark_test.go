@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
+	"github.com/yumemi-thomas/typefacts/internal/typefacts"
 )
 
 type lifecycleBenchmarkBackend struct{}

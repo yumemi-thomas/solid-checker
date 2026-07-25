@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
+	"github.com/yumemi-thomas/typefacts/internal/typefacts"
 )
 
 func TestSemanticAffectedSetCutoff(t *testing.T) {

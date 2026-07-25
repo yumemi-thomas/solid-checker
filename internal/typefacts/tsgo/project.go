@@ -27,7 +27,7 @@ import (
 	"github.com/microsoft/typescript-go/shim/vfs"
 	"github.com/microsoft/typescript-go/shim/vfs/osvfs"
 
-	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
+	"github.com/yumemi-thomas/typefacts/internal/typefacts"
 )
 
 var ErrClosed = errors.New("type facts project is closed")

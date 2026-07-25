@@ -7,26 +7,26 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-checker/internal/typefacts"
-	"github.com/yumemi-thomas/solid-checker/internal/typefacts/tsgo"
+	"github.com/yumemi-thomas/typefacts/internal/typefacts"
+	"github.com/yumemi-thomas/typefacts/internal/typefacts/tsgo"
 )
 
 func TestDescribeTypePreservesSolidAccessorAliasOrigin(t *testing.T) {
-	root := filepath.Join("..", "engine", "testdata", "eslint-reactivity-v2")
+	root := filepath.Join("testdata", "accessor-alias")
 	project, err := tsgo.OpenProject(context.Background(), filepath.Join(root, "tsconfig.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = project.Close() })
 	describer := project.(typefacts.TypeDescriber)
-	for _, fixture := range []struct{ name, call string }{{"effect-callback-parameter.tsx", "read()"}, {"effect-callback-member.tsx", "props.read()"}} {
+	for _, fixture := range []struct{ name, call string }{{"parameter.ts", "read()"}, {"member.ts", "props.read()"}} {
 		path := filepath.Join(root, fixture.name)
 		source, err := os.ReadFile(path)
 		if err != nil {
 			t.Fatal(err)
 		}
 		start := strings.Index(string(source), fixture.call)
-		if fixture.name == "effect-callback-member.tsx" {
+		if fixture.name == "member.ts" {
 			start += len("props.")
 		}
 		descriptor, err := describer.DescribeTypeAt(context.Background(), typefacts.Location{Path: path, StartByte: start, EndByte: start + len("read")})

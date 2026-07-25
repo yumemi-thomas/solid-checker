@@ -1,0 +1,86 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  binary:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            goos: linux
+            goarch: amd64
+            platform: linux
+            arch: x64
+            extension: ""
+          - runner: ubuntu-24.04
+            goos: linux
+            goarch: arm64
+            platform: linux
+            arch: arm64
+            extension: ""
+          - runner: macos-15-intel
+            goos: darwin
+            goarch: amd64
+            platform: darwin
+            arch: x64
+            extension: ""
+          - runner: macos-15
+            goos: darwin
+            goarch: arm64
+            platform: darwin
+            arch: arm64
+            extension: ""
+          - runner: windows-2025
+            goos: windows
+            goarch: amd64
+            platform: win32
+            arch: x64
+            extension: ".exe"
+    runs-on: ${{ matrix.runner }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build producer
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          TYPEFACTS_BUILD_ID: ${{ github.ref_name }}
+        run: |
+          mkdir -p release
+          go build \
+            -ldflags "-X main.buildID=$TYPEFACTS_BUILD_ID" \
+            -o "release/solid-typefacts-${{ matrix.platform }}-${{ matrix.arch }}${{ matrix.extension }}" \
+            ./cmd/solid-typefacts
+      - uses: actions/upload-artifact@v4
+        with:
+          name: typefacts-${{ matrix.platform }}-${{ matrix.arch }}
+          path: release/*
+
+  publish:
+    needs: binary
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: release
+          merge-multiple: true
+      - name: Create digest manifest
+        working-directory: release
+        run: sha256sum solid-typefacts-* > SHA256SUMS
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*

@@ -7,7 +7,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-checker/internal/wirecbor"
+	"github.com/yumemi-thomas/typefacts/internal/wirecbor"
 )
 
 func richFactTable() FactTableV2 {

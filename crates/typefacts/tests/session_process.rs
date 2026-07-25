@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{AnalysisDemand, Producer, Session, v3::FileChange};
 
@@ -7,9 +7,32 @@ fn repository_root() -> PathBuf {
 }
 
 fn producer() -> PathBuf {
-    std::env::var_os("TYPEFACTS_TEST_BIN")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| repository_root().join("bin/solid-typefacts"))
+    static PRODUCER: OnceLock<PathBuf> = OnceLock::new();
+    PRODUCER
+        .get_or_init(|| {
+            if let Some(path) = std::env::var_os("TYPEFACTS_TEST_BIN") {
+                return PathBuf::from(path);
+            }
+            let output = repository_root()
+                .join("target/typefacts-test")
+                .join(if cfg!(windows) {
+                    "solid-typefacts.exe"
+                } else {
+                    "solid-typefacts"
+                });
+            fs::create_dir_all(output.parent().unwrap()).unwrap();
+            let ldflags = format!("-X main.buildID={}", typefacts::v3::TYPE_FACTS_BUILD_ID);
+            let status = Command::new("go")
+                .current_dir(repository_root())
+                .args(["build", "-ldflags", &ldflags, "-o"])
+                .arg(&output)
+                .arg("./cmd/solid-typefacts")
+                .status()
+                .expect("run go build for the session process test");
+            assert!(status.success(), "build the Type Facts test producer");
+            output
+        })
+        .clone()
 }
 
 fn project() -> PathBuf {
@@ -64,7 +87,7 @@ fn public_session_owns_the_retained_process_lifecycle() {
 #[cfg(unix)]
 #[test]
 fn analyze_restarts_the_producer_and_replays_updates_after_a_crash() {
-    use std::{os::unix::fs::PermissionsExt, process::Command};
+    use std::os::unix::fs::PermissionsExt;
 
     let directory =
         std::env::temp_dir().join(format!("typefacts-session-crash-{}", std::process::id()));
