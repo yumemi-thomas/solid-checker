@@ -345,7 +345,11 @@ impl Connection {
     /// Holding one of these is what lets a caller overlap its own work with an
     /// acknowledgement. It is private: the session decides when a response is
     /// collected, so no consumer can leave one outstanding.
-    fn send(&self, mut request: Request) -> Result<SentRequest, SessionError> {
+    /// Stamps the request id in place and writes the frame. The request is
+    /// borrowed, not consumed: a transport failure lets the caller re-send
+    /// the same request over a fresh connection without having cloned it up
+    /// front on every exchange.
+    fn send(&self, request: &mut Request) -> Result<SentRequest, SessionError> {
         request.request_id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
         let request_id = request.request_id;
         let cancellable = request.operation == Operation::Analyze;
@@ -360,7 +364,7 @@ impl Connection {
         let sent_at = Instant::now();
         let mut request_bytes = 0;
         let result = (|| {
-            let payload = encode_sidecar_request(&request)?;
+            let payload = encode_sidecar_request(request)?;
             request_bytes = u64::try_from(payload.len() + 4).unwrap_or(u64::MAX);
             let mut writer = self
                 .writer
@@ -429,7 +433,7 @@ impl Connection {
         Ok(response)
     }
 
-    fn exchange(&self, request: Request) -> Result<Response, SessionError> {
+    fn exchange(&self, request: &mut Request) -> Result<Response, SessionError> {
         let sent = self.send(request)?;
         self.wait(sent)
     }
@@ -789,7 +793,7 @@ impl Session {
                 self.restart_and_replay()?;
                 let mut retry = request(Operation::Update, &self.project_id, self.generation + 1);
                 retry.changes.clone_from(&changes);
-                self.exchange_once(retry)?;
+                self.exchange_once(&mut retry)?;
                 self.commit_update(changes);
                 Ok(())
             }
@@ -804,11 +808,11 @@ impl Session {
         self.replay_batches.push(changes);
     }
 
-    fn send_once(&self, sending: Request) -> Result<SentRequest, SessionError> {
+    fn send_once(&self, mut sending: Request) -> Result<SentRequest, SessionError> {
         self.connection
             .as_ref()
             .ok_or(SessionError::Closed)?
-            .send(sending)
+            .send(&mut sending)
     }
 
     /// Sends an update and waits for it, doing nothing in between.
@@ -850,8 +854,8 @@ impl Session {
         if self.closed {
             return Ok(());
         }
-        let result =
-            self.exchange_once(request(Operation::Close, &self.project_id, self.generation));
+        let mut close = request(Operation::Close, &self.project_id, self.generation);
+        let result = self.exchange_once(&mut close);
         self.closed = true;
         if let Some(mut connection) = self.connection.take() {
             connection.terminate();
@@ -956,17 +960,17 @@ impl Session {
         Ok(table)
     }
 
-    fn exchange(&mut self, request: Request) -> Result<Response, SessionError> {
-        match self.exchange_once(request.clone()) {
+    fn exchange(&mut self, mut request: Request) -> Result<Response, SessionError> {
+        match self.exchange_once(&mut request) {
             Err(error) if error.is_transport_failure() => {
                 self.restart_and_replay()?;
-                self.exchange_once(request)
+                self.exchange_once(&mut request)
             }
             result => result,
         }
     }
 
-    fn exchange_once(&self, request: Request) -> Result<Response, SessionError> {
+    fn exchange_once(&self, request: &mut Request) -> Result<Response, SessionError> {
         self.connection
             .as_ref()
             .ok_or(SessionError::Closed)?
@@ -980,11 +984,12 @@ impl Session {
         self.connection = Some(Connection::spawn(&self.producer, &self.project_id)?);
         self.generation = 1;
         self.clear_retained_state();
-        self.exchange_once(request(Operation::Open, &self.project_id, 1))?;
+        let mut open = request(Operation::Open, &self.project_id, 1);
+        self.exchange_once(&mut open)?;
         for changes in self.replay_batches.clone() {
             let mut update = request(Operation::Update, &self.project_id, self.generation + 1);
             update.changes = changes;
-            self.exchange_once(update)?;
+            self.exchange_once(&mut update)?;
             self.generation += 1;
         }
         Ok(())
