@@ -283,7 +283,7 @@ func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFil
 					StartByte: scanner.SkipTrivia(sourceFile.Text(), node.Pos()),
 					EndByte:   node.End(),
 				})
-				if ast.IsPartOfTypeNode(node) {
+				if isTypeSpaceReference(node) {
 					entry.spaces[referenceID] |= 2
 				} else {
 					entry.spaces[referenceID] |= 1
@@ -301,6 +301,17 @@ func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFil
 		entry.refs[id] = locations
 	}
 	return entry
+}
+
+// IsPartOfTypeNode handles the right side of a QualifiedName, but an imported
+// namespace is commonly its leftmost identifier. Classify the complete
+// qualified name so its enclosing TypeReference (or TypeQuery) determines the
+// reference space for every identifier in the chain.
+func isTypeSpaceReference(node *ast.Node) bool {
+	for node.Parent != nil && ast.IsQualifiedName(node.Parent) {
+		node = node.Parent
+	}
+	return ast.IsPartOfTypeNode(node)
 }
 
 func referenceSpaceFromBits(bits uint8) typefacts.ReferenceSpace {

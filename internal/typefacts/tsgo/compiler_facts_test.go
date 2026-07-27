@@ -246,3 +246,101 @@ Shared();
 		t.Fatal("merged type/value symbol has no runtime identity")
 	}
 }
+
+func TestReferenceSpaceClassifiesQualifiedTypeNames(t *testing.T) {
+	dir := t.TempDir()
+	write := func(name, contents string) string {
+		t.Helper()
+		path := filepath.Join(dir, name)
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return path
+	}
+	write("tsconfig.json", `{
+		"compilerOptions": {
+			"module": "esnext",
+			"moduleResolution": "bundler",
+			"strict": true
+		},
+		"include": ["*.ts"]
+	}`)
+	write("runtime.ts", `
+		export namespace JSX {
+			export interface CSSProperties {
+				color?: string;
+			}
+			export interface Element {
+				node: unknown;
+			}
+		}
+
+		export function Portal() {}
+
+		export namespace Namespace {
+			export namespace Type {
+				export interface Member {
+					value: unknown;
+				}
+			}
+		}
+
+		export namespace Shared {
+			export interface Type {
+				value: unknown;
+			}
+			export const runtime = 1;
+		}
+	`)
+	source := `
+		import { JSX, Portal, Namespace, Shared } from "./runtime";
+
+		type Style = JSX.CSSProperties;
+		type Element = JSX.Element;
+		type Deep = Namespace.Type.Member;
+		type SharedType = Shared.Type;
+
+		Shared.runtime;
+		Portal();
+	`
+	sourcePath := write("consumer.ts", source)
+
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	demands := make([]typefacts.EntityDemand, 0, 4)
+	for _, name := range []string{"JSX", "Portal", "Namespace", "Shared"} {
+		start := strings.Index(source, name)
+		demands = append(demands, typefacts.EntityDemand{
+			Location: typefacts.Location{
+				Path:      sourcePath,
+				StartByte: start,
+				EndByte:   start + len(name),
+			},
+			Symbol:         true,
+			ReferenceSpace: true,
+		})
+	}
+
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatalf("SemanticEntities: %v", err)
+	}
+
+	want := map[string]typefacts.ReferenceSpace{
+		"JSX":       typefacts.ReferenceSpaceType,
+		"Portal":    typefacts.ReferenceSpaceValue,
+		"Namespace": typefacts.ReferenceSpaceType,
+		"Shared":    typefacts.ReferenceSpaceBoth,
+	}
+	for i, demand := range demands {
+		name := source[demand.Location.StartByte:demand.Location.EndByte]
+		if got := entities[i].ReferenceSpace; got != want[name] {
+			t.Errorf("%s referenceSpace = %q, want %q", name, got, want[name])
+		}
+	}
+}

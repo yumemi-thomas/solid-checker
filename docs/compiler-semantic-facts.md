@@ -38,10 +38,13 @@ diagnostics and must only treat `valid` as positive evidence.
 
 The retained reference index visits identifier nodes, resolves each with
 `Checker.GetSymbolAtLocation`, excludes declaration/import-property names with
-`ast.IsDeclarationNameOrImportPropertyName`, and classifies uses with
-`ast.IsPartOfTypeNode`. Space is keyed by the local alias symbol rather than
-its canonical target, so two imports of the same export may correctly have
-different results.
+`ast.IsDeclarationNameOrImportPropertyName`, walks each identifier through its
+enclosing `QualifiedName` chain, and classifies the resulting compiler node
+with `ast.IsPartOfTypeNode`. Walking the AST chain makes the surrounding
+`TypeReference` or `TypeQuery` authoritative for leftmost namespace
+identifiers. Space is keyed by the local alias symbol rather than its canonical
+target, so two imports of the same export may correctly have different
+results.
 
 ## Canonical runtime identity
 
