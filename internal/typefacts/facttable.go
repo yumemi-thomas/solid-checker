@@ -38,8 +38,9 @@ type DeclarationV2 struct {
 // CallV2 describes a resolved call target. v1's opaque return-type identity
 // is deleted (zero measured demand); the instantiated return type text stays.
 type CallV2 struct {
-	Target         string `cbor:"target,omitempty" json:"target,omitempty"`
-	ReturnTypeText string `cbor:"returnTypeText,omitempty" json:"returnTypeText,omitempty"`
+	Target         string               `cbor:"target,omitempty" json:"target,omitempty"`
+	ReturnTypeText string               `cbor:"returnTypeText,omitempty" json:"returnTypeText,omitempty"`
+	Validity       ResolvedCallValidity `cbor:"validity" json:"validity"`
 }
 
 // TypeDescriptorV2 exposes source identity for named types.
@@ -52,10 +53,13 @@ type TypeDescriptorV2 struct {
 // EntityFactV2 is one location-keyed entity. v1's opaque type identity field
 // is deleted (zero measured demand).
 type EntityFactV2 struct {
-	Location       LocationV2        `cbor:"location" json:"location"`
-	Symbol         string            `cbor:"symbol,omitempty" json:"symbol,omitempty"`
-	TypeDescriptor *TypeDescriptorV2 `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
-	ResolvedCall   *CallV2           `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
+	Location        LocationV2        `cbor:"location" json:"location"`
+	Symbol          string            `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	TypeDescriptor  *TypeDescriptorV2 `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
+	ResolvedCall    *CallV2           `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
+	Callability     Callability       `cbor:"callability,omitempty" json:"callability,omitempty"`
+	ReferenceSpace  ReferenceSpace    `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
+	RuntimeIdentity string            `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 }
 
 // SymbolFactV2 carries a generation-scoped symbol's facts under canonical

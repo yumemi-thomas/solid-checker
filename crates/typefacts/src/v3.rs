@@ -4,14 +4,14 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AsyncFunctionFact, Declaration, EntityFact, FactTable, FileFact, Location, ResolvedCall,
-    SourceBinding, SourceCall, SourceDigest, SourceFunction, SourceHash, SymbolFact,
-    TypeDescriptor,
+    AsyncFunctionFact, Callability, Declaration, EntityFact, FactTable, FileFact, Location,
+    ReferenceSpace, ResolvedCall, ResolvedCallValidity, SourceBinding, SourceCall, SourceDigest,
+    SourceFunction, SourceHash, SymbolFact, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V3: u64 = 3;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:ea1dcb3603bdf8d8c3ff55a8d1ce6cf85b348d3cbcefb6d8cfc3bdf4072fbf9e";
+    "sha256:2d0631e43f52b1b9e125836daf73da524bbd0d3fc5656d49dab8a7371c193815";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -66,6 +66,12 @@ pub struct EntityDemand {
     pub type_descriptor: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub structural_accessor: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub callability: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reference_space: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub runtime_identity: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -262,6 +268,9 @@ pub const DEMAND_FLAG_TYPE_DESCRIPTOR: u64 = 1 << 2;
 pub const DEMAND_FLAG_RESOLVED_CALL: u64 = 1 << 3;
 pub const DEMAND_FLAG_ASYNC: u64 = 1 << 4;
 pub const DEMAND_FLAG_STRUCTURAL_ACCESSOR: u64 = 1 << 5;
+pub const DEMAND_FLAG_CALLABILITY: u64 = 1 << 6;
+pub const DEMAND_FLAG_REFERENCE_SPACE: u64 = 1 << 7;
+pub const DEMAND_FLAG_RUNTIME_IDENTITY: u64 = 1 << 8;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -278,7 +287,7 @@ pub const FUNCTION_FLAG_ASYNC: u64 = 1 << 1;
 pub const FUNCTION_FLAG_ARROW: u64 = 1 << 2;
 pub const ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC: u64 = 1 << 0;
 
-const PACKED_FACT_TABLE_VERSION: u64 = 2;
+const PACKED_FACT_TABLE_VERSION: u64 = 3;
 const PACKED_COLLECTION_LIMIT: usize = 1_000_000;
 
 struct PackedCursor<'a> {
@@ -505,7 +514,7 @@ fn decode_entity_run(
             .ok_or_else(|| "packed entity end overflow".to_owned())?;
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
-        if flags & !3 != 0 {
+        if flags & !31 != 0 {
             return Err(format!("packed entity has unknown flags {flags}"));
         }
         let type_descriptor = if flags & 1 != 0 {
@@ -521,9 +530,31 @@ fn decode_entity_run(
             Some(ResolvedCall {
                 target: cursor.string_index(strings, "resolved target")?,
                 return_type_text: cursor.string_index(strings, "return type")?,
+                validity: parse_resolved_call_validity(
+                    &cursor.string_index(strings, "resolved call validity")?,
+                )?,
             })
         } else {
             None
+        };
+        let callability = if flags & 4 != 0 {
+            Some(parse_callability(
+                &cursor.string_index(strings, "callability")?,
+            )?)
+        } else {
+            None
+        };
+        let reference_space = if flags & 8 != 0 {
+            Some(parse_reference_space(
+                &cursor.string_index(strings, "reference space")?,
+            )?)
+        } else {
+            None
+        };
+        let runtime_identity = if flags & 16 != 0 {
+            cursor.string_index(strings, "runtime identity")?
+        } else {
+            Arc::from("")
         };
         entities.push(EntityFact {
             location: Location {
@@ -534,10 +565,42 @@ fn decode_entity_run(
             symbol,
             type_descriptor,
             resolved_call,
+            callability,
+            reference_space,
+            runtime_identity,
         });
         previous_start = start;
     }
     Ok(())
+}
+
+fn parse_callability(value: &str) -> Result<Callability, String> {
+    match value {
+        "callable" => Ok(Callability::Callable),
+        "nonCallable" => Ok(Callability::NonCallable),
+        "mixed" => Ok(Callability::Mixed),
+        "unknown" => Ok(Callability::Unknown),
+        _ => Err(format!("unknown callability {value:?}")),
+    }
+}
+
+fn parse_reference_space(value: &str) -> Result<ReferenceSpace, String> {
+    match value {
+        "value" => Ok(ReferenceSpace::Value),
+        "type" => Ok(ReferenceSpace::Type),
+        "both" => Ok(ReferenceSpace::Both),
+        "neither" => Ok(ReferenceSpace::Neither),
+        _ => Err(format!("unknown reference space {value:?}")),
+    }
+}
+
+fn parse_resolved_call_validity(value: &str) -> Result<ResolvedCallValidity, String> {
+    match value {
+        "valid" => Ok(ResolvedCallValidity::Valid),
+        "recovery" => Ok(ResolvedCallValidity::Recovery),
+        "unresolved" => Ok(ResolvedCallValidity::Unresolved),
+        _ => Err(format!("unknown resolved call validity {value:?}")),
+    }
 }
 
 /// Decodes one file's calls, bindings, functions, and async functions — the
@@ -833,6 +896,15 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.structural_accessor {
             flags |= DEMAND_FLAG_STRUCTURAL_ACCESSOR;
         }
+        if demand.callability {
+            flags |= DEMAND_FLAG_CALLABILITY;
+        }
+        if demand.reference_space {
+            flags |= DEMAND_FLAG_REFERENCE_SPACE;
+        }
+        if demand.runtime_identity {
+            flags |= DEMAND_FLAG_RUNTIME_IDENTITY;
+        }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());
         push_uvarint(&mut group.1, (flags << 1) | has_query);
@@ -882,7 +954,7 @@ mod tests {
     fn packed_table_decoder_is_strict_and_direct() {
         // version, schema, generation, one prefix-coded empty string, then
         // four empty top-level collections.
-        let valid = [2, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+        let valid = [3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0];
         let table = decode_packed_fact_table(&valid, "/p/tsconfig.json".into()).unwrap();
         assert_eq!(table.schema, 2);
         assert_eq!(table.generation, 1);
@@ -893,7 +965,7 @@ mod tests {
         assert!(table.files.is_empty());
 
         assert!(decode_packed_fact_table(&valid[..valid.len() - 1], "/p".into()).is_err());
-        assert!(decode_packed_fact_table(&[2, 2, 1], "/p".into()).is_err());
+        assert!(decode_packed_fact_table(&[3, 2, 1], "/p".into()).is_err());
         let mut trailing = valid.to_vec();
         trailing.push(0);
         assert!(decode_packed_fact_table(&trailing, "/p".into()).is_err());

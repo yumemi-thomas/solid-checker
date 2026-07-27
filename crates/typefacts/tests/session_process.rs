@@ -1,9 +1,73 @@
 use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
-    AnalysisDemand, DemandGroup, Location, Producer, Session,
+    AnalysisDemand, Callability, DemandGroup, Location, Producer, ReferenceSpace,
+    ResolvedCallValidity, Session,
     v3::{EntityDemand, FileChange},
 };
+
+#[test]
+fn rust_client_consumes_compiler_semantic_facts_across_retained_updates() {
+    let project = project();
+    let use_path = project.parent().unwrap().join("use.ts");
+    let source = fs::read_to_string(&use_path).unwrap();
+    let import_start = source.find("localCount").unwrap();
+    let call_start = source.rfind("localCount()").unwrap();
+    let demand = EntityDemand {
+        location: Location {
+            path: use_path.to_string_lossy().into_owned().into(),
+            start_byte: import_start as u64,
+            end_byte: (import_start + "localCount".len()) as u64,
+        },
+        query_location: Some(Location {
+            path: use_path.to_string_lossy().into_owned().into(),
+            start_byte: call_start as u64,
+            end_byte: (call_start + "localCount()".len()) as u64,
+        }),
+        symbol: true,
+        resolved_call: true,
+        callability: true,
+        reference_space: true,
+        runtime_identity: true,
+        ..EntityDemand::default()
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let first = session
+        .analyze(&AnalysisDemand {
+            entities: vec![demand.clone()],
+        })
+        .unwrap();
+    let entity = &first.entities[0];
+    assert_eq!(entity.callability, Some(Callability::Callable));
+    assert_eq!(entity.reference_space, Some(ReferenceSpace::Value));
+    assert!(entity.runtime_identity.starts_with("runtime:h:"));
+    assert_eq!(
+        entity.resolved_call.as_ref().unwrap().validity,
+        ResolvedCallValidity::Valid
+    );
+
+    let unrelated_path = project.parent().unwrap().join("unrelated.ts");
+    session
+        .update([FileChange {
+            path: unrelated_path.to_string_lossy().into_owned(),
+            source: fs::read(&unrelated_path).unwrap(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let second = session
+        .analyze(&AnalysisDemand {
+            entities: vec![demand],
+        })
+        .unwrap();
+    assert_eq!(second.entities[0], first.entities[0]);
+    session.close().unwrap();
+}
 
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

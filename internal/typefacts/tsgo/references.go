@@ -18,6 +18,7 @@ import (
 type referenceIndex struct {
 	// merged is nil until the first reference query of a generation.
 	merged map[typefacts.SymbolID][]typefacts.Location
+	spaces map[typefacts.SymbolID]typefacts.ReferenceSpace
 	// refreshPaths are affected files removed from an already-materialized
 	// merged index. They are rescanned lazily at the established reference
 	// closure point so symbol counter minting retains its order.
@@ -37,6 +38,7 @@ func (r *referenceIndex) invalidate(
 	affected []string,
 	retained func(string) bool,
 ) {
+	r.spaces = nil
 	// A second update before pending fragments are rescanned cannot safely
 	// compose an exact symbol delta. Large affected sets also favor a full
 	// merged-index rebuild.
@@ -78,6 +80,7 @@ func (r *referenceIndex) invalidate(
 		return
 	}
 	r.merged = nil
+	r.spaces = nil
 	r.refreshPaths = nil
 	r.changedSymbols = nil
 	r.deltaExact = false
@@ -85,6 +88,7 @@ func (r *referenceIndex) invalidate(
 
 func (r *referenceIndex) reset() {
 	r.merged = nil
+	r.spaces = nil
 	r.refreshPaths = nil
 	r.changedSymbols = nil
 	r.deltaExact = false
@@ -214,6 +218,7 @@ func (r *referenceIndex) ensure(p *project) {
 // generation-scoped counter IDs cannot outlive its generation.
 type fileReferences struct {
 	refs    map[typefacts.SymbolID][]typefacts.Location
+	spaces  map[typefacts.SymbolID]uint8
 	durable bool
 }
 
@@ -241,23 +246,36 @@ func (r *referenceIndex) build(p *project) map[typefacts.SymbolID][]typefacts.Lo
 	}
 	sort.Strings(paths)
 	references := make(map[typefacts.SymbolID][]typefacts.Location)
+	spaces := make(map[typefacts.SymbolID]uint8)
 	for _, path := range paths {
 		for id, locations := range r.files[path].refs {
 			references[id] = append(references[id], locations...)
 		}
+		for id, meaning := range r.files[path].spaces {
+			spaces[id] |= meaning
+		}
+	}
+	r.spaces = make(map[typefacts.SymbolID]typefacts.ReferenceSpace, len(spaces))
+	for id, meaning := range spaces {
+		r.spaces[id] = referenceSpaceFromBits(meaning)
 	}
 	return references
 }
 
 // scan resolves every non-declaration identifier in one file.
 func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFile) *fileReferences {
-	entry := &fileReferences{refs: make(map[typefacts.SymbolID][]typefacts.Location), durable: true}
+	entry := &fileReferences{
+		refs:    make(map[typefacts.SymbolID][]typefacts.Location),
+		spaces:  make(map[typefacts.SymbolID]uint8),
+		durable: true,
+	}
 	var visit func(*ast.Node) bool
 	visit = func(node *ast.Node) bool {
 		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) {
 			if symbol := p.checker.GetSymbolAtLocation(node); symbol != nil {
+				referenceID := p.idFor(symbol)
 				id := p.idFor(p.canonicalSymbol(symbol))
-				if !durableSymbolID(id) {
+				if !durableSymbolID(id) || !durableSymbolID(referenceID) {
 					entry.durable = false
 				}
 				entry.refs[id] = append(entry.refs[id], typefacts.Location{
@@ -265,6 +283,11 @@ func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFil
 					StartByte: scanner.SkipTrivia(sourceFile.Text(), node.Pos()),
 					EndByte:   node.End(),
 				})
+				if ast.IsPartOfTypeNode(node) {
+					entry.spaces[referenceID] |= 2
+				} else {
+					entry.spaces[referenceID] |= 1
+				}
 			}
 		}
 		node.ForEachChild(visit)
@@ -278,4 +301,37 @@ func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFil
 		entry.refs[id] = locations
 	}
 	return entry
+}
+
+func referenceSpaceFromBits(bits uint8) typefacts.ReferenceSpace {
+	switch bits {
+	case 1:
+		return typefacts.ReferenceSpaceValue
+	case 2:
+		return typefacts.ReferenceSpaceType
+	case 3:
+		return typefacts.ReferenceSpaceBoth
+	default:
+		return typefacts.ReferenceSpaceNeither
+	}
+}
+
+func (r *referenceIndex) spaceFor(p *project, id typefacts.SymbolID) typefacts.ReferenceSpace {
+	r.ensure(p)
+	if r.spaces == nil {
+		spaces := make(map[typefacts.SymbolID]uint8)
+		for _, entry := range r.files {
+			for symbol, meaning := range entry.spaces {
+				spaces[symbol] |= meaning
+			}
+		}
+		r.spaces = make(map[typefacts.SymbolID]typefacts.ReferenceSpace, len(spaces))
+		for symbol, meaning := range spaces {
+			r.spaces[symbol] = referenceSpaceFromBits(meaning)
+		}
+	}
+	if space := r.spaces[id]; space != "" {
+		return space
+	}
+	return typefacts.ReferenceSpaceNeither
 }

@@ -76,7 +76,8 @@ func demandListHash(demands []EntityDemand, seed maphash.Seed) uint64 {
 		}
 		buffer = append(buffer,
 			flag(demand.Symbol), flag(demand.TypeDescriptor), flag(demand.ResolvedCall),
-			flag(demand.References), flag(demand.Async), flag(demand.StructuralAccessor),
+			flag(demand.Callability), flag(demand.References), flag(demand.Async), flag(demand.StructuralAccessor),
+			flag(demand.ReferenceSpace), flag(demand.RuntimeIdentity),
 		)
 		_, _ = digest.Write(buffer)
 	}
@@ -156,6 +157,15 @@ func (a *entityAccumulator) add(demand EntityDemand, entity EntityFact, structur
 	if entity.ResolvedCall != nil {
 		target.ResolvedCall = entity.ResolvedCall
 		a.enqueue(entity.ResolvedCall.Target)
+	}
+	if entity.Callability != "" {
+		target.Callability = entity.Callability
+	}
+	if entity.ReferenceSpace != "" {
+		target.ReferenceSpace = entity.ReferenceSpace
+	}
+	if entity.RuntimeIdentity != "" {
+		target.RuntimeIdentity = entity.RuntimeIdentity
 	}
 	if structural != "" {
 		a.structural = append(a.structural, structural)

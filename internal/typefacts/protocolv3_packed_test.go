@@ -31,9 +31,12 @@ func richFactTable() FactTableV2 {
 			{Location: LocationV2{Path: "/p/a.tsx", StartByte: 1, EndByte: 4}, Symbol: "symbol:h:1"},
 			{Location: LocationV2{Path: "/p/a.tsx", StartByte: 5, EndByte: 9}, TypeDescriptor: descriptor},
 			{
-				Location:     LocationV2{Path: "/p/b.tsx", StartByte: 2, EndByte: 8},
-				Symbol:       "symbol:h:2",
-				ResolvedCall: &CallV2{Target: "symbol:h:1", ReturnTypeText: "() => number"},
+				Location:        LocationV2{Path: "/p/b.tsx", StartByte: 2, EndByte: 8},
+				Symbol:          "symbol:h:2",
+				ResolvedCall:    &CallV2{Target: "symbol:h:1", ReturnTypeText: "() => number", Validity: ResolvedCallValid},
+				Callability:     CallabilityCallable,
+				ReferenceSpace:  ReferenceSpaceBoth,
+				RuntimeIdentity: "runtime:h:1",
 			},
 			{Location: LocationV2{Path: "/p/b.tsx", StartByte: 9, EndByte: 12}},
 		},
@@ -97,8 +100,8 @@ func goldenPackedTable(t *testing.T) FactTableV2 {
 // the exact bytes so a reordering of the writer — in particular the dictionary
 // interning order — cannot silently change the frame.
 func TestPackedFactTableLayoutIsFrozen(t *testing.T) {
-	const goldenLength = 345
-	const goldenDigest = "5d90f8b9c9c3bafb57760f7facc1fdca0f221836ca54c27fdba737023510335d"
+	const goldenLength = 389
+	const goldenDigest = "fa3ce50d2ae74ed45e7f719425958b49ccc08bbf5541b4538a62a0d66fc292e7"
 
 	packed, err := PackedFactTableV3From(goldenPackedTable(t))
 	if err != nil {

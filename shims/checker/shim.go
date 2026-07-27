@@ -38,5 +38,11 @@ func Checker_isTypeIdenticalTo(recv *checker.Checker, source *checker.Type, targ
 func NewChecker(program checker.Program, tracer *checker.Tracer) (*checker.Checker, *sync.Mutex)
 
 const SignatureKindCall = checker.SignatureKindCall
+const SignatureFlagsIsSignatureCandidateForOverloadFailure = checker.SignatureFlagsIsSignatureCandidateForOverloadFailure
+const TypeFlagsAny = checker.TypeFlagsAny
+const TypeFlagsUnknown = checker.TypeFlagsUnknown
+const TypeFlagsNever = checker.TypeFlagsNever
+const TypeFlagsIncludesError = checker.TypeFlagsIncludesError
 
 type Type = checker.Type
+type Signature = checker.Signature

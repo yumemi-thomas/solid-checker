@@ -46,6 +46,9 @@ func resolvedCallEqual(left, right *Call) bool {
 func entityFactEqual(left, right EntityFact) bool {
 	return left.Location == right.Location &&
 		left.Symbol == right.Symbol &&
+		left.Callability == right.Callability &&
+		left.ReferenceSpace == right.ReferenceSpace &&
+		left.RuntimeIdentity == right.RuntimeIdentity &&
 		typeDescriptorEqual(left.TypeDescriptor, right.TypeDescriptor) &&
 		resolvedCallEqual(left.ResolvedCall, right.ResolvedCall)
 }

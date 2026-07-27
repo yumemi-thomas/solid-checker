@@ -9,7 +9,7 @@
 use std::{fs, path::PathBuf};
 
 use typefacts::{
-    decode, encode,
+    Callability, ReferenceSpace, ResolvedCallValidity, decode, encode,
     v3::{Operation, Request, Response, TYPE_FACTS_SCHEMA_V3},
 };
 
@@ -62,6 +62,18 @@ fn response_golden_round_trips_identically() {
     assert_eq!(table.project_id, "/p/tsconfig.json");
     assert!(!table.entities.is_empty());
     assert!(!table.symbols.is_empty());
+    let compiler_facts = &table.entities[2];
+    assert_eq!(compiler_facts.callability, Some(Callability::Callable));
+    assert_eq!(compiler_facts.reference_space, Some(ReferenceSpace::Both));
+    assert_eq!(compiler_facts.runtime_identity.as_ref(), "runtime:h:1");
+    assert_eq!(
+        compiler_facts
+            .resolved_call
+            .as_ref()
+            .expect("resolved-call fact")
+            .validity,
+        ResolvedCallValidity::Valid
+    );
 
     assert_eq!(encode(&response).expect("re-encode response"), bytes);
 }

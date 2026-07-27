@@ -11,6 +11,9 @@ type EntityDemand struct {
 	Symbol             bool      `cbor:"symbol,omitempty" json:"symbol,omitempty"`
 	TypeDescriptor     bool      `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
 	ResolvedCall       bool      `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
+	Callability        bool      `cbor:"callability,omitempty" json:"callability,omitempty"`
+	ReferenceSpace     bool      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
+	RuntimeIdentity    bool      `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 	References         bool      `cbor:"references,omitempty" json:"references,omitempty"`
 	Async              bool      `cbor:"async,omitempty" json:"async,omitempty"`
 	StructuralAccessor bool      `cbor:"structuralAccessor,omitempty" json:"structuralAccessor,omitempty"`
@@ -19,10 +22,13 @@ type EntityDemand struct {
 // EntityFact is one legal location-keyed entity in the finite fact universe.
 // Location ranges are ordered from outermost to innermost during encoding.
 type EntityFact struct {
-	Location       Location        `cbor:"location" json:"location"`
-	Symbol         SymbolID        `cbor:"symbol,omitempty" json:"symbol,omitempty"`
-	TypeDescriptor *TypeDescriptor `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
-	ResolvedCall   *Call           `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
+	Location        Location        `cbor:"location" json:"location"`
+	Symbol          SymbolID        `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	TypeDescriptor  *TypeDescriptor `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
+	ResolvedCall    *Call           `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
+	Callability     Callability     `cbor:"callability,omitempty" json:"callability,omitempty"`
+	ReferenceSpace  ReferenceSpace  `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
+	RuntimeIdentity RuntimeSymbolID `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 }
 
 // SymbolFact contains every legal symbol-keyed response for a generation.

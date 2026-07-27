@@ -90,6 +90,32 @@ pub struct Declaration {
     pub location: Location,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Callability {
+    Callable,
+    NonCallable,
+    Mixed,
+    Unknown,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ReferenceSpace {
+    Value,
+    Type,
+    Both,
+    Neither,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ResolvedCallValidity {
+    Valid,
+    Recovery,
+    Unresolved,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResolvedCall {
@@ -97,6 +123,7 @@ pub struct ResolvedCall {
     pub target: Arc<str>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub return_type_text: Arc<str>,
+    pub validity: ResolvedCallValidity,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -120,6 +147,12 @@ pub struct EntityFact {
     pub type_descriptor: Option<TypeDescriptor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub resolved_call: Option<ResolvedCall>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub callability: Option<Callability>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub reference_space: Option<ReferenceSpace>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub runtime_identity: Arc<str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -540,6 +573,9 @@ mod tests {
                 references: true,
                 r#async: false,
                 structural_accessor: false,
+                callability: false,
+                reference_space: false,
+                runtime_identity: false,
             }],
             compact_demands: Some(v3::CompactDemands {
                 groups: vec![v3::CompactDemandGroup(1, vec![7, 1, 1, 1, 1, 1])],
@@ -573,6 +609,9 @@ mod tests {
                 references: true,
                 r#async: false,
                 structural_accessor: false,
+                callability: false,
+                reference_space: false,
+                runtime_identity: false,
             },
             v3::EntityDemand {
                 location: location("a.ts", 5, 9),
@@ -583,6 +622,9 @@ mod tests {
                 references: false,
                 r#async: true,
                 structural_accessor: true,
+                callability: true,
+                reference_space: true,
+                runtime_identity: true,
             },
             v3::EntityDemand {
                 location: location("b.ts", 2, 8),
@@ -593,6 +635,9 @@ mod tests {
                 references: false,
                 r#async: true,
                 structural_accessor: false,
+                callability: false,
+                reference_space: false,
+                runtime_identity: false,
             },
         ];
         let compact = v3::compact_demands(&demands);

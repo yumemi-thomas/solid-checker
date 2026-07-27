@@ -43,7 +43,11 @@ func sourceDigestV2(source SourceFile) SourceDigestV2 {
 }
 
 func entityFactV2(entity EntityFact) EntityFactV2 {
-	converted := EntityFactV2{Location: locationV2(entity.Location), Symbol: string(entity.Symbol)}
+	converted := EntityFactV2{
+		Location: locationV2(entity.Location), Symbol: string(entity.Symbol),
+		Callability: entity.Callability, ReferenceSpace: entity.ReferenceSpace,
+		RuntimeIdentity: string(entity.RuntimeIdentity),
+	}
 	if entity.TypeDescriptor != nil {
 		descriptor := TypeDescriptorV2{Text: entity.TypeDescriptor.Text, OriginModule: entity.TypeDescriptor.OriginModule}
 		for _, declaration := range entity.TypeDescriptor.AliasDeclarations {
@@ -52,7 +56,7 @@ func entityFactV2(entity EntityFact) EntityFactV2 {
 		converted.TypeDescriptor = &descriptor
 	}
 	if entity.ResolvedCall != nil {
-		converted.ResolvedCall = &CallV2{Target: string(entity.ResolvedCall.Target), ReturnTypeText: entity.ResolvedCall.ReturnTypeText}
+		converted.ResolvedCall = &CallV2{Target: string(entity.ResolvedCall.Target), ReturnTypeText: entity.ResolvedCall.ReturnTypeText, Validity: entity.ResolvedCall.Validity}
 	}
 	return converted
 }

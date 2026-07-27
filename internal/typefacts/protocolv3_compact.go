@@ -60,6 +60,9 @@ const (
 	demandFlagResolvedCall       = 1 << 3
 	demandFlagAsync              = 1 << 4
 	demandFlagStructuralAccessor = 1 << 5
+	demandFlagCallability        = 1 << 6
+	demandFlagReferenceSpace     = 1 << 7
+	demandFlagRuntimeIdentity    = 1 << 8
 )
 
 // stringTableV3 interns strings in first-occurrence order; index 0 is "".
@@ -127,6 +130,15 @@ func CompactDemandsV3From(demands []EntityDemand) CompactDemandsV3 {
 		if demand.StructuralAccessor {
 			flags |= demandFlagStructuralAccessor
 		}
+		if demand.Callability {
+			flags |= demandFlagCallability
+		}
+		if demand.ReferenceSpace {
+			flags |= demandFlagReferenceSpace
+		}
+		if demand.RuntimeIdentity {
+			flags |= demandFlagRuntimeIdentity
+		}
 		header := flags << 1
 		if demand.QueryLocation != nil {
 			header |= 1
@@ -187,6 +199,9 @@ func (compact CompactDemandsV3) Expand() ([]EntityDemand, error) {
 				ResolvedCall:       flags&demandFlagResolvedCall != 0,
 				Async:              flags&demandFlagAsync != 0,
 				StructuralAccessor: flags&demandFlagStructuralAccessor != 0,
+				Callability:        flags&demandFlagCallability != 0,
+				ReferenceSpace:     flags&demandFlagReferenceSpace != 0,
+				RuntimeIdentity:    flags&demandFlagRuntimeIdentity != 0,
 			}
 			if header&1 != 0 {
 				queryPathIndex, next, err := takeCompactUvarint(rest)

@@ -70,10 +70,29 @@ func readV3Golden(t *testing.T, name string) []byte {
 	return golden
 }
 
+func v3GoldenPath(t *testing.T, name string) string {
+	t.Helper()
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test path")
+	}
+	return filepath.Join(filepath.Dir(filename), "..", "..", "benchmarks", "phase1", name)
+}
+
 // The Rust client decodes these same two files in
 // crates/typefacts/tests/typefacts_v3_codec_golden.rs, so a drift in either
 // language's field names, tags, or canonical ordering fails one of the pair.
 func TestV3RequestGoldenRoundTripsIdentically(t *testing.T) {
+	if os.Getenv("TYPEFACTS_UPDATE_GOLDEN") != "" {
+		request, _ := v3GoldenFixtures(t)
+		encoded, err := wirecbor.Marshal(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(v3GoldenPath(t, "typefacts-v3-request-golden.cbor"), encoded, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	golden := readV3Golden(t, "typefacts-v3-request-golden.cbor")
 	var request LifecycleRequest
 	if err := wirecbor.Unmarshal(golden, &request); err != nil {
@@ -97,6 +116,16 @@ func TestV3RequestGoldenRoundTripsIdentically(t *testing.T) {
 }
 
 func TestV3ResponseGoldenRoundTripsIdentically(t *testing.T) {
+	if os.Getenv("TYPEFACTS_UPDATE_GOLDEN") != "" {
+		_, response := v3GoldenFixtures(t)
+		encoded, err := wirecbor.Marshal(response)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(v3GoldenPath(t, "typefacts-v3-response-golden.cbor"), encoded, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	golden := readV3Golden(t, "typefacts-v3-response-golden.cbor")
 	var response LifecycleResponse
 	if err := wirecbor.Unmarshal(golden, &response); err != nil {

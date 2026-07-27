@@ -80,6 +80,7 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 	var currentDemandPath, currentCleanPath string
 	var currentSourceFile *ast.SourceFile
 	var currentSourceError error
+	var currentSemanticDiagnostics []*ast.Diagnostic
 	batchDescriptors := make(map[typefacts.SymbolID]*typefacts.TypeDescriptor)
 	cachedDescriptor := func(symbol typefacts.SymbolID) *typefacts.TypeDescriptor {
 		if descriptor := batchDescriptors[symbol]; descriptor != nil {
@@ -100,6 +101,7 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 			currentDemandPath = location.Path
 			currentCleanPath = filepath.Clean(location.Path)
 			currentSourceFile, currentSourceError = p.sourceFileFor(typefacts.Location{Path: currentCleanPath})
+			currentSemanticDiagnostics = nil
 		}
 		location.Path = currentCleanPath
 		entity.Location.Path = currentCleanPath
@@ -107,14 +109,30 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 			result = append(result, entity)
 			continue
 		}
-		if entity.Symbol != "" && !demand.TypeDescriptor && !demand.ResolvedCall {
+		if entity.Symbol != "" && !demand.TypeDescriptor && !demand.ResolvedCall && !demand.Callability && !demand.ReferenceSpace && !demand.RuntimeIdentity {
 			result = append(result, entity)
 			continue
 		}
 		resultNode := deepestNodeAt(ast.GetNodeAtPosition(currentSourceFile, location.StartByte, false), location.StartByte)
-		if demand.Symbol && entity.Symbol == "" && resultNode != nil {
-			if symbol := p.checker.GetSymbolAtLocation(resultNode); symbol != nil {
-				entity.Symbol = p.idFor(symbol)
+		var resultSymbol *ast.Symbol
+		if resultNode != nil && (demand.Symbol || demand.ReferenceSpace || demand.RuntimeIdentity) {
+			resultSymbol = p.checker.GetSymbolAtLocation(resultNode)
+			if demand.Symbol && entity.Symbol == "" && resultSymbol != nil {
+				entity.Symbol = p.idFor(resultSymbol)
+			}
+		}
+		if demand.ReferenceSpace {
+			entity.ReferenceSpace = typefacts.ReferenceSpaceNeither
+			if resultSymbol != nil {
+				entity.ReferenceSpace = p.referenceIndex.spaceFor(p, p.idFor(resultSymbol))
+			}
+		}
+		if demand.RuntimeIdentity && resultSymbol != nil {
+			runtimeSymbol := p.canonicalSymbol(resultSymbol)
+			if runtimeSymbol.Flags&ast.SymbolFlagsValue != 0 {
+				if ref, ok := durableRuntimeRefFor(runtimeSymbol); ok {
+					entity.RuntimeIdentity = ref.runtimeID()
+				}
 			}
 		}
 		query := location
@@ -142,7 +160,11 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 				}
 			}
 		}
+		if demand.Callability && queryNode != nil {
+			entity.Callability = callabilityOfType(p.checker, p.checker.GetTypeAtLocation(queryNode))
+		}
 		if demand.ResolvedCall && queryNode != nil {
+			entity.ResolvedCall = &typefacts.Call{Validity: typefacts.ResolvedCallUnresolved}
 			node := queryNode
 			for node != nil && !ast.IsCallExpression(node) {
 				node = node.Parent
@@ -151,18 +173,82 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 				callee := node.AsCallExpression().Expression
 				target := p.checker.GetSymbolAtLocation(callee)
 				signature := checker.Checker_getResolvedSignature(p.checker, node, nil, checker.CheckModeNormal)
-				if target != nil && signature != nil {
+				candidates := []*checker.Signature{}
+				_ = checker.Checker_getResolvedSignature(p.checker, node, &candidates, checker.CheckModeNormal)
+				if target != nil {
+					entity.ResolvedCall.Target = p.idFor(p.canonicalSymbol(target))
+				}
+				if signature != nil {
+					entity.ResolvedCall.Validity = typefacts.ResolvedCallValid
+					if len(candidates) == 0 || signature.Flags()&checker.SignatureFlagsIsSignatureCandidateForOverloadFailure != 0 {
+						entity.ResolvedCall.Validity = typefacts.ResolvedCallRecovery
+					} else {
+						if currentSemanticDiagnostics == nil {
+							currentSemanticDiagnostics = p.program.GetSemanticDiagnostics(ctx, currentSourceFile)
+						}
+						if hasCallResolutionDiagnostic(node, currentSourceFile, currentSemanticDiagnostics) {
+							entity.ResolvedCall.Validity = typefacts.ResolvedCallRecovery
+						}
+					}
 					returnType := checker.Checker_getReturnTypeOfSignature(p.checker, signature)
 					if returnType != nil {
-						entity.ResolvedCall = &typefacts.Call{
-							Target:         p.idFor(p.canonicalSymbol(target)),
-							ReturnTypeText: p.checker.TypeToString(returnType),
-						}
+						entity.ResolvedCall.ReturnTypeText = p.checker.TypeToString(returnType)
 					}
 				}
 			}
+		} else if demand.ResolvedCall {
+			entity.ResolvedCall = &typefacts.Call{Validity: typefacts.ResolvedCallUnresolved}
 		}
 		result = append(result, entity)
 	}
 	return result, structural, nil
+}
+
+func hasCallResolutionDiagnostic(call *ast.Node, sourceFile *ast.SourceFile, diagnostics []*ast.Diagnostic) bool {
+	for _, diagnostic := range diagnostics {
+		if diagnostic.Pos() < call.Pos() || diagnostic.End() > call.End() {
+			continue
+		}
+		switch diagnostic.Code() {
+		case 2344, 2345, 2348, 2349, 2350, 2379, 2554, 2555, 2558, 2635,
+			2677, 2721, 2722, 2723, 2757, 2769, 2794, 2810, 6234:
+			node := deepestNodeAt(ast.GetNodeAtPosition(sourceFile, diagnostic.Pos(), false), diagnostic.Pos())
+			for node != nil && !ast.IsCallExpression(node) {
+				node = node.Parent
+			}
+			if node == call {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func callabilityOfType(typeChecker *checker.Checker, value *checker.Type) typefacts.Callability {
+	if value == nil || value.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsNever|checker.TypeFlagsIncludesError) != 0 {
+		return typefacts.CallabilityUnknown
+	}
+	constituents := value.Distributed()
+	if len(constituents) == 0 {
+		return typefacts.CallabilityUnknown
+	}
+	callable, nonCallable := false, false
+	for _, constituent := range constituents {
+		if constituent == nil || constituent.Flags()&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsNever|checker.TypeFlagsIncludesError) != 0 {
+			return typefacts.CallabilityUnknown
+		}
+		if len(typeChecker.GetSignaturesOfType(constituent, checker.SignatureKindCall)) != 0 {
+			callable = true
+		} else {
+			nonCallable = true
+		}
+	}
+	switch {
+	case callable && nonCallable:
+		return typefacts.CallabilityMixed
+	case callable:
+		return typefacts.CallabilityCallable
+	default:
+		return typefacts.CallabilityNonCallable
+	}
 }

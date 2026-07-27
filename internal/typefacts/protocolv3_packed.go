@@ -11,7 +11,7 @@ import (
 // Packed v3 full-frame encoding. This is deliberately an opaque byte string
 // at the lifecycle seam: callers either receive a validated FactTableV2 or an
 // error, and none of the columnar representation leaks into analysis code.
-const packedFactTableVersion = 2
+const packedFactTableVersion = 3
 
 // Optional-field and boolean flag bits carried inside the packed frame. The
 // Rust decoder declares the same values in crates/typefacts/src/v3.rs.
@@ -114,6 +114,15 @@ func (w *packedWriter) entityRun(entities []EntityFactV2) {
 		if entity.ResolvedCall != nil {
 			flags |= 2
 		}
+		if entity.Callability != "" {
+			flags |= 4
+		}
+		if entity.ReferenceSpace != "" {
+			flags |= 8
+		}
+		if entity.RuntimeIdentity != "" {
+			flags |= 16
+		}
 		w.u64(flags)
 		if entity.TypeDescriptor != nil {
 			w.text(entity.TypeDescriptor.Text)
@@ -123,6 +132,16 @@ func (w *packedWriter) entityRun(entities []EntityFactV2) {
 		if entity.ResolvedCall != nil {
 			w.text(entity.ResolvedCall.Target)
 			w.text(entity.ResolvedCall.ReturnTypeText)
+			w.text(string(entity.ResolvedCall.Validity))
+		}
+		if entity.Callability != "" {
+			w.text(string(entity.Callability))
+		}
+		if entity.ReferenceSpace != "" {
+			w.text(string(entity.ReferenceSpace))
+		}
+		if entity.RuntimeIdentity != "" {
+			w.text(entity.RuntimeIdentity)
 		}
 		previousStart = entity.Location.StartByte
 	}
@@ -444,6 +463,15 @@ func PackedFactTableV3FromInternal(table FactTable, generation uint64) []byte {
 			if entity.ResolvedCall != nil {
 				flags |= 2
 			}
+			if entity.Callability != "" {
+				flags |= 4
+			}
+			if entity.ReferenceSpace != "" {
+				flags |= 8
+			}
+			if entity.RuntimeIdentity != "" {
+				flags |= 16
+			}
 			rows.u64(flags)
 			if entity.TypeDescriptor != nil {
 				rows.text(entity.TypeDescriptor.Text)
@@ -453,6 +481,16 @@ func PackedFactTableV3FromInternal(table FactTable, generation uint64) []byte {
 			if entity.ResolvedCall != nil {
 				rows.text(string(entity.ResolvedCall.Target))
 				rows.text(entity.ResolvedCall.ReturnTypeText)
+				rows.text(string(entity.ResolvedCall.Validity))
+			}
+			if entity.Callability != "" {
+				rows.text(string(entity.Callability))
+			}
+			if entity.ReferenceSpace != "" {
+				rows.text(string(entity.ReferenceSpace))
+			}
+			if entity.RuntimeIdentity != "" {
+				rows.text(string(entity.RuntimeIdentity))
 			}
 			previousStart = start
 		}

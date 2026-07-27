@@ -53,6 +53,9 @@
         "symbol": { "type": "boolean" },
         "typeDescriptor": { "type": "boolean" },
         "resolvedCall": { "type": "boolean" },
+        "callability": { "type": "boolean" },
+        "referenceSpace": { "type": "boolean" },
+        "runtimeIdentity": { "type": "boolean" },
         "references": { "type": "boolean" },
         "async": { "type": "boolean" },
         "structuralAccessor": { "type": "boolean" }
@@ -131,9 +134,13 @@
           "additionalProperties": false,
           "properties": {
             "target": { "type": "string" },
-            "returnTypeText": { "type": "string" }
+            "returnTypeText": { "type": "string" },
+            "validity": { "enum": ["valid", "recovery", "unresolved"] }
           }
-        }
+        },
+        "callability": { "enum": ["callable", "nonCallable", "mixed", "unknown"] },
+        "referenceSpace": { "enum": ["value", "type", "both", "neither"] },
+        "runtimeIdentity": { "type": "string" }
       }
     },
     "symbolFact": {

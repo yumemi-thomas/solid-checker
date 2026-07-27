@@ -1096,13 +1096,22 @@ func (p *project) ResolvedCall(ctx context.Context, location typefacts.Location)
 	if signature == nil {
 		return typefacts.Call{}, fmt.Errorf("%w: call signature at byte %d", typefacts.ErrNotFound, location.StartByte)
 	}
+	candidates := []*checker.Signature{}
+	_ = checker.Checker_getResolvedSignature(p.checker, node, &candidates, checker.CheckModeNormal)
 	returnType := checker.Checker_getReturnTypeOfSignature(p.checker, signature)
 	if returnType == nil {
 		return typefacts.Call{}, fmt.Errorf("%w: return type at byte %d", typefacts.ErrNotFound, location.StartByte)
 	}
+	validity := typefacts.ResolvedCallValid
+	if len(candidates) == 0 ||
+		signature.Flags()&checker.SignatureFlagsIsSignatureCandidateForOverloadFailure != 0 ||
+		hasCallResolutionDiagnostic(node, sourceFile, p.program.GetSemanticDiagnostics(ctx, sourceFile)) {
+		validity = typefacts.ResolvedCallRecovery
+	}
 	return typefacts.Call{
 		Target:         p.idFor(target),
 		ReturnTypeText: p.checker.TypeToString(returnType),
+		Validity:       validity,
 	}, nil
 }
 
@@ -1446,7 +1455,17 @@ func durableRefFor(symbol *ast.Symbol) (durableSymbolRef, bool) {
 	if len(symbol.Declarations) == 0 {
 		return durableSymbolRef{}, false
 	}
-	node := symbol.Declarations[0]
+	return durableRefForDeclaration(symbol, symbol.Declarations[0])
+}
+
+func durableRuntimeRefFor(symbol *ast.Symbol) (durableSymbolRef, bool) {
+	if symbol == nil || symbol.ValueDeclaration == nil {
+		return durableSymbolRef{}, false
+	}
+	return durableRefForDeclaration(symbol, symbol.ValueDeclaration)
+}
+
+func durableRefForDeclaration(symbol *ast.Symbol, node *ast.Node) (durableSymbolRef, bool) {
 	sourceFile := ast.GetSourceFileOfNode(node)
 	if sourceFile == nil {
 		return durableSymbolRef{}, false
@@ -1494,6 +1513,23 @@ func (ref durableSymbolRef) exportedID() typefacts.SymbolID {
 	input = append(input, 0)
 	input = append(input, ref.name...)
 	return hashedSymbolID(sha256.Sum256(input))
+}
+
+func (ref durableSymbolRef) runtimeID() typefacts.RuntimeSymbolID {
+	path := ref.path
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		path = filepath.Clean(resolved)
+	}
+	input := make([]byte, 0, len(path)+len(ref.name)+32)
+	input = append(input, path...)
+	input = append(input, 0)
+	input = strconv.AppendInt(input, int64(ref.startByte), 10)
+	input = append(input, 0)
+	input = strconv.AppendInt(input, int64(ref.endByte), 10)
+	input = append(input, 0)
+	input = append(input, ref.name...)
+	id := string(hashedSymbolID(sha256.Sum256(input)))
+	return typefacts.RuntimeSymbolID("runtime:h:" + strings.TrimPrefix(id, "symbol:h:"))
 }
 
 // durableSymbolID reports whether id can outlive the generation that minted
@@ -1585,11 +1621,18 @@ func (p *project) symbolFor(id typefacts.SymbolID) (*ast.Symbol, bool) {
 }
 
 func (p *project) canonicalSymbol(symbol *ast.Symbol) *ast.Symbol {
-	if symbol.Flags&ast.SymbolFlagsAlias == 0 {
-		return symbol
-	}
-	if original := p.checker.GetAliasedSymbol(symbol); original != nil {
-		return original
+	// GetAliasedSymbol normally resolves the complete chain. The bounded loop
+	// also handles compiler versions that expose one hop without allocating a
+	// visited map on every identifier in the retained reference scan.
+	for range 64 {
+		if symbol == nil || symbol.Flags&ast.SymbolFlagsAlias == 0 {
+			break
+		}
+		original := p.checker.GetAliasedSymbol(symbol)
+		if original == nil || original == symbol {
+			break
+		}
+		symbol = original
 	}
 	return symbol
 }

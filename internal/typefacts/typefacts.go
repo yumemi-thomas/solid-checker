@@ -17,6 +17,10 @@ var ErrNotFound = errors.New("type fact not found")
 // declaration or reports ErrNotFound, never a different symbol.
 type SymbolID string
 
+// RuntimeSymbolID is a declaration-derived identity used only for equality
+// across aliases and reexports. Unlike SymbolID it is not a lookup handle.
+type RuntimeSymbolID string
+
 // TypeDescriptor exposes source identity for named types without leaking a
 // backend AST. It is available through the optional TypeDescriber capability.
 type TypeDescriptor struct {
@@ -27,6 +31,35 @@ type TypeDescriptor struct {
 
 type TypeDescriber interface {
 	DescribeTypeAt(context.Context, Location) (TypeDescriptor, error)
+}
+
+// Callability is the compiler's call-signature classification for a demanded
+// expression. It is derived from TypeChecker.GetSignaturesOfType over the
+// actual union constituents, never from rendered type text.
+type Callability string
+
+const (
+	CallabilityCallable    Callability = "callable"
+	CallabilityNonCallable Callability = "nonCallable"
+	CallabilityMixed       Callability = "mixed"
+	CallabilityUnknown     Callability = "unknown"
+)
+
+// ReferenceSpace summarizes the semantic meaning of all compiler-resolved
+// references to an imported or aliased symbol.
+type ReferenceSpace string
+
+const (
+	ReferenceSpaceValue   ReferenceSpace = "value"
+	ReferenceSpaceType    ReferenceSpace = "type"
+	ReferenceSpaceBoth    ReferenceSpace = "both"
+	ReferenceSpaceNeither ReferenceSpace = "neither"
+)
+
+// SemanticEntityLookup is the demand-shaped compiler-fact interface used by
+// protocol producers and integration tests.
+type SemanticEntityLookup interface {
+	SemanticEntities(context.Context, []EntityDemand) ([]EntityFact, error)
 }
 
 // SourceCall describes one parsed call expression without exposing backend AST
@@ -116,7 +149,17 @@ type Declaration struct {
 	Location Location
 }
 
-// Call describes the target and instantiated return type of a resolved call.
+// ResolvedCallValidity distinguishes a compiler-selected signature from the
+// recovery signatures TypeScript creates while reporting failed resolution.
+type ResolvedCallValidity string
+
+const (
+	ResolvedCallValid      ResolvedCallValidity = "valid"
+	ResolvedCallRecovery   ResolvedCallValidity = "recovery"
+	ResolvedCallUnresolved ResolvedCallValidity = "unresolved"
+)
+
+// Call describes the target and instantiated return type of a demanded call.
 // The return type is carried as text only: the opaque per-generation identity
 // that used to accompany it had no consumer, and because it embedded the
 // generation number it made every entity row holding a resolved call compare as
@@ -124,6 +167,7 @@ type Declaration struct {
 type Call struct {
 	Target         SymbolID
 	ReturnTypeText string
+	Validity       ResolvedCallValidity
 }
 
 // FileChange is one monotonically-versioned editor overlay change.

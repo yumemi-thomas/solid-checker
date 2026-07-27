@@ -30,5 +30,10 @@ session.close()?;
 make test
 ```
 
+The compiler-derived contract facts and their TypeScript API mapping are
+documented in [docs/compiler-semantic-facts.md](docs/compiler-semantic-facts.md).
+The corresponding solid-checker heuristic removals are listed in
+[docs/migration-solid-checker.md](docs/migration-solid-checker.md).
+
 Tagged releases publish `solid-typefacts` binaries for Linux, macOS, and
 Windows on x64 and arm64 where supported, plus a `SHA256SUMS` manifest.

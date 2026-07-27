@@ -84,6 +84,9 @@ func IsMethodDeclaration(node *ast.Node) bool
 //go:linkname IsModuleDeclaration github.com/microsoft/typescript-go/internal/ast.IsModuleDeclaration
 func IsModuleDeclaration(node *ast.Node) bool
 
+//go:linkname IsPartOfTypeNode github.com/microsoft/typescript-go/internal/ast.IsPartOfTypeNode
+func IsPartOfTypeNode(node *ast.Node) bool
+
 //go:linkname IsReturnStatement github.com/microsoft/typescript-go/internal/ast.IsReturnStatement
 func IsReturnStatement(node *ast.Node) bool
 
@@ -114,3 +117,4 @@ type SourceFile = ast.SourceFile
 type Symbol = ast.Symbol
 
 const SymbolFlagsAlias = ast.SymbolFlagsAlias
+const SymbolFlagsValue = ast.SymbolFlagsValue
