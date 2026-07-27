@@ -188,12 +188,10 @@ func BenchmarkFallbackTableDiff(b *testing.B) {
 	}
 }
 
-// BenchmarkColdTablePack prices the full-mode response body: converting the
-// internal table to its wire form and packing it, which is what a client's
-// first analyze and every retained-state desync pays on top of the analysis
-// itself. Today that route allocates a complete intermediate FactTableV2 just
-// to feed the packed encoder. packed-B/op records the frame size the client
-// must then decode.
+// BenchmarkColdTablePack prices the full-mode response body: packing the
+// internal table into the columnar frame, which is what a client's first
+// analyze and every retained-state desync pays on top of the analysis itself.
+// packed-B/op records the frame size the client must then decode.
 func BenchmarkColdTablePack(b *testing.B) {
 	ctx := context.Background()
 	root := generateCorpus(b)
@@ -218,11 +216,7 @@ func BenchmarkColdTablePack(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		packed, err := typefacts.PackedFactTableV3From(typefacts.FactTableV2From(*table, projectID, 1))
-		if err != nil {
-			b.Fatal(err)
-		}
-		packedBytes = len(packed)
+		packedBytes = len(typefacts.PackedFactTableV3FromInternal(*table, 1))
 	}
 	b.ReportMetric(float64(packedBytes), "packed-B/op")
 }

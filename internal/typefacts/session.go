@@ -183,11 +183,7 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		// re-minted identities like any other change.
 		if request.ResetState || s.retained.table == nil {
 			response.TableMode = TableModeFull
-			packed, err := PackedFactTableV3From(FactTableV2From(*analyzedTable, s.projectID, generation))
-			if err != nil {
-				return fail("assembly-failed", err)
-			}
-			response.PackedTable = packed
+			response.PackedTable = PackedFactTableV3FromInternal(*analyzedTable, generation)
 		} else {
 			delta := DiffFactTablesV3FromInternal(*s.retained.table, *analyzedTable, generation)
 			if s.retained.table.Generation == analyzedTable.Generation && delta.Empty() {

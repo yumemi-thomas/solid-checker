@@ -1,6 +1,7 @@
 package typefacts
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
@@ -231,10 +232,16 @@ func PackedFactTableV3From(table FactTableV2) ([]byte, error) {
 		rows.raw(body.bytes)
 	}
 
+	return packedFrame(table.Schema, table.Generation, rows), nil
+}
+
+// packedFrame assembles the versioned frame around finished rows: the header,
+// the prefix-coded string dictionary the rows index into, then the rows.
+func packedFrame(schema, generation uint64, rows packedWriter) []byte {
 	frame := packedWriter{bytes: make([]byte, 0, len(rows.bytes)+4096)}
 	frame.u64(packedFactTableVersion)
-	frame.u64(table.Schema)
-	frame.u64(table.Generation)
+	frame.u64(schema)
+	frame.u64(generation)
 	frame.u64(uint64(len(rows.dict.values)))
 	previous := ""
 	for _, value := range rows.dict.values {
@@ -252,7 +259,176 @@ func PackedFactTableV3From(table FactTableV2) ([]byte, error) {
 		previous = value
 	}
 	frame.raw(rows.bytes)
-	return frame.bytes, nil
+	return frame.bytes
+}
+
+// The internal-row writers mirror their v2 counterparts above, applying the
+// same scalar conversions the v2 constructors apply (locationV2 widening,
+// wireSymbolName escaping) inline — so no intermediate row is materialized.
+
+func (w *packedWriter) internalLocation(location Location, state *packedLocationState) {
+	w.location(locationV2(location), state)
+}
+
+func (w *packedWriter) internalLocations(locations []Location) {
+	w.u64(uint64(len(locations)))
+	var state packedLocationState
+	for _, location := range locations {
+		w.internalLocation(location, &state)
+	}
+}
+
+func (w *packedWriter) internalDeclarations(declarations []Declaration) {
+	w.u64(uint64(len(declarations)))
+	var state packedLocationState
+	for _, declaration := range declarations {
+		w.text(wireSymbolName(declaration.Name))
+		w.text(declaration.Kind)
+		w.internalLocation(declaration.Location, &state)
+	}
+}
+
+func (w *packedWriter) internalSourceCall(call SourceCall) {
+	var state packedLocationState
+	w.internalLocation(call.Location, &state)
+	w.internalLocation(call.Callee, &state)
+	w.internalLocations(call.Arguments)
+	w.text(string(call.Target))
+}
+
+// internalEntityGroups is packedEntityGroups over internal rows.
+func internalEntityGroups(entities []EntityFact) []int {
+	var groups []int
+	for index, entity := range entities {
+		if index == 0 || entities[index-1].Location.Path != entity.Location.Path {
+			groups = append(groups, 0)
+		}
+		groups[len(groups)-1]++
+	}
+	return groups
+}
+
+// PackedFactTableV3FromInternal encodes the canonical internal table into the
+// same frame PackedFactTableV3From produces from the v2 form, byte for byte —
+// without materializing that form. The full-mode response path uses this;
+// the v2 route stays for callers that already hold a wire table.
+func PackedFactTableV3FromInternal(table FactTable, generation uint64) []byte {
+	rows := packedWriter{bytes: make([]byte, 0, 1<<20), dict: newStringTableV3()}
+
+	rows.u64(uint64(len(table.Sources)))
+	for _, source := range table.Sources {
+		rows.text(source.Path)
+		digest := sha256.Sum256(source.Source)
+		rows.raw(digest[:])
+	}
+
+	groups := internalEntityGroups(table.Entities)
+	rows.u64(uint64(len(groups)))
+	offset := 0
+	for _, length := range groups {
+		group := table.Entities[offset : offset+length]
+		offset += length
+		rows.text(group[0].Location.Path)
+		rows.u64(uint64(length))
+		var previousStart uint64
+		for _, entity := range group {
+			start := uint64(entity.Location.StartByte)
+			rows.signed(int64(start) - int64(previousStart))
+			rows.u64(uint64(entity.Location.EndByte) - start)
+			rows.text(string(entity.Symbol))
+			flags := uint64(0)
+			if entity.TypeDescriptor != nil {
+				flags |= 1
+			}
+			if entity.ResolvedCall != nil {
+				flags |= 2
+			}
+			rows.u64(flags)
+			if entity.TypeDescriptor != nil {
+				rows.text(entity.TypeDescriptor.Text)
+				rows.text(entity.TypeDescriptor.OriginModule)
+				rows.internalDeclarations(entity.TypeDescriptor.AliasDeclarations)
+			}
+			if entity.ResolvedCall != nil {
+				rows.text(string(entity.ResolvedCall.Target))
+				rows.text(entity.ResolvedCall.ReturnTypeText)
+			}
+			previousStart = start
+		}
+	}
+
+	rows.u64(uint64(table.symbolFactsCount()))
+	table.rangeSymbolFacts(func(symbol SymbolFact) {
+		rows.text(string(symbol.ID))
+		rows.text(string(symbol.AliasTarget))
+		rows.internalDeclarations(symbol.Declarations)
+		// The v2 constructor withholds reference lists from alias symbols;
+		// the frame must carry the same empty list here.
+		if symbol.AliasTarget == "" {
+			rows.internalLocations(symbol.References)
+		} else {
+			rows.u64(0)
+		}
+	})
+
+	rows.u64(uint64(len(table.Files)))
+	var scratch []byte
+	for _, file := range table.Files {
+		// The dictionary is ordered by first use and a file interns its own
+		// path after the rows it contains, so buffer the rows and emit the
+		// path index in front of them. Reordering this changes the frame.
+		body := packedWriter{bytes: scratch[:0], dict: rows.dict}
+		body.u64(uint64(len(file.Calls)))
+		for _, call := range file.Calls {
+			body.internalSourceCall(call)
+		}
+		body.u64(uint64(len(file.Bindings)))
+		for _, binding := range file.Bindings {
+			flags := uint64(0)
+			if binding.Array {
+				flags |= bindingFlagArray
+			}
+			body.u64(flags)
+			body.internalLocations(binding.Names)
+			body.internalSourceCall(binding.Initializer)
+		}
+		body.u64(uint64(len(file.Functions)))
+		for _, function := range file.Functions {
+			var state packedLocationState
+			body.internalLocation(function.Name, &state)
+			body.internalLocation(function.Body, &state)
+			body.internalLocations(function.Parameters)
+			flags := uint64(0)
+			if function.Exported {
+				flags |= functionFlagExported
+			}
+			if function.Async {
+				flags |= functionFlagAsync
+			}
+			if function.Arrow {
+				flags |= functionFlagArrow
+			}
+			body.u64(flags)
+		}
+		body.u64(uint64(len(file.AsyncFunctions)))
+		for _, function := range file.AsyncFunctions {
+			var state packedLocationState
+			body.internalLocation(function.Expression, &state)
+			body.text(string(function.Symbol))
+			body.text(string(function.Target))
+			flags := uint64(0)
+			if function.CanReturnAsync {
+				flags |= asyncFunctionFlagCanReturnAsync
+			}
+			body.u64(flags)
+			body.internalLocations(function.CallsAfterAwait)
+		}
+		rows.text(file.Path)
+		rows.raw(body.bytes)
+		scratch = body.bytes
+	}
+
+	return packedFrame(TypeFactsSchemaVersionV2, generation, rows)
 }
 
 func packedHashedSymbol(symbol string) ([]byte, bool) {
