@@ -157,17 +157,11 @@ func (a *entityAccumulator) add(demand EntityDemand, entity EntityFact, structur
 	if entity.ResolvedCall != nil {
 		target.ResolvedCall = entity.ResolvedCall
 		a.enqueue(entity.ResolvedCall.Target)
-		if declaration := entity.ResolvedCall.Declaration; declaration != nil {
-			a.enqueue(declaration.Symbol)
-			for _, owner := range declaration.Owners {
-				a.enqueue(owner.Symbol)
-			}
-		}
-		for _, mapping := range entity.ResolvedCall.Arguments {
-			if mapping.Parameter != nil {
-				a.enqueue(mapping.Parameter.Symbol)
-			}
-		}
+		// Declaration, owner, and parameter identities are self-contained
+		// metadata on the resolved-call fact. Only the call target is a symbol
+		// closure lookup handle; hydrating standalone rows for every embedded
+		// identity duplicates declarations and references across large call
+		// sets.
 	}
 	if entity.Callability != "" {
 		target.Callability = entity.Callability

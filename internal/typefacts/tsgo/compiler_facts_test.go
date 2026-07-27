@@ -431,6 +431,49 @@ pair(...pairArguments);
 	}
 }
 
+func TestResolvedCallsReuseCompilerIdenticalTypeDescriptors(t *testing.T) {
+	dir := t.TempDir()
+	source := `function first(value: number): number { return value; }
+function second(value: number): number { return value; }
+first(1);
+second(2);
+`
+	sourcePath := filepath.Join(dir, "descriptor-cache.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	demands := make([]typefacts.EntityDemand, 0, 2)
+	for _, text := range []string{"first(1)", "second(2)"} {
+		start := strings.LastIndex(source, text)
+		demands = append(demands, typefacts.EntityDemand{
+			Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(text)},
+			ResolvedCall: true,
+		})
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first := entities[0].ResolvedCall.Arguments[0].Parameter.TypeDescriptor
+	second := entities[1].ResolvedCall.Arguments[0].Parameter.TypeDescriptor
+	if first == nil || second == nil {
+		t.Fatalf("parameter descriptors are missing: first=%+v second=%+v", first, second)
+	}
+	if first != second {
+		t.Fatalf("compiler-identical number types used distinct descriptors: %p and %p", first, second)
+	}
+}
+
 func TestResolvedCallHandlesCallConstructAndIntersectionSignatures(t *testing.T) {
 	dir := t.TempDir()
 	source := `interface Callable {

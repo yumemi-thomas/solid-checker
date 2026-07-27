@@ -122,10 +122,13 @@ layouts, and symbols whose type and value declarations share a name.
 
 Resolved-call work is demand-driven: the producer resolves and describes only
 requested call locations. Selected declarations and instantiated parameters
-are cached by signature within one analysis generation and discarded on
-update. Retained per-file contributions track declaration and parameter source
-dependencies, so an edit rematerializes only facts that could otherwise carry
-stale locations.
+are cached by signature within one analysis generation, while compiler-identical
+instantiated and return types share one descriptor rendering. All checker-owned
+caches are discarded on update. Declaration, owner, and parameter identities
+are embedded facts rather than standalone symbol-closure lookup handles, so
+they do not duplicate symbol rows. Retained per-file contributions track
+declaration and parameter source dependencies, so an edit rematerializes only
+facts that could otherwise carry stale locations.
 
 The lifecycle protocol/schema version is 4. The compact packed-table version is
 3 and the packed-delta version is 2. Go and Rust pin the same v4 schema digest,

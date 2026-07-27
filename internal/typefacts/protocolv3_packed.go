@@ -373,7 +373,7 @@ func appendPackedDictionary(frame *packedWriter, dict *stringTableV3) {
 	for _, value := range dict.values {
 		if digest, ok := packedHashedSymbol(value); ok {
 			frame.u64(1)
-			frame.raw(digest)
+			frame.raw(digest[:])
 			continue
 		}
 		frame.u64(0)
@@ -717,14 +717,14 @@ func PackedFactTableV3FromInternal(table FactTable, generation uint64) []byte {
 	return packedFrame(TypeFactsTableSchemaVersion, generation, rows)
 }
 
-func packedHashedSymbol(symbol string) ([]byte, bool) {
+func packedHashedSymbol(symbol string) ([12]byte, bool) {
 	const prefix = "symbol:h:"
+	var raw [12]byte
 	if !strings.HasPrefix(symbol, prefix) || len(symbol) != len(prefix)+24 {
-		return nil, false
+		return raw, false
 	}
-	raw := make([]byte, 12)
-	if _, err := hex.Decode(raw, []byte(symbol[len(prefix):])); err != nil {
-		return nil, false
+	if _, err := hex.Decode(raw[:], []byte(symbol[len(prefix):])); err != nil {
+		return raw, false
 	}
 	return raw, true
 }

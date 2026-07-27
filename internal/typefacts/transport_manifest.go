@@ -91,21 +91,6 @@ func collectPathSymbols(table *FactTable, path string, symbols map[SymbolID]stru
 		}
 		if entity.ResolvedCall != nil && entity.ResolvedCall.Target != "" {
 			symbols[entity.ResolvedCall.Target] = struct{}{}
-			if declaration := entity.ResolvedCall.Declaration; declaration != nil {
-				if declaration.Symbol != "" {
-					symbols[declaration.Symbol] = struct{}{}
-				}
-				for _, owner := range declaration.Owners {
-					if owner.Symbol != "" {
-						symbols[owner.Symbol] = struct{}{}
-					}
-				}
-			}
-			for _, mapping := range entity.ResolvedCall.Arguments {
-				if mapping.Parameter != nil && mapping.Parameter.Symbol != "" {
-					symbols[mapping.Parameter.Symbol] = struct{}{}
-				}
-			}
 		}
 	}
 	if file, ok := canonicalFileFact(table.Files, path); ok {

@@ -18,8 +18,12 @@ import (
 // symbol_store.go (symbolFactChunkSize = 256).
 const (
 	corpusParallelSymbolThreshold = 1024
-	corpusModules                 = 48
-	corpusMembersPerModule        = 24
+	// Resolved-call declarations, owners, and parameters carry embedded
+	// identities. They must not each hydrate a duplicate standalone symbol
+	// row: the generated corpus closes roughly 2,450 genuine symbols.
+	corpusSymbolClosureBudget = 2600
+	corpusModules             = 48
+	corpusMembersPerModule    = 24
 )
 
 // generateCorpus writes a deterministic TypeScript project large enough to
@@ -116,6 +120,10 @@ func TestGeneratedCorpusCrossesTheParallelThresholds(t *testing.T) {
 	if stats.Symbols < corpusParallelSymbolThreshold {
 		t.Fatalf("corpus closed %d symbols, below the %d parallel threshold; the parallel paths in closeSymbols stay unexecuted",
 			stats.Symbols, corpusParallelSymbolThreshold)
+	}
+	if stats.Symbols > corpusSymbolClosureBudget {
+		t.Fatalf("corpus closed %d symbols, above the %d-row budget; embedded resolved-call identities are expanding the standalone symbol closure",
+			stats.Symbols, corpusSymbolClosureBudget)
 	}
 }
 

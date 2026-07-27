@@ -68,11 +68,19 @@ type project struct {
 	// directory), so durable re-resolution of lib-declared symbols falls
 	// back to this index. Nil until the first fallback of a generation.
 	filesByName map[string]*ast.SourceFile
+	// currentSourceFiles validates checker-owned declaration nodes without a
+	// canonical path lookup per resolved call. A stale incremental node is
+	// absent and takes the current-declaration remapping path.
+	currentSourceFiles map[*ast.SourceFile]struct{}
 	// resolved-call caches are generation-scoped and populated only by
 	// resolvedCall demands. Signatures and symbols are checker-owned pointers,
 	// so every accepted update drops the maps as it installs the new checker.
 	resolvedDeclarations map[resolvedDeclarationCacheKey]*typefacts.ResolvedDeclaration
 	resolvedParameters   map[resolvedParameterCacheKey]*typefacts.ParameterFact
+	// typeDescriptors interns compiler-identical instantiated and return
+	// types. TypeToString is presentation work, not a semantic decision, and
+	// is disproportionately allocation-heavy when repeated per call.
+	typeDescriptors map[*checker.Type]*typefacts.TypeDescriptor
 	// declarationShapes caches diagnostic-free exported contracts for the
 	// accepted program generation. Incremental updates need only emit the
 	// candidate generation's shape; semantically affected files are evicted
@@ -422,8 +430,10 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 		p.durableRefs[preserved.id] = preserved.ref
 	}
 	p.filesByName = nil
+	p.currentSourceFiles = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
+	p.typeDescriptors = nil
 	p.nextSymbol = 0
 
 	stageStarted = time.Now()
@@ -1027,12 +1037,7 @@ func (p *project) DescribeTypeAt(ctx context.Context, location typefacts.Locatio
 	if value == nil {
 		return typefacts.TypeDescriptor{}, fmt.Errorf("%w: type at byte %d", typefacts.ErrNotFound, location.StartByte)
 	}
-	descriptor := typefacts.TypeDescriptor{Text: p.checker.TypeToString(value)}
-	if alias := value.Alias(); alias != nil && alias.Symbol() != nil {
-		descriptor.AliasDeclarations = declarationsForSymbol(alias.Symbol())
-		descriptor.OriginModule = declarationModule(alias.Symbol())
-	}
-	return descriptor, nil
+	return *p.typeDescriptorFor(value), nil
 }
 
 func declarationModule(symbol *ast.Symbol) string {
@@ -1111,7 +1116,7 @@ func (p *project) ResolvedCall(ctx context.Context, location typefacts.Location)
 	}
 	call := typefacts.Call{
 		Target:         p.idFor(target),
-		ReturnTypeText: p.checker.TypeToString(returnType),
+		ReturnTypeText: p.typeDescriptorFor(returnType).Text,
 		Validity:       validity,
 		Kind:           typefacts.CallKindCall,
 	}
@@ -1422,8 +1427,10 @@ func (p *project) Close() error {
 	clear(p.mintedIDs)
 	p.referenceIndex.reset()
 	p.filesByName = nil
+	p.currentSourceFiles = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
+	p.typeDescriptors = nil
 	p.declarationShapes = nil
 	p.exportedIdentities = nil
 	return nil

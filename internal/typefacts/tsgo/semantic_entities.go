@@ -150,15 +150,11 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 				if cached := cachedDescriptor(entity.Symbol); cached != nil {
 					entity.TypeDescriptor = cached
 				} else if value := p.checker.GetTypeAtLocation(queryNode); value != nil {
-					descriptor := typefacts.TypeDescriptor{Text: p.checker.TypeToString(value)}
-					if alias := value.Alias(); alias != nil && alias.Symbol() != nil {
-						descriptor.AliasDeclarations = declarationsForSymbol(alias.Symbol())
-						descriptor.OriginModule = declarationModule(alias.Symbol())
-					}
+					descriptor := p.typeDescriptorFor(value)
 					if entity.Symbol != "" {
-						batchDescriptors[entity.Symbol] = &descriptor
+						batchDescriptors[entity.Symbol] = descriptor
 					}
-					entity.TypeDescriptor = &descriptor
+					entity.TypeDescriptor = descriptor
 				}
 			}
 		}
@@ -206,7 +202,7 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 					}
 					returnType := checker.Checker_getReturnTypeOfSignature(p.checker, signature)
 					if returnType != nil {
-						entity.ResolvedCall.ReturnTypeText = p.checker.TypeToString(returnType)
+						entity.ResolvedCall.ReturnTypeText = p.typeDescriptorFor(returnType).Text
 					}
 					if entity.ResolvedCall.Validity == typefacts.ResolvedCallValid {
 						calleeType := p.checker.GetTypeAtLocation(callee)
@@ -267,8 +263,7 @@ func (p *project) currentSignatureDeclaration(signature *checker.Signature, targ
 	if sourceFile == nil {
 		return nil
 	}
-	currentSource := p.program.GetSourceFile(sourceFile.FileName())
-	if currentSource == sourceFile {
+	if p.isCurrentSourceFile(sourceFile) {
 		return declaration
 	}
 	target = p.canonicalSymbol(target)
@@ -309,6 +304,17 @@ func (p *project) currentSignatureDeclaration(signature *checker.Signature, targ
 		return matches[ordinal]
 	}
 	return nil
+}
+
+func (p *project) isCurrentSourceFile(sourceFile *ast.SourceFile) bool {
+	if p.currentSourceFiles == nil {
+		p.currentSourceFiles = make(map[*ast.SourceFile]struct{}, len(p.program.SourceFiles()))
+		for _, current := range p.program.SourceFiles() {
+			p.currentSourceFiles[current] = struct{}{}
+		}
+	}
+	_, current := p.currentSourceFiles[sourceFile]
+	return current
 }
 
 func (p *project) resolvedDeclaration(signature *checker.Signature, node *ast.Node, fallbackSymbol *ast.Symbol) *typefacts.ResolvedDeclaration {
@@ -480,8 +486,7 @@ func (p *project) argumentMappings(call *ast.Node, signature *checker.Signature,
 			}
 		}
 		if parameterType != nil {
-			descriptor := typeDescriptorFor(p.checker, parameterType)
-			fact.TypeDescriptor = &descriptor
+			fact.TypeDescriptor = p.typeDescriptorFor(parameterType)
 		}
 		if p.resolvedParameters == nil {
 			p.resolvedParameters = make(map[resolvedParameterCacheKey]*typefacts.ParameterFact)
@@ -508,12 +513,19 @@ func unresolvedArgumentMappings(arguments []*ast.Node, reason typefacts.Argument
 	return result
 }
 
-func typeDescriptorFor(typeChecker *checker.Checker, value *checker.Type) typefacts.TypeDescriptor {
-	descriptor := typefacts.TypeDescriptor{Text: typeChecker.TypeToString(value)}
+func (p *project) typeDescriptorFor(value *checker.Type) *typefacts.TypeDescriptor {
+	if descriptor := p.typeDescriptors[value]; descriptor != nil {
+		return descriptor
+	}
+	descriptor := &typefacts.TypeDescriptor{Text: p.checker.TypeToString(value)}
 	if alias := value.Alias(); alias != nil && alias.Symbol() != nil {
 		descriptor.AliasDeclarations = declarationsForSymbol(alias.Symbol())
 		descriptor.OriginModule = declarationModule(alias.Symbol())
 	}
+	if p.typeDescriptors == nil {
+		p.typeDescriptors = make(map[*checker.Type]*typefacts.TypeDescriptor)
+	}
+	p.typeDescriptors[value] = descriptor
 	return descriptor
 }
 
