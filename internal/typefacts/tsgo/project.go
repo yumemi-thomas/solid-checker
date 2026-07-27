@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -54,8 +55,13 @@ type project struct {
 	// set on the incremental path and clears the memo on full rebuilds.
 	sourceFactsMemo map[string]*fileFactsMemo
 	// durableRefs maps a durable SymbolID back to its declaration so the
-	// symbol can be re-resolved lazily in a later generation.
+	// symbol can be re-resolved lazily in a later generation. mintedIDs is
+	// the inverse mint cache: a durable ref always hashes to the same ID, so
+	// each distinct ref pays the digest once per session. Both grow with the
+	// distinct identities the session touches and share whatever eviction
+	// story bounds that.
 	durableRefs map[typefacts.SymbolID]durableSymbolRef
+	mintedIDs   map[durableSymbolRef]typefacts.SymbolID
 	// filesByName is a generation-scoped index of program files keyed by
 	// their cleaned file name. Program.GetSourceFile does not round-trip
 	// virtual bundled-lib names (bundled:/… is resolved against the working
@@ -122,6 +128,7 @@ func OpenProject(ctx context.Context, configPath string, trace typefacts.Trace) 
 		symbolsByID:     make(map[typefacts.SymbolID]*ast.Symbol),
 		sourceFactsMemo: make(map[string]*fileFactsMemo),
 		durableRefs:     make(map[typefacts.SymbolID]durableSymbolRef),
+		mintedIDs:       make(map[durableSymbolRef]typefacts.SymbolID),
 	}
 	opened.exportedIdentities = collectExportedIdentities(program, typeChecker)
 	opened.rebuildImportGraph(program)
@@ -1387,6 +1394,7 @@ func (p *project) Close() error {
 	clear(p.symbolsByID)
 	clear(p.sourceFactsMemo)
 	clear(p.durableRefs)
+	clear(p.mintedIDs)
 	p.referenceIndex.reset()
 	p.filesByName = nil
 	p.declarationShapes = nil
@@ -1425,14 +1433,37 @@ func durableRefFor(symbol *ast.Symbol) (durableSymbolRef, bool) {
 	}, true
 }
 
+// hashedSymbolID renders a digest prefix as the wire ID in one allocation.
+func hashedSymbolID(digest [sha256.Size]byte) typefacts.SymbolID {
+	var id [9 + 24]byte
+	copy(id[:], "symbol:h:")
+	hex.Encode(id[9:], digest[:12])
+	return typefacts.SymbolID(id[:])
+}
+
 func (ref durableSymbolRef) id() typefacts.SymbolID {
-	digest := sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d\x00%d\x00%s", ref.path, ref.startByte, ref.endByte, ref.name)))
-	return typefacts.SymbolID("symbol:h:" + hex.EncodeToString(digest[:12]))
+	// The digest input is byte-identical to the historical
+	// fmt.Sprintf("%s\x00%d\x00%d\x00%s", ...) — durable IDs persist across
+	// sessions, so the rendering may never drift.
+	input := make([]byte, 0, len(ref.path)+len(ref.name)+32)
+	input = append(input, ref.path...)
+	input = append(input, 0)
+	input = strconv.AppendInt(input, int64(ref.startByte), 10)
+	input = append(input, 0)
+	input = strconv.AppendInt(input, int64(ref.endByte), 10)
+	input = append(input, 0)
+	input = append(input, ref.name...)
+	return hashedSymbolID(sha256.Sum256(input))
 }
 
 func (ref durableSymbolRef) exportedID() typefacts.SymbolID {
-	digest := sha256.Sum256([]byte(fmt.Sprintf("export\x00%s\x00%s", ref.path, ref.name)))
-	return typefacts.SymbolID("symbol:h:" + hex.EncodeToString(digest[:12]))
+	// Byte-identical to the historical fmt.Sprintf("export\x00%s\x00%s", ...).
+	input := make([]byte, 0, len(ref.path)+len(ref.name)+16)
+	input = append(input, "export\x00"...)
+	input = append(input, ref.path...)
+	input = append(input, 0)
+	input = append(input, ref.name...)
+	return hashedSymbolID(sha256.Sum256(input))
 }
 
 // durableSymbolID reports whether id can outlive the generation that minted
@@ -1454,7 +1485,15 @@ func (p *project) idFor(symbol *ast.Symbol) typefacts.SymbolID {
 		}
 	}
 	if ref, ok := durableRefFor(symbol); ok {
-		id := ref.id()
+		// The symbol-keyed maps are generation-scoped, but the ref is the
+		// durable identity itself: an unchanged declaration always hashes to
+		// the same ID, so mint once per distinct ref for the session instead
+		// of re-running the digest for every touched symbol of every update.
+		id, minted := p.mintedIDs[ref]
+		if !minted {
+			id = ref.id()
+			p.mintedIDs[ref] = id
+		}
 		if existing, taken := p.symbolsByID[id]; !taken || existing == symbol {
 			p.idsBySymbol[symbol] = id
 			p.symbolsByID[id] = symbol
