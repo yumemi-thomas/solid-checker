@@ -381,8 +381,20 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	if p.retained == nil {
 		p.retained = make(map[string]*fileClosureContribution)
 	}
-	union := make(map[SymbolID]struct{})
-	descriptorSeed := make(map[SymbolID]*TypeDescriptor)
+	union := p.suppressionScratch
+	p.suppressionScratch = nil
+	if union == nil {
+		union = make(map[SymbolID]struct{})
+	} else {
+		clear(union)
+	}
+	descriptorSeed := p.descriptorSeedScratch
+	if descriptorSeed == nil {
+		descriptorSeed = make(map[SymbolID]*TypeDescriptor)
+		p.descriptorSeedScratch = descriptorSeed
+	} else {
+		clear(descriptorSeed)
+	}
 	var changed []int
 	var changedDemands []EntityDemand
 	for index := range groups {
@@ -549,6 +561,10 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	retention.RecomputedFiles = len(changed)
 	// Files no longer demanded drop out here rather than lingering.
 	p.retained = nextRetained
+	// The outgoing lastSuppression becomes the next generation's union
+	// scratch; it was built two generations ago, so it is never the map the
+	// suppression-delta comparison above just read against.
+	p.suppressionScratch = p.lastSuppression
 	p.lastSuppression = union
 	stages.demand = time.Since(started)
 	started = time.Now()

@@ -108,6 +108,15 @@ type DemandClosure struct {
 	// whole-batch semantics.
 	retained        map[string]*fileClosureContribution
 	lastSuppression map[SymbolID]struct{}
+	// suppressionScratch and descriptorSeedScratch back the per-generation
+	// suppression union and descriptor seed. Both are derived in full every
+	// generation — the first-wins descriptor order makes true incremental
+	// maintenance fragile — but deriving into cleared, retained maps costs no
+	// allocation once the session reaches steady state. The union ping-pongs
+	// with lastSuppression, which must stay a distinct map for the
+	// suppression-delta comparison.
+	suppressionScratch    map[SymbolID]struct{}
+	descriptorSeedScratch map[SymbolID]*TypeDescriptor
 	// symbolFacts memoizes the generation-independent half of durable
 	// symbol closure: alias targets and declarations. Update removes facts
 	// declared in affected files. symbolReferences separately retains lists
@@ -264,6 +273,9 @@ func (p *DemandClosure) Close() error {
 	p.symbolsByPath = nil
 	p.symbolOrder = nil
 	p.symbolScratch = nil
+	p.lastSuppression = nil
+	p.suppressionScratch = nil
+	p.descriptorSeedScratch = nil
 	p.interner = nil
 	p.seenScratch = nil
 	p.fullScratch = nil
