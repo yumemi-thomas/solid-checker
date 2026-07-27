@@ -496,6 +496,19 @@ func (b *closureBuilder) patchCanonicalSymbolStore(ctx context.Context, facts []
 		b.cachedReferences[id] = references[id]
 	}
 
+	// A symbol is marked changed whenever it was recomputed, not when its
+	// fact actually differs — so a span-stable edit patches rows identical
+	// to the retained generation, and because hashed IDs scatter a file's
+	// symbols across the whole canonical order, those no-op patches would
+	// rebuild nearly every chunk. Identical rows are dropped here, after
+	// every patch mutation above, so untouched chunks stay shared. The
+	// transport manifest still over-names these symbols; the diff already
+	// tolerates candidates that compare equal.
+	for id, fact := range patches {
+		if retained, present := previous.Get(id); present && symbolFactEqual(fact, retained) {
+			delete(patches, id)
+		}
+	}
 	next, shared, removed, complete := previous.Patch(b.symbolSeen, patches, b.removedSymbolCandidates)
 	if !complete {
 		return nil, false, nil

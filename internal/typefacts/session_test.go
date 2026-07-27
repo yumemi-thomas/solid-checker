@@ -248,8 +248,15 @@ func TestSessionAnalysisTraversesTheRetainedPath(t *testing.T) {
 	if retention.CachedSymbolFacts == 0 {
 		t.Fatalf("no durable symbol fact was reused; retention = %+v", retention)
 	}
-	if retention.PatchedSymbolRows == 0 {
+	// SharedSymbolChunks is the patch path's signature: only Patch shares
+	// chunks with the preceding store. PatchedSymbolRows cannot stand in for
+	// it — this edit leaves every declaration span in place, so the
+	// recomputed rows are identical and correctly patch nothing.
+	if retention.SharedSymbolChunks == 0 {
 		t.Fatalf("the canonical symbol store was rebuilt rather than patched, so the exact-delta fast path went untested; retention = %+v", retention)
+	}
+	if retention.PatchedSymbolRows != 0 {
+		t.Fatalf("a span-stable edit patched %d identical rows; retention = %+v", retention.PatchedSymbolRows, retention)
 	}
 	if warmResponse.TableMode != TableModeDelta {
 		t.Fatalf("warm analyze table mode = %q, want %q; retention = %+v", warmResponse.TableMode, TableModeDelta, retention)
