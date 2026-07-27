@@ -44,7 +44,7 @@ func transportManifest(previous, next *FactTable, builder *closureBuilder, chang
 		sourcePaths:    make(map[string]struct{}, len(changedPaths)),
 		entityPaths:    make(map[string]struct{}, len(changedPaths)),
 		filePaths:      make(map[string]struct{}, len(changedPaths)),
-		symbolIDs:      make(map[SymbolID]struct{}, len(builder.changedSymbolIDs)),
+		symbolIDs:      make(map[SymbolID]struct{}, builder.changedSymbols.len()),
 		exact:          true,
 	}
 	for path := range changedPaths {
@@ -55,7 +55,7 @@ func transportManifest(previous, next *FactTable, builder *closureBuilder, chang
 		collectPathSymbols(previous, path, manifest.symbolIDs)
 		collectPathSymbols(next, path, manifest.symbolIDs)
 	}
-	for id := range builder.changedSymbolIDs {
+	for _, id := range builder.changedSymbols.ids {
 		manifest.symbolIDs[id] = struct{}{}
 	}
 

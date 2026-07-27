@@ -20,18 +20,23 @@ import (
 // symbols reached from the demanded entities, the facts resolved for them, and
 // the retained state carried over from the preceding generation.
 type closureBuilder struct {
-	backend     ClosureBackend
-	trace       Trace
-	cleanPaths  map[string]string
-	entities    map[Location]*EntityFact
-	symbolQueue []SymbolID
-	symbolSeen  map[SymbolID]struct{}
+	backend    ClosureBackend
+	trace      Trace
+	cleanPaths map[string]string
+	entities   map[Location]*EntityFact
+	// interner assigns SymbolIDs their session-stable dense handles;
+	// symbolQueue and queueHandles grow in lockstep, so the fact built for
+	// queue position i carries handle queueHandles[i].
+	interner     *symbolInterner
+	symbolQueue  []SymbolID
+	queueHandles []int32
+	symbolSeen   *symbolHandleSet
 	// fullTier marks the symbols whose reference lists this generation must
 	// carry: those reached by a demand that asked for references. Symbols
 	// reached only to be classified stay out and get no list. Full tier
 	// propagates along alias-target edges, because a caller canonicalizes
 	// before fanning out on references.
-	fullTier                map[SymbolID]struct{}
+	fullTier                *symbolHandleSet
 	descriptors             map[SymbolID]*TypeDescriptor
 	cachedSymbolFacts       map[SymbolID]SymbolFact
 	cachedReferences        map[SymbolID][]Location
@@ -47,9 +52,12 @@ type closureBuilder struct {
 	recomputedReferences    int
 	patchedSymbolRows       int
 	sharedSymbolChunks      int
-	changedSymbolIDs        map[SymbolID]struct{}
+	changedSymbols          *changedSymbolSet
 	removedSymbolCandidates map[SymbolID]struct{}
 	referenceChangesExact   bool
+	// factIndexScratch backs closeSymbols' handle-to-fact index; the closure
+	// reclaims it after every generation.
+	factIndexScratch []int32
 }
 
 func (b *closureBuilder) cleanPath(path string) string {
@@ -75,11 +83,12 @@ func (b *closureBuilder) enqueueSymbol(id SymbolID) {
 	if id == "" {
 		return
 	}
-	if _, ok := b.symbolSeen[id]; ok {
+	handle := b.interner.handle(id)
+	if !b.symbolSeen.add(handle) {
 		return
 	}
-	b.symbolSeen[id] = struct{}{}
 	b.symbolQueue = append(b.symbolQueue, id)
+	b.queueHandles = append(b.queueHandles, handle)
 }
 
 // closeSymbols drains the worklist to a fixed point: every reached symbol
@@ -149,10 +158,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 			continue
 		}
 		b.recomputedSymbolFacts++
-		if b.changedSymbolIDs == nil {
-			b.changedSymbolIDs = make(map[SymbolID]struct{})
-		}
-		b.changedSymbolIDs[id] = struct{}{}
+		b.changedSymbols.add(id)
 		target, err := b.backend.ResolveAlias(ctx, id)
 		switch {
 		case err == nil:
@@ -184,10 +190,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 			continue
 		}
 		b.recomputedSymbolFacts++
-		if b.changedSymbolIDs == nil {
-			b.changedSymbolIDs = make(map[SymbolID]struct{})
-		}
-		b.changedSymbolIDs[id] = struct{}{}
+		b.changedSymbols.add(id)
 		target, err := b.backend.ResolveAlias(ctx, id)
 		switch {
 		case err == nil:
@@ -207,17 +210,28 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 	}
 	factsDuration := time.Since(started)
 	started = time.Now()
+	// Alias handles are resolved once so the fixpoint passes below are pure
+	// bitset traffic. Every alias target was enqueued during the drain, so the
+	// interner already knows it.
+	aliasHandles := make([]int32, len(facts))
+	for index := range facts {
+		if facts[index].AliasTarget == "" {
+			aliasHandles[index] = -1
+			continue
+		}
+		aliasHandles[index] = b.interner.handle(facts[index].AliasTarget)
+	}
 	for changed := true; changed; {
 		changed = false
-		for _, fact := range facts {
-			if fact.AliasTarget == "" {
+		for index := range facts {
+			target := aliasHandles[index]
+			if target < 0 {
 				continue
 			}
-			if _, full := b.fullTier[fact.ID]; !full {
+			if !b.fullTier.contains(b.queueHandles[index]) {
 				continue
 			}
-			if _, full := b.fullTier[fact.AliasTarget]; !full {
-				b.fullTier[fact.AliasTarget] = struct{}{}
+			if b.fullTier.add(target) {
 				changed = true
 			}
 		}
@@ -234,14 +248,30 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 				Nanos("factsNs", factsDuration), Nanos("fullTierNs", fullTierDuration),
 				Nanos("referencesNs", referencesDuration), Nanos("sortNs", 0),
 				Count("initialSymbols", initialSymbolCount), Count("symbols", patched.Len()),
-				Count("fullTier", len(b.fullTier)), Count("references", len(b.closedReferences)))
+				Count("fullTier", b.fullTier.len()), Count("references", len(b.closedReferences)))
 		}
 		return nil, nil
 	}
-	factByID := make(map[SymbolID]*SymbolFact, len(facts))
+	// factIndex maps a symbol's handle to its position in facts, offset by
+	// one so the zeroed scratch means absent. It replaces the string-keyed
+	// factByID map this loop used to build every generation.
+	factIndex := b.factIndexScratch
+	if cap(factIndex) < b.interner.size() {
+		factIndex = make([]int32, b.interner.size())
+	} else {
+		factIndex = factIndex[:cap(factIndex)]
+		clear(factIndex)
+	}
+	b.factIndexScratch = factIndex
 	for index := range facts {
-		fact := &facts[index]
-		factByID[fact.ID] = fact
+		factIndex[b.queueHandles[index]] = int32(index) + 1
+	}
+	factFor := func(id SymbolID) *SymbolFact {
+		handle, ok := b.interner.lookup(id)
+		if !ok || int(handle) >= len(factIndex) || factIndex[handle] == 0 {
+			return nil
+		}
+		return &facts[factIndex[handle]-1]
 	}
 	// Reference lists always come from the batch capability: one backend
 	// lock instead of tens of thousands of round trips. There is no
@@ -254,7 +284,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 		}
 		// Only full-tier symbols carry reference lists; a symbol reached
 		// solely to be classified gets none.
-		if _, demanded := b.fullTier[fact.ID]; !demanded {
+		if !b.fullTier.contains(b.queueHandles[index]) {
 			continue
 		}
 		ids = append(ids, fact.ID)
@@ -272,10 +302,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 			changedSet := make(map[SymbolID]struct{}, len(changedIDs))
 			for _, id := range changedIDs {
 				changedSet[id] = struct{}{}
-				if b.changedSymbolIDs == nil {
-					b.changedSymbolIDs = make(map[SymbolID]struct{})
-				}
-				b.changedSymbolIDs[id] = struct{}{}
+				b.changedSymbols.add(id)
 			}
 			b.referenceChangesExact = true
 			referenceWorkers := min(runtime.GOMAXPROCS(0), len(ids))
@@ -301,7 +328,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 								chunk.ids = append(chunk.ids, id)
 								continue
 							}
-							factByID[id].References = cached
+							factFor(id).References = cached
 							chunk.hits++
 						}
 					}()
@@ -321,7 +348,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 						refresh = append(refresh, id)
 						continue
 					}
-					factByID[id].References = cached
+					factFor(id).References = cached
 					b.cachedReferenceHits++
 				}
 			}
@@ -334,12 +361,9 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 	}
 	b.recomputedReferences += len(refresh)
 	for _, id := range refresh {
-		if b.changedSymbolIDs == nil {
-			b.changedSymbolIDs = make(map[SymbolID]struct{})
-		}
-		b.changedSymbolIDs[id] = struct{}{}
+		b.changedSymbols.add(id)
 		// Absence is a known-empty list, not an unresolved cache miss.
-		factByID[id].References = references[id]
+		factFor(id).References = references[id]
 	}
 	if b.referenceChangesExact {
 		// The exact delta makes the preceding map itself reusable.
@@ -347,28 +371,28 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 		// refreshed rows instead of copying every retained slice header.
 		b.closedReferences = b.cachedReferences
 		for id := range b.closedReferences {
-			fact := factByID[id]
+			fact := factFor(id)
 			if fact == nil || fact.AliasTarget != "" {
 				delete(b.closedReferences, id)
 				continue
 			}
-			if _, demanded := b.fullTier[id]; !demanded {
+			if !b.fullTier.containsID(id) {
 				delete(b.closedReferences, id)
 			}
 		}
 		for _, id := range refresh {
-			b.closedReferences[id] = factByID[id].References
+			b.closedReferences[id] = factFor(id).References
 		}
 	} else {
 		b.closedReferences = make(map[SymbolID][]Location, len(ids))
 		for _, id := range ids {
-			b.closedReferences[id] = factByID[id].References
+			b.closedReferences[id] = factFor(id).References
 		}
 	}
 	referencesDuration := time.Since(started)
 	started = time.Now()
 	var spare []SymbolFact
-	facts, spare = orderSymbolFacts(facts, factByID, b.cachedSymbolOrder, b.symbolOrderBuffer[:0])
+	facts, spare = orderSymbolFacts(facts, factIndex, b.interner, b.cachedSymbolOrder, b.symbolOrderBuffer[:0])
 	b.symbolFactsBuffer = spare[:0]
 	sortDuration := time.Since(started)
 	if b.trace != nil {
@@ -376,7 +400,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 			Nanos("factsNs", factsDuration), Nanos("fullTierNs", fullTierDuration),
 			Nanos("referencesNs", referencesDuration), Nanos("sortNs", sortDuration),
 			Count("initialSymbols", initialSymbolCount), Count("symbols", len(facts)),
-			Count("fullTier", len(b.fullTier)), Count("references", len(b.closedReferences)))
+			Count("fullTier", b.fullTier.len()), Count("references", len(b.closedReferences)))
 	}
 	return facts, nil
 }
@@ -392,13 +416,10 @@ func (b *closureBuilder) patchCanonicalSymbolStore(ctx context.Context, facts []
 	}
 	for index := range facts {
 		fact := &facts[index]
-		eligible := fact.AliasTarget == ""
-		if eligible {
-			_, eligible = b.fullTier[fact.ID]
-		}
+		eligible := fact.AliasTarget == "" && b.fullTier.containsID(fact.ID)
 		_, previouslyEligible := b.cachedReferences[fact.ID]
 		if eligible != previouslyEligible {
-			if _, changed := b.changedSymbolIDs[fact.ID]; !changed {
+			if !b.changedSymbols.containsID(fact.ID) {
 				return nil, false, nil
 			}
 		}
@@ -413,16 +434,13 @@ func (b *closureBuilder) patchCanonicalSymbolStore(ctx context.Context, facts []
 	}
 	b.referenceChangesExact = true
 	for _, id := range changedReferences {
-		if b.changedSymbolIDs == nil {
-			b.changedSymbolIDs = make(map[SymbolID]struct{})
-		}
-		b.changedSymbolIDs[id] = struct{}{}
+		b.changedSymbols.add(id)
 	}
 
-	patches := make(map[SymbolID]SymbolFact, len(b.changedSymbolIDs))
+	patches := make(map[SymbolID]SymbolFact, b.changedSymbols.len())
 	for index := range facts {
 		fact := facts[index]
-		if _, changed := b.changedSymbolIDs[fact.ID]; !changed {
+		if !b.changedSymbols.containsID(fact.ID) {
 			continue
 		}
 		if retained, present := previous.Get(fact.ID); present {
@@ -431,8 +449,8 @@ func (b *closureBuilder) patchCanonicalSymbolStore(ctx context.Context, facts []
 		patches[fact.ID] = fact
 	}
 
-	refreshSet := make(map[SymbolID]struct{}, len(changedReferences)+len(b.changedSymbolIDs))
-	for id := range b.changedSymbolIDs {
+	refreshSet := make(map[SymbolID]struct{}, len(changedReferences)+b.changedSymbols.len())
+	for _, id := range b.changedSymbols.ids {
 		fact, present := patches[id]
 		if !present {
 			fact, present = previous.Get(id)
@@ -440,10 +458,7 @@ func (b *closureBuilder) patchCanonicalSymbolStore(ctx context.Context, facts []
 		if !present {
 			continue
 		}
-		eligible := fact.AliasTarget == ""
-		if eligible {
-			_, eligible = b.fullTier[id]
-		}
+		eligible := fact.AliasTarget == "" && b.fullTier.containsID(id)
 		if !eligible {
 			fact.References = nil
 			patches[id] = fact
@@ -501,12 +516,24 @@ func (b *closureBuilder) patchCanonicalSymbolStore(ctx context.Context, facts []
 // Surviving rows take their current values in the prior order; only new IDs
 // need sorting before the two sorted runs are merged. Missing prior IDs simply
 // drop out.
+//
+// factIndex maps interned handles to fact positions offset by one (zero means
+// absent) and is consumed: entries taken by the prior order are zeroed so the
+// leftovers identify this generation's additions.
 func orderSymbolFacts(
 	facts []SymbolFact,
-	factByID map[SymbolID]*SymbolFact,
+	factIndex []int32,
+	interner *symbolInterner,
 	previous []SymbolID,
 	output []SymbolFact,
 ) ([]SymbolFact, []SymbolFact) {
+	factFor := func(id SymbolID) (int32, bool) {
+		handle, ok := interner.lookup(id)
+		if !ok || int(handle) >= len(factIndex) || factIndex[handle] == 0 {
+			return 0, false
+		}
+		return handle, true
+	}
 	if len(previous) == 0 {
 		sort.Slice(facts, func(i, j int) bool { return facts[i].ID < facts[j].ID })
 		return facts, output
@@ -517,12 +544,12 @@ func orderSymbolFacts(
 			ordered = make([]SymbolFact, 0, len(facts))
 		}
 		for _, id := range previous {
-			fact, ok := factByID[id]
+			handle, ok := factFor(id)
 			if !ok {
 				ordered = ordered[:0]
 				break
 			}
-			ordered = append(ordered, *fact)
+			ordered = append(ordered, facts[factIndex[handle]-1])
 		}
 		if len(ordered) == len(facts) {
 			return ordered, facts
@@ -531,19 +558,22 @@ func orderSymbolFacts(
 
 	retained := make([]SymbolFact, 0, len(facts))
 	for _, id := range previous {
-		if fact, ok := factByID[id]; ok {
-			retained = append(retained, *fact)
-			delete(factByID, id)
+		if handle, ok := factFor(id); ok {
+			retained = append(retained, facts[factIndex[handle]-1])
+			factIndex[handle] = 0
 		}
 	}
-	if len(factByID) == 0 {
+	if len(retained) == len(facts) {
 		output = append(output[:0], retained...)
 		return output, facts
 	}
 
-	added := make([]SymbolFact, 0, len(factByID))
-	for _, fact := range factByID {
-		added = append(added, *fact)
+	added := make([]SymbolFact, 0, len(facts)-len(retained))
+	for index := range facts {
+		handle, ok := interner.lookup(facts[index].ID)
+		if ok && int(handle) < len(factIndex) && factIndex[handle] == int32(index)+1 {
+			added = append(added, facts[index])
+		}
 	}
 	sort.Slice(added, func(i, j int) bool { return added[i].ID < added[j].ID })
 

@@ -85,11 +85,20 @@ type DemandClosure struct {
 	previousTable         *FactTable
 	recyclableTable       *FactTable
 	transportChangedPaths map[string]struct{}
-	closedSyms            map[SymbolID]struct{}
-	fullTier              map[SymbolID]struct{}
-	stats                 ClosureStats
-	generation            uint64
-	closed                bool
+	// interner assigns every symbol this session reaches a dense stable
+	// handle; the scratch slices below back the per-generation handle sets so
+	// a generation allocates no symbol-keyed maps at all.
+	interner           *symbolInterner
+	seenScratch        []bool
+	fullScratch        []bool
+	changedScratch     []bool
+	changedIDScratch   []SymbolID
+	queueScratch       []SymbolID
+	queueHandleScratch []int32
+	factIndexScratch   []int32
+	stats              ClosureStats
+	generation         uint64
+	closed             bool
 	// retained carries per-file demand-closure contributions across
 	// generations (ADR 0001): an accepted update drops exactly the affected
 	// set, and a file whose demands are unchanged reuses its entity facts
@@ -228,8 +237,6 @@ func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (Affec
 	p.previousTable = p.table
 	p.table = nil
 	p.transportChangedPaths = invalidPaths
-	p.closedSyms = nil
-	p.fullTier = nil
 	// Retained contributions survive except the affected set; a
 	// departed file must be evicted now, not when next queried.
 	for _, path := range affected.Files {
@@ -252,12 +259,19 @@ func (p *DemandClosure) Close() error {
 	p.previousTable = nil
 	p.recyclableTable = nil
 	p.transportChangedPaths = nil
-	p.closedSyms = nil
 	p.symbolFacts = nil
 	p.symbolReferences = nil
 	p.symbolsByPath = nil
 	p.symbolOrder = nil
 	p.symbolScratch = nil
+	p.interner = nil
+	p.seenScratch = nil
+	p.fullScratch = nil
+	p.changedScratch = nil
+	p.changedIDScratch = nil
+	p.queueScratch = nil
+	p.queueHandleScratch = nil
+	p.factIndexScratch = nil
 	return p.backend.Close()
 }
 

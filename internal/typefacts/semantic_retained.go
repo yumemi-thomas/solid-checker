@@ -214,11 +214,11 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	ctx context.Context,
 	groups []demandGroup,
 	generation uint64,
-) (*FactTable, map[SymbolID]struct{}, map[SymbolID]struct{}, semanticDemandStages, ClosureRetention, error) {
+) (*FactTable, int, semanticDemandStages, ClosureRetention, error) {
 	retention := ClosureRetention{}
 	sources, err := p.backend.SourceFiles(ctx)
 	if err != nil {
-		return nil, nil, nil, semanticDemandStages{}, retention, err
+		return nil, 0, semanticDemandStages{}, retention, err
 	}
 	sort.Slice(sources, func(i, j int) bool { return sources[i].Path < sources[j].Path })
 	table := p.recyclableTable
@@ -237,12 +237,20 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	table.Symbols = nil
 	table.symbols = nil
 	table.transport = nil
+	if p.interner == nil {
+		p.interner = newSymbolInterner()
+	}
 	builder := &closureBuilder{
 		backend:                 p.backend,
 		trace:                   p.trace,
 		entities:                make(map[Location]*EntityFact),
-		symbolSeen:              make(map[SymbolID]struct{}),
-		fullTier:                make(map[SymbolID]struct{}),
+		interner:                p.interner,
+		symbolQueue:             p.queueScratch[:0],
+		queueHandles:            p.queueHandleScratch[:0],
+		symbolSeen:              newSymbolHandleSet(p.interner, p.seenScratch),
+		fullTier:                newSymbolHandleSet(p.interner, p.fullScratch),
+		changedSymbols:          newChangedSymbolSet(p.interner, p.changedScratch, p.changedIDScratch),
+		factIndexScratch:        p.factIndexScratch,
 		descriptors:             make(map[SymbolID]*TypeDescriptor),
 		cleanPaths:              make(map[string]string),
 		cachedSymbolFacts:       p.symbolFacts,
@@ -252,6 +260,18 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		symbolOrderBuffer:       table.Symbols,
 		removedSymbolCandidates: retainedSymbolCandidates(p.previousTable, p.transportChangedPaths),
 	}
+	// The generation's handle sets and queue live on closure-owned scratch;
+	// hand the backing back for the next generation whichever way this one
+	// ends.
+	defer func() {
+		p.seenScratch = builder.symbolSeen.members
+		p.fullScratch = builder.fullTier.members
+		p.changedScratch = builder.changedSymbols.set.members
+		p.changedIDScratch = builder.changedSymbols.ids[:0]
+		p.queueScratch = builder.symbolQueue[:0]
+		p.queueHandleScratch = builder.queueHandles[:0]
+		p.factIndexScratch = builder.factIndexScratch
+	}()
 	if p.previousTable != nil {
 		builder.cachedCanonicalStore = p.previousTable.symbols
 		if builder.cachedCanonicalStore == nil {
@@ -292,7 +312,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	}
 	refreshedAsync, err := asyncFunctionsForDemands(ctx, p.backend, refreshAsyncDemands)
 	if err != nil {
-		return nil, nil, nil, stages, retention, err
+		return nil, 0, stages, retention, err
 	}
 	crossPathAsync := false
 	for path := range refreshedAsync {
@@ -313,7 +333,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		}
 		refreshedAsync, err = asyncFunctionsForDemands(ctx, p.backend, refreshAsyncDemands)
 		if err != nil {
-			return nil, nil, nil, stages, retention, err
+			return nil, 0, stages, retention, err
 		}
 	}
 	for path := range refreshAsyncPaths {
@@ -343,7 +363,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	}
 	for _, source := range sources {
 		if err := ctx.Err(); err != nil {
-			return nil, nil, nil, stages, retention, err
+			return nil, 0, stages, retention, err
 		}
 		path := filepath.Clean(source.Path)
 		asyncFunctions := asyncByPath[path]
@@ -416,7 +436,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	if len(changedDemands) != 0 {
 		entities, structural, err := p.backend.SemanticEntitiesScoped(ctx, changedDemands, union, descriptorSeed)
 		if err != nil {
-			return nil, nil, nil, stages, retention, err
+			return nil, 0, stages, retention, err
 		}
 		rebuildContributions(entities, structural, changed)
 		for _, index := range changed {
@@ -484,7 +504,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 			retention.SuppressionRecompute = true
 			entities, structural, err := p.backend.SemanticEntitiesScoped(ctx, refreshDemands, union, nil)
 			if err != nil {
-				return nil, nil, nil, stages, retention, err
+				return nil, 0, stages, retention, err
 			}
 			rebuildContributions(entities, structural, refresh)
 			changed = append(changed, refresh...)
@@ -546,7 +566,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 			builder.enqueueSymbol(symbol)
 		}
 		for _, symbol := range group.contribution.fullTier {
-			builder.fullTier[symbol] = struct{}{}
+			builder.fullTier.addID(symbol)
 		}
 	}
 	stages.assembly = time.Since(started)
@@ -565,7 +585,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	started = time.Now()
 	symbols, err := builder.closeSymbols(ctx)
 	if err != nil {
-		return nil, nil, nil, stages, retention, err
+		return nil, 0, stages, retention, err
 	}
 	p.symbolScratch = builder.symbolFactsBuffer
 	symbolStore := builder.closedSymbolStore
@@ -584,7 +604,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		nextSymbolFacts = make(map[SymbolID]SymbolFact, len(symbols))
 	}
 	for id, fact := range nextSymbolFacts {
-		if _, present := builder.symbolSeen[id]; !present {
+		if !builder.symbolSeen.containsID(id) {
 			p.unindexSymbolFact(fact)
 			delete(nextSymbolFacts, id)
 		}
@@ -600,7 +620,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 			}
 			return
 		}
-		if _, changed := builder.changedSymbolIDs[fact.ID]; changed {
+		if builder.changedSymbols.containsID(fact.ID) {
 			if previous, retained := nextSymbolFacts[fact.ID]; retained {
 				p.unindexSymbolFact(previous)
 			}
@@ -635,7 +655,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	// The table is transport-only: it exists to be converted to the wire shape
 	// or diffed against its predecessor, and answers no per-location queries.
 	stages.symbol = stages.assembly + stages.sort + stages.close
-	return table, builder.symbolSeen, builder.fullTier, stages, retention, nil
+	return table, builder.fullTier.len(), stages, retention, nil
 }
 
 // ClosureRetention reports how much of a generation's demand closure was

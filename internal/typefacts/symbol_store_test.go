@@ -12,9 +12,9 @@ func TestSymbolFactStoreSharesUntouchedChunksAcrossPatch(t *testing.T) {
 		facts[index] = SymbolFact{ID: SymbolID(fmt.Sprintf("symbol-%04d", index))}
 	}
 	previous := newSymbolFactStore(facts)
-	present := make(map[SymbolID]struct{}, len(facts))
+	present := newSymbolHandleSet(newSymbolInterner(), nil)
 	for _, fact := range facts {
-		present[fact.ID] = struct{}{}
+		present.addID(fact.ID)
 	}
 	changed := facts[300]
 	changed.AliasTarget = "updated"
@@ -51,7 +51,7 @@ func TestSymbolFactStoreSharesUntouchedChunksAcrossPatch(t *testing.T) {
 func TestSymbolFactStoreRejectsIncompleteRemovalCandidates(t *testing.T) {
 	facts := []SymbolFact{{ID: "a"}, {ID: "b"}}
 	previous := newSymbolFactStore(facts)
-	present := map[SymbolID]struct{}{"a": {}}
+	present := testHandleSet(newSymbolInterner(), "a")
 
 	_, _, _, complete := previous.Patch(present, nil, nil)
 

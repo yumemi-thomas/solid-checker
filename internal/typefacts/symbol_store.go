@@ -73,7 +73,7 @@ func (s *symbolFactStore) chunkFor(id SymbolID) int {
 // symbol universe; patches contains current rows for every added or changed
 // symbol. The returned integer counts chunks shared with the preceding store.
 func (s *symbolFactStore) Patch(
-	present map[SymbolID]struct{},
+	present *symbolHandleSet,
 	patches map[SymbolID]SymbolFact,
 	removalCandidates map[SymbolID]struct{},
 ) (*symbolFactStore, int, []SymbolID, bool) {
@@ -84,7 +84,7 @@ func (s *symbolFactStore) Patch(
 		}
 		sort.Slice(facts, func(i, j int) bool { return facts[i].ID < facts[j].ID })
 		store := newSymbolFactStore(facts)
-		return store, 0, nil, store.Len() == len(present)
+		return store, 0, nil, store.Len() == present.len()
 	}
 
 	additions := make(map[int][]SymbolFact)
@@ -101,7 +101,7 @@ func (s *symbolFactStore) Patch(
 	var removed []SymbolID
 	removedSet := make(map[SymbolID]struct{})
 	for id := range removalCandidates {
-		if _, exists := present[id]; exists {
+		if present.containsID(id) {
 			continue
 		}
 		if _, exists := s.Get(id); !exists {
@@ -140,7 +140,7 @@ func (s *symbolFactStore) Patch(
 			next.length += end - start
 		}
 	}
-	return next, shared, removed, next.Len() == len(present)
+	return next, shared, removed, next.Len() == present.len()
 }
 
 func (t FactTable) symbolFactsCount() int {

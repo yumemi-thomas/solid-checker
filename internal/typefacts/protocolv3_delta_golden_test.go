@@ -79,7 +79,7 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 	}
 	exact := &closureBuilder{
 		referenceChangesExact: true,
-		changedSymbolIDs:      map[SymbolID]struct{}{"a": {}, "a2": {}, "b": {}},
+		changedSymbols:        testChangedSet(newSymbolInterner(), "a", "a2", "b"),
 	}
 	edit.transport = transportManifest(&base, &edit, exact, map[string]struct{}{"a.ts": {}})
 	deleted.transport = transportManifest(&edit, &deleted, exact, map[string]struct{}{"b.ts": {}})
@@ -119,7 +119,7 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 	}
 	sharedEdit.transport = transportManifest(&sharedBase, &sharedEdit, &closureBuilder{
 		referenceChangesExact: true,
-		changedSymbolIDs:      map[SymbolID]struct{}{"shared": {}},
+		changedSymbols:        testChangedSet(newSymbolInterner(), "shared"),
 	}, map[string]struct{}{"a.ts": {}})
 	steps = append(steps, deltaGoldenStep{
 		Label:    "symbol-reference-file",

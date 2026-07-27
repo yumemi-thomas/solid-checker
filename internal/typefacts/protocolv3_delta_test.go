@@ -90,7 +90,7 @@ func TestInternalFactTableDeltaMatchesFullConversion(t *testing.T) {
 	}
 	exactBuilder := &closureBuilder{
 		referenceChangesExact: true,
-		changedSymbolIDs:      map[SymbolID]struct{}{"a": {}, "a2": {}, "b": {}},
+		changedSymbols:        testChangedSet(newSymbolInterner(), "a", "a2", "b"),
 	}
 	edit.transport = transportManifest(&base, &edit, exactBuilder, map[string]struct{}{"a.ts": {}})
 	deleted.transport = transportManifest(&edit, &deleted, exactBuilder, map[string]struct{}{"b.ts": {}})
@@ -135,7 +135,7 @@ func TestManifestDeltaDoesNotReplaceSharedReferenceRow(t *testing.T) {
 	}
 	builder := &closureBuilder{
 		referenceChangesExact: true,
-		changedSymbolIDs:      map[SymbolID]struct{}{"shared": {}},
+		changedSymbols:        testChangedSet(newSymbolInterner(), "shared"),
 	}
 	edit.transport = transportManifest(&base, &edit, builder, map[string]struct{}{"a.ts": {}})
 

@@ -66,20 +66,18 @@ func (p *DemandClosure) materializeDemandTableLocked(
 	groups []demandGroup,
 ) error {
 	started := time.Now()
-	table, closed, full, stages, retention, err := p.materializeSemanticDemandRetained(ctx, groups, generation)
+	table, fullTierSymbols, stages, retention, err := p.materializeSemanticDemandRetained(ctx, groups, generation)
 	if err != nil {
 		return err
 	}
 	p.table = table
-	p.closedSyms = closed
-	p.fullTier = full
 	p.stats = ClosureStats{
 		BuildSequence:    p.stats.BuildSequence + 1,
 		Generation:       generation,
 		Files:            len(table.Files),
 		Entities:         len(table.Entities),
 		Symbols:          table.symbolFactsCount(),
-		FullTierSymbols:  len(full),
+		FullTierSymbols:  fullTierSymbols,
 		BuildDuration:    time.Since(started),
 		AsyncDuration:    stages.async,
 		DemandDuration:   stages.demand,

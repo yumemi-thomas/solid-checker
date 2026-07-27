@@ -26,12 +26,13 @@ func TestOrderSymbolFactsReusesCanonicalOrderAcrossDelta(t *testing.T) {
 		{ID: "b"},
 		{ID: "a"},
 	}
-	byID := make(map[SymbolID]*SymbolFact, len(facts))
+	interner := newSymbolInterner()
+	factIndex := make([]int32, len(facts))
 	for index := range facts {
-		byID[facts[index].ID] = &facts[index]
+		factIndex[interner.handle(facts[index].ID)] = int32(index) + 1
 	}
 
-	got, _ := orderSymbolFacts(facts, byID, []SymbolID{"a", "c", "d"}, nil)
+	got, _ := orderSymbolFacts(facts, factIndex, interner, []SymbolID{"a", "c", "d"}, nil)
 	want := []SymbolFact{
 		{ID: "a"},
 		{ID: "b"},
@@ -57,16 +58,18 @@ func TestPatchCanonicalSymbolStoreChangesOnlyDeltaRows(t *testing.T) {
 		"a": {oldReference},
 		"b": {oldReference},
 	}
+	interner := newSymbolInterner()
 	builder := closureBuilder{
 		backend: canonicalPatchBackend{
 			changed:    []SymbolID{"b"},
 			references: map[SymbolID][]Location{"b": {newReference}},
 		},
-		symbolSeen:           map[SymbolID]struct{}{"a": {}, "b": {}},
-		fullTier:             map[SymbolID]struct{}{"a": {}, "b": {}},
+		interner:             interner,
+		symbolSeen:           testHandleSet(interner, "a", "b"),
+		fullTier:             testHandleSet(interner, "a", "b"),
 		cachedReferences:     cachedReferences,
 		cachedCanonicalStore: newSymbolFactStore(previous),
-		changedSymbolIDs:     map[SymbolID]struct{}{"b": {}},
+		changedSymbols:       testChangedSet(interner, "b"),
 	}
 
 	store, ok, err := builder.patchCanonicalSymbolStore(context.Background(), current)
