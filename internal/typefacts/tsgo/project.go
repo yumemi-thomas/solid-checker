@@ -489,6 +489,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 		// change resolution outside the module graph; fail closed.
 		clear(p.sourceFactsMemo)
 		p.referenceIndex.reset()
+		p.sweepDurableIdentities(program)
 	}
 	if p.declarationShapes == nil {
 		p.declarationShapes = make(map[string]declarationShape)
@@ -1400,6 +1401,35 @@ func (p *project) Close() error {
 	p.declarationShapes = nil
 	p.exportedIdentities = nil
 	return nil
+}
+
+// sweepDurableIdentities drops durable-identity bookkeeping for files the
+// program no longer contains. This is the one eviction that cannot change
+// behavior: an absent file's declarations cannot re-resolve regardless, and a
+// file that re-enters the program re-mints identical entries through the
+// location scans that precede any by-id query. It runs on the full-rebuild
+// update path — deletes and config changes are where files leave wholesale.
+// Identities whose declaring file stays in the program are never dropped,
+// even when the file is affected: recomputing an edited file's facts resolves
+// enqueued symbols by ID, and evicting those entries would silently cost
+// their declarations. So churn within living files still accretes (one entry
+// per distinct declaration span ever seen), which is the accepted bound.
+func (p *project) sweepDurableIdentities(program *compiler.Program) {
+	sourceFiles := program.SourceFiles()
+	present := make(map[string]struct{}, len(sourceFiles))
+	for _, sourceFile := range sourceFiles {
+		present[filepath.Clean(sourceFile.FileName())] = struct{}{}
+	}
+	for id, ref := range p.durableRefs {
+		if _, ok := present[ref.path]; !ok {
+			delete(p.durableRefs, id)
+		}
+	}
+	for ref := range p.mintedIDs {
+		if _, ok := present[ref.path]; !ok {
+			delete(p.mintedIDs, ref)
+		}
+	}
 }
 
 // durableSymbolRef is the durable symbol identity: the name span of the

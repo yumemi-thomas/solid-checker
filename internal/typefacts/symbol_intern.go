@@ -10,7 +10,7 @@ package typefacts
 
 type symbolInterner struct {
 	handles map[SymbolID]int32
-	ids     []SymbolID
+	count   int32
 }
 
 func newSymbolInterner() *symbolInterner {
@@ -22,9 +22,9 @@ func (n *symbolInterner) handle(id SymbolID) int32 {
 	if handle, ok := n.handles[id]; ok {
 		return handle
 	}
-	handle := int32(len(n.ids))
+	handle := n.count
 	n.handles[id] = handle
-	n.ids = append(n.ids, id)
+	n.count++
 	return handle
 }
 
@@ -35,7 +35,7 @@ func (n *symbolInterner) lookup(id SymbolID) (int32, bool) {
 }
 
 func (n *symbolInterner) size() int {
-	return len(n.ids)
+	return int(n.count)
 }
 
 // symbolHandleSet is one generation's symbol membership as a bitset over
@@ -90,6 +90,25 @@ func (s *symbolHandleSet) containsID(id SymbolID) bool {
 
 func (s *symbolHandleSet) len() int {
 	return s.count
+}
+
+// A session that keeps minting identities the closure never sees again —
+// non-durable IDs are re-minted fresh every generation — would grow the
+// interner without bound. Handles carry no meaning across generations: every
+// set built over them is per-generation scratch, and the ordering index
+// stores IDs, not handles. So when dead identities outnumber the live symbol
+// universe, the cheapest eviction is a fresh interner; the next build
+// re-interns exactly the symbols it reaches, at first-generation cost.
+const internerResetSlack = 1024
+
+// maybeResetInterner replaces the interner when its identity count has
+// outgrown the live universe, using the preceding table's canonical symbol
+// count as the liveness estimate. Called between generations only — never
+// while a build holds handles.
+func (p *DemandClosure) maybeResetInterner() {
+	if p.interner == nil || p.interner.size() > 2*len(p.symbolOrder)+internerResetSlack {
+		p.interner = newSymbolInterner()
+	}
 }
 
 // changedSymbolSet is a symbolHandleSet that also keeps the inserted IDs as a

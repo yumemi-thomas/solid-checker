@@ -237,9 +237,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	table.Symbols = nil
 	table.symbols = nil
 	table.transport = nil
-	if p.interner == nil {
-		p.interner = newSymbolInterner()
-	}
+	p.maybeResetInterner()
 	builder := &closureBuilder{
 		backend:                 p.backend,
 		trace:                   p.trace,
