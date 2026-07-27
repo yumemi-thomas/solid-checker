@@ -167,7 +167,6 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 			response.Timings.AssemblyNs = uint64(stats.AssemblyDuration)
 			response.Timings.SortNs = uint64(stats.SortDuration)
 			response.Timings.CloseSymbolsNs = uint64(stats.CloseDuration)
-			response.Timings.PrepareNs = uint64(stats.PrepareDuration)
 			response.Timings.RetainedFiles = uint64(stats.Retention.RetainedFiles)
 			response.Timings.RecomputedFiles = uint64(stats.Retention.RecomputedFiles)
 			response.Timings.NonDurableFiles = uint64(stats.Retention.NonDurableFiles)

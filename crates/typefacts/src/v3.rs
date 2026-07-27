@@ -10,7 +10,7 @@ use crate::{
 
 pub const TYPE_FACTS_SCHEMA_V3: u64 = 3;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:5b4c02b23be9b53ec248beed5b8241cb6344af49cf9363c1373a6d9bce91f5a9";
+    "sha256:0404f910756ce6350f6f299c8b1a1c5f873e5533cb1ccc6b90c19bb8804ac1cb";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -164,8 +164,6 @@ pub struct ServerTimings {
     pub sort_ns: u64,
     #[serde(default, skip_serializing_if = "is_zero")]
     pub close_symbols_ns: u64,
-    #[serde(default, skip_serializing_if = "is_zero")]
-    pub prepare_ns: u64,
     #[serde(default, skip_serializing_if = "is_false")]
     pub materialized: bool,
     #[serde(default, skip_serializing_if = "is_zero")]

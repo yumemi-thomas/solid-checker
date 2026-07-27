@@ -216,7 +216,6 @@
         "assemblyNs": { "type": "integer", "minimum": 0 },
         "sortNs": { "type": "integer", "minimum": 0 },
         "closeSymbolsNs": { "type": "integer", "minimum": 0 },
-        "prepareNs": { "type": "integer", "minimum": 0 },
         "materialized": { "type": "boolean" },
         "retainedFiles": { "type": "integer", "minimum": 0 },
         "recomputedFiles": { "type": "integer", "minimum": 0 },

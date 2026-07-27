@@ -31,6 +31,25 @@ at upgrade; the crate takes a major version bump to say so.
   v3's explicit demand list replaced. The client sends precise locations now, so
   handing the producer spans to re-scan would undo that.
 
+## A second bump followed
+
+This ADR chose to batch the removals into one release, "one digest bump, not
+two". A second bump followed anyway, and the reason is worth recording rather
+than leaving the claim looking wrong.
+
+The same deletion pass that motivated this ADR removed `FactTable.Prepare`, which
+left the `prepareNs` response field with nothing to report. It became a
+permanently-zero number reaching the crate's public surface as
+`ExchangeTimings.server_prepare` — the same defect as the request fields above, in
+the other direction, created after this ADR had already landed. It was removed in
+crate 0.3.0 along with `ServerTimings.prepare_ns` and the internal
+`PrepareDuration` chain behind it.
+
+The batching principle stands; it just cannot cover a field that only became dead
+as a consequence of the work being batched. The general form of the rule is that a
+digest bump should carry every field known to be dead at the time, and that
+deleting a producer capability obliges a check for response fields it fed.
+
 ## Consequences
 
 - The per-file demand hash digests six flag bytes instead of nine.

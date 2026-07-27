@@ -87,7 +87,6 @@ func (p *DemandClosure) materializeDemandTableLocked(
 		AssemblyDuration: stages.assembly,
 		SortDuration:     stages.sort,
 		CloseDuration:    stages.close,
-		PrepareDuration:  stages.prepare,
 		Retention:        retention,
 	}
 	if p.trace != nil {
@@ -163,6 +162,5 @@ type semanticDemandStages struct {
 	assembly time.Duration
 	sort     time.Duration
 	close    time.Duration
-	prepare  time.Duration
 	symbol   time.Duration
 }

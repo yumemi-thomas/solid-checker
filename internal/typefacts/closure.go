@@ -58,7 +58,6 @@ type ClosureStats struct {
 	AssemblyDuration time.Duration    `json:"assemblyDurationNs,omitempty"`
 	SortDuration     time.Duration    `json:"sortDurationNs,omitempty"`
 	CloseDuration    time.Duration    `json:"closeDurationNs,omitempty"`
-	PrepareDuration  time.Duration    `json:"prepareDurationNs,omitempty"`
 	Retention        ClosureRetention `json:"retention,omitzero"`
 }
 

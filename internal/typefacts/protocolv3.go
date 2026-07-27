@@ -6,7 +6,7 @@ const TypeFactsSchemaVersionV3 uint64 = 3
 
 const (
 	TypeFactsHandshakeProtocol uint64 = 1
-	TypeFactsSchemaSHA256             = "sha256:5b4c02b23be9b53ec248beed5b8241cb6344af49cf9363c1373a6d9bce91f5a9"
+	TypeFactsSchemaSHA256             = "sha256:0404f910756ce6350f6f299c8b1a1c5f873e5533cb1ccc6b90c19bb8804ac1cb"
 )
 
 type ServiceHandshake struct {
@@ -67,7 +67,6 @@ type LifecycleTimings struct {
 	AssemblyNs      uint64 `cbor:"assemblyNs,omitempty" json:"assemblyNs,omitempty"`
 	SortNs          uint64 `cbor:"sortNs,omitempty" json:"sortNs,omitempty"`
 	CloseSymbolsNs  uint64 `cbor:"closeSymbolsNs,omitempty" json:"closeSymbolsNs,omitempty"`
-	PrepareNs       uint64 `cbor:"prepareNs,omitempty" json:"prepareNs,omitempty"`
 	Materialized    bool   `cbor:"materialized,omitempty" json:"materialized,omitempty"`
 	RetainedFiles   uint64 `cbor:"retainedFiles,omitempty" json:"retainedFiles,omitempty"`
 	RecomputedFiles uint64 `cbor:"recomputedFiles,omitempty" json:"recomputedFiles,omitempty"`
