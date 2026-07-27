@@ -4,7 +4,8 @@
 //! one accepted update, the caller's own local work, and one analysis of ~1,000
 //! demand groups of which exactly one changed.
 //!
-//! It compares two shapes that differ *only* in where the caller's work goes:
+//! It compares three shapes. The first two differ *only* in where the caller's
+//! work goes:
 //!
 //! - serial: acknowledge the update, then do local work, then analyse;
 //! - pipelined: do local work while the update is in flight, then analyse.
@@ -13,6 +14,18 @@
 //! rather than comparing two different call paths. Local work is a fixed number
 //! of arithmetic rounds, not a sleep, so it consumes a real CPU and cannot
 //! overlap by accident of the scheduler.
+//!
+//! The third differs from serial *only* in whether the caller still holds the
+//! previous fact table when the next analysis lands:
+//!
+//! - serial_dropped_table: drop the table before every analysis.
+//!
+//! A held table co-owns the session's retained storage, so applying the next
+//! delta must first copy every section it touches; a dropped one leaves the
+//! session sole owner and the delta patches in place. The gap between serial
+//! and serial_dropped_table is therefore the client-side cost of that copy —
+//! paid by the ordinary editor pattern, which keeps the current table alive to
+//! query until the next one replaces it.
 //!
 //! Output is JSON on stdout. There is deliberately no absolute time threshold:
 //! the assertions here are correctness and relative overlap.
@@ -262,6 +275,15 @@ enum Shape {
     Pipelined,
 }
 
+/// Whether the caller keeps the previous fact table alive across the next
+/// analysis. Holding is what a real editor does; dropping shows what the
+/// analysis costs once the retained-table copy is off the path.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Retention {
+    Hold,
+    Drop,
+}
+
 #[derive(Default)]
 struct Samples {
     total: Vec<f64>,
@@ -298,8 +320,8 @@ fn summarize(values: &[f64]) -> BTreeMap<&'static str, f64> {
 }
 
 /// Runs the edit script in one shape and returns its samples plus the final
-/// table, so the two shapes can be proved equivalent.
-fn run(shape: Shape, corpus: &Corpus) -> (Samples, FactTable, u64) {
+/// table, so the shapes can be proved equivalent.
+fn run(shape: Shape, retention: Retention, corpus: &Corpus) -> (Samples, FactTable, u64) {
     let project_id = corpus
         .root
         .join("tsconfig.json")
@@ -318,7 +340,11 @@ fn run(shape: Shape, corpus: &Corpus) -> (Samples, FactTable, u64) {
     session.analyze_groups(&groups).expect("first analysis");
 
     let mut samples = Samples::default();
-    let mut table: Option<FactTable> = None;
+    // The caller's copy of the current fact table. Under Hold it always tracks
+    // the latest analysis, the way an editor keeps the current table alive to
+    // query; under Drop it is released before every analysis, so the session
+    // stays sole owner of the retained storage.
+    let mut held: Option<FactTable> = None;
 
     for edit in 0..(WARMUP_EDITS + MEASURED_EDITS) {
         let measured = edit >= WARMUP_EDITS;
@@ -365,12 +391,15 @@ fn run(shape: Shape, corpus: &Corpus) -> (Samples, FactTable, u64) {
         };
         let update_timings = session.take_last_update_timings().unwrap_or_default();
 
+        if retention == Retention::Drop {
+            drop(held.take());
+        }
         let analyze_started = Instant::now();
         let analyzed = session
             .analyze_groups(&iteration_groups)
             .expect("analysis after edit");
         let analyze_elapsed = analyze_started.elapsed();
-        table = Some(analyzed);
+        held = Some(analyzed);
         let total = started.elapsed();
         let exchange = session.take_last_exchange_timings().unwrap_or_default();
 
@@ -390,19 +419,29 @@ fn run(shape: Shape, corpus: &Corpus) -> (Samples, FactTable, u64) {
         }
 
         // Restore the unedited demand run so the next iteration's "one changed
-        // group" is measured against a stable baseline.
-        session
+        // group" is measured against a stable baseline, under the same
+        // retention discipline so every delta application in the run sees the
+        // same ownership shape.
+        if retention == Retention::Drop {
+            drop(held.take());
+        }
+        let restored = session
             .analyze_groups(&groups)
             .expect("restore baseline demands");
+        match retention {
+            Retention::Hold => held = Some(restored),
+            Retention::Drop => drop(restored),
+        }
+        black_box(&held);
     }
 
+    // One final unchanged analysis, identical across shapes, so equivalence is
+    // asserted on the same request regardless of shape or retention.
+    drop(held);
+    let final_table = session.analyze_groups(&groups).expect("final analysis");
     let generation = session.generation();
     session.close().expect("close session");
-    (
-        samples,
-        table.expect("at least one analysis ran"),
-        generation,
-    )
+    (samples, final_table, generation)
 }
 
 fn emit(shape: &str, samples: &Samples, groups: usize, generation: u64) -> String {
@@ -437,18 +476,28 @@ fn main() {
     let corpus = generate_corpus();
     let groups = corpus.modules.len();
 
-    let (serial, serial_table, serial_generation) = run(Shape::Serial, &corpus);
-    let (pipelined, pipelined_table, pipelined_generation) = run(Shape::Pipelined, &corpus);
+    let (serial, serial_table, serial_generation) = run(Shape::Serial, Retention::Hold, &corpus);
+    let (pipelined, pipelined_table, pipelined_generation) =
+        run(Shape::Pipelined, Retention::Hold, &corpus);
+    let (dropped, dropped_table, dropped_generation) = run(Shape::Serial, Retention::Drop, &corpus);
 
-    // Equivalence: the two shapes must land on identical facts, fact for fact,
+    // Equivalence: every shape must land on identical facts, fact for fact,
     // or a faster number means nothing.
     assert_eq!(
         serial_table, pipelined_table,
         "serial and pipelined shapes produced different fact tables"
     );
     assert_eq!(
+        serial_table, dropped_table,
+        "held and dropped retention produced different fact tables"
+    );
+    assert_eq!(
         serial_generation, pipelined_generation,
         "serial and pipelined shapes ended on different session generations"
+    );
+    assert_eq!(
+        serial_generation, dropped_generation,
+        "held and dropped retention ended on different session generations"
     );
     let expected_generation = (WARMUP_EDITS + MEASURED_EDITS) as u64 + 1;
     assert_eq!(
@@ -465,8 +514,12 @@ fn main() {
     println!("  \"shapes\": {{");
     println!("{},", emit("serial", &serial, groups, serial_generation));
     println!(
-        "{}",
+        "{},",
         emit("pipelined", &pipelined, groups, pipelined_generation)
+    );
+    println!(
+        "{}",
+        emit("serial_dropped_table", &dropped, groups, dropped_generation)
     );
     println!("  }}");
     println!("}}");

@@ -66,6 +66,7 @@ func BenchmarkSourceFactsAfterLeafEdit(b *testing.B) {
 	}
 	queryAll()
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for iteration := 0; iteration < b.N; iteration++ {
 		change := typefacts.FileChange{
@@ -149,6 +150,7 @@ func BenchmarkReferencesAfterLeafEdit(b *testing.B) {
 	}
 	queryAll()
 
+	b.ReportAllocs()
 	b.ResetTimer()
 	for iteration := 0; iteration < b.N; iteration++ {
 		change := typefacts.FileChange{
