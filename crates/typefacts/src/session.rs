@@ -108,8 +108,8 @@ impl<'a> DemandGroup<'a> {
         let path = self.path();
         self.demands
             .iter()
-            .map(|demand| demand.location.path.as_str())
-            .find(|candidate| *candidate != path)
+            .map(|demand| demand.location.path.as_ref())
+            .find(|candidate: &&str| *candidate != path)
     }
 }
 
@@ -1061,7 +1061,7 @@ fn table_changes(response: &Response) -> Result<TableChanges, SessionError> {
             let mut symbol_ids = delta
                 .symbols
                 .iter()
-                .map(|symbol| symbol.id.clone())
+                .map(|symbol| symbol.id.to_string())
                 .chain(
                     delta
                         .symbol_reference_files
@@ -1073,7 +1073,7 @@ fn table_changes(response: &Response) -> Result<TableChanges, SessionError> {
             let mut file_paths = delta
                 .files
                 .iter()
-                .map(|file| file.path.clone())
+                .map(|file| file.path.to_string())
                 .chain(delta.removed_file_paths.iter().cloned())
                 .collect::<Vec<_>>();
             entity_paths.sort();
@@ -1103,7 +1103,7 @@ fn group_demands(demands: &[EntityDemand]) -> Vec<Vec<EntityDemand>> {
     let mut order: Vec<Vec<EntityDemand>> = Vec::new();
     let mut runs: HashMap<&str, usize> = HashMap::new();
     for demand in demands {
-        let path = demand.location.path.as_str();
+        let path: &str = &demand.location.path;
         match runs.get(path) {
             Some(&index) => order[index].push(demand.clone()),
             None => {
@@ -1133,8 +1133,8 @@ fn remove_sorted_row<T>(rows: &mut Vec<T>, removed: &str, key: impl Fn(&T) -> &s
 
 /// The bounds of one path's contiguous run in the path-major entity order.
 fn entity_run(entities: &[EntityFact], path: &str) -> std::ops::Range<usize> {
-    let start = entities.partition_point(|entity| entity.location.path.as_str() < path);
-    let end = entities.partition_point(|entity| entity.location.path.as_str() <= path);
+    let start = entities.partition_point(|entity| entity.location.path.as_ref() < path);
+    let end = entities.partition_point(|entity| entity.location.path.as_ref() <= path);
     start..end
 }
 
@@ -1146,10 +1146,10 @@ fn entity_run(entities: &[EntityFact], path: &str) -> std::ops::Range<usize> {
 fn apply_table_delta(table: &mut FactTable, delta: &FactTableDelta) -> Result<(), SessionError> {
     let sources = Arc::make_mut(&mut table.sources);
     for removed in &delta.removed_source_paths {
-        remove_sorted_row(sources, removed, |value| value.path.as_str());
+        remove_sorted_row(sources, removed, |value| value.path.as_ref());
     }
     for source in &delta.sources {
-        upsert_sorted_row(sources, source, |value| value.path.as_str());
+        upsert_sorted_row(sources, source, |value| value.path.as_ref());
     }
 
     let entities = Arc::make_mut(&mut table.entities);
@@ -1166,7 +1166,7 @@ fn apply_table_delta(table: &mut FactTable, delta: &FactTableDelta) -> Result<()
         if file
             .entities
             .iter()
-            .any(|entity| entity.location.path != file.path)
+            .any(|entity| entity.location.path.as_ref() != file.path.as_str())
         {
             return Err(SessionError::InvalidResponse(format!(
                 "entity delta for {:?} contains another path",
@@ -1188,16 +1188,16 @@ fn apply_table_delta(table: &mut FactTable, delta: &FactTableDelta) -> Result<()
 
     let symbols = Arc::make_mut(&mut table.symbols);
     for removed in &delta.removed_symbol_ids {
-        remove_sorted_row(symbols, removed, |value| value.id.as_str());
+        remove_sorted_row(symbols, removed, |value| value.id.as_ref());
     }
     for symbol in &delta.symbols {
-        upsert_sorted_row(symbols, symbol, |value| value.id.as_str());
+        upsert_sorted_row(symbols, symbol, |value| value.id.as_ref());
     }
     for replacement in &delta.symbol_reference_files {
         if replacement
             .references
             .iter()
-            .any(|reference| reference.path != replacement.path)
+            .any(|reference| reference.path.as_ref() != replacement.path.as_str())
         {
             return Err(SessionError::InvalidResponse(format!(
                 "reference delta for {:?} contains another path",
@@ -1217,7 +1217,7 @@ fn apply_table_delta(table: &mut FactTable, delta: &FactTableDelta) -> Result<()
             )));
         }
         let symbol_index = symbols
-            .binary_search_by(|symbol| symbol.id.cmp(&replacement.id))
+            .binary_search_by(|symbol| symbol.id.as_ref().cmp(replacement.id.as_str()))
             .map_err(|_| {
                 SessionError::InvalidResponse(format!(
                     "reference delta names missing symbol {:?}",
@@ -1225,23 +1225,27 @@ fn apply_table_delta(table: &mut FactTable, delta: &FactTableDelta) -> Result<()
                 ))
             })?;
         let symbol = &mut symbols[symbol_index];
-        let start = symbol
-            .references
-            .partition_point(|reference| reference.path < replacement.path);
-        let end = symbol
-            .references
-            .partition_point(|reference| reference.path <= replacement.path);
-        symbol
-            .references
-            .splice(start..end, replacement.references.iter().cloned());
+        // The reference list is shared with older generations, so replace the
+        // path's run by rebuilding the list — sized once, no splice-shifting.
+        let references = &symbol.references;
+        let start = references
+            .partition_point(|reference| reference.path.as_ref() < replacement.path.as_str());
+        let end = references
+            .partition_point(|reference| reference.path.as_ref() <= replacement.path.as_str());
+        let mut next =
+            Vec::with_capacity(references.len() - (end - start) + replacement.references.len());
+        next.extend_from_slice(&references[..start]);
+        next.extend(replacement.references.iter().cloned());
+        next.extend_from_slice(&references[end..]);
+        symbol.references = next.into();
     }
 
     let files = Arc::make_mut(&mut table.files);
     for removed in &delta.removed_file_paths {
-        remove_sorted_row(files, removed, |value| value.path.as_str());
+        remove_sorted_row(files, removed, |value| value.path.as_ref());
     }
     for file in &delta.files {
-        upsert_sorted_row(files, file, |value| value.path.as_str());
+        upsert_sorted_row(files, file, |value| value.path.as_ref());
     }
     table.generation = delta.generation;
     Ok(())
@@ -1397,13 +1401,14 @@ mod tests {
     fn reference_delta_replaces_only_the_named_paths_run() {
         let mut table = table_with_symbol(SymbolFact {
             id: "shared".into(),
-            alias_target: String::new(),
-            declarations: Vec::new(),
+            alias_target: "".into(),
+            declarations: Vec::new().into(),
             references: vec![
                 location("a.ts", 1),
                 location("b.ts", 1),
                 location("c.ts", 1),
-            ],
+            ]
+            .into(),
         });
         apply_table_delta(
             &mut table,
@@ -1420,7 +1425,7 @@ mod tests {
             table.symbols[0]
                 .references
                 .iter()
-                .map(|reference| (reference.path.as_str(), reference.start_byte))
+                .map(|reference| (reference.path.as_ref(), reference.start_byte))
                 .collect::<Vec<_>>(),
             vec![("a.ts", 1), ("b.ts", 4), ("b.ts", 9), ("c.ts", 1)],
         );
@@ -1432,13 +1437,14 @@ mod tests {
     fn empty_reference_delta_clears_only_that_path() {
         let mut table = table_with_symbol(SymbolFact {
             id: "shared".into(),
-            alias_target: String::new(),
-            declarations: Vec::new(),
+            alias_target: "".into(),
+            declarations: Vec::new().into(),
             references: vec![
                 location("a.ts", 1),
                 location("b.ts", 1),
                 location("c.ts", 1),
-            ],
+            ]
+            .into(),
         });
         apply_table_delta(&mut table, &reference_delta("shared", "b.ts", Vec::new()))
             .expect("apply the empty reference delta");
@@ -1446,7 +1452,7 @@ mod tests {
             table.symbols[0]
                 .references
                 .iter()
-                .map(|reference| reference.path.as_str())
+                .map(|reference| reference.path.as_ref())
                 .collect::<Vec<_>>(),
             vec!["a.ts", "c.ts"],
         );
@@ -1458,9 +1464,9 @@ mod tests {
     fn reference_delta_fails_closed_on_desync() {
         let mut table = table_with_symbol(SymbolFact {
             id: "shared".into(),
-            alias_target: String::new(),
-            declarations: Vec::new(),
-            references: vec![location("a.ts", 1)],
+            alias_target: "".into(),
+            declarations: Vec::new().into(),
+            references: vec![location("a.ts", 1)].into(),
         });
         assert!(matches!(
             apply_table_delta(
@@ -1521,7 +1527,7 @@ mod tests {
         apply_table_delta(&mut table, &delta).expect("apply the keyed delta");
 
         assert_eq!(table.sources.len(), 1);
-        assert_eq!(table.sources[0].path, "a.ts");
+        assert_eq!(table.sources[0].path.as_ref(), "a.ts");
         assert_eq!(table.sources[0].sha256, SourceHash::of("a2"));
     }
 

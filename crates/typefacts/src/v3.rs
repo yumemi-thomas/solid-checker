@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
@@ -341,7 +342,7 @@ impl<'a> PackedCursor<'a> {
         Ok(bytes)
     }
 
-    fn string_index(&mut self, strings: &[String], label: &str) -> Result<String, String> {
+    fn string_index(&mut self, strings: &[Arc<str>], label: &str) -> Result<Arc<str>, String> {
         let index = usize::try_from(self.u64()?)
             .map_err(|_| format!("packed {label} string index overflows usize"))?;
         strings
@@ -352,7 +353,7 @@ impl<'a> PackedCursor<'a> {
 
     fn location(
         &mut self,
-        strings: &[String],
+        strings: &[Arc<str>],
         state: &mut PackedLocationState,
     ) -> Result<Location, String> {
         let path_token = self.u64()?;
@@ -383,7 +384,7 @@ impl<'a> PackedCursor<'a> {
         })
     }
 
-    fn locations(&mut self, strings: &[String]) -> Result<Vec<Location>, String> {
+    fn locations(&mut self, strings: &[Arc<str>]) -> Result<Vec<Location>, String> {
         let count = self.count("locations")?;
         let mut locations = Vec::with_capacity(count);
         let mut state = PackedLocationState::default();
@@ -393,7 +394,7 @@ impl<'a> PackedCursor<'a> {
         Ok(locations)
     }
 
-    fn declarations(&mut self, strings: &[String]) -> Result<Vec<Declaration>, String> {
+    fn declarations(&mut self, strings: &[Arc<str>]) -> Result<Vec<Declaration>, String> {
         let count = self.count("declarations")?;
         let mut declarations = Vec::with_capacity(count);
         let mut state = PackedLocationState::default();
@@ -407,7 +408,7 @@ impl<'a> PackedCursor<'a> {
         Ok(declarations)
     }
 
-    fn source_call(&mut self, strings: &[String]) -> Result<SourceCall, String> {
+    fn source_call(&mut self, strings: &[Arc<str>]) -> Result<SourceCall, String> {
         let mut state = PackedLocationState::default();
         Ok(SourceCall {
             location: self.location(strings, &mut state)?,
@@ -427,13 +428,15 @@ fn add_signed(base: u64, delta: i64, label: &str) -> Result<u64, String> {
     .ok_or_else(|| format!("packed {label} delta overflow"))
 }
 
-fn decode_packed_strings(cursor: &mut PackedCursor<'_>) -> Result<Vec<String>, String> {
+fn decode_packed_strings(cursor: &mut PackedCursor<'_>) -> Result<Vec<Arc<str>>, String> {
     let count = cursor.count("strings")?;
     let mut strings = Vec::with_capacity(count);
+    // The prefix window for tag-0 strings. Hashed symbols (tag 1) do not
+    // participate in prefix coding, so the window survives them untouched.
     let mut previous = Vec::<u8>::new();
     for _ in 0..count {
         let tag = cursor.u64()?;
-        let (value, next_previous) = match tag {
+        let value: Arc<str> = match tag {
             0 => {
                 let prefix = usize::try_from(cursor.u64()?)
                     .map_err(|_| "packed string prefix overflows usize".to_owned())?;
@@ -442,11 +445,11 @@ fn decode_packed_strings(cursor: &mut PackedCursor<'_>) -> Result<Vec<String>, S
                 }
                 let suffix_length = usize::try_from(cursor.u64()?)
                     .map_err(|_| "packed string length overflows usize".to_owned())?;
-                let mut bytes = previous[..prefix].to_vec();
-                bytes.extend_from_slice(cursor.raw(suffix_length)?);
-                let value = String::from_utf8(bytes.clone())
-                    .map_err(|_| "packed string is not UTF-8".to_owned())?;
-                (value, Some(bytes))
+                previous.truncate(prefix);
+                previous.extend_from_slice(cursor.raw(suffix_length)?);
+                std::str::from_utf8(&previous)
+                    .map_err(|_| "packed string is not UTF-8".to_owned())?
+                    .into()
             }
             1 => {
                 const HEX: &[u8; 16] = b"0123456789abcdef";
@@ -457,14 +460,11 @@ fn decode_packed_strings(cursor: &mut PackedCursor<'_>) -> Result<Vec<String>, S
                     value.push(HEX[usize::from(byte >> 4)] as char);
                     value.push(HEX[usize::from(byte & 0x0f)] as char);
                 }
-                (value, None)
+                value.into()
             }
             other => return Err(format!("packed string has unknown encoding tag {other}")),
         };
         strings.push(value);
-        if let Some(bytes) = next_previous {
-            previous = bytes;
-        }
     }
     Ok(strings)
 }
@@ -524,7 +524,7 @@ pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<Fact
                 Some(TypeDescriptor {
                     text: cursor.string_index(&strings, "type text")?,
                     origin_module: cursor.string_index(&strings, "origin module")?,
-                    alias_declarations: cursor.declarations(&strings)?,
+                    alias_declarations: cursor.declarations(&strings)?.into(),
                 })
             } else {
                 None
@@ -557,8 +557,8 @@ pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<Fact
         symbols.push(SymbolFact {
             id: cursor.string_index(&strings, "symbol id")?,
             alias_target: cursor.string_index(&strings, "alias target")?,
-            declarations: cursor.declarations(&strings)?,
-            references: cursor.locations(&strings)?,
+            declarations: cursor.declarations(&strings)?.into(),
+            references: cursor.locations(&strings)?.into(),
         });
     }
 
@@ -625,10 +625,10 @@ pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<Fact
         }
         files.push(FileFact {
             path,
-            calls,
-            bindings,
-            functions,
-            async_functions,
+            calls: calls.into(),
+            bindings: bindings.into(),
+            functions: functions.into(),
+            async_functions: async_functions.into(),
         });
     }
     if cursor.offset != input.len() {
@@ -676,7 +676,7 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
     let mut groups: Vec<CompactDemandGroup> = Vec::new();
     let mut previous_start = 0;
     for demand in demands {
-        let path = strings.intern(demand.location.path.as_str());
+        let path = strings.intern(demand.location.path.as_ref());
         if groups
             .last()
             .is_none_or(|group| group.0 != path || demand.location.start_byte < previous_start)
@@ -719,7 +719,7 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         );
         previous_start = demand.location.start_byte;
         if let Some(query) = &demand.query_location {
-            push_uvarint(&mut group.1, strings.intern(query.path.as_str()));
+            push_uvarint(&mut group.1, strings.intern(query.path.as_ref()));
             push_uvarint(&mut group.1, query.start_byte);
             push_uvarint(
                 &mut group.1,

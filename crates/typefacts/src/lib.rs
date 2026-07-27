@@ -23,17 +23,27 @@ pub const MAX_NESTING_DEPTH: usize = 32;
 pub const MAX_COLLECTION_LENGTH: usize = 1_000_000;
 pub const SHA256_PREFIX: &str = "sha256:";
 
+// Fact rows keep their heap data behind `Arc`, so cloning a row — which the
+// retained session does for every row of a section whose storage the caller
+// still co-owns — bumps reference counts instead of copying strings and
+// lists. Types that only ever live inside one of those shared lists
+// (`Declaration`, `SourceCall`, …) keep plain owned fields: they are never
+// cloned row by row. The wire shape is unchanged; `Arc<str>` and `Arc<[T]>`
+// serialize exactly as the string and list they hold.
+
+/// serde `skip_serializing_if` helper for `Arc<[T]>` fields.
+fn is_empty_slice<T>(values: &[T]) -> bool {
+    values.is_empty()
+}
+
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct SourceHash(String);
+pub struct SourceHash(Arc<str>);
 
 impl SourceHash {
     #[must_use]
     pub fn of(source: &str) -> Self {
-        Self(format!(
-            "{SHA256_PREFIX}{:x}",
-            Sha256::digest(source.as_bytes())
-        ))
+        Self(format!("{SHA256_PREFIX}{:x}", Sha256::digest(source.as_bytes())).into())
     }
 
     pub fn parse(value: impl Into<String>) -> Result<Self, TypeFactsError> {
@@ -49,7 +59,7 @@ impl SourceHash {
         {
             return Err(TypeFactsError::SourceHash(value));
         }
-        Ok(Self(value))
+        Ok(Self(value.into()))
     }
 
     #[must_use]
@@ -67,7 +77,7 @@ impl fmt::Display for SourceHash {
 #[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Location {
-    pub path: String,
+    pub path: Arc<str>,
     pub end_byte: u64,
     pub start_byte: u64,
 }
@@ -75,37 +85,37 @@ pub struct Location {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Declaration {
-    pub name: String,
-    pub kind: String,
+    pub name: Arc<str>,
+    pub kind: Arc<str>,
     pub location: Location,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResolvedCall {
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub target: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub return_type_text: String,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub return_type_text: Arc<str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TypeDescriptor {
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub text: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub origin_module: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub alias_declarations: Vec<Declaration>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub text: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub origin_module: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub alias_declarations: Arc<[Declaration]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct EntityFact {
     pub location: Location,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub symbol: String,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub symbol: Arc<str>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_descriptor: Option<TypeDescriptor>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -115,13 +125,13 @@ pub struct EntityFact {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SymbolFact {
-    pub id: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub alias_target: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub declarations: Vec<Declaration>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub references: Vec<Location>,
+    pub id: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub alias_target: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub declarations: Arc<[Declaration]>,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub references: Arc<[Location]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -131,8 +141,8 @@ pub struct SourceCall {
     pub callee: Location,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub arguments: Vec<Location>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub target: String,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target: Arc<str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -163,10 +173,10 @@ pub struct SourceFunction {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AsyncFunctionFact {
     pub expression: Location,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub symbol: String,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub target: String,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub symbol: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub target: Arc<str>,
     #[serde(default, skip_serializing_if = "is_false")]
     pub can_return_async: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -176,21 +186,21 @@ pub struct AsyncFunctionFact {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct FileFact {
-    pub path: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub calls: Vec<SourceCall>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub bindings: Vec<SourceBinding>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub functions: Vec<SourceFunction>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub async_functions: Vec<AsyncFunctionFact>,
+    pub path: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub calls: Arc<[SourceCall]>,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub bindings: Arc<[SourceBinding]>,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub functions: Arc<[SourceFunction]>,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub async_functions: Arc<[AsyncFunctionFact]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SourceDigest {
-    pub path: String,
+    pub path: Arc<str>,
     pub sha256: SourceHash,
 }
 

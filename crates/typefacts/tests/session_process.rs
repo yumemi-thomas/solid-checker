@@ -155,7 +155,7 @@ fn synthetic_groups(base: &str, count: usize) -> Vec<Vec<EntityDemand>> {
         .map(|index| {
             vec![EntityDemand {
                 location: Location {
-                    path: format!("{base}/file{index:04}.ts"),
+                    path: format!("{base}/file{index:04}.ts").into(),
                     start_byte: 0,
                     end_byte: 1,
                 },
@@ -283,7 +283,7 @@ fn a_group_carrying_a_foreign_location_is_rejected() {
     let mixed = vec![
         EntityDemand {
             location: Location {
-                path: format!("{base}/here.ts"),
+                path: format!("{base}/here.ts").into(),
                 start_byte: 0,
                 end_byte: 1,
             },
@@ -292,7 +292,7 @@ fn a_group_carrying_a_foreign_location_is_rejected() {
         },
         EntityDemand {
             location: Location {
-                path: format!("{base}/elsewhere.ts"),
+                path: format!("{base}/elsewhere.ts").into(),
                 start_byte: 0,
                 end_byte: 1,
             },

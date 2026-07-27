@@ -251,7 +251,7 @@ fn module_source(path: &str, index: usize, variant: u8) -> (String, Vec<EntityDe
 
 fn location(path: &str, start: usize, end: usize) -> Location {
     Location {
-        path: path.to_owned(),
+        path: path.into(),
         start_byte: start as u64,
         end_byte: end as u64,
     }
