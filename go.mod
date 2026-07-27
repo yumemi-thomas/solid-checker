@@ -28,13 +28,13 @@ require (
 
 // Keep every unstable shim on one reviewed tsgolint revision.
 replace (
-	github.com/microsoft/typescript-go/shim/ast => github.com/oxc-project/tsgolint/shim/ast v0.0.0-20260714154531-c3269c01a0c8
-	github.com/microsoft/typescript-go/shim/bundled => github.com/oxc-project/tsgolint/shim/bundled v0.0.0-20260714154531-c3269c01a0c8
-	github.com/microsoft/typescript-go/shim/checker => github.com/oxc-project/tsgolint/shim/checker v0.0.0-20260714154531-c3269c01a0c8
-	github.com/microsoft/typescript-go/shim/compiler => github.com/oxc-project/tsgolint/shim/compiler v0.0.0-20260714154531-c3269c01a0c8
-	github.com/microsoft/typescript-go/shim/core => github.com/oxc-project/tsgolint/shim/core v0.0.0-20260714154531-c3269c01a0c8
-	github.com/microsoft/typescript-go/shim/scanner => github.com/oxc-project/tsgolint/shim/scanner v0.0.0-20260714154531-c3269c01a0c8
-	github.com/microsoft/typescript-go/shim/tsoptions => github.com/oxc-project/tsgolint/shim/tsoptions v0.0.0-20260714154531-c3269c01a0c8
-	github.com/microsoft/typescript-go/shim/vfs => github.com/oxc-project/tsgolint/shim/vfs v0.0.0-20260714154531-c3269c01a0c8
-	github.com/microsoft/typescript-go/shim/vfs/osvfs => github.com/oxc-project/tsgolint/shim/vfs/osvfs v0.0.0-20260714154531-c3269c01a0c8
+	github.com/microsoft/typescript-go/shim/ast => github.com/oxc-project/tsgolint/shim/ast v0.0.0-20260727005008-f671fef6357e
+	github.com/microsoft/typescript-go/shim/bundled => github.com/oxc-project/tsgolint/shim/bundled v0.0.0-20260727005008-f671fef6357e
+	github.com/microsoft/typescript-go/shim/checker => github.com/oxc-project/tsgolint/shim/checker v0.0.0-20260727005008-f671fef6357e
+	github.com/microsoft/typescript-go/shim/compiler => github.com/oxc-project/tsgolint/shim/compiler v0.0.0-20260727005008-f671fef6357e
+	github.com/microsoft/typescript-go/shim/core => github.com/oxc-project/tsgolint/shim/core v0.0.0-20260727005008-f671fef6357e
+	github.com/microsoft/typescript-go/shim/scanner => github.com/oxc-project/tsgolint/shim/scanner v0.0.0-20260727005008-f671fef6357e
+	github.com/microsoft/typescript-go/shim/tsoptions => github.com/oxc-project/tsgolint/shim/tsoptions v0.0.0-20260727005008-f671fef6357e
+	github.com/microsoft/typescript-go/shim/vfs => github.com/oxc-project/tsgolint/shim/vfs v0.0.0-20260727005008-f671fef6357e
+	github.com/microsoft/typescript-go/shim/vfs/osvfs => github.com/oxc-project/tsgolint/shim/vfs/osvfs v0.0.0-20260727005008-f671fef6357e
 )
