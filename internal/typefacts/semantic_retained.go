@@ -583,8 +583,9 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	if nextSymbolFacts == nil {
 		nextSymbolFacts = make(map[SymbolID]SymbolFact, len(symbols))
 	}
-	for id := range nextSymbolFacts {
+	for id, fact := range nextSymbolFacts {
 		if _, present := builder.symbolSeen[id]; !present {
+			p.unindexSymbolFact(fact)
 			delete(nextSymbolFacts, id)
 		}
 	}
@@ -593,15 +594,23 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		// generations. A declaration-less synthetic symbol may change its
 		// alias meaning without giving Update a path by which to evict it.
 		if !DurableSymbolID(fact.ID) || !DurableSymbolID(fact.AliasTarget) || len(fact.Declarations) == 0 {
-			delete(nextSymbolFacts, fact.ID)
+			if previous, retained := nextSymbolFacts[fact.ID]; retained {
+				p.unindexSymbolFact(previous)
+				delete(nextSymbolFacts, fact.ID)
+			}
 			return
 		}
 		if _, changed := builder.changedSymbolIDs[fact.ID]; changed {
-			nextSymbolFacts[fact.ID] = SymbolFact{
+			if previous, retained := nextSymbolFacts[fact.ID]; retained {
+				p.unindexSymbolFact(previous)
+			}
+			retainedFact := SymbolFact{
 				ID:           fact.ID,
 				AliasTarget:  fact.AliasTarget,
 				Declarations: fact.Declarations,
 			}
+			nextSymbolFacts[fact.ID] = retainedFact
+			p.indexSymbolFact(retainedFact)
 		}
 	})
 	p.symbolFacts = nextSymbolFacts

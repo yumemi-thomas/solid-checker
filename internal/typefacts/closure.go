@@ -107,6 +107,11 @@ type DemandClosure struct {
 	// only when the backend supplies an exact changed-symbol delta.
 	symbolFacts      map[SymbolID]SymbolFact
 	symbolReferences map[SymbolID][]Location
+	// symbolsByPath indexes symbolFacts by cleaned declaring path, so Update
+	// evicts an affected set by looking up its paths instead of scanning every
+	// retained fact. Every write to symbolFacts goes through indexSymbolFact /
+	// unindexSymbolFact to keep the two exactly in sync.
+	symbolsByPath map[string]map[SymbolID]struct{}
 	// symbolOrder is the preceding materialized table's canonical ID order.
 	// Retained closure uses it as an ordering index so an ordinary edit only
 	// sorts genuinely new symbols instead of re-sorting the complete table.
@@ -147,6 +152,36 @@ func NewDemandClosure(backend Project, trace Trace) (*DemandClosure, error) {
 	return &DemandClosure{backend: full, trace: trace, generation: 1}, nil
 }
 
+// indexSymbolFact records a retained fact under each of its cleaned declaring
+// paths. Callers must pair it with every insert into symbolFacts.
+func (p *DemandClosure) indexSymbolFact(fact SymbolFact) {
+	if p.symbolsByPath == nil {
+		p.symbolsByPath = make(map[string]map[SymbolID]struct{})
+	}
+	for _, declaration := range fact.Declarations {
+		path := filepath.Clean(declaration.Location.Path)
+		ids := p.symbolsByPath[path]
+		if ids == nil {
+			ids = make(map[SymbolID]struct{})
+			p.symbolsByPath[path] = ids
+		}
+		ids[fact.ID] = struct{}{}
+	}
+}
+
+// unindexSymbolFact removes a retained fact from the path index. Callers must
+// pair it with every delete from symbolFacts, passing the fact being removed.
+func (p *DemandClosure) unindexSymbolFact(fact SymbolFact) {
+	for _, declaration := range fact.Declarations {
+		path := filepath.Clean(declaration.Location.Path)
+		ids := p.symbolsByPath[path]
+		delete(ids, fact.ID)
+		if len(ids) == 0 {
+			delete(p.symbolsByPath, path)
+		}
+	}
+}
+
 // demandHashSeed lazily initializes the process-local seed for demand-run
 // hashing; retained state never crosses processes.
 func (p *DemandClosure) demandHashSeed() maphash.Seed {
@@ -181,15 +216,13 @@ func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (Affec
 	for _, change := range changes {
 		invalidPaths[filepath.Clean(change.Path)] = struct{}{}
 	}
-	if len(invalidPaths) != 0 {
-		for id, fact := range p.symbolFacts {
-			for _, declaration := range fact.Declarations {
-				if _, invalid := invalidPaths[filepath.Clean(declaration.Location.Path)]; invalid {
-					delete(p.symbolFacts, id)
-					delete(p.symbolReferences, id)
-					break
-				}
+	for path := range invalidPaths {
+		for id := range p.symbolsByPath[path] {
+			if fact, retained := p.symbolFacts[id]; retained {
+				p.unindexSymbolFact(fact)
+				delete(p.symbolFacts, id)
 			}
+			delete(p.symbolReferences, id)
 		}
 	}
 	p.previousTable = p.table
@@ -222,6 +255,7 @@ func (p *DemandClosure) Close() error {
 	p.closedSyms = nil
 	p.symbolFacts = nil
 	p.symbolReferences = nil
+	p.symbolsByPath = nil
 	p.symbolOrder = nil
 	p.symbolScratch = nil
 	return p.backend.Close()
