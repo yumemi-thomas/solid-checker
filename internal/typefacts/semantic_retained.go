@@ -278,20 +278,42 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 			builder.cachedCanonicalStore = newSymbolFactStore(p.previousTable.Symbols)
 		}
 	}
-	var asyncGroups []demandGroup
+	// The async runs are rebuilt every generation, but into retained scratch:
+	// counting first sizes the flat backing exactly, so it never reallocates
+	// and each group's run is a stable capped window into it. The windows are
+	// only ever read within the async section below — refresh lists copy the
+	// demands out — so reusing the backing next generation is safe.
+	asyncTotal := 0
 	for index := range groups {
-		var asyncDemands []EntityDemand
 		for _, demand := range groups[index].demands {
 			if demand.Async {
-				asyncDemands = append(asyncDemands, demand)
+				asyncTotal++
 			}
 		}
-		if len(asyncDemands) != 0 {
-			asyncGroups = append(asyncGroups, demandGroup{
-				path:    groups[index].path,
-				demands: asyncDemands,
-			})
+	}
+	asyncGroups := p.asyncGroupScratch[:0]
+	if asyncTotal != 0 {
+		flat := p.asyncDemandScratch
+		if cap(flat) < asyncTotal {
+			flat = make([]EntityDemand, 0, asyncTotal)
+		} else {
+			flat = flat[:0]
 		}
+		for index := range groups {
+			start := len(flat)
+			for _, demand := range groups[index].demands {
+				if demand.Async {
+					flat = append(flat, demand)
+				}
+			}
+			if len(flat) > start {
+				asyncGroups = append(asyncGroups, demandGroup{
+					path:    groups[index].path,
+					demands: flat[start:len(flat):len(flat)],
+				})
+			}
+		}
+		p.asyncDemandScratch = flat
 	}
 	stages := semanticDemandStages{}
 	started := time.Now()
@@ -361,6 +383,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	} else {
 		p.asyncFiles = nil
 	}
+	p.asyncGroupScratch = asyncGroups[:0]
 	for _, source := range sources {
 		if err := ctx.Err(); err != nil {
 			return nil, 0, stages, retention, err

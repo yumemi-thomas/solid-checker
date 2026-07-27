@@ -138,8 +138,12 @@ type DemandClosure struct {
 	// asyncFiles retains complete durable async-function contributions by
 	// demand path. Exact changed-path manifests let ordinary edits query only
 	// changed files; cross-file selections fall back to a full async batch.
-	asyncFiles map[string][]AsyncFunctionFact
-	demandSeed maphash.Seed
+	// The two scratch slices back each generation's async demand runs: a flat
+	// buffer the runs window into, and the group list itself.
+	asyncFiles         map[string][]AsyncFunctionFact
+	asyncDemandScratch []EntityDemand
+	asyncGroupScratch  []demandGroup
+	demandSeed         maphash.Seed
 }
 
 // fileClosureContribution is one file's share of the semantic demand
@@ -276,6 +280,9 @@ func (p *DemandClosure) Close() error {
 	p.lastSuppression = nil
 	p.suppressionScratch = nil
 	p.descriptorSeedScratch = nil
+	p.asyncFiles = nil
+	p.asyncDemandScratch = nil
+	p.asyncGroupScratch = nil
 	p.interner = nil
 	p.seenScratch = nil
 	p.fullScratch = nil
