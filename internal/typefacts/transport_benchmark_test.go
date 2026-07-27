@@ -59,6 +59,48 @@ func BenchmarkUpdateOnlyAtScale(b *testing.B) {
 	}
 }
 
+// BenchmarkUpdateShapeChangeAtScale prices the update whose edit changes the
+// module's exported shape: the semantic cutoff cannot apply, so this is the
+// path that must walk the module graph for the affected set. The comment-only
+// edit in BenchmarkUpdateOnlyAtScale never reaches that walk.
+func BenchmarkUpdateShapeChangeAtScale(b *testing.B) {
+	ctx := context.Background()
+	root := generateCorpus(b)
+	projectID := filepath.Clean(filepath.Join(root, "tsconfig.json"))
+	backend, err := tsgo.OpenProject(ctx, projectID, nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	closure, err := typefacts.NewDemandClosure(backend, nil)
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { _ = closure.Close() })
+
+	demands := realisticDemands(b, backend.(demandSource), ctx)
+	if _, err := closure.DemandTableForGroups(ctx, 1, groupedDemands(demands), demandPaths(demands)); err != nil {
+		b.Fatal(err)
+	}
+
+	editPath := filepath.Clean(filepath.Join(root, "mod00.ts"))
+	original, err := os.ReadFile(editPath)
+	if err != nil {
+		b.Fatal(err)
+	}
+
+	edit := 0
+	b.ReportAllocs()
+	for b.Loop() {
+		edit++
+		source := make([]byte, 0, len(original)+48)
+		source = append(source, original...)
+		source = append(source, fmt.Sprintf("\nexport const shapeEdit%d = %d;\n", edit, edit)...)
+		if _, err := closure.Update(ctx, []typefacts.FileChange{{Path: editPath, Version: uint64(edit), Source: source}}); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 // diffBenchTables materializes two tables exactly one accepted leaf edit
 // apart, the way Session holds them: the previous generation's table is safe
 // for precisely one generation before the closure recycles its storage, and

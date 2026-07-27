@@ -80,6 +80,18 @@ type project struct {
 	// the map from the current program on each call, which is also what evicts
 	// files that left the program.
 	sourceBytes map[*ast.SourceFile][]byte
+	// The retained module graph of the accepted program, which the affected
+	// walk consumes instead of re-resolving every import edge per update.
+	// forwardDeps holds each non-declaration file's cleaned resolved
+	// dependencies, reverseDeps the inverted index, and graphFiles the graph's
+	// node set. A content edit to an existing file can change only that file's
+	// own outgoing edges — resolution never depends on another file's content —
+	// so the ordinary keystroke patches one file's edges; anything that can
+	// change program membership or other files' resolution (new files, deletes,
+	// config changes, imports pulling files in or out) rebuilds the graph.
+	forwardDeps map[string][]string
+	reverseDeps map[string]map[string]struct{}
+	graphFiles  map[string]struct{}
 }
 
 // OpenProject loads and binds the TypeScript project at configPath.
@@ -112,6 +124,7 @@ func OpenProject(ctx context.Context, configPath string, trace typefacts.Trace) 
 		durableRefs:     make(map[typefacts.SymbolID]durableSymbolRef),
 	}
 	opened.exportedIdentities = collectExportedIdentities(program, typeChecker)
+	opened.rebuildImportGraph(program)
 	return opened, nil
 }
 
@@ -400,16 +413,41 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.nextSymbol = 0
 
 	stageStarted = time.Now()
+	// The retained graph must advance on every accepted update — even ones
+	// whose affected set is decided without a walk — or a later generation
+	// walks stale edges. oldReverse keeps the pre-update edges alive for the
+	// rebuild path, where the union of both generations' graphs preserves the
+	// prior behaviour: an importer whose edge only the old program knew (a
+	// deleted dependency, a redirected resolution) still lands in the set.
+	oldReverse := p.reverseDeps
+	graphPatched := false
+	if incremental && incrementalPath != "" {
+		graphPatched = p.patchImportGraph(program, incrementalPath)
+	}
+	if !graphPatched {
+		p.rebuildImportGraph(program)
+	}
 	var affected []string
-	if semanticCutoff {
+	switch {
+	case semanticCutoff:
 		// A diagnostic-free declaration emit proves that the module's
 		// exported TypeScript shape is unchanged, and every external export
 		// slot was paired bijectively with its prior canonical ID. Retained
 		// importer facts can therefore keep those IDs even when declaration
 		// spans inside the edited module moved.
 		affected = append([]string(nil), changedPaths...)
-	} else {
-		affected = affectedFiles(changedPaths, oldProgram, program)
+	case globalScopeChange(changedPaths, oldProgram, program):
+		// A change inside the shared global scope can be referenced from
+		// anywhere with no import edge to follow. Fail closed, exactly as
+		// the multi-file and delete paths do.
+		affected = everySourcePath(oldProgram, program)
+	case graphPatched:
+		// A content edit changes only the edited file's own outgoing edges,
+		// and a walk rooted at that file never traverses them, so the
+		// patched graph alone already equals the two-generation union.
+		affected = affectedFromReverseDeps(changedPaths, p.reverseDeps)
+	default:
+		affected = affectedFromReverseDeps(changedPaths, oldReverse, p.reverseDeps)
 	}
 	sort.Strings(affected)
 	affectedDuration := time.Since(stageStarted)
@@ -724,17 +762,107 @@ func everySourcePath(programs ...*compiler.Program) []string {
 	return result
 }
 
-func affectedFiles(changedPaths []string, programs ...*compiler.Program) []string {
-	// Retention rests on the premise that a changed declaring file puts every
-	// referencing file into the affected set. The walk below establishes that
-	// through import edges, which is sound only for external modules: a change
-	// inside the shared global scope can be referenced from anywhere with no
-	// edge to follow, so retained files would keep durable identities whose
-	// declaration spans have moved. Fail closed, exactly as the multi-file and
-	// delete paths do.
-	if globalScopeChange(changedPaths, programs...) {
-		return everySourcePath(programs...)
+// moduleEdges resolves one file's import specifiers to cleaned dependency
+// paths. Duplicate specifiers yield duplicate entries, which every consumer
+// tolerates.
+func moduleEdges(program *compiler.Program, sourceFile *ast.SourceFile) []string {
+	imports := sourceFile.Imports()
+	if len(imports) == 0 {
+		return nil
 	}
+	edges := make([]string, 0, len(imports))
+	for _, specifier := range imports {
+		resolved := program.GetResolvedModuleFromModuleSpecifier(sourceFile, specifier)
+		if resolved == nil {
+			continue
+		}
+		edges = append(edges, filepath.Clean(resolved.ResolvedFileName))
+	}
+	return edges
+}
+
+func (p *project) addImportEdges(importer string, dependencies []string) {
+	for _, dependency := range dependencies {
+		importers := p.reverseDeps[dependency]
+		if importers == nil {
+			importers = make(map[string]struct{})
+			p.reverseDeps[dependency] = importers
+		}
+		importers[importer] = struct{}{}
+	}
+}
+
+// rebuildImportGraph resolves every non-declaration file's imports and
+// replaces the retained graph. This is the O(project) path; ordinary edits go
+// through patchImportGraph instead.
+func (p *project) rebuildImportGraph(program *compiler.Program) {
+	sourceFiles := program.SourceFiles()
+	p.forwardDeps = make(map[string][]string, len(sourceFiles))
+	p.reverseDeps = make(map[string]map[string]struct{}, len(sourceFiles))
+	p.graphFiles = make(map[string]struct{}, len(sourceFiles))
+	for _, sourceFile := range sourceFiles {
+		if sourceFile.IsDeclarationFile {
+			continue
+		}
+		importer := filepath.Clean(sourceFile.FileName())
+		p.graphFiles[importer] = struct{}{}
+		edges := moduleEdges(program, sourceFile)
+		if len(edges) != 0 {
+			p.forwardDeps[importer] = edges
+		}
+		p.addImportEdges(importer, edges)
+	}
+}
+
+// patchImportGraph carries the retained graph across a single-file content
+// edit by re-resolving only the edited file's outgoing edges. It reports false
+// — leaving the graph untouched for rebuildImportGraph — whenever the premise
+// does not hold: the program's membership changed (a new import can pull files
+// in, and a new file can redirect other files' resolution), or the edited file
+// is not a file of the program.
+func (p *project) patchImportGraph(program *compiler.Program, path string) bool {
+	path = filepath.Clean(path)
+	var edited *ast.SourceFile
+	nodes := 0
+	for _, sourceFile := range program.SourceFiles() {
+		if sourceFile.IsDeclarationFile {
+			continue
+		}
+		nodes++
+		name := filepath.Clean(sourceFile.FileName())
+		if _, known := p.graphFiles[name]; !known {
+			return false
+		}
+		if name == path {
+			edited = sourceFile
+		}
+	}
+	if nodes != len(p.graphFiles) || edited == nil {
+		return false
+	}
+	for _, dependency := range p.forwardDeps[path] {
+		importers := p.reverseDeps[dependency]
+		delete(importers, path)
+		if len(importers) == 0 {
+			delete(p.reverseDeps, dependency)
+		}
+	}
+	edges := moduleEdges(program, edited)
+	if len(edges) != 0 {
+		p.forwardDeps[path] = edges
+	} else {
+		delete(p.forwardDeps, path)
+	}
+	p.addImportEdges(path, edges)
+	return true
+}
+
+// affectedFromReverseDeps walks the reverse-dependency indexes from the
+// changed paths to a fixed point. Retention rests on the premise that a
+// changed declaring file puts every referencing file into the affected set,
+// which import edges establish only for external modules; callers guard the
+// shared-global-scope case before walking.
+func affectedFromReverseDeps(changedPaths []string, graphs ...map[string]map[string]struct{}) []string {
 	affected := make(map[string]struct{}, len(changedPaths))
 	queue := make([]string, 0, len(changedPaths))
 	for _, path := range changedPaths {
@@ -742,37 +870,17 @@ func affectedFiles(changedPaths []string, programs ...*compiler.Program) []strin
 		affected[path] = struct{}{}
 		queue = append(queue, path)
 	}
-	reverseDependencies := make(map[string]map[string]struct{})
-	for _, program := range programs {
-		for _, sourceFile := range program.SourceFiles() {
-			if sourceFile.IsDeclarationFile {
-				continue
-			}
-			importer := filepath.Clean(sourceFile.FileName())
-			for _, specifier := range sourceFile.Imports() {
-				resolved := program.GetResolvedModuleFromModuleSpecifier(sourceFile, specifier)
-				if resolved == nil {
-					continue
-				}
-				dependency := filepath.Clean(resolved.ResolvedFileName)
-				importers := reverseDependencies[dependency]
-				if importers == nil {
-					importers = make(map[string]struct{})
-					reverseDependencies[dependency] = importers
-				}
-				importers[importer] = struct{}{}
-			}
-		}
-	}
 	for len(queue) != 0 {
 		dependency := queue[0]
 		queue = queue[1:]
-		for importer := range reverseDependencies[dependency] {
-			if _, seen := affected[importer]; seen {
-				continue
+		for _, graph := range graphs {
+			for importer := range graph[dependency] {
+				if _, seen := affected[importer]; seen {
+					continue
+				}
+				affected[importer] = struct{}{}
+				queue = append(queue, importer)
 			}
-			affected[importer] = struct{}{}
-			queue = append(queue, importer)
 		}
 	}
 	files := make([]string, 0, len(affected))
