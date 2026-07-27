@@ -11,7 +11,7 @@ import (
 )
 
 func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "schema", "typefacts-v2.schema.json"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "schema", "typefacts-v3.schema.json"))
 	if err != nil {
 		t.Fatal(err)
 	}

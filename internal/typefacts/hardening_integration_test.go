@@ -245,7 +245,7 @@ referenced();
 identity("mixed");
 `)
 
-	project, err := tsgo.OpenProject(context.Background(), filepath.Join(root, "app", "tsconfig.json"))
+	project, err := tsgo.OpenProject(context.Background(), filepath.Join(root, "app", "tsconfig.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -506,7 +506,7 @@ feature('ok');
 
 func openProject(t *testing.T, root string) typefacts.Project {
 	t.Helper()
-	project, err := tsgo.OpenProject(context.Background(), filepath.Join(root, "tsconfig.json"))
+	project, err := tsgo.OpenProject(context.Background(), filepath.Join(root, "tsconfig.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

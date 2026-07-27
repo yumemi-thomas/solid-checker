@@ -2,7 +2,6 @@ package typefacts
 
 import (
 	"context"
-	"errors"
 	"os"
 	"testing"
 )
@@ -34,7 +33,7 @@ func lifecycleRequest(id uint64, operation LifecycleOperation, generation uint64
 func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	t.Parallel()
 	backend := newSessionTestBackend()
-	session, err := NewSession(backend, "/project/tsconfig.json", false)
+	session, err := NewSession(backend, "/project/tsconfig.json", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -48,7 +47,7 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	firstRequest := lifecycleRequest(2, LifecycleAnalyze, 1)
 	firstRequest.ResetState = true
 	first := session.Lifecycle(context.Background(), firstRequest)
-	if !first.OK || first.TableMode != TableModeFull || first.StateToken != "1" || len(first.PackedTable) == 0 || first.CompactTable != nil || first.Table != nil {
+	if !first.OK || first.TableMode != TableModeFull || first.StateToken != "1" || len(first.PackedTable) == 0 {
 		t.Fatalf("initial analyze response = %+v", first)
 	}
 	firstTable := FactTableV2From(*session.retained.table, session.projectID, 1)
@@ -78,7 +77,7 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	if !next.OK || next.TableMode != TableModeDelta || next.StateToken != "2" || next.TableDelta == nil {
 		t.Fatalf("post-update analyze response = %+v", next)
 	}
-	applied := ApplyFactTableDeltaV3(firstTable, *next.TableDelta)
+	applied := applyFactTableDeltaV3(t, firstTable, *next.TableDelta)
 	if applied.Generation != 2 {
 		t.Fatalf("delta generation = %d, want 2", applied.Generation)
 	}
@@ -86,7 +85,7 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 
 func TestSessionReturnsSourcesThroughOneSharedArena(t *testing.T) {
 	t.Parallel()
-	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", false)
+	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -127,7 +126,7 @@ func TestSessionReturnsSourcesThroughOneSharedArena(t *testing.T) {
 
 func TestSessionCancellationDoesNotCommitRetainedState(t *testing.T) {
 	t.Parallel()
-	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", false)
+	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +150,7 @@ func TestSessionCancellationDoesNotCommitRetainedState(t *testing.T) {
 func TestSessionOwnsProjectClosure(t *testing.T) {
 	t.Parallel()
 	backend := newSessionTestBackend()
-	session, err := NewSession(backend, "/project/tsconfig.json", false)
+	session, err := NewSession(backend, "/project/tsconfig.json", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -177,11 +176,82 @@ func TestSessionOwnsProjectClosure(t *testing.T) {
 		t.Fatalf("backend Close called %d times, want 1", backend.closeCalls)
 	}
 
-	_, err = session.Closure(context.Background(), ClosureRequest{
-		Schema: TypeFactsSchemaVersionV2, ProjectID: "/project/tsconfig.json",
-		Generation: 1, RulesetVersion: 1,
-	})
-	if !errors.Is(err, ErrSessionClosed) {
-		t.Fatalf("v2 request after close error = %v, want ErrSessionClosed", err)
+	analyze := session.Lifecycle(context.Background(), lifecycleRequest(2, LifecycleAnalyze, 1))
+	if analyze.Error == nil || analyze.Error.Code != "session-closed" {
+		t.Fatalf("analyze after close = %+v, want session-closed", analyze)
+	}
+}
+
+// twoFileBackend serves two sources so an update to one leaves the other
+// retained, which is the only way the retention counters become meaningful.
+type twoFileBackend struct {
+	transportOnlyBackend
+	second SourceFile
+}
+
+func (b twoFileBackend) SourceFiles(context.Context) ([]SourceFile, error) {
+	return []SourceFile{b.transportOnlyBackend.source, b.second}, nil
+}
+
+// TestSessionAnalysisTraversesTheRetainedPath pins that the in-package doubles
+// drive the branches the producer actually ships. Before the doubles gained the
+// production capability quartet they only satisfied the unscoped surface, so
+// every fast unit test exercised a fallback materializer that no release ever
+// runs — and the retention machinery this asserts on went untested outside one
+// integration test.
+func TestSessionAnalysisTraversesTheRetainedPath(t *testing.T) {
+	t.Parallel()
+	const firstPath = "/project/source.ts"
+	const secondPath = "/project/other.ts"
+	backend := twoFileBackend{
+		transportOnlyBackend: transportOnlyBackend{source: SourceFile{
+			Path: firstPath, Source: []byte("export const value = 1\n"),
+		}},
+		second: SourceFile{Path: secondPath, Source: []byte("export const other = 2\n")},
+	}
+	session, err := NewSession(backend, "/project/tsconfig.json", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = session.Close() })
+
+	demands := []EntityDemand{
+		{Location: Location{Path: firstPath, StartByte: 13, EndByte: 18}, Symbol: true, References: true},
+		{Location: Location{Path: secondPath, StartByte: 13, EndByte: 18}, Symbol: true, References: true},
+	}
+
+	cold := lifecycleRequest(1, LifecycleAnalyze, 1)
+	cold.ResetState = true
+	cold.Demands = demands
+	if response := session.Lifecycle(context.Background(), cold); !response.OK || response.TableMode != TableModeFull {
+		t.Fatalf("cold analyze = %+v", response)
+	}
+	token := "1"
+
+	update := lifecycleRequest(2, LifecycleUpdate, 2)
+	update.Changes = []FileChangeV3{{Path: firstPath, Version: 1, Source: []byte("export const value = 11\n")}}
+	if response := session.Lifecycle(context.Background(), update); !response.OK {
+		t.Fatalf("update = %+v", response)
+	}
+
+	warm := lifecycleRequest(3, LifecycleAnalyze, 2)
+	warm.StateToken = token
+	warmResponse := session.Lifecycle(context.Background(), warm)
+	if !warmResponse.OK {
+		t.Fatalf("warm analyze = %+v", warmResponse)
+	}
+
+	retention := session.closure.Stats().Retention
+	if retention.RetainedFiles == 0 {
+		t.Fatalf("no file was retained across the update; retention = %+v", retention)
+	}
+	if retention.CachedSymbolFacts == 0 {
+		t.Fatalf("no durable symbol fact was reused; retention = %+v", retention)
+	}
+	if retention.PatchedSymbolRows == 0 {
+		t.Fatalf("the canonical symbol store was rebuilt rather than patched, so the exact-delta fast path went untested; retention = %+v", retention)
+	}
+	if warmResponse.TableMode != TableModeDelta {
+		t.Fatalf("warm analyze table mode = %q, want %q; retention = %+v", warmResponse.TableMode, TableModeDelta, retention)
 	}
 }

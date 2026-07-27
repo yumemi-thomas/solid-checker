@@ -1,68 +1,11 @@
 package typefacts
 
 import (
-	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
-	"path/filepath"
-	"slices"
 	"strings"
 	"unicode/utf8"
 )
-
-// ClosureResponseFor materializes a frozen-v2 response from the retained
-// TS-Go project. The request generation must match the live closure
-// generation; v2 deliberately has no update operation.
-func (p *ClosureProject) ClosureResponseFor(ctx context.Context, request ClosureRequest) (ClosureResponse, error) {
-	if err := ValidateClosureRequest(request); err != nil {
-		return ClosureResponse{}, err
-	}
-	p.mu.Lock()
-	if request.Generation != p.generation {
-		p.mu.Unlock()
-		return ClosureResponse{}, ErrGenerationMismatch
-	}
-	seeds, err := locationsFromV2(request.CompilerSpans)
-	if err != nil {
-		p.mu.Unlock()
-		return ClosureResponse{}, err
-	}
-	if !slices.Equal(p.compilerSeeds, seeds) {
-		p.compilerSeeds = seeds
-		p.table = nil
-		p.closedSyms = nil
-		p.fullTier = nil
-	}
-	p.mu.Unlock()
-
-	table, err := p.Table(ctx)
-	if err != nil {
-		return ClosureResponse{}, err
-	}
-	response := ClosureResponse{
-		Schema:     TypeFactsSchemaVersionV2,
-		ProjectID:  request.ProjectID,
-		Generation: request.Generation,
-		Table:      tableV2(*table, request.ProjectID, request.Generation),
-	}
-	if err := ValidateClosureResponse(request, response); err != nil {
-		return ClosureResponse{}, err
-	}
-	return response, nil
-}
-
-func locationsFromV2(values []LocationV2) ([]Location, error) {
-	result := make([]Location, 0, len(values))
-	for _, value := range values {
-		start, end := int(value.StartByte), int(value.EndByte)
-		if start < 0 || end < start || uint64(start) != value.StartByte || uint64(end) != value.EndByte {
-			return nil, fmt.Errorf("invalid compiler span %s:%d..%d", value.Path, value.StartByte, value.EndByte)
-		}
-		result = append(result, Location{Path: filepath.Clean(value.Path), StartByte: start, EndByte: end})
-	}
-	return result, nil
-}
 
 func locationV2(value Location) LocationV2 {
 	return LocationV2{Path: value.Path, StartByte: uint64(value.StartByte), EndByte: uint64(value.EndByte)}
@@ -182,8 +125,4 @@ func FactTableV2From(table FactTable, projectID string, generation uint64) FactT
 		result.Files = append(result.Files, fileFactV2(file))
 	}
 	return result
-}
-
-func tableV2(table FactTable, projectID string, generation uint64) FactTableV2 {
-	return FactTableV2From(table, projectID, generation)
 }

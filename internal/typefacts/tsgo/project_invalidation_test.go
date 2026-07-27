@@ -67,7 +67,7 @@ func TestSemanticAffectedSetCutoff(t *testing.T) {
 			}
 
 			ctx := context.Background()
-			opened, err := OpenProject(ctx, configPath)
+			opened, err := OpenProject(ctx, configPath, nil)
 			if err != nil {
 				t.Fatal(err)
 			}

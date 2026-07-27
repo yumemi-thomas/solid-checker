@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
+	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts/tsgo"
 )
 
 func TestProjectDiscoversSemanticAsyncFunctionsAndPostAwaitCalls(t *testing.T) {
@@ -81,21 +82,6 @@ function customStream(value: CustomStream): CustomStream { return value; }
 	facts, err := discoverer.SourceAsyncFunctions(context.Background(), path)
 	if err != nil {
 		t.Fatal(err)
-	}
-	fused, ok := project.(typefacts.FileFactsDiscoverer)
-	if !ok {
-		t.Fatal("project does not expose fused file facts")
-	}
-	fileFacts, err := fused.SourceFileFacts(context.Background(), path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(fileFacts.AsyncFunctions, facts) {
-		t.Fatalf(
-			"fused and standalone async facts diverged:\nstandalone %#v\nfused      %#v",
-			facts,
-			fileFacts.AsyncFunctions,
-		)
 	}
 	asyncFunctions, promisedFunctions := 0, 0
 	afterCalls, nestedCalls, conditionalCalls, dominatedCalls := 0, 0, 0, 0
@@ -221,4 +207,53 @@ async function awaited() {
 	if afterCalls != 1 {
 		t.Fatalf("after-await calls = %d, want 1; facts=%#v", afterCalls, facts)
 	}
+}
+
+// TestAsyncFunctionsAtCrossFileDeclarationInScriptFiles pins the reachability
+// of cross-path async facts, which is what the closure's crossPathAsync
+// bail-out defends against.
+//
+// appendAsyncSymbolFacts walks symbol.ValueDeclaration and never resolves
+// import aliases, so in a module-kind project a cross-file reference dead-ends
+// at the import specifier and every fact stays local. Script-kind files (no
+// imports, no exports) share one global scope, so an identifier resolves
+// straight to the declaration in another file — and a demand in one file yields
+// a fact whose expression lives in another. Deleting the bail-out on the
+// strength of module-only evidence would silently drop those facts from
+// retained state.
+func TestAsyncFunctionsAtCrossFileDeclarationInScriptFiles(t *testing.T) {
+	ctx := context.Background()
+	root, err := filepath.Abs(filepath.Join("testdata", "retained-scripts"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend, err := tsgo.OpenProject(ctx, filepath.Join(root, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = backend.Close() })
+
+	demanded := filepath.Clean(filepath.Join(root, "use-alpha.ts"))
+	calls, err := backend.(typefacts.CallDiscoverer).SourceCalls(ctx, demanded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	locations := make([]typefacts.Location, 0, len(calls))
+	for _, call := range calls {
+		locations = append(locations, call.Callee)
+	}
+	facts, err := backend.(typefacts.AsyncFunctionLookup).AsyncFunctionsAt(ctx, locations)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign := make([]string, 0)
+	for _, fact := range facts {
+		if where := filepath.Clean(fact.Expression.Path); where != demanded {
+			foreign = append(foreign, filepath.Base(where))
+		}
+	}
+	if len(foreign) == 0 {
+		t.Fatalf("no async fact resolved outside the demanded file, so crossPathAsync is unreachable here; facts=%#v", facts)
+	}
+	t.Logf("async demands in use-alpha.ts produced %d fact(s) declared in %v", len(foreign), foreign)
 }

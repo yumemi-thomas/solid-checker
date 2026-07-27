@@ -185,28 +185,8 @@ func TestProjectResolvesCallTargetAndReturnType(t *testing.T) {
 	if call.Target != originalID {
 		t.Errorf("call target = %q, want %q", call.Target, originalID)
 	}
-	if call.ReturnType == "" {
-		t.Error("call has empty return type identity")
-	}
 	if call.ReturnTypeText != "number" {
 		t.Errorf("return type = %q, want number", call.ReturnTypeText)
-	}
-}
-
-func TestProjectTypeAtCallMatchesResolvedReturnType(t *testing.T) {
-	project, fixture := openAliasedProject(t)
-	callLocation := locationOf(t, filepath.Join(fixture, "use.ts"), "localCount()")
-
-	call, err := project.ResolvedCall(context.Background(), callLocation)
-	if err != nil {
-		t.Fatal(err)
-	}
-	typeID, err := project.TypeAt(context.Background(), callLocation)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if typeID != call.ReturnType {
-		t.Errorf("type at call = %q, resolved return type = %q", typeID, call.ReturnType)
 	}
 }
 
@@ -278,7 +258,7 @@ func TestProjectUpdateRechecksChangedFileAndImporter(t *testing.T) {
 func openAliasedProject(t *testing.T) (typefacts.Project, string) {
 	t.Helper()
 	fixture := filepath.Join("testdata", "aliased-import")
-	project, err := tsgo.OpenProject(context.Background(), filepath.Join(fixture, "tsconfig.json"))
+	project, err := tsgo.OpenProject(context.Background(), filepath.Join(fixture, "tsconfig.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

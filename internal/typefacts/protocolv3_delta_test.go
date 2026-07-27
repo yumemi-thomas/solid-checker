@@ -43,7 +43,7 @@ func TestFactTableDeltaMatchesFreshTablesAcrossEditDeleteAndDemandShrink(t *test
 
 	retained := base
 	for _, fresh := range []FactTableV2{edit, deleted, shrunk} {
-		retained = ApplyFactTableDeltaV3(retained, DiffFactTablesV3(retained, fresh))
+		retained = applyFactTableDeltaV3(t, retained, DiffFactTablesV3(retained, fresh))
 		if !reflect.DeepEqual(retained, fresh) {
 			t.Fatalf("delta-applied retained table differs from fresh generation %d\nretained: %#v\nfresh: %#v", fresh.Generation, retained, fresh)
 		}
@@ -100,7 +100,7 @@ func TestInternalFactTableDeltaMatchesFullConversion(t *testing.T) {
 	retained := FactTableV2From(base, "project", 1)
 	for _, freshInternal := range []FactTable{edit, deleted, shrunk} {
 		delta := DiffFactTablesV3FromInternal(previous, freshInternal, freshInternal.Generation)
-		retained = ApplyFactTableDeltaV3(retained, delta)
+		retained = applyFactTableDeltaV3(t, retained, delta)
 		fresh := FactTableV2From(freshInternal, "project", freshInternal.Generation)
 		if !reflect.DeepEqual(retained, fresh) {
 			t.Fatalf("direct delta differs from full conversion at generation %d\nretained: %#v\nfresh: %#v", fresh.Generation, retained, fresh)
@@ -146,7 +146,7 @@ func TestManifestDeltaDoesNotReplaceSharedReferenceRow(t *testing.T) {
 	if len(delta.SymbolReferenceFiles) != 1 {
 		t.Fatalf("reference file deltas = %d, want 1", len(delta.SymbolReferenceFiles))
 	}
-	retained := ApplyFactTableDeltaV3(FactTableV2From(base, base.ProjectID, base.Generation), delta)
+	retained := applyFactTableDeltaV3(t, FactTableV2From(base, base.ProjectID, base.Generation), delta)
 	fresh := FactTableV2From(edit, edit.ProjectID, edit.Generation)
 	if !reflect.DeepEqual(retained, fresh) {
 		t.Fatalf("reference-file delta differs from fresh table\nretained: %#v\nfresh: %#v", retained, fresh)

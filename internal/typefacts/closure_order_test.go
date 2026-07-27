@@ -62,12 +62,11 @@ func TestPatchCanonicalSymbolStoreChangesOnlyDeltaRows(t *testing.T) {
 			changed:    []SymbolID{"b"},
 			references: map[SymbolID][]Location{"b": {newReference}},
 		},
-		symbolSeen:             map[SymbolID]struct{}{"a": {}, "b": {}},
-		fullTier:               map[SymbolID]struct{}{"a": {}, "b": {}},
-		referencesOnlyFullTier: true,
-		cachedReferences:       cachedReferences,
-		cachedCanonicalStore:   newSymbolFactStore(previous),
-		changedSymbolIDs:       map[SymbolID]struct{}{"b": {}},
+		symbolSeen:           map[SymbolID]struct{}{"a": {}, "b": {}},
+		fullTier:             map[SymbolID]struct{}{"a": {}, "b": {}},
+		cachedReferences:     cachedReferences,
+		cachedCanonicalStore: newSymbolFactStore(previous),
+		changedSymbolIDs:     map[SymbolID]struct{}{"b": {}},
 	}
 
 	store, ok, err := builder.patchCanonicalSymbolStore(context.Background(), current)

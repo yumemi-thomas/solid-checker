@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"os"
 	"path"
 	"path/filepath"
 	"sort"
@@ -36,6 +35,7 @@ var _ typefacts.Project = (*project)(nil)
 
 type project struct {
 	mu             sync.Mutex
+	trace          typefacts.Trace
 	configPath     string
 	fs             *overlayFS
 	versions       map[string]uint64
@@ -47,8 +47,6 @@ type project struct {
 	nextSymbol     uint64
 	idsBySymbol    map[*ast.Symbol]typefacts.SymbolID
 	symbolsByID    map[typefacts.SymbolID]*ast.Symbol
-	nextType       uint64
-	idsByType      map[*checker.Type]typefacts.TypeID
 	referenceIndex referenceIndex
 	// sourceFactsMemo carries per-file Source* facts across generations. An
 	// entry is stored only when every symbol identity it contains is durable,
@@ -77,7 +75,9 @@ type project struct {
 }
 
 // OpenProject loads and binds the TypeScript project at configPath.
-func OpenProject(ctx context.Context, configPath string) (typefacts.Project, error) {
+// OpenProject opens one configured project. trace may be nil, which disables
+// backend tracing.
+func OpenProject(ctx context.Context, configPath string, trace typefacts.Trace) (typefacts.Project, error) {
 	absConfigPath, err := filepath.Abs(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("resolve tsconfig path: %w", err)
@@ -90,6 +90,7 @@ func OpenProject(ctx context.Context, configPath string) (typefacts.Project, err
 	}
 
 	opened := &project{
+		trace:           trace,
 		configPath:      absConfigPath,
 		fs:              fs,
 		versions:        make(map[string]uint64),
@@ -99,7 +100,6 @@ func OpenProject(ctx context.Context, configPath string) (typefacts.Project, err
 		generation:      1,
 		idsBySymbol:     make(map[*ast.Symbol]typefacts.SymbolID),
 		symbolsByID:     make(map[typefacts.SymbolID]*ast.Symbol),
-		idsByType:       make(map[*checker.Type]typefacts.TypeID),
 		sourceFactsMemo: make(map[string]*fileFactsMemo),
 		durableRefs:     make(map[typefacts.SymbolID]durableSymbolRef),
 	}
@@ -122,9 +122,11 @@ func typeScriptPathDir(fileName string) string {
 	return path.Dir(normalizeTypeScriptPath(fileName))
 }
 
-// singleCheckerPool serves this adapter's one retained checker. UpdateProgram
-// inherits it through program options, so incremental updates construct one
-// checker instead of the default pool's four.
+// singleCheckerPool serves this adapter's one retained checker (ADR 0004).
+// UpdateProgram inherits it through program options, so incremental updates
+// construct one checker instead of the default pool's four. The pool and the
+// project mutex are one decision: the non-exclusive file-affine lease below is
+// safe only because every entry point is already serialized.
 type singleCheckerPool struct {
 	program *compiler.Program
 	once    sync.Once
@@ -169,10 +171,10 @@ func buildProgram(ctx context.Context, configPath string, fs vfs.FS) (*compiler.
 
 	program := compiler.NewProgram(compiler.ProgramOptions{
 		Config: config,
-		// Parse and bind in parallel, but keep exactly one checker: this
-		// adapter acquires a single checker for the project's lifetime, and
-		// the default non-single-threaded pool constructs four checkers on
-		// every program update, tripling editor-path allocation.
+		// Parse and bind in parallel, but keep exactly one checker (ADR 0004).
+		// SingleThreaded would also yield one checker, but it serializes parse
+		// and bind — the phases that do scale — so the custom pool is what
+		// keeps both properties.
 		SingleThreaded:              core.TSFalse,
 		CreateCheckerPool:           newSingleCheckerPool,
 		Host:                        host,
@@ -373,7 +375,6 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	}
 	clear(p.idsBySymbol)
 	clear(p.symbolsByID)
-	clear(p.idsByType)
 	for symbol, preserved := range currentExports {
 		p.idsBySymbol[symbol] = preserved.id
 		p.symbolsByID[preserved.id] = symbol
@@ -381,7 +382,6 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	}
 	p.filesByName = nil
 	p.nextSymbol = 0
-	p.nextType = 0
 
 	stageStarted = time.Now()
 	var affected []string
@@ -443,11 +443,16 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 		clear(p.declarationShapes)
 	}
 	invalidationDuration := time.Since(stageStarted)
-	if os.Getenv("SOLID_TYPEFACTS_TIMINGS") != "" {
-		fmt.Fprintf(os.Stderr,
-			"{\"typefactsUpdate\":{\"totalNs\":%d,\"overlayNs\":%d,\"oldShapeNs\":%d,\"oldShapeCached\":%t,\"programNs\":%d,\"newShapeNs\":%d,\"affectedNs\":%d,\"invalidationNs\":%d}}\n",
-			time.Since(updateStarted), overlayDuration, oldShapeDuration, oldShapeCached,
-			programDuration, newShapeDuration, affectedDuration, invalidationDuration)
+	if p.trace != nil {
+		p.trace.Metrics("update",
+			typefacts.Nanos("totalNs", time.Since(updateStarted)),
+			typefacts.Nanos("overlayNs", overlayDuration),
+			typefacts.Nanos("oldShapeNs", oldShapeDuration),
+			typefacts.Flag("oldShapeCached", oldShapeCached),
+			typefacts.Nanos("programNs", programDuration),
+			typefacts.Nanos("newShapeNs", newShapeDuration),
+			typefacts.Nanos("affectedNs", affectedDuration),
+			typefacts.Nanos("invalidationNs", invalidationDuration))
 	}
 	return typefacts.AffectedSet{Files: affected}, nil
 }
@@ -668,7 +673,52 @@ func resolvedImportPaths(program *compiler.Program, sourceFile *ast.SourceFile) 
 	return imports, true
 }
 
+// globalScopeChange reports whether any changed file participates in the shared
+// global scope rather than being an external module. Script-kind files (no
+// imports and no exports) and global declaration files are referenced without
+// any import edge, so the reverse-dependency walk in affectedFiles cannot find
+// their referencing files.
+func globalScopeChange(changedPaths []string, programs ...*compiler.Program) bool {
+	for _, path := range changedPaths {
+		path = filepath.Clean(path)
+		for _, program := range programs {
+			sourceFile := program.GetSourceFile(path)
+			if sourceFile == nil {
+				continue
+			}
+			if !ast.IsExternalModule(sourceFile) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func everySourcePath(programs ...*compiler.Program) []string {
+	paths := make(map[string]struct{})
+	for _, program := range programs {
+		for _, sourceFile := range program.SourceFiles() {
+			paths[filepath.Clean(sourceFile.FileName())] = struct{}{}
+		}
+	}
+	result := make([]string, 0, len(paths))
+	for path := range paths {
+		result = append(result, path)
+	}
+	return result
+}
+
 func affectedFiles(changedPaths []string, programs ...*compiler.Program) []string {
+	// Retention rests on the premise that a changed declaring file puts every
+	// referencing file into the affected set. The walk below establishes that
+	// through import edges, which is sound only for external modules: a change
+	// inside the shared global scope can be referenced from anywhere with no
+	// edge to follow, so retained files would keep durable identities whose
+	// declaration spans have moved. Fail closed, exactly as the multi-file and
+	// delete paths do.
+	if globalScopeChange(changedPaths, programs...) {
+		return everySourcePath(programs...)
+	}
 	affected := make(map[string]struct{}, len(changedPaths))
 	queue := make([]string, 0, len(changedPaths))
 	for _, path := range changedPaths {
@@ -817,30 +867,6 @@ func (p *project) Declarations(ctx context.Context, id typefacts.SymbolID) ([]ty
 	return declarations, nil
 }
 
-func (p *project) TypeAt(ctx context.Context, location typefacts.Location) (typefacts.TypeID, error) {
-	if err := ctx.Err(); err != nil {
-		return "", err
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		return "", ErrClosed
-	}
-	sourceFile, err := p.sourceFileFor(location)
-	if err != nil {
-		return "", err
-	}
-	node := ast.GetNodeAtPosition(sourceFile, location.StartByte, false)
-	if node == nil {
-		return "", fmt.Errorf("%w: node at byte %d", typefacts.ErrNotFound, location.StartByte)
-	}
-	value := p.checker.GetTypeAtLocation(node)
-	if value == nil {
-		return "", fmt.Errorf("%w: type at byte %d", typefacts.ErrNotFound, location.StartByte)
-	}
-	return p.idForType(value), nil
-}
-
 func (p *project) DescribeTypeAt(ctx context.Context, location typefacts.Location) (typefacts.TypeDescriptor, error) {
 	if err := ctx.Err(); err != nil {
 		return typefacts.TypeDescriptor{}, err
@@ -944,7 +970,6 @@ func (p *project) ResolvedCall(ctx context.Context, location typefacts.Location)
 	}
 	return typefacts.Call{
 		Target:         p.idFor(target),
-		ReturnType:     p.idForType(returnType),
 		ReturnTypeText: p.checker.TypeToString(returnType),
 	}, nil
 }
@@ -1236,7 +1261,6 @@ func (p *project) Close() error {
 	p.checker = nil
 	clear(p.idsBySymbol)
 	clear(p.symbolsByID)
-	clear(p.idsByType)
 	clear(p.sourceFactsMemo)
 	clear(p.durableRefs)
 	p.referenceIndex.reset()
@@ -1375,16 +1399,6 @@ func (p *project) canonicalSymbol(symbol *ast.Symbol) *ast.Symbol {
 		return original
 	}
 	return symbol
-}
-
-func (p *project) idForType(value *checker.Type) typefacts.TypeID {
-	if id, ok := p.idsByType[value]; ok {
-		return id
-	}
-	p.nextType++
-	id := typefacts.TypeID(fmt.Sprintf("type:%d:%d", p.generation, p.nextType))
-	p.idsByType[value] = id
-	return id
 }
 
 func declarationKind(node *ast.Node) string {

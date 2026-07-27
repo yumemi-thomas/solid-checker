@@ -1,35 +1,25 @@
 package typefacts
 
-import (
-	"errors"
-	"fmt"
-	"regexp"
-)
+import "errors"
 
-// TypeFacts v2 wire model is the frozen closure-request schema consumed by the
-// Rust checker. It replaces v1's client-enumerated demand keys with a request:
-// seeds plus a pinned expansion-ruleset version in, one closed fact table per
-// generation out. The v1 types in protocol.go and materialized.go remain
-// frozen evidence of the rejected eager-materialization candidate.
+// The v2-shaped fact table is the model the producer materializes and the
+// packed v3 frame carries. Its row types are also the delta wire shapes in
+// FactTableDeltaV3, so the "V2" suffix names the fact-table model version —
+// not the retired v2 closure protocol.
 //
 // All offsets are unsigned 64-bit per the wire codec rules. Optional fields
-// are omitted, never null. Field names are the cbor/json tags below; the
-// golden fixtures under benchmarks/phase1/ pin the deterministic bytes.
-const (
-	// TypeFactsSchemaVersionV2 identifies the closure-request wire schema.
-	TypeFactsSchemaVersionV2 uint64 = 2
-	// ExpansionRulesetVersionV1 identifies the normative seed and expansion
-	// canonical expansion rules. Changing the rules bumps this version.
-	ExpansionRulesetVersionV1 uint64 = 1
-)
+// are omitted, never null. Field names are the cbor/json tags below.
 
-var (
-	ErrRulesetMismatch  = errors.New("type facts expansion ruleset version mismatch")
-	ErrSourceHash       = errors.New("type facts source hash mismatch")
-	ErrAliasReferences  = errors.New("type facts alias symbol carries references")
-	ErrClosureGap       = errors.New("type facts closure gap")
-	ErrReferencesUnkept = errors.New("type facts references not included")
-)
+// TypeFactsSchemaVersion is the schema stamped on the internal fact table
+// materialized inside the producer; the transport model version is
+// TypeFactsSchemaVersionV2.
+const TypeFactsSchemaVersion uint64 = 1
+
+var ErrGenerationMismatch = errors.New("type facts generation mismatch")
+
+// TypeFactsSchemaVersionV2 identifies the fact-table model carried in the
+// packed frame and echoed as FactTable.schema by the Rust client.
+const TypeFactsSchemaVersionV2 uint64 = 2
 
 // LocationV2 is a UTF-8 byte range in original source.
 type LocationV2 struct {
@@ -140,71 +130,4 @@ type FactTableV2 struct {
 	Entities   []EntityFactV2   `cbor:"entities" json:"entities"`
 	Symbols    []SymbolFactV2   `cbor:"symbols" json:"symbols"`
 	Files      []FileFactV2     `cbor:"files" json:"files"`
-}
-
-// ClosureRequest asks the type-facts service for one generation's demand
-// closure. compilerSpans carries the ExecutionMap-derived seed spans
-// (callback roles, JSX operations) sorted by path, start, end; every other
-// seed class is derived service-side from sources the service owns.
-type ClosureRequest struct {
-	Schema         uint64       `cbor:"schema" json:"schema"`
-	ProjectID      string       `cbor:"projectId" json:"projectId"`
-	Generation     uint64       `cbor:"generation" json:"generation"`
-	RulesetVersion uint64       `cbor:"rulesetVersion" json:"rulesetVersion"`
-	CompilerSpans  []LocationV2 `cbor:"compilerSpans,omitempty" json:"compilerSpans,omitempty"`
-}
-
-// ClosureResponse answers a ClosureRequest with the closed table.
-type ClosureResponse struct {
-	Schema     uint64      `cbor:"schema" json:"schema"`
-	ProjectID  string      `cbor:"projectId" json:"projectId"`
-	Generation uint64      `cbor:"generation" json:"generation"`
-	Table      FactTableV2 `cbor:"table" json:"table"`
-}
-
-var sourceDigestPattern = regexp.MustCompile(`^sha256:[0-9a-f]{64}$`)
-
-// ValidateClosureRequest enforces schema and ruleset identity and canonical
-// seed-span ordering.
-func ValidateClosureRequest(request ClosureRequest) error {
-	if request.Schema != TypeFactsSchemaVersionV2 {
-		return fmt.Errorf("unsupported TypeFacts schema %d", request.Schema)
-	}
-	if request.RulesetVersion != ExpansionRulesetVersionV1 {
-		return fmt.Errorf("%w: %d", ErrRulesetMismatch, request.RulesetVersion)
-	}
-	if request.ProjectID == "" || request.Generation == 0 {
-		return ErrGenerationMismatch
-	}
-	for index := 1; index < len(request.CompilerSpans); index++ {
-		left, right := request.CompilerSpans[index-1], request.CompilerSpans[index]
-		if left.Path > right.Path || (left.Path == right.Path && (left.StartByte > right.StartByte ||
-			(left.StartByte == right.StartByte && left.EndByte > right.EndByte))) {
-			return fmt.Errorf("compilerSpans not in canonical order at index %d", index)
-		}
-	}
-	return nil
-}
-
-// ValidateClosureResponse enforces schema and generation identity, source
-// digest shape, and the canonical-reference-storage invariant.
-func ValidateClosureResponse(request ClosureRequest, response ClosureResponse) error {
-	if response.Schema != TypeFactsSchemaVersionV2 || response.Table.Schema != TypeFactsSchemaVersionV2 {
-		return fmt.Errorf("unsupported TypeFacts schema %d", response.Schema)
-	}
-	if response.ProjectID != request.ProjectID || response.Generation != request.Generation ||
-		response.Table.ProjectID != request.ProjectID || response.Table.Generation != request.Generation {
-		return ErrGenerationMismatch
-	}
-	for _, source := range response.Table.Sources {
-		if !sourceDigestPattern.MatchString(source.SHA256) {
-			return fmt.Errorf("%w: %s", ErrSourceHash, source.Path)
-		}
-	}
-	for _, symbol := range response.Table.Symbols {
-		if symbol.AliasTarget != "" && len(symbol.References) != 0 {
-			return fmt.Errorf("%w: %s", ErrAliasReferences, symbol.ID)
-		}
-	}
-	return nil
 }

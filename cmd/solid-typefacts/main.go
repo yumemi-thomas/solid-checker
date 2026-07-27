@@ -1,5 +1,5 @@
 // Command solid-typefacts exposes a retained TypeScript-Go project through
-// the frozen TypeFacts v2 length-prefixed deterministic-CBOR protocol.
+// the TypeFacts v3 length-prefixed deterministic-CBOR lifecycle protocol.
 package main
 
 import (
@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/pprof"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,13 +24,37 @@ import (
 
 var buildID = "dev"
 
-// stageTrace reports a service-side stage duration on stderr when
-// SOLID_TYPEFACTS_TIMINGS is set.
-func stageTrace(stage string, elapsed time.Duration) {
+// stderrTrace is the only adapter at the typefacts.Trace seam, and the only
+// place in the producer that reads the environment or writes to stderr. It is
+// installed once at startup, or not at all: a nil Trace means every gated
+// payload computation below the seam is skipped rather than computed and
+// discarded.
+type stderrTrace struct{}
+
+// newTrace resolves the tracing decision once, so no hot path repeats an
+// environment lookup per analysis.
+func newTrace() typefacts.Trace {
 	if os.Getenv("SOLID_TYPEFACTS_TIMINGS") == "" {
-		return
+		return nil
 	}
-	fmt.Fprintf(os.Stderr, "{\"typefactsStage\":%q,\"elapsedNs\":%d}\n", stage, elapsed.Nanoseconds())
+	return stderrTrace{}
+}
+
+func (stderrTrace) Stage(name string, elapsed time.Duration) {
+	fmt.Fprintf(os.Stderr, "{\"typefactsStage\":%q,\"elapsedNs\":%d}\n", name, elapsed.Nanoseconds())
+}
+
+func (stderrTrace) Metrics(name string, values ...typefacts.Metric) {
+	var builder strings.Builder
+	fmt.Fprintf(&builder, "{%q:{", "typefacts:"+name)
+	for index, value := range values {
+		if index > 0 {
+			builder.WriteByte(',')
+		}
+		fmt.Fprintf(&builder, "%q:%d", value.Key, value.Value)
+	}
+	builder.WriteString("}}\n")
+	_, _ = os.Stderr.WriteString(builder.String())
 }
 
 func main() {
@@ -41,6 +66,7 @@ func main() {
 
 func run(ctx context.Context, args []string, input io.Reader, output io.Writer) error {
 	started := time.Now()
+	trace := newTrace()
 	flags := flag.NewFlagSet("solid-typefacts", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	project := flags.String("project", "", "path to tsconfig.json")
@@ -90,78 +116,76 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	if err := writer.Flush(); err != nil {
 		return fmt.Errorf("flush startup handshake: %w", err)
 	}
-	stageTrace("handshake-written", time.Since(started))
+	if trace != nil {
+		trace.Stage("handshake-written", time.Since(started))
+	}
 
-	backend, err := tsgo.OpenProject(ctx, projectID)
+	backend, err := tsgo.OpenProject(ctx, projectID, nil)
 	if err != nil {
 		return fmt.Errorf("open TS-Go project: %w", err)
 	}
-	stageTrace("open", time.Since(started))
-	session, err := typefacts.NewSession(backend, projectID, false)
+	if trace != nil {
+		trace.Stage("open", time.Since(started))
+	}
+	session, err := typefacts.NewSession(backend, projectID, trace)
 	if err != nil {
 		return err
 	}
 	defer session.Close()
 
 	reader := bufio.NewReader(input)
-	responder := &closureResponder{session: session}
-	return serve(ctx, responder, reader, writer)
+	responder := &lifecycleResponder{
+		session:            session,
+		trace:              trace,
+		crashBeforeUpdate:  os.Getenv("SOLID_TYPEFACTS_CRASH_BEFORE_UPDATE"),
+		crashBeforeAnalyze: os.Getenv("SOLID_TYPEFACTS_CRASH_BEFORE_ANALYZE"),
+	}
+	return serve(ctx, responder, reader, writer, trace)
 }
 
 // responder answers decoded requests; serve owns framing, arrival-order
-// dispatch, and cancellation. A v2 error is fatal (matching the frozen
-// protocol's behavior); a v3 request always yields a response frame.
+// dispatch, and cancellation. Every request yields exactly one response frame.
 type responder interface {
-	v2(ctx context.Context, request typefacts.ClosureRequest) (typefacts.ClosureResponse, error)
-	v3(ctx context.Context, request typefacts.LifecycleRequest) typefacts.LifecycleResponse
+	lifecycle(ctx context.Context, request typefacts.LifecycleRequest) typefacts.LifecycleResponse
 }
 
-type closureResponder struct {
+type lifecycleResponder struct {
 	session *typefacts.Session
+	trace   typefacts.Trace
+	// Marker paths for test-only fault injection, resolved once at startup so
+	// no environment lookup sits on the per-request path.
+	crashBeforeUpdate  string
+	crashBeforeAnalyze string
 }
 
-func (r *closureResponder) v2(ctx context.Context, request typefacts.ClosureRequest) (typefacts.ClosureResponse, error) {
-	value, err := r.session.Closure(ctx, request)
-	if err != nil {
-		return typefacts.ClosureResponse{}, fmt.Errorf("materialize closure: %w", err)
-	}
-	return value, nil
-}
-
-func (r *closureResponder) v3(ctx context.Context, request typefacts.LifecycleRequest) typefacts.LifecycleResponse {
+func (r *lifecycleResponder) lifecycle(ctx context.Context, request typefacts.LifecycleRequest) typefacts.LifecycleResponse {
 	switch request.Operation {
 	case typefacts.LifecycleUpdate:
-		crashOnMarker("SOLID_TYPEFACTS_CRASH_BEFORE_UPDATE")
+		crashOnMarker(r.crashBeforeUpdate)
 	case typefacts.LifecycleAnalyze:
-		crashOnMarker("SOLID_TYPEFACTS_CRASH_BEFORE_ANALYZE")
+		crashOnMarker(r.crashBeforeAnalyze)
 	}
 	started := time.Now()
 	response := r.session.Lifecycle(ctx, request)
-	diagnostics := r.session.Diagnostics(request.RequestID)
-	if diagnostics.Updated {
-		stageTrace("update", time.Since(started))
+	if r.trace == nil {
+		return response
 	}
-	if diagnostics.Analyzed {
-		stats := diagnostics.Closure
-		stageTrace("analyze", diagnostics.OperationDuration)
-		stageTrace("analyze-materialize", stats.BuildDuration)
-		stageTrace("analyze-async", stats.AsyncDuration)
-		stageTrace("analyze-demand", stats.DemandDuration)
-		stageTrace("analyze-symbols", stats.SymbolDuration)
-		if os.Getenv("SOLID_TYPEFACTS_TIMINGS") != "" {
-			fmt.Fprintf(os.Stderr, "{\"typefactsRetention\":{\"retained\":%d,\"recomputed\":%d,\"suppressionRecompute\":%t}}\n",
-				stats.Retention.RetainedFiles, stats.Retention.RecomputedFiles, stats.Retention.SuppressionRecompute)
-		}
+	switch {
+	case request.Operation == typefacts.LifecycleUpdate:
+		r.trace.Stage("update", time.Since(started))
+	case response.Timings != nil:
+		// The closure reports its own stage breakdown through the seam; the
+		// request-level duration is the only number the adapter owns.
+		r.trace.Stage("analyze", time.Duration(response.Timings.AnalyzeNs))
 	}
 	return response
 }
 
-// crashOnMarker terminates the service when the named environment variable
-// points at an existing marker file, consuming the marker so a restarted
-// service runs normally. Test-only fault injection for client crash-recovery
-// coverage, following the SOLID_TYPEFACTS_BAD_FRAME precedent.
-func crashOnMarker(name string) {
-	path := os.Getenv(name)
+// crashOnMarker terminates the service when path names an existing marker file,
+// consuming the marker so a restarted service runs normally. Test-only fault
+// injection for client crash-recovery coverage, following the
+// SOLID_TYPEFACTS_BAD_FRAME precedent.
+func crashOnMarker(path string) {
 	if path == "" {
 		return
 	}
@@ -170,11 +194,10 @@ func crashOnMarker(name string) {
 	}
 }
 
-// job is one generation-scoped request awaiting the ordered worker. cancel is
-// non-nil for cancellable v3 operations and is released after dispatch.
+// job is one generation-scoped request awaiting the ordered worker. release is
+// non-nil for cancellable operations and is called after dispatch.
 type job struct {
-	v2            *typefacts.ClosureRequest
-	v3            *typefacts.LifecycleRequest
+	request       *typefacts.LifecycleRequest
 	ctx           context.Context
 	requestDecode time.Duration
 	release       func()
@@ -187,13 +210,13 @@ type job struct {
 // immediately, and the acknowledgement is ordered like any other response.
 // Responses are encoded and written on a dedicated writer goroutine so a
 // large table encode never delays the next request's compute.
-func serve(ctx context.Context, respond responder, input io.Reader, output *bufio.Writer) error {
+func serve(ctx context.Context, respond responder, input io.Reader, output *bufio.Writer, trace typefacts.Trace) error {
 	var cancelMu sync.Mutex
 	cancels := make(map[uint64]context.CancelFunc)
 
 	jobs := newQueue[job]()
-	responses := newQueue[any]()
-	fatal := make(chan error, 2)
+	responses := newQueue[typefacts.LifecycleResponse]()
+	fatal := make(chan error, 1)
 	var pipeline sync.WaitGroup
 
 	pipeline.Add(1)
@@ -205,16 +228,7 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 			if !ok {
 				return
 			}
-			if next.v2 != nil {
-				value, err := respond.v2(ctx, *next.v2)
-				if err != nil {
-					fatal <- err
-					return
-				}
-				responses.push(value)
-				continue
-			}
-			value := respond.v3(next.ctx, *next.v3)
+			value := respond.lifecycle(next.ctx, *next.request)
 			if value.Timings != nil {
 				value.Timings.RequestDecodeNs = uint64(next.requestDecode)
 			}
@@ -239,7 +253,9 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 				fatal <- fmt.Errorf("encode response: %w", err)
 				return
 			}
-			stageTrace("encode-response", time.Since(encodeStarted))
+			if trace != nil {
+				trace.Stage("encode-response", time.Since(encodeStarted))
+			}
 			writeStarted := time.Now()
 			if err := writeFrame(output, encoded); err != nil {
 				fatal <- err
@@ -249,7 +265,9 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 				fatal <- err
 				return
 			}
-			stageTrace("write-response", time.Since(writeStarted))
+			if trace != nil {
+				trace.Stage("write-response", time.Since(writeStarted))
+			}
 		}
 	}()
 
@@ -297,49 +315,32 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 		if next.err != nil {
 			return drain(next.err)
 		}
-		payload := next.payload
 		decodeStarted := time.Now()
-		var envelope map[string]any
-		if err := wirecbor.Unmarshal(payload, &envelope); err != nil {
-			return drain(fmt.Errorf("decode request envelope: %w", err))
+		var request typefacts.LifecycleRequest
+		if err := wirecbor.Unmarshal(next.payload, &request); err != nil {
+			return drain(fmt.Errorf("decode request: %w", err))
 		}
-		schema, _ := envelope["schema"].(uint64)
-		switch schema {
-		case typefacts.TypeFactsSchemaVersionV2:
-			var request typefacts.ClosureRequest
-			if err := wirecbor.Unmarshal(payload, &request); err != nil {
-				return drain(fmt.Errorf("decode v2 request: %w", err))
-			}
-			jobs.push(job{v2: &request, ctx: ctx})
-		case typefacts.TypeFactsSchemaVersionV3:
-			var request typefacts.LifecycleRequest
-			if err := wirecbor.Unmarshal(payload, &request); err != nil {
-				return drain(fmt.Errorf("decode v3 request: %w", err))
-			}
-			if request.Operation == typefacts.LifecycleCancel {
-				cancelMu.Lock()
-				cancel := cancels[request.CancelRequestID]
-				cancelMu.Unlock()
-				if cancel != nil {
-					cancel()
-				}
-				jobs.push(job{v3: &request, ctx: ctx})
-				continue
-			}
-			requestCtx, cancel := context.WithCancel(ctx)
+		if request.Operation == typefacts.LifecycleCancel {
 			cancelMu.Lock()
-			cancels[request.RequestID] = cancel
+			cancel := cancels[request.CancelRequestID]
 			cancelMu.Unlock()
-			requestID := request.RequestID
-			jobs.push(job{v3: &request, ctx: requestCtx, requestDecode: time.Since(decodeStarted), release: func() {
+			if cancel != nil {
 				cancel()
-				cancelMu.Lock()
-				delete(cancels, requestID)
-				cancelMu.Unlock()
-			}})
-		default:
-			return drain(fmt.Errorf("unsupported TypeFacts schema %d", schema))
+			}
+			jobs.push(job{request: &request, ctx: ctx})
+			continue
 		}
+		requestCtx, cancel := context.WithCancel(ctx)
+		cancelMu.Lock()
+		cancels[request.RequestID] = cancel
+		cancelMu.Unlock()
+		requestID := request.RequestID
+		jobs.push(job{request: &request, ctx: requestCtx, requestDecode: time.Since(decodeStarted), release: func() {
+			cancel()
+			cancelMu.Lock()
+			delete(cancels, requestID)
+			cancelMu.Unlock()
+		}})
 	}
 }
 

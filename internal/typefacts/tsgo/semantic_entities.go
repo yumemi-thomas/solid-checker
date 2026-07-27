@@ -143,7 +143,6 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 					if returnType != nil {
 						entity.ResolvedCall = &typefacts.Call{
 							Target:         p.idFor(p.canonicalSymbol(target)),
-							ReturnType:     p.idForType(returnType),
 							ReturnTypeText: p.checker.TypeToString(returnType),
 						}
 					}

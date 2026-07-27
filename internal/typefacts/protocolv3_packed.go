@@ -12,8 +12,24 @@ import (
 // error, and none of the columnar representation leaks into analysis code.
 const packedFactTableVersion = 2
 
+// Optional-field and boolean flag bits carried inside the packed frame. The
+// Rust decoder declares the same values in crates/typefacts/src/v3.rs.
+const bindingFlagArray = 1 << 0
+
+const (
+	functionFlagExported = 1 << 0
+	functionFlagAsync    = 1 << 1
+	functionFlagArrow    = 1 << 2
+)
+
+const asyncFunctionFlagCanReturnAsync = 1 << 0
+
+// packedWriter appends varint-coded rows and interns every string it writes
+// into one shared dictionary. Rows are buffered while the dictionary fills so
+// the frame can emit the dictionary ahead of the rows that index into it.
 type packedWriter struct {
 	bytes []byte
+	dict  *stringTableV3
 }
 
 func (w *packedWriter) u64(value uint64) {
@@ -28,28 +44,33 @@ func (w *packedWriter) raw(value []byte) {
 	w.bytes = append(w.bytes, value...)
 }
 
+// text writes a string as its dictionary index, interning on first use.
+func (w *packedWriter) text(value string) {
+	w.u64(w.dict.intern(value))
+}
+
 type packedLocationState struct {
 	path  uint64
 	start uint64
 	valid bool
 }
 
-func (w *packedWriter) location(location CompactLocationV3, state *packedLocationState) {
-	samePath := state.valid && state.path == location.Path
-	if samePath {
+func (w *packedWriter) location(location LocationV2, state *packedLocationState) {
+	path := w.dict.intern(location.Path)
+	if state.valid && state.path == path {
 		w.u64(1)
 		w.signed(int64(location.StartByte) - int64(state.start))
 	} else {
-		w.u64(location.Path << 1)
+		w.u64(path << 1)
 		w.u64(location.StartByte)
 	}
 	w.u64(location.EndByte - location.StartByte)
-	state.path = location.Path
+	state.path = path
 	state.start = location.StartByte
 	state.valid = true
 }
 
-func (w *packedWriter) locations(locations []CompactLocationV3) {
+func (w *packedWriter) locations(locations []LocationV2) {
 	w.u64(uint64(len(locations)))
 	var state packedLocationState
 	for _, location := range locations {
@@ -57,59 +78,51 @@ func (w *packedWriter) locations(locations []CompactLocationV3) {
 	}
 }
 
-func (w *packedWriter) declaration(declaration CompactDeclarationV3, state *packedLocationState) {
-	w.u64(declaration.Name)
-	w.u64(declaration.Kind)
-	w.location(declaration.Location, state)
-}
-
-func (w *packedWriter) declarations(declarations []CompactDeclarationV3) {
+func (w *packedWriter) declarations(declarations []DeclarationV2) {
 	w.u64(uint64(len(declarations)))
 	var state packedLocationState
 	for _, declaration := range declarations {
-		w.declaration(declaration, &state)
+		w.text(declaration.Name)
+		w.text(declaration.Kind)
+		w.location(declaration.Location, &state)
 	}
 }
 
-func (w *packedWriter) sourceCall(call CompactSourceCallV3) {
+func (w *packedWriter) sourceCall(call SourceCallV2) {
 	var state packedLocationState
 	w.location(call.Location, &state)
 	w.location(call.Callee, &state)
 	w.locations(call.Arguments)
-	w.u64(call.Target)
+	w.text(call.Target)
+}
+
+// packedEntityGroups reports the length of each run of entities that share a
+// source path. Paths map one-to-one onto dictionary indexes, so grouping by
+// the paths themselves groups exactly as grouping by their indexes would.
+func packedEntityGroups(entities []EntityFactV2) []int {
+	var groups []int
+	for index, entity := range entities {
+		if index == 0 || entities[index-1].Location.Path != entity.Location.Path {
+			groups = append(groups, 0)
+		}
+		groups[len(groups)-1]++
+	}
+	return groups
 }
 
 // PackedFactTableV3From encodes a full table into a validated, versioned
 // columnar frame. Locations use per-list path elision, delta-coded starts,
 // and lengths; optional fields use flags; source hashes use raw 32-byte
 // digests; repeated strings use prefix coding.
+//
+// Rows are written straight from the v2 table while the string dictionary
+// fills, so no intermediate row representation is materialized.
 func PackedFactTableV3From(table FactTableV2) ([]byte, error) {
-	compact := CompactFactTableV3From(table)
-	w := packedWriter{bytes: make([]byte, 0, 1<<20)}
-	w.u64(packedFactTableVersion)
-	w.u64(compact.Schema)
-	w.u64(compact.Generation)
+	rows := packedWriter{bytes: make([]byte, 0, 1<<20), dict: newStringTableV3()}
 
-	w.u64(uint64(len(compact.Strings)))
-	previous := ""
-	for _, value := range compact.Strings {
-		if digest, ok := packedHashedSymbol(value); ok {
-			w.u64(1)
-			w.raw(digest)
-		} else {
-			w.u64(0)
-			prefix := commonStringPrefix(previous, value)
-			suffix := value[prefix:]
-			w.u64(uint64(prefix))
-			w.u64(uint64(len(suffix)))
-			w.raw([]byte(suffix))
-			previous = value
-		}
-	}
-
-	w.u64(uint64(len(compact.Sources)))
-	for _, source := range compact.Sources {
-		w.u64(source.Path)
+	rows.u64(uint64(len(table.Sources)))
+	for _, source := range table.Sources {
+		rows.text(source.Path)
 		digest := strings.TrimPrefix(source.SHA256, "sha256:")
 		if len(digest) != 64 {
 			return nil, fmt.Errorf("packed source digest is not canonical: %q", source.SHA256)
@@ -118,84 +131,128 @@ func PackedFactTableV3From(table FactTableV2) ([]byte, error) {
 		if _, err := hex.Decode(raw, []byte(digest)); err != nil {
 			return nil, fmt.Errorf("decode packed source digest: %w", err)
 		}
-		w.raw(raw)
+		rows.raw(raw)
 	}
 
-	w.u64(uint64(len(compact.EntityFiles)))
-	for _, file := range compact.EntityFiles {
-		w.u64(file.Path)
-		w.u64(uint64(len(file.Entities)))
+	groups := packedEntityGroups(table.Entities)
+	rows.u64(uint64(len(groups)))
+	offset := 0
+	for _, length := range groups {
+		group := table.Entities[offset : offset+length]
+		offset += length
+		rows.text(group[0].Location.Path)
+		rows.u64(uint64(length))
 		var previousStart uint64
-		for _, entity := range file.Entities {
-			w.signed(int64(entity.StartByte) - int64(previousStart))
-			w.u64(entity.EndByte - entity.StartByte)
-			w.u64(entity.Symbol)
+		for _, entity := range group {
+			rows.signed(int64(entity.Location.StartByte) - int64(previousStart))
+			rows.u64(entity.Location.EndByte - entity.Location.StartByte)
+			rows.text(entity.Symbol)
 			flags := uint64(0)
-			if len(entity.TypeDescriptor) != 0 {
+			if entity.TypeDescriptor != nil {
 				flags |= 1
 			}
-			if len(entity.ResolvedCall) != 0 {
+			if entity.ResolvedCall != nil {
 				flags |= 2
 			}
-			w.u64(flags)
-			if len(entity.TypeDescriptor) > 1 || len(entity.ResolvedCall) > 1 {
-				return nil, fmt.Errorf("packed entity optional field has multiple rows")
+			rows.u64(flags)
+			if entity.TypeDescriptor != nil {
+				rows.text(entity.TypeDescriptor.Text)
+				rows.text(entity.TypeDescriptor.OriginModule)
+				rows.declarations(entity.TypeDescriptor.AliasDeclarations)
 			}
-			if len(entity.TypeDescriptor) == 1 {
-				descriptor := entity.TypeDescriptor[0]
-				w.u64(descriptor.Text)
-				w.u64(descriptor.OriginModule)
-				w.declarations(descriptor.AliasDeclarations)
+			if entity.ResolvedCall != nil {
+				rows.text(entity.ResolvedCall.Target)
+				rows.text(entity.ResolvedCall.ReturnTypeText)
 			}
-			if len(entity.ResolvedCall) == 1 {
-				call := entity.ResolvedCall[0]
-				w.u64(call.Target)
-				w.u64(call.ReturnTypeText)
-			}
-			previousStart = entity.StartByte
+			previousStart = entity.Location.StartByte
 		}
 	}
 
-	w.u64(uint64(len(compact.Symbols)))
-	for _, symbol := range compact.Symbols {
-		w.u64(symbol.ID)
-		w.u64(symbol.AliasTarget)
-		w.declarations(symbol.Declarations)
-		w.locations(symbol.References)
+	rows.u64(uint64(len(table.Symbols)))
+	for _, symbol := range table.Symbols {
+		rows.text(symbol.ID)
+		rows.text(symbol.AliasTarget)
+		rows.declarations(symbol.Declarations)
+		rows.locations(symbol.References)
 	}
 
-	w.u64(uint64(len(compact.Files)))
-	for _, file := range compact.Files {
-		w.u64(file.Path)
-		w.u64(uint64(len(file.Calls)))
+	rows.u64(uint64(len(table.Files)))
+	for _, file := range table.Files {
+		// The dictionary is ordered by first use and a file interns its own
+		// path after the rows it contains, so buffer the rows and emit the
+		// path index in front of them. Reordering this changes the frame.
+		body := packedWriter{dict: rows.dict}
+		body.u64(uint64(len(file.Calls)))
 		for _, call := range file.Calls {
-			w.sourceCall(call)
+			body.sourceCall(call)
 		}
-		w.u64(uint64(len(file.Bindings)))
+		body.u64(uint64(len(file.Bindings)))
 		for _, binding := range file.Bindings {
-			w.u64(binding.Flags)
-			w.locations(binding.Names)
-			w.sourceCall(binding.Initializer)
+			flags := uint64(0)
+			if binding.Array {
+				flags |= bindingFlagArray
+			}
+			body.u64(flags)
+			body.locations(binding.Names)
+			body.sourceCall(binding.Initializer)
 		}
-		w.u64(uint64(len(file.Functions)))
+		body.u64(uint64(len(file.Functions)))
 		for _, function := range file.Functions {
 			var state packedLocationState
-			w.location(function.Name, &state)
-			w.location(function.Body, &state)
-			w.locations(function.Parameters)
-			w.u64(function.Flags)
+			body.location(function.Name, &state)
+			body.location(function.Body, &state)
+			body.locations(function.Parameters)
+			flags := uint64(0)
+			if function.Exported {
+				flags |= functionFlagExported
+			}
+			if function.Async {
+				flags |= functionFlagAsync
+			}
+			if function.Arrow {
+				flags |= functionFlagArrow
+			}
+			body.u64(flags)
 		}
-		w.u64(uint64(len(file.AsyncFunctions)))
+		body.u64(uint64(len(file.AsyncFunctions)))
 		for _, function := range file.AsyncFunctions {
 			var state packedLocationState
-			w.location(function.Expression, &state)
-			w.u64(function.Symbol)
-			w.u64(function.Target)
-			w.u64(function.Flags)
-			w.locations(function.CallsAfterAwait)
+			body.location(function.Expression, &state)
+			body.text(function.Symbol)
+			body.text(function.Target)
+			flags := uint64(0)
+			if function.CanReturnAsync {
+				flags |= asyncFunctionFlagCanReturnAsync
+			}
+			body.u64(flags)
+			body.locations(function.CallsAfterAwait)
 		}
+		rows.text(file.Path)
+		rows.raw(body.bytes)
 	}
-	return w.bytes, nil
+
+	frame := packedWriter{bytes: make([]byte, 0, len(rows.bytes)+4096)}
+	frame.u64(packedFactTableVersion)
+	frame.u64(table.Schema)
+	frame.u64(table.Generation)
+	frame.u64(uint64(len(rows.dict.values)))
+	previous := ""
+	for _, value := range rows.dict.values {
+		if digest, ok := packedHashedSymbol(value); ok {
+			frame.u64(1)
+			frame.raw(digest)
+			continue
+		}
+		frame.u64(0)
+		prefix := commonStringPrefix(previous, value)
+		suffix := value[prefix:]
+		frame.u64(uint64(prefix))
+		frame.u64(uint64(len(suffix)))
+		frame.raw([]byte(suffix))
+		previous = value
+	}
+	frame.raw(rows.bytes)
+	return frame.bytes, nil
 }
 
 func packedHashedSymbol(symbol string) ([]byte, bool) {

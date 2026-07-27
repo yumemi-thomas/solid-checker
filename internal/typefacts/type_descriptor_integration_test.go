@@ -13,7 +13,7 @@ import (
 
 func TestDescribeTypePreservesSolidAccessorAliasOrigin(t *testing.T) {
 	root := filepath.Join("testdata", "accessor-alias")
-	project, err := tsgo.OpenProject(context.Background(), filepath.Join(root, "tsconfig.json"))
+	project, err := tsgo.OpenProject(context.Background(), filepath.Join(root, "tsconfig.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

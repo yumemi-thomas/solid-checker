@@ -30,7 +30,7 @@ func TestSourceFactsMemoAcrossGenerations(t *testing.T) {
 	cPath := write("c.ts", "export const unrelated = 1;\n")
 
 	ctx := context.Background()
-	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"))
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

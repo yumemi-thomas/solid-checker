@@ -1,0 +1,115 @@
+package typefacts
+
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+
+	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
+)
+
+// v3GoldenFixtures builds the request and response the frozen fixtures under
+// benchmarks/phase1 pin. The pair is deliberately dense: an analyze carrying a
+// compact demand snapshot, and a full response carrying a packed fact table,
+// so both compression schemes and the deterministic-CBOR envelope are covered
+// by one cross-language round trip.
+func v3GoldenFixtures(t *testing.T) (LifecycleRequest, LifecycleResponse) {
+	t.Helper()
+	request := LifecycleRequest{
+		Schema:     TypeFactsSchemaVersionV3,
+		RequestID:  7,
+		Operation:  LifecycleAnalyze,
+		ProjectID:  "/p/tsconfig.json",
+		Generation: 3,
+		Changes: []FileChangeV3{
+			{Path: "/p/a.tsx", Version: 2, Source: []byte("export const value = 1\n")},
+			{Path: "/p/gone.tsx", Version: 3, Deleted: true},
+		},
+		CompactDemands: &CompactDemandsV3{
+			Groups: []CompactDemandGroupV3{
+				{Path: 1, Demands: []byte{0x03, 0x01, 0x03}},
+				{Path: 2, Demands: []byte{0x0d, 0x02, 0x06}},
+			},
+			Strings: []string{"", "/p/a.tsx", "/p/b.tsx"},
+		},
+		StateToken:         "4",
+		RemovedDemandPaths: []string{"/p/dropped.tsx"},
+	}
+
+	packed, err := PackedFactTableV3From(goldenPackedTable(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := LifecycleResponse{
+		Schema:      TypeFactsSchemaVersionV3,
+		RequestID:   7,
+		ProjectID:   "/p/tsconfig.json",
+		Generation:  3,
+		OK:          true,
+		PackedTable: packed,
+		TableMode:   TableModeFull,
+		StateToken:  "5",
+		Affected:    []string{"/p/a.tsx"},
+		Timings:     &LifecycleTimings{AnalyzeNs: 1234, Materialized: true, RetainedFiles: 2},
+	}
+	return request, response
+}
+
+func readV3Golden(t *testing.T, name string) []byte {
+	t.Helper()
+	_, filename, _, ok := runtime.Caller(0)
+	if !ok {
+		t.Fatal("resolve test path")
+	}
+	golden, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "benchmarks", "phase1", name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return golden
+}
+
+// The Rust client decodes these same two files in
+// crates/typefacts/tests/typefacts_v3_codec_golden.rs, so a drift in either
+// language's field names, tags, or canonical ordering fails one of the pair.
+func TestV3RequestGoldenRoundTripsIdentically(t *testing.T) {
+	golden := readV3Golden(t, "typefacts-v3-request-golden.cbor")
+	var request LifecycleRequest
+	if err := wirecbor.Unmarshal(golden, &request); err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateLifecycleRequest(request); err != nil {
+		t.Fatalf("golden request invalid: %v", err)
+	}
+	expected, _ := v3GoldenFixtures(t)
+	if request.RequestID != expected.RequestID || request.Operation != expected.Operation ||
+		request.StateToken != expected.StateToken || request.CompactDemands == nil {
+		t.Fatalf("golden request = %+v", request)
+	}
+	encoded, err := wirecbor.Marshal(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(encoded, golden) {
+		t.Fatalf("golden re-encoding changed: %x != %x", encoded, golden)
+	}
+}
+
+func TestV3ResponseGoldenRoundTripsIdentically(t *testing.T) {
+	golden := readV3Golden(t, "typefacts-v3-response-golden.cbor")
+	var response LifecycleResponse
+	if err := wirecbor.Unmarshal(golden, &response); err != nil {
+		t.Fatal(err)
+	}
+	if !response.OK || response.TableMode != TableModeFull || len(response.PackedTable) == 0 {
+		t.Fatalf("golden response = %+v", response)
+	}
+	encoded, err := wirecbor.Marshal(response)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(encoded, golden) {
+		t.Fatalf("golden re-encoding changed: %x != %x", encoded, golden)
+	}
+}

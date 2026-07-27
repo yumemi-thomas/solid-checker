@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
 )
 
@@ -23,31 +22,6 @@ func TestMarshalIsCoreDeterministic(t *testing.T) {
 	}
 	if !bytes.Equal(first, second) {
 		t.Fatalf("canonical encodings differ: %x != %x", first, second)
-	}
-}
-
-func TestTypeFactsV1GoldenRoundTripsIdentically(t *testing.T) {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("resolve test path")
-	}
-	golden, err := os.ReadFile(filepath.Join(filepath.Dir(filename), "..", "..", "benchmarks", "phase1", "typefacts-v1-golden.cbor"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var response typefacts.BatchResponse
-	if err := wirecbor.Unmarshal(golden, &response); err != nil {
-		t.Fatal(err)
-	}
-	if response.Schema != 1 || response.Table.Schema != 1 || response.Generation != response.Table.Generation {
-		t.Fatalf("golden identity = %#v", response)
-	}
-	encoded, err := wirecbor.Marshal(response)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(encoded, golden) {
-		t.Fatalf("golden re-encoding changed: %x != %x", encoded, golden)
 	}
 }
 

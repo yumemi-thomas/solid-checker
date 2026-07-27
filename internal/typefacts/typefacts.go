@@ -1,5 +1,6 @@
-// Package typefacts defines the compiler-independent seam through which the
-// certification engine asks TypeScript project questions.
+// Package typefacts defines the compiler-independent seam through which a
+// consumer asks questions about a configured TypeScript project, and the v3
+// protocol the producer answers them over.
 package typefacts
 
 import (
@@ -9,18 +10,12 @@ import (
 
 var ErrNotFound = errors.New("type fact not found")
 
-// OpenProjectFunc constructs a Type Facts project at the engine seam.
-type OpenProjectFunc func(context.Context, string) (Project, error)
-
 // SymbolID is an opaque identity stable for one Project analysis version.
 // Implementations may keep an ID resolvable across updates while its
 // declaration is unchanged (durable symbol identity); holders must treat
 // cross-update resolution as best-effort — it either answers for the same
 // declaration or reports ErrNotFound, never a different symbol.
 type SymbolID string
-
-// TypeID is an opaque identity stable for one Project analysis version.
-type TypeID string
 
 // TypeDescriptor exposes source identity for named types without leaking a
 // backend AST. It is available through the optional TypeDescriber capability.
@@ -100,11 +95,9 @@ type AsyncFunctionDiscoverer interface {
 	SourceAsyncFunctions(context.Context, string) ([]AsyncFunctionFact, error)
 }
 
-// AsyncFunctionLookup is the demand-shaped async/control-flow capability used
-// by retained semantic analysis. Implementations return only function and
-// local-alias facts relevant at the requested locations; the legacy
-// AsyncFunctionDiscoverer remains the compatibility surface for whole-file
-// protocol materialization.
+// AsyncFunctionLookup is the demand-shaped async/control-flow capability the
+// retained analysis uses. Implementations return only the function and
+// local-alias facts relevant at the requested locations.
 type AsyncFunctionLookup interface {
 	AsyncFunctionsAt(context.Context, []Location) ([]AsyncFunctionFact, error)
 }
@@ -124,9 +117,12 @@ type Declaration struct {
 }
 
 // Call describes the target and instantiated return type of a resolved call.
+// The return type is carried as text only: the opaque per-generation identity
+// that used to accompany it had no consumer, and because it embedded the
+// generation number it made every entity row holding a resolved call compare as
+// changed on every generation, inflating each delta.
 type Call struct {
 	Target         SymbolID
-	ReturnType     TypeID
 	ReturnTypeText string
 }
 
@@ -158,7 +154,6 @@ type Project interface {
 	ResolveAlias(context.Context, SymbolID) (SymbolID, error)
 	Declarations(context.Context, SymbolID) ([]Declaration, error)
 	References(context.Context, SymbolID) ([]Location, error)
-	TypeAt(context.Context, Location) (TypeID, error)
 	ResolvedCall(context.Context, Location) (Call, error)
 	Close() error
 }

@@ -46,7 +46,7 @@ func BenchmarkSourceFactsAfterLeafEdit(b *testing.B) {
 	leafPath := write("leaf.ts", moduleSource(files, 0))
 
 	ctx := context.Background()
-	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"))
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -117,7 +117,7 @@ func BenchmarkReferencesAfterLeafEdit(b *testing.B) {
 	leafPath := write("leaf.ts", moduleSource(files, 0))
 
 	ctx := context.Background()
-	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"))
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
 	if err != nil {
 		b.Fatal(err)
 	}

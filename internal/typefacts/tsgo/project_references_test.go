@@ -45,7 +45,7 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 	cPath := write("c.ts", "export const unrelated = 1;\n")
 
 	ctx := context.Background()
-	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"))
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -124,7 +124,7 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 
 		// A fresh project over the same tree must answer the same durable
 		// ID with byte-identical locations.
-		fresh, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"))
+		fresh, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -178,7 +178,7 @@ func TestReferencesFailClosedWhenDeclarationDisappears(t *testing.T) {
 	bPath := write("b.ts", "export function makeThing(): number {\n  return 1;\n}\n")
 
 	ctx := context.Background()
-	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"))
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,7 +213,7 @@ func TestReferencesDropFileThatLeftProgram(t *testing.T) {
 	mainPath := write("main.ts", "import { helper } from \"./lib\";\nimport { fromDep } from \"./dep\";\nexport const value = helper() + fromDep;\n")
 
 	ctx := context.Background()
-	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"))
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
 	if err != nil {
 		t.Fatal(err)
 	}

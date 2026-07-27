@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"io"
 	"sync"
 	"testing"
@@ -24,11 +23,7 @@ type orderedResponder struct {
 	analyzeWait time.Duration
 }
 
-func (r *orderedResponder) v2(context.Context, typefacts.ClosureRequest) (typefacts.ClosureResponse, error) {
-	return typefacts.ClosureResponse{}, fmt.Errorf("v2 is not exercised by this test")
-}
-
-func (r *orderedResponder) v3(ctx context.Context, request typefacts.LifecycleRequest) typefacts.LifecycleResponse {
+func (r *orderedResponder) lifecycle(ctx context.Context, request typefacts.LifecycleRequest) typefacts.LifecycleResponse {
 	response := typefacts.LifecycleResponse{
 		Schema: typefacts.TypeFactsSchemaVersionV3, RequestID: request.RequestID,
 		ProjectID: request.ProjectID, Generation: r.generation,
@@ -77,7 +72,7 @@ func startServe(t *testing.T, respond responder) *servedResponder {
 	done := make(chan error, 1)
 	go func() {
 		writer := bufio.NewWriter(responseWriter)
-		done <- serve(context.Background(), respond, requestReader, writer)
+		done <- serve(context.Background(), respond, requestReader, writer, nil)
 		responseWriter.Close()
 	}()
 	return &servedResponder{

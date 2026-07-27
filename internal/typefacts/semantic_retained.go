@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/binary"
 	"hash/maphash"
+	"maps"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,39 +19,32 @@ type demandGroup struct {
 	contribution *fileClosureContribution
 }
 
-// groupDemands splits a canonically sorted demand list into per-file groups.
-// Canonical order sorts by raw path, so runs are contiguous; groups are
-// keyed by the clean path to match retention and affected-set keys.
-func groupDemands(demands []EntityDemand) []demandGroup {
-	if len(demands) == 0 {
-		return nil
-	}
-	var groups []demandGroup
-	start := 0
-	rawPath := demands[0].Location.Path
-	cleanPath := filepath.Clean(rawPath)
+// canonicalDemandRun returns the run sorted by location, allocating only when
+// the input is not already in that order — which is the common case, since both
+// the Rust client and the protocol adapter build runs from sorted input.
+func canonicalDemandRun(demands []EntityDemand) []EntityDemand {
+	sorted := true
 	for index := 1; index < len(demands); index++ {
-		nextRawPath := demands[index].Location.Path
-		if nextRawPath == rawPath {
-			continue
+		previous, current := demands[index-1].Location, demands[index].Location
+		if previous.StartByte > current.StartByte ||
+			(previous.StartByte == current.StartByte && previous.EndByte > current.EndByte) {
+			sorted = false
+			break
 		}
-		rawPath = nextRawPath
-		nextCleanPath := filepath.Clean(nextRawPath)
-		if nextCleanPath == cleanPath {
-			continue
-		}
-		groups = append(groups, demandGroup{
-			path:    cleanPath,
-			demands: demands[start:index],
-		})
-		start = index
-		cleanPath = nextCleanPath
 	}
-	groups = append(groups, demandGroup{
-		path:    cleanPath,
-		demands: demands[start:],
+	if sorted {
+		return demands
+	}
+	canonical := make([]EntityDemand, len(demands))
+	copy(canonical, demands)
+	sort.SliceStable(canonical, func(i, j int) bool {
+		left, right := canonical[i].Location, canonical[j].Location
+		if left.StartByte != right.StartByte {
+			return left.StartByte < right.StartByte
+		}
+		return left.EndByte < right.EndByte
 	})
-	return groups
+	return canonical
 }
 
 // demandListHash digests one file's demand run. The hash only ever compares
@@ -81,8 +75,7 @@ func demandListHash(demands []EntityDemand, seed maphash.Seed) uint64 {
 			buffer = append(buffer, 0)
 		}
 		buffer = append(buffer,
-			flag(demand.Symbol), flag(demand.Type), flag(demand.TypeDescriptor),
-			flag(demand.ResolvedCall), flag(demand.ResolveAlias), flag(demand.Declarations),
+			flag(demand.Symbol), flag(demand.TypeDescriptor), flag(demand.ResolvedCall),
 			flag(demand.References), flag(demand.Async), flag(demand.StructuralAccessor),
 		)
 		_, _ = digest.Write(buffer)
@@ -217,9 +210,8 @@ func (a *entityAccumulator) contribution(hash uint64) *fileClosureContribution {
 // always run under the exact current union, and when the union differs from
 // the previous generation's, the retained files whose descriptor demands
 // touch the difference are refreshed under it. Caller holds p.mu.
-func (p *ClosureProject) materializeSemanticDemandRetained(
+func (p *DemandClosure) materializeSemanticDemandRetained(
 	ctx context.Context,
-	scoped ScopedSemanticEntityDiscoverer,
 	groups []demandGroup,
 	generation uint64,
 ) (*FactTable, map[SymbolID]struct{}, map[SymbolID]struct{}, semanticDemandStages, ClosureRetention, error) {
@@ -229,8 +221,8 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 		return nil, nil, nil, semanticDemandStages{}, retention, err
 	}
 	sort.Slice(sources, func(i, j int) bool { return sources[i].Path < sources[j].Path })
-	table := p.spareDemandTable
-	p.spareDemandTable = nil
+	table := p.recyclableTable
+	p.recyclableTable = nil
 	if table == nil {
 		table = &FactTable{}
 	}
@@ -247,23 +239,23 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 	table.transport = nil
 	builder := &closureBuilder{
 		backend:                 p.backend,
+		trace:                   p.trace,
 		entities:                make(map[Location]*EntityFact),
 		symbolSeen:              make(map[SymbolID]struct{}),
 		fullTier:                make(map[SymbolID]struct{}),
 		descriptors:             make(map[SymbolID]*TypeDescriptor),
 		cleanPaths:              make(map[string]string),
-		referencesOnlyFullTier:  true,
 		cachedSymbolFacts:       p.symbolFacts,
 		cachedReferences:        p.symbolReferences,
 		cachedSymbolOrder:       p.symbolOrder,
 		symbolFactsBuffer:       p.symbolScratch,
 		symbolOrderBuffer:       table.Symbols,
-		removedSymbolCandidates: retainedSymbolCandidates(p.previousDemandTable, p.transportChangedPaths),
+		removedSymbolCandidates: retainedSymbolCandidates(p.previousTable, p.transportChangedPaths),
 	}
-	if p.previousDemandTable != nil {
-		builder.cachedCanonicalStore = p.previousDemandTable.symbols
+	if p.previousTable != nil {
+		builder.cachedCanonicalStore = p.previousTable.symbols
 		if builder.cachedCanonicalStore == nil {
-			builder.cachedCanonicalStore = newSymbolFactStore(p.previousDemandTable.Symbols)
+			builder.cachedCanonicalStore = newSymbolFactStore(p.previousTable.Symbols)
 		}
 	}
 	var asyncGroups []demandGroup
@@ -381,6 +373,12 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 		// demand run may differ. Hash unchanged runs only when no exact
 		// changed-path set is available (initial/full materialization).
 		if contribution == nil || p.transportChangedPaths == nil || pathChanged {
+			// The accumulator merges same-location demands only when they are
+			// adjacent, and the hash is order-sensitive, so a client that emits
+			// a run in varying order would both mis-merge and defeat retention.
+			// Canonicalize rather than reject: it costs nothing for a run that
+			// already arrives sorted, and no caller can get it silently wrong.
+			group.demands = canonicalDemandRun(group.demands)
 			group.hash = demandListHash(group.demands, p.demandHashSeed())
 		} else {
 			group.hash = contribution.demandHash
@@ -416,7 +414,7 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 		}
 	}
 	if len(changedDemands) != 0 {
-		entities, structural, err := scoped.SemanticEntitiesScoped(ctx, changedDemands, union, descriptorSeed)
+		entities, structural, err := p.backend.SemanticEntitiesScoped(ctx, changedDemands, union, descriptorSeed)
 		if err != nil {
 			return nil, nil, nil, stages, retention, err
 		}
@@ -484,7 +482,7 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 		}
 		if len(refresh) != 0 {
 			retention.SuppressionRecompute = true
-			entities, structural, err := scoped.SemanticEntitiesScoped(ctx, refreshDemands, union, nil)
+			entities, structural, err := p.backend.SemanticEntitiesScoped(ctx, refreshDemands, union, nil)
 			if err != nil {
 				return nil, nil, nil, stages, retention, err
 			}
@@ -492,6 +490,25 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 			changed = append(changed, refresh...)
 		}
 	}
+	// Every recomputed group's rows may differ from the preceding generation, and
+	// the transport manifest is built from changed paths alone — so all of them
+	// must be named here or the delta silently omits their rows. There are more
+	// reasons to recompute than an edit: a changed demand run, a descriptor
+	// refresh under a shifted suppression union, or a file holding non-durable
+	// identities, which are re-minted every generation and so can never be
+	// retained. Naming them is what lets such a file take the delta path instead
+	// of forcing a whole-table pack.
+	manifestChangedPaths := p.transportChangedPaths
+	if len(changed) != 0 {
+		manifestChangedPaths = maps.Clone(p.transportChangedPaths)
+		if manifestChangedPaths == nil {
+			manifestChangedPaths = make(map[string]struct{}, len(changed))
+		}
+		for _, index := range changed {
+			manifestChangedPaths[groups[index].path] = struct{}{}
+		}
+	}
+
 	nextRetained := make(map[string]*fileClosureContribution, len(groups))
 	entityTotal := 0
 	for index := range groups {
@@ -602,13 +619,12 @@ func (p *ClosureProject) materializeSemanticDemandRetained(
 	table.Symbols = symbols
 	table.symbols = symbolStore
 	table.Entities = entities
-	table.transport = transportManifest(p.previousDemandTable, table, builder, p.transportChangedPaths)
-	p.spareDemandTable = p.previousDemandTable
-	p.previousDemandTable = nil
+	table.transport = transportManifest(p.previousTable, table, builder, manifestChangedPaths)
+	p.recyclableTable = p.previousTable
+	p.previousTable = nil
 	p.transportChangedPaths = nil
-	// This retained table has the same transport-only lifetime as the
-	// non-retained semantic-demand table. FactTable.Prepare remains required
-	// for materialized tables that actually serve Facts lookups.
+	// The table is transport-only: it exists to be converted to the wire shape
+	// or diffed against its predecessor, and answers no per-location queries.
 	stages.symbol = stages.assembly + stages.sort + stages.close
 	return table, builder.symbolSeen, builder.fullTier, stages, retention, nil
 }

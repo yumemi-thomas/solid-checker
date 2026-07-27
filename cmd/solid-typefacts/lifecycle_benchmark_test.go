@@ -27,9 +27,6 @@ func (lifecycleBenchmarkBackend) Declarations(context.Context, typefacts.SymbolI
 func (lifecycleBenchmarkBackend) References(context.Context, typefacts.SymbolID) ([]typefacts.Location, error) {
 	return nil, typefacts.ErrNotFound
 }
-func (lifecycleBenchmarkBackend) TypeAt(context.Context, typefacts.Location) (typefacts.TypeID, error) {
-	return "", typefacts.ErrNotFound
-}
 func (lifecycleBenchmarkBackend) ResolvedCall(context.Context, typefacts.Location) (typefacts.Call, error) {
 	return typefacts.Call{}, typefacts.ErrNotFound
 }
@@ -50,11 +47,46 @@ func (lifecycleBenchmarkBackend) SourceAsyncFunctions(context.Context, string) (
 	return nil, nil
 }
 
+// The production capability quartet. Without these the double only satisfies
+// the unscoped surface, and the benchmark would drive a materializer no release
+// runs.
+func (lifecycleBenchmarkBackend) SemanticEntitiesScoped(
+	_ context.Context,
+	demands []typefacts.EntityDemand,
+	_ map[typefacts.SymbolID]struct{},
+	_ map[typefacts.SymbolID]*typefacts.TypeDescriptor,
+) ([]typefacts.EntityFact, []typefacts.SymbolID, error) {
+	entities := make([]typefacts.EntityFact, len(demands))
+	structural := make([]typefacts.SymbolID, len(demands))
+	for index := range demands {
+		entities[index] = typefacts.EntityFact{Location: demands[index].Location}
+	}
+	return entities, structural, nil
+}
+
+func (lifecycleBenchmarkBackend) AsyncFunctionsAt(context.Context, []typefacts.Location) ([]typefacts.AsyncFunctionFact, error) {
+	return nil, nil
+}
+
+func (lifecycleBenchmarkBackend) ReferencesBatch(context.Context, []typefacts.SymbolID) (map[typefacts.SymbolID][]typefacts.Location, error) {
+	return nil, nil
+}
+
+func (lifecycleBenchmarkBackend) ChangedReferences(context.Context) ([]typefacts.SymbolID, bool, error) {
+	return nil, true, nil
+}
+
 var lifecycleBenchmarkResponse typefacts.LifecycleResponse
 
+// BenchmarkLifecycleWarmReuse measures the reuse short-circuit alone: the timed
+// request presents a matching state token with no demand changes, so
+// session.lifecycle answers from retained state and never reaches
+// DemandTableForGroups. It prices a token compare and a map lookup — not
+// materialization. For the analysis cost see the corpus benchmarks in
+// internal/typefacts.
 func BenchmarkLifecycleWarmReuse(b *testing.B) {
 	ctx := context.Background()
-	session, err := typefacts.NewSession(lifecycleBenchmarkBackend{}, "/project/tsconfig.json", false)
+	session, err := typefacts.NewSession(lifecycleBenchmarkBackend{}, "/project/tsconfig.json", nil)
 	if err != nil {
 		b.Fatal(err)
 	}

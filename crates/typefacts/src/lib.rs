@@ -1,4 +1,4 @@
-//! Rust client model for the frozen TypeFacts v2 closure protocol.
+//! Rust client model for the TypeFacts v3 lifecycle protocol.
 //!
 //! This package contains checker-derived facts only. Structural discovery is
 //! owned by `solid-ast-facts`; no regex or TypeScript AST shape is reproduced.
@@ -14,11 +14,10 @@ mod session;
 pub mod v3;
 
 pub use session::{
-    AnalysisDemand, Cancellation, ExchangeTimings, Producer, Session, SessionError, TableChanges,
+    AnalysisDemand, Cancellation, DemandGroup, ExchangeTimings, Producer, Session, SessionError,
+    TableChanges, UpdateTimings,
 };
 
-pub const TYPE_FACTS_SCHEMA: u64 = 2;
-pub const EXPANSION_RULESET: u64 = 1;
 pub const MAX_MESSAGE_BYTES: usize = 64 << 20;
 pub const MAX_NESTING_DEPTH: usize = 32;
 pub const MAX_COLLECTION_LENGTH: usize = 1_000_000;
@@ -65,25 +64,7 @@ impl fmt::Display for SourceHash {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct Generation(u64);
-
-impl Generation {
-    pub fn new(value: u64) -> Result<Self, TypeFactsError> {
-        if value == 0 {
-            return Err(TypeFactsError::Generation);
-        }
-        Ok(Self(value))
-    }
-
-    #[must_use]
-    pub const fn get(self) -> u64 {
-        self.0
-    }
-}
-
-#[derive(Clone, Debug, Eq, Hash, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, Hash, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Location {
     pub path: String,
@@ -225,26 +206,6 @@ pub struct FactTable {
     pub files: Arc<Vec<FileFact>>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ClosureRequest {
-    pub schema: u64,
-    pub project_id: String,
-    pub generation: u64,
-    pub ruleset_version: u64,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub compiler_spans: Vec<Location>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ClosureResponse {
-    pub schema: u64,
-    pub project_id: String,
-    pub generation: u64,
-    pub table: FactTable,
-}
-
 #[derive(Debug, Error)]
 pub enum TypeFactsError {
     #[error("message is {actual} bytes, limit is {limit}")]
@@ -255,105 +216,8 @@ pub enum TypeFactsError {
     DeterministicCbor(String),
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
-    #[error("unsupported TypeFacts schema {0}")]
-    Schema(u64),
-    #[error("unsupported expansion ruleset {0}")]
-    Ruleset(u64),
-    #[error("project identity is empty")]
-    ProjectIdentity,
-    #[error("generation identity is invalid")]
-    Generation,
     #[error("source hash is not canonical sha256: {0:?}")]
     SourceHash(String),
-    #[error("response identity does not match request")]
-    IdentityMismatch,
-    #[error("compiler spans are not in canonical order")]
-    CompilerSpanOrder,
-    #[error("source digests are not in canonical order")]
-    SourceOrder,
-    #[error("symbol {0} is an alias but also carries references")]
-    AliasReferences(String),
-    #[error("invalid {category} location {path}:{start}..{end}")]
-    InvalidLocation {
-        category: &'static str,
-        path: String,
-        start: u64,
-        end: u64,
-    },
-}
-
-impl ClosureRequest {
-    pub fn new(
-        project_id: impl Into<String>,
-        generation: Generation,
-        mut compiler_spans: Vec<Location>,
-    ) -> Result<Self, TypeFactsError> {
-        compiler_spans.sort_by(location_cmp);
-        compiler_spans.dedup();
-        let request = Self {
-            schema: TYPE_FACTS_SCHEMA,
-            project_id: project_id.into(),
-            generation: generation.get(),
-            ruleset_version: EXPANSION_RULESET,
-            compiler_spans,
-        };
-        request.validate()?;
-        Ok(request)
-    }
-
-    pub fn validate(&self) -> Result<(), TypeFactsError> {
-        if self.schema != TYPE_FACTS_SCHEMA {
-            return Err(TypeFactsError::Schema(self.schema));
-        }
-        if self.ruleset_version != EXPANSION_RULESET {
-            return Err(TypeFactsError::Ruleset(self.ruleset_version));
-        }
-        if self.project_id.is_empty() {
-            return Err(TypeFactsError::ProjectIdentity);
-        }
-        if self.generation == 0 {
-            return Err(TypeFactsError::Generation);
-        }
-        validate_locations("compiler span", &self.compiler_spans)?;
-        if !self
-            .compiler_spans
-            .windows(2)
-            .all(|pair| location_cmp(&pair[0], &pair[1]).is_le())
-        {
-            return Err(TypeFactsError::CompilerSpanOrder);
-        }
-        Ok(())
-    }
-}
-
-impl ClosureResponse {
-    pub fn validate_for(&self, request: &ClosureRequest) -> Result<(), TypeFactsError> {
-        request.validate()?;
-        if self.schema != TYPE_FACTS_SCHEMA || self.table.schema != TYPE_FACTS_SCHEMA {
-            return Err(TypeFactsError::Schema(self.schema));
-        }
-        if self.project_id != request.project_id
-            || self.generation != request.generation
-            || self.table.project_id != request.project_id
-            || self.table.generation != request.generation
-        {
-            return Err(TypeFactsError::IdentityMismatch);
-        }
-        if !self
-            .table
-            .sources
-            .windows(2)
-            .all(|pair| pair[0].path <= pair[1].path)
-        {
-            return Err(TypeFactsError::SourceOrder);
-        }
-        for symbol in self.table.symbols.iter() {
-            if !symbol.alias_target.is_empty() && !symbol.references.is_empty() {
-                return Err(TypeFactsError::AliasReferences(symbol.id.clone()));
-            }
-        }
-        validate_table_locations(&self.table)
-    }
 }
 
 pub fn encode<T: Serialize>(value: &T) -> Result<Vec<u8>, TypeFactsError> {
@@ -420,121 +284,6 @@ pub fn read_frame(reader: &mut impl Read) -> Result<Vec<u8>, TypeFactsError> {
     let mut payload = vec![0_u8; length];
     reader.read_exact(&mut payload)?;
     Ok(payload)
-}
-
-pub struct FramedTransport<S> {
-    stream: S,
-}
-
-impl<S> FramedTransport<S> {
-    #[must_use]
-    pub const fn new(stream: S) -> Self {
-        Self { stream }
-    }
-
-    #[must_use]
-    pub fn into_inner(self) -> S {
-        self.stream
-    }
-}
-
-impl<S: Read + Write> FramedTransport<S> {
-    pub fn send<Request: Serialize>(&mut self, request: &Request) -> Result<(), TypeFactsError> {
-        let encoded = encode(request)?;
-        write_frame(&mut self.stream, &encoded)
-    }
-
-    pub fn receive<Response: DeserializeOwned>(&mut self) -> Result<Response, TypeFactsError> {
-        let response = read_frame(&mut self.stream)?;
-        decode(&response)
-    }
-
-    pub fn exchange<Request: Serialize, Response: DeserializeOwned>(
-        &mut self,
-        request: &Request,
-    ) -> Result<Response, TypeFactsError> {
-        self.send(request)?;
-        self.receive()
-    }
-
-    pub fn closure(&mut self, request: &ClosureRequest) -> Result<ClosureResponse, TypeFactsError> {
-        request.validate()?;
-        let response: ClosureResponse = self.exchange(request)?;
-        response.validate_for(request)?;
-        Ok(response)
-    }
-}
-
-fn validate_table_locations(table: &FactTable) -> Result<(), TypeFactsError> {
-    for entity in table.entities.iter() {
-        validate_location("entity", &entity.location)?;
-    }
-    for symbol in table.symbols.iter() {
-        for declaration in &symbol.declarations {
-            validate_location("declaration", &declaration.location)?;
-        }
-        validate_locations("symbol reference", &symbol.references)?;
-    }
-    for file in table.files.iter() {
-        for call in &file.calls {
-            validate_location("source call", &call.location)?;
-            validate_location("source callee", &call.callee)?;
-            validate_locations("source argument", &call.arguments)?;
-        }
-        for binding in &file.bindings {
-            for name in &binding.names {
-                validate_optional_location(name)?;
-            }
-        }
-        for function in &file.functions {
-            validate_optional_location(&function.name)?;
-            validate_optional_location(&function.body)?;
-            validate_locations("function parameter", &function.parameters)?;
-        }
-        for function in &file.async_functions {
-            validate_location("async expression", &function.expression)?;
-            validate_locations("call after await", &function.calls_after_await)?;
-        }
-    }
-    Ok(())
-}
-
-fn validate_optional_location(location: &Location) -> Result<(), TypeFactsError> {
-    if location.path.is_empty() && location.start_byte == 0 && location.end_byte == 0 {
-        Ok(())
-    } else {
-        validate_location("optional function", location)
-    }
-}
-
-fn validate_locations(
-    category: &'static str,
-    locations: &[Location],
-) -> Result<(), TypeFactsError> {
-    for location in locations {
-        validate_location(category, location)?;
-    }
-    Ok(())
-}
-
-fn validate_location(category: &'static str, location: &Location) -> Result<(), TypeFactsError> {
-    if location.path.is_empty() || location.start_byte > location.end_byte {
-        return Err(TypeFactsError::InvalidLocation {
-            category,
-            path: location.path.clone(),
-            start: location.start_byte,
-            end: location.end_byte,
-        });
-    }
-    Ok(())
-}
-
-fn location_cmp(left: &Location, right: &Location) -> std::cmp::Ordering {
-    (&left.path, left.start_byte, left.end_byte).cmp(&(
-        &right.path,
-        right.start_byte,
-        right.end_byte,
-    ))
 }
 
 fn canonicalize(value: &mut ciborium::Value) -> Result<(), TypeFactsError> {
@@ -754,33 +503,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn request_is_canonicalized() {
-        let generation = Generation::new(3).unwrap();
-        let request = ClosureRequest::new(
-            "project",
-            generation,
-            vec![
-                Location {
-                    path: "b.ts".into(),
-                    start_byte: 2,
-                    end_byte: 3,
-                },
-                Location {
-                    path: "a.ts".into(),
-                    start_byte: 4,
-                    end_byte: 5,
-                },
-            ],
-        )
-        .unwrap();
-        assert_eq!(request.compiler_spans[0].path, "a.ts");
-        assert_eq!(
-            decode::<ClosureRequest>(&encode(&request).unwrap()).unwrap(),
-            request
-        );
-    }
-
-    #[test]
     fn sidecar_request_fast_path_preserves_canonical_cbor() {
         let location = Location {
             path: "a.ts".into(),
@@ -799,8 +521,6 @@ mod tests {
                 source: b"let a = 1".to_vec(),
                 deleted: false,
             }],
-            structural_spans: vec![location.clone()],
-            compiler_spans: vec![location.clone()],
             demands: vec![v3::EntityDemand {
                 location,
                 query_location: None,
@@ -827,7 +547,7 @@ mod tests {
     }
 
     #[test]
-    fn compact_demands_and_table_round_trip() {
+    fn compact_demands_round_trip() {
         let location = |path: &str, start: u64, end: u64| Location {
             path: path.into(),
             start_byte: start,
@@ -870,176 +590,6 @@ mod tests {
         assert_eq!(decoded, compact);
         assert_eq!(decoded.groups.len(), 2);
         assert_eq!(decoded.strings[0], "");
-
-        let table = FactTable {
-            schema: 2,
-            generation: 3,
-            project_id: "project".into(),
-            sources: vec![SourceDigest {
-                path: "a.ts".into(),
-                sha256: SourceHash::of("src"),
-            }]
-            .into(),
-            entities: vec![
-                EntityFact {
-                    location: location("a.ts", 1, 4),
-                    symbol: "symbol:h:1".into(),
-                    type_descriptor: None,
-                    resolved_call: None,
-                },
-                EntityFact {
-                    location: location("a.ts", 5, 9),
-                    symbol: String::new(),
-                    type_descriptor: Some(TypeDescriptor {
-                        text: "Accessor<number>".into(),
-                        origin_module: "solid-js".into(),
-                        alias_declarations: vec![Declaration {
-                            name: "Accessor".into(),
-                            kind: "TypeAlias".into(),
-                            location: location("d.ts", 10, 30),
-                        }],
-                    }),
-                    resolved_call: Some(ResolvedCall {
-                        target: "symbol:h:1".into(),
-                        return_type_text: "() => number".into(),
-                    }),
-                },
-            ]
-            .into(),
-            symbols: vec![SymbolFact {
-                id: "symbol:h:1".into(),
-                alias_target: String::new(),
-                declarations: vec![Declaration {
-                    name: "count".into(),
-                    kind: "Variable".into(),
-                    location: location("a.ts", 1, 4),
-                }],
-                references: vec![location("a.ts", 1, 4), location("b.ts", 2, 8)],
-            }]
-            .into(),
-            files: vec![FileFact {
-                path: "a.ts".into(),
-                calls: vec![SourceCall {
-                    location: location("a.ts", 2, 8),
-                    callee: location("a.ts", 2, 7),
-                    arguments: vec![location("a.ts", 7, 8)],
-                    target: "symbol:h:1".into(),
-                }],
-                bindings: vec![SourceBinding {
-                    array: true,
-                    names: vec![location("a.ts", 0, 1)],
-                    initializer: SourceCall {
-                        location: location("a.ts", 2, 8),
-                        callee: location("a.ts", 2, 7),
-                        arguments: vec![],
-                        target: String::new(),
-                    },
-                }],
-                functions: vec![SourceFunction {
-                    name: location("a.ts", 20, 25),
-                    body: location("a.ts", 26, 40),
-                    parameters: vec![location("a.ts", 21, 22)],
-                    exported: true,
-                    r#async: false,
-                    arrow: true,
-                }],
-                async_functions: vec![AsyncFunctionFact {
-                    expression: location("a.ts", 26, 40),
-                    symbol: "symbol:h:2".into(),
-                    target: "symbol:h:1".into(),
-                    can_return_async: true,
-                    calls_after_await: vec![location("a.ts", 30, 34)],
-                }],
-            }]
-            .into(),
-        };
-        // Build the compact table the way the Go service does: grouped by
-        // path with one dictionary, then prove expansion is lossless after a
-        // codec round trip.
-        let compact_table = v3::CompactFactTable {
-            schema: table.schema,
-            generation: table.generation,
-            project_id: table.project_id.clone(),
-            strings: vec![
-                "".into(),
-                "a.ts".into(),
-                "symbol:h:1".into(),
-                "Accessor<number>".into(),
-                "solid-js".into(),
-                "Accessor".into(),
-                "TypeAlias".into(),
-                "d.ts".into(),
-                "() => number".into(),
-                "count".into(),
-                "Variable".into(),
-                "b.ts".into(),
-                "symbol:h:2".into(),
-            ],
-            sources: vec![v3::CompactSourceDigest(1, SourceHash::of("src"))],
-            entity_files: vec![v3::CompactEntityFile(
-                1,
-                vec![
-                    v3::CompactEntityFact(1, 4, 2, vec![], vec![]),
-                    v3::CompactEntityFact(
-                        5,
-                        9,
-                        0,
-                        vec![v3::CompactTypeDescriptor(
-                            3,
-                            4,
-                            vec![v3::CompactDeclaration(5, 6, v3::CompactLocation(7, 10, 30))],
-                        )],
-                        vec![v3::CompactCall(2, 8)],
-                    ),
-                ],
-            )],
-            symbols: vec![v3::CompactSymbolFact(
-                2,
-                0,
-                vec![v3::CompactDeclaration(9, 10, v3::CompactLocation(1, 1, 4))],
-                vec![v3::CompactLocation(1, 1, 4), v3::CompactLocation(11, 2, 8)],
-            )],
-            files: vec![v3::CompactFileFact(
-                1,
-                vec![v3::CompactSourceCall(
-                    v3::CompactLocation(1, 2, 8),
-                    v3::CompactLocation(1, 2, 7),
-                    vec![v3::CompactLocation(1, 7, 8)],
-                    2,
-                )],
-                vec![v3::CompactSourceBinding(
-                    v3::BINDING_FLAG_ARRAY,
-                    vec![v3::CompactLocation(1, 0, 1)],
-                    v3::CompactSourceCall(
-                        v3::CompactLocation(1, 2, 8),
-                        v3::CompactLocation(1, 2, 7),
-                        vec![],
-                        0,
-                    ),
-                )],
-                vec![v3::CompactSourceFunction(
-                    v3::CompactLocation(1, 20, 25),
-                    v3::CompactLocation(1, 26, 40),
-                    vec![v3::CompactLocation(1, 21, 22)],
-                    v3::FUNCTION_FLAG_EXPORTED | v3::FUNCTION_FLAG_ARROW,
-                )],
-                vec![v3::CompactAsyncFunction(
-                    v3::CompactLocation(1, 26, 40),
-                    12,
-                    2,
-                    v3::ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC,
-                    vec![v3::CompactLocation(1, 30, 34)],
-                )],
-            )],
-        };
-        let decoded: v3::CompactFactTable = decode(&encode(&compact_table).unwrap()).unwrap();
-        assert_eq!(decoded.expand().unwrap(), table);
-
-        let broken = v3::CompactFactTable {
-            sources: vec![v3::CompactSourceDigest(99, SourceHash::of("src"))],
-            ..compact_table
-        };
-        assert!(broken.expand().is_err());
     }
 
     #[test]
@@ -1052,39 +602,6 @@ mod tests {
         assert!(matches!(
             read_frame(&mut oversized.as_slice()),
             Err(TypeFactsError::MessageLimit { .. })
-        ));
-    }
-
-    #[test]
-    fn rejects_alias_reference_storage() {
-        let request = ClosureRequest::new("project", Generation::new(1).unwrap(), vec![]).unwrap();
-        let response = ClosureResponse {
-            schema: 2,
-            project_id: "project".into(),
-            generation: 1,
-            table: FactTable {
-                schema: 2,
-                generation: 1,
-                project_id: "project".into(),
-                sources: vec![].into(),
-                entities: vec![].into(),
-                symbols: vec![SymbolFact {
-                    id: "s1".into(),
-                    alias_target: "s2".into(),
-                    declarations: vec![],
-                    references: vec![Location {
-                        path: "a.ts".into(),
-                        start_byte: 0,
-                        end_byte: 1,
-                    }],
-                }]
-                .into(),
-                files: vec![].into(),
-            },
-        };
-        assert!(matches!(
-            response.validate_for(&request),
-            Err(TypeFactsError::AliasReferences(_))
         ));
     }
 

@@ -6,7 +6,7 @@ const TypeFactsSchemaVersionV3 uint64 = 3
 
 const (
 	TypeFactsHandshakeProtocol uint64 = 1
-	TypeFactsSchemaSHA256             = "sha256:fae64229118d84de0ba1ddaf7562f81691c15e1faa38add05a11f7060d6666df"
+	TypeFactsSchemaSHA256             = "sha256:5b4c02b23be9b53ec248beed5b8241cb6344af49cf9363c1373a6d9bce91f5a9"
 )
 
 type ServiceHandshake struct {
@@ -40,8 +40,6 @@ type LifecycleRequest struct {
 	ProjectID          string             `cbor:"projectId" json:"projectId"`
 	Generation         uint64             `cbor:"generation" json:"generation"`
 	Changes            []FileChangeV3     `cbor:"changes,omitempty" json:"changes,omitempty"`
-	StructuralSpans    []LocationV2       `cbor:"structuralSpans,omitempty" json:"structuralSpans,omitempty"`
-	CompilerSpans      []LocationV2       `cbor:"compilerSpans,omitempty" json:"compilerSpans,omitempty"`
 	Demands            []EntityDemand     `cbor:"demands,omitempty" json:"demands,omitempty"`
 	CompactDemands     *CompactDemandsV3  `cbor:"compactDemands,omitempty" json:"compactDemands,omitempty"`
 	StateToken         string             `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`
@@ -77,23 +75,21 @@ type LifecycleTimings struct {
 }
 
 type LifecycleResponse struct {
-	Schema        uint64              `cbor:"schema" json:"schema"`
-	RequestID     uint64              `cbor:"requestId" json:"requestId"`
-	ProjectID     string              `cbor:"projectId" json:"projectId"`
-	Generation    uint64              `cbor:"generation" json:"generation"`
-	OK            bool                `cbor:"ok" json:"ok"`
-	Table         *FactTableV2        `cbor:"table,omitempty" json:"table,omitempty"`
-	CompactTable  *CompactFactTableV3 `cbor:"compactTable,omitempty" json:"compactTable,omitempty"`
-	PackedTable   []byte              `cbor:"packedTable,omitempty" json:"packedTable,omitempty"`
-	TableDelta    *FactTableDeltaV3   `cbor:"tableDelta,omitempty" json:"tableDelta,omitempty"`
-	TableMode     string              `cbor:"tableMode,omitempty" json:"tableMode,omitempty"`
-	StateToken    string              `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`
-	Affected      []string            `cbor:"affected,omitempty" json:"affected,omitempty"`
-	Sources       []SourceFileV3      `cbor:"sources,omitempty" json:"sources,omitempty"`
-	SourceArena   string              `cbor:"sourceArena,omitempty" json:"sourceArena,omitempty"`
-	SourceLengths []uint64            `cbor:"sourceLengths,omitempty" json:"sourceLengths,omitempty"`
-	Timings       *LifecycleTimings   `cbor:"timings,omitempty" json:"timings,omitempty"`
-	Error         *LifecycleError     `cbor:"error,omitempty" json:"error,omitempty"`
+	Schema        uint64            `cbor:"schema" json:"schema"`
+	RequestID     uint64            `cbor:"requestId" json:"requestId"`
+	ProjectID     string            `cbor:"projectId" json:"projectId"`
+	Generation    uint64            `cbor:"generation" json:"generation"`
+	OK            bool              `cbor:"ok" json:"ok"`
+	PackedTable   []byte            `cbor:"packedTable,omitempty" json:"packedTable,omitempty"`
+	TableDelta    *FactTableDeltaV3 `cbor:"tableDelta,omitempty" json:"tableDelta,omitempty"`
+	TableMode     string            `cbor:"tableMode,omitempty" json:"tableMode,omitempty"`
+	StateToken    string            `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`
+	Affected      []string          `cbor:"affected,omitempty" json:"affected,omitempty"`
+	Sources       []SourceFileV3    `cbor:"sources,omitempty" json:"sources,omitempty"`
+	SourceArena   string            `cbor:"sourceArena,omitempty" json:"sourceArena,omitempty"`
+	SourceLengths []uint64          `cbor:"sourceLengths,omitempty" json:"sourceLengths,omitempty"`
+	Timings       *LifecycleTimings `cbor:"timings,omitempty" json:"timings,omitempty"`
+	Error         *LifecycleError   `cbor:"error,omitempty" json:"error,omitempty"`
 }
 
 const (

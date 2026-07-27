@@ -2,13 +2,11 @@ package typefacts
 
 import (
 	"bufio"
-	"cmp"
 	"context"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strconv"
 	"time"
@@ -18,19 +16,18 @@ var ErrSessionClosed = errors.New("Type Facts session is closed")
 
 // Session owns one retained Type Facts analysis lifetime. Its interface
 // concentrates project identity, generation, retained demand state, wire
-// table selection, and project closure behind the v2 and v3 request shapes.
+// table selection, and project closure behind the v3 lifecycle request shape.
 //
 // Calls are dispatched serially by the protocol adapter. Cancellation may
 // arrive concurrently by cancelling the context of the active call.
 type Session struct {
-	closure             *ClosureProject
-	projectID           string
-	retained            retainedSessionState
-	retainedDiagnostics SessionDiagnostics
-	inlineSources       map[string]struct{}
-	sourceArenaPath     string
-	closed              bool
-	closeErr            error
+	closure         *DemandClosure
+	trace           Trace
+	projectID       string
+	retained        retainedSessionState
+	sourceArenaPath string
+	closed          bool
+	closeErr        error
 }
 
 type retainedSessionState struct {
@@ -40,54 +37,28 @@ type retainedSessionState struct {
 	table     *FactTable
 }
 
-// SessionDiagnostics carries adapter-facing observability without coupling
-// the session to environment variables or stderr.
-type SessionDiagnostics struct {
-	RequestID         uint64
-	Updated           bool
-	Analyzed          bool
-	OperationDuration time.Duration
-	Closure           ClosureStats
-}
-
 // NewSession assumes ownership of backend, including when construction fails.
-func NewSession(backend Project, projectID string, fallback bool) (*Session, error) {
+// trace may be nil, which disables producer-side tracing.
+func NewSession(backend Project, projectID string, trace Trace) (*Session, error) {
 	projectID = filepath.Clean(projectID)
 	if projectID == "" || projectID == "." {
 		_ = backend.Close()
 		return nil, errors.New("Type Facts session requires a project identity")
 	}
-	closure, err := NewClosureProject(backend, fallback)
+	closure, err := NewDemandClosure(backend, trace)
 	if err != nil {
 		_ = backend.Close()
 		return nil, err
 	}
 	return &Session{
-		closure:       closure,
-		projectID:     projectID,
-		inlineSources: make(map[string]struct{}),
+		closure:   closure,
+		trace:     trace,
+		projectID: projectID,
 	}, nil
-}
-
-func (s *Session) Closure(ctx context.Context, request ClosureRequest) (ClosureResponse, error) {
-	if s.closed {
-		return ClosureResponse{}, ErrSessionClosed
-	}
-	if filepath.Clean(request.ProjectID) != s.projectID {
-		return ClosureResponse{}, ErrGenerationMismatch
-	}
-	return s.closure.ClosureResponseFor(ctx, request)
 }
 
 func (s *Session) Lifecycle(ctx context.Context, request LifecycleRequest) LifecycleResponse {
 	return s.lifecycle(ctx, request)
-}
-
-func (s *Session) Diagnostics(requestID uint64) SessionDiagnostics {
-	if s.retainedDiagnostics.RequestID != requestID {
-		return SessionDiagnostics{}
-	}
-	return s.retainedDiagnostics
 }
 
 func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) LifecycleResponse {
@@ -123,7 +94,6 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		if request.Generation != generation+1 {
 			return fail("generation-mismatch", ErrGenerationMismatch)
 		}
-		started := time.Now()
 		changes := make([]FileChange, 0, len(request.Changes))
 		for _, change := range request.Changes {
 			changes = append(changes, FileChange{
@@ -133,19 +103,6 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		affected, err := s.closure.Update(ctx, changes)
 		if err != nil {
 			return fail("update-failed", err)
-		}
-		for _, change := range changes {
-			path := filepath.Clean(change.Path)
-			if change.Deleted {
-				delete(s.inlineSources, path)
-			} else {
-				s.inlineSources[path] = struct{}{}
-			}
-		}
-		s.retainedDiagnostics = SessionDiagnostics{
-			RequestID:         request.RequestID,
-			Updated:           true,
-			OperationDuration: time.Since(started),
 		}
 		response.Generation = s.closure.generation
 		response.Affected = affected.Files
@@ -163,50 +120,31 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 			}
 			request.Demands = expanded
 		}
-		stateful := request.ResetState || request.StateToken != "" || len(request.RemovedDemandPaths) != 0
-		nextDemands := s.retained.demands
-		if stateful {
-			if !request.ResetState && request.StateToken != s.retained.tokenText {
-				return fail("state-mismatch", ErrGenerationMismatch)
-			}
-			nextDemands = applySessionDemandChanges(s.retained.demands, request.Demands, request.RemovedDemandPaths, request.ResetState)
-			if !request.ResetState &&
-				len(request.Demands) == 0 &&
-				len(request.RemovedDemandPaths) == 0 &&
-				s.retained.table != nil &&
-				s.retained.table.Generation == generation {
-				response.TableMode = TableModeReuse
-				response.StateToken = s.retained.tokenText
-				response.Timings = &LifecycleTimings{}
-				response.OK = true
-				return response
-			}
+		// Analyze is always retained-state scoped: a caller either resets the
+		// state or presents the token the previous analyze handed back.
+		if !request.ResetState && request.StateToken != s.retained.tokenText {
+			return fail("state-mismatch", ErrGenerationMismatch)
 		}
+		if !request.ResetState &&
+			len(request.Demands) == 0 &&
+			len(request.RemovedDemandPaths) == 0 &&
+			s.retained.table != nil &&
+			s.retained.table.Generation == generation {
+			response.TableMode = TableModeReuse
+			response.StateToken = s.retained.tokenText
+			response.Timings = &LifecycleTimings{}
+			response.OK = true
+			return response
+		}
+		nextDemands := applySessionDemandChanges(s.retained.demands, request.Demands, request.RemovedDemandPaths, request.ResetState)
 		started := time.Now()
 		buildSequence := s.closure.Stats().BuildSequence
-		var analyzed ClosureResponse
-		var analyzedTable *FactTable
-		var err error
-		if stateful {
-			analyzedTable, err = s.closure.DemandTableForGroups(
-				ctx,
-				generation,
-				sessionDemandGroups(nextDemands),
-				sessionDemandChangedPaths(request.Demands, request.RemovedDemandPaths),
-			)
-		} else if len(request.Demands) != 0 {
-			analyzed, err = s.closure.DemandResponseFor(ctx, s.projectID, generation, request.Demands)
-		} else {
-			spans := append(append([]LocationV2(nil), request.StructuralSpans...), request.CompilerSpans...)
-			slices.SortFunc(spans, func(a, b LocationV2) int {
-				return cmp.Or(cmp.Compare(a.Path, b.Path), cmp.Compare(a.StartByte, b.StartByte), cmp.Compare(a.EndByte, b.EndByte))
-			})
-			v2 := ClosureRequest{
-				Schema: TypeFactsSchemaVersionV2, ProjectID: s.projectID, Generation: generation,
-				RulesetVersion: 1, CompilerSpans: spans,
-			}
-			analyzed, err = s.closure.ClosureResponseFor(ctx, v2)
-		}
+		analyzedTable, err := s.closure.DemandTableForGroups(
+			ctx,
+			generation,
+			sessionDemandGroups(nextDemands),
+			sessionDemandChangedPaths(request.Demands, request.RemovedDemandPaths),
+		)
 		if err != nil {
 			if ctx.Err() != nil {
 				return fail("analysis-cancelled", ctx.Err())
@@ -219,12 +157,6 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		stats := s.closure.Stats()
 		elapsed := time.Since(started)
 		materialized := stats.BuildSequence != buildSequence
-		s.retainedDiagnostics = SessionDiagnostics{
-			RequestID:         request.RequestID,
-			Analyzed:          true,
-			OperationDuration: elapsed,
-			Closure:           stats,
-		}
 		response.Timings = &LifecycleTimings{
 			AnalyzeNs:    uint64(elapsed),
 			Materialized: materialized,
@@ -240,34 +172,40 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 			response.Timings.RecomputedFiles = uint64(stats.Retention.RecomputedFiles)
 			response.Timings.NonDurableFiles = uint64(stats.Retention.NonDurableFiles)
 		}
-		if stateful {
-			nextToken := s.retained.token + 1
-			nextTokenText := strconv.FormatUint(nextToken, 10)
-			response.StateToken = nextTokenText
-			if request.ResetState || s.retained.table == nil || stats.Retention.NonDurableFiles != 0 {
-				response.TableMode = TableModeFull
-				packed, err := PackedFactTableV3From(FactTableV2From(*analyzedTable, s.projectID, generation))
-				if err != nil {
-					return fail("assembly-failed", err)
-				}
-				response.PackedTable = packed
-			} else {
-				delta := DiffFactTablesV3FromInternal(*s.retained.table, *analyzedTable, generation)
-				if s.retained.table.Generation == analyzedTable.Generation && delta.Empty() {
-					response.TableMode = TableModeReuse
-				} else {
-					response.TableMode = TableModeDelta
-					response.TableDelta = &delta
-				}
+		nextToken := s.retained.token + 1
+		nextTokenText := strconv.FormatUint(nextToken, 10)
+		response.StateToken = nextTokenText
+		// Building the wire form is not part of the analysis the response
+		// reports, so it is traced separately. Without this the cost shows up
+		// nowhere and reads as client or transport overhead.
+		transportStarted := time.Now()
+		// A non-durable file no longer forces a whole-table pack: its recomputed
+		// paths reach the transport manifest, so the delta describes its
+		// re-minted identities like any other change.
+		if request.ResetState || s.retained.table == nil {
+			response.TableMode = TableModeFull
+			packed, err := PackedFactTableV3From(FactTableV2From(*analyzedTable, s.projectID, generation))
+			if err != nil {
+				return fail("assembly-failed", err)
 			}
-			s.retained.token = nextToken
-			s.retained.tokenText = nextTokenText
-			s.retained.demands = nextDemands
-			table := *analyzedTable
-			s.retained.table = &table
+			response.PackedTable = packed
 		} else {
-			response.Table = &analyzed.Table
+			delta := DiffFactTablesV3FromInternal(*s.retained.table, *analyzedTable, generation)
+			if s.retained.table.Generation == analyzedTable.Generation && delta.Empty() {
+				response.TableMode = TableModeReuse
+			} else {
+				response.TableMode = TableModeDelta
+				response.TableDelta = &delta
+			}
 		}
+		if s.trace != nil {
+			s.trace.Stage("analyze-transport-"+response.TableMode, time.Since(transportStarted))
+		}
+		s.retained.token = nextToken
+		s.retained.tokenText = nextTokenText
+		s.retained.demands = nextDemands
+		table := *analyzedTable
+		s.retained.table = &table
 	case LifecycleSources:
 		if request.Generation != generation {
 			return fail("generation-mismatch", ErrGenerationMismatch)
