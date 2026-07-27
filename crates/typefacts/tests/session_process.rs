@@ -97,27 +97,31 @@ fn public_session_owns_the_retained_process_lifecycle() {
 #[cfg(unix)]
 #[test]
 fn analyze_restarts_the_producer_and_replays_updates_after_a_crash() {
-    use std::os::unix::fs::PermissionsExt;
-
     let directory =
         std::env::temp_dir().join(format!("typefacts-session-crash-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
     let pid_path = directory.join("producer.pid");
     let wrapper = directory.join("producer");
+    // The wrapper reports the pid the session is talking to, then becomes the
+    // real producer, so killing that pid kills the session's own process.
     fs::write(
         &wrapper,
         format!(
-            "#!/bin/sh\nprintf '%s' \"$$\" > '{}'\nexec '{}' \"$@\"\n",
+            "printf '%s' \"$$\" > '{}'\nexec '{}' \"$@\"\n",
             pid_path.display(),
             producer().display()
         ),
     )
     .unwrap();
-    fs::set_permissions(&wrapper, fs::Permissions::from_mode(0o755)).unwrap();
 
     let project = project();
+    // The shell is handed the wrapper to *read* rather than being made
+    // executable for the kernel to exec. A sibling test spawning a producer
+    // concurrently forks a copy of this file's still-open write descriptor, and
+    // until that child reaches its own exec the kernel refuses to exec a file
+    // that is open for writing (ETXTBSY). Reading a script has no such rule.
     let mut session = Session::open(
-        Producer::at(&wrapper),
+        Producer::at("/bin/sh").with_arg(&wrapper),
         project.to_string_lossy(),
         Vec::new(),
     )
