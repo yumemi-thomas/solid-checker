@@ -72,6 +72,14 @@ type project struct {
 	// Module-scope export uniqueness makes this deterministic across process
 	// restart while nested/non-exported symbols keep span-based identities.
 	exportedIdentities map[*ast.Symbol]preservedExportIdentity
+	// sourceBytes carries each program file's text as bytes across
+	// generations, keyed by the file's AST node. Incremental program updates
+	// reuse the node for every unchanged file, and a node's text is immutable,
+	// so a hit is always the same bytes — without this, every materializing
+	// analyze re-copies the entire project's source text. SourceFiles rebuilds
+	// the map from the current program on each call, which is also what evicts
+	// files that left the program.
+	sourceBytes map[*ast.SourceFile][]byte
 }
 
 // OpenProject loads and binds the TypeScript project at configPath.
@@ -231,16 +239,24 @@ func (p *project) SourceFiles(ctx context.Context) ([]typefacts.SourceFile, erro
 	if p.closed {
 		return nil, ErrClosed
 	}
-	files := make([]typefacts.SourceFile, 0)
-	for _, sourceFile := range p.program.SourceFiles() {
+	programFiles := p.program.SourceFiles()
+	files := make([]typefacts.SourceFile, 0, len(programFiles))
+	bytesByFile := make(map[*ast.SourceFile][]byte, len(programFiles))
+	for _, sourceFile := range programFiles {
 		if sourceFile.IsDeclarationFile {
 			continue
 		}
+		source, cached := p.sourceBytes[sourceFile]
+		if !cached {
+			source = []byte(sourceFile.Text())
+		}
+		bytesByFile[sourceFile] = source
 		files = append(files, typefacts.SourceFile{
 			Path:   filepath.Clean(sourceFile.FileName()),
-			Source: []byte(sourceFile.Text()),
+			Source: source,
 		})
 	}
+	p.sourceBytes = bytesByFile
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, nil
 }
