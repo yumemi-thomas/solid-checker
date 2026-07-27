@@ -1,7 +1,7 @@
 # solid-checker
 
 Project-level reactivity checker and language server for Solid. The package
-ships native `solid-checker`, `solid-checkerd`, and `solid-typefacts` executables
+ships native `solid-checker` and `solid-typefacts` executables
 for supported platforms.
 
 Install it as a development dependency:
@@ -10,7 +10,7 @@ Install it as a development dependency:
 npm install --save-dev solid-checker
 ```
 
-Then run `solid-checker --certify` or start the `solid-checkerd` language server.
+Then run `solid-checker --certify`.
 
 The CLI uses the Oxc graphical reporter for framed terminal diagnostics:
 

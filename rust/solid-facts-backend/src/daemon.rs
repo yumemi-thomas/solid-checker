@@ -23,7 +23,7 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
-    NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSidecar, analyze_project,
+    NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession, analyze_project,
     discovered_contract_paths, imported_package_roots,
 };
 
@@ -54,7 +54,6 @@ pub fn enabled() -> bool {
 
 pub fn eligible(request: &Request) -> bool {
     request.sources.is_empty()
-        && request.compiler_executable.is_empty()
         && request.emit_contract.is_empty()
         && !request.check_contracts
         && matches!(request.format.as_str(), "json" | "text")
@@ -135,7 +134,7 @@ enum Sync {
 impl State {
     fn open(request: &Request) -> Result<Self, Box<dyn Error>> {
         let typescript =
-            TypeFactsSidecar::spawn(&request.typefacts_executable, &request.typefacts_args)?;
+            TypeFactsSession::open(&request.typefacts_executable, &request.project_id, &[])?;
         let (session, configured) =
             NativeIncrementalSession::open_pipelined(request.project_id.clone(), typescript)?;
         let project = PathBuf::from(&request.project_id);

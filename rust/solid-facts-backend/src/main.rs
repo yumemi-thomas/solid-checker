@@ -12,9 +12,9 @@ use std::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
-    BackendError, CompilerSidecar, SourceFile, TypeFactsSidecar, analyze_project_measured_with,
-    build_project, build_project_native_measured, bundled_solid_js_contract, decode_source_files,
-    default_typefacts_executable, package_contract_statuses, read_package_contract,
+    BackendError, SourceFile, TypeFactsSession, analyze_project_measured_with,
+    build_project_native_measured, bundled_solid_js_contract, default_typefacts_executable,
+    package_contract_statuses, read_package_contract,
 };
 
 #[derive(Deserialize)]
@@ -23,10 +23,6 @@ struct Request {
     project_id: String,
     generation: u64,
     sources: Vec<SourceFile>,
-    #[serde(default)]
-    compiler_executable: String,
-    #[serde(default)]
-    compiler_args: Vec<String>,
     typefacts_executable: String,
     #[serde(default)]
     typefacts_args: Vec<String>,
@@ -54,6 +50,21 @@ struct Request {
     help: bool,
     #[serde(default)]
     serve: bool,
+}
+
+/// Strips the `-project <path>` pair the session now supplies itself, leaving
+/// only producer-specific flags.
+fn producer_arguments(arguments: &[String]) -> Vec<String> {
+    let mut kept = Vec::new();
+    let mut rest = arguments.iter();
+    while let Some(argument) = rest.next() {
+        if argument == "-project" {
+            let _ = rest.next();
+            continue;
+        }
+        kept.push(argument.clone());
+    }
+    kept
 }
 
 fn json_format() -> String {
@@ -102,44 +113,32 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         return Err("--serve requires a Unix platform".into());
     }
     let diagnostics = env!("CARGO_BIN_NAME") == "solid-checker-rust";
-    let mut typescript =
-        TypeFactsSidecar::spawn(&request.typefacts_executable, &request.typefacts_args)?;
-    // The service now flushes its handshake before opening the TypeScript
-    // program, so spawn returns as soon as the process is live rather than
-    // after the program build. `sidecarSpawnNs` therefore measures process
-    // startup plus handshake, no longer the program build (which has moved
-    // into `sourcesFetchNs`, the first request that needs the built program).
+    // `Session::open` spawns the producer, verifies the compatibility
+    // handshake, and opens the project. It returns as soon as the process is
+    // live, so `sidecarSpawnNs` measures startup plus handshake rather than
+    // the TypeScript program build — that lands on the first request needing
+    // the built program, which is the source fetch below.
+    let mut typescript = TypeFactsSession::open(
+        &request.typefacts_executable,
+        &request.project_id,
+        &producer_arguments(&request.typefacts_args),
+    )?;
     let sidecar_spawn_ns = started.elapsed().as_nanos();
     let mut sources_bytes = 0usize;
-    let mut sources_wire_bytes = 0u64;
+    let sources_wire_bytes = 0u64;
     let mut preloaded_bundled = None;
     if request.sources.is_empty() {
-        // Pipeline open+sources ahead of the program build: both frames queue
-        // in the service's ordered worker and are answered once the program is
-        // built. While those responses are in flight, decode the bundled
-        // solid-js contract — the only cold work that needs nothing from the
-        // service — so it overlaps the build instead of running after facts.
-        let pending_open = typescript.lifecycle_send(lifecycle_request(
-            Operation::Open,
-            &request.project_id,
-            request.generation,
-        ))?;
-        let pending_sources = typescript.lifecycle_send(lifecycle_request(
-            Operation::Sources,
-            &request.project_id,
-            request.generation,
-        ))?;
+        // Decode the bundled solid-js contract first: it is the only cold work
+        // that needs nothing from the producer, so it overlaps the program
+        // build that the source fetch is about to wait on.
         if diagnostics {
             preloaded_bundled = Some(bundled_solid_js_contract()?);
         }
-        typescript.lifecycle_wait(pending_open)?;
-        let response = typescript.lifecycle_wait(pending_sources)?;
-        sources_wire_bytes = response.client_response_bytes;
-        request.sources = decode_source_files(response)?;
+        request.sources = typescript.configured_sources()?;
         sources_bytes = request.sources.iter().map(|s| s.source.len()).sum();
     }
     let source_setup_ns = started.elapsed().as_nanos();
-    let (facts, native_timings) = if request.compiler_executable.is_empty() {
+    let (facts, native_timings) = {
         let (facts, timings) = build_project_native_measured(
             request.project_id.clone(),
             request.generation,
@@ -147,19 +146,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             &mut typescript,
         )?;
         (facts, Some(timings))
-    } else {
-        let mut compiler =
-            CompilerSidecar::spawn(&request.compiler_executable, &request.compiler_args)?;
-        (
-            build_project(
-                request.project_id.clone(),
-                request.generation,
-                request.sources.clone(),
-                &mut compiler,
-                &mut typescript,
-            )?,
-            None,
-        )
     };
     let facts_complete_ns = started.elapsed().as_nanos();
     if diagnostics && request.check_contracts {
@@ -252,7 +238,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
 fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
     let mut project = PathBuf::from("tsconfig.json");
-    let mut compiler = std::env::var("SOLID_COMPILER_FACTS_BIN").unwrap_or_default();
     let mut typefacts = default_typefacts_executable();
     let mut contract_paths = Vec::new();
     let mut format = "default".to_owned();
@@ -270,10 +255,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     while let Some(argument) = args.next() {
         if let Some(value) = argument.strip_prefix("--project=") {
             project = PathBuf::from(value);
-            continue;
-        }
-        if let Some(value) = argument.strip_prefix("--compiler=") {
-            compiler = value.into();
             continue;
         }
         if let Some(value) = argument.strip_prefix("--typefacts=") {
@@ -316,7 +297,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--project" | "-project" => {
                 project = PathBuf::from(args.next().ok_or("--project needs a path")?)
             }
-            "--compiler" => compiler = args.next().ok_or("--compiler needs a path")?,
             "--typefacts" => typefacts = args.next().ok_or("--typefacts needs a path")?,
             "--contract" => contract_paths.push(args.next().ok_or("--contract needs a path")?),
             "--format" => format = args.next().ok_or("--format needs a value")?,
@@ -354,8 +334,6 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         project_id: project.to_string_lossy().into_owned(),
         generation: 1,
         sources: vec![],
-        compiler_executable: compiler,
-        compiler_args: vec![],
         typefacts_executable: typefacts,
         typefacts_args: vec!["-project".into(), project.to_string_lossy().into_owned()],
         contract_paths,
@@ -390,7 +368,6 @@ fn print_help() {
            --declaration-artifact <PATH> Hash a declaration artifact into the contract\n\
            --implementation-artifact <PATH> Hash an implementation artifact into the contract\n\
            --typefacts <PATH>           TypeFacts service executable\n\
-           --compiler <PATH>            Use the compiler-facts sidecar instead of native Rust\n\
            --serve                      Run the retained per-project check daemon (Unix only);\n\
                                         clients use it when SOLID_CHECKER_DAEMON=1\n\
            -h, --help                   Print help"
@@ -478,33 +455,6 @@ fn artifact_for_file(
     })
 }
 
-use solid_ts_facts::v3::Operation;
-
-/// A generation-scoped lifecycle request with an empty payload, used for the
-/// open and sources handshakes the cold path pipelines ahead of the build.
-fn lifecycle_request(
-    operation: Operation,
-    project_id: &str,
-    generation: u64,
-) -> solid_ts_facts::v3::Request {
-    solid_ts_facts::v3::Request {
-        schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-        request_id: 0,
-        operation,
-        project_id: project_id.into(),
-        generation,
-        changes: vec![],
-        structural_spans: vec![],
-        compiler_spans: vec![],
-        demands: vec![],
-        compact_demands: None,
-        state_token: String::new(),
-        reset_state: false,
-        removed_demand_paths: vec![],
-        cancel_request_id: 0,
-    }
-}
-
 /// A per-project daemon holding the retained `NativeIncrementalSession` behind
 /// a Unix socket, so repeat CLI checks reuse the warm session instead of
 /// rebuilding the TypeScript program and demand closure from scratch.
@@ -530,10 +480,16 @@ fn main() {
                 })
                 .unwrap_or_else(|| "solid-facts-backend".into());
             eprintln!("{program}: {error}");
-            let exit_code = if error
-                .downcast_ref::<BackendError>()
-                .is_some_and(|error| matches!(error, BackendError::Handshake(_)))
-            {
+            // An incompatible producer is its own exit code so callers can
+            // tell "wrong build" from "analysis failed". The session reports
+            // it through its own error type now.
+            let exit_code = if error.downcast_ref::<BackendError>().is_some_and(|error| {
+                matches!(
+                    error,
+                    BackendError::Handshake(_)
+                        | BackendError::TypeFactsSession(typefacts::SessionError::Handshake(_))
+                )
+            }) {
                 3
             } else {
                 2

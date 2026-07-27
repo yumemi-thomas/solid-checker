@@ -10,7 +10,7 @@ use std::{
 
 use solid_facts::{FileFacts, ProjectFacts};
 use solid_facts_core::Span;
-use solid_ts_facts::{EntityFact, FactTable, FileFact, Location, SymbolFact, TypeDescriptor};
+use typefacts::{EntityFact, FactTable, FileFact, Location, SymbolFact, TypeDescriptor};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
@@ -20,7 +20,7 @@ pub(super) struct EntitySymbols {
 impl EntitySymbols {
     pub(super) fn get(&self, location: &Location) -> Option<&String> {
         self.by_path
-            .get(location.path.as_str())
+            .get(location.path.as_ref())
             .and_then(|entities| entities.get(&(location.start_byte, location.end_byte)))
     }
 
@@ -61,7 +61,7 @@ impl<'a> ProjectIndexes<'a> {
             .typescript
             .symbols
             .iter()
-            .map(|symbol| (symbol.id.as_str(), symbol))
+            .map(|symbol| (symbol.id.as_ref(), symbol))
             .collect();
         Self {
             files_by_path,
@@ -74,7 +74,7 @@ impl<'a> ProjectIndexes<'a> {
     pub(super) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
         self.typescript
             .files
-            .binary_search_by(|file| file.path.as_str().cmp(path))
+            .binary_search_by(|file| file.path.as_ref().cmp(path))
             .ok()
             .map(|index| &self.typescript.files[index])
     }
@@ -83,11 +83,11 @@ impl<'a> ProjectIndexes<'a> {
         let start = self
             .typescript
             .entities
-            .partition_point(|entity| entity.location.path.as_str() < path);
+            .partition_point(|entity| entity.location.path.as_ref() < path);
         let end = self
             .typescript
             .entities
-            .partition_point(|entity| entity.location.path.as_str() <= path);
+            .partition_point(|entity| entity.location.path.as_ref() <= path);
         &self.typescript.entities[start..end]
     }
 }
@@ -312,18 +312,21 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
         let files = &self.facts.typescript.files;
         files
-            .binary_search_by(|file| file.path.as_str().cmp(path))
+            .binary_search_by(|file| file.path.as_ref().cmp(path))
             .ok()
             .map(|index| &files[index])
     }
 
     /// The symbol a callee span resolves to: the exact entity at the span,
     /// falling back to the smallest symbol-bearing entity contained in it.
-    pub(super) fn callee_symbol(&self, path: &str, callee: Span) -> Option<&'a String> {
-        self.entities.at(path, callee).or_else(|| {
-            self.smallest_contained(path, callee, |entity| !entity.symbol.is_empty())
-                .map(|entity| &entity.symbol)
-        })
+    pub(super) fn callee_symbol(&self, path: &str, callee: Span) -> Option<&'a str> {
+        self.entities
+            .at(path, callee)
+            .map(String::as_str)
+            .or_else(|| {
+                self.smallest_contained(path, callee, |entity| !entity.symbol.is_empty())
+                    .map(|entity| entity.symbol.as_ref())
+            })
     }
 
     /// The type descriptor of the smallest typed entity contained in a span.
@@ -347,8 +350,8 @@ impl<'a> SemanticLookup<'a> {
 
     fn entities_for_path(&self, path: &str) -> &'a [EntityFact] {
         let entities = &self.facts.typescript.entities;
-        let start = entities.partition_point(|entity| entity.location.path.as_str() < path);
-        let end = entities.partition_point(|entity| entity.location.path.as_str() <= path);
+        let start = entities.partition_point(|entity| entity.location.path.as_ref() < path);
+        let end = entities.partition_point(|entity| entity.location.path.as_ref() <= path);
         &entities[start..end]
     }
 
@@ -460,7 +463,7 @@ impl<'a> SemanticLookup<'a> {
             let mut map = HashMap::with_capacity(entities.len());
             for (index, entity) in entities.iter().enumerate() {
                 map.entry((
-                    entity.location.path.as_str(),
+                    entity.location.path.as_ref(),
                     entity.location.start_byte,
                     entity.location.end_byte,
                 ))

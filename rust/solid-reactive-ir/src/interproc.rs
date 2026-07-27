@@ -14,7 +14,7 @@ use std::{
 
 use solid_facts::ProjectFacts;
 use solid_facts_core::Span;
-use solid_ts_facts::Location;
+use typefacts::Location;
 
 use super::{
     CachedInterproceduralGraph, CachedInterproceduralResultFile, CachedInterproceduralResults,
@@ -930,7 +930,7 @@ fn direct_reference_contributions(
         .into_iter()
         .flatten()
     {
-        let Some(&file) = project_indexes.files_by_path.get(reference.path.as_str()) else {
+        let Some(&file) = project_indexes.files_by_path.get(reference.path.as_ref()) else {
             continue;
         };
         let Ok(start) = u32::try_from(reference.start_byte) else {
@@ -974,7 +974,7 @@ fn direct_reference_contributions(
                     });
             if let Some((primitive, returned)) = factory_return {
                 let contract_location = Location {
-                    path: format!("bundled://solid-js.json#{primitive}"),
+                    path: format!("bundled://solid-js.json#{primitive}").into(),
                     start_byte: 0,
                     end_byte: 0,
                 };
@@ -1410,7 +1410,8 @@ fn interprocedural_reads(
                                                 Location {
                                                     path: format!(
                                                         "bundled://solid-js.json#{primitive}"
-                                                    ),
+                                                    )
+                                                    .into(),
                                                     start_byte: 0,
                                                     end_byte: 0,
                                                 },
@@ -1441,7 +1442,7 @@ fn interprocedural_reads(
         let mut direct = Vec::with_capacity(summaries[index].len());
         for read in summaries[index].take() {
             let in_returned_closure = returned_closures.iter().any(|closure| {
-                read.origin.path == node.path
+                read.origin.path == node.path.clone().into()
                     && u64::from(closure.start) <= read.origin.start_byte
                     && read.origin.end_byte <= u64::from(closure.end)
             });

@@ -5,15 +5,15 @@ use serde::{Deserialize, Serialize};
 use solid_ast_facts::AstFacts;
 use solid_compiler_facts::ExecutionMap;
 use solid_facts_core::{Generation, SourceHash, SourcePath, Span};
-use solid_ts_facts::{FactTable, Location};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
+use typefacts::{FactTable, Location};
 
 pub use solid_ast_facts;
 pub use solid_compiler_facts;
 pub use solid_facts_core as core;
-pub use solid_ts_facts;
+pub use typefacts;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -92,7 +92,7 @@ impl FileFacts {
             .into_iter()
             .map(|span| {
                 Ok(Location {
-                    path: self.path.to_string(),
+                    path: self.path.to_string().into(),
                     start_byte: u64::from(span.start),
                     end_byte: u64::from(span.end),
                 })
@@ -115,7 +115,7 @@ impl FileFacts {
             .structural_seed_spans()
             .into_iter()
             .map(|span| Location {
-                path: self.path.to_string(),
+                path: self.path.to_string().into(),
                 start_byte: u64::from(span.start),
                 end_byte: u64::from(span.end),
             })
@@ -147,7 +147,9 @@ impl ProjectFacts {
             let Some(source_hash) = source_hashes.get(file.path.as_str()) else {
                 return Err(JoinError::MissingTypeScriptSource(file.path.to_string()));
             };
-            if **source_hash != file.source_hash {
+            // The producer and the checker each own a `SourceHash` newtype, so
+            // identity is compared on the canonical `sha256:` text they share.
+            if source_hash.as_str() != file.source_hash.as_str() {
                 return Err(JoinError::TypeScriptSourceHash(file.path.to_string()));
             }
         }
@@ -166,7 +168,7 @@ mod tests {
     use super::*;
     use solid_ast_facts::extract;
     use solid_compiler_facts::COMPILER_FACTS_PROTOCOL;
-    use solid_ts_facts::SourceDigest;
+    use typefacts::SourceDigest;
 
     #[test]
     fn joins_one_coherent_generation() {
@@ -189,7 +191,7 @@ mod tests {
             project_id: "project".into(),
             sources: vec![SourceDigest {
                 path: "src/a.ts".into(),
-                sha256: SourceHash::of(source),
+                sha256: typefacts::SourceHash::of(source),
             }]
             .into(),
             entities: vec![].into(),

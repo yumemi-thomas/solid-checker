@@ -153,8 +153,9 @@ dependencies = [
 ]
 
 [[package]]
-name = "dom-expressions-jsx-compiler"
+name = "dom-expressions-compiler"
 version = "0.0.0"
+source = "git+https://github.com/yumemi-thomas/dom-expressions?rev=209e1bf78f5616885d473dd04a68913cd6bb2ce0#209e1bf78f5616885d473dd04a68913cd6bb2ce0"
 dependencies = [
  "html5ever",
  "htmlize",
@@ -167,11 +168,9 @@ dependencies = [
  "oxc_ast_visit",
  "oxc_codegen",
  "oxc_parser",
+ "oxc_semantic",
  "oxc_span",
  "oxc_syntax",
- "serde",
- "serde_json",
- "sha2",
 ]
 
 [[package]]
@@ -977,6 +976,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde_bytes"
+version = "0.11.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a5d440709e79d88e51ac01c4b72fc6cb7314017bb7da9eeff678aa94c10e3ea8"
+dependencies = [
+ "serde",
+ "serde_core",
+]
+
+[[package]]
 name = "serde_core"
 version = "1.0.228"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1067,14 +1076,14 @@ dependencies = [
 name = "solid-checker-wasm"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-jsx-compiler",
+ "dom-expressions-compiler",
  "napi",
  "napi-build",
  "napi-derive",
  "serde",
  "serde_json",
  "solid-facts-backend",
- "solid-ts-facts",
+ "typefacts",
 ]
 
 [[package]]
@@ -1095,15 +1104,15 @@ dependencies = [
  "solid-ast-facts",
  "solid-compiler-facts",
  "solid-facts-core",
- "solid-ts-facts",
  "thiserror",
+ "typefacts",
 ]
 
 [[package]]
 name = "solid-facts-backend"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-jsx-compiler",
+ "dom-expressions-compiler",
  "oxc-miette",
  "oxc_diagnostics",
  "serde",
@@ -1115,8 +1124,8 @@ dependencies = [
  "solid-facts-core",
  "solid-reactive-ir",
  "solid-reactive-solver",
- "solid-ts-facts",
  "thiserror",
+ "typefacts",
 ]
 
 [[package]]
@@ -1129,21 +1138,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "solid-lsp"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "solid-compiler-facts",
- "solid-facts",
- "solid-facts-backend",
- "solid-reactive-ir",
- "solid-reactive-solver",
- "solid-ts-facts",
- "thiserror",
-]
-
-[[package]]
 name = "solid-reactive-ir"
 version = "0.1.0"
 dependencies = [
@@ -1151,8 +1145,8 @@ dependencies = [
  "solid-ast-facts",
  "solid-facts",
  "solid-facts-core",
- "solid-ts-facts",
  "thiserror",
+ "typefacts",
 ]
 
 [[package]]
@@ -1161,18 +1155,7 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "solid-reactive-ir",
- "solid-ts-facts",
-]
-
-[[package]]
-name = "solid-ts-facts"
-version = "0.1.0"
-dependencies = [
- "ciborium",
- "serde",
- "sha2",
- "solid-facts-core",
- "thiserror",
+ "typefacts",
 ]
 
 [[package]]
@@ -1255,6 +1238,18 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "typefacts"
+version = "0.3.0"
+source = "git+https://github.com/yumemi-thomas/solid-ts-facts?rev=4adeb2063b94dad141a571e20762dd9c451aa34b#4adeb2063b94dad141a571e20762dd9c451aa34b"
+dependencies = [
+ "ciborium",
+ "serde",
+ "serde_bytes",
+ "sha2",
+ "thiserror",
 ]
 
 [[package]]

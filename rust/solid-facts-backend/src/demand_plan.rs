@@ -5,7 +5,7 @@
 use std::collections::{HashMap, HashSet};
 
 use solid_facts::FileFacts;
-use solid_ts_facts::v3::EntityDemand;
+use typefacts::v3::EntityDemand;
 
 use crate::{
     BackendError, callee_property_location, structural_accessor_spans, typefacts_location,
@@ -134,7 +134,7 @@ fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), Ba
     Ok(())
 }
 
-fn demand(location: solid_ts_facts::Location) -> EntityDemand {
+fn demand(location: typefacts::Location) -> EntityDemand {
     EntityDemand {
         location,
         query_location: None,

@@ -51,7 +51,6 @@ mkdirSync(nativeDirectory, { recursive: true });
 
 const binaries = [
   ["solid-checker", join(rustDirectory, `solid-checker-rust${extension}`)],
-  ["solid-checkerd", join(rustDirectory, `solid-checkerd-rust${extension}`)],
   ["solid-typefacts", typefacts]
 ];
 const manifest = {

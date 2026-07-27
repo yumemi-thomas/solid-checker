@@ -1,8 +1,9 @@
 # Monorepo and upstream policy
 
-This repository is the build and review home for the complete `solid-checker`
-analysis path. A contributor needs one clone for the Rust checker, the Go
-TypeFacts service, compiler integration, schemas, tests, and corpus automation.
+This repository is the build and review home for the `solid-checker` analysis
+path: the Rust checker, its schemas, tests, and corpus automation. The JSX
+compiler and the TypeFacts producer are pinned dependencies maintained in their
+own repositories.
 
 ## Module seams
 
@@ -10,31 +11,33 @@ Physical colocation does not merge the module interfaces:
 
 - `rust/solid-facts-backend` orchestrates certification.
 - `rust/solid-compiler-facts` owns compiler-fact integration.
-- `cmd/solid-typefacts` and `internal/typefacts` own TypeScript-Go facts.
-- `third_party/dom-expressions/packages/jsx-compiler` owns JSX execution
-  semantics.
+- The `typefacts` crate and its `solid-typefacts` producer own TypeScript-Go
+  facts, in their own repository.
+- The `dom-expressions-compiler` crate owns JSX execution semantics.
 - `rust/solid-facts-backend` owns package contracts.
 
-Oxc and compiler facts stay in-process. The versioned `ExecutionMap` protocol
-remains available for differential testing.
+Oxc and compiler facts stay in-process.
 
 ## Fork policy
 
-`third_party/dom-expressions` is a deliberately narrow source import, not a
-complete upstream checkout. Only `packages/jsx-compiler` and the minimal
-workspace files required to build its N-API wrapper are retained.
+The DOM Expressions compiler is consumed as a pinned Cargo git dependency on
+[a fork](https://github.com/yumemi-thomas/dom-expressions), not vendored. Its
+own repository owns compiler development and conformance against the reference
+transform.
 
-To update it, compare against the recorded upstream revision, import compiler
-changes selectively, and review any upstream changes outside the compiler for
-dependencies that must also move. Do not restore unrelated runtime packages,
-release infrastructure, generated artifacts, or repository tooling. Then run
-`make conformance` and `make verify`, and record the new revision in
-`THIRD_PARTY_NOTICES.md`.
+To adopt new compiler work, move the `rev` of `dom-expressions-compiler` in
+`rust/Cargo.toml`, record the new revision in `THIRD_PARTY_NOTICES.md`, and run
+`make verify`. Pin by revision rather than branch so a build is reproducible
+and every upstream move is an explicit, reviewable commit here.
 
-Oxc, tsgolint, and TypeScript-Go stay pinned dependencies until local source
-changes are required. If one becomes a fork, import it under `third_party/`
-with its license and provenance rather than maintaining a hidden sibling
-checkout.
+The TypeFacts producer and its Rust client are pinned the same way, on
+[solid-ts-facts](https://github.com/yumemi-thomas/solid-ts-facts). They must
+move together: the startup handshake compares protocol version, schema digest,
+and build id, so `scripts/build-typefacts.sh` reads the revision straight out
+of `rust/Cargo.toml` rather than keeping a second copy of it.
+
+Oxc, tsgolint, and TypeScript-Go stay pinned dependencies too. Prefer a pinned
+dependency on a fork's own repository over vendoring sources into this tree.
 
 ## Corpus policy
 

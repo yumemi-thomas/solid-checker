@@ -28,8 +28,10 @@ function nativePackageRoot() {
 function findRepository(start) {
   let directory = resolve(start);
   for (;;) {
+    // `go.mod` used to mark the root; the producer moved to its own
+    // repository, so the Rust workspace plus the Makefile identify it now.
     if (
-      existsSync(join(directory, "go.mod")) &&
+      existsSync(join(directory, "Makefile")) &&
       existsSync(join(directory, "rust", "Cargo.toml"))
     ) {
       return directory;
@@ -49,9 +51,7 @@ function packagedBinary(name) {
 
 export function launch(command) {
   const repository = findRepository(packageRoot) ?? findRepository(process.cwd());
-  const override = command === "solid-checkerd"
-    ? process.env.SOLID_CHECKERD_NATIVE_BIN
-    : process.env.SOLID_CHECKER_NATIVE_BIN;
+  const override = process.env.SOLID_CHECKER_NATIVE_BIN;
   let executable = override || packagedBinary(command);
   let developmentTypeFacts;
 
@@ -75,8 +75,7 @@ export function launch(command) {
   if (!existsSync(executable)) {
     console.error(
       `solid-checker: no ${command} binary for ${process.platform}-${process.arch}; ` +
-      `set ${command === "solid-checkerd" ? "SOLID_CHECKERD_NATIVE_BIN" : "SOLID_CHECKER_NATIVE_BIN"} ` +
-      "or install a supported package"
+      "set SOLID_CHECKER_NATIVE_BIN or install a supported package"
     );
     process.exit(2);
   }

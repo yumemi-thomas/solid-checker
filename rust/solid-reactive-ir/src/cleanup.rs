@@ -9,7 +9,7 @@ use std::collections::HashMap;
 
 use solid_facts::FileFacts;
 use solid_facts_core::Span;
-use solid_ts_facts::Location;
+use typefacts::Location;
 
 use super::{
     EntitySymbols, Fix, InvalidCleanupReturn, LeafOwnerOperation, SemanticLookup, TextEdit,
@@ -124,7 +124,7 @@ where
             let callback_type = lookup
                 .entity_at(file.path.as_str(), argument.span)
                 .and_then(|entity| entity.type_descriptor.as_ref())
-                .map(|descriptor| descriptor.text.as_str());
+                .map(|descriptor| descriptor.text.as_ref());
             if callback_type.is_some_and(callable_returns_cleanup_compatible) {
                 continue;
             }

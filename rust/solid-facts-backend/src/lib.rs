@@ -4,7 +4,6 @@
 mod cache;
 mod demand_plan;
 mod diagnostics;
-mod transport;
 
 pub use cache::{CacheStats, FactsCache};
 pub use diagnostics::{
@@ -41,18 +40,16 @@ pub fn default_typefacts_executable() -> String {
 
 use std::{
     collections::{HashMap, HashSet},
-    io::{BufRead, BufReader, BufWriter, Write},
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize};
-use solid_compiler_facts::{AnalysisRequest, CompilerOptions, ExecutionMap, SidecarResponse};
+use solid_compiler_facts::{AnalysisRequest, CompilerOptions, ExecutionMap};
 use solid_facts::{FileFacts, ProjectFacts, TypeScriptChanges};
 use solid_facts_core::{Generation, Span};
-use solid_ts_facts::{ClosureRequest, ClosureResponse, FramedTransport};
 use thiserror::Error;
+use typefacts::{FactTable, v3::EntityDemand};
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -69,49 +66,38 @@ pub trait CompilerFactsProvider {
 
 pub struct SemanticDemandGroup<'a> {
     pub path: &'a str,
-    pub demands: &'a [solid_ts_facts::v3::EntityDemand],
+    pub demands: &'a [EntityDemand],
 }
 
+/// The checker's view of a TypeFacts producer.
+///
+/// The retained session — process lifecycle, framing, handshake, request
+/// correlation, retained demands and delta application — belongs to the
+/// `typefacts` crate. What is left here is the one question the analysis
+/// pipeline asks: given this generation's demands, what is the fact table?
 pub trait TypeFactsProvider {
-    fn closure(&mut self, request: &ClosureRequest) -> Result<ClosureResponse, BackendError>;
-
-    /// Whether the semantic path consumes compiler spans from `ClosureRequest`.
+    /// Analyses the current generation from demands already grouped by path.
     ///
-    /// Retained v3 sessions receive compiler structure through lifecycle
-    /// updates and intentionally send no compiler spans with analyze requests.
-    /// The v2/reference path still requires the canonical span table.
-    fn semantic_requires_compiler_spans(&self) -> bool {
-        true
-    }
-
-    fn semantic(
-        &mut self,
-        request: &ClosureRequest,
-        _demands: Vec<solid_ts_facts::v3::EntityDemand>,
-    ) -> Result<ClosureResponse, BackendError> {
-        self.closure(request)
-    }
-
+    /// A group equal to the retained state is neither cloned nor transmitted,
+    /// so an unchanged generation costs a lookup rather than a round trip.
     fn semantic_grouped(
         &mut self,
-        request: &ClosureRequest,
         groups: &[SemanticDemandGroup<'_>],
-    ) -> Result<ClosureResponse, BackendError> {
-        self.semantic(
-            request,
-            groups
-                .iter()
-                .flat_map(|group| group.demands.iter().cloned())
-                .collect(),
-        )
-    }
+    ) -> Result<FactTable, BackendError>;
 
-    fn semantic_response_requires_validation(&self) -> bool {
-        true
-    }
-
-    fn validate_semantic_reuse(&mut self, _request: &ClosureRequest) -> Result<bool, BackendError> {
-        Ok(false)
+    /// Analyses from a flat demand list, grouping it first. A convenience for
+    /// callers that do not already keep demands grouped.
+    fn semantic(&mut self, demands: Vec<EntityDemand>) -> Result<FactTable, BackendError> {
+        let grouped = group_demands(&demands);
+        let groups = grouped
+            .iter()
+            .filter(|run| !run.is_empty())
+            .map(|run| SemanticDemandGroup {
+                path: run[0].location.path.as_ref(),
+                demands: run,
+            })
+            .collect::<Vec<_>>();
+        self.semantic_grouped(&groups)
     }
 
     fn take_last_exchange_timings(&mut self) -> Option<TypeFactsExchangeTimings> {
@@ -138,15 +124,15 @@ pub enum BackendError {
     #[error("compiler facts error: {0}")]
     Compiler(#[from] solid_compiler_facts::CompilerFactsError),
     #[error("TypeFacts error: {0}")]
-    TypeFacts(#[from] solid_ts_facts::TypeFactsError),
+    TypeFacts(#[from] typefacts::TypeFactsError),
+    #[error("TypeFacts session error: {0}")]
+    TypeFactsSession(#[from] typefacts::SessionError),
     #[error("fact join error: {0}")]
     Join(#[from] solid_facts::JoinError),
-    #[error("compiler sidecar returned no execution map")]
+    #[error("the Solid compiler returned no semantic trace")]
     MissingExecutionMap,
     #[error("native Solid compiler facts error: {0}")]
     NativeCompiler(String),
-    #[error("compiler sidecar {code}: {message}")]
-    CompilerSidecar { code: String, message: String },
     #[error("TypeFacts service {code}: {message}")]
     TypeFactsService { code: String, message: String },
     #[error("reactive IR error: {0}")]
@@ -164,7 +150,7 @@ impl BackendError {
     pub fn is_typefacts_transport_failure(&self) -> bool {
         matches!(
             self,
-            Self::Process(_) | Self::Io(_) | Self::TypeFacts(solid_ts_facts::TypeFactsError::Io(_))
+            Self::Process(_) | Self::Io(_) | Self::TypeFacts(typefacts::TypeFactsError::Io(_))
         )
     }
 }
@@ -174,34 +160,160 @@ pub struct NativeCompilerFacts;
 
 impl CompilerFactsProvider for NativeCompilerFacts {
     fn analyze(&mut self, request: &AnalysisRequest) -> Result<ExecutionMap, BackendError> {
-        use dom_expressions_jsx_compiler::{
-            TransformOptions, analyze_execution_map, prelude::Either,
-        };
+        use dom_expressions_compiler::{CompileOptions, Generate, Wrapper, compile};
 
-        let effect_wrapper = request.compiler_options.effect_wrapper.clone().map(|name| {
-            if name.is_empty() {
-                Either::A(false)
-            } else {
-                Either::B(name)
-            }
-        });
-        let options = TransformOptions {
-            filename: Some(request.path.clone()),
-            module_name: Some(request.compiler_options.module_name.clone()),
-            generate: Some(request.compiler_options.generate.clone()),
-            hydratable: Some(request.compiler_options.hydratable),
-            dev: Some(request.compiler_options.dev),
-            effect_wrapper,
-            wrap_conditionals: request.compiler_options.wrap_conditionals,
-            static_marker: request.compiler_options.static_marker.clone(),
-            built_ins: Some(request.compiler_options.built_ins.clone()),
-            compiler_facts: Some(true),
-            ..TransformOptions::default()
+        let requested = &request.compiler_options;
+        // `None` leaves the compiler's own default wrapper in place; an
+        // explicitly empty name is how the checker asks for no wrapper at all.
+        let effect_wrapper = match requested.effect_wrapper.as_deref() {
+            None => Wrapper::Default,
+            Some("") => Wrapper::Disabled,
+            Some(name) => Wrapper::Name(name.to_owned()),
         };
-        let encoded = analyze_execution_map(&request.source, &options)
+        let generate = match requested.generate.as_str() {
+            "dom" => Generate::Dom,
+            other => {
+                return Err(BackendError::NativeCompiler(format!(
+                    "semantic tracing supports DOM output only, not `{other}`"
+                )));
+            }
+        };
+        let options = CompileOptions {
+            filename: Some(request.path.clone()),
+            module_name: requested.module_name.clone(),
+            generate,
+            hydratable: requested.hydratable,
+            dev: requested.dev,
+            effect_wrapper,
+            wrap_conditionals: requested.wrap_conditionals.unwrap_or(true),
+            static_marker: requested
+                .static_marker
+                .clone()
+                .unwrap_or_else(|| CompileOptions::default().static_marker),
+            built_ins: requested.built_ins.clone(),
+            semantic_trace: true,
+            ..CompileOptions::default()
+        };
+        let output = compile(&request.source, &options)
             .map_err(|error| BackendError::NativeCompiler(error.to_string()))?;
-        ExecutionMap::from_json(&encoded, &request.source).map_err(Into::into)
+        let trace = output
+            .semantic_trace
+            .ok_or(BackendError::MissingExecutionMap)?;
+        execution_map_from_trace(&trace, &request.source)
     }
+}
+
+/// Projects the compiler's semantic trace onto the checker's execution map.
+///
+/// The trace is total: every censused JSX site carries a terminal decision, so
+/// each one lands in exactly one of the tracked, untracked, or callback
+/// categories, and `ExecutionMap::uncovered_jsx_expressions` is empty by
+/// construction rather than by luck.
+fn execution_map_from_trace(
+    trace: &dom_expressions_compiler::SemanticTrace,
+    source: &str,
+) -> Result<ExecutionMap, BackendError> {
+    use dom_expressions_compiler::{
+        CallbackDecision, ExecutionSiteKind, TerminalDecision, ValueDecision,
+    };
+    use solid_compiler_facts::{
+        COMPILER_FACTS_PROTOCOL, CallbackRole, CallbackRoleKind, ExecutionRegion, JsxOperation,
+        RegionReason,
+    };
+
+    let mut map = ExecutionMap {
+        compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+        source_hash: solid_facts_core::SourceHash::of(source),
+        tracked_regions: Vec::new(),
+        untracked_regions: Vec::new(),
+        // The compiler has never emitted ownership regions; ownership is
+        // derived from the AST and type facts instead.
+        ownership_regions: Vec::new(),
+        callback_roles: Vec::new(),
+        jsx_operations: Vec::new(),
+    };
+
+    // Sites arrive ordered by (span, kind), so appending in iteration order
+    // keeps every category in the canonical span order `validate` requires.
+    for site in &trace.sites {
+        let span = Span::new(site.span.start, site.span.end);
+        let kind = match site.kind {
+            ExecutionSiteKind::JsxChild => "jsx-expression",
+            ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
+                "dynamic-attribute"
+            }
+            ExecutionSiteKind::ComponentProperty
+            | ExecutionSiteKind::ComponentSpread
+            | ExecutionSiteKind::ComponentChild => "component-property",
+            ExecutionSiteKind::EventHandler => "event-listener",
+            ExecutionSiteKind::Ref => "directive-apply",
+            ExecutionSiteKind::ControlFlowRender => "control-flow-render",
+        };
+        map.jsx_operations.push(JsxOperation {
+            span,
+            kind: kind.into(),
+        });
+
+        match site.decision {
+            TerminalDecision::Value(ValueDecision::ReactiveRerun) => {
+                let reason = match site.kind {
+                    ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
+                        RegionReason::JsxAttribute
+                    }
+                    _ => RegionReason::JsxChild,
+                };
+                map.tracked_regions.push(ExecutionRegion { span, reason });
+            }
+            // `CallerContext` is the dynamic component prop: the expression is
+            // handed to the child as a getter and re-evaluated in the child's
+            // tracking context. It is deferred, not untracked — treating it as
+            // an untracked region would report every `when={count()}` as a
+            // stale read.
+            TerminalDecision::Value(ValueDecision::CallerContext) => {
+                map.callback_roles.push(CallbackRole {
+                    span,
+                    role: CallbackRoleKind::Deferred,
+                });
+            }
+            // A component child is handed to the component and invoked from
+            // the component's own render, not from here — a deferred callback
+            // even when the value itself is built once.
+            TerminalDecision::Value(ValueDecision::EagerOnce)
+                if site.kind == ExecutionSiteKind::ComponentChild =>
+            {
+                map.callback_roles.push(CallbackRole {
+                    span,
+                    role: CallbackRoleKind::Deferred,
+                });
+            }
+            // `EagerOnce` and `Elided` settle at render and never re-run.
+            TerminalDecision::Value(ValueDecision::EagerOnce | ValueDecision::Elided) => {
+                let reason = match site.kind {
+                    ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
+                        RegionReason::JsxAttribute
+                    }
+                    ExecutionSiteKind::ComponentProperty
+                    | ExecutionSiteKind::ComponentSpread
+                    | ExecutionSiteKind::ComponentChild => RegionReason::ComponentGetter,
+                    _ => RegionReason::JsxChild,
+                };
+                map.untracked_regions.push(ExecutionRegion { span, reason });
+            }
+            TerminalDecision::Callback(decision) => {
+                let role = match decision {
+                    CallbackDecision::LaterEvent => CallbackRoleKind::EventHandler,
+                    CallbackDecision::RefApply => CallbackRoleKind::DirectiveApply,
+                    // A render callback runs at render time under no tracking
+                    // scope of its own.
+                    CallbackDecision::LaterRender => CallbackRoleKind::Render,
+                };
+                map.callback_roles.push(CallbackRole { span, role });
+            }
+        }
+    }
+
+    map.validate(source)?;
+    Ok(map)
 }
 
 #[derive(Clone, Debug)]
@@ -212,77 +324,140 @@ pub struct SourceChange {
     pub compiler_options: CompilerOptions,
 }
 
-pub struct IncrementalSession {
-    project_id: String,
-    generation: u64,
-    sources: HashMap<String, SourceFile>,
-    cache: FactsCache,
-    compiler: CompilerSidecar,
-    typescript: TypeFactsSidecar,
-}
-
 const TYPEFACTS_RECOVERY_ATTEMPTS: u32 = 3;
 
-/// Awaits an edit's pipelined update immediately before the analyze request
-/// is written, so the analyze of the new generation is never sent ahead of
-/// the update's acknowledgement, and a superseding edit observed at that
-/// point skips the analyze entirely — the update half still lands.
-struct PipelinedTypeFacts<'session> {
-    sidecar: &'session mut TypeFactsSidecar,
-    pending_update: Option<PendingLifecycle>,
-    update_landed: bool,
-    cancelled: Option<&'session std::sync::atomic::AtomicBool>,
+/// Splits a demand list into per-path runs.
+///
+/// Demands arrive sorted by location, so equal paths are already adjacent and
+/// grouping is a single scan.
+fn group_demands(demands: &[EntityDemand]) -> Vec<Vec<EntityDemand>> {
+    let mut runs: Vec<Vec<EntityDemand>> = Vec::new();
+    for demand in demands {
+        match runs.last_mut() {
+            Some(run) if run[0].location.path == demand.location.path => run.push(demand.clone()),
+            _ => runs.push(vec![demand.clone()]),
+        }
+    }
+    runs
 }
 
-impl PipelinedTypeFacts<'_> {
-    fn await_update(&mut self) -> Result<(), BackendError> {
-        if let Some(pending) = self.pending_update.take() {
-            self.sidecar.lifecycle_wait(pending)?;
-            self.update_landed = true;
-            check_cancelled(self.cancelled)?;
+/// The checker's handle on one retained TypeFacts producer process.
+///
+/// A thin adapter over [`typefacts::Session`]: the crate owns the transport,
+/// the handshake, retained demands and delta application, and this maps its
+/// vocabulary onto the backend's error and timing types.
+pub struct TypeFactsSession {
+    session: typefacts::Session,
+    last_exchange_timings: Option<TypeFactsExchangeTimings>,
+    last_table_changes: Option<TypeScriptChanges>,
+}
+
+impl TypeFactsSession {
+    /// Starts a producer and opens the project on it.
+    ///
+    /// `arguments` carries producer-specific flags only; the session appends
+    /// the `-project` argument itself.
+    pub fn open(
+        executable: &str,
+        project_id: &str,
+        arguments: &[String],
+    ) -> Result<Self, BackendError> {
+        let mut producer = typefacts::Producer::at(executable);
+        for argument in arguments {
+            producer = producer.with_arg(argument);
         }
+        let session = typefacts::Session::open(producer, project_id, Vec::new())?;
+        Ok(Self {
+            session,
+            last_exchange_timings: None,
+            last_table_changes: None,
+        })
+    }
+
+    /// The project's configured source set, as the TypeScript program sees it.
+    pub fn configured_sources(&mut self) -> Result<Vec<SourceFile>, BackendError> {
+        Ok(self
+            .session
+            .configured_sources()?
+            .into_iter()
+            .map(|source| SourceFile {
+                path: source.path,
+                source: String::from_utf8_lossy(&source.source).into_owned(),
+                compiler_options: CompilerOptions::default(),
+            })
+            .collect())
+    }
+
+    /// Applies an overlay and advances the generation.
+    pub fn update(&mut self, changes: Vec<typefacts::v3::FileChange>) -> Result<(), BackendError> {
+        self.session.update(changes)?;
         Ok(())
     }
+
+    #[must_use]
+    pub fn generation(&self) -> u64 {
+        self.session.generation()
+    }
+
+    #[must_use]
+    pub fn cancellation_handle(&self) -> Option<typefacts::Cancellation> {
+        self.session.cancellation_handle()
+    }
+
+    fn record(&mut self) {
+        self.last_exchange_timings =
+            self.session
+                .take_last_exchange_timings()
+                .map(|timings| TypeFactsExchangeTimings {
+                    roundtrip: timings.roundtrip,
+                    request_send: timings.request_send,
+                    request_bytes: timings.request_bytes,
+                    response_decode: timings.response_decode,
+                    response_bytes: timings.response_bytes,
+                    server_request_decode: timings.server_request_decode,
+                    server_analyze: timings.server_analyze,
+                    server_async: timings.server_async,
+                    server_demand: timings.server_demand,
+                    server_assembly: timings.server_assembly,
+                    server_sort: timings.server_sort,
+                    server_close_symbols: timings.server_close_symbols,
+                    server_materialized: timings.server_materialized,
+                    server_retained_files: timings.server_retained_files,
+                    server_recomputed_files: timings.server_recomputed_files,
+                    server_non_durable_files: timings.server_non_durable_files,
+                });
+        self.last_table_changes =
+            self.session
+                .take_last_table_changes()
+                .map(|changes| TypeScriptChanges {
+                    unchanged: changes.unchanged,
+                    entity_paths: changes.entity_paths,
+                    symbol_ids: changes.symbol_ids,
+                    file_paths: changes.file_paths,
+                });
+    }
 }
 
-impl TypeFactsProvider for PipelinedTypeFacts<'_> {
-    fn closure(&mut self, request: &ClosureRequest) -> Result<ClosureResponse, BackendError> {
-        self.await_update()?;
-        self.sidecar.closure(request)
-    }
-
-    fn semantic(
-        &mut self,
-        request: &ClosureRequest,
-        demands: Vec<solid_ts_facts::v3::EntityDemand>,
-    ) -> Result<ClosureResponse, BackendError> {
-        self.await_update()?;
-        self.sidecar.semantic(request, demands)
-    }
-
+impl TypeFactsProvider for TypeFactsSession {
     fn semantic_grouped(
         &mut self,
-        request: &ClosureRequest,
         groups: &[SemanticDemandGroup<'_>],
-    ) -> Result<ClosureResponse, BackendError> {
-        self.await_update()?;
-        self.sidecar.semantic_grouped(request, groups)
-    }
-
-    fn semantic_response_requires_validation(&self) -> bool {
-        self.sidecar.semantic_response_requires_validation()
-    }
-
-    fn semantic_requires_compiler_spans(&self) -> bool {
-        self.sidecar.semantic_requires_compiler_spans()
+    ) -> Result<FactTable, BackendError> {
+        let borrowed = groups
+            .iter()
+            .filter_map(|group| typefacts::DemandGroup::new(group.demands))
+            .collect::<Vec<_>>();
+        let table = self.session.analyze_groups(&borrowed)?;
+        self.record();
+        Ok(table)
     }
 
     fn take_last_exchange_timings(&mut self) -> Option<TypeFactsExchangeTimings> {
-        self.sidecar.take_last_exchange_timings()
+        self.last_exchange_timings.take()
     }
 
     fn take_last_table_changes(&mut self) -> Option<TypeScriptChanges> {
-        self.sidecar.take_last_table_changes()
+        self.last_table_changes.take()
     }
 }
 
@@ -294,7 +469,7 @@ pub struct NativeIncrementalSession {
     sources: HashMap<String, SourceFile>,
     cache: FactsCache,
     last_facts: Option<Arc<ProjectFacts>>,
-    typescript: TypeFactsSidecar,
+    typescript: TypeFactsSession,
     known_paths: HashSet<String>,
     last_build_timings: NativeBuildTimings,
 }
@@ -303,22 +478,19 @@ impl NativeIncrementalSession {
     pub fn open(
         project_id: String,
         sources: Vec<SourceFile>,
-        mut typescript: TypeFactsSidecar,
+        typescript: TypeFactsSession,
     ) -> Result<Self, BackendError> {
-        open_typescript_project(&mut typescript, &project_id)?;
         Ok(Self::from_sources(project_id, sources, typescript))
     }
 
-    /// Opens the project by pipelining `open` and `sources` (see
-    /// [`TypeFactsSidecar::open_and_configured_sources`]) rather than fetching
-    /// sources and opening in two sequential round trips. Returns the session
-    /// together with the configured sources so callers can seed their own
-    /// bookkeeping. The `open` is issued here, so callers must not open again.
+    /// Opens the project and returns the session together with its configured
+    /// sources, so callers can seed their own bookkeeping. `TypeFactsSession`
+    /// has already issued the `open`, so callers must not open again.
     pub fn open_pipelined(
         project_id: String,
-        mut typescript: TypeFactsSidecar,
+        mut typescript: TypeFactsSession,
     ) -> Result<(Self, Vec<SourceFile>), BackendError> {
-        let sources = typescript.open_and_configured_sources(&project_id, 1)?;
+        let sources = typescript.configured_sources()?;
         let session = Self::from_sources(project_id, sources.clone(), typescript);
         Ok((session, sources))
     }
@@ -326,7 +498,7 @@ impl NativeIncrementalSession {
     fn from_sources(
         project_id: String,
         sources: Vec<SourceFile>,
-        typescript: TypeFactsSidecar,
+        typescript: TypeFactsSession,
     ) -> Self {
         Self {
             project_id,
@@ -367,7 +539,7 @@ impl NativeIncrementalSession {
             .extend(changes.iter().map(|change| change.path.clone()));
         let wire_changes = changes
             .iter()
-            .map(|change| solid_ts_facts::v3::FileChange {
+            .map(|change| typefacts::v3::FileChange {
                 path: change.path.clone(),
                 version: change.version,
                 source: change
@@ -449,33 +621,18 @@ impl NativeIncrementalSession {
     fn edit_attempt(
         &mut self,
         next_generation: u64,
-        wire_changes: &[solid_ts_facts::v3::FileChange],
+        wire_changes: &[typefacts::v3::FileChange],
         update_landed: &mut bool,
         cancelled: Option<&std::sync::atomic::AtomicBool>,
     ) -> Result<ProjectFacts, BackendError> {
-        let pending_update = if *update_landed {
-            None
-        } else {
-            Some(
-                self.typescript
-                    .lifecycle_send(solid_ts_facts::v3::Request {
-                        schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-                        request_id: 0,
-                        operation: solid_ts_facts::v3::Operation::Update,
-                        project_id: self.project_id.clone(),
-                        generation: next_generation,
-                        changes: wire_changes.to_vec(),
-                        structural_spans: vec![],
-                        compiler_spans: vec![],
-                        demands: vec![],
-                        compact_demands: None,
-                        state_token: String::new(),
-                        reset_state: false,
-                        removed_demand_paths: vec![],
-                        cancel_request_id: 0,
-                    })?,
-            )
-        };
+        // The session applies the overlay and advances its own generation.
+        // `Session` owns transport recovery, so a failure here is already
+        // past its internal restart-and-replay.
+        if !*update_landed {
+            self.typescript.update(wire_changes.to_vec())?;
+            *update_landed = true;
+            check_cancelled(cancelled)?;
+        }
         let mut sources = self.sources.values().cloned().collect::<Vec<_>>();
         sources.sort_by(|left, right| left.path.cmp(&right.path));
         let changed_paths = wire_changes
@@ -490,33 +647,15 @@ impl NativeIncrementalSession {
                 previous: facts,
                 changed_paths: &changed_paths,
             });
-        let mut provider = PipelinedTypeFacts {
-            sidecar: &mut self.typescript,
-            pending_update,
-            update_landed: false,
-            cancelled,
-        };
         let result = build_project_native_cached_measured_inner(
             self.project_id.clone(),
             next_generation,
             sources,
-            &mut provider,
+            &mut self.typescript,
             &mut self.cache,
             cancelled,
             retained,
         );
-        let leftover_update = provider.pending_update.take();
-        if provider.update_landed {
-            *update_landed = true;
-        }
-        if let Some(pending) = leftover_update {
-            match self.typescript.lifecycle_wait(pending) {
-                Ok(_) => *update_landed = true,
-                // The build failed before the semantic stage and the update
-                // also failed; the update failure is the root cause.
-                Err(update_error) => return Err(update_error),
-            }
-        }
         result.map(|(facts, timings)| {
             self.last_build_timings = timings;
             facts
@@ -635,190 +774,21 @@ impl NativeIncrementalSession {
     }
 
     #[must_use]
-    pub fn cancellation_handle(&self) -> TypeFactsCancellation {
+    pub fn cancellation_handle(&self) -> Option<typefacts::Cancellation> {
         self.typescript.cancellation_handle()
     }
 
+    /// Recovery is the session's own concern now.
+    ///
+    /// `typefacts::Session` restarts the producer and replays every retained
+    /// generation from inside the failing exchange, so by the time an error
+    /// reaches here it has already been through that. Kept so callers that
+    /// used to drive recovery explicitly still compile.
     pub fn recover_typefacts(&mut self) -> Result<(), BackendError> {
-        self.typescript.restart()?;
-        open_typescript_project(&mut self.typescript, &self.project_id)?;
-        if self.generation == 1 {
-            return Ok(());
-        }
-        let mut changes = self
-            .known_paths
-            .iter()
-            .map(|path| solid_ts_facts::v3::FileChange {
-                path: path.clone(),
-                version: self.generation,
-                source: self
-                    .sources
-                    .get(path)
-                    .map_or_else(Vec::new, |source| source.source.as_bytes().to_vec()),
-                deleted: !self.sources.contains_key(path),
-            })
-            .collect::<Vec<_>>();
-        changes.sort_by(|left, right| left.path.cmp(&right.path));
-        for generation in 2..=self.generation {
-            self.typescript.lifecycle(solid_ts_facts::v3::Request {
-                schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-                request_id: 0,
-                operation: solid_ts_facts::v3::Operation::Update,
-                project_id: self.project_id.clone(),
-                generation,
-                changes: if generation == 2 {
-                    changes.clone()
-                } else {
-                    vec![]
-                },
-                structural_spans: vec![],
-                compiler_spans: vec![],
-                demands: vec![],
-                compact_demands: None,
-                state_token: String::new(),
-                reset_state: false,
-                removed_demand_paths: vec![],
-                cancel_request_id: 0,
-            })?;
-        }
         Ok(())
     }
 }
 
-impl IncrementalSession {
-    pub fn open(
-        project_id: String,
-        sources: Vec<SourceFile>,
-        compiler: CompilerSidecar,
-        mut typescript: TypeFactsSidecar,
-    ) -> Result<Self, BackendError> {
-        open_typescript_project(&mut typescript, &project_id)?;
-        Ok(Self {
-            project_id,
-            generation: 1,
-            sources: sources
-                .into_iter()
-                .map(|source| (source.path.clone(), source))
-                .collect(),
-            cache: FactsCache::default(),
-            compiler,
-            typescript,
-        })
-    }
-
-    pub fn update(&mut self, changes: Vec<SourceChange>) -> Result<Vec<String>, BackendError> {
-        update_session(
-            &self.project_id,
-            &mut self.generation,
-            &mut self.sources,
-            &mut self.cache,
-            &mut self.typescript,
-            changes,
-        )
-    }
-
-    pub fn analyze(&mut self) -> Result<ProjectFacts, BackendError> {
-        let mut sources = self.sources.values().cloned().collect::<Vec<_>>();
-        sources.sort_by(|left, right| left.path.cmp(&right.path));
-        build_project_cached(
-            self.project_id.clone(),
-            self.generation,
-            sources,
-            &mut self.compiler,
-            &mut self.typescript,
-            &mut self.cache,
-        )
-    }
-
-    #[must_use]
-    pub const fn generation(&self) -> u64 {
-        self.generation
-    }
-
-    #[must_use]
-    pub fn cache_stats(&self) -> CacheStats {
-        self.cache.stats()
-    }
-}
-
-fn open_typescript_project(
-    typescript: &mut TypeFactsSidecar,
-    project_id: &str,
-) -> Result<(), BackendError> {
-    typescript.lifecycle(solid_ts_facts::v3::Request {
-        schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-        request_id: 0,
-        operation: solid_ts_facts::v3::Operation::Open,
-        project_id: project_id.into(),
-        generation: 1,
-        changes: vec![],
-        structural_spans: vec![],
-        compiler_spans: vec![],
-        demands: vec![],
-        compact_demands: None,
-        state_token: String::new(),
-        reset_state: false,
-        removed_demand_paths: vec![],
-        cancel_request_id: 0,
-    })?;
-    Ok(())
-}
-
-fn update_session(
-    project_id: &str,
-    generation: &mut u64,
-    sources: &mut HashMap<String, SourceFile>,
-    cache: &mut FactsCache,
-    typescript: &mut TypeFactsSidecar,
-    changes: Vec<SourceChange>,
-) -> Result<Vec<String>, BackendError> {
-    let next_generation = generation.checked_add(1).ok_or(BackendError::Generation)?;
-    let wire_changes = changes
-        .iter()
-        .map(|change| solid_ts_facts::v3::FileChange {
-            path: change.path.clone(),
-            version: change.version,
-            source: change
-                .source
-                .as_deref()
-                .map_or_else(Vec::new, |source| source.as_bytes().to_vec()),
-            deleted: change.source.is_none(),
-        })
-        .collect();
-    let response = typescript.lifecycle(solid_ts_facts::v3::Request {
-        schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-        request_id: 0,
-        operation: solid_ts_facts::v3::Operation::Update,
-        project_id: project_id.into(),
-        generation: next_generation,
-        changes: wire_changes,
-        structural_spans: vec![],
-        compiler_spans: vec![],
-        demands: vec![],
-        compact_demands: None,
-        state_token: String::new(),
-        reset_state: false,
-        removed_demand_paths: vec![],
-        cancel_request_id: 0,
-    })?;
-    for change in changes {
-        cache.invalidate_path(&change.path);
-        if let Some(source) = change.source {
-            sources.insert(
-                change.path.clone(),
-                SourceFile {
-                    path: change.path,
-                    source,
-                    compiler_options: change.compiler_options,
-                },
-            );
-        } else {
-            sources.remove(&change.path);
-        }
-    }
-    *generation = next_generation;
-    Ok(response.affected)
-}
 pub fn build_project(
     project_id: impl Into<String>,
     generation: u64,
@@ -877,7 +847,6 @@ pub struct TypeFactsExchangeTimings {
     pub server_assembly: Duration,
     pub server_sort: Duration,
     pub server_close_symbols: Duration,
-    pub server_prepare: Duration,
     pub server_materialized: bool,
     pub server_retained_files: u64,
     pub server_recomputed_files: u64,
@@ -954,20 +923,15 @@ pub fn build_project_native_measured(
     let type_facts_started = Instant::now();
     let demand_started = Instant::now();
     let request_started = Instant::now();
-    let request = ClosureRequest::new(project_id.clone(), generation, seeds)?;
     let request_assembly = request_started.elapsed();
     let semantic_demand_started = Instant::now();
     let demands = semantic_demands(&files)?;
     let semantic_demand_assembly = semantic_demand_started.elapsed();
     let demand_assembly = demand_started.elapsed();
-    let response = typescript.semantic(&request, demands)?;
+    let mut table = typescript.semantic(demands)?;
     let exchange = typescript.take_last_exchange_timings().unwrap_or_default();
     let table_changes = typescript.take_last_table_changes();
-    if typescript.semantic_response_requires_validation() {
-        response.validate_for(&request)?;
-    }
     let type_facts = type_facts_started.elapsed();
-    let mut table = response.table;
     let hydrate_started = Instant::now();
     hydrate_structural_file_facts(&mut table, &files);
     let hydrate = hydrate_started.elapsed();
@@ -1116,73 +1080,22 @@ fn build_project_native_cached_measured_inner(
         .into_iter()
         .map(|file| file.expect("every source was retained or recomputed"))
         .collect::<Vec<_>>();
-    let mut seeds = Vec::new();
-    if typescript.semantic_requires_compiler_spans() {
-        for facts in &files {
-            seeds.extend(facts.compiler_seed_locations()?);
-            seeds.extend(facts.structural_seed_locations());
-        }
-    }
     let file_fact_assembly = assembly_started.elapsed();
     let source_analysis = analysis_started.elapsed();
     let type_facts_started = Instant::now();
     check_cancelled(cancelled)?;
-    let cached_generation_matches = cache
-        .semantic_table
-        .as_ref()
-        .is_some_and(|(cached_generation, _)| *cached_generation == generation.get());
-    let reuse_request = ClosureRequest::new(project_id.clone(), generation, Vec::new())?;
-    if cached_generation_matches && typescript.validate_semantic_reuse(&reuse_request)? {
-        let exchange = typescript.take_last_exchange_timings().unwrap_or_default();
-        check_cancelled(cancelled)?;
-        let type_facts = type_facts_started.elapsed();
-        let hydrate_started = Instant::now();
-        let table = cache
-            .semantic_table
-            .as_ref()
-            .expect("generation-matched semantic table")
-            .1
-            .clone();
-        let hydrate = hydrate_started.elapsed();
-        let join_started = Instant::now();
-        let facts = ProjectFacts::join(generation, project_id, files, table)?;
-        let join = join_started.elapsed();
-        return Ok((
-            facts,
-            NativeBuildTimings {
-                source_analysis,
-                source_files_reused,
-                source_files_recomputed,
-                ast_facts,
-                compiler_facts,
-                file_fact_assembly,
-                type_facts,
-                demand_assembly: Duration::ZERO,
-                request_assembly: Duration::ZERO,
-                semantic_demand_assembly: Duration::ZERO,
-                hydrate,
-                join,
-                exchange,
-            },
-        ));
-    }
     let demand_started = Instant::now();
     let request_started = Instant::now();
-    let request = ClosureRequest::new(project_id.clone(), generation, seeds)?;
     let request_assembly = request_started.elapsed();
     let semantic_demand_started = Instant::now();
     let demand_groups = semantic_demand_groups_cached(&files, cache)?;
     let semantic_demand_assembly = semantic_demand_started.elapsed();
     let demand_assembly = demand_started.elapsed();
-    let response = typescript.semantic_grouped(&request, &demand_groups)?;
+    let mut table = typescript.semantic_grouped(&demand_groups)?;
     let exchange = typescript.take_last_exchange_timings().unwrap_or_default();
     let table_changes = typescript.take_last_table_changes();
     check_cancelled(cancelled)?;
-    if typescript.semantic_response_requires_validation() {
-        response.validate_for(&request)?;
-    }
     let type_facts = type_facts_started.elapsed();
-    let mut table = response.table;
     let hydrate_started = Instant::now();
     hydrate_structural_file_facts_cached(&mut table, &files, cache);
     let hydrate = hydrate_started.elapsed();
@@ -1304,19 +1217,12 @@ pub fn build_project_cached(
         seeds.extend(facts.structural_seed_locations());
         files.push(facts);
     }
-    let request = ClosureRequest::new(project_id.clone(), generation, seeds)?;
-    let response = typescript.semantic(&request, semantic_demands_cached(&files, cache)?)?;
-    if typescript.semantic_response_requires_validation() {
-        response.validate_for(&request)?;
-    }
-    let mut table = response.table;
+    let mut table = typescript.semantic(semantic_demands_cached(&files, cache)?)?;
     hydrate_structural_file_facts_cached(&mut table, &files, cache);
     ProjectFacts::join(generation, project_id, files, table).map_err(Into::into)
 }
 
-fn semantic_demands(
-    files: &[FileFacts],
-) -> Result<Vec<solid_ts_facts::v3::EntityDemand>, BackendError> {
+fn semantic_demands(files: &[FileFacts]) -> Result<Vec<typefacts::v3::EntityDemand>, BackendError> {
     demand_plan::plan(files)
 }
 
@@ -1392,7 +1298,7 @@ fn structural_accessor_spans(file: &FileFacts) -> HashSet<Span> {
 fn semantic_demands_cached(
     files: &[FileFacts],
     cache: &mut FactsCache,
-) -> Result<Vec<solid_ts_facts::v3::EntityDemand>, BackendError> {
+) -> Result<Vec<typefacts::v3::EntityDemand>, BackendError> {
     let mut demands = Vec::new();
     let mut ordered_files = files.iter().collect::<Vec<_>>();
     ordered_files.sort_by(|left, right| left.path.cmp(&right.path));
@@ -1443,18 +1349,15 @@ fn semantic_demand_groups_cached<'a>(
         .collect())
 }
 
-fn typefacts_location(path: &str, span: solid_facts_core::Span) -> solid_ts_facts::Location {
-    solid_ts_facts::Location {
+fn typefacts_location(path: &str, span: solid_facts_core::Span) -> typefacts::Location {
+    typefacts::Location {
         path: path.into(),
         start_byte: u64::from(span.start),
         end_byte: u64::from(span.end),
     }
 }
 
-fn callee_property_location(
-    source: &str,
-    callee: &solid_ts_facts::Location,
-) -> solid_ts_facts::Location {
+fn callee_property_location(source: &str, callee: &typefacts::Location) -> typefacts::Location {
     let Ok(start) = usize::try_from(callee.start_byte) else {
         return callee.clone();
     };
@@ -1467,28 +1370,28 @@ fn callee_property_location(
     let Some(dot) = text.iter().rposition(|byte| *byte == b'.') else {
         return callee.clone();
     };
-    solid_ts_facts::Location {
+    typefacts::Location {
         path: callee.path.clone(),
         start_byte: u64::try_from(start + dot + 1).unwrap_or(callee.start_byte),
         end_byte: callee.end_byte,
     }
 }
 
-fn hydrate_structural_file_facts(table: &mut solid_ts_facts::FactTable, files: &[FileFacts]) {
+fn hydrate_structural_file_facts(table: &mut typefacts::FactTable, files: &[FileFacts]) {
     let files_by_path = files
         .iter()
         .map(|file| (file.path.as_str(), file))
         .collect::<HashMap<_, _>>();
     for target in Arc::make_mut(&mut table.files) {
-        let Some(file) = files_by_path.get(target.path.as_str()).copied() else {
+        let Some(file) = files_by_path.get(target.path.as_ref()).copied() else {
             continue;
         };
-        target.functions = structural_functions(file);
+        target.functions = structural_functions(file).into();
     }
 }
 
 fn hydrate_structural_file_facts_cached(
-    table: &mut solid_ts_facts::FactTable,
+    table: &mut typefacts::FactTable,
     files: &[FileFacts],
     cache: &mut FactsCache,
 ) {
@@ -1497,7 +1400,7 @@ fn hydrate_structural_file_facts_cached(
         .map(|file| (file.path.as_str(), file))
         .collect::<HashMap<_, _>>();
     for target in Arc::make_mut(&mut table.files) {
-        let Some(file) = files_by_path.get(target.path.as_str()).copied() else {
+        let Some(file) = files_by_path.get(target.path.as_ref()).copied() else {
             continue;
         };
         let key = format!("{}\0{}", file.path, file.source_hash);
@@ -1512,13 +1415,13 @@ fn hydrate_structural_file_facts_cached(
                 .get(&key)
                 .expect("inserted structural functions")
         };
-        if target.functions != *functions {
-            target.functions.clone_from(functions);
+        if target.functions.as_ref() != functions.as_slice() {
+            target.functions = functions.clone().into();
         }
     }
 }
 
-fn structural_functions(file: &FileFacts) -> Vec<solid_ts_facts::SourceFunction> {
+fn structural_functions(file: &FileFacts) -> Vec<typefacts::SourceFunction> {
     let mut result = Vec::new();
     for function in &file.ast.functions {
         let name = function.name.as_ref().or_else(|| {
@@ -1556,10 +1459,10 @@ fn structural_functions(file: &FileFacts) -> Vec<solid_ts_facts::SourceFunction>
                         && candidate.span.contains(function.span)
                 })
         });
-        result.push(solid_ts_facts::SourceFunction {
+        result.push(typefacts::SourceFunction {
             name: typefacts_location(file.path.as_str(), name.span),
-            body: solid_ts_facts::Location {
-                path: file.path.to_string(),
+            body: typefacts::Location {
+                path: file.path.to_string().into(),
                 start_byte: u64::from(function.body.start),
                 // TS-Go reports a block body without the closing brace,
                 // while Oxc's span includes it.
@@ -1647,1133 +1550,16 @@ fn compiler_cache_key(request: &AnalysisRequest) -> Result<String, BackendError>
     ))
 }
 
-pub struct CompilerSidecar {
-    child: Child,
-    input: BufWriter<ChildStdin>,
-    output: BufReader<ChildStdout>,
-}
-
-impl CompilerSidecar {
-    pub fn spawn(executable: &str, args: &[String]) -> Result<Self, BackendError> {
-        let mut child = Command::new(executable)
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .map_err(|error| BackendError::Process(error.to_string()))?;
-        let input = child
-            .stdin
-            .take()
-            .ok_or_else(|| BackendError::Process("compiler stdin unavailable".into()))?;
-        let output = child
-            .stdout
-            .take()
-            .ok_or_else(|| BackendError::Process("compiler stdout unavailable".into()))?;
-        Ok(Self {
-            child,
-            input: BufWriter::new(input),
-            output: BufReader::new(output),
-        })
-    }
-}
-
-impl CompilerFactsProvider for CompilerSidecar {
-    fn analyze(&mut self, request: &AnalysisRequest) -> Result<ExecutionMap, BackendError> {
-        serde_json::to_writer(&mut self.input, request)?;
-        self.input.write_all(b"\n")?;
-        self.input.flush()?;
-        let mut line = String::new();
-        if self.output.read_line(&mut line)? == 0 {
-            return Err(BackendError::Process(
-                "compiler sidecar closed stdout".into(),
-            ));
-        }
-        let response: SidecarResponse = serde_json::from_str(&line)?;
-        if !response.ok {
-            let error = response
-                .error
-                .ok_or_else(|| BackendError::Process("invalid compiler error response".into()))?;
-            return Err(BackendError::CompilerSidecar {
-                code: error.code,
-                message: error.message,
-            });
-        }
-        response
-            .execution_map
-            .ok_or(BackendError::MissingExecutionMap)
-    }
-}
-
-impl Drop for CompilerSidecar {
-    fn drop(&mut self) {
-        let _ = self.input.flush();
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-    }
-}
-
-pub struct TypeFactsSidecar {
-    child: Child,
-    writer: std::sync::Arc<std::sync::Mutex<BufWriter<ChildStdin>>>,
-    pending: PendingResponses,
-    next_request_id: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    active_request_id: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    project_id: String,
-    executable: String,
-    args: Vec<String>,
-    reader: Option<std::thread::JoinHandle<()>>,
-    last_exchange_timings: Option<TypeFactsExchangeTimings>,
-    state_token: String,
-    retained_demands: HashMap<String, Vec<solid_ts_facts::v3::EntityDemand>>,
-    retained_table: Option<solid_ts_facts::FactTable>,
-    last_table_changes: Option<TypeScriptChanges>,
-}
-
-// The reader thread decodes each frame once for routing and hands the decoded
-// response to the waiting caller; re-decoding multi-megabyte fact tables at
-// the call site was a measured double cost.
-type PendingResponses = std::sync::Arc<
-    std::sync::Mutex<
-        HashMap<u64, std::sync::mpsc::SyncSender<Result<solid_ts_facts::v3::Response, String>>>,
-    >,
->;
-
-/// A lifecycle request that has been written but not yet awaited. Dropping it
-/// abandons the response; the reader thread discards frames with no waiter.
-pub struct PendingLifecycle {
-    request_id: u64,
-    cancellable: bool,
-    sent_at: Instant,
-    request_send: Duration,
-    request_bytes: u64,
-    receiver: std::sync::mpsc::Receiver<Result<solid_ts_facts::v3::Response, String>>,
-}
-
-#[derive(Clone)]
-pub struct TypeFactsCancellation {
-    writer: std::sync::Weak<std::sync::Mutex<BufWriter<ChildStdin>>>,
-    next_request_id: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    active_request_id: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    project_id: String,
-}
-
-struct ProcessIo {
-    input: ChildStdin,
-    output: ChildStdout,
-}
-
-impl std::io::Read for ProcessIo {
-    fn read(&mut self, buffer: &mut [u8]) -> std::io::Result<usize> {
-        self.output.read(buffer)
-    }
-}
-
-impl Write for ProcessIo {
-    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
-        self.input.write(buffer)
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        self.input.flush()
-    }
-}
-
-impl TypeFactsSidecar {
-    pub fn spawn(executable: &str, args: &[String]) -> Result<Self, BackendError> {
-        let mut child = Command::new(executable)
-            .args(args)
-            .stdin(Stdio::piped())
-            .stdout(Stdio::piped())
-            .spawn()
-            .map_err(|error| BackendError::Process(error.to_string()))?;
-        let input = child
-            .stdin
-            .take()
-            .ok_or_else(|| BackendError::Process("TypeFacts stdin unavailable".into()))?;
-        let output = child
-            .stdout
-            .take()
-            .ok_or_else(|| BackendError::Process("TypeFacts stdout unavailable".into()))?;
-        let transport = FramedTransport::new(ProcessIo { input, output });
-        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        let handshake_thread = std::thread::spawn(move || {
-            let mut transport = transport;
-            let handshake = transport.receive::<solid_ts_facts::v3::Handshake>();
-            let _ = sender.send((handshake, transport));
-        });
-        let (handshake, transport) = match receiver.recv_timeout(Duration::from_secs(5)) {
-            Ok(result) => {
-                handshake_thread
-                    .join()
-                    .map_err(|_| BackendError::Handshake("startup reader panicked".into()))?;
-                result
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = handshake_thread.join();
-                return Err(BackendError::Handshake(
-                    "service did not report compatibility within 5 seconds".into(),
-                ));
-            }
-            Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                let _ = handshake_thread.join();
-                return Err(BackendError::Handshake(
-                    "startup reader disconnected".into(),
-                ));
-            }
-        };
-        let handshake = handshake
-            .map_err(|error| BackendError::Handshake(format!("invalid startup frame: {error}")))?;
-        let expected = (
-            solid_ts_facts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
-            solid_ts_facts::v3::TYPE_FACTS_SCHEMA_SHA256,
-            solid_ts_facts::v3::TYPE_FACTS_BUILD_ID,
-        );
-        let actual = (
-            handshake.protocol,
-            handshake.schema_hash.as_str(),
-            handshake.build_id.as_str(),
-        );
-        if actual != expected {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(BackendError::Handshake(format!(
-                "expected protocol {}, schema {}, build {:?}; got protocol {}, schema {}, build {:?}",
-                expected.0, expected.1, expected.2, actual.0, actual.1, actual.2
-            )));
-        }
-        let ProcessIo { input, mut output } = transport.into_inner();
-        let writer = std::sync::Arc::new(std::sync::Mutex::new(BufWriter::new(input)));
-        let pending = PendingResponses::default();
-        let reader_pending = std::sync::Arc::clone(&pending);
-        let bad_frame_path = std::env::var_os("SOLID_TYPEFACTS_BAD_FRAME");
-        let reader = std::thread::spawn(move || {
-            loop {
-                let payload = match transport::read_frame(&mut output) {
-                    Ok(payload) => payload,
-                    Err(error) => {
-                        fail_pending_responses(&reader_pending, error.to_string());
-                        break;
-                    }
-                };
-                let decode_started = Instant::now();
-                let response = match solid_ts_facts::decode_trusted::<solid_ts_facts::v3::Response>(
-                    &payload,
-                ) {
-                    Ok(mut response) => {
-                        response.client_decode_ns =
-                            u64::try_from(decode_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
-                        response.client_response_bytes =
-                            u64::try_from(payload.len()).unwrap_or(u64::MAX);
-                        response
-                    }
-                    Err(error) => {
-                        if let Some(path) = &bad_frame_path {
-                            let _ = std::fs::write(path, &payload);
-                        }
-                        fail_pending_responses(&reader_pending, error.to_string());
-                        break;
-                    }
-                };
-                if let Ok(mut pending) = reader_pending.lock()
-                    && let Some(sender) = pending.remove(&response.request_id)
-                {
-                    let _ = sender.send(Ok(response));
-                }
-            }
-        });
-        let next_request_id = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(1));
-        let active_request_id = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
-        Ok(Self {
-            child,
-            writer,
-            pending,
-            next_request_id,
-            active_request_id,
-            project_id: args
-                .windows(2)
-                .find(|arguments| arguments[0] == "-project")
-                .map_or_else(String::new, |arguments| arguments[1].clone()),
-            executable: executable.into(),
-            args: args.to_vec(),
-            reader: Some(reader),
-            last_exchange_timings: None,
-            state_token: String::new(),
-            retained_demands: HashMap::new(),
-            retained_table: None,
-            last_table_changes: None,
-        })
-    }
-
-    pub fn restart(&mut self) -> Result<(), BackendError> {
-        let replacement = Self::spawn(&self.executable, &self.args)?;
-        *self = replacement;
-        Ok(())
-    }
-
-    #[must_use]
-    pub fn cancellation_handle(&self) -> TypeFactsCancellation {
-        TypeFactsCancellation {
-            writer: std::sync::Arc::downgrade(&self.writer),
-            next_request_id: std::sync::Arc::clone(&self.next_request_id),
-            active_request_id: std::sync::Arc::clone(&self.active_request_id),
-            project_id: self.project_id.clone(),
-        }
-    }
-
-    pub fn lifecycle(
-        &mut self,
-        request: solid_ts_facts::v3::Request,
-    ) -> Result<solid_ts_facts::v3::Response, BackendError> {
-        let pending = self.lifecycle_send(request)?;
-        self.lifecycle_wait(pending)
-    }
-
-    /// Writes a lifecycle request without awaiting its response, so a caller
-    /// can overlap local work with the service round trip. The service
-    /// processes generation-scoped requests in arrival order; responses are
-    /// correlated by request identity and may be awaited in any order.
-    pub fn lifecycle_send(
-        &mut self,
-        mut request: solid_ts_facts::v3::Request,
-    ) -> Result<PendingLifecycle, BackendError> {
-        request.request_id = self
-            .next_request_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let request_id = request.request_id;
-        let sent_at = Instant::now();
-        let cancellable = request.operation == solid_ts_facts::v3::Operation::Analyze;
-        if cancellable {
-            self.active_request_id
-                .store(request_id, std::sync::atomic::Ordering::Release);
-        }
-        let (sender, receiver) = std::sync::mpsc::sync_channel(1);
-        self.pending
-            .lock()
-            .map_err(|_| BackendError::Process("TypeFacts pending map poisoned".into()))?
-            .insert(request_id, sender);
-        let request_bytes = match transport::write_frame(&self.writer, &request) {
-            Ok(bytes) => bytes,
-            Err(error) => {
-                if let Ok(mut pending) = self.pending.lock() {
-                    pending.remove(&request_id);
-                }
-                if cancellable {
-                    self.clear_active_request(request_id);
-                }
-                return Err(error);
-            }
-        };
-        let request_send = sent_at.elapsed();
-        Ok(PendingLifecycle {
-            request_id,
-            cancellable,
-            sent_at,
-            request_send,
-            request_bytes: u64::try_from(request_bytes).unwrap_or(u64::MAX),
-            receiver,
-        })
-    }
-
-    pub fn lifecycle_wait(
-        &self,
-        pending: PendingLifecycle,
-    ) -> Result<solid_ts_facts::v3::Response, BackendError> {
-        let response = pending
-            .receiver
-            .recv()
-            .map_err(|_| BackendError::Process("TypeFacts response channel closed".into()))
-            .and_then(|received| received.map_err(BackendError::Process));
-        if pending.cancellable {
-            self.clear_active_request(pending.request_id);
-        }
-        let mut response = response?;
-        response.client_roundtrip_ns =
-            u64::try_from(pending.sent_at.elapsed().as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_send_ns =
-            u64::try_from(pending.request_send.as_nanos()).unwrap_or(u64::MAX);
-        response.client_request_bytes = pending.request_bytes;
-        if response.request_id != pending.request_id {
-            return Err(BackendError::Process(
-                "TypeFacts response request identity mismatch".into(),
-            ));
-        }
-        if !response.ok {
-            let error = response.error.ok_or_else(|| {
-                BackendError::Process("TypeFacts error response has no body".into())
-            })?;
-            return Err(BackendError::TypeFactsService {
-                code: error.code,
-                message: error.message,
-            });
-        }
-        Ok(response)
-    }
-
-    fn clear_active_request(&self, request_id: u64) {
-        self.active_request_id
-            .compare_exchange(
-                request_id,
-                0,
-                std::sync::atomic::Ordering::AcqRel,
-                std::sync::atomic::Ordering::Acquire,
-            )
-            .ok();
-    }
-
-    fn record_exchange_timings(&mut self, response: &solid_ts_facts::v3::Response) {
-        let server = response.timings.unwrap_or_default();
-        self.last_exchange_timings = Some(TypeFactsExchangeTimings {
-            roundtrip: Duration::from_nanos(response.client_roundtrip_ns),
-            request_send: Duration::from_nanos(response.client_request_send_ns),
-            request_bytes: response.client_request_bytes,
-            response_decode: Duration::from_nanos(response.client_decode_ns),
-            response_bytes: response.client_response_bytes,
-            server_request_decode: Duration::from_nanos(server.request_decode_ns),
-            server_analyze: Duration::from_nanos(server.analyze_ns),
-            server_async: Duration::from_nanos(server.r#async_ns),
-            server_demand: Duration::from_nanos(server.demand_ns),
-            server_assembly: Duration::from_nanos(server.assembly_ns),
-            server_sort: Duration::from_nanos(server.sort_ns),
-            server_close_symbols: Duration::from_nanos(server.close_symbols_ns),
-            server_prepare: Duration::from_nanos(server.prepare_ns),
-            server_materialized: server.materialized,
-            server_retained_files: server.retained_files,
-            server_recomputed_files: server.recomputed_files,
-            server_non_durable_files: server.non_durable_files,
-        });
-    }
-
-    pub fn configured_sources(
-        &mut self,
-        project_id: &str,
-        generation: u64,
-    ) -> Result<Vec<SourceFile>, BackendError> {
-        let response = self.lifecycle(sources_request(project_id, generation))?;
-        decode_source_files(response)
-    }
-
-    /// Pipelines the `open` and `sources` lifecycle requests: both frames are
-    /// written before either response is awaited, so the service — which
-    /// processes generation-scoped requests in arrival order after building
-    /// the program — answers them back-to-back, collapsing two sequential
-    /// cold-start round trips into one. Returns the configured sources; the
-    /// open acknowledgement is validated and discarded.
-    pub fn open_and_configured_sources(
-        &mut self,
-        project_id: &str,
-        generation: u64,
-    ) -> Result<Vec<SourceFile>, BackendError> {
-        let pending_open = self.lifecycle_send(solid_ts_facts::v3::Request {
-            schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-            request_id: 0,
-            operation: solid_ts_facts::v3::Operation::Open,
-            project_id: project_id.into(),
-            generation,
-            changes: vec![],
-            structural_spans: vec![],
-            compiler_spans: vec![],
-            demands: vec![],
-            compact_demands: None,
-            state_token: String::new(),
-            reset_state: false,
-            removed_demand_paths: vec![],
-            cancel_request_id: 0,
-        })?;
-        let pending_sources = self.lifecycle_send(sources_request(project_id, generation))?;
-        self.lifecycle_wait(pending_open)?;
-        let response = self.lifecycle_wait(pending_sources)?;
-        decode_source_files(response)
-    }
-}
-
-fn sources_request(project_id: &str, generation: u64) -> solid_ts_facts::v3::Request {
-    solid_ts_facts::v3::Request {
-        schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-        request_id: 0,
-        operation: solid_ts_facts::v3::Operation::Sources,
-        project_id: project_id.into(),
-        generation,
-        changes: vec![],
-        structural_spans: vec![],
-        compiler_spans: vec![],
-        demands: vec![],
-        compact_demands: None,
-        state_token: String::new(),
-        reset_state: false,
-        removed_demand_paths: vec![],
-        cancel_request_id: 0,
-    }
-}
-
-pub fn decode_source_files(
-    response: solid_ts_facts::v3::Response,
-) -> Result<Vec<SourceFile>, BackendError> {
-    let arena = if response.source_arena.is_empty() {
-        None
-    } else {
-        let bytes = std::fs::read(&response.source_arena).map_err(|error| {
-            BackendError::Process(format!(
-                "read TypeFacts source arena {:?}: {error}",
-                response.source_arena
-            ))
-        })?;
-        let _ = std::fs::remove_file(&response.source_arena);
-        Some(bytes)
-    };
-    if let Some(arena) = arena.as_deref() {
-        if response.source_lengths.len() != response.sources.len() {
-            return Err(BackendError::Process(
-                "TypeFacts source arena descriptor count mismatch".into(),
-            ));
-        }
-        let mut offset = 0usize;
-        let mut sources = Vec::with_capacity(response.sources.len());
-        for (source, length) in response.sources.into_iter().zip(response.source_lengths) {
-            let length = usize::try_from(length)
-                .map_err(|_| BackendError::Process("source arena length overflow".into()))?;
-            let end = offset
-                .checked_add(length)
-                .ok_or_else(|| BackendError::Process("source arena range overflow".into()))?;
-            let bytes = arena.get(offset..end).ok_or_else(|| {
-                BackendError::Process("source arena range is out of bounds".into())
-            })?;
-            offset = end;
-            sources.push(decode_source_file(source, Some(bytes))?);
-        }
-        if offset != arena.len() {
-            return Err(BackendError::Process(
-                "TypeFacts source arena has trailing bytes".into(),
-            ));
-        }
-        return Ok(sources);
-    }
-    response
-        .sources
-        .into_iter()
-        .map(|source| decode_source_file(source, None))
-        .collect()
-}
-
-fn decode_source_file(
-    source: solid_ts_facts::v3::SourceFile,
-    arena: Option<&[u8]>,
-) -> Result<SourceFile, BackendError> {
-    let bytes = if let Some(arena) = arena {
-        arena.to_vec()
-    } else if source.local {
-        std::fs::read(&source.path).map_err(|error| {
-            BackendError::Process(format!("read configured source {:?}: {error}", source.path))
-        })?
-    } else {
-        source.source
-    };
-    Ok(SourceFile {
-        path: source.path,
-        source: String::from_utf8(bytes).map_err(|error| {
-            BackendError::Process(format!("TypeFacts returned non-UTF-8 source: {error}"))
-        })?,
-        compiler_options: CompilerOptions::default(),
-    })
-}
-
-impl TypeFactsSidecar {
-    fn semantic_retained(
-        &mut self,
-        request: &ClosureRequest,
-        demands: Vec<solid_ts_facts::v3::EntityDemand>,
-        force_reset: bool,
-    ) -> Result<ClosureResponse, BackendError> {
-        let grouped = group_demands(&demands);
-        let reset_state = force_reset || self.state_token.is_empty();
-        let (wire_demands, removed_demand_paths) = if reset_state {
-            (demands, Vec::new())
-        } else {
-            demand_delta(&self.retained_demands, &grouped)
-        };
-        let response = self.semantic_retained_exchange(
-            request,
-            wire_demands,
-            removed_demand_paths,
-            reset_state,
-        )?;
-        self.retained_demands = grouped;
-        Ok(response)
-    }
-
-    fn semantic_retained_grouped(
-        &mut self,
-        request: &ClosureRequest,
-        groups: &[SemanticDemandGroup<'_>],
-        force_reset: bool,
-    ) -> Result<ClosureResponse, BackendError> {
-        let reset_state = force_reset || self.state_token.is_empty();
-        let mut wire_demands = Vec::new();
-        let mut present = HashSet::with_capacity(groups.len());
-        for group in groups {
-            present.insert(group.path);
-            if reset_state
-                || self
-                    .retained_demands
-                    .get(group.path)
-                    .is_none_or(|previous| previous != group.demands)
-            {
-                wire_demands.extend_from_slice(group.demands);
-            }
-        }
-        let mut removed_demand_paths = if reset_state {
-            Vec::new()
-        } else {
-            self.retained_demands
-                .keys()
-                .filter(|path| !present.contains(path.as_str()))
-                .cloned()
-                .collect::<Vec<_>>()
-        };
-        removed_demand_paths.sort();
-        let response = self.semantic_retained_exchange(
-            request,
-            wire_demands,
-            removed_demand_paths,
-            reset_state,
-        )?;
-        if reset_state {
-            self.retained_demands.clear();
-        } else {
-            self.retained_demands
-                .retain(|path, _| present.contains(path.as_str()));
-        }
-        for group in groups {
-            let changed = self
-                .retained_demands
-                .get(group.path)
-                .is_none_or(|previous| previous != group.demands);
-            if changed {
-                self.retained_demands
-                    .insert(group.path.to_owned(), group.demands.to_vec());
-            }
-        }
-        Ok(response)
-    }
-
-    fn semantic_retained_exchange(
-        &mut self,
-        request: &ClosureRequest,
-        wire_demands: Vec<solid_ts_facts::v3::EntityDemand>,
-        removed_demand_paths: Vec<String>,
-        reset_state: bool,
-    ) -> Result<ClosureResponse, BackendError> {
-        // Full reset snapshots go over compact; warm demand deltas stay plain.
-        let (demands, compact_demands) = if reset_state && !wire_demands.is_empty() {
-            (
-                vec![],
-                Some(solid_ts_facts::v3::compact_demands(&wire_demands)),
-            )
-        } else {
-            (wire_demands, None)
-        };
-        let mut response = self.lifecycle(solid_ts_facts::v3::Request {
-            schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-            request_id: 0,
-            operation: solid_ts_facts::v3::Operation::Analyze,
-            project_id: request.project_id.clone(),
-            generation: request.generation,
-            changes: vec![],
-            structural_spans: vec![],
-            compiler_spans: vec![],
-            demands,
-            compact_demands,
-            state_token: if reset_state {
-                String::new()
-            } else {
-                self.state_token.clone()
-            },
-            reset_state,
-            removed_demand_paths,
-            cancel_request_id: 0,
-        })?;
-        self.record_exchange_timings(&response);
-        let reused = response.table_mode == "reuse";
-        self.last_table_changes = Some(match response.table_mode.as_str() {
-            "reuse" => TypeScriptChanges {
-                unchanged: true,
-                ..TypeScriptChanges::default()
-            },
-            "delta" => {
-                let delta = response.table_delta.as_ref().ok_or_else(|| {
-                    BackendError::Process("TypeFacts delta response has no delta".into())
-                })?;
-                let mut entity_paths = delta
-                    .entity_files
-                    .iter()
-                    .map(|file| file.path.clone())
-                    .chain(delta.removed_entity_paths.iter().cloned())
-                    .collect::<Vec<_>>();
-                let mut symbol_ids = delta
-                    .symbols
-                    .iter()
-                    .map(|symbol| symbol.id.clone())
-                    .chain(
-                        delta
-                            .symbol_reference_files
-                            .iter()
-                            .map(|references| references.id.clone()),
-                    )
-                    .chain(delta.removed_symbol_ids.iter().cloned())
-                    .collect::<Vec<_>>();
-                let mut file_paths = delta
-                    .files
-                    .iter()
-                    .map(|file| file.path.clone())
-                    .chain(delta.removed_file_paths.iter().cloned())
-                    .collect::<Vec<_>>();
-                entity_paths.sort();
-                entity_paths.dedup();
-                symbol_ids.sort();
-                symbol_ids.dedup();
-                file_paths.sort();
-                file_paths.dedup();
-                let unchanged =
-                    entity_paths.is_empty() && symbol_ids.is_empty() && file_paths.is_empty();
-                TypeScriptChanges {
-                    unchanged,
-                    entity_paths,
-                    symbol_ids,
-                    file_paths,
-                }
-            }
-            _ => TypeScriptChanges::default(),
-        });
-        let table = match response.table_mode.as_str() {
-            "full" => {
-                if !response.packed_table.is_empty() {
-                    solid_ts_facts::v3::decode_packed_fact_table(
-                        &response.packed_table,
-                        response.project_id.clone(),
-                    )
-                    .map_err(|error| {
-                        BackendError::Process(format!("TypeFacts packed table invalid: {error}"))
-                    })?
-                } else {
-                    match (response.table.take(), response.compact_table.take()) {
-                        (Some(table), _) => table,
-                        (None, Some(compact)) => compact.expand().map_err(|error| {
-                            BackendError::Process(format!(
-                                "TypeFacts compact table invalid: {error}"
-                            ))
-                        })?,
-                        (None, None) => {
-                            return Err(BackendError::Process(
-                                "TypeFacts full response returned no table".into(),
-                            ));
-                        }
-                    }
-                }
-            }
-            "reuse" => {
-                let mut table = self.retained_table.clone().ok_or_else(|| {
-                    BackendError::Process("TypeFacts requested reuse without retained table".into())
-                })?;
-                table.generation = response.generation;
-                table.project_id.clone_from(&response.project_id);
-                table
-            }
-            "delta" => {
-                let mut table = self.retained_table.clone().ok_or_else(|| {
-                    BackendError::Process(
-                        "TypeFacts returned a delta without retained table".into(),
-                    )
-                })?;
-                apply_table_delta(
-                    &mut table,
-                    response.table_delta.as_ref().ok_or_else(|| {
-                        BackendError::Process("TypeFacts delta response has no delta".into())
-                    })?,
-                )?;
-                table
-            }
-            other => {
-                return Err(BackendError::Process(format!(
-                    "TypeFacts returned unsupported table mode {other:?}"
-                )));
-            }
-        };
-        let closure = ClosureResponse {
-            schema: solid_ts_facts::TYPE_FACTS_SCHEMA,
-            project_id: response.project_id,
-            generation: response.generation,
-            table,
-        };
-        closure.validate_for(request)?;
-        if response.state_token.is_empty() {
-            return Err(BackendError::Process(
-                "TypeFacts retained response has no state token".into(),
-            ));
-        }
-        self.state_token = response.state_token;
-        if !reused {
-            self.retained_table = Some(closure.table.clone());
-        }
-        Ok(closure)
-    }
-}
-
-fn group_demands(
-    demands: &[solid_ts_facts::v3::EntityDemand],
-) -> HashMap<String, Vec<solid_ts_facts::v3::EntityDemand>> {
-    let mut grouped: HashMap<String, Vec<_>> = HashMap::new();
-    for demand in demands {
-        grouped
-            .entry(demand.location.path.clone())
-            .or_default()
-            .push(demand.clone());
-    }
-    grouped
-}
-
-fn demand_delta(
-    previous: &HashMap<String, Vec<solid_ts_facts::v3::EntityDemand>>,
-    next: &HashMap<String, Vec<solid_ts_facts::v3::EntityDemand>>,
-) -> (Vec<solid_ts_facts::v3::EntityDemand>, Vec<String>) {
-    let mut paths: Vec<_> = next.keys().collect();
-    paths.sort();
-    let mut changed = Vec::new();
-    for path in paths {
-        if previous.get(path) != next.get(path) {
-            changed.extend(next[path].iter().cloned());
-        }
-    }
-    let mut removed: Vec<_> = previous
-        .keys()
-        .filter(|path| !next.contains_key(*path))
-        .cloned()
-        .collect();
-    removed.sort();
-    (changed, removed)
-}
-
-fn apply_table_delta(
-    table: &mut solid_ts_facts::FactTable,
-    delta: &solid_ts_facts::v3::FactTableDelta,
-) -> Result<(), BackendError> {
-    let source_paths: HashSet<_> = delta
-        .sources
-        .iter()
-        .map(|value| value.path.as_str())
-        .collect();
-    let removed_source_paths: HashSet<_> = delta
-        .removed_source_paths
-        .iter()
-        .map(String::as_str)
-        .collect();
-    let sources = Arc::make_mut(&mut table.sources);
-    sources.retain(|value| {
-        !source_paths.contains(value.path.as_str())
-            && !removed_source_paths.contains(value.path.as_str())
-    });
-    sources.extend(delta.sources.iter().cloned());
-    sources.sort_by(|left, right| left.path.cmp(&right.path));
-
-    let entity_paths: HashSet<_> = delta
-        .entity_files
-        .iter()
-        .map(|value| value.path.as_str())
-        .collect();
-    let removed_entity_paths: HashSet<_> = delta
-        .removed_entity_paths
-        .iter()
-        .map(String::as_str)
-        .collect();
-    let entities = Arc::make_mut(&mut table.entities);
-    entities.retain(|value| {
-        !entity_paths.contains(value.location.path.as_str())
-            && !removed_entity_paths.contains(value.location.path.as_str())
-    });
-    for file in &delta.entity_files {
-        entities.extend(file.entities.iter().cloned());
-    }
-    entities.sort_by(|left, right| {
-        (
-            &left.location.path,
-            left.location.start_byte,
-            left.location.end_byte,
-        )
-            .cmp(&(
-                &right.location.path,
-                right.location.start_byte,
-                right.location.end_byte,
-            ))
-    });
-
-    let symbol_ids: HashSet<_> = delta
-        .symbols
-        .iter()
-        .map(|value| value.id.as_str())
-        .collect();
-    let removed_symbol_ids: HashSet<_> = delta
-        .removed_symbol_ids
-        .iter()
-        .map(String::as_str)
-        .collect();
-    let symbols = Arc::make_mut(&mut table.symbols);
-    symbols.retain(|value| {
-        !symbol_ids.contains(value.id.as_str()) && !removed_symbol_ids.contains(value.id.as_str())
-    });
-    symbols.extend(delta.symbols.iter().cloned());
-    symbols.sort_by(|left, right| left.id.cmp(&right.id));
-    for replacement in &delta.symbol_reference_files {
-        if replacement
-            .references
-            .iter()
-            .any(|reference| reference.path != replacement.path)
-        {
-            return Err(BackendError::Process(format!(
-                "TypeFacts reference delta for {:?} contains another path",
-                replacement.path
-            )));
-        }
-        if replacement.references.windows(2).any(|pair| {
-            (pair[0].start_byte, pair[0].end_byte) > (pair[1].start_byte, pair[1].end_byte)
-        }) {
-            return Err(BackendError::Process(format!(
-                "TypeFacts reference delta for {:?} is not ordered",
-                replacement.id
-            )));
-        }
-        let symbol_index = symbols
-            .binary_search_by(|symbol| symbol.id.cmp(&replacement.id))
-            .map_err(|_| {
-                BackendError::Process(format!(
-                    "TypeFacts reference delta names missing symbol {:?}",
-                    replacement.id
-                ))
-            })?;
-        let symbol = &mut symbols[symbol_index];
-        let start = symbol
-            .references
-            .partition_point(|reference| reference.path < replacement.path);
-        let end = symbol
-            .references
-            .partition_point(|reference| reference.path <= replacement.path);
-        symbol
-            .references
-            .splice(start..end, replacement.references.iter().cloned());
-    }
-
-    let file_paths: HashSet<_> = delta
-        .files
-        .iter()
-        .map(|value| value.path.as_str())
-        .collect();
-    let removed_file_paths: HashSet<_> = delta
-        .removed_file_paths
-        .iter()
-        .map(String::as_str)
-        .collect();
-    let files = Arc::make_mut(&mut table.files);
-    files.retain(|value| {
-        !file_paths.contains(value.path.as_str())
-            && !removed_file_paths.contains(value.path.as_str())
-    });
-    files.extend(delta.files.iter().cloned());
-    files.sort_by(|left, right| left.path.cmp(&right.path));
-    table.generation = delta.generation;
-    Ok(())
-}
-
-impl TypeFactsProvider for TypeFactsSidecar {
-    fn closure(&mut self, request: &ClosureRequest) -> Result<ClosureResponse, BackendError> {
-        let response = self.lifecycle(solid_ts_facts::v3::Request {
-            schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-            request_id: 0,
-            operation: solid_ts_facts::v3::Operation::Analyze,
-            project_id: request.project_id.clone(),
-            generation: request.generation,
-            changes: vec![],
-            structural_spans: vec![],
-            compiler_spans: request.compiler_spans.clone(),
-            demands: vec![],
-            compact_demands: None,
-            state_token: String::new(),
-            reset_state: false,
-            removed_demand_paths: vec![],
-            cancel_request_id: 0,
-        })?;
-        self.record_exchange_timings(&response);
-        let closure = ClosureResponse {
-            schema: solid_ts_facts::TYPE_FACTS_SCHEMA,
-            project_id: response.project_id,
-            generation: response.generation,
-            table: response.table.ok_or_else(|| {
-                BackendError::Process("TypeFacts analysis returned no table".into())
-            })?,
-        };
-        closure.validate_for(request)?;
-        Ok(closure)
-    }
-
-    fn semantic(
-        &mut self,
-        request: &ClosureRequest,
-        demands: Vec<solid_ts_facts::v3::EntityDemand>,
-    ) -> Result<ClosureResponse, BackendError> {
-        if std::env::var_os("SOLID_TYPEFACTS_REFERENCE_V2").is_some() {
-            return self.closure(request);
-        }
-        let retry_demands = demands.clone();
-        match self.semantic_retained(request, demands, false) {
-            Err(BackendError::TypeFactsService { code, .. }) if code == "state-mismatch" => {
-                self.state_token.clear();
-                self.retained_demands.clear();
-                self.retained_table = None;
-                self.semantic_retained(request, retry_demands, true)
-            }
-            result => result,
-        }
-    }
-
-    fn semantic_requires_compiler_spans(&self) -> bool {
-        std::env::var_os("SOLID_TYPEFACTS_REFERENCE_V2").is_some()
-    }
-
-    fn semantic_grouped(
-        &mut self,
-        request: &ClosureRequest,
-        groups: &[SemanticDemandGroup<'_>],
-    ) -> Result<ClosureResponse, BackendError> {
-        if std::env::var_os("SOLID_TYPEFACTS_REFERENCE_V2").is_some() {
-            return self.closure(request);
-        }
-        match self.semantic_retained_grouped(request, groups, false) {
-            Err(BackendError::TypeFactsService { code, .. }) if code == "state-mismatch" => {
-                self.state_token.clear();
-                self.retained_demands.clear();
-                self.retained_table = None;
-                self.semantic_retained_grouped(request, groups, true)
-            }
-            result => result,
-        }
-    }
-
-    fn semantic_response_requires_validation(&self) -> bool {
-        false
-    }
-
-    fn validate_semantic_reuse(&mut self, request: &ClosureRequest) -> Result<bool, BackendError> {
-        if self.state_token.is_empty() {
-            return Ok(false);
-        }
-        let result = self.lifecycle(solid_ts_facts::v3::Request {
-            schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-            request_id: 0,
-            operation: solid_ts_facts::v3::Operation::Analyze,
-            project_id: request.project_id.clone(),
-            generation: request.generation,
-            changes: vec![],
-            structural_spans: vec![],
-            compiler_spans: vec![],
-            demands: vec![],
-            compact_demands: None,
-            state_token: self.state_token.clone(),
-            reset_state: false,
-            removed_demand_paths: vec![],
-            cancel_request_id: 0,
-        });
-        match result {
-            Ok(response) => {
-                self.record_exchange_timings(&response);
-                if response.table_mode == "reuse" && response.state_token == self.state_token {
-                    Ok(true)
-                } else {
-                    self.state_token.clear();
-                    self.retained_demands.clear();
-                    self.retained_table = None;
-                    Ok(false)
-                }
-            }
-            Err(BackendError::TypeFactsService { code, .. }) if code == "state-mismatch" => {
-                self.state_token.clear();
-                self.retained_demands.clear();
-                self.retained_table = None;
-                Ok(false)
-            }
-            Err(error) => Err(error),
-        }
-    }
-
-    fn take_last_exchange_timings(&mut self) -> Option<TypeFactsExchangeTimings> {
-        self.last_exchange_timings.take()
-    }
-
-    fn take_last_table_changes(&mut self) -> Option<TypeScriptChanges> {
-        self.last_table_changes.take()
-    }
-}
-
-impl Drop for TypeFactsSidecar {
-    fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
-        if let Some(reader) = self.reader.take() {
-            let _ = reader.join();
-        }
-    }
-}
-
-impl TypeFactsCancellation {
-    pub fn cancel_active(&self) -> Result<bool, BackendError> {
-        let target = self
-            .active_request_id
-            .load(std::sync::atomic::Ordering::Acquire);
-        if target == 0 {
-            return Ok(false);
-        }
-        let Some(writer) = self.writer.upgrade() else {
-            return Ok(false);
-        };
-        let request_id = self
-            .next_request_id
-            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        let _ = transport::write_frame(
-            &writer,
-            &solid_ts_facts::v3::Request {
-                schema: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_V3,
-                request_id,
-                operation: solid_ts_facts::v3::Operation::Cancel,
-                project_id: self.project_id.clone(),
-                generation: 1,
-                changes: vec![],
-                structural_spans: vec![],
-                compiler_spans: vec![],
-                demands: vec![],
-                compact_demands: None,
-                state_token: String::new(),
-                reset_state: false,
-                removed_demand_paths: vec![],
-                cancel_request_id: target,
-            },
-        )?;
-        Ok(true)
-    }
-}
-
-fn fail_pending_responses(pending: &PendingResponses, message: String) {
-    if let Ok(mut pending) = pending.lock() {
-        for (_, sender) in pending.drain() {
-            let _ = sender.send(Err(message.clone()));
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use solid_compiler_facts::COMPILER_FACTS_PROTOCOL;
     use solid_facts_core::SourceHash;
-    use solid_ts_facts::{FactTable, SourceDigest, TYPE_FACTS_SCHEMA};
+    use typefacts::{FactTable, SourceDigest};
+
+    /// The wire schema the in-memory stub claims; the real value comes from
+    /// the producer's handshake, which no stub performs.
+    const STUB_SCHEMA: u64 = 2;
 
     struct Compiler;
     impl CompilerFactsProvider for Compiler {
@@ -2798,24 +1584,29 @@ mod tests {
         }
     }
 
+    /// Stands in for a retained session: it answers with a table stamped for
+    /// the generation it is on, and advances the way a real session does when
+    /// the caller moves to the next one.
     struct Types {
         source: SourceDigest,
+        project_id: String,
+        generation: u64,
     }
     impl TypeFactsProvider for Types {
-        fn closure(&mut self, request: &ClosureRequest) -> Result<ClosureResponse, BackendError> {
-            Ok(ClosureResponse {
-                schema: TYPE_FACTS_SCHEMA,
-                project_id: request.project_id.clone(),
-                generation: request.generation,
-                table: FactTable {
-                    schema: TYPE_FACTS_SCHEMA,
-                    project_id: request.project_id.clone(),
-                    generation: request.generation,
-                    sources: vec![self.source.clone()].into(),
-                    entities: vec![].into(),
-                    symbols: vec![].into(),
-                    files: vec![].into(),
-                },
+        fn semantic_grouped(
+            &mut self,
+            _groups: &[SemanticDemandGroup<'_>],
+        ) -> Result<FactTable, BackendError> {
+            let generation = self.generation;
+            self.generation += 1;
+            Ok(FactTable {
+                schema: STUB_SCHEMA,
+                project_id: self.project_id.clone(),
+                generation,
+                sources: vec![self.source.clone()].into(),
+                entities: vec![].into(),
+                symbols: vec![].into(),
+                files: vec![].into(),
             })
         }
     }
@@ -2840,37 +1631,6 @@ mod tests {
     }
 
     #[test]
-    fn hydrates_local_sources_and_preserves_inline_fallbacks() {
-        let path = std::env::temp_dir().join(format!(
-            "solid-checker-source-hydration-{}.ts",
-            std::process::id()
-        ));
-        std::fs::write(&path, "export const local = 1;\n").unwrap();
-        let local = decode_source_file(
-            solid_ts_facts::v3::SourceFile {
-                path: path.to_string_lossy().into_owned(),
-                local: true,
-                source: vec![],
-            },
-            None,
-        )
-        .unwrap();
-        assert_eq!(local.source, "export const local = 1;\n");
-        std::fs::remove_file(path).unwrap();
-
-        let inline = decode_source_file(
-            solid_ts_facts::v3::SourceFile {
-                path: "/virtual/generated.ts".into(),
-                local: false,
-                source: b"export const generated = 2;\n".to_vec(),
-            },
-            None,
-        )
-        .unwrap();
-        assert_eq!(inline.source, "export const generated = 2;\n");
-    }
-
-    #[test]
     fn retained_demands_and_indexed_hydration_match_fresh_results() {
         let files = vec![
             test_file_facts(
@@ -2888,7 +1648,7 @@ mod tests {
         assert_eq!(retained_demands, fresh_demands);
 
         let mut fresh_table = FactTable {
-            schema: TYPE_FACTS_SCHEMA,
+            schema: STUB_SCHEMA,
             project_id: "project".into(),
             generation: 1,
             sources: vec![].into(),
@@ -2897,12 +1657,12 @@ mod tests {
             files: files
                 .iter()
                 .rev()
-                .map(|file| solid_ts_facts::FileFact {
-                    path: file.path.to_string(),
-                    calls: vec![],
-                    bindings: vec![],
-                    functions: vec![],
-                    async_functions: vec![],
+                .map(|file| typefacts::FileFact {
+                    path: file.path.to_string().into(),
+                    calls: vec![].into(),
+                    bindings: vec![].into(),
+                    functions: vec![].into(),
+                    async_functions: vec![].into(),
                 })
                 .collect::<Vec<_>>()
                 .into(),
@@ -2948,11 +1708,9 @@ mod tests {
             assert!(demand.symbol);
             assert_eq!(demand.type_descriptor, call.arguments.is_empty());
         }
-        assert!(
-            demands
-                .iter()
-                .any(|demand| { demand.r#async && demand.location.path == file.path.as_str() })
-        );
+        assert!(demands.iter().any(|demand| {
+            demand.r#async && demand.location.path.as_ref() == file.path.as_str()
+        }));
         assert!(
             demands.windows(2).all(|pair| pair[0] != pair[1]),
             "the transport plan must not contain duplicate queries"
@@ -2975,9 +1733,11 @@ mod tests {
         let source = "export const answer = 42;";
         let mut compiler = Compiler;
         let mut types = Types {
+            project_id: "project".into(),
+            generation: 1,
             source: SourceDigest {
                 path: "src/a.ts".into(),
-                sha256: SourceHash::of(source),
+                sha256: typefacts::SourceHash::of(source),
             },
         };
         let project = build_project(
@@ -3006,9 +1766,11 @@ mod tests {
         };
         let mut compiler = CountingCompiler(0);
         let mut types = Types {
+            project_id: "project".into(),
+            generation: 1,
             source: SourceDigest {
                 path: "src/a.ts".into(),
-                sha256: SourceHash::of(source),
+                sha256: typefacts::SourceHash::of(source),
             },
         };
         let mut cache = FactsCache::default();

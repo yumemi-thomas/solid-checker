@@ -106,8 +106,7 @@ reuses `parserOptions.project`). Set `settings.solidChecker.project` if your
 config has a nonstandard name or is a solution-style root config.
 
 > The plugin analyzes the project once per lint run and reports from that
-> snapshot. Use it in lint commands and CI; for live diagnostics as you type,
-> use the `solid-checkerd` language server instead.
+> snapshot, so it fits lint commands, editor-on-save, and CI.
 
 ## CLI options
 
@@ -179,12 +178,7 @@ automatically from `node_modules`. See
 [package contracts](docs/package-contracts.md) for hashing artifacts and the
 trust boundary.
 
-## Language server and WASM
-
-The package also ships `solid-checkerd`, an incremental language server that
-publishes diagnostics for the whole project (including unopened files), keeps
-them in sync as you type, and offers preferred quick fixes. Point any
-LSP-capable editor at `solid-checkerd --project tsconfig.json`.
+## WASM
 
 In StackBlitz, WebContainers, or a browser worker — anywhere a native process
 can't be spawned — import the process-free WASM API from the same package:

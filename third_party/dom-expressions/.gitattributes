@@ -1,4 +1,0 @@
-# Force LF everywhere so fixture comparisons behave identically on Windows
-# runners (CRLF checkouts broke jsx-compiler fixture tests).
-* text=auto eol=lf
-*.node binary

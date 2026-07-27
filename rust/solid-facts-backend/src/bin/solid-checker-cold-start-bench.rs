@@ -187,7 +187,7 @@ fn parse_args() -> Result<Options, Box<dyn std::error::Error>> {
     let mut typefacts = env::var_os("SOLID_TYPEFACTS_BIN")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("bin/solid-typefacts"));
-    let mut project = PathBuf::from("internal/engine/testdata/eslint-reactivity-v2/tsconfig.json");
+    let mut project = PathBuf::from("fixtures/engine/eslint-reactivity-v2/tsconfig.json");
     let mut iterations = 10_usize;
     let arguments = env::args().skip(1).collect::<Vec<_>>();
     let mut index = 0;

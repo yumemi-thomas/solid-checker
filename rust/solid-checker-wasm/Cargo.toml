@@ -17,10 +17,12 @@ napi-derive.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 solid-facts-backend = { path = "../solid-facts-backend" }
-solid-ts-facts = { path = "../solid-ts-facts" }
+typefacts.workspace = true
 
 [target.'cfg(target_family = "wasm")'.dependencies]
-dom-expressions-jsx-compiler = { path = "../../third_party/dom-expressions/packages/jsx-compiler" }
+# The wasm cdylib needs the compiler's Node-API registrations linked in, so
+# this one keeps the crate's default `node` feature.
+dom-expressions-compiler = { workspace = true, features = ["node"] }
 
 [build-dependencies]
 napi-build = "2"

@@ -8,7 +8,7 @@ use std::{
 
 use serde_json::json;
 use solid_facts_backend::{
-    NativeBuildTimings, NativeIncrementalSession, SourceChange, TypeFactsSidecar,
+    NativeBuildTimings, NativeIncrementalSession, SourceChange, TypeFactsSession,
 };
 
 struct Options {
@@ -69,8 +69,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let project = options.project.canonicalize()?;
     let project_id = project.to_string_lossy().into_owned();
     let startup = Instant::now();
-    let typescript =
-        TypeFactsSidecar::spawn(&options.typefacts, &["-project".into(), project_id.clone()])?;
+    let typescript = TypeFactsSession::open(&options.typefacts, &project_id, &[])?;
     let (mut session, sources) = NativeIncrementalSession::open_pipelined(project_id, typescript)?;
     let source_count = sources.len();
     let source_setup_ns = nanos(startup.elapsed());
@@ -356,7 +355,6 @@ fn type_facts_breakdown(
         "serverAssembly": exchanges(|timing| timing.server_assembly),
         "serverSort": exchanges(|timing| timing.server_sort),
         "serverCloseSymbols": exchanges(|timing| timing.server_close_symbols),
-        "serverPrepare": exchanges(|timing| timing.server_prepare),
         "encodeAndTransport": exchanges(|timing| timing.encode_and_transport()),
         "responseDecode": exchanges(|timing| timing.response_decode),
         "responseBytes": distribution(samples.iter().map(|timing| timing.exchange.response_bytes).collect()),

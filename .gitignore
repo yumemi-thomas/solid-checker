@@ -8,8 +8,8 @@
 **/target/
 **/node_modules/
 # Contract integration tests use small, hand-written packages as fixtures.
-!internal/reactiveir/testdata/package-*/node_modules/
-!internal/reactiveir/testdata/package-*/node_modules/**
+!fixtures/reactive-ir/package-*/node_modules/
+!fixtures/reactive-ir/package-*/node_modules/**
 /.pnpm-store/
 packages/wasm/browser.js
 packages/wasm/generated.d.ts
@@ -19,3 +19,4 @@ packages/wasm/solid-checker-wasm.wasi.cjs
 packages/wasm/solid-checker-wasm.wasm32-wasi*.wasm
 packages/wasm/wasi-worker*.mjs
 *.test
+/.typefacts/

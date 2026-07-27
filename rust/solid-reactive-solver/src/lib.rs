@@ -2,8 +2,8 @@ mod rules;
 
 use serde::{Deserialize, Serialize};
 use solid_reactive_ir::{ExecutionRole, Program};
-use solid_ts_facts::Location;
 use std::time::{Duration, Instant};
+use typefacts::Location;
 
 pub use rules::{DOCS_BASE_URL, Rule, RuleMetadata, docs_url};
 
@@ -551,7 +551,7 @@ fn strict_read_evidence(read: &solid_reactive_ir::ReactiveRead) -> Vec<EvidenceS
 
 fn strict_read_related_locations(
     read: &solid_reactive_ir::ReactiveRead,
-) -> Vec<solid_ts_facts::Location> {
+) -> Vec<typefacts::Location> {
     let mut locations = vec![read.declaration.clone()];
     if let Some(origin) = &read.origin {
         locations.push(origin.clone());

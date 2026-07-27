@@ -35,7 +35,7 @@ test("restores executable permissions after artifact download", () => {
       mkdirSync(nativeRoot, { recursive: true });
 
       const binaries = {};
-      for (const name of ["solid-checker", "solid-checkerd", "solid-typefacts"]) {
+      for (const name of ["solid-checker", "solid-typefacts"]) {
         const path = `native/${target}/${name}${extension}`;
         const binary = join(targetRoot, path);
         writeFileSync(binary, "test binary");

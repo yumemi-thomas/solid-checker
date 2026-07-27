@@ -4,12 +4,10 @@ members = [
   "solid-facts-core",
   "solid-ast-facts",
   "solid-compiler-facts",
-  "solid-ts-facts",
   "solid-facts",
   "solid-facts-backend",
   "solid-reactive-ir",
   "solid-reactive-solver",
-  "solid-lsp",
   "solid-checker-wasm",
 ]
 
@@ -20,6 +18,11 @@ publish = false
 rust-version = "1.97"
 
 [workspace.dependencies]
+# The JSX compiler lives in its own repository now and is pinned by revision:
+# `dom-expressions` is tracked on a feature branch, and reproducible builds
+# matter more here than picking up upstream automatically.
+dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "209e1bf78f5616885d473dd04a68913cd6bb2ce0", default-features = false }
+typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "4adeb2063b94dad141a571e20762dd9c451aa34b" }
 ciborium = "0.2"
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"

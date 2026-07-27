@@ -11,10 +11,6 @@ fn cli_consumes_discovered_package_contracts() {
         Ok(value) => value,
         Err(_) => return,
     };
-    let compiler = match env::var("SOLID_COMPILER_FACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     for (fixture, rule, message) in [
         ("package-consumer", "strict-read-untracked", "readCount"),
@@ -42,11 +38,8 @@ fn cli_consumes_discovered_package_contracts() {
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
             .env("SOLID_TYPEFACTS_BIN", &typefacts)
-            .env("SOLID_COMPILER_FACTS_BIN", &compiler)
             .args(["--format", "json", "--project"])
-            .arg(root.join(format!(
-                "internal/reactiveir/testdata/{fixture}/tsconfig.json"
-            )))
+            .arg(root.join(format!("fixtures/reactive-ir/{fixture}/tsconfig.json")))
             .output()
             .expect("run Rust diagnostic CLI");
         assert!(
@@ -69,11 +62,10 @@ fn cli_consumes_discovered_package_contracts() {
 fn cli_validates_a_contract_without_opening_a_project() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let contract = root.join(
-        "internal/reactiveir/testdata/package-consumer/node_modules/reactive-package/solid-reactivity.json",
+        "fixtures/reactive-ir/package-consumer/node_modules/reactive-package/solid-reactivity.json",
     );
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env_remove("SOLID_TYPEFACTS_BIN")
-        .env_remove("SOLID_COMPILER_FACTS_BIN")
         .args(["--validate-contract"])
         .arg(contract)
         .output()
@@ -92,7 +84,7 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
         Err(_) => return,
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let fixture = root.join("internal/reactiveir/testdata/package-consumer");
+    let fixture = root.join("fixtures/reactive-ir/package-consumer");
     let directory = temporary_directory("local-contract");
     fs::copy(fixture.join("App.tsx"), directory.join("App.tsx")).unwrap();
     fs::copy(fixture.join("jsx.d.ts"), directory.join("jsx.d.ts")).unwrap();
@@ -231,7 +223,7 @@ fn cli_emits_and_revalidates_package_contracts() {
         "export declare function createCount(): () => number;\n",
     )
     .unwrap();
-    let producer = root.join("internal/reactiveir/testdata/package-return-producer/tsconfig.json");
+    let producer = root.join("fixtures/reactive-ir/package-return-producer/tsconfig.json");
     let result = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
         .args(["--project"])

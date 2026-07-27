@@ -1,58 +1,40 @@
 RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
-COMPILER_MANIFEST := third_party/dom-expressions/packages/jsx-compiler/Cargo.toml
-COMPILER_BIN := third_party/dom-expressions/packages/jsx-compiler/target/debug/solid-compiler-facts
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-compiler build-rust package test test-go test-rust test-cli test-compiler test-zed verify conformance corpus clean
+.PHONY: build build-typefacts build-rust package test test-rust test-cli verify corpus clean
 
 build: build-rust
 
+# The producer lives in yumemi-thomas/solid-ts-facts and is built from the
+# revision `rust/Cargo.toml` pins the client to; the startup handshake rejects
+# any other pairing.
 build-typefacts:
-	mkdir -p bin
-	go build -ldflags "-X main.buildID=$(SOLID_CHECKER_BUILD_ID)" -o bin/solid-typefacts ./cmd/solid-typefacts
-
-build-compiler:
-	cargo +$(RUST_TOOLCHAIN) build --manifest-path $(COMPILER_MANIFEST) --no-default-features --features sidecar --bin solid-compiler-facts
+	TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" scripts/build-typefacts.sh
 
 build-rust: build-typefacts
 	mkdir -p bin
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
+	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
 	cp rust/target/debug/solid-checker-rust bin/solid-checker-rust
-	cp rust/target/debug/solid-checkerd-rust bin/solid-checkerd-rust
 
 package: build-typefacts
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
+	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" node scripts/package-rust.mjs --output dist/solid-checker
 
-test: test-go test-rust test-cli test-compiler test-zed
+test: test-rust test-cli
 
-test-go:
-	go test ./cmd/solid-typefacts ./internal/typefacts/... ./internal/wirecbor
-
-test-rust: build-typefacts build-compiler
-	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" SOLID_COMPILER_FACTS_BIN="$(CURDIR)/$(COMPILER_BIN)" cargo +$(RUST_TOOLCHAIN) test --manifest-path $(RUST_MANIFEST) --workspace
+test-rust: build-typefacts
+	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" cargo +$(RUST_TOOLCHAIN) test --manifest-path $(RUST_MANIFEST) --workspace
 
 test-cli:
 	npm ci --ignore-scripts --prefix packages/cli
 	npm test --prefix packages/cli
 
-test-compiler:
-	cargo +$(RUST_TOOLCHAIN) test --manifest-path $(COMPILER_MANIFEST) --no-default-features --features sidecar
-
-test-zed:
-	cargo +$(RUST_TOOLCHAIN) test --manifest-path packages/zed-solid-checker/Cargo.toml
-
 verify:
 	scripts/verify.sh
 
-conformance: build-compiler
-	pnpm --dir third_party/dom-expressions install --frozen-lockfile --ignore-scripts
-	RUSTUP_TOOLCHAIN=$(RUST_TOOLCHAIN) pnpm --dir third_party/dom-expressions --filter @dom-expressions/jsx-compiler run build:debug
-	node scripts/compiler-conformance.mjs third_party/dom-expressions/packages/jsx-compiler $(COMPILER_BIN)
-
-corpus: build-rust build-compiler
+corpus: build-rust
 	scripts/run-solid-primitives-corpus.sh
 
 clean:
-	rm -rf bin dist rust/target
+	rm -rf bin dist rust/target .typefacts

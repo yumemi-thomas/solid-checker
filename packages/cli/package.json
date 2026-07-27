@@ -12,8 +12,7 @@
     "./eslint": "./eslint.cjs"
   },
   "bin": {
-    "solid-checker": "bin/solid-checker.mjs",
-    "solid-checkerd": "bin/solid-checkerd.mjs"
+    "solid-checker": "bin/solid-checker.mjs"
   },
   "files": [
     "bin",

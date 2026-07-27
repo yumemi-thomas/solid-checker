@@ -1,12 +1,14 @@
 # Contributing
 
-The checker, CLI, and LSP are Rust. Go is limited to the TypeScript-Go
-`solid-typefacts` service. Keep that boundary explicit: Oxc owns syntax, the
-Solid compiler owns execution semantics, and TypeScript-Go owns checker facts.
+The checker and CLI are Rust. There is no Go in this repository: the
+TypeScript-Go `solid-typefacts` producer is built from its own repository by
+`scripts/build-typefacts.sh`. Keep the fact boundary explicit: Oxc owns syntax,
+the Solid compiler owns execution semantics, and TypeScript-Go owns checker
+facts.
 
 ## Prerequisites
 
-- Go 1.26 or newer
+- Go 1.26 or newer (to build the TypeFacts producer from its pinned revision)
 - Rust 1.97 with `rustfmt` and `clippy`
 - Node.js 24 and pnpm 11
 - `jq`
@@ -14,15 +16,14 @@ Solid compiler owns execution semantics, and TypeScript-Go owns checker facts.
 ## Common commands
 
 ```sh
-make build       # Rust CLI/LSP and Go TypeFacts helper
-make test        # TypeFacts, Rust workspace, adapters, compiler, and Zed
-make verify      # formatting, vet, Clippy, tests, and schema validation
+make build       # Rust CLI and the pinned TypeFacts producer
+make test        # Rust workspace and CLI adapters
+make verify      # formatting, Clippy, tests, and schema validation
 make package     # native npm package layout
-make conformance # controlled compiler conformance
 ```
 
-Run `make verify` before proposing a change. Changes to compiler execution
-semantics must also pass `make conformance`.
+Run `make verify` before proposing a change. Compiler execution semantics are
+conformance-tested in the `dom-expressions` repository, not here.
 
 ## Semantic changes
 
@@ -46,7 +47,7 @@ secret after verifying the first trusted release.
 
 ## Upstream code
 
-The required DOM Expressions compiler sources are maintained as a selective
-import under `third_party/dom-expressions`. Follow
-[the monorepo policy](docs/monorepo.md) when updating them. Oxc, tsgolint, and
-TypeScript-Go remain pinned dependencies.
+The DOM Expressions compiler and the TypeFacts producer live in their own
+repositories and are consumed as pinned dependencies. Follow
+[the monorepo policy](docs/monorepo.md) when moving either pin. Oxc, tsgolint,
+and TypeScript-Go remain pinned dependencies too.

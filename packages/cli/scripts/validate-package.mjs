@@ -10,7 +10,7 @@ if (packageJson.name !== "solid-checker") {
 if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(packageJson.version)) {
   throw new Error(`invalid publish version: ${packageJson.version}`);
 }
-for (const command of ["solid-checker", "solid-checkerd"]) {
+for (const command of ["solid-checker"]) {
   if (!existsSync(join(root, packageJson.bin[command]))) {
     throw new Error(`launcher for ${command} is missing`);
   }

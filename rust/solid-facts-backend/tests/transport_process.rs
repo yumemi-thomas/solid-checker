@@ -1,9 +1,7 @@
 use std::{env, fs, path::PathBuf, process::Command};
 
-use solid_facts_backend::{TypeFactsProvider, TypeFactsSidecar, decode_source_files};
-use solid_facts_core::Generation;
-use solid_ts_facts::ClosureRequest;
-use solid_ts_facts::v3::{FileChange, Operation, Request, TYPE_FACTS_SCHEMA_V3};
+use solid_facts_backend::{SemanticDemandGroup, TypeFactsProvider, TypeFactsSession};
+use typefacts::v3::FileChange;
 
 #[test]
 fn timing_lines_are_valid_json() {
@@ -14,7 +12,7 @@ fn timing_lines_are_valid_json() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .args(["--format", "json", "--project"])
-        .arg(root.join("internal/reactiveir/testdata/tracer/tsconfig.json"))
+        .arg(root.join("fixtures/reactive-ir/tracer/tsconfig.json"))
         .args(["--typefacts", &typefacts])
         .env("SOLID_CHECKER_TIMINGS", "1")
         .output()
@@ -45,12 +43,12 @@ fn cli_rejects_a_mismatched_typefacts_build() {
     let directory = env::temp_dir().join(format!("solid-checker-handshake-{}", std::process::id()));
     fs::create_dir_all(&directory).unwrap();
     let service = directory.join("mismatched-typefacts");
-    let handshake = solid_ts_facts::v3::Handshake {
-        protocol: solid_ts_facts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
-        schema_hash: solid_ts_facts::v3::TYPE_FACTS_SCHEMA_SHA256.into(),
+    let handshake = typefacts::v3::Handshake {
+        protocol: typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
+        schema_hash: typefacts::v3::TYPE_FACTS_SCHEMA_SHA256.into(),
         build_id: "definitely-not-this-engine".into(),
     };
-    let payload = solid_ts_facts::encode(&handshake).unwrap();
+    let payload = typefacts::encode(&handshake).unwrap();
     let mut frame = u32::try_from(payload.len()).unwrap().to_le_bytes().to_vec();
     frame.extend(payload);
     let escaped = frame
@@ -69,7 +67,7 @@ fn cli_rejects_a_mismatched_typefacts_build() {
         .args(["--typefacts"])
         .arg(&service)
         .args(["--project"])
-        .arg(root.join("internal/reactiveir/testdata/tracer/tsconfig.json"))
+        .arg(root.join("fixtures/reactive-ir/tracer/tsconfig.json"))
         .output()
         .expect("run Rust CLI with mismatched service");
     assert_eq!(output.status.code(), Some(3));
@@ -77,150 +75,49 @@ fn cli_rejects_a_mismatched_typefacts_build() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+/// The raw v3 wire — framing, packed tables, deltas, compact demands — is the
+/// `typefacts` crate's own test surface. What belongs here is the checker's use
+/// of it: open a real producer, read the configured sources, apply an overlay,
+/// and analyse the retained project.
 #[test]
-fn frozen_cbor_exchanges_with_the_go_tsgo_service() {
+fn retained_session_serves_sources_and_facts_for_the_project() {
     let executable = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
         Err(_) => return,
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let project = root.join("internal/reactiveir/testdata/tracer/tsconfig.json");
-    let project_id = project.canonicalize().expect("canonical tsconfig");
-    let args = vec!["-project".into(), project_id.to_string_lossy().into_owned()];
-    let mut service = TypeFactsSidecar::spawn(&executable, &args).expect("spawn Go TS-Go service");
-    let request = ClosureRequest::new(
-        project_id.to_string_lossy(),
-        Generation::new(1).unwrap(),
-        vec![],
-    )
-    .unwrap();
-    let response = service.closure(&request).expect("exchange TypeFacts v2");
-    assert_eq!(response.project_id, request.project_id);
-    assert!(!response.table.sources.is_empty());
-}
-
-fn lifecycle_request(operation: Operation, project_id: String, generation: u64) -> Request {
-    Request {
-        schema: TYPE_FACTS_SCHEMA_V3,
-        request_id: 0,
-        operation,
-        project_id,
-        generation,
-        changes: vec![],
-        structural_spans: vec![],
-        compiler_spans: vec![],
-        demands: vec![],
-        compact_demands: None,
-        state_token: String::new(),
-        reset_state: false,
-        removed_demand_paths: vec![],
-        cancel_request_id: 0,
-    }
-}
-
-#[test]
-fn v3_updates_and_reanalyzes_a_retained_project() {
-    let executable = match env::var("SOLID_TYPEFACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let fixture = root.join("internal/reactiveir/testdata/tracer");
+    let fixture = root.join("fixtures/reactive-ir/tracer");
     let project = fixture.join("tsconfig.json").canonicalize().unwrap();
     let project_id = project.to_string_lossy().into_owned();
-    let mut service =
-        TypeFactsSidecar::spawn(&executable, &["-project".into(), project_id.clone()]).unwrap();
-    let source_response = service
-        .lifecycle(lifecycle_request(Operation::Sources, project_id.clone(), 1))
-        .unwrap();
-    let app_descriptor = source_response
-        .sources
-        .iter()
-        .find(|source| source.path.ends_with("App.tsx"))
-        .expect("App.tsx source descriptor exists");
-    assert!(!source_response.source_arena.is_empty());
-    assert_eq!(
-        source_response.source_lengths.len(),
-        source_response.sources.len()
-    );
-    assert!(!app_descriptor.local);
-    assert!(app_descriptor.source.is_empty());
+    let mut session = TypeFactsSession::open(&executable, &project_id, &[]).unwrap();
 
-    let hydrated_sources = decode_source_files(source_response).expect("local sources hydrate");
+    let sources = session.configured_sources().expect("configured sources");
     assert!(
-        hydrated_sources
+        sources
             .iter()
-            .any(|source| source.path.ends_with("App.tsx") && !source.source.is_empty())
+            .any(|source| source.path.ends_with("App.tsx") && !source.source.is_empty()),
+        "the session hydrates configured sources: {sources:#?}"
     );
-    service
-        .lifecycle(lifecycle_request(Operation::Open, project_id.clone(), 1))
-        .unwrap();
+
+    let table = session
+        .semantic_grouped(&[] as &[SemanticDemandGroup<'_>])
+        .expect("analyze the opened generation");
+    assert_eq!(table.project_id, project_id);
+    assert!(!table.sources.is_empty());
+
     let app = fixture.join("App.tsx").canonicalize().unwrap();
-    let mut update = lifecycle_request(Operation::Update, project_id.clone(), 2);
-    update.changes.push(FileChange {
-        path: app.to_string_lossy().into_owned(),
-        version: 1,
-        source: fs::read(&app).unwrap(),
-        deleted: false,
-    });
-    service.lifecycle(update).unwrap();
-    let updated_source_response = service
-        .lifecycle(lifecycle_request(Operation::Sources, project_id.clone(), 2))
-        .unwrap();
-    let app_overlay = updated_source_response
-        .sources
-        .iter()
-        .find(|source| source.path.ends_with("App.tsx"))
-        .expect("updated App.tsx source descriptor exists");
-    assert!(!app_overlay.local);
-    assert!(app_overlay.source.is_empty());
-    assert!(
-        decode_source_files(updated_source_response)
-            .expect("updated source arena hydrates")
-            .iter()
-            .any(|source| source.path.ends_with("App.tsx") && !source.source.is_empty())
-    );
-    assert!(
-        service
-            .lifecycle(lifecycle_request(Operation::Analyze, project_id.clone(), 2))
-            .unwrap()
-            .table
-            .is_some()
-    );
-    // A stateful reset analyze answers with the compact full frame, and the
-    // compact demand snapshot round-trips through the service.
-    let mut reset = lifecycle_request(Operation::Analyze, project_id.clone(), 2);
-    reset.reset_state = true;
-    reset.compact_demands = Some(solid_ts_facts::v3::compact_demands(&[
-        solid_ts_facts::v3::EntityDemand {
-            r#async: false,
-            symbol: true,
-            location: solid_ts_facts::Location {
-                path: app.to_string_lossy().into_owned(),
-                start_byte: 0,
-                end_byte: 1,
-            },
-            references: false,
-            resolved_call: false,
-            query_location: None,
-            type_descriptor: false,
-            structural_accessor: false,
-        },
-    ]));
-    let stateful = service.lifecycle(reset).unwrap();
-    assert_eq!(stateful.table_mode, "full");
-    assert!(stateful.table.is_none());
-    assert!(stateful.compact_table.is_none());
-    assert!(
-        solid_ts_facts::v3::decode_packed_fact_table(
-            &stateful.packed_table,
-            stateful.project_id.clone()
-        )
-        .is_ok()
-    );
-    assert!(
-        service
-            .lifecycle(lifecycle_request(Operation::Analyze, project_id, 1))
-            .is_err()
-    );
+    session
+        .update(vec![FileChange {
+            path: app.to_string_lossy().into_owned(),
+            version: 1,
+            source: fs::read(&app).unwrap(),
+            deleted: false,
+        }])
+        .expect("apply an overlay");
+    assert_eq!(session.generation(), 2);
+
+    let updated = session
+        .semantic_grouped(&[] as &[SemanticDemandGroup<'_>])
+        .expect("analyze the new generation");
+    assert_eq!(updated.generation, 2);
 }

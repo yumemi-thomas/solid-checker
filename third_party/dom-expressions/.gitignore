@@ -1,4 +1,0 @@
-node_modules/
-.pnpm-store/
-packages/jsx-compiler/target/
-packages/jsx-compiler/*.node

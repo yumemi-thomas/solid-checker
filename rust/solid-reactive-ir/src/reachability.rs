@@ -5,7 +5,7 @@ use std::{
 
 use solid_facts::ProjectFacts;
 use solid_facts_core::Span;
-use solid_ts_facts::Location;
+use typefacts::Location;
 
 use super::{
     CachedReachabilityFile, EntitySymbols, FunctionNode, ProjectIndexes, ReachabilityEdge,
@@ -148,7 +148,7 @@ fn discover_reachability_file(
     let exported_bodies = indexes
         .typescript_file(file.path.as_str())
         .into_iter()
-        .flat_map(|file| &file.functions)
+        .flat_map(|file| file.functions.iter())
         .filter(|function| function.exported)
         .map(|function| (function.body.start_byte, function.body.end_byte))
         .collect::<HashSet<_>>();
@@ -388,8 +388,8 @@ pub(super) fn reachable_call_multiplicity_incremental(
 
     if topology_unchanged {
         calls.retain(|location, _| {
-            !removed_paths.contains(location.path.as_str())
-                && !recomputed_paths.contains(location.path.as_str())
+            !removed_paths.contains(location.path.as_ref())
+                && !recomputed_paths.contains(location.path.as_ref())
         });
         for file in facts
             .files
@@ -592,10 +592,10 @@ pub(super) fn reachable_call_multiplicity(
         .collect::<HashMap<_, _>>();
     let mut exported_bodies = HashMap::<&str, HashSet<(u64, u64)>>::new();
     for file in facts.typescript.files.iter() {
-        for function in &file.functions {
+        for function in file.functions.iter() {
             if function.exported {
                 exported_bodies
-                    .entry(file.path.as_str())
+                    .entry(file.path.as_ref())
                     .or_default()
                     .insert((function.body.start_byte, function.body.end_byte));
             }

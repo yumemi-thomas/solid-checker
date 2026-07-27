@@ -11,7 +11,7 @@ use std::{
 };
 
 use solid_facts::ProjectFacts;
-use solid_ts_facts::{Declaration, FactTable, Location, SymbolFact};
+use typefacts::{Declaration, FactTable, Location, SymbolFact};
 
 use super::{
     CachedTypeScriptIndexes, EntitySymbols, SourceDiscoverySymbolSemantics,
@@ -82,9 +82,9 @@ pub(super) fn alias_roots_and_source_declarations(
     let mut roots = HashMap::with_capacity(table.symbols.len());
     let mut declarations = HashMap::new();
     for symbol in table.symbols.iter() {
-        let mut root = symbol.id.clone();
+        let mut root = symbol.id.to_string();
         for _ in 0..=targets.len() {
-            let Some(next) = targets.get(&root) else {
+            let Some(next) = targets.get(root.as_str()) else {
                 break;
             };
             root.clone_from(next);
@@ -97,7 +97,7 @@ pub(super) fn alias_roots_and_source_declarations(
         {
             declarations.insert(root.clone(), declaration.clone());
         }
-        roots.insert(symbol.id.clone(), root);
+        roots.insert(symbol.id.to_string(), root);
     }
     (roots, declarations)
 }
@@ -107,7 +107,7 @@ pub(super) fn symbol_alias_targets(table: &FactTable) -> HashMap<String, String>
         .symbols
         .iter()
         .filter(|symbol| !symbol.alias_target.is_empty())
-        .map(|symbol| (symbol.id.clone(), symbol.alias_target.clone()))
+        .map(|symbol| (symbol.id.to_string(), symbol.alias_target.to_string()))
         .collect()
 }
 
@@ -119,9 +119,9 @@ pub(super) fn source_discovery_symbol_semantics(
         .iter()
         .map(|symbol| {
             (
-                symbol.id.clone(),
+                symbol.id.to_string(),
                 SourceDiscoverySymbolSemantics {
-                    alias_target: symbol.alias_target.clone(),
+                    alias_target: symbol.alias_target.to_string(),
                     declarations: source_discovery_declaration_semantics(&symbol.declarations),
                 },
             )
@@ -136,10 +136,10 @@ pub(super) fn symbols_by_root(
     let mut by_root = HashMap::<String, Vec<String>>::new();
     for symbol in table.symbols.iter() {
         let root = aliases
-            .get(&symbol.id)
+            .get(symbol.id.as_ref())
             .cloned()
-            .unwrap_or_else(|| symbol.id.clone());
-        by_root.entry(root).or_default().push(symbol.id.clone());
+            .unwrap_or_else(|| symbol.id.to_string());
+        by_root.entry(root).or_default().push(symbol.id.to_string());
     }
     by_root
 }
@@ -185,7 +185,7 @@ pub(super) fn patch_typescript_indexes(
                 id,
                 symbols_by_id
                     .get(id.as_str())
-                    .map(|symbol| symbol.alias_target.as_str())
+                    .map(|symbol| symbol.alias_target.as_ref())
                     .filter(|target| !target.is_empty()),
             )
         })
@@ -238,7 +238,7 @@ pub(super) fn patch_typescript_indexes(
                 symbols_by_id
                     .get(id.as_str())
                     .map(|symbol| SourceDiscoverySymbolSemantics {
-                        alias_target: symbol.alias_target.clone(),
+                        alias_target: symbol.alias_target.to_string(),
                         declarations: source_discovery_declaration_semantics(&symbol.declarations),
                     });
             cache.source_discovery_symbol_semantics.get(id.as_str()) != current.as_ref()
@@ -300,7 +300,7 @@ pub(super) fn patch_typescript_indexes(
             cache.source_discovery_symbol_semantics.insert(
                 id.clone(),
                 SourceDiscoverySymbolSemantics {
-                    alias_target: symbol.alias_target.clone(),
+                    alias_target: symbol.alias_target.to_string(),
                     declarations: source_discovery_declaration_semantics(&symbol.declarations),
                 },
             );
@@ -327,11 +327,11 @@ pub(super) fn patch_typescript_indexes(
                     .source_declarations
                     .insert(root.clone(), declaration.clone());
             }
-            for declaration in &symbol.declarations {
+            for declaration in symbol.declarations.iter() {
                 if solid_primitive_declaration(declaration) {
                     cache
                         .symbol_names
-                        .insert(root.clone(), declaration.name.clone());
+                        .insert(root.clone(), declaration.name.to_string());
                 }
             }
             if !symbol.references.is_empty() {
@@ -373,10 +373,10 @@ pub(super) fn patch_typescript_indexes(
         cache.entities.by_path.remove(path);
         let start = table
             .entities
-            .partition_point(|entity| entity.location.path.as_str() < path.as_str());
+            .partition_point(|entity| entity.location.path.as_ref() < path.as_str());
         let end = table
             .entities
-            .partition_point(|entity| entity.location.path.as_str() <= path.as_str());
+            .partition_point(|entity| entity.location.path.as_ref() <= path.as_str());
         for entity in &table.entities[start..end] {
             if entity.symbol.is_empty() {
                 continue;
@@ -384,15 +384,15 @@ pub(super) fn patch_typescript_indexes(
             cache
                 .entities
                 .by_path
-                .entry(entity.location.path.clone())
+                .entry(entity.location.path.to_string())
                 .or_default()
                 .insert(
                     (entity.location.start_byte, entity.location.end_byte),
                     cache
                         .aliases
-                        .get(&entity.symbol)
+                        .get(entity.symbol.as_ref())
                         .cloned()
-                        .unwrap_or_else(|| entity.symbol.clone()),
+                        .unwrap_or_else(|| entity.symbol.to_string()),
                 );
         }
     }
@@ -410,9 +410,9 @@ pub(super) fn async_symbol_root(symbol: &str, table: &FactTable) -> String {
     let aliases = table
         .files
         .iter()
-        .flat_map(|file| &file.async_functions)
+        .flat_map(|file| file.async_functions.iter())
         .filter(|function| !function.symbol.is_empty() && !function.target.is_empty())
-        .map(|function| (function.symbol.as_str(), function.target.as_str()))
+        .map(|function| (function.symbol.as_ref(), function.target.as_ref()))
         .collect::<HashMap<_, _>>();
     let mut current = symbol;
     let mut seen = HashSet::new();
@@ -433,14 +433,14 @@ pub(super) fn entity_symbols(table: &FactTable, roots: &HashMap<String, String>)
         .filter(|entity| !entity.symbol.is_empty())
     {
         by_path
-            .entry(entity.location.path.clone())
+            .entry(entity.location.path.to_string())
             .or_default()
             .insert(
                 (entity.location.start_byte, entity.location.end_byte),
                 roots
-                    .get(&entity.symbol)
+                    .get(entity.symbol.as_ref())
                     .cloned()
-                    .unwrap_or_else(|| entity.symbol.clone()),
+                    .unwrap_or_else(|| entity.symbol.to_string()),
             );
     }
     EntitySymbols { by_path }
@@ -453,12 +453,12 @@ pub(super) fn symbol_names(
     let mut names = HashMap::new();
     for symbol in table.symbols.iter() {
         let root = roots
-            .get(&symbol.id)
+            .get(symbol.id.as_ref())
             .cloned()
-            .unwrap_or_else(|| symbol.id.clone());
-        for declaration in &symbol.declarations {
+            .unwrap_or_else(|| symbol.id.to_string());
+        for declaration in symbol.declarations.iter() {
             if solid_primitive_declaration(declaration) {
-                names.insert(root.clone(), declaration.name.clone());
+                names.insert(root.clone(), declaration.name.to_string());
             }
         }
     }
@@ -475,9 +475,9 @@ pub(super) fn references_by_source(
             continue;
         }
         let root = roots
-            .get(&symbol.id)
+            .get(symbol.id.as_ref())
             .cloned()
-            .unwrap_or_else(|| symbol.id.clone());
+            .unwrap_or_else(|| symbol.id.to_string());
         references
             .entry(root)
             .or_default()
@@ -494,7 +494,7 @@ fn solid_primitive_declaration(declaration: &Declaration) -> bool {
     (declaration.location.path.contains("solid-js")
         || declaration.location.path.contains("@solidjs"))
         && matches!(
-            declaration.name.as_str(),
+            declaration.name.as_ref(),
             "createSignal"
                 | "createMemo"
                 | "mapArray"

@@ -1,41 +1,38 @@
 # Rust analysis foundations
 
-This workspace is the production analysis backend. It includes the checker,
-CLI, and language server.
+This workspace is the production analysis backend. It includes the checker and
+the CLI.
 
 Fact ownership is deliberately split:
 
 - `solid-ast-facts`: parser-derived source structure from one Oxc AST walk;
 - `solid-compiler-facts`: Solid compiler execution roles (`ExecutionMap`);
-- `solid-ts-facts`: checker-derived facts decoded from the frozen TypeFacts v2
-  protocol;
+- `typefacts`: checker-derived facts and the retained producer session, from
+  [solid-ts-facts](https://github.com/yumemi-thomas/solid-ts-facts);
 - `solid-facts-core`: source identity, generations, hashes, and byte spans;
 - `solid-facts`: validates and joins the three domains without exposing either
   Oxc or TypeScript-Go nodes.
 - `solid-facts-backend`: orchestration, retained caches, certification
   snapshots, contracts, and the CLI;
-- `solid-reactive-ir` and `solid-reactive-solver`: native analysis and rules;
-- `solid-lsp`: asynchronous incremental LSP scheduling and presentation.
+- `solid-reactive-ir` and `solid-reactive-solver`: native analysis and rules.
 
 The AST package contains no regular expressions. TypeScript facts contain no
 syntax-discovery fallback. Both choices are architectural constraints: Oxc owns
 structure and TypeScript-Go owns checker semantics.
 
-The production Rust path has one live seam: Rust to the small Go TypeFacts
-service. Oxc AST facts and Solid compiler facts run in-process. The old
-compiler-facts sidecar remains only as a differential option selected with
-`--compiler`.
+The production Rust path has one live seam: Rust to the `solid-typefacts`
+producer. Oxc AST facts and Solid compiler facts run in-process, the latter via
+the `dom-expressions-compiler` crate's semantic trace.
 
-The TypeFacts service is `cmd/solid-typefacts`. It retains one TS-Go project
-and serves lifecycle v3 plus frozen v2 fact tables over deterministic,
-length-prefixed CBOR. Startup verifies the protocol, frozen schema hash, and
-build ID before analysis. Incremental overlays, affected paths, cancellation,
-out-of-order response correlation, crash recovery, and generation replay are
-implemented.
+The producer and its Rust client both live in the `solid-ts-facts` repository.
+`TypeFactsSession` is the checker-side adapter over `typefacts::Session`, which
+owns the process, framing, handshake, retained demands, delta application,
+cancellation, and restart-and-replay. `scripts/build-typefacts.sh` builds the
+producer from the revision `Cargo.toml` pins the client to, because the startup
+handshake rejects any other pairing.
 
-The integration tests launch both the real Go service and the controlled
-Oxc/Solid compiler sidecar on the tracer fixture, then join their output with
-the Rust Oxc AST facts.
+The integration tests launch the real producer on the tracer fixture and join
+its output with the in-process Oxc and compiler facts.
 
 The Rust-led path sends Oxc-derived identifier locations as authoritative
 closure seeds. When those seeds are present, the Go closure builder bypasses
@@ -44,15 +41,14 @@ its legacy regular-expression discovery. Oxc parsing is bounded by
 AST facts are cached by path and source hash, and compiler facts by path,
 source hash, and compiler options.
 
-`IncrementalSession` retains the compiler and TypeFacts processes, current
-source overlays, generation, and both caches. A v3 update invalidates only
+`NativeIncrementalSession` retains the TypeFacts session, current source
+overlays, generation, and both caches. An update invalidates only
 changed/deleted paths; unchanged file facts survive and output remains sorted.
 
 `solid-checker-rust` is the diagnostic CLI. It accepts `--project`,
 loads the Oxc Solid compiler as an in-process Rust crate, and uses
 the sibling `solid-typefacts` executable automatically; `SOLID_TYPEFACTS_BIN`
-or `--typefacts` can override it. `--compiler` remains available to compare
-the legacy compiler-facts process boundary.
+or `--typefacts` can override it.
 TypeScript-Go supplies the configured project source set, so tsconfig
 include/exclude and project resolution are authoritative rather than
 reimplemented by a directory walk.
@@ -107,20 +103,15 @@ multiplicity through cycles.
 SOLID_TYPEFACTS_BIN=bin/solid-typefacts \
 cargo +1.97 run --manifest-path rust/Cargo.toml --bin solid-checker-rust -- \
   --format json --certify \
-  --project internal/reactiveir/testdata/tracer/tsconfig.json
+  --project fixtures/reactive-ir/tracer/tsconfig.json
 ```
 
 Set `SOLID_CHECKER_TIMINGS=1` to emit nanosecond stage timings on stderr. Oxc AST
 and Solid compiler facts are produced in parallel per source; deterministic
 source order is restored before the TS-Go closure is joined.
 
-`solid-checkerd-rust` shares the CLI's contract/IR/solver/snapshot module,
-rejects stale document versions, publishes UTF-16 diagnostics and quick
-fixes, and cancels superseded analysis across the TypeFacts boundary.
-
-`make package` creates one install tree containing `solid-checker`,
-`solid-checkerd`, and the matching `solid-typefacts` helper plus a checksum
-manifest. CI builds and smoke-tests that layout on Darwin and Linux
+`make package` creates one install tree containing `solid-checker` and the
+matching `solid-typefacts` helper plus a checksum manifest. CI builds and smoke-tests that layout on Darwin and Linux
 arm64/amd64 and Windows amd64. Tagged releases publish each layout as a
 platform-constrained optional npm package alongside the portable launcher.
 The `solid-checker-wasm` workspace crate exposes the same in-process analysis

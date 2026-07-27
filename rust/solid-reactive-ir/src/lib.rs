@@ -37,7 +37,6 @@ use reachability::{
 use serde::{Deserialize, Serialize};
 use solid_facts::{FileFacts, ProjectFacts};
 use solid_facts_core::{SourceHash, Span};
-use solid_ts_facts::{Declaration, EntityFact, FileFact, Location};
 use static_api::StaticApiContext;
 use symbols::{
     add_solid_namespace_names, alias_roots_and_source_declarations, async_symbol_root,
@@ -45,6 +44,7 @@ use symbols::{
     source_discovery_symbol_semantics, symbol_alias_targets, symbol_names, symbols_by_root,
 };
 use thiserror::Error;
+use typefacts::{Declaration, EntityFact, FileFact, Location};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -608,8 +608,8 @@ fn source_discovery_declaration_semantic(
     declaration: &Declaration,
 ) -> SourceDiscoveryDeclarationSemantics {
     SourceDiscoveryDeclarationSemantics {
-        name: declaration.name.clone(),
-        kind: declaration.kind.clone(),
+        name: declaration.name.to_string(),
+        kind: declaration.kind.to_string(),
         runtime: !declaration.location.path.ends_with(".d.ts"),
     }
 }
@@ -1038,12 +1038,12 @@ fn source_discovery_identity(
     let mut symbol_ids = HashSet::<String>::new();
     for entity in &entities {
         if !entity.symbol.is_empty() {
-            symbol_ids.insert(entity.symbol.clone());
+            symbol_ids.insert(entity.symbol.to_string());
         }
         if let Some(call) = &entity.resolved_call
             && !call.target.is_empty()
         {
-            symbol_ids.insert(call.target.clone());
+            symbol_ids.insert(call.target.to_string());
         }
     }
     let mut pending = symbol_ids.iter().cloned().collect::<Vec<_>>();
@@ -1051,8 +1051,8 @@ fn source_discovery_identity(
         let Some(symbol) = indexes.symbols_by_id.get(id.as_str()) else {
             continue;
         };
-        if !symbol.alias_target.is_empty() && symbol_ids.insert(symbol.alias_target.clone()) {
-            pending.push(symbol.alias_target.clone());
+        if !symbol.alias_target.is_empty() && symbol_ids.insert(symbol.alias_target.to_string()) {
+            pending.push(symbol.alias_target.to_string());
         }
     }
     let mut symbols = symbol_ids
@@ -1063,7 +1063,7 @@ fn source_discovery_identity(
                 .get(id.as_str())
                 .map(|symbol| SourceSymbolIdentity {
                     id,
-                    alias_target: symbol.alias_target.clone(),
+                    alias_target: symbol.alias_target.to_string(),
                     declarations: source_discovery_declaration_semantics(&symbol.declarations),
                 })
         })
@@ -1121,7 +1121,7 @@ fn source_discovery_identity_matches(
             .symbols_by_id
             .get(retained.id.as_str())
             .is_some_and(|current| {
-                current.alias_target == retained.alias_target
+                current.alias_target == retained.alias_target.clone().into()
                     && source_discovery_declaration_semantics(&current.declarations)
                         == retained.declarations
             })
@@ -1286,7 +1286,7 @@ fn discover_file_sources(
                             returned.label.clone(),
                             primitive.into(),
                             Location {
-                                path: format!("bundled://solid-js.json#{primitive}"),
+                                path: format!("bundled://solid-js.json#{primitive}").into(),
                                 start_byte: 0,
                                 end_byte: 0,
                             },
@@ -1837,7 +1837,8 @@ fn discover_sources(
                                         returned.label.clone(),
                                         primitive.into(),
                                         Location {
-                                            path: format!("bundled://solid-js.json#{primitive}"),
+                                            path: format!("bundled://solid-js.json#{primitive}")
+                                                .into(),
                                             start_byte: 0,
                                             end_byte: 0,
                                         },
@@ -1981,7 +1982,7 @@ fn discover_sources(
             continue;
         };
         let solid_alias = descriptor.alias_declarations.iter().any(|declaration| {
-            declaration.name == "Accessor"
+            declaration.name == "Accessor".into()
                 && declaration
                     .location
                     .path
@@ -1989,7 +1990,7 @@ fn discover_sources(
                     .to_ascii_lowercase()
                     .contains("solid-js")
         });
-        if descriptor.origin_module != "solid-js" && !solid_alias {
+        if descriptor.origin_module != "solid-js".into() && !solid_alias {
             continue;
         }
         let Some(symbol) = entities.get(&entity.location) else {
@@ -2006,11 +2007,11 @@ fn discover_sources(
         let declaration_location = descriptor
             .alias_declarations
             .iter()
-            .find(|declaration| matches!(declaration.name.as_str(), "Accessor" | "Setter"))
+            .find(|declaration| matches!(declaration.name.as_ref(), "Accessor" | "Setter"))
             .map_or(local_location, |declaration| declaration.location.clone());
         accessors
             .entry(symbol.clone())
-            .or_insert((name, declaration_location));
+            .or_insert((name.to_string(), declaration_location));
         source_phases.entry(symbol.clone()).or_insert(1);
     }
     for file in &facts.files {
@@ -2108,8 +2109,9 @@ fn discover_sources(
                                     source_declarations
                                         .iter()
                                         .find_map(|(symbol, declaration)| {
-                                            (declaration.name == name
-                                                && declaration.location.path == file.path.as_str())
+                                            (declaration.name == name.into()
+                                                && declaration.location.path
+                                                    == file.path.as_str().into())
                                             .then_some(symbol)
                                         })
                                 })
@@ -2766,7 +2768,7 @@ fn build_with_contracts_measured_incremental(
         }
     }
     for typescript_file in facts.typescript.files.iter() {
-        for function in &typescript_file.async_functions {
+        for function in typescript_file.async_functions.iter() {
             for call in &function.calls_after_await {
                 let Some(symbol) = entities.get(call) else {
                     continue;
@@ -2777,7 +2779,7 @@ fn build_with_contracts_measured_incremental(
                 let ast_call = facts
                     .files
                     .iter()
-                    .find(|file| file.path.as_str() == call.path)
+                    .find(|file| *file.path.as_str() == *call.path)
                     .and_then(|file| {
                         file.ast
                             .calls
@@ -2798,14 +2800,14 @@ fn build_with_contracts_measured_incremental(
                 };
                 let function_symbol = async_symbol_root(
                     aliases
-                        .get(&function.symbol)
-                        .map_or(function.symbol.as_str(), String::as_str),
+                        .get(function.symbol.as_ref())
+                        .map_or(function.symbol.as_ref(), String::as_str),
                     &facts.typescript,
                 );
                 let Some(analysis_context) = facts.files.iter().find_map(|file| {
                     file.ast.calls.iter().find_map(|candidate| {
                         let argument = candidate.arguments.first()?;
-                        let lexical = file.path.as_str() == function.expression.path
+                        let lexical = *file.path.as_str() == *function.expression.path
                             && argument.span.contains(Span::new(
                                 u32::try_from(function.expression.start_byte).ok()?,
                                 u32::try_from(function.expression.end_byte).ok()?,
@@ -3073,7 +3075,7 @@ fn build_with_contracts_measured_incremental(
                         .is_some_and(|owner| owner.span == function.span)
             }) {
                 let reactive = reads.iter().any(|read| {
-                    read.location.path == file.path.as_str()
+                    read.location.path == file.path.as_str().into()
                         && u64::from(test.start) <= read.location.start_byte
                         && read.location.end_byte <= u64::from(test.end)
                 });
@@ -3408,9 +3410,9 @@ fn component_props_parameter_fix(
             .typescript
             .symbols
             .iter()
-            .find(|candidate| candidate.id == *symbol)?;
-        for reference in &symbol.references {
-            if reference.path != file.path.as_str() {
+            .find(|candidate| candidate.id == symbol.clone().into())?;
+        for reference in symbol.references.iter() {
+            if reference.path != file.path.as_str().into() {
                 return None;
             }
             let span = Span::new(
@@ -3862,7 +3864,7 @@ fn find_missing_owners(
             let boundary = primitive_name(
                 file.path.as_str(),
                 element.name.span,
-                Some(&file.source_text(element.name.span).unwrap_or_default()),
+                Some(file.source_text(element.name.span).unwrap_or_default()),
                 entities,
                 symbol_names,
             );
@@ -4103,7 +4105,7 @@ fn discover_owner_file(
         let boundary = primitive_name(
             file.path.as_str(),
             element.name.span,
-            Some(&file.source_text(element.name.span).unwrap_or_default()),
+            Some(file.source_text(element.name.span).unwrap_or_default()),
             entities,
             symbol_names,
         );
@@ -4404,7 +4406,7 @@ fn push_owner_requirement(
 ) {
     let location = location(path, span);
     if seen.insert((
-        location.path.clone(),
+        location.path.to_string(),
         location.start_byte,
         location.end_byte,
         operation.into(),
@@ -4492,7 +4494,7 @@ fn jsx_element_is_loading(
     primitive_name(
         file.path.as_str(),
         element.name.span,
-        Some(&file.source_text(element.name.span).unwrap_or_default()),
+        Some(file.source_text(element.name.span).unwrap_or_default()),
         entities,
         symbol_names,
     )
@@ -4749,16 +4751,16 @@ fn typed_accessor_descriptor_at<'a>(
     lookup: &SemanticLookup<'a>,
     path: &str,
     callee: Span,
-) -> Option<&'a solid_ts_facts::TypeDescriptor> {
+) -> Option<&'a typefacts::TypeDescriptor> {
     lookup
         .smallest_contained_descriptor(path, callee)
         .filter(|descriptor| go_solid_accessor_descriptor(descriptor))
 }
 
-fn go_solid_accessor_descriptor(descriptor: &solid_ts_facts::TypeDescriptor) -> bool {
-    descriptor.origin_module == "solid-js"
+fn go_solid_accessor_descriptor(descriptor: &typefacts::TypeDescriptor) -> bool {
+    descriptor.origin_module == "solid-js".into()
         || descriptor.alias_declarations.iter().any(|declaration| {
-            declaration.name == "Accessor"
+            declaration.name == "Accessor".into()
                 && declaration
                     .location
                     .path
@@ -5360,7 +5362,7 @@ impl LocalAccessContext<'_> {
             if inside_function && self.setters.contains_key(symbol) {
                 result.write_action_obligations.insert((
                     "write",
-                    callee.path.clone(),
+                    callee.path.to_string(),
                     callee.start_byte,
                     callee.end_byte,
                 ));
@@ -5368,7 +5370,7 @@ impl LocalAccessContext<'_> {
             if inside_function && self.actions.contains_key(symbol) {
                 result.write_action_obligations.insert((
                     "action",
-                    callee.path.clone(),
+                    callee.path.to_string(),
                     callee.start_byte,
                     callee.end_byte,
                 ));
@@ -5944,7 +5946,7 @@ fn jsx_primitive_name(
     primitive_name(
         file.path.as_str(),
         element.name.span,
-        Some(&file.source_text(element.name.span).unwrap_or_default()),
+        Some(file.source_text(element.name.span).unwrap_or_default()),
         entities,
         symbol_names,
     )
@@ -5979,7 +5981,7 @@ fn location(path: &str, span: Span) -> Location {
 
 #[cfg(test)]
 mod tests {
-    use solid_ts_facts::{FactTable, SymbolFact};
+    use typefacts::{FactTable, SymbolFact};
 
     use super::interproc::InterproceduralResultView;
     use super::*;
@@ -6106,20 +6108,21 @@ mod tests {
             sources: Vec::new().into(),
             entities: Vec::new().into(),
             symbols: vec![
-                solid_ts_facts::SymbolFact {
+                typefacts::SymbolFact {
                     id: "early".into(),
                     alias_target: "root".into(),
-                    declarations: vec![declaration("Accessor", "solid-js.d.ts", 1)],
-                    references: Vec::new(),
+                    declarations: (vec![declaration("Accessor", "solid-js.d.ts", 1)]).into(),
+                    references: (Vec::new()).into(),
                 },
-                solid_ts_facts::SymbolFact {
+                typefacts::SymbolFact {
                     id: "later".into(),
                     alias_target: "root".into(),
-                    declarations: vec![
+                    declarations: (vec![
                         declaration("Accessor", "other.d.ts", 2),
                         declaration("sourceAccessor", "source.ts", 3),
-                    ],
-                    references: Vec::new(),
+                    ])
+                    .into(),
+                    references: (Vec::new()).into(),
                 },
             ]
             .into(),
@@ -6128,8 +6131,8 @@ mod tests {
 
         let (_, declarations) = alias_roots_and_source_declarations(&table);
 
-        assert_eq!(declarations["root"].name, "sourceAccessor");
-        assert_eq!(declarations["root"].location.path, "source.ts");
+        assert_eq!(declarations["root"].name, ("sourceAccessor").into());
+        assert_eq!(declarations["root"].location.path, ("source.ts").into());
     }
 
     #[test]
@@ -6137,8 +6140,8 @@ mod tests {
         let symbol = |id: &str, target: &str, declarations: Vec<Declaration>| SymbolFact {
             id: id.into(),
             alias_target: target.into(),
-            declarations,
-            references: Vec::new(),
+            declarations: declarations.into(),
+            references: Vec::new().into(),
         };
         let entity = |symbol: &str, start: u64| EntityFact {
             location: Location {
@@ -6160,11 +6163,12 @@ mod tests {
             ),
         ]
         .into();
-        Arc::make_mut(&mut old.symbols)[1].references = vec![Location {
+        Arc::make_mut(&mut old.symbols)[1].references = (vec![Location {
             path: "fixture.ts".into(),
             start_byte: 10,
             end_byte: 11,
-        }];
+        }])
+        .into();
         old.entities = vec![entity("old-alias", 10)].into();
         let mut current = empty_project(2).typescript;
         current.symbols = vec![
@@ -6176,7 +6180,7 @@ mod tests {
             ),
         ]
         .into();
-        Arc::make_mut(&mut current.symbols)[1].references = vec![
+        Arc::make_mut(&mut current.symbols)[1].references = (vec![
             Location {
                 path: "fixture.ts".into(),
                 start_byte: 13,
@@ -6192,12 +6196,13 @@ mod tests {
                 start_byte: 12,
                 end_byte: 13,
             },
-        ];
+        ])
+        .into();
         current.entities = vec![entity("new-alias", 12)].into();
         let symbols_by_id = current
             .symbols
             .iter()
-            .map(|symbol| (symbol.id.as_str(), symbol))
+            .map(|symbol| (symbol.id.as_ref(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6244,13 +6249,14 @@ mod tests {
             entities: Vec::new().into(),
             symbols: vec![SymbolFact {
                 id: "root".into(),
-                alias_target: String::new(),
-                declarations: vec![declaration("root", "fixture.ts", 1)],
-                references: vec![Location {
+                alias_target: (String::new()).into(),
+                declarations: (vec![declaration("root", "fixture.ts", 1)]).into(),
+                references: (vec![Location {
                     path: "fixture.ts".into(),
                     start_byte: reference_start,
                     end_byte: reference_start + 1,
-                }],
+                }])
+                .into(),
             }]
             .into(),
             files: Vec::new().into(),
@@ -6260,7 +6266,7 @@ mod tests {
         let symbols_by_id = current
             .symbols
             .iter()
-            .map(|symbol| (symbol.id.as_str(), symbol))
+            .map(|symbol| (symbol.id.as_ref(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6297,9 +6303,9 @@ mod tests {
             entities: Vec::new().into(),
             symbols: vec![SymbolFact {
                 id: "root".into(),
-                alias_target: String::new(),
-                declarations: vec![declaration("root", "fixture.ts", start)],
-                references: Vec::new(),
+                alias_target: (String::new()).into(),
+                declarations: (vec![declaration("root", "fixture.ts", start)]).into(),
+                references: (Vec::new()).into(),
             }]
             .into(),
             files: Vec::new().into(),
@@ -6309,7 +6315,7 @@ mod tests {
         let symbols_by_id = current
             .symbols
             .iter()
-            .map(|symbol| (symbol.id.as_str(), symbol))
+            .map(|symbol| (symbol.id.as_ref(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6347,9 +6353,9 @@ mod tests {
             entities: Vec::new().into(),
             symbols: vec![SymbolFact {
                 id: "root".into(),
-                alias_target: String::new(),
-                declarations: vec![declaration("createSignal", path, 10)],
-                references: Vec::new(),
+                alias_target: (String::new()).into(),
+                declarations: (vec![declaration("createSignal", path, 10)]).into(),
+                references: (Vec::new()).into(),
             }]
             .into(),
             files: Vec::new().into(),
@@ -6359,7 +6365,7 @@ mod tests {
         let symbols_by_id = current
             .symbols
             .iter()
-            .map(|symbol| (symbol.id.as_str(), symbol))
+            .map(|symbol| (symbol.id.as_ref(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6373,7 +6379,8 @@ mod tests {
             patch_typescript_indexes(&mut patched, &current, &symbols_by_id, &changes).is_some()
         );
         assert_eq!(
-            patched.source_declarations["root"].location.path, "b.ts",
+            patched.source_declarations["root"].location.path,
+            ("b.ts").into(),
             "the current representative location must still be patched"
         );
         assert!(
@@ -6393,32 +6400,32 @@ mod tests {
             id: id.into(),
             alias_target: target.into(),
             declarations,
-            references: Vec::new(),
+            references: (Vec::new()).into(),
         };
         let mut old = empty_project(1).typescript;
         old.symbols = vec![
-            symbol("root", "", Vec::new()),
+            symbol("root", "", (Vec::new()).into()),
             symbol(
                 "old-alias",
                 "root",
-                vec![declaration("root", "fixture.d.ts", 1)],
+                (vec![declaration("root", "fixture.d.ts", 1)]).into(),
             ),
         ]
         .into();
         let mut current = empty_project(2).typescript;
         current.symbols = vec![
-            symbol("root", "", Vec::new()),
+            symbol("root", "", (Vec::new()).into()),
             symbol(
                 "new-alias",
                 "root",
-                vec![declaration("root", "fixture.ts", 1)],
+                (vec![declaration("root", "fixture.ts", 1)]).into(),
             ),
         ]
         .into();
         let symbols_by_id = current
             .symbols
             .iter()
-            .map(|symbol| (symbol.id.as_str(), symbol))
+            .map(|symbol| (symbol.id.as_ref(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6456,21 +6463,21 @@ mod tests {
             symbols: vec![
                 SymbolFact {
                     id: "root-a".into(),
-                    alias_target: String::new(),
-                    declarations: Vec::new(),
-                    references: Vec::new(),
+                    alias_target: (String::new()).into(),
+                    declarations: (Vec::new()).into(),
+                    references: (Vec::new()).into(),
                 },
                 SymbolFact {
                     id: "root-b".into(),
-                    alias_target: String::new(),
-                    declarations: Vec::new(),
-                    references: Vec::new(),
+                    alias_target: (String::new()).into(),
+                    declarations: (Vec::new()).into(),
+                    references: (Vec::new()).into(),
                 },
                 SymbolFact {
                     id: "alias".into(),
                     alias_target: target.into(),
-                    declarations: Vec::new(),
-                    references: Vec::new(),
+                    declarations: (Vec::new()).into(),
+                    references: (Vec::new()).into(),
                 },
             ]
             .into(),
@@ -6481,7 +6488,7 @@ mod tests {
         let symbols_by_id = current
             .symbols
             .iter()
-            .map(|symbol| (symbol.id.as_str(), symbol))
+            .map(|symbol| (symbol.id.as_ref(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {

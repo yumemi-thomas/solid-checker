@@ -167,14 +167,14 @@ pub fn analyze_project_measured_with(
                     .imports
                     .iter()
                     .find(|import| package_root(&import.module) == status.name)
-                    .map(|import| solid_ts_facts::Location {
-                        path: file.path.as_str().to_owned(),
+                    .map(|import| typefacts::Location {
+                        path: file.path.as_str().to_owned().into(),
                         start_byte: u64::from(import.span.start),
                         end_byte: u64::from(import.span.end),
                     })
             })
-            .unwrap_or_else(|| solid_ts_facts::Location {
-                path: project.to_string_lossy().into_owned(),
+            .unwrap_or_else(|| typefacts::Location {
+                path: project.to_string_lossy().into_owned().into(),
                 start_byte: 0,
                 end_byte: 0,
             });
@@ -320,7 +320,7 @@ pub fn analysis_metrics(
     let canonical = |symbol: &str| {
         aliases
             .get(symbol)
-            .map_or_else(|| symbol.to_owned(), Clone::clone)
+            .map_or_else(|| symbol.to_owned().into(), Clone::clone)
     };
     let entities = facts
         .typescript
@@ -330,7 +330,7 @@ pub fn analysis_metrics(
         .map(|entity| {
             (
                 (
-                    entity.location.path.as_str(),
+                    entity.location.path.as_ref(),
                     entity.location.start_byte,
                     entity.location.end_byte,
                 ),
@@ -376,7 +376,7 @@ pub fn analysis_metrics(
                     continue;
                 };
                 contracted_functions.insert(
-                    symbol.clone(),
+                    symbol.to_string(),
                     summary
                         .returns
                         .as_ref()
@@ -389,12 +389,12 @@ pub fn analysis_metrics(
         .typescript
         .files
         .iter()
-        .flat_map(|file| &file.bindings)
+        .flat_map(|file| file.bindings.iter())
         .filter(|binding| {
             !binding.array
                 && !binding.names.is_empty()
                 && contracted_functions
-                    .get(&canonical(&binding.initializer.target))
+                    .get(canonical(&binding.initializer.target).as_ref())
                     .is_some_and(|returned| returned.as_deref() == Some("accessor"))
         })
         .count();
@@ -441,13 +441,10 @@ pub fn analysis_metrics(
     }
 }
 
-pub fn source_location(
-    location: &solid_ts_facts::Location,
-    sources: &[SourceFile],
-) -> SourceLocation {
+pub fn source_location(location: &typefacts::Location, sources: &[SourceFile]) -> SourceLocation {
     let (line, column) = sources
         .iter()
-        .find(|source| source.path == location.path)
+        .find(|source| *source.path == *location.path)
         .map_or((1, 1), |source| {
             let mut offset = usize::try_from(location.start_byte)
                 .unwrap_or(usize::MAX)
@@ -463,7 +460,7 @@ pub fn source_location(
             )
         });
     SourceLocation {
-        path: location.path.clone(),
+        path: location.path.to_string(),
         start_byte: location.start_byte,
         end_byte: location.end_byte,
         line,

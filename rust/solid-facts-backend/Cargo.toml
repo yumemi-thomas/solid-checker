@@ -11,14 +11,14 @@ autobins = false
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
-dom-expressions-jsx-compiler = { path = "../../third_party/dom-expressions/packages/jsx-compiler", default-features = false }
+dom-expressions-compiler.workspace = true
 oxc_diagnostics.workspace = true
 oxc_miette.workspace = true
 solid-ast-facts = { path = "../solid-ast-facts" }
 solid-compiler-facts = { path = "../solid-compiler-facts" }
 solid-facts = { path = "../solid-facts" }
 solid-facts-core = { path = "../solid-facts-core" }
-solid-ts-facts = { path = "../solid-ts-facts" }
+typefacts.workspace = true
 solid-reactive-ir = { path = "../solid-reactive-ir" }
 solid-reactive-solver = { path = "../solid-reactive-solver" }
 thiserror.workspace = true

@@ -6,13 +6,14 @@ whose original notices remain applicable.
 ## DOM Expressions
 
 - Upstream: https://github.com/ryansolid/dom-expressions
-- Imported revision: `e717d06cf0eb489375f178a6506247d6b12822ab`
-- Location: `third_party/dom-expressions`
-- License: MIT; the upstream `LICENSE` is retained in that directory.
+- Consumed fork: https://github.com/yumemi-thomas/dom-expressions
+- Pinned revision: `209e1bf78f5616885d473dd04a68913cd6bb2ce0`
+- License: MIT
 
-Only the JSX compiler sources needed by `solid-checker` are retained. Local
-changes add the compiler execution-map interface and `solid-compiler-facts`
-sidecar.
+The `dom-expressions-compiler` crate is consumed as a pinned Cargo git
+dependency, built without its Node-API feature. It is not forked or copied into
+this repository; the semantic trace that `solid-checker` reads is maintained
+upstream in that fork.
 
 ## Oxc
 
@@ -27,7 +28,8 @@ repository.
 
 - tsgolint revision: `c3269c01a0c894a31330e1b4c3bd4edc6eb7694b`
 - TypeScript-Go revision: `2bd066d87f5b`
-- Resolution: pinned Go module versions in `go.mod` and `go.sum`
+- Resolution: pinned Go module versions in the `solid-ts-facts` repository,
+  which builds the TypeFacts producer
 - Licenses: MIT
 
 Only tsgolint's TypeScript-Go shim modules are consumed. Neither repository is

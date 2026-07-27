@@ -11,5 +11,5 @@ serde.workspace = true
 solid-ast-facts = { path = "../solid-ast-facts" }
 solid-compiler-facts = { path = "../solid-compiler-facts" }
 solid-facts-core = { path = "../solid-facts-core" }
-solid-ts-facts = { path = "../solid-ts-facts" }
+typefacts.workspace = true
 thiserror.workspace = true

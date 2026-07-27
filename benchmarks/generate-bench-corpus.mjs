@@ -29,7 +29,7 @@ mkdirSync(out, { recursive: true });
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const shim = readFileSync(
-  join(root, "internal/engine/testdata/eslint-reactivity-v2/solid-js.d.ts"),
+  join(root, "fixtures/engine/eslint-reactivity-v2/solid-js.d.ts"),
 );
 writeFileSync(join(out, "solid-js.d.ts"), shim);
 

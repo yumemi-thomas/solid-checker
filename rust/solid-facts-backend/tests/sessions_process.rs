@@ -6,73 +6,10 @@ use std::{env, fs, path::PathBuf};
 
 use solid_compiler_facts::CompilerOptions;
 use solid_facts_backend::{
-    CacheStats, CompilerSidecar, IncrementalSession, NativeIncrementalSession, SourceChange,
-    SourceFile, TypeFactsSidecar, build_project,
+    CacheStats, NativeCompilerFacts, NativeIncrementalSession, SourceChange, SourceFile,
+    TypeFactsSession, build_project,
 };
 use support::{decode_findings, temporary_directory};
-
-#[test]
-fn incremental_session_reuses_unchanged_file_facts() {
-    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let compiler = match env::var("SOLID_COMPILER_FACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let fixture = root.join("internal/reactiveir/testdata/tracer");
-    let project = fixture.join("tsconfig.json").canonicalize().unwrap();
-    let project_id = project.to_string_lossy().into_owned();
-    let paths = [fixture.join("App.tsx"), fixture.join("source.ts")];
-    let sources = paths
-        .iter()
-        .map(|path| SourceFile {
-            path: path.canonicalize().unwrap().to_string_lossy().into_owned(),
-            source: std::fs::read_to_string(path).unwrap(),
-            compiler_options: CompilerOptions::default(),
-        })
-        .collect();
-    let compiler = CompilerSidecar::spawn(&compiler, &[]).unwrap();
-    let typescript =
-        TypeFactsSidecar::spawn(&typefacts, &["-project".into(), project_id.clone()]).unwrap();
-    let mut session = IncrementalSession::open(project_id, sources, compiler, typescript).unwrap();
-    session.analyze().unwrap();
-    assert_eq!(
-        session.cache_stats(),
-        CacheStats {
-            ast_entries: 2,
-            compiler_entries: 2
-        }
-    );
-    let app = paths[0].canonicalize().unwrap();
-    let source = format!("// edit\n{}", std::fs::read_to_string(&app).unwrap());
-    session
-        .update(vec![SourceChange {
-            path: app.to_string_lossy().into_owned(),
-            version: 1,
-            source: Some(source),
-            compiler_options: CompilerOptions::default(),
-        }])
-        .unwrap();
-    assert_eq!(session.generation(), 2);
-    assert_eq!(
-        session.cache_stats(),
-        CacheStats {
-            ast_entries: 1,
-            compiler_entries: 1
-        }
-    );
-    session.analyze().unwrap();
-    assert_eq!(
-        session.cache_stats(),
-        CacheStats {
-            ast_entries: 2,
-            compiler_entries: 2
-        }
-    );
-}
 
 #[test]
 fn native_incremental_session_reuses_oxc_and_solid_facts() {
@@ -81,7 +18,7 @@ fn native_incremental_session_reuses_oxc_and_solid_facts() {
         Err(_) => return,
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let fixture = root.join("internal/reactiveir/testdata/tracer");
+    let fixture = root.join("fixtures/reactive-ir/tracer");
     let project = fixture.join("tsconfig.json").canonicalize().unwrap();
     let project_id = project.to_string_lossy().into_owned();
     let paths = [fixture.join("App.tsx"), fixture.join("source.ts")];
@@ -93,8 +30,7 @@ fn native_incremental_session_reuses_oxc_and_solid_facts() {
             compiler_options: CompilerOptions::default(),
         })
         .collect();
-    let typescript =
-        TypeFactsSidecar::spawn(&typefacts, &["-project".into(), project_id.clone()]).unwrap();
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
     let mut session = NativeIncrementalSession::open(project_id, sources, typescript).unwrap();
     session.analyze().unwrap();
     let first_timings = session.last_build_timings();
@@ -165,20 +101,18 @@ fn pipelined_open_matches_sequential_sources_and_analyzes() {
         Err(_) => return,
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let fixture = root.join("internal/reactiveir/testdata/tracer");
+    let fixture = root.join("fixtures/reactive-ir/tracer");
     let project = fixture.join("tsconfig.json").canonicalize().unwrap();
     let project_id = project.to_string_lossy().into_owned();
 
     // The sequential baseline: fetch sources, then open, in two round trips.
-    let mut sequential =
-        TypeFactsSidecar::spawn(&typefacts, &["-project".into(), project_id.clone()]).unwrap();
-    let expected = sequential.configured_sources(&project_id, 1).unwrap();
+    let mut sequential = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let expected = sequential.configured_sources().unwrap();
 
     // The reordered handshake lets the client pipeline open+sources before the
     // program build completes; the pipelined path must resolve the same source
     // set and produce facts.
-    let pipelined =
-        TypeFactsSidecar::spawn(&typefacts, &["-project".into(), project_id.clone()]).unwrap();
+    let pipelined = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
     let (mut session, sources) =
         NativeIncrementalSession::open_pipelined(project_id, pipelined).unwrap();
     assert_eq!(
@@ -201,20 +135,15 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         Ok(value) => value,
         Err(_) => return,
     };
-    let compiler = match env::var("SOLID_COMPILER_FACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", typefacts)
-        .env("SOLID_COMPILER_FACTS_BIN", compiler)
         .args([
             "--format",
             "json",
             "--project",
             &root
-                .join("internal/engine/testdata/eslint-reactivity-v2/tsconfig.json")
+                .join("fixtures/engine/eslint-reactivity-v2/tsconfig.json")
                 .to_string_lossy(),
         ])
         .output()
@@ -367,15 +296,10 @@ fn rust_cli_emits_snapshot_text_and_certification_exit_codes() {
         Ok(value) => value,
         Err(_) => return,
     };
-    let compiler = match env::var("SOLID_COMPILER_FACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let tracer = root.join("internal/reactiveir/testdata/tracer/tsconfig.json");
+    let tracer = root.join("fixtures/reactive-ir/tracer/tsconfig.json");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
-        .env("SOLID_COMPILER_FACTS_BIN", &compiler)
         .args(["--format", "text", "--project", &tracer.to_string_lossy()])
         .output()
         .unwrap();
@@ -386,7 +310,6 @@ fn rust_cli_emits_snapshot_text_and_certification_exit_codes() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
-        .env("SOLID_COMPILER_FACTS_BIN", &compiler)
         .args([
             "--format",
             "json",
@@ -407,10 +330,9 @@ fn rust_cli_emits_snapshot_text_and_certification_exit_codes() {
     );
     assert_eq!(snapshot["metrics"]["filesAnalyzed"], 1);
 
-    let corrected = root.join("internal/reactiveir/testdata/tracer-corrected/tsconfig.json");
+    let corrected = root.join("fixtures/reactive-ir/tracer-corrected/tsconfig.json");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", typefacts)
-        .env("SOLID_COMPILER_FACTS_BIN", compiler)
         .args([
             "--format",
             "json",
@@ -438,7 +360,7 @@ fn daemon_and_one_shot_share_snapshot_emission() {
         Err(_) => return,
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let project = root.join("internal/reactiveir/testdata/tracer/tsconfig.json");
+    let project = root.join("fixtures/reactive-ir/tracer/tsconfig.json");
     let command = || {
         let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
         command
@@ -475,56 +397,13 @@ fn daemon_and_one_shot_share_snapshot_emission() {
 }
 
 #[test]
-fn in_process_compiler_matches_the_sidecar_snapshot() {
-    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let compiler = match env::var("SOLID_COMPILER_FACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
-    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    for fixture in ["tracer", "control-flow", "async-boundary"] {
-        let project = root.join(format!(
-            "internal/reactiveir/testdata/{fixture}/tsconfig.json"
-        ));
-        let native = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
-            .env("SOLID_TYPEFACTS_BIN", &typefacts)
-            .env_remove("SOLID_COMPILER_FACTS_BIN")
-            .args(["--format", "json", "--project", &project.to_string_lossy()])
-            .output()
-            .unwrap();
-        let sidecar = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
-            .env("SOLID_TYPEFACTS_BIN", &typefacts)
-            .env("SOLID_COMPILER_FACTS_BIN", &compiler)
-            .args(["--format", "json", "--project", &project.to_string_lossy()])
-            .output()
-            .unwrap();
-        assert!(
-            native.status.success() && sidecar.status.success(),
-            "fixture {fixture}: native={}, sidecar={}",
-            String::from_utf8_lossy(&native.stderr),
-            String::from_utf8_lossy(&sidecar.stderr)
-        );
-        let native: serde_json::Value = serde_json::from_slice(&native.stdout).unwrap();
-        let sidecar: serde_json::Value = serde_json::from_slice(&sidecar.stdout).unwrap();
-        assert_eq!(native, sidecar, "fixture {fixture}");
-    }
-}
-
-#[test]
 fn joins_real_oxc_compiler_and_tsgo_facts() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
         Err(_) => return,
     };
-    let compiler = match env::var("SOLID_COMPILER_FACTS_BIN") {
-        Ok(value) => value,
-        Err(_) => return,
-    };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let fixture = root.join("internal/reactiveir/testdata/tracer");
+    let fixture = root.join("fixtures/reactive-ir/tracer");
     let project = fixture
         .join("tsconfig.json")
         .canonicalize()
@@ -542,12 +421,9 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
             compiler_options: CompilerOptions::default(),
         })
         .collect();
-    let mut compiler = CompilerSidecar::spawn(&compiler, &[]).expect("spawn Oxc compiler");
-    let mut typescript = TypeFactsSidecar::spawn(
-        &typefacts,
-        &["-project".into(), project.to_string_lossy().into_owned()],
-    )
-    .expect("spawn TS-Go service");
+    let mut compiler = NativeCompilerFacts;
+    let mut typescript = TypeFactsSession::open(&typefacts, &project.to_string_lossy(), &[])
+        .expect("open the TypeFacts session");
     let facts = build_project(
         project.to_string_lossy(),
         1,
@@ -576,7 +452,7 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
 }
 fn tracer_fixture_session(typefacts_executable: &str) -> (NativeIncrementalSession, Vec<PathBuf>) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
-    let fixture = root.join("internal/reactiveir/testdata/tracer");
+    let fixture = root.join("fixtures/reactive-ir/tracer");
     let project = fixture.join("tsconfig.json").canonicalize().unwrap();
     let project_id = project.to_string_lossy().into_owned();
     let paths = vec![
@@ -591,11 +467,7 @@ fn tracer_fixture_session(typefacts_executable: &str) -> (NativeIncrementalSessi
             compiler_options: CompilerOptions::default(),
         })
         .collect();
-    let typescript = TypeFactsSidecar::spawn(
-        typefacts_executable,
-        &["-project".into(), project_id.clone()],
-    )
-    .unwrap();
+    let typescript = TypeFactsSession::open(typefacts_executable, &project_id, &[]).unwrap();
     let session = NativeIncrementalSession::open(project_id, sources, typescript).unwrap();
     (session, paths)
 }
@@ -797,7 +669,7 @@ fn incremental_owner_fragments_match_fresh_owner_fixtures() {
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..");
     for fixture_name in ["owner-presence", "leaf-owner"] {
-        let fixture = root.join(format!("internal/reactiveir/testdata/{fixture_name}"));
+        let fixture = root.join(format!("fixtures/reactive-ir/{fixture_name}"));
         let project = fixture.join("tsconfig.json").canonicalize().unwrap();
         let project_id = project.to_string_lossy().into_owned();
         let app = fixture.join("App.tsx").canonicalize().unwrap();
@@ -806,8 +678,7 @@ fn incremental_owner_fragments_match_fresh_owner_fixtures() {
             source: fs::read_to_string(&app).unwrap(),
             compiler_options: CompilerOptions::default(),
         }];
-        let typescript =
-            TypeFactsSidecar::spawn(&typefacts, &["-project".into(), project_id.clone()]).unwrap();
+        let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
         let mut session = NativeIncrementalSession::open(project_id, sources, typescript).unwrap();
         let first = session.analyze().unwrap();
         let mut incremental = solid_reactive_ir::IncrementalBuilder::default();

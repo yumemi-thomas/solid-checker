@@ -12,7 +12,7 @@ use std::{
 };
 
 use solid_facts::ProjectFacts;
-use solid_ts_facts::Location;
+use typefacts::Location;
 
 use super::{
     CachedContractExports, ContractCallback, ContractExport, ContractExportFragment,
@@ -105,7 +105,7 @@ pub(super) fn resolve_contract_imports(
                     package_name: contract.package.name.clone(),
                     symbol: symbol.clone(),
                     contract_location: Location {
-                        path: format!("{}#{imported}", contract.source_path),
+                        path: format!("{}#{imported}", contract.source_path).into(),
                         start_byte: 0,
                         end_byte: 0,
                     },

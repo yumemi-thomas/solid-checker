@@ -138,7 +138,7 @@ pub(super) fn push_directive_creation(
 ) {
     let location = location(path, span);
     if seen.insert((
-        location.path.clone(),
+        location.path.to_string(),
         location.start_byte,
         location.end_byte,
     )) {
