@@ -160,17 +160,6 @@ func (t FactTable) rangeSymbolFacts(visit func(SymbolFact)) {
 	}
 }
 
-func (t FactTable) symbolFactsSlice() []SymbolFact {
-	if t.symbols == nil {
-		return t.Symbols
-	}
-	facts := make([]SymbolFact, 0, t.symbols.Len())
-	t.symbols.Range(func(fact SymbolFact) {
-		facts = append(facts, fact)
-	})
-	return facts
-}
-
 func (t FactTable) canonicalSymbol(id SymbolID) (SymbolFact, bool) {
 	if t.symbols != nil {
 		return t.symbols.Get(id)

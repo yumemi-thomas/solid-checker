@@ -2,7 +2,7 @@ package typefacts
 
 import (
 	"bytes"
-	"reflect"
+	"slices"
 	"sort"
 )
 
@@ -27,22 +27,85 @@ func DiffFactTablesV3FromInternal(previous, next FactTable, generation uint64) F
 		previous.Files,
 		next.Files,
 		func(value FileFact) string { return value.Path },
-		func(left, right FileFact) bool { return reflect.DeepEqual(left, right) },
+		fileFactEqual,
 		fileFactV2,
 		&delta.Files,
 		&delta.RemovedFilePaths,
 	)
-	diffCanonicalRows(
-		previous.symbolFactsSlice(),
-		next.symbolFactsSlice(),
-		func(value SymbolFact) string { return string(value.ID) },
-		func(left, right SymbolFact) bool { return reflect.DeepEqual(left, right) },
-		symbolFactV2,
-		&delta.Symbols,
-		&delta.RemovedSymbolIDs,
-	)
+	diffCanonicalSymbolStores(previous, next, &delta)
 	diffCanonicalEntityFiles(previous.Entities, next.Entities, &delta)
 	return delta
+}
+
+// symbolFactCursor walks a table's symbol rows chunk by chunk in canonical ID
+// order, exposing chunk boundaries so the diff can skip shared chunks whole.
+type symbolFactCursor struct {
+	chunks [][]SymbolFact
+	chunk  int
+	row    int
+}
+
+func newSymbolFactCursor(table FactTable) symbolFactCursor {
+	if table.symbols != nil {
+		return symbolFactCursor{chunks: table.symbols.chunks}
+	}
+	if len(table.Symbols) == 0 {
+		return symbolFactCursor{}
+	}
+	return symbolFactCursor{chunks: [][]SymbolFact{table.Symbols}}
+}
+
+func (c *symbolFactCursor) valid() bool { return c.chunk < len(c.chunks) }
+
+func (c *symbolFactCursor) fact() SymbolFact { return c.chunks[c.chunk][c.row] }
+
+func (c *symbolFactCursor) next() {
+	c.row++
+	if c.row == len(c.chunks[c.chunk]) {
+		c.chunk++
+		c.row = 0
+	}
+}
+
+// diffCanonicalSymbolStores merge-walks two symbol stores without flattening
+// either. A chunk the successor shares with its predecessor is the same slice
+// by construction (symbolFactStore.Patch), so when both cursors stand at the
+// start of one it is skipped whole — for an ordinary edit that reduces the
+// fallback diff's symbol pass to the few chunks that were actually rebuilt.
+func diffCanonicalSymbolStores(previous, next FactTable, delta *FactTableDeltaV3) {
+	left := newSymbolFactCursor(previous)
+	right := newSymbolFactCursor(next)
+	for left.valid() && right.valid() {
+		if left.row == 0 && right.row == 0 {
+			leftChunk, rightChunk := left.chunks[left.chunk], right.chunks[right.chunk]
+			if len(leftChunk) != 0 && len(leftChunk) == len(rightChunk) && &leftChunk[0] == &rightChunk[0] {
+				left.chunk++
+				right.chunk++
+				continue
+			}
+		}
+		leftFact, rightFact := left.fact(), right.fact()
+		switch {
+		case leftFact.ID < rightFact.ID:
+			delta.RemovedSymbolIDs = append(delta.RemovedSymbolIDs, string(leftFact.ID))
+			left.next()
+		case rightFact.ID < leftFact.ID:
+			delta.Symbols = append(delta.Symbols, symbolFactV2(rightFact))
+			right.next()
+		default:
+			if !symbolFactEqual(leftFact, rightFact) {
+				delta.Symbols = append(delta.Symbols, symbolFactV2(rightFact))
+			}
+			left.next()
+			right.next()
+		}
+	}
+	for ; left.valid(); left.next() {
+		delta.RemovedSymbolIDs = append(delta.RemovedSymbolIDs, string(left.fact().ID))
+	}
+	for ; right.valid(); right.next() {
+		delta.Symbols = append(delta.Symbols, symbolFactV2(right.fact()))
+	}
 }
 
 func diffFactTablesV3FromManifest(previous, next FactTable, generation uint64, manifest *factTableTransportChanges) FactTableDeltaV3 {
@@ -62,7 +125,7 @@ func diffFactTablesV3FromManifest(previous, next FactTable, generation uint64, m
 		next.Files,
 		sortedStringKeys(manifest.filePaths),
 		func(value FileFact) string { return value.Path },
-		func(left, right FileFact) bool { return reflect.DeepEqual(left, right) },
+		fileFactEqual,
 		fileFactV2,
 		&delta.Files,
 		&delta.RemovedFilePaths,
@@ -87,7 +150,7 @@ func diffFactTablesV3FromManifest(previous, next FactTable, generation uint64, m
 		switch {
 		case len(newEntities) == 0 && len(oldEntities) != 0:
 			delta.RemovedEntityPaths = append(delta.RemovedEntityPaths, path)
-		case !reflect.DeepEqual(oldEntities, newEntities):
+		case !entityFactsEqual(oldEntities, newEntities):
 			delta.EntityFiles = append(delta.EntityFiles, EntityFileV3{
 				Path: path, Entities: convertEntityFactsV2(newEntities),
 			})
@@ -113,7 +176,7 @@ func diffCanonicalSymbolCandidates(
 			*removed = append(*removed, candidate)
 		case rightOK && !leftOK:
 			*changed = append(*changed, symbolFactV2(right))
-		case rightOK && (left.AliasTarget != right.AliasTarget || !reflect.DeepEqual(left.Declarations, right.Declarations)):
+		case rightOK && (left.AliasTarget != right.AliasTarget || !slices.Equal(left.Declarations, right.Declarations)):
 			*changed = append(*changed, symbolFactV2(right))
 		case rightOK:
 			diffSymbolReferenceFiles(candidate, left.References, right.References, referencePaths, referenceFiles)
@@ -130,7 +193,7 @@ func diffSymbolReferenceFiles(
 	for _, path := range paths {
 		previousReferences := canonicalReferencesForPath(previous, path)
 		nextReferences := canonicalReferencesForPath(next, path)
-		if reflect.DeepEqual(previousReferences, nextReferences) {
+		if locationsEqual(previousReferences, nextReferences) {
 			continue
 		}
 		references := make([]LocationV2, 0, len(nextReferences))
@@ -262,7 +325,7 @@ func diffCanonicalEntityFiles(previous, next []EntityFact, delta *FactTableDelta
 			right = end
 		default:
 			leftEnd, rightEnd := entityPathEnd(previous, left), entityPathEnd(next, right)
-			if !reflect.DeepEqual(previous[left:leftEnd], next[right:rightEnd]) {
+			if !entityFactsEqual(previous[left:leftEnd], next[right:rightEnd]) {
 				delta.EntityFiles = append(delta.EntityFiles, EntityFileV3{
 					Path:     rightPath,
 					Entities: convertEntityFactsV2(next[right:rightEnd]),
