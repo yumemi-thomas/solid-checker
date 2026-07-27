@@ -601,8 +601,8 @@ func declarationShapeFor(
 		release()
 	}
 	result := program.Emit(ctx, compiler.EmitOptions{
-		TargetSourceFile: sourceFile,
-		EmitOnly:         compiler.EmitOnlyForcedDts,
+		TargetSourceFiles: []*ast.SourceFile{sourceFile},
+		EmitOnly:          compiler.EmitOnlyForcedDts,
 		WriteFile: func(_ string, text string, data *compiler.WriteFileData) error {
 			if data != nil && (len(data.Diagnostics) != 0 || data.SkippedDtsWrite) {
 				writeDiagnostics = true

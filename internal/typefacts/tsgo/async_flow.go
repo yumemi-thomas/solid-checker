@@ -312,7 +312,7 @@ func asyncReturnType(typeChecker *checker.Checker, returnType *checker.Type) boo
 	if awaited := checker.Checker_getAwaitedType(typeChecker, returnType); awaited != nil && !checker.Checker_isTypeIdenticalTo(typeChecker, returnType, awaited) {
 		return true
 	}
-	if symbol := checker.Type_symbol(returnType); symbol != nil {
+	if symbol := returnType.Symbol(); symbol != nil {
 		if symbol.Name == "AsyncIterable" || symbol.Name == "AsyncIterator" {
 			return true
 		}

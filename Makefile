@@ -11,7 +11,7 @@ build:
 test: fmt vet test-go test-rust
 
 fmt:
-	test -z "$$(gofmt -l cmd internal)"
+	test -z "$$(gofmt -l cmd internal shims)"
 	cargo +$(RUST_TOOLCHAIN) fmt --all -- --check
 
 vet:
