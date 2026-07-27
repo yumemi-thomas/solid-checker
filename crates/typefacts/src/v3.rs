@@ -4,14 +4,16 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    AsyncFunctionFact, Callability, Declaration, EntityFact, FactTable, FileFact, Location,
-    ReferenceSpace, ResolvedCall, ResolvedCallValidity, SourceBinding, SourceCall, SourceDigest,
-    SourceFunction, SourceHash, SymbolFact, TypeDescriptor,
+    ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, AsyncFunctionFact, CallKind,
+    Callability, Declaration, DeclarationOwner, EntityFact, FactTable, FileFact, Location,
+    ParameterFact, ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration,
+    SourceBinding, SourceCall, SourceDigest, SourceFunction, SourceHash, SymbolFact,
+    TypeDescriptor,
 };
 
-pub const TYPE_FACTS_SCHEMA_V3: u64 = 3;
+pub const TYPE_FACTS_SCHEMA_V4: u64 = 4;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:2d0631e43f52b1b9e125836daf73da524bbd0d3fc5656d49dab8a7371c193815";
+    "sha256:45a65287dec3d5f75b1be174eb19cce2898c739dd55035c4ab8e6c4a9ba106ef";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -287,7 +289,7 @@ pub const FUNCTION_FLAG_ASYNC: u64 = 1 << 1;
 pub const FUNCTION_FLAG_ARROW: u64 = 1 << 2;
 pub const ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC: u64 = 1 << 0;
 
-const PACKED_FACT_TABLE_VERSION: u64 = 3;
+const PACKED_FACT_TABLE_VERSION: u64 = 4;
 const PACKED_COLLECTION_LIMIT: usize = 1_000_000;
 
 struct PackedCursor<'a> {
@@ -340,6 +342,14 @@ impl<'a> PackedCursor<'a> {
             ));
         }
         Ok(count)
+    }
+
+    fn boolean(&mut self, label: &str) -> Result<bool, String> {
+        match self.u64()? {
+            0 => Ok(false),
+            1 => Ok(true),
+            value => Err(format!("packed {label} boolean has value {value}")),
+        }
     }
 
     fn raw(&mut self, length: usize) -> Result<&'a [u8], String> {
@@ -419,6 +429,124 @@ impl<'a> PackedCursor<'a> {
             });
         }
         Ok(declarations)
+    }
+
+    fn type_descriptor(&mut self, strings: &[Arc<str>]) -> Result<TypeDescriptor, String> {
+        Ok(TypeDescriptor {
+            text: self.string_index(strings, "type text")?,
+            origin_module: self.string_index(strings, "origin module")?,
+            alias_declarations: self.declarations(strings)?.into(),
+        })
+    }
+
+    fn resolved_declaration(
+        &mut self,
+        strings: &[Arc<str>],
+    ) -> Result<ResolvedDeclaration, String> {
+        let symbol = self.string_index(strings, "resolved declaration symbol")?;
+        let name = self.string_index(strings, "resolved declaration name")?;
+        let kind = self.string_index(strings, "resolved declaration kind")?;
+        let mut state = PackedLocationState::default();
+        let location = self.location(strings, &mut state)?;
+        let owner_count = self.count("declaration owners")?;
+        let mut owners = Vec::with_capacity(owner_count);
+        for _ in 0..owner_count {
+            owners.push(DeclarationOwner {
+                symbol: self.string_index(strings, "declaration owner symbol")?,
+                name: self.string_index(strings, "declaration owner name")?,
+                kind: self.string_index(strings, "declaration owner kind")?,
+                location: self.location(strings, &mut state)?,
+            });
+        }
+        Ok(ResolvedDeclaration {
+            symbol,
+            name,
+            kind,
+            location,
+            owners: owners.into(),
+            qualified_name: self.string_index(strings, "qualified declaration name")?,
+            origin_module: self.string_index(strings, "declaration origin module")?,
+            source_file: self.string_index(strings, "declaration source file")?,
+            standard_library: self.boolean("standard library")?,
+        })
+    }
+
+    fn resolved_call(&mut self, strings: &[Arc<str>]) -> Result<ResolvedCall, String> {
+        let target = self.string_index(strings, "resolved target")?;
+        let return_type_text = self.string_index(strings, "return type")?;
+        let validity =
+            parse_resolved_call_validity(&self.string_index(strings, "resolved call validity")?)?;
+        let kind = parse_call_kind(&self.string_index(strings, "resolved call kind")?)?;
+        let declaration = if self.boolean("resolved declaration presence")? {
+            Some(self.resolved_declaration(strings)?)
+        } else {
+            None
+        };
+        let argument_count = self.count("argument mappings")?;
+        let mut arguments = Vec::with_capacity(argument_count);
+        for _ in 0..argument_count {
+            let argument_index = self.u64()?;
+            let status =
+                parse_argument_mapping_status(&self.string_index(strings, "mapping status")?)?;
+            let unresolved_text = self.string_index(strings, "mapping unresolved reason")?;
+            let unresolved = if unresolved_text.is_empty() {
+                None
+            } else {
+                Some(parse_argument_mapping_reason(&unresolved_text)?)
+            };
+            let parameter = if self.boolean("mapped parameter presence")? {
+                let index = self.u64()?;
+                let symbol = self.string_index(strings, "parameter symbol")?;
+                let flags = self.u64()?;
+                if flags & !15 != 0 {
+                    return Err(format!("packed parameter has unknown flags {flags}"));
+                }
+                let declaration = if flags & 1 != 0 {
+                    let name = self.string_index(strings, "parameter declaration name")?;
+                    let kind = self.string_index(strings, "parameter declaration kind")?;
+                    let mut state = PackedLocationState::default();
+                    Some(Declaration {
+                        name,
+                        kind,
+                        location: self.location(strings, &mut state)?,
+                    })
+                } else {
+                    None
+                };
+                let callability =
+                    parse_callability(&self.string_index(strings, "parameter callability")?)?;
+                let type_descriptor = if flags & 8 != 0 {
+                    Some(self.type_descriptor(strings)?)
+                } else {
+                    None
+                };
+                Some(ParameterFact {
+                    index,
+                    symbol,
+                    declaration,
+                    rest: flags & 2 != 0,
+                    optional: flags & 4 != 0,
+                    callability,
+                    type_descriptor,
+                })
+            } else {
+                None
+            };
+            arguments.push(ArgumentMapping {
+                argument_index,
+                status,
+                unresolved,
+                parameter,
+            });
+        }
+        Ok(ResolvedCall {
+            target,
+            return_type_text,
+            validity,
+            kind,
+            declaration,
+            arguments: arguments.into(),
+        })
     }
 
     fn source_call(&mut self, strings: &[Arc<str>]) -> Result<SourceCall, String> {
@@ -518,22 +646,12 @@ fn decode_entity_run(
             return Err(format!("packed entity has unknown flags {flags}"));
         }
         let type_descriptor = if flags & 1 != 0 {
-            Some(TypeDescriptor {
-                text: cursor.string_index(strings, "type text")?,
-                origin_module: cursor.string_index(strings, "origin module")?,
-                alias_declarations: cursor.declarations(strings)?.into(),
-            })
+            Some(cursor.type_descriptor(strings)?)
         } else {
             None
         };
         let resolved_call = if flags & 2 != 0 {
-            Some(ResolvedCall {
-                target: cursor.string_index(strings, "resolved target")?,
-                return_type_text: cursor.string_index(strings, "return type")?,
-                validity: parse_resolved_call_validity(
-                    &cursor.string_index(strings, "resolved call validity")?,
-                )?,
-            })
+            Some(cursor.resolved_call(strings)?)
         } else {
             None
         };
@@ -600,6 +718,34 @@ fn parse_resolved_call_validity(value: &str) -> Result<ResolvedCallValidity, Str
         "recovery" => Ok(ResolvedCallValidity::Recovery),
         "unresolved" => Ok(ResolvedCallValidity::Unresolved),
         _ => Err(format!("unknown resolved call validity {value:?}")),
+    }
+}
+
+fn parse_call_kind(value: &str) -> Result<CallKind, String> {
+    match value {
+        "unknown" => Ok(CallKind::Unknown),
+        "call" => Ok(CallKind::Call),
+        "construct" => Ok(CallKind::Construct),
+        _ => Err(format!("unknown resolved call kind {value:?}")),
+    }
+}
+
+fn parse_argument_mapping_status(value: &str) -> Result<ArgumentMappingStatus, String> {
+    match value {
+        "resolved" => Ok(ArgumentMappingStatus::Resolved),
+        "unresolved" => Ok(ArgumentMappingStatus::Unresolved),
+        _ => Err(format!("unknown argument mapping status {value:?}")),
+    }
+}
+
+fn parse_argument_mapping_reason(value: &str) -> Result<ArgumentMappingReason, String> {
+    match value {
+        "callUnresolved" => Ok(ArgumentMappingReason::CallUnresolved),
+        "recoverySignature" => Ok(ArgumentMappingReason::RecoverySignature),
+        "compositeSignature" => Ok(ArgumentMappingReason::CompositeSignature),
+        "spreadArgument" => Ok(ArgumentMappingReason::SpreadArgument),
+        "parameterUnavailable" => Ok(ArgumentMappingReason::ParameterUnavailable),
+        _ => Err(format!("unknown argument mapping reason {value:?}")),
     }
 }
 
@@ -735,7 +881,7 @@ pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<Fact
     })
 }
 
-const PACKED_FACT_TABLE_DELTA_VERSION: u64 = 1;
+const PACKED_FACT_TABLE_DELTA_VERSION: u64 = 2;
 
 fn decode_packed_texts(
     cursor: &mut PackedCursor<'_>,
@@ -945,7 +1091,7 @@ mod tests {
     fn handshake_hash_matches_frozen_schema() {
         let actual = format!(
             "sha256:{:x}",
-            Sha256::digest(include_bytes!("../../../schema/typefacts-v3.schema.json"))
+            Sha256::digest(include_bytes!("../../../schema/typefacts-v4.schema.json"))
         );
         assert_eq!(actual, TYPE_FACTS_SCHEMA_SHA256);
     }
@@ -954,9 +1100,9 @@ mod tests {
     fn packed_table_decoder_is_strict_and_direct() {
         // version, schema, generation, one prefix-coded empty string, then
         // four empty top-level collections.
-        let valid = [3, 2, 1, 1, 0, 0, 0, 0, 0, 0, 0];
+        let valid = [4, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0];
         let table = decode_packed_fact_table(&valid, "/p/tsconfig.json".into()).unwrap();
-        assert_eq!(table.schema, 2);
+        assert_eq!(table.schema, 3);
         assert_eq!(table.generation, 1);
         assert_eq!(table.project_id, "/p/tsconfig.json");
         assert!(table.sources.is_empty());
@@ -965,7 +1111,7 @@ mod tests {
         assert!(table.files.is_empty());
 
         assert!(decode_packed_fact_table(&valid[..valid.len() - 1], "/p".into()).is_err());
-        assert!(decode_packed_fact_table(&[3, 2, 1], "/p".into()).is_err());
+        assert!(decode_packed_fact_table(&[4, 3, 1], "/p".into()).is_err());
         let mut trailing = valid.to_vec();
         trailing.push(0);
         assert!(decode_packed_fact_table(&trailing, "/p".into()).is_err());

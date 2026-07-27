@@ -74,7 +74,7 @@ func openNonDurableSession(t *testing.T, root string) (*typefacts.Session, strin
 
 func nonDurableRequest(id uint64, operation typefacts.LifecycleOperation, projectID string, generation uint64) typefacts.LifecycleRequest {
 	return typefacts.LifecycleRequest{
-		Schema:     typefacts.TypeFactsSchemaVersionV3,
+		Schema:     typefacts.TypeFactsSchemaVersionV4,
 		RequestID:  id,
 		Operation:  operation,
 		ProjectID:  projectID,

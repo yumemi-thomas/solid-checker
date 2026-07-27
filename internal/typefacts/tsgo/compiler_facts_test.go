@@ -133,6 +133,485 @@ const unresolved = takesNumber;
 			t.Errorf("entity %d validity = %q, want %q", index, got, validity)
 		}
 	}
+	if mapping := entities[0].ResolvedCall.Arguments; len(mapping) != 1 ||
+		mapping[0].Status != typefacts.ArgumentMappingResolved {
+		t.Errorf("valid call mappings = %+v", mapping)
+	}
+	if mapping := entities[1].ResolvedCall.Arguments; len(mapping) != 1 ||
+		mapping[0].Status != typefacts.ArgumentMappingUnresolved ||
+		mapping[0].Unresolved != typefacts.ArgumentMappingRecoverySignature {
+		t.Errorf("recovery call mappings = %+v", mapping)
+	}
+	if mapping := entities[2].ResolvedCall.Arguments; len(mapping) != 0 {
+		t.Errorf("unresolved non-call mappings = %+v, want empty", mapping)
+	}
+}
+
+func TestResolvedCallIdentifiesSelectedOverloadAndMapsArguments(t *testing.T) {
+	dir := t.TempDir()
+	source := `function select(value: string, callback: (value: string) => void): void;
+function select(value: number, callback: (value: number) => number): number;
+function select(value: string | number, callback: (value: never) => unknown) {
+	return callback(value as never);
+}
+const selected = select(1, value => value);
+`
+	sourcePath := filepath.Join(dir, "calls.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	callStart := strings.LastIndex(source, "select(")
+	entities, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location: typefacts.Location{
+			Path:      sourcePath,
+			StartByte: callStart,
+			EndByte:   callStart + len("select(1, value => value)"),
+		},
+		ResolvedCall: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := entities[0].ResolvedCall
+	if call == nil {
+		t.Fatal("resolved call fact is missing")
+	}
+	if call.Kind != typefacts.CallKindCall {
+		t.Fatalf("call kind = %q, want call", call.Kind)
+	}
+	if call.Validity != typefacts.ResolvedCallValid {
+		t.Fatalf("validity = %q, want valid", call.Validity)
+	}
+	if call.Declaration == nil {
+		t.Fatal("selected overload declaration is missing")
+	}
+	secondOverload := strings.Index(source[strings.Index(source, "\n")+1:], "select") + strings.Index(source, "\n") + 1
+	if got := call.Declaration.Location.StartByte; got != secondOverload {
+		t.Fatalf("selected declaration starts at %d, want second overload at %d", got, secondOverload)
+	}
+	if call.Declaration.Symbol == "" || call.Declaration.Name != "select" ||
+		call.Declaration.Kind != "FunctionDeclaration" {
+		t.Fatalf("selected declaration identity = %+v", call.Declaration)
+	}
+	if len(call.Arguments) != 2 {
+		t.Fatalf("argument mappings = %d, want 2", len(call.Arguments))
+	}
+	for index, mapping := range call.Arguments {
+		if mapping.ArgumentIndex != index || mapping.Status != typefacts.ArgumentMappingResolved ||
+			mapping.Parameter == nil || mapping.Parameter.Index != index {
+			t.Fatalf("argument %d mapping = %+v", index, mapping)
+		}
+		if mapping.Parameter.Symbol == "" || mapping.Parameter.Declaration == nil ||
+			mapping.Parameter.TypeDescriptor == nil {
+			t.Fatalf("argument %d parameter facts = %+v", index, mapping.Parameter)
+		}
+	}
+	if got := call.Arguments[0].Parameter.Callability; got != typefacts.CallabilityNonCallable {
+		t.Errorf("value parameter callability = %q, want nonCallable", got)
+	}
+	if got := call.Arguments[1].Parameter.Callability; got != typefacts.CallabilityCallable {
+		t.Errorf("callback parameter callability = %q, want callable", got)
+	}
+}
+
+func TestResolvedCallOwnerIdentityDistinguishesSameNamedMethods(t *testing.T) {
+	dir := t.TempDir()
+	source := `interface CustomStorage { getItem(key: string): string }
+interface CustomEventTarget { removeEventListener(type: string, listener: () => void): void }
+interface CustomArray { push(value: number): number }
+interface CustomFunction { bind(thisArg: unknown): void }
+declare const customStorage: CustomStorage;
+declare const customTarget: CustomEventTarget;
+declare const customArray: CustomArray;
+declare const customFunction: CustomFunction;
+declare const storage: Storage;
+declare const target: EventTarget;
+declare const array: number[];
+declare const fn: Function;
+storage.getItem("key");
+customStorage.getItem("key");
+target.removeEventListener("event", () => {});
+customTarget.removeEventListener("event", () => {});
+array.push(1);
+customArray.push(1);
+fn.bind(undefined);
+customFunction.bind(undefined);
+`
+	sourcePath := filepath.Join(dir, "owners.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	calls := []string{
+		`storage.getItem("key")`,
+		`customStorage.getItem("key")`,
+		`target.removeEventListener("event", () => {})`,
+		`customTarget.removeEventListener("event", () => {})`,
+		`array.push(1)`,
+		`customArray.push(1)`,
+		`fn.bind(undefined)`,
+		`customFunction.bind(undefined)`,
+	}
+	demands := make([]typefacts.EntityDemand, 0, len(calls))
+	for _, call := range calls {
+		start := strings.Index(source, call)
+		demands = append(demands, typefacts.EntityDemand{
+			Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(call)},
+			ResolvedCall: true,
+		})
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wantQualified := []string{
+		"Storage.getItem", "CustomStorage.getItem",
+		"EventTarget.removeEventListener", "CustomEventTarget.removeEventListener",
+		"Array.push", "CustomArray.push",
+		"Function.bind", "CustomFunction.bind",
+	}
+	for index, want := range wantQualified {
+		call := entities[index].ResolvedCall
+		if call == nil || call.Declaration == nil {
+			t.Fatalf("%s declaration is missing", calls[index])
+		}
+		if got := call.Declaration.QualifiedName; got != want {
+			t.Errorf("%s qualified identity = %q, want %q", calls[index], got, want)
+		}
+		wantStandardLibrary := index%2 == 0
+		if got := call.Declaration.StandardLibrary; got != wantStandardLibrary {
+			t.Errorf("%s standardLibrary = %t, want %t", calls[index], got, wantStandardLibrary)
+		}
+		if index%2 == 0 && call.Declaration.Symbol == entities[index+1].ResolvedCall.Declaration.Symbol {
+			t.Errorf("%s and %s share declaration identity %q", calls[index], calls[index+1], call.Declaration.Symbol)
+		}
+	}
+}
+
+func TestResolvedConstructionMapsRestArguments(t *testing.T) {
+	dir := t.TempDir()
+	source := `class Box {
+	constructor(callback: (value: string) => void, ...labels: string[]) {}
+}
+const box = new Box(value => {}, "first", "second");
+`
+	sourcePath := filepath.Join(dir, "construct.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	start := strings.Index(source, "new Box")
+	entities, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location: typefacts.Location{
+			Path: sourcePath, StartByte: start, EndByte: start + len(`new Box(value => {}, "first", "second")`),
+		},
+		ResolvedCall: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := entities[0].ResolvedCall
+	if call == nil || call.Validity != typefacts.ResolvedCallValid {
+		t.Fatalf("construction = %+v", call)
+	}
+	if call.Kind != typefacts.CallKindConstruct {
+		t.Fatalf("construction kind = %q, want construct", call.Kind)
+	}
+	if call.Declaration == nil || call.Declaration.QualifiedName != "Box.constructor" {
+		t.Fatalf("constructor declaration = %+v", call.Declaration)
+	}
+	if len(call.Arguments) != 3 {
+		t.Fatalf("argument mappings = %d, want 3", len(call.Arguments))
+	}
+	if call.Arguments[0].Parameter == nil ||
+		call.Arguments[0].Parameter.Callability != typefacts.CallabilityCallable ||
+		call.Arguments[0].Parameter.Rest {
+		t.Errorf("callback mapping = %+v", call.Arguments[0])
+	}
+	for _, index := range []int{1, 2} {
+		mapping := call.Arguments[index]
+		if mapping.Parameter == nil || mapping.Parameter.Index != 1 || !mapping.Parameter.Rest {
+			t.Errorf("rest argument %d mapping = %+v", index, mapping)
+		}
+	}
+}
+
+func TestArgumentMappingsUseGenericSubstitutionAndRejectAmbiguousSpread(t *testing.T) {
+	dir := t.TempDir()
+	source := `function generic<T>(value: T, callback?: (value: T) => T): T {
+	return callback ? callback(value) : value;
+}
+function pair(first: number, second: string): void {}
+const pairArguments: [number, string] = [1, "two"];
+generic(1, value => value);
+pair(...pairArguments);
+`
+	sourcePath := filepath.Join(dir, "mapping.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	demandCall := func(text string) typefacts.EntityDemand {
+		start := strings.LastIndex(source, text)
+		return typefacts.EntityDemand{
+			Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(text)},
+			ResolvedCall: true,
+		}
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{
+		demandCall("generic(1, value => value)"),
+		demandCall("pair(...pairArguments)"),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	generic := entities[0].ResolvedCall
+	if generic == nil || len(generic.Arguments) != 2 {
+		t.Fatalf("generic call = %+v", generic)
+	}
+	valueParameter := generic.Arguments[0].Parameter
+	callbackParameter := generic.Arguments[1].Parameter
+	if valueParameter == nil || valueParameter.TypeDescriptor == nil ||
+		valueParameter.TypeDescriptor.Text != "number" {
+		t.Errorf("instantiated value parameter = %+v", valueParameter)
+	}
+	if callbackParameter == nil || !callbackParameter.Optional ||
+		callbackParameter.Callability != typefacts.CallabilityMixed ||
+		callbackParameter.TypeDescriptor == nil ||
+		callbackParameter.TypeDescriptor.Text != "((value: number) => number) | undefined" {
+		t.Errorf("instantiated callback parameter = %+v, type = %q", callbackParameter, callbackParameter.TypeDescriptor.Text)
+	}
+
+	spread := entities[1].ResolvedCall
+	if spread == nil || len(spread.Arguments) != 1 {
+		t.Fatalf("spread call = %+v", spread)
+	}
+	if mapping := spread.Arguments[0]; mapping.Status != typefacts.ArgumentMappingUnresolved ||
+		mapping.Unresolved != typefacts.ArgumentMappingSpreadArgument || mapping.Parameter != nil {
+		t.Errorf("spread mapping = %+v", mapping)
+	}
+}
+
+func TestResolvedCallHandlesCallConstructAndIntersectionSignatures(t *testing.T) {
+	dir := t.TempDir()
+	source := `interface Callable {
+	(callback: () => void): void;
+}
+interface Constructable {
+	new (callback: () => void): object;
+}
+type Intersected = {
+	(value: string): string;
+} & {
+	(value: number): number;
+};
+declare const callable: Callable;
+declare const constructable: Constructable;
+declare const intersected: Intersected;
+callable(() => {});
+new constructable(() => {});
+intersected(1);
+`
+	sourcePath := filepath.Join(dir, "signatures.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	calls := []string{`callable(() => {})`, `new constructable(() => {})`, `intersected(1)`}
+	demands := make([]typefacts.EntityDemand, 0, len(calls))
+	for _, call := range calls {
+		start := strings.LastIndex(source, call)
+		demands = append(demands, typefacts.EntityDemand{
+			Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(call)},
+			ResolvedCall: true,
+		})
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []struct {
+		kind      typefacts.CallKind
+		qualified string
+		declKind  string
+	}{
+		{typefacts.CallKindCall, "Callable.call", "CallSignature"},
+		{typefacts.CallKindConstruct, "Constructable.construct", "ConstructSignature"},
+		{typefacts.CallKindCall, "Intersected.call", "CallSignature"},
+	}
+	for index, expected := range want {
+		call := entities[index].ResolvedCall
+		if call == nil || call.Validity != typefacts.ResolvedCallValid ||
+			call.Kind != expected.kind || call.Declaration == nil ||
+			call.Declaration.QualifiedName != expected.qualified ||
+			call.Declaration.Kind != expected.declKind {
+			t.Errorf("%s fact = %+v declaration = %+v, want %+v", calls[index], call, call.Declaration, expected)
+			continue
+		}
+		if len(call.Arguments) != 1 || call.Arguments[0].Status != typefacts.ArgumentMappingResolved {
+			t.Errorf("%s mappings = %+v", calls[index], call.Arguments)
+		}
+	}
+}
+
+func TestResolvedUnionCallDoesNotGuessOneConstituentDeclaration(t *testing.T) {
+	dir := t.TempDir()
+	source := `interface Left {
+	(value: string): string;
+}
+interface Right {
+	(value: string): number;
+}
+declare const union: Left | Right;
+const value = union("value");
+`
+	sourcePath := filepath.Join(dir, "union.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	start := strings.LastIndex(source, `union("value")`)
+	entities, err := opened.(typefacts.SemanticEntityLookup).SemanticEntities(
+		context.Background(),
+		[]typefacts.EntityDemand{{
+			Location: typefacts.Location{
+				Path: sourcePath, StartByte: start, EndByte: start + len(`union("value")`),
+			},
+			ResolvedCall: true,
+		}},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := entities[0].ResolvedCall
+	if call == nil || call.Validity != typefacts.ResolvedCallValid {
+		t.Fatalf("union call = %+v", call)
+	}
+	if call.Declaration != nil {
+		t.Errorf("union call guessed declaration %+v", call.Declaration)
+	}
+	if len(call.Arguments) != 1 ||
+		call.Arguments[0].Status != typefacts.ArgumentMappingUnresolved ||
+		call.Arguments[0].Unresolved != typefacts.ArgumentMappingCompositeSignature {
+		t.Errorf("union argument mappings = %+v", call.Arguments)
+	}
+}
+
+func TestResolvedCallRejectsStaleDeclarationNodesAfterUpdate(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "tsconfig.json")
+	declarationPath := filepath.Join(dir, "library.ts")
+	callPath := filepath.Join(dir, "consumer.ts")
+	originalDeclaration := "export function invoke(callback: () => void) { callback(); }\n"
+	updatedDeclaration := "// shifted declaration\n" + originalDeclaration
+	callSource := "import { invoke } from \"./library\";\ninvoke(() => {});\n"
+	for path, source := range map[string]string{
+		configPath:      `{"compilerOptions":{"strict":true,"module":"esnext","moduleResolution":"bundler","target":"esnext"},"include":["*.ts"]}`,
+		declarationPath: originalDeclaration,
+		callPath:        callSource,
+	} {
+		if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	opened, err := OpenProject(context.Background(), configPath, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+	callStart := strings.LastIndex(callSource, "invoke(")
+	demand := typefacts.EntityDemand{
+		Location: typefacts.Location{
+			Path:      callPath,
+			StartByte: callStart,
+			EndByte:   callStart + len("invoke(() => {})"),
+		},
+		ResolvedCall: true,
+	}
+	if _, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{demand}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := opened.Update(context.Background(), []typefacts.FileChange{{
+		Path: declarationPath, Version: 1, Source: []byte(updatedDeclaration),
+	}}); err != nil {
+		t.Fatal(err)
+	}
+
+	entities, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{demand})
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := entities[0].ResolvedCall
+	if call == nil || call.Declaration == nil || len(call.Arguments) != 1 ||
+		call.Arguments[0].Parameter == nil || call.Arguments[0].Parameter.Declaration == nil {
+		t.Fatalf("updated call fact = %+v", call)
+	}
+	wantDeclarationStart := strings.Index(updatedDeclaration, "invoke")
+	if got := call.Declaration.Location.StartByte; got != wantDeclarationStart {
+		t.Errorf("selected declaration starts at stale byte %d, want current byte %d", got, wantDeclarationStart)
+	}
+	wantParameterStart := strings.Index(updatedDeclaration, "callback")
+	if got := call.Arguments[0].Parameter.Declaration.Location.StartByte; got != wantParameterStart {
+		t.Errorf("parameter declaration starts at stale byte %d, want current byte %d", got, wantParameterStart)
+	}
 }
 
 func TestReferenceSpaceAndCanonicalRuntimeIdentity(t *testing.T) {

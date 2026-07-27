@@ -150,13 +150,14 @@ type DemandClosure struct {
 // closure, valid while the file stays outside every accepted update's
 // affected set and its demand list hashes identically.
 type fileClosureContribution struct {
-	demandHash  uint64
-	entities    []EntityFact
-	descriptors []symbolDescriptor
-	enqueued    []SymbolID
-	fullTier    []SymbolID
-	structural  []SymbolID
-	durable     bool
+	demandHash   uint64
+	entities     []EntityFact
+	descriptors  []symbolDescriptor
+	enqueued     []SymbolID
+	fullTier     []SymbolID
+	structural   []SymbolID
+	dependencies map[string]struct{}
+	durable      bool
 }
 
 type symbolDescriptor struct {

@@ -1,1 +1,3 @@
-export const unrelated = 42;
+const identity = (value: number) => value;
+
+export const unrelated = identity(42);

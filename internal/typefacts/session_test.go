@@ -25,7 +25,7 @@ func (b *sessionTestBackend) Close() error {
 
 func lifecycleRequest(id uint64, operation LifecycleOperation, generation uint64) LifecycleRequest {
 	return LifecycleRequest{
-		Schema: TypeFactsSchemaVersionV3, RequestID: id,
+		Schema: TypeFactsSchemaVersionV4, RequestID: id,
 		Operation: operation, ProjectID: "/project/tsconfig.json", Generation: generation,
 	}
 }

@@ -68,6 +68,11 @@ type project struct {
 	// directory), so durable re-resolution of lib-declared symbols falls
 	// back to this index. Nil until the first fallback of a generation.
 	filesByName map[string]*ast.SourceFile
+	// resolved-call caches are generation-scoped and populated only by
+	// resolvedCall demands. Signatures and symbols are checker-owned pointers,
+	// so every accepted update drops the maps as it installs the new checker.
+	resolvedDeclarations map[resolvedDeclarationCacheKey]*typefacts.ResolvedDeclaration
+	resolvedParameters   map[resolvedParameterCacheKey]*typefacts.ParameterFact
 	// declarationShapes caches diagnostic-free exported contracts for the
 	// accepted program generation. Incremental updates need only emit the
 	// candidate generation's shape; semantically affected files are evicted
@@ -417,6 +422,8 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 		p.durableRefs[preserved.id] = preserved.ref
 	}
 	p.filesByName = nil
+	p.resolvedDeclarations = nil
+	p.resolvedParameters = nil
 	p.nextSymbol = 0
 
 	stageStarted = time.Now()
@@ -1035,16 +1042,10 @@ func declarationModule(symbol *ast.Symbol) string {
 				continue
 			}
 			name := node.Name()
-			sourceFile := ast.GetSourceFileOfNode(node)
-			if name == nil || sourceFile == nil {
+			if name == nil {
 				continue
 			}
-			start := scanner.SkipTrivia(sourceFile.Text(), name.Pos())
-			end := name.End()
-			if start < 0 || end > len(sourceFile.Text()) || start >= end {
-				continue
-			}
-			return strings.Trim(string(sourceFile.Text()[start:end]), "\"'")
+			return name.Text()
 		}
 	}
 	return ""
@@ -1108,11 +1109,25 @@ func (p *project) ResolvedCall(ctx context.Context, location typefacts.Location)
 		hasCallResolutionDiagnostic(node, sourceFile, p.program.GetSemanticDiagnostics(ctx, sourceFile)) {
 		validity = typefacts.ResolvedCallRecovery
 	}
-	return typefacts.Call{
+	call := typefacts.Call{
 		Target:         p.idFor(target),
 		ReturnTypeText: p.checker.TypeToString(returnType),
 		Validity:       validity,
-	}, nil
+		Kind:           typefacts.CallKindCall,
+	}
+	if validity == typefacts.ResolvedCallRecovery {
+		call.Arguments = unresolvedArgumentMappings(node.Arguments(), typefacts.ArgumentMappingRecoverySignature)
+		return call, nil
+	}
+	calleeType := p.checker.GetTypeAtLocation(callee)
+	if calleeType != nil && calleeType.Flags()&checker.TypeFlagsUnion != 0 {
+		call.Arguments = unresolvedArgumentMappings(node.Arguments(), typefacts.ArgumentMappingCompositeSignature)
+		return call, nil
+	}
+	declaration := p.currentSignatureDeclaration(signature, target)
+	call.Declaration = p.resolvedDeclaration(signature, declaration, target)
+	call.Arguments = p.argumentMappings(node, signature, declaration)
+	return call, nil
 }
 
 // fileFactsMemo is one file's source-fact memo entry. Each fact set is
@@ -1407,6 +1422,8 @@ func (p *project) Close() error {
 	clear(p.mintedIDs)
 	p.referenceIndex.reset()
 	p.filesByName = nil
+	p.resolvedDeclarations = nil
+	p.resolvedParameters = nil
 	p.declarationShapes = nil
 	p.exportedIdentities = nil
 	return nil

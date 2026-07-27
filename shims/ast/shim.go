@@ -84,6 +84,9 @@ func IsMethodDeclaration(node *ast.Node) bool
 //go:linkname IsModuleDeclaration github.com/microsoft/typescript-go/internal/ast.IsModuleDeclaration
 func IsModuleDeclaration(node *ast.Node) bool
 
+//go:linkname IsNewExpression github.com/microsoft/typescript-go/internal/ast.IsNewExpression
+func IsNewExpression(node *ast.Node) bool
+
 //go:linkname IsPartOfTypeNode github.com/microsoft/typescript-go/internal/ast.IsPartOfTypeNode
 func IsPartOfTypeNode(node *ast.Node) bool
 
@@ -92,6 +95,9 @@ func IsQualifiedName(node *ast.Node) bool
 
 //go:linkname IsReturnStatement github.com/microsoft/typescript-go/internal/ast.IsReturnStatement
 func IsReturnStatement(node *ast.Node) bool
+
+//go:linkname IsSpreadElement github.com/microsoft/typescript-go/internal/ast.IsSpreadElement
+func IsSpreadElement(node *ast.Node) bool
 
 //go:linkname IsSwitchStatement github.com/microsoft/typescript-go/internal/ast.IsSwitchStatement
 func IsSwitchStatement(node *ast.Node) bool
@@ -112,6 +118,7 @@ const KindAmpersandAmpersandToken = ast.KindAmpersandAmpersandToken
 const KindBarBarToken = ast.KindBarBarToken
 const KindDefaultClause = ast.KindDefaultClause
 const KindQuestionQuestionToken = ast.KindQuestionQuestionToken
+const InternalSymbolNamePrefix = ast.InternalSymbolNamePrefix
 const ModifierFlagsAsync = ast.ModifierFlagsAsync
 const ModifierFlagsExport = ast.ModifierFlagsExport
 
@@ -120,4 +127,5 @@ type SourceFile = ast.SourceFile
 type Symbol = ast.Symbol
 
 const SymbolFlagsAlias = ast.SymbolFlagsAlias
+const SymbolFlagsOptional = ast.SymbolFlagsOptional
 const SymbolFlagsValue = ast.SymbolFlagsValue

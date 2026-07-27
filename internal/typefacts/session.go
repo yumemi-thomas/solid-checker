@@ -64,7 +64,7 @@ func (s *Session) Lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) LifecycleResponse {
 	generation := s.closure.generation
 	response := LifecycleResponse{
-		Schema: TypeFactsSchemaVersionV3, RequestID: request.RequestID,
+		Schema: TypeFactsSchemaVersionV4, RequestID: request.RequestID,
 		ProjectID: s.projectID, Generation: generation,
 	}
 	fail := func(code string, err error) LifecycleResponse {

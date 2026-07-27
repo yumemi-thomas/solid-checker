@@ -11,7 +11,7 @@ import (
 // Packed v3 full-frame encoding. This is deliberately an opaque byte string
 // at the lifecycle seam: callers either receive a validated FactTableV2 or an
 // error, and none of the columnar representation leaks into analysis code.
-const packedFactTableVersion = 3
+const packedFactTableVersion = 4
 
 // Optional-field and boolean flag bits carried inside the packed frame. The
 // Rust decoder declares the same values in crates/typefacts/src/v3.rs.
@@ -89,6 +89,86 @@ func (w *packedWriter) declarations(declarations []DeclarationV2) {
 	}
 }
 
+func (w *packedWriter) typeDescriptor(descriptor *TypeDescriptorV2) {
+	w.text(descriptor.Text)
+	w.text(descriptor.OriginModule)
+	w.declarations(descriptor.AliasDeclarations)
+}
+
+func (w *packedWriter) resolvedDeclaration(declaration *ResolvedDeclarationV2) {
+	w.text(declaration.Symbol)
+	w.text(declaration.Name)
+	w.text(declaration.Kind)
+	var state packedLocationState
+	w.location(declaration.Location, &state)
+	w.u64(uint64(len(declaration.Owners)))
+	for _, owner := range declaration.Owners {
+		w.text(owner.Symbol)
+		w.text(owner.Name)
+		w.text(owner.Kind)
+		w.location(owner.Location, &state)
+	}
+	w.text(declaration.QualifiedName)
+	w.text(declaration.OriginModule)
+	w.text(declaration.SourceFile)
+	w.u64(boolBit(declaration.StandardLibrary))
+}
+
+func (w *packedWriter) resolvedCall(call *CallV2) {
+	w.text(call.Target)
+	w.text(call.ReturnTypeText)
+	w.text(string(call.Validity))
+	w.text(string(call.Kind))
+	w.u64(boolBit(call.Declaration != nil))
+	if call.Declaration != nil {
+		w.resolvedDeclaration(call.Declaration)
+	}
+	w.u64(uint64(len(call.Arguments)))
+	for _, mapping := range call.Arguments {
+		w.u64(mapping.ArgumentIndex)
+		w.text(string(mapping.Status))
+		w.text(string(mapping.Unresolved))
+		w.u64(boolBit(mapping.Parameter != nil))
+		if mapping.Parameter == nil {
+			continue
+		}
+		parameter := mapping.Parameter
+		w.u64(parameter.Index)
+		w.text(parameter.Symbol)
+		flags := uint64(0)
+		if parameter.Declaration != nil {
+			flags |= 1
+		}
+		if parameter.Rest {
+			flags |= 2
+		}
+		if parameter.Optional {
+			flags |= 4
+		}
+		if parameter.TypeDescriptor != nil {
+			flags |= 8
+		}
+		w.u64(flags)
+		if parameter.Declaration != nil {
+			w.text(parameter.Declaration.Name)
+			w.text(parameter.Declaration.Kind)
+			var state packedLocationState
+			w.location(parameter.Declaration.Location, &state)
+		}
+		w.text(string(parameter.Callability))
+		if parameter.TypeDescriptor != nil {
+			w.typeDescriptor(parameter.TypeDescriptor)
+		}
+	}
+}
+
+func boolBit(value bool) uint64 {
+	if value {
+		return 1
+	}
+	return 0
+}
+
 func (w *packedWriter) sourceCall(call SourceCallV2) {
 	var state packedLocationState
 	w.location(call.Location, &state)
@@ -125,14 +205,10 @@ func (w *packedWriter) entityRun(entities []EntityFactV2) {
 		}
 		w.u64(flags)
 		if entity.TypeDescriptor != nil {
-			w.text(entity.TypeDescriptor.Text)
-			w.text(entity.TypeDescriptor.OriginModule)
-			w.declarations(entity.TypeDescriptor.AliasDeclarations)
+			w.typeDescriptor(entity.TypeDescriptor)
 		}
 		if entity.ResolvedCall != nil {
-			w.text(entity.ResolvedCall.Target)
-			w.text(entity.ResolvedCall.ReturnTypeText)
-			w.text(string(entity.ResolvedCall.Validity))
+			w.resolvedCall(entity.ResolvedCall)
 		}
 		if entity.Callability != "" {
 			w.text(string(entity.Callability))
@@ -318,7 +394,7 @@ func appendPackedDictionary(frame *packedWriter, dict *stringTableV3) {
 // varint is the compatibility gate, and both executables ship in build-ID
 // lockstep. The Rust decoder is decode_packed_fact_table_delta in
 // crates/typefacts/src/v3.rs.
-const packedFactTableDeltaVersion = 1
+const packedFactTableDeltaVersion = 2
 
 // PackedFactTableDeltaV3From encodes a delta into the packed frame:
 // version, generation, dictionary, then sources, removed source paths,
@@ -408,6 +484,79 @@ func (w *packedWriter) internalDeclarations(declarations []Declaration) {
 	}
 }
 
+func (w *packedWriter) internalTypeDescriptor(descriptor *TypeDescriptor) {
+	w.text(descriptor.Text)
+	w.text(descriptor.OriginModule)
+	w.internalDeclarations(descriptor.AliasDeclarations)
+}
+
+func (w *packedWriter) internalResolvedDeclaration(declaration *ResolvedDeclaration) {
+	w.text(string(declaration.Symbol))
+	w.text(wireSymbolName(declaration.Name))
+	w.text(declaration.Kind)
+	var state packedLocationState
+	w.internalLocation(declaration.Location, &state)
+	w.u64(uint64(len(declaration.Owners)))
+	for _, owner := range declaration.Owners {
+		w.text(string(owner.Symbol))
+		w.text(wireSymbolName(owner.Name))
+		w.text(owner.Kind)
+		w.internalLocation(owner.Location, &state)
+	}
+	w.text(declaration.QualifiedName)
+	w.text(declaration.OriginModule)
+	w.text(declaration.SourceFile)
+	w.u64(boolBit(declaration.StandardLibrary))
+}
+
+func (w *packedWriter) internalResolvedCall(call *Call) {
+	w.text(string(call.Target))
+	w.text(call.ReturnTypeText)
+	w.text(string(call.Validity))
+	w.text(string(call.Kind))
+	w.u64(boolBit(call.Declaration != nil))
+	if call.Declaration != nil {
+		w.internalResolvedDeclaration(call.Declaration)
+	}
+	w.u64(uint64(len(call.Arguments)))
+	for _, mapping := range call.Arguments {
+		w.u64(uint64(mapping.ArgumentIndex))
+		w.text(string(mapping.Status))
+		w.text(string(mapping.Unresolved))
+		w.u64(boolBit(mapping.Parameter != nil))
+		if mapping.Parameter == nil {
+			continue
+		}
+		parameter := mapping.Parameter
+		w.u64(uint64(parameter.Index))
+		w.text(string(parameter.Symbol))
+		flags := uint64(0)
+		if parameter.Declaration != nil {
+			flags |= 1
+		}
+		if parameter.Rest {
+			flags |= 2
+		}
+		if parameter.Optional {
+			flags |= 4
+		}
+		if parameter.TypeDescriptor != nil {
+			flags |= 8
+		}
+		w.u64(flags)
+		if parameter.Declaration != nil {
+			w.text(wireSymbolName(parameter.Declaration.Name))
+			w.text(parameter.Declaration.Kind)
+			var state packedLocationState
+			w.internalLocation(parameter.Declaration.Location, &state)
+		}
+		w.text(string(parameter.Callability))
+		if parameter.TypeDescriptor != nil {
+			w.internalTypeDescriptor(parameter.TypeDescriptor)
+		}
+	}
+}
+
 func (w *packedWriter) internalSourceCall(call SourceCall) {
 	var state packedLocationState
 	w.internalLocation(call.Location, &state)
@@ -479,9 +628,7 @@ func PackedFactTableV3FromInternal(table FactTable, generation uint64) []byte {
 				rows.internalDeclarations(entity.TypeDescriptor.AliasDeclarations)
 			}
 			if entity.ResolvedCall != nil {
-				rows.text(string(entity.ResolvedCall.Target))
-				rows.text(entity.ResolvedCall.ReturnTypeText)
-				rows.text(string(entity.ResolvedCall.Validity))
+				rows.internalResolvedCall(entity.ResolvedCall)
 			}
 			if entity.Callability != "" {
 				rows.text(string(entity.Callability))
@@ -567,7 +714,7 @@ func PackedFactTableV3FromInternal(table FactTable, generation uint64) []byte {
 		scratch = body.bytes
 	}
 
-	return packedFrame(TypeFactsSchemaVersionV2, generation, rows)
+	return packedFrame(TypeFactsTableSchemaVersion, generation, rows)
 }
 
 func packedHashedSymbol(symbol string) ([]byte, bool) {

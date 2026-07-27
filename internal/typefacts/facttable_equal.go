@@ -40,7 +40,52 @@ func resolvedCallEqual(left, right *Call) bool {
 	if left == nil || right == nil {
 		return left == right
 	}
-	return *left == *right
+	return left.Target == right.Target &&
+		left.ReturnTypeText == right.ReturnTypeText &&
+		left.Validity == right.Validity &&
+		left.Kind == right.Kind &&
+		resolvedDeclarationEqual(left.Declaration, right.Declaration) &&
+		slices.EqualFunc(left.Arguments, right.Arguments, argumentMappingEqual)
+}
+
+func resolvedDeclarationEqual(left, right *ResolvedDeclaration) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return left.Symbol == right.Symbol &&
+		left.Name == right.Name &&
+		left.Kind == right.Kind &&
+		left.Location == right.Location &&
+		left.QualifiedName == right.QualifiedName &&
+		left.OriginModule == right.OriginModule &&
+		left.SourceFile == right.SourceFile &&
+		left.StandardLibrary == right.StandardLibrary &&
+		slices.Equal(left.Owners, right.Owners)
+}
+
+func parameterFactEqual(left, right *ParameterFact) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	if left.Index != right.Index ||
+		left.Symbol != right.Symbol ||
+		left.Rest != right.Rest ||
+		left.Optional != right.Optional ||
+		left.Callability != right.Callability ||
+		!typeDescriptorEqual(left.TypeDescriptor, right.TypeDescriptor) {
+		return false
+	}
+	if left.Declaration == nil || right.Declaration == nil {
+		return left.Declaration == right.Declaration
+	}
+	return *left.Declaration == *right.Declaration
+}
+
+func argumentMappingEqual(left, right ArgumentMapping) bool {
+	return left.ArgumentIndex == right.ArgumentIndex &&
+		left.Status == right.Status &&
+		left.Unresolved == right.Unresolved &&
+		parameterFactEqual(left.Parameter, right.Parameter)
 }
 
 func entityFactEqual(left, right EntityFact) bool {

@@ -15,6 +15,57 @@ func declarationV2(value Declaration) DeclarationV2 {
 	return DeclarationV2{Name: wireSymbolName(value.Name), Kind: value.Kind, Location: locationV2(value.Location)}
 }
 
+func typeDescriptorV2(value *TypeDescriptor) *TypeDescriptorV2 {
+	if value == nil {
+		return nil
+	}
+	descriptor := &TypeDescriptorV2{Text: value.Text, OriginModule: value.OriginModule}
+	for _, declaration := range value.AliasDeclarations {
+		descriptor.AliasDeclarations = append(descriptor.AliasDeclarations, declarationV2(declaration))
+	}
+	return descriptor
+}
+
+func resolvedDeclarationV2(value *ResolvedDeclaration) *ResolvedDeclarationV2 {
+	if value == nil {
+		return nil
+	}
+	result := &ResolvedDeclarationV2{
+		Symbol: string(value.Symbol), Name: wireSymbolName(value.Name), Kind: value.Kind,
+		Location: locationV2(value.Location), QualifiedName: value.QualifiedName,
+		OriginModule: value.OriginModule, SourceFile: value.SourceFile,
+		StandardLibrary: value.StandardLibrary,
+	}
+	for _, owner := range value.Owners {
+		result.Owners = append(result.Owners, DeclarationOwnerV2{
+			Symbol: string(owner.Symbol), Name: wireSymbolName(owner.Name), Kind: owner.Kind,
+			Location: locationV2(owner.Location),
+		})
+	}
+	return result
+}
+
+func argumentMappingV2(value ArgumentMapping) ArgumentMappingV2 {
+	result := ArgumentMappingV2{
+		ArgumentIndex: uint64(value.ArgumentIndex),
+		Status:        value.Status,
+		Unresolved:    value.Unresolved,
+	}
+	if value.Parameter != nil {
+		parameter := value.Parameter
+		result.Parameter = &ParameterFactV2{
+			Index: uint64(parameter.Index), Symbol: string(parameter.Symbol),
+			Rest: parameter.Rest, Optional: parameter.Optional,
+			Callability: parameter.Callability, TypeDescriptor: typeDescriptorV2(parameter.TypeDescriptor),
+		}
+		if parameter.Declaration != nil {
+			declaration := declarationV2(*parameter.Declaration)
+			result.Parameter.Declaration = &declaration
+		}
+	}
+	return result
+}
+
 // TypeScript uses the invalid UTF-8 byte 0xfe as an unambiguous prefix for
 // synthetic symbol names. Deterministic CBOR text must be valid UTF-8, so use
 // TypeScript's public escaped-name spelling at the protocol boundary.
@@ -49,14 +100,17 @@ func entityFactV2(entity EntityFact) EntityFactV2 {
 		RuntimeIdentity: string(entity.RuntimeIdentity),
 	}
 	if entity.TypeDescriptor != nil {
-		descriptor := TypeDescriptorV2{Text: entity.TypeDescriptor.Text, OriginModule: entity.TypeDescriptor.OriginModule}
-		for _, declaration := range entity.TypeDescriptor.AliasDeclarations {
-			descriptor.AliasDeclarations = append(descriptor.AliasDeclarations, declarationV2(declaration))
-		}
-		converted.TypeDescriptor = &descriptor
+		converted.TypeDescriptor = typeDescriptorV2(entity.TypeDescriptor)
 	}
 	if entity.ResolvedCall != nil {
-		converted.ResolvedCall = &CallV2{Target: string(entity.ResolvedCall.Target), ReturnTypeText: entity.ResolvedCall.ReturnTypeText, Validity: entity.ResolvedCall.Validity}
+		call := entity.ResolvedCall
+		converted.ResolvedCall = &CallV2{
+			Target: string(call.Target), ReturnTypeText: call.ReturnTypeText, Validity: call.Validity,
+			Kind: call.Kind, Declaration: resolvedDeclarationV2(call.Declaration),
+		}
+		for _, mapping := range call.Arguments {
+			converted.ResolvedCall.Arguments = append(converted.ResolvedCall.Arguments, argumentMappingV2(mapping))
+		}
 	}
 	return converted
 }
@@ -108,7 +162,7 @@ func fileFactV2(file FileFact) FileFactV2 {
 // converter so unchanged rows are not allocated again.
 func FactTableV2From(table FactTable, projectID string, generation uint64) FactTableV2 {
 	result := FactTableV2{
-		Schema:     TypeFactsSchemaVersionV2,
+		Schema:     TypeFactsTableSchemaVersion,
 		Generation: generation,
 		ProjectID:  projectID,
 		Sources:    []SourceDigestV2{},

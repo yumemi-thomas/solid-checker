@@ -1018,7 +1018,7 @@ impl Drop for Session {
 
 fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
     Request {
-        schema: v3::TYPE_FACTS_SCHEMA_V3,
+        schema: v3::TYPE_FACTS_SCHEMA_V4,
         request_id: 0,
         operation,
         project_id: project_id.into(),

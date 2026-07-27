@@ -157,6 +157,17 @@ func (a *entityAccumulator) add(demand EntityDemand, entity EntityFact, structur
 	if entity.ResolvedCall != nil {
 		target.ResolvedCall = entity.ResolvedCall
 		a.enqueue(entity.ResolvedCall.Target)
+		if declaration := entity.ResolvedCall.Declaration; declaration != nil {
+			a.enqueue(declaration.Symbol)
+			for _, owner := range declaration.Owners {
+				a.enqueue(owner.Symbol)
+			}
+		}
+		for _, mapping := range entity.ResolvedCall.Arguments {
+			if mapping.Parameter != nil {
+				a.enqueue(mapping.Parameter.Symbol)
+			}
+		}
 	}
 	if entity.Callability != "" {
 		target.Callability = entity.Callability
@@ -189,6 +200,7 @@ func (a *entityAccumulator) contribution(hash uint64) *fileClosureContribution {
 		}
 	}
 	descriptors := make([]symbolDescriptor, 0)
+	dependencies := make(map[string]struct{})
 	for index := range a.entities {
 		entity := &a.entities[index]
 		if entity.Symbol != "" && entity.TypeDescriptor != nil {
@@ -197,15 +209,47 @@ func (a *entityAccumulator) contribution(hash uint64) *fileClosureContribution {
 				descriptor: entity.TypeDescriptor,
 			})
 		}
+		addDependency := func(location Location) {
+			if location.Path != "" && filepath.Clean(location.Path) != filepath.Clean(entity.Location.Path) {
+				dependencies[filepath.Clean(location.Path)] = struct{}{}
+			}
+		}
+		if entity.TypeDescriptor != nil {
+			for _, declaration := range entity.TypeDescriptor.AliasDeclarations {
+				addDependency(declaration.Location)
+			}
+		}
+		if call := entity.ResolvedCall; call != nil {
+			if call.Declaration != nil {
+				addDependency(call.Declaration.Location)
+				for _, owner := range call.Declaration.Owners {
+					addDependency(owner.Location)
+				}
+			}
+			for _, mapping := range call.Arguments {
+				if mapping.Parameter == nil {
+					continue
+				}
+				if mapping.Parameter.Declaration != nil {
+					addDependency(mapping.Parameter.Declaration.Location)
+				}
+				if mapping.Parameter.TypeDescriptor != nil {
+					for _, declaration := range mapping.Parameter.TypeDescriptor.AliasDeclarations {
+						addDependency(declaration.Location)
+					}
+				}
+			}
+		}
 	}
 	return &fileClosureContribution{
-		demandHash:  hash,
-		entities:    a.entities,
-		descriptors: descriptors,
-		enqueued:    a.enqueued,
-		fullTier:    a.fullTier,
-		structural:  a.structural,
-		durable:     durable,
+		demandHash:   hash,
+		entities:     a.entities,
+		descriptors:  descriptors,
+		enqueued:     a.enqueued,
+		fullTier:     a.fullTier,
+		structural:   a.structural,
+		dependencies: dependencies,
+		durable:      durable,
 	}
 }
 
@@ -432,6 +476,13 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		group := &groups[index]
 		contribution := p.retained[group.path]
 		_, pathChanged := p.transportChangedPaths[group.path]
+		dependencyChanged := false
+		for dependency := range contributionDependencies(contribution) {
+			if _, changed := p.transportChangedPaths[dependency]; changed {
+				dependencyChanged = true
+				break
+			}
+		}
 		// Update and demand-delta handling already name every path whose
 		// demand run may differ. Hash unchanged runs only when no exact
 		// changed-path set is available (initial/full materialization).
@@ -446,7 +497,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		} else {
 			group.hash = contribution.demandHash
 		}
-		if contribution != nil && contribution.demandHash == group.hash {
+		if contribution != nil && !dependencyChanged && contribution.demandHash == group.hash {
 			group.contribution = contribution
 			for _, symbol := range contribution.structural {
 				union[symbol] = struct{}{}
@@ -703,6 +754,13 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	// or diffed against its predecessor, and answers no per-location queries.
 	stages.symbol = stages.assembly + stages.sort + stages.close
 	return table, builder.fullTier.len(), stages, retention, nil
+}
+
+func contributionDependencies(contribution *fileClosureContribution) map[string]struct{} {
+	if contribution == nil {
+		return nil
+	}
+	return contribution.dependencies
 }
 
 // ClosureRetention reports how much of a generation's demand closure was

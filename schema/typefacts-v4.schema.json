@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://solid-checker.dev/schema/typefacts-v3.schema.json",
-  "title": "TypeFactsSchema v3 (retained lifecycle protocol)",
+  "$id": "https://solid-checker.dev/schema/typefacts-v4.schema.json",
+  "title": "TypeFactsSchema v4 (retained lifecycle protocol)",
   "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
   "oneOf": [
     { "$ref": "#/$defs/lifecycleRequest" },
@@ -30,6 +30,67 @@
         "name": { "type": "string" },
         "kind": { "type": "string" },
         "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "declarationOwner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "location"],
+      "properties": {
+        "symbol": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "typeDescriptor": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "text": { "type": "string" },
+        "originModule": { "type": "string" },
+        "aliasDeclarations": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/declaration" } }
+      }
+    },
+    "resolvedDeclaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "location"],
+      "properties": {
+        "symbol": { "type": "string" },
+        "name": { "type": "string" },
+        "kind": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" },
+        "owners": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/declarationOwner" } },
+        "qualifiedName": { "type": "string" },
+        "originModule": { "type": "string" },
+        "sourceFile": { "type": "string" },
+        "standardLibrary": { "type": "boolean" }
+      }
+    },
+    "parameterFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["index", "callability"],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "symbol": { "type": "string" },
+        "declaration": { "$ref": "#/$defs/declaration" },
+        "rest": { "type": "boolean" },
+        "optional": { "type": "boolean" },
+        "callability": { "enum": ["callable", "nonCallable", "mixed", "unknown"] },
+        "typeDescriptor": { "$ref": "#/$defs/typeDescriptor" }
+      }
+    },
+    "argumentMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["argumentIndex", "status"],
+      "properties": {
+        "argumentIndex": { "type": "integer", "minimum": 0 },
+        "status": { "enum": ["resolved", "unresolved"] },
+        "unresolved": { "enum": ["callUnresolved", "recoverySignature", "compositeSignature", "spreadArgument", "parameterUnavailable"] },
+        "parameter": { "$ref": "#/$defs/parameterFact" }
       }
     },
     "fileChange": {
@@ -88,7 +149,7 @@
       "additionalProperties": false,
       "required": ["schema", "requestId", "operation", "projectId", "generation"],
       "properties": {
-        "schema": { "const": 3 },
+        "schema": { "const": 4 },
         "requestId": { "type": "integer", "minimum": 1 },
         "operation": {
           "enum": ["open", "update", "analyze", "sources", "cancel", "close"]
@@ -120,22 +181,17 @@
       "properties": {
         "location": { "$ref": "#/$defs/location" },
         "symbol": { "type": "string" },
-        "typeDescriptor": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "text": { "type": "string" },
-            "originModule": { "type": "string" },
-            "aliasDeclarations": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/declaration" } }
-          }
-        },
+        "typeDescriptor": { "$ref": "#/$defs/typeDescriptor" },
         "resolvedCall": {
           "type": "object",
           "additionalProperties": false,
           "properties": {
             "target": { "type": "string" },
             "returnTypeText": { "type": "string" },
-            "validity": { "enum": ["valid", "recovery", "unresolved"] }
+            "validity": { "enum": ["valid", "recovery", "unresolved"] },
+            "kind": { "enum": ["unknown", "call", "construct"] },
+            "declaration": { "$ref": "#/$defs/resolvedDeclaration" },
+            "arguments": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/argumentMapping" } }
           }
         },
         "callability": { "enum": ["callable", "nonCallable", "mixed", "unknown"] },
@@ -235,7 +291,7 @@
       "required": ["schema", "requestId", "projectId", "generation", "ok"],
       "description": "tableMode selects how the analyze result is carried: \"full\" ships packedTable, \"delta\" ships packedDelta, and \"reuse\" ships neither because the retained table is unchanged.",
       "properties": {
-        "schema": { "const": 3 },
+        "schema": { "const": 4 },
         "requestId": { "type": "integer", "minimum": 1 },
         "projectId": { "type": "string", "minLength": 1 },
         "generation": { "type": "integer", "minimum": 1 },

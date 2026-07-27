@@ -57,7 +57,7 @@ func openCorpusSession(b *testing.B) (*typefacts.Session, string, []typefacts.En
 
 func corpusRequest(id uint64, operation typefacts.LifecycleOperation, projectID string, generation uint64) typefacts.LifecycleRequest {
 	return typefacts.LifecycleRequest{
-		Schema:     typefacts.TypeFactsSchemaVersionV3,
+		Schema:     typefacts.TypeFactsSchemaVersionV4,
 		RequestID:  id,
 		Operation:  operation,
 		ProjectID:  projectID,

@@ -119,7 +119,35 @@ func firstWireMismatch(left, right *typefacts.FactTableV2) string {
 	}
 	for index := range min(len(left.Entities), len(right.Entities)) {
 		if differs(left.Entities[index], right.Entities[index]) {
-			return fmt.Sprintf("entities[%d]:\n  got  %+v\n  want %+v", index, left.Entities[index], right.Entities[index])
+			gotCall, wantCall := left.Entities[index].ResolvedCall, right.Entities[index].ResolvedCall
+			return fmt.Sprintf("entities[%d]:\n  got  %+v\n  want %+v\n  got call: %#v\n  want call: %#v\n  got declaration: %#v\n  want declaration: %#v\n  got arguments: %#v\n  want arguments: %#v",
+				index, left.Entities[index], right.Entities[index],
+				gotCall, wantCall,
+				func() any {
+					if gotCall == nil {
+						return nil
+					}
+					return gotCall.Declaration
+				}(),
+				func() any {
+					if wantCall == nil {
+						return nil
+					}
+					return wantCall.Declaration
+				}(),
+				func() any {
+					if gotCall == nil {
+						return nil
+					}
+					return gotCall.Arguments
+				}(),
+				func() any {
+					if wantCall == nil {
+						return nil
+					}
+					return wantCall.Arguments
+				}(),
+			)
 		}
 	}
 	for index := range min(len(left.Symbols), len(right.Symbols)) {

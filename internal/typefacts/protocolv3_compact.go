@@ -3,6 +3,8 @@ package typefacts
 import (
 	"encoding/binary"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 )
 
 // Compact v3 full-frame encoding.
@@ -76,6 +78,9 @@ func newStringTableV3() *stringTableV3 {
 }
 
 func (t *stringTableV3) intern(value string) uint64 {
+	if !utf8.ValidString(value) {
+		value = strings.ToValidUTF8(value, "\uFFFD")
+	}
 	if index, ok := t.indexes[value]; ok {
 		return index
 	}

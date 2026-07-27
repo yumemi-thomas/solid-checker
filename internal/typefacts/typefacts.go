@@ -159,6 +159,81 @@ const (
 	ResolvedCallUnresolved ResolvedCallValidity = "unresolved"
 )
 
+// CallKind distinguishes ordinary invocation from construction.
+type CallKind string
+
+const (
+	CallKindUnknown   CallKind = "unknown"
+	CallKindCall      CallKind = "call"
+	CallKindConstruct CallKind = "construct"
+)
+
+// ResolvedDeclaration identifies the declaration selected by overload
+// resolution. Symbol and each owner symbol are compiler-resolved identities;
+// names and QualifiedName are display metadata.
+type ResolvedDeclaration struct {
+	Symbol          SymbolID
+	Name            string
+	Kind            string
+	Location        Location
+	Owners          []DeclarationOwner
+	QualifiedName   string
+	OriginModule    string
+	SourceFile      string
+	StandardLibrary bool
+}
+
+// DeclarationOwner is one compiler declaration containing a selected
+// signature declaration, ordered outermost to innermost.
+type DeclarationOwner struct {
+	Symbol   SymbolID
+	Name     string
+	Kind     string
+	Location Location
+}
+
+// ArgumentMappingStatus says whether TypeScript exposes one exact formal
+// parameter for a supplied argument.
+type ArgumentMappingStatus string
+
+const (
+	ArgumentMappingResolved   ArgumentMappingStatus = "resolved"
+	ArgumentMappingUnresolved ArgumentMappingStatus = "unresolved"
+)
+
+// ArgumentMappingReason explains why a supplied argument has no exact formal
+// parameter mapping.
+type ArgumentMappingReason string
+
+const (
+	ArgumentMappingCallUnresolved       ArgumentMappingReason = "callUnresolved"
+	ArgumentMappingRecoverySignature    ArgumentMappingReason = "recoverySignature"
+	ArgumentMappingCompositeSignature   ArgumentMappingReason = "compositeSignature"
+	ArgumentMappingSpreadArgument       ArgumentMappingReason = "spreadArgument"
+	ArgumentMappingParameterUnavailable ArgumentMappingReason = "parameterUnavailable"
+)
+
+// ParameterFact describes the selected signature's formal parameter after
+// generic substitution at one argument position.
+type ParameterFact struct {
+	Index          int
+	Symbol         SymbolID
+	Declaration    *Declaration
+	Rest           bool
+	Optional       bool
+	Callability    Callability
+	TypeDescriptor *TypeDescriptor
+}
+
+// ArgumentMapping relates one supplied argument to its exact formal parameter,
+// or carries an explicit reason that no exact mapping exists.
+type ArgumentMapping struct {
+	ArgumentIndex int
+	Status        ArgumentMappingStatus
+	Unresolved    ArgumentMappingReason
+	Parameter     *ParameterFact
+}
+
 // Call describes the target and instantiated return type of a demanded call.
 // The return type is carried as text only: the opaque per-generation identity
 // that used to accompany it had no consumer, and because it embedded the
@@ -168,6 +243,9 @@ type Call struct {
 	Target         SymbolID
 	ReturnTypeText string
 	Validity       ResolvedCallValidity
+	Kind           CallKind
+	Declaration    *ResolvedDeclaration
+	Arguments      []ArgumentMapping
 }
 
 // FileChange is one monotonically-versioned editor overlay change.

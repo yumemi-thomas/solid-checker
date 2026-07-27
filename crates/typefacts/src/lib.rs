@@ -116,6 +116,91 @@ pub enum ResolvedCallValidity {
     Unresolved,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum CallKind {
+    Unknown,
+    Call,
+    Construct,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ArgumentMappingStatus {
+    Resolved,
+    Unresolved,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ArgumentMappingReason {
+    CallUnresolved,
+    RecoverySignature,
+    CompositeSignature,
+    SpreadArgument,
+    ParameterUnavailable,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DeclarationOwner {
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub symbol: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub name: Arc<str>,
+    pub kind: Arc<str>,
+    pub location: Location,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResolvedDeclaration {
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub symbol: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub name: Arc<str>,
+    pub kind: Arc<str>,
+    pub location: Location,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub owners: Arc<[DeclarationOwner]>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub qualified_name: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub origin_module: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub source_file: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub standard_library: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ParameterFact {
+    pub index: u64,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub symbol: Arc<str>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration: Option<Declaration>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub rest: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub optional: bool,
+    pub callability: Callability,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub type_descriptor: Option<TypeDescriptor>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ArgumentMapping {
+    pub argument_index: u64,
+    pub status: ArgumentMappingStatus,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub unresolved: Option<ArgumentMappingReason>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<ParameterFact>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResolvedCall {
@@ -124,6 +209,11 @@ pub struct ResolvedCall {
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub return_type_text: Arc<str>,
     pub validity: ResolvedCallValidity,
+    pub kind: CallKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub declaration: Option<ResolvedDeclaration>,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub arguments: Arc<[ArgumentMapping]>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -553,7 +643,7 @@ mod tests {
             end_byte: 2,
         };
         let request = v3::Request {
-            schema: v3::TYPE_FACTS_SCHEMA_V3,
+            schema: v3::TYPE_FACTS_SCHEMA_V4,
             request_id: 7,
             operation: v3::Operation::Analyze,
             project_id: "project".into(),

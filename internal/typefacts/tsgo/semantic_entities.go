@@ -3,9 +3,11 @@ package tsgo
 import (
 	"context"
 	"path/filepath"
+	"strings"
 
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/typescript-go/shim/scanner"
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 )
 
@@ -164,19 +166,31 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 			entity.Callability = callabilityOfType(p.checker, p.checker.GetTypeAtLocation(queryNode))
 		}
 		if demand.ResolvedCall && queryNode != nil {
-			entity.ResolvedCall = &typefacts.Call{Validity: typefacts.ResolvedCallUnresolved}
+			entity.ResolvedCall = &typefacts.Call{
+				Validity: typefacts.ResolvedCallUnresolved,
+				Kind:     typefacts.CallKindUnknown,
+			}
 			node := queryNode
-			for node != nil && !ast.IsCallExpression(node) {
+			for node != nil && !isCallLikeExpression(node) {
 				node = node.Parent
 			}
 			if node != nil {
-				callee := node.AsCallExpression().Expression
+				if ast.IsNewExpression(node) {
+					entity.ResolvedCall.Kind = typefacts.CallKindConstruct
+				} else {
+					entity.ResolvedCall.Kind = typefacts.CallKindCall
+				}
+				callee := node.Expression()
 				target := p.checker.GetSymbolAtLocation(callee)
 				signature := checker.Checker_getResolvedSignature(p.checker, node, nil, checker.CheckModeNormal)
 				candidates := []*checker.Signature{}
 				_ = checker.Checker_getResolvedSignature(p.checker, node, &candidates, checker.CheckModeNormal)
 				if target != nil {
-					entity.ResolvedCall.Target = p.idFor(p.canonicalSymbol(target))
+					target = p.canonicalSymbol(target)
+					entity.ResolvedCall.Target = p.idFor(target)
+					if current, ok := p.symbolFor(entity.ResolvedCall.Target); ok {
+						target = current
+					}
 				}
 				if signature != nil {
 					entity.ResolvedCall.Validity = typefacts.ResolvedCallValid
@@ -194,14 +208,313 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 					if returnType != nil {
 						entity.ResolvedCall.ReturnTypeText = p.checker.TypeToString(returnType)
 					}
+					if entity.ResolvedCall.Validity == typefacts.ResolvedCallValid {
+						calleeType := p.checker.GetTypeAtLocation(callee)
+						if calleeType != nil && calleeType.Flags()&checker.TypeFlagsUnion != 0 {
+							entity.ResolvedCall.Arguments = unresolvedArgumentMappings(
+								node.Arguments(),
+								typefacts.ArgumentMappingCompositeSignature,
+							)
+						} else {
+							declaration := p.currentSignatureDeclaration(signature, target)
+							entity.ResolvedCall.Declaration = p.resolvedDeclaration(signature, declaration, target)
+							entity.ResolvedCall.Arguments = p.argumentMappings(node, signature, declaration)
+						}
+					} else {
+						entity.ResolvedCall.Arguments = unresolvedArgumentMappings(
+							node.Arguments(),
+							typefacts.ArgumentMappingRecoverySignature,
+						)
+					}
+				} else {
+					entity.ResolvedCall.Arguments = unresolvedArgumentMappings(
+						node.Arguments(),
+						typefacts.ArgumentMappingCallUnresolved,
+					)
 				}
 			}
 		} else if demand.ResolvedCall {
-			entity.ResolvedCall = &typefacts.Call{Validity: typefacts.ResolvedCallUnresolved}
+			entity.ResolvedCall = &typefacts.Call{
+				Validity: typefacts.ResolvedCallUnresolved,
+				Kind:     typefacts.CallKindUnknown,
+			}
 		}
 		result = append(result, entity)
 	}
 	return result, structural, nil
+}
+
+func isCallLikeExpression(node *ast.Node) bool {
+	return ast.IsCallExpression(node) || ast.IsNewExpression(node)
+}
+
+type resolvedDeclarationCacheKey struct {
+	signature *checker.Signature
+	fallback  *ast.Symbol
+}
+
+type resolvedParameterCacheKey struct {
+	signature     *checker.Signature
+	argumentIndex int
+}
+
+func (p *project) currentSignatureDeclaration(signature *checker.Signature, target *ast.Symbol) *ast.Node {
+	declaration := signature.Declaration()
+	if declaration == nil {
+		return nil
+	}
+	sourceFile := ast.GetSourceFileOfNode(declaration)
+	if sourceFile == nil {
+		return nil
+	}
+	currentSource := p.program.GetSourceFile(sourceFile.FileName())
+	if currentSource == sourceFile {
+		return declaration
+	}
+	target = p.canonicalSymbol(target)
+	if target == nil {
+		return nil
+	}
+
+	ordinal := 0
+	if declarationSymbol := declaration.Symbol(); declarationSymbol != nil {
+		for _, candidate := range declarationSymbol.Declarations {
+			if candidate.Kind != declaration.Kind {
+				continue
+			}
+			if candidate == declaration {
+				break
+			}
+			ordinal++
+		}
+	}
+	matches := make([]*ast.Node, 0, ordinal+1)
+	for _, root := range target.Declarations {
+		if root.Kind == declaration.Kind {
+			matches = append(matches, root)
+			continue
+		}
+		var visit func(*ast.Node) bool
+		visit = func(node *ast.Node) bool {
+			if node.Kind == declaration.Kind {
+				matches = append(matches, node)
+				return false
+			}
+			node.ForEachChild(visit)
+			return false
+		}
+		root.ForEachChild(visit)
+	}
+	if ordinal < len(matches) {
+		return matches[ordinal]
+	}
+	return nil
+}
+
+func (p *project) resolvedDeclaration(signature *checker.Signature, node *ast.Node, fallbackSymbol *ast.Symbol) *typefacts.ResolvedDeclaration {
+	key := resolvedDeclarationCacheKey{signature: signature, fallback: fallbackSymbol}
+	if cached := p.resolvedDeclarations[key]; cached != nil {
+		return cached
+	}
+	if node == nil {
+		return nil
+	}
+	sourceFile := ast.GetSourceFileOfNode(node)
+	if sourceFile == nil {
+		return nil
+	}
+	nameNode := node.Name()
+	if nameNode == nil {
+		nameNode = node
+	}
+	symbol := node.Symbol()
+	if (ast.IsArrowFunction(node) || ast.IsFunctionExpression(node)) && fallbackSymbol != nil {
+		// Anonymous function expressions often carry an internal signature
+		// symbol. The callable declaration exposed to consumers is the
+		// compiler-resolved callee symbol that owns that expression.
+		symbol = fallbackSymbol
+	}
+	if symbol == nil && node.Name() != nil {
+		symbol = p.checker.GetSymbolAtLocation(node.Name())
+	}
+	if symbol == nil {
+		symbol = fallbackSymbol
+	}
+	kind := strings.TrimPrefix(node.KindString(), "Kind")
+	result := &typefacts.ResolvedDeclaration{
+		Name:       "",
+		Kind:       kind,
+		Location:   typefacts.Location{Path: filepath.Clean(sourceFile.FileName()), StartByte: scanner.SkipTrivia(sourceFile.Text(), nameNode.Pos()), EndByte: nameNode.End()},
+		SourceFile: filepath.Clean(sourceFile.FileName()),
+	}
+	if symbol != nil {
+		symbol = p.canonicalSymbol(symbol)
+		result.Symbol = p.idFor(symbol)
+		result.OriginModule = declarationModule(symbol)
+		if !strings.HasPrefix(symbol.Name, ast.InternalSymbolNamePrefix) {
+			result.Name = symbol.Name
+		}
+	}
+	switch kind {
+	case "Constructor":
+		result.Name = "constructor"
+	case "ArrowFunction", "FunctionExpression":
+		if result.Name == "" {
+			result.Name = "call"
+		}
+	case "CallSignature", "FunctionType":
+		result.Name = "call"
+	case "ConstructSignature", "ConstructorType":
+		result.Name = "construct"
+	}
+	for owner := node.Parent; owner != nil && owner.Parent != nil; owner = owner.Parent {
+		ownerSymbol := owner.Symbol()
+		if ownerSymbol == nil && owner.Name() != nil {
+			ownerSymbol = p.checker.GetSymbolAtLocation(owner.Name())
+		}
+		if ownerSymbol == nil {
+			continue
+		}
+		ownerSource := ast.GetSourceFileOfNode(owner)
+		if ownerSource == nil {
+			continue
+		}
+		ownerSymbol = p.canonicalSymbol(ownerSymbol)
+		if ownerSymbol == symbol {
+			continue
+		}
+		name := owner.Name()
+		if name == nil {
+			name = owner
+		}
+		result.Owners = append(result.Owners, typefacts.DeclarationOwner{
+			Symbol: p.idFor(ownerSymbol),
+			Name:   ownerSymbol.Name,
+			Kind:   strings.TrimPrefix(owner.KindString(), "Kind"),
+			Location: typefacts.Location{
+				Path:      filepath.Clean(ownerSource.FileName()),
+				StartByte: scanner.SkipTrivia(ownerSource.Text(), name.Pos()),
+				EndByte:   name.End(),
+			},
+		})
+	}
+	for left, right := 0, len(result.Owners)-1; left < right; left, right = left+1, right-1 {
+		result.Owners[left], result.Owners[right] = result.Owners[right], result.Owners[left]
+	}
+	qualified := make([]string, 0, len(result.Owners)+1)
+	for _, owner := range result.Owners {
+		if owner.Name != "" && !strings.HasPrefix(owner.Name, ast.InternalSymbolNamePrefix) {
+			qualified = append(qualified, owner.Name)
+		}
+	}
+	if result.Name != "" {
+		qualified = append(qualified, result.Name)
+	}
+	result.QualifiedName = strings.Join(qualified, ".")
+	result.StandardLibrary = p.program.IsSourceFileDefaultLibrary(sourceFile.Path())
+	if p.resolvedDeclarations == nil {
+		p.resolvedDeclarations = make(map[resolvedDeclarationCacheKey]*typefacts.ResolvedDeclaration)
+	}
+	p.resolvedDeclarations[key] = result
+	return result
+}
+
+func (p *project) argumentMappings(call *ast.Node, signature *checker.Signature, signatureDeclaration *ast.Node) []typefacts.ArgumentMapping {
+	arguments := call.Arguments()
+	result := make([]typefacts.ArgumentMapping, 0, len(arguments))
+	parameters := signature.Parameters()
+	for argumentIndex, argument := range arguments {
+		if ast.IsSpreadElement(argument) {
+			result = append(result, typefacts.ArgumentMapping{
+				ArgumentIndex: argumentIndex,
+				Status:        typefacts.ArgumentMappingUnresolved,
+				Unresolved:    typefacts.ArgumentMappingSpreadArgument,
+			})
+			continue
+		}
+		parameterKey := resolvedParameterCacheKey{signature: signature, argumentIndex: argumentIndex}
+		if cached := p.resolvedParameters[parameterKey]; cached != nil {
+			result = append(result, typefacts.ArgumentMapping{
+				ArgumentIndex: argumentIndex,
+				Status:        typefacts.ArgumentMappingResolved,
+				Parameter:     cached,
+			})
+			continue
+		}
+		formalIndex := argumentIndex
+		if formalIndex >= len(parameters) {
+			if !signature.HasRestParameter() || len(parameters) == 0 {
+				result = append(result, typefacts.ArgumentMapping{
+					ArgumentIndex: argumentIndex,
+					Status:        typefacts.ArgumentMappingUnresolved,
+					Unresolved:    typefacts.ArgumentMappingParameterUnavailable,
+				})
+				continue
+			}
+			formalIndex = len(parameters) - 1
+		}
+		parameter := parameters[formalIndex]
+		if signatureDeclaration != nil && formalIndex < len(signatureDeclaration.Parameters()) {
+			currentParameter := signatureDeclaration.Parameters()[formalIndex]
+			if currentParameter.Symbol() != nil {
+				parameter = currentParameter.Symbol()
+			} else if currentParameter.Name() != nil {
+				if symbol := p.checker.GetSymbolAtLocation(currentParameter.Name()); symbol != nil {
+					parameter = symbol
+				}
+			}
+		}
+		parameterType := checker.Checker_getTypeAtPosition(p.checker, signature, argumentIndex)
+		rest := signature.HasRestParameter() && formalIndex == len(parameters)-1
+		fact := &typefacts.ParameterFact{
+			Index:       formalIndex,
+			Rest:        rest,
+			Optional:    !rest && formalIndex >= signature.MinArgumentCount(),
+			Callability: callabilityOfType(p.checker, parameterType),
+		}
+		if parameter != nil {
+			fact.Optional = fact.Optional || !rest && parameter.Flags&ast.SymbolFlagsOptional != 0
+			fact.Symbol = p.idFor(parameter)
+			if declarations := declarationsForSymbol(parameter); len(declarations) != 0 {
+				fact.Declaration = &declarations[0]
+			}
+		}
+		if parameterType != nil {
+			descriptor := typeDescriptorFor(p.checker, parameterType)
+			fact.TypeDescriptor = &descriptor
+		}
+		if p.resolvedParameters == nil {
+			p.resolvedParameters = make(map[resolvedParameterCacheKey]*typefacts.ParameterFact)
+		}
+		p.resolvedParameters[parameterKey] = fact
+		result = append(result, typefacts.ArgumentMapping{
+			ArgumentIndex: argumentIndex,
+			Status:        typefacts.ArgumentMappingResolved,
+			Parameter:     fact,
+		})
+	}
+	return result
+}
+
+func unresolvedArgumentMappings(arguments []*ast.Node, reason typefacts.ArgumentMappingReason) []typefacts.ArgumentMapping {
+	result := make([]typefacts.ArgumentMapping, 0, len(arguments))
+	for index := range arguments {
+		result = append(result, typefacts.ArgumentMapping{
+			ArgumentIndex: index,
+			Status:        typefacts.ArgumentMappingUnresolved,
+			Unresolved:    reason,
+		})
+	}
+	return result
+}
+
+func typeDescriptorFor(typeChecker *checker.Checker, value *checker.Type) typefacts.TypeDescriptor {
+	descriptor := typefacts.TypeDescriptor{Text: typeChecker.TypeToString(value)}
+	if alias := value.Alias(); alias != nil && alias.Symbol() != nil {
+		descriptor.AliasDeclarations = declarationsForSymbol(alias.Symbol())
+		descriptor.OriginModule = declarationModule(alias.Symbol())
+	}
+	return descriptor
 }
 
 func hasCallResolutionDiagnostic(call *ast.Node, sourceFile *ast.SourceFile, diagnostics []*ast.Diagnostic) bool {
@@ -213,7 +526,7 @@ func hasCallResolutionDiagnostic(call *ast.Node, sourceFile *ast.SourceFile, dia
 		case 2344, 2345, 2348, 2349, 2350, 2379, 2554, 2555, 2558, 2635,
 			2677, 2721, 2722, 2723, 2757, 2769, 2794, 2810, 6234:
 			node := deepestNodeAt(ast.GetNodeAtPosition(sourceFile, diagnostic.Pos(), false), diagnostic.Pos())
-			for node != nil && !ast.IsCallExpression(node) {
+			for node != nil && !isCallLikeExpression(node) {
 				node = node.Parent
 			}
 			if node == call {

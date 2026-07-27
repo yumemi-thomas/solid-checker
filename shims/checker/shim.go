@@ -25,6 +25,9 @@ func Checker_getBaseTypes(recv *checker.Checker, t *checker.Type) []*checker.Typ
 //go:linkname Checker_getReturnTypeOfSignature github.com/microsoft/typescript-go/internal/checker.(*Checker).getReturnTypeOfSignature
 func Checker_getReturnTypeOfSignature(recv *checker.Checker, sig *checker.Signature) *checker.Type
 
+//go:linkname Checker_getTypeAtPosition github.com/microsoft/typescript-go/internal/checker.(*Checker).getTypeAtPosition
+func Checker_getTypeAtPosition(recv *checker.Checker, signature *checker.Signature, pos int) *checker.Type
+
 //go:linkname Checker_getBaseConstraintOfType github.com/microsoft/typescript-go/internal/checker.(*Checker).getBaseConstraintOfType
 func Checker_getBaseConstraintOfType(recv *checker.Checker, t *checker.Type) *checker.Type
 
@@ -42,6 +45,7 @@ const SignatureFlagsIsSignatureCandidateForOverloadFailure = checker.SignatureFl
 const TypeFlagsAny = checker.TypeFlagsAny
 const TypeFlagsUnknown = checker.TypeFlagsUnknown
 const TypeFlagsNever = checker.TypeFlagsNever
+const TypeFlagsUnion = checker.TypeFlagsUnion
 const TypeFlagsIncludesError = checker.TypeFlagsIncludesError
 
 type Type = checker.Type

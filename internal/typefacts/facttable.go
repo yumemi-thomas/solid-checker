@@ -2,8 +2,8 @@ package typefacts
 
 import "errors"
 
-// The v2-shaped fact table is the model the producer materializes and the
-// packed v3 frame carries. Its row types are also the delta wire shapes in
+// The fact table is the model the producer materializes and the packed
+// lifecycle frame carries. Its row types are also the delta wire shapes in
 // FactTableDeltaV3, so the "V2" suffix names the fact-table model version —
 // not the retired v2 closure protocol.
 //
@@ -12,14 +12,14 @@ import "errors"
 
 // TypeFactsSchemaVersion is the schema stamped on the internal fact table
 // materialized inside the producer; the transport model version is
-// TypeFactsSchemaVersionV2.
+// TypeFactsTableSchemaVersion.
 const TypeFactsSchemaVersion uint64 = 1
 
 var ErrGenerationMismatch = errors.New("type facts generation mismatch")
 
-// TypeFactsSchemaVersionV2 identifies the fact-table model carried in the
+// TypeFactsTableSchemaVersion identifies the fact-table model carried in the
 // packed frame and echoed as FactTable.schema by the Rust client.
-const TypeFactsSchemaVersionV2 uint64 = 2
+const TypeFactsTableSchemaVersion uint64 = 3
 
 // LocationV2 is a UTF-8 byte range in original source.
 type LocationV2 struct {
@@ -35,12 +35,59 @@ type DeclarationV2 struct {
 	Location LocationV2 `cbor:"location" json:"location"`
 }
 
-// CallV2 describes a resolved call target. v1's opaque return-type identity
-// is deleted (zero measured demand); the instantiated return type text stays.
+// DeclarationOwnerV2 is one compiler declaration containing the selected
+// signature declaration.
+type DeclarationOwnerV2 struct {
+	Symbol   string     `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	Name     string     `cbor:"name,omitempty" json:"name,omitempty"`
+	Kind     string     `cbor:"kind" json:"kind"`
+	Location LocationV2 `cbor:"location" json:"location"`
+}
+
+// ResolvedDeclarationV2 identifies the exact declaration selected by overload
+// resolution.
+type ResolvedDeclarationV2 struct {
+	Symbol          string               `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	Name            string               `cbor:"name,omitempty" json:"name,omitempty"`
+	Kind            string               `cbor:"kind" json:"kind"`
+	Location        LocationV2           `cbor:"location" json:"location"`
+	Owners          []DeclarationOwnerV2 `cbor:"owners,omitempty" json:"owners,omitempty"`
+	QualifiedName   string               `cbor:"qualifiedName,omitempty" json:"qualifiedName,omitempty"`
+	OriginModule    string               `cbor:"originModule,omitempty" json:"originModule,omitempty"`
+	SourceFile      string               `cbor:"sourceFile,omitempty" json:"sourceFile,omitempty"`
+	StandardLibrary bool                 `cbor:"standardLibrary,omitempty" json:"standardLibrary,omitempty"`
+}
+
+// ParameterFactV2 is an instantiated selected-signature parameter.
+type ParameterFactV2 struct {
+	Index          uint64            `cbor:"index" json:"index"`
+	Symbol         string            `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	Declaration    *DeclarationV2    `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Rest           bool              `cbor:"rest,omitempty" json:"rest,omitempty"`
+	Optional       bool              `cbor:"optional,omitempty" json:"optional,omitempty"`
+	Callability    Callability       `cbor:"callability" json:"callability"`
+	TypeDescriptor *TypeDescriptorV2 `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
+}
+
+// ArgumentMappingV2 relates one supplied argument to an exact formal
+// parameter, or explains why no exact mapping exists.
+type ArgumentMappingV2 struct {
+	ArgumentIndex uint64                `cbor:"argumentIndex" json:"argumentIndex"`
+	Status        ArgumentMappingStatus `cbor:"status" json:"status"`
+	Unresolved    ArgumentMappingReason `cbor:"unresolved,omitempty" json:"unresolved,omitempty"`
+	Parameter     *ParameterFactV2      `cbor:"parameter,omitempty" json:"parameter,omitempty"`
+}
+
+// CallV2 describes a resolved call target, selected declaration, and
+// argument-to-parameter mappings. v1's opaque return-type identity is deleted
+// (zero measured demand); the instantiated return type text stays.
 type CallV2 struct {
-	Target         string               `cbor:"target,omitempty" json:"target,omitempty"`
-	ReturnTypeText string               `cbor:"returnTypeText,omitempty" json:"returnTypeText,omitempty"`
-	Validity       ResolvedCallValidity `cbor:"validity" json:"validity"`
+	Target         string                 `cbor:"target,omitempty" json:"target,omitempty"`
+	ReturnTypeText string                 `cbor:"returnTypeText,omitempty" json:"returnTypeText,omitempty"`
+	Validity       ResolvedCallValidity   `cbor:"validity" json:"validity"`
+	Kind           CallKind               `cbor:"kind,omitempty" json:"kind,omitempty"`
+	Declaration    *ResolvedDeclarationV2 `cbor:"declaration,omitempty" json:"declaration,omitempty"`
+	Arguments      []ArgumentMappingV2    `cbor:"arguments,omitempty" json:"arguments,omitempty"`
 }
 
 // TypeDescriptorV2 exposes source identity for named types.

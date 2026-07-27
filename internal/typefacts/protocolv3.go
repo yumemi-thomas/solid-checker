@@ -2,11 +2,11 @@ package typefacts
 
 import "fmt"
 
-const TypeFactsSchemaVersionV3 uint64 = 3
+const TypeFactsSchemaVersionV4 uint64 = 4
 
 const (
 	TypeFactsHandshakeProtocol uint64 = 1
-	TypeFactsSchemaSHA256             = "sha256:2d0631e43f52b1b9e125836daf73da524bbd0d3fc5656d49dab8a7371c193815"
+	TypeFactsSchemaSHA256             = "sha256:45a65287dec3d5f75b1be174eb19cce2898c739dd55035c4ab8e6c4a9ba106ef"
 )
 
 type ServiceHandshake struct {
@@ -129,7 +129,7 @@ type FactTableDeltaV3 struct {
 }
 
 func ValidateLifecycleRequest(request LifecycleRequest) error {
-	if request.Schema != TypeFactsSchemaVersionV3 {
+	if request.Schema != TypeFactsSchemaVersionV4 {
 		return fmt.Errorf("unsupported TypeFacts schema %d", request.Schema)
 	}
 	if request.RequestID == 0 || request.ProjectID == "" || request.Generation == 0 {

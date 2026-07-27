@@ -1,7 +1,7 @@
 use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
-    AnalysisDemand, Callability, DemandGroup, Location, Producer, ReferenceSpace,
+    AnalysisDemand, CallKind, Callability, DemandGroup, Location, Producer, ReferenceSpace,
     ResolvedCallValidity, Session,
     v3::{EntityDemand, FileChange},
 };
@@ -46,10 +46,16 @@ fn rust_client_consumes_compiler_semantic_facts_across_retained_updates() {
     assert_eq!(entity.callability, Some(Callability::Callable));
     assert_eq!(entity.reference_space, Some(ReferenceSpace::Value));
     assert!(entity.runtime_identity.starts_with("runtime:h:"));
-    assert_eq!(
-        entity.resolved_call.as_ref().unwrap().validity,
-        ResolvedCallValidity::Valid
-    );
+    let resolved = entity.resolved_call.as_ref().unwrap();
+    assert_eq!(resolved.validity, ResolvedCallValidity::Valid);
+    assert_eq!(resolved.kind, CallKind::Call);
+    let declaration = resolved
+        .declaration
+        .as_ref()
+        .expect("valid call carries its selected declaration");
+    assert_eq!(declaration.name.as_ref(), "count");
+    assert!(!declaration.standard_library);
+    assert!(resolved.arguments.is_empty());
 
     let unrelated_path = project.parent().unwrap().join("unrelated.ts");
     session

@@ -13,6 +13,15 @@ new facts:
   demand `referenceSpace`.
 - Regex parsing of export declarations and module specifiers to join aliases:
   compare non-empty `runtimeIdentity` values.
+- Declaration-name plus declaration-file checks such as `"getItem"` in
+  `lib.dom.d.ts`: compare the selected declaration symbol and owner chain from
+  `resolvedCall.declaration`. `qualifiedName` is useful for logs, not equality.
+- Overload guessing and positional argument heuristics: consume each
+  `resolvedCall.arguments` entry and use its selected parameter symbol,
+  declaration, instantiated type, rest/optional flags, and callability.
+- Synthetic or best-effort mapping for recovery, union-composite, and spread
+  calls: honor the explicit unresolved mapping reason instead.
 
 `returnTypeText` remains presentation data. It must not be used to decide any
-of the facts above.
+of the facts above. The new facts also do not authorize a callback-timing
+contract: invocation timing is runtime behavior that TypeScript does not prove.

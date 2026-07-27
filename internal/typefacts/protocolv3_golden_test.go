@@ -18,7 +18,7 @@ import (
 func v3GoldenFixtures(t *testing.T) (LifecycleRequest, LifecycleResponse) {
 	t.Helper()
 	request := LifecycleRequest{
-		Schema:     TypeFactsSchemaVersionV3,
+		Schema:     TypeFactsSchemaVersionV4,
 		RequestID:  7,
 		Operation:  LifecycleAnalyze,
 		ProjectID:  "/p/tsconfig.json",
@@ -43,7 +43,7 @@ func v3GoldenFixtures(t *testing.T) (LifecycleRequest, LifecycleResponse) {
 		t.Fatal(err)
 	}
 	response := LifecycleResponse{
-		Schema:      TypeFactsSchemaVersionV3,
+		Schema:      TypeFactsSchemaVersionV4,
 		RequestID:   7,
 		ProjectID:   "/p/tsconfig.json",
 		Generation:  3,
