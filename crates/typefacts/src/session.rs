@@ -16,7 +16,8 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    FactTable, TypeFactsError, decode, decode_trusted, encode_sidecar_request, read_frame,
+    EntityFact, FactTable, TypeFactsError, decode, decode_trusted, encode_sidecar_request,
+    read_frame,
     v3::{
         self, EntityDemand, FactTableDelta, FileChange, Handshake, Operation, Request, Response,
         SourceFile,
@@ -1114,72 +1115,84 @@ fn group_demands(demands: &[EntityDemand]) -> Vec<Vec<EntityDemand>> {
     order
 }
 
-fn apply_table_delta(table: &mut FactTable, delta: &FactTableDelta) -> Result<(), SessionError> {
-    let source_paths = delta
-        .sources
-        .iter()
-        .map(|value| value.path.as_str())
-        .collect::<HashSet<_>>();
-    let removed_source_paths = delta
-        .removed_source_paths
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
-    let sources = Arc::make_mut(&mut table.sources);
-    sources.retain(|value| {
-        !source_paths.contains(value.path.as_str())
-            && !removed_source_paths.contains(value.path.as_str())
-    });
-    sources.extend(delta.sources.iter().cloned());
-    sources.sort_by(|left, right| left.path.cmp(&right.path));
-
-    let entity_paths = delta
-        .entity_files
-        .iter()
-        .map(|value| value.path.as_str())
-        .collect::<HashSet<_>>();
-    let removed_entity_paths = delta
-        .removed_entity_paths
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
-    let entities = Arc::make_mut(&mut table.entities);
-    entities.retain(|value| {
-        !entity_paths.contains(value.location.path.as_str())
-            && !removed_entity_paths.contains(value.location.path.as_str())
-    });
-    for file in &delta.entity_files {
-        entities.extend(file.entities.iter().cloned());
+/// Replaces or inserts one row of a vector kept sorted and unique by `key`.
+fn upsert_sorted_row<T: Clone>(rows: &mut Vec<T>, row: &T, key: impl Fn(&T) -> &str) {
+    match rows.binary_search_by(|value| key(value).cmp(key(row))) {
+        Ok(index) => rows[index] = row.clone(),
+        Err(index) => rows.insert(index, row.clone()),
     }
-    entities.sort_by(|left, right| {
-        (
-            &left.location.path,
-            left.location.start_byte,
-            left.location.end_byte,
-        )
-            .cmp(&(
-                &right.location.path,
-                right.location.start_byte,
-                right.location.end_byte,
-            ))
-    });
+}
 
-    let symbol_ids = delta
-        .symbols
-        .iter()
-        .map(|value| value.id.as_str())
-        .collect::<HashSet<_>>();
-    let removed_symbol_ids = delta
-        .removed_symbol_ids
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
+/// Removes the row carrying `removed` from a vector kept sorted and unique by
+/// `key`. A miss is fine: removal of a row the client never demanded.
+fn remove_sorted_row<T>(rows: &mut Vec<T>, removed: &str, key: impl Fn(&T) -> &str) {
+    if let Ok(index) = rows.binary_search_by(|value| key(value).cmp(removed)) {
+        rows.remove(index);
+    }
+}
+
+/// The bounds of one path's contiguous run in the path-major entity order.
+fn entity_run(entities: &[EntityFact], path: &str) -> std::ops::Range<usize> {
+    let start = entities.partition_point(|entity| entity.location.path.as_str() < path);
+    let end = entities.partition_point(|entity| entity.location.path.as_str() <= path);
+    start..end
+}
+
+/// Applies a delta by splicing each changed row or run into its place in the
+/// retained table's canonical order. Every section is ordered and the delta
+/// names only the rows that may differ, so nothing here scans, hashes, or
+/// re-sorts the unchanged remainder — the previous retain/extend/sort walked
+/// the entire table per generation.
+fn apply_table_delta(table: &mut FactTable, delta: &FactTableDelta) -> Result<(), SessionError> {
+    let sources = Arc::make_mut(&mut table.sources);
+    for removed in &delta.removed_source_paths {
+        remove_sorted_row(sources, removed, |value| value.path.as_str());
+    }
+    for source in &delta.sources {
+        upsert_sorted_row(sources, source, |value| value.path.as_str());
+    }
+
+    let entities = Arc::make_mut(&mut table.entities);
+    for removed in &delta.removed_entity_paths {
+        let run = entity_run(entities, removed);
+        entities.drain(run);
+    }
+    for file in &delta.entity_files {
+        // The splice below replaces the path's whole run in place, so the
+        // table only stays canonically ordered if the replacement is a valid
+        // run itself: every entity on the named path, in span order. The
+        // producer emits it that way; check rather than assume, because an
+        // unordered splice would corrupt every later delta.
+        if file
+            .entities
+            .iter()
+            .any(|entity| entity.location.path != file.path)
+        {
+            return Err(SessionError::InvalidResponse(format!(
+                "entity delta for {:?} contains another path",
+                file.path
+            )));
+        }
+        if !file.entities.windows(2).all(|pair| {
+            (pair[0].location.start_byte, pair[0].location.end_byte)
+                <= (pair[1].location.start_byte, pair[1].location.end_byte)
+        }) {
+            return Err(SessionError::InvalidResponse(format!(
+                "entity delta for {:?} is not in canonical order",
+                file.path
+            )));
+        }
+        let run = entity_run(entities, &file.path);
+        entities.splice(run, file.entities.iter().cloned());
+    }
+
     let symbols = Arc::make_mut(&mut table.symbols);
-    symbols.retain(|value| {
-        !symbol_ids.contains(value.id.as_str()) && !removed_symbol_ids.contains(value.id.as_str())
-    });
-    symbols.extend(delta.symbols.iter().cloned());
-    symbols.sort_by(|left, right| left.id.cmp(&right.id));
+    for removed in &delta.removed_symbol_ids {
+        remove_sorted_row(symbols, removed, |value| value.id.as_str());
+    }
+    for symbol in &delta.symbols {
+        upsert_sorted_row(symbols, symbol, |value| value.id.as_str());
+    }
     for replacement in &delta.symbol_reference_files {
         if replacement
             .references
@@ -1223,23 +1236,13 @@ fn apply_table_delta(table: &mut FactTable, delta: &FactTableDelta) -> Result<()
             .splice(start..end, replacement.references.iter().cloned());
     }
 
-    let file_paths = delta
-        .files
-        .iter()
-        .map(|value| value.path.as_str())
-        .collect::<HashSet<_>>();
-    let removed_file_paths = delta
-        .removed_file_paths
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
     let files = Arc::make_mut(&mut table.files);
-    files.retain(|value| {
-        !file_paths.contains(value.path.as_str())
-            && !removed_file_paths.contains(value.path.as_str())
-    });
-    files.extend(delta.files.iter().cloned());
-    files.sort_by(|left, right| left.path.cmp(&right.path));
+    for removed in &delta.removed_file_paths {
+        remove_sorted_row(files, removed, |value| value.path.as_str());
+    }
+    for file in &delta.files {
+        upsert_sorted_row(files, file, |value| value.path.as_str());
+    }
     table.generation = delta.generation;
     Ok(())
 }
