@@ -6,7 +6,7 @@ const TypeFactsSchemaVersionV3 uint64 = 3
 
 const (
 	TypeFactsHandshakeProtocol uint64 = 1
-	TypeFactsSchemaSHA256             = "sha256:0404f910756ce6350f6f299c8b1a1c5f873e5533cb1ccc6b90c19bb8804ac1cb"
+	TypeFactsSchemaSHA256             = "sha256:ea1dcb3603bdf8d8c3ff55a8d1ce6cf85b348d3cbcefb6d8cfc3bdf4072fbf9e"
 )
 
 type ServiceHandshake struct {
@@ -80,7 +80,7 @@ type LifecycleResponse struct {
 	Generation    uint64            `cbor:"generation" json:"generation"`
 	OK            bool              `cbor:"ok" json:"ok"`
 	PackedTable   []byte            `cbor:"packedTable,omitempty" json:"packedTable,omitempty"`
-	TableDelta    *FactTableDeltaV3 `cbor:"tableDelta,omitempty" json:"tableDelta,omitempty"`
+	PackedDelta   []byte            `cbor:"packedDelta,omitempty" json:"packedDelta,omitempty"`
 	TableMode     string            `cbor:"tableMode,omitempty" json:"tableMode,omitempty"`
 	StateToken    string            `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`
 	Affected      []string          `cbor:"affected,omitempty" json:"affected,omitempty"`

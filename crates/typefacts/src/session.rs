@@ -880,7 +880,15 @@ impl Session {
         };
         analyze.reset_state = reset_state;
         analyze.removed_demand_paths = removed_demand_paths;
-        let response = self.exchange(analyze)?;
+        let mut response = self.exchange(analyze)?;
+        // Deltas travel as the opaque packed frame; expand it once here so
+        // everything downstream keeps working on the semantic delta.
+        if !response.packed_delta.is_empty() {
+            response.table_delta = Some(
+                v3::decode_packed_fact_table_delta(&response.packed_delta)
+                    .map_err(SessionError::InvalidResponse)?,
+            );
+        }
         self.last_exchange_timings = Some(exchange_timings(&response));
         self.last_table_changes = Some(table_changes(&response)?);
         let table = match response.table_mode.as_str() {
@@ -1539,6 +1547,8 @@ mod tests {
         base: Vec<u8>,
         delta: FactTableDelta,
         #[serde(with = "serde_bytes")]
+        packed: Vec<u8>,
+        #[serde(with = "serde_bytes")]
         expected: Vec<u8>,
     }
 
@@ -1568,7 +1578,17 @@ mod tests {
             let expected = v3::decode_packed_fact_table(&step.expected, project)
                 .unwrap_or_else(|error| panic!("{}: decode expected: {error}", step.label));
 
-            apply_table_delta(&mut table, &step.delta)
+            // Responses carry the packed frame; it must expand to exactly the
+            // semantic delta the fixture also pins in plain CBOR.
+            let unpacked = v3::decode_packed_fact_table_delta(&step.packed)
+                .unwrap_or_else(|error| panic!("{}: decode packed delta: {error}", step.label));
+            assert_eq!(
+                unpacked, step.delta,
+                "{} packed frame expands to the wrong delta",
+                step.label
+            );
+
+            apply_table_delta(&mut table, &unpacked)
                 .unwrap_or_else(|error| panic!("{}: apply delta: {error}", step.label));
 
             assert_eq!(table, expected, "{} produced the wrong table", step.label);

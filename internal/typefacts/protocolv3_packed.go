@@ -97,6 +97,101 @@ func (w *packedWriter) sourceCall(call SourceCallV2) {
 	w.text(call.Target)
 }
 
+// entityRun writes one path's entity rows: a count, then delta-coded starts,
+// lengths, and flagged optional fields. The run's path is written by the
+// caller, whose frame decides where it goes.
+func (w *packedWriter) entityRun(entities []EntityFactV2) {
+	w.u64(uint64(len(entities)))
+	var previousStart uint64
+	for _, entity := range entities {
+		w.signed(int64(entity.Location.StartByte) - int64(previousStart))
+		w.u64(entity.Location.EndByte - entity.Location.StartByte)
+		w.text(entity.Symbol)
+		flags := uint64(0)
+		if entity.TypeDescriptor != nil {
+			flags |= 1
+		}
+		if entity.ResolvedCall != nil {
+			flags |= 2
+		}
+		w.u64(flags)
+		if entity.TypeDescriptor != nil {
+			w.text(entity.TypeDescriptor.Text)
+			w.text(entity.TypeDescriptor.OriginModule)
+			w.declarations(entity.TypeDescriptor.AliasDeclarations)
+		}
+		if entity.ResolvedCall != nil {
+			w.text(entity.ResolvedCall.Target)
+			w.text(entity.ResolvedCall.ReturnTypeText)
+		}
+		previousStart = entity.Location.StartByte
+	}
+}
+
+// fileFactBody writes one file's calls, bindings, functions, and async
+// functions — everything but the path, whose position differs by frame.
+func (w *packedWriter) fileFactBody(file FileFactV2) {
+	w.u64(uint64(len(file.Calls)))
+	for _, call := range file.Calls {
+		w.sourceCall(call)
+	}
+	w.u64(uint64(len(file.Bindings)))
+	for _, binding := range file.Bindings {
+		flags := uint64(0)
+		if binding.Array {
+			flags |= bindingFlagArray
+		}
+		w.u64(flags)
+		w.locations(binding.Names)
+		w.sourceCall(binding.Initializer)
+	}
+	w.u64(uint64(len(file.Functions)))
+	for _, function := range file.Functions {
+		var state packedLocationState
+		w.location(function.Name, &state)
+		w.location(function.Body, &state)
+		w.locations(function.Parameters)
+		flags := uint64(0)
+		if function.Exported {
+			flags |= functionFlagExported
+		}
+		if function.Async {
+			flags |= functionFlagAsync
+		}
+		if function.Arrow {
+			flags |= functionFlagArrow
+		}
+		w.u64(flags)
+	}
+	w.u64(uint64(len(file.AsyncFunctions)))
+	for _, function := range file.AsyncFunctions {
+		var state packedLocationState
+		w.location(function.Expression, &state)
+		w.text(function.Symbol)
+		w.text(function.Target)
+		flags := uint64(0)
+		if function.CanReturnAsync {
+			flags |= asyncFunctionFlagCanReturnAsync
+		}
+		w.u64(flags)
+		w.locations(function.CallsAfterAwait)
+	}
+}
+
+// packedSourceDigest converts a canonical "sha256:<hex>" digest to its raw
+// 32-byte frame form.
+func packedSourceDigest(sha256Text string) ([]byte, error) {
+	digest := strings.TrimPrefix(sha256Text, "sha256:")
+	if len(digest) != 64 {
+		return nil, fmt.Errorf("packed source digest is not canonical: %q", sha256Text)
+	}
+	raw := make([]byte, 32)
+	if _, err := hex.Decode(raw, []byte(digest)); err != nil {
+		return nil, fmt.Errorf("decode packed source digest: %w", err)
+	}
+	return raw, nil
+}
+
 // packedEntityGroups reports the length of each run of entities that share a
 // source path. Paths map one-to-one onto dictionary indexes, so grouping by
 // the paths themselves groups exactly as grouping by their indexes would.
@@ -124,13 +219,9 @@ func PackedFactTableV3From(table FactTableV2) ([]byte, error) {
 	rows.u64(uint64(len(table.Sources)))
 	for _, source := range table.Sources {
 		rows.text(source.Path)
-		digest := strings.TrimPrefix(source.SHA256, "sha256:")
-		if len(digest) != 64 {
-			return nil, fmt.Errorf("packed source digest is not canonical: %q", source.SHA256)
-		}
-		raw := make([]byte, 32)
-		if _, err := hex.Decode(raw, []byte(digest)); err != nil {
-			return nil, fmt.Errorf("decode packed source digest: %w", err)
+		raw, err := packedSourceDigest(source.SHA256)
+		if err != nil {
+			return nil, err
 		}
 		rows.raw(raw)
 	}
@@ -142,31 +233,7 @@ func PackedFactTableV3From(table FactTableV2) ([]byte, error) {
 		group := table.Entities[offset : offset+length]
 		offset += length
 		rows.text(group[0].Location.Path)
-		rows.u64(uint64(length))
-		var previousStart uint64
-		for _, entity := range group {
-			rows.signed(int64(entity.Location.StartByte) - int64(previousStart))
-			rows.u64(entity.Location.EndByte - entity.Location.StartByte)
-			rows.text(entity.Symbol)
-			flags := uint64(0)
-			if entity.TypeDescriptor != nil {
-				flags |= 1
-			}
-			if entity.ResolvedCall != nil {
-				flags |= 2
-			}
-			rows.u64(flags)
-			if entity.TypeDescriptor != nil {
-				rows.text(entity.TypeDescriptor.Text)
-				rows.text(entity.TypeDescriptor.OriginModule)
-				rows.declarations(entity.TypeDescriptor.AliasDeclarations)
-			}
-			if entity.ResolvedCall != nil {
-				rows.text(entity.ResolvedCall.Target)
-				rows.text(entity.ResolvedCall.ReturnTypeText)
-			}
-			previousStart = entity.Location.StartByte
-		}
+		rows.entityRun(group)
 	}
 
 	rows.u64(uint64(len(table.Symbols)))
@@ -183,51 +250,7 @@ func PackedFactTableV3From(table FactTableV2) ([]byte, error) {
 		// path after the rows it contains, so buffer the rows and emit the
 		// path index in front of them. Reordering this changes the frame.
 		body := packedWriter{dict: rows.dict}
-		body.u64(uint64(len(file.Calls)))
-		for _, call := range file.Calls {
-			body.sourceCall(call)
-		}
-		body.u64(uint64(len(file.Bindings)))
-		for _, binding := range file.Bindings {
-			flags := uint64(0)
-			if binding.Array {
-				flags |= bindingFlagArray
-			}
-			body.u64(flags)
-			body.locations(binding.Names)
-			body.sourceCall(binding.Initializer)
-		}
-		body.u64(uint64(len(file.Functions)))
-		for _, function := range file.Functions {
-			var state packedLocationState
-			body.location(function.Name, &state)
-			body.location(function.Body, &state)
-			body.locations(function.Parameters)
-			flags := uint64(0)
-			if function.Exported {
-				flags |= functionFlagExported
-			}
-			if function.Async {
-				flags |= functionFlagAsync
-			}
-			if function.Arrow {
-				flags |= functionFlagArrow
-			}
-			body.u64(flags)
-		}
-		body.u64(uint64(len(file.AsyncFunctions)))
-		for _, function := range file.AsyncFunctions {
-			var state packedLocationState
-			body.location(function.Expression, &state)
-			body.text(function.Symbol)
-			body.text(function.Target)
-			flags := uint64(0)
-			if function.CanReturnAsync {
-				flags |= asyncFunctionFlagCanReturnAsync
-			}
-			body.u64(flags)
-			body.locations(function.CallsAfterAwait)
-		}
+		body.fileFactBody(file)
 		rows.text(file.Path)
 		rows.raw(body.bytes)
 	}
@@ -242,9 +265,17 @@ func packedFrame(schema, generation uint64, rows packedWriter) []byte {
 	frame.u64(packedFactTableVersion)
 	frame.u64(schema)
 	frame.u64(generation)
-	frame.u64(uint64(len(rows.dict.values)))
+	appendPackedDictionary(&frame, rows.dict)
+	frame.raw(rows.bytes)
+	return frame.bytes
+}
+
+// appendPackedDictionary emits the string dictionary: hashed symbol IDs as
+// raw digest bytes, everything else prefix-coded against the previous entry.
+func appendPackedDictionary(frame *packedWriter, dict *stringTableV3) {
+	frame.u64(uint64(len(dict.values)))
 	previous := ""
-	for _, value := range rows.dict.values {
+	for _, value := range dict.values {
 		if digest, ok := packedHashedSymbol(value); ok {
 			frame.u64(1)
 			frame.raw(digest)
@@ -258,8 +289,78 @@ func packedFrame(schema, generation uint64, rows packedWriter) []byte {
 		frame.raw([]byte(suffix))
 		previous = value
 	}
+}
+
+// Packed v3 delta-frame encoding. Deltas used to ship as plain CBOR structs —
+// every row a map repeating its field-name keys, every location repeating its
+// absolute path — which is exactly the overhead the compact shapes exist to
+// avoid. The delta frame reuses the table frame's row and dictionary
+// machinery; only the header and section order differ. Its leading version
+// varint is the compatibility gate, and both executables ship in build-ID
+// lockstep. The Rust decoder is decode_packed_fact_table_delta in
+// crates/typefacts/src/v3.rs.
+const packedFactTableDeltaVersion = 1
+
+// PackedFactTableDeltaV3From encodes a delta into the packed frame:
+// version, generation, dictionary, then sources, removed source paths,
+// entity files, removed entity paths, symbols, removed symbol IDs, symbol
+// reference files, files, and removed file paths, in that fixed order.
+func PackedFactTableDeltaV3From(delta FactTableDeltaV3) ([]byte, error) {
+	rows := packedWriter{bytes: make([]byte, 0, 4096), dict: newStringTableV3()}
+	texts := func(values []string) {
+		rows.u64(uint64(len(values)))
+		for _, value := range values {
+			rows.text(value)
+		}
+	}
+
+	rows.u64(uint64(len(delta.Sources)))
+	for _, source := range delta.Sources {
+		rows.text(source.Path)
+		raw, err := packedSourceDigest(source.SHA256)
+		if err != nil {
+			return nil, err
+		}
+		rows.raw(raw)
+	}
+	texts(delta.RemovedSourcePaths)
+
+	rows.u64(uint64(len(delta.EntityFiles)))
+	for _, file := range delta.EntityFiles {
+		rows.text(file.Path)
+		rows.entityRun(file.Entities)
+	}
+	texts(delta.RemovedEntityPaths)
+
+	rows.u64(uint64(len(delta.Symbols)))
+	for _, symbol := range delta.Symbols {
+		rows.text(symbol.ID)
+		rows.text(symbol.AliasTarget)
+		rows.declarations(symbol.Declarations)
+		rows.locations(symbol.References)
+	}
+	texts(delta.RemovedSymbolIDs)
+
+	rows.u64(uint64(len(delta.SymbolReferenceFiles)))
+	for _, file := range delta.SymbolReferenceFiles {
+		rows.text(file.ID)
+		rows.text(file.Path)
+		rows.locations(file.References)
+	}
+
+	rows.u64(uint64(len(delta.Files)))
+	for _, file := range delta.Files {
+		rows.text(file.Path)
+		rows.fileFactBody(file)
+	}
+	texts(delta.RemovedFilePaths)
+
+	frame := packedWriter{bytes: make([]byte, 0, len(rows.bytes)+1024)}
+	frame.u64(packedFactTableDeltaVersion)
+	frame.u64(delta.Generation)
+	appendPackedDictionary(&frame, rows.dict)
 	frame.raw(rows.bytes)
-	return frame.bytes
+	return frame.bytes, nil
 }
 
 // The internal-row writers mirror their v2 counterparts above, applying the

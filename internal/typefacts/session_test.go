@@ -50,8 +50,6 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	if !first.OK || first.TableMode != TableModeFull || first.StateToken != "1" || len(first.PackedTable) == 0 {
 		t.Fatalf("initial analyze response = %+v", first)
 	}
-	firstTable := FactTableV2From(*session.retained.table, session.projectID, 1)
-
 	reuseRequest := lifecycleRequest(3, LifecycleAnalyze, 1)
 	reuseRequest.StateToken = first.StateToken
 	reuse := session.Lifecycle(context.Background(), reuseRequest)
@@ -74,12 +72,14 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	nextRequest := lifecycleRequest(6, LifecycleAnalyze, 2)
 	nextRequest.StateToken = first.StateToken
 	next := session.Lifecycle(context.Background(), nextRequest)
-	if !next.OK || next.TableMode != TableModeDelta || next.StateToken != "2" || next.TableDelta == nil {
+	if !next.OK || next.TableMode != TableModeDelta || next.StateToken != "2" || len(next.PackedDelta) == 0 {
 		t.Fatalf("post-update analyze response = %+v", next)
 	}
-	applied := applyFactTableDeltaV3(t, firstTable, *next.TableDelta)
-	if applied.Generation != 2 {
-		t.Fatalf("delta generation = %d, want 2", applied.Generation)
+	// The frame's expansion and application are the Rust side's obligation,
+	// pinned by the delta golden; here the producer's promise is the mode,
+	// the token, and a non-empty frame for the advanced generation.
+	if next.Generation != 2 {
+		t.Fatalf("delta response generation = %d, want 2", next.Generation)
 	}
 }
 

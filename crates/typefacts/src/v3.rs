@@ -11,7 +11,7 @@ use crate::{
 
 pub const TYPE_FACTS_SCHEMA_V3: u64 = 3;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:0404f910756ce6350f6f299c8b1a1c5f873e5533cb1ccc6b90c19bb8804ac1cb";
+    "sha256:ea1dcb3603bdf8d8c3ff55a8d1ce6cf85b348d3cbcefb6d8cfc3bdf4072fbf9e";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -185,8 +185,8 @@ pub struct Response {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty", with = "serde_bytes")]
     pub packed_table: Vec<u8>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub table_delta: Option<FactTableDelta>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty", with = "serde_bytes")]
+    pub packed_delta: Vec<u8>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub table_mode: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -203,6 +203,10 @@ pub struct Response {
     pub timings: Option<ServerTimings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Error>,
+    /// The expanded form of `packed_delta`, filled by the session after the
+    /// frame decodes. Never on the wire.
+    #[serde(skip)]
+    pub table_delta: Option<FactTableDelta>,
     #[serde(skip)]
     pub client_decode_ns: u64,
     #[serde(skip)]
@@ -483,6 +487,132 @@ fn raw_digest(bytes: &[u8]) -> Result<SourceHash, String> {
     SourceHash::parse(value).map_err(|error| error.to_string())
 }
 
+/// Decodes one path's entity run: a count, then delta-coded starts, lengths,
+/// and flagged optional fields, appended to `entities`.
+fn decode_entity_run(
+    cursor: &mut PackedCursor<'_>,
+    strings: &[Arc<str>],
+    path: &Arc<str>,
+    entities: &mut Vec<EntityFact>,
+) -> Result<(), String> {
+    let count = cursor.count("entities")?;
+    entities.reserve(count);
+    let mut previous_start = 0;
+    for _ in 0..count {
+        let start = add_signed(previous_start, cursor.signed()?, "entity start")?;
+        let end = start
+            .checked_add(cursor.u64()?)
+            .ok_or_else(|| "packed entity end overflow".to_owned())?;
+        let symbol = cursor.string_index(strings, "entity symbol")?;
+        let flags = cursor.u64()?;
+        if flags & !3 != 0 {
+            return Err(format!("packed entity has unknown flags {flags}"));
+        }
+        let type_descriptor = if flags & 1 != 0 {
+            Some(TypeDescriptor {
+                text: cursor.string_index(strings, "type text")?,
+                origin_module: cursor.string_index(strings, "origin module")?,
+                alias_declarations: cursor.declarations(strings)?.into(),
+            })
+        } else {
+            None
+        };
+        let resolved_call = if flags & 2 != 0 {
+            Some(ResolvedCall {
+                target: cursor.string_index(strings, "resolved target")?,
+                return_type_text: cursor.string_index(strings, "return type")?,
+            })
+        } else {
+            None
+        };
+        entities.push(EntityFact {
+            location: Location {
+                path: path.clone(),
+                start_byte: start,
+                end_byte: end,
+            },
+            symbol,
+            type_descriptor,
+            resolved_call,
+        });
+        previous_start = start;
+    }
+    Ok(())
+}
+
+/// Decodes one file's calls, bindings, functions, and async functions — the
+/// body every frame writes after whichever path placement it uses.
+fn decode_file_fact(
+    cursor: &mut PackedCursor<'_>,
+    strings: &[Arc<str>],
+    path: Arc<str>,
+) -> Result<FileFact, String> {
+    let call_count = cursor.count("calls")?;
+    let mut calls = Vec::with_capacity(call_count);
+    for _ in 0..call_count {
+        calls.push(cursor.source_call(strings)?);
+    }
+    let binding_count = cursor.count("bindings")?;
+    let mut bindings = Vec::with_capacity(binding_count);
+    for _ in 0..binding_count {
+        let flags = cursor.u64()?;
+        if flags & !BINDING_FLAG_ARRAY != 0 {
+            return Err(format!("packed binding has unknown flags {flags}"));
+        }
+        bindings.push(SourceBinding {
+            array: flags & BINDING_FLAG_ARRAY != 0,
+            names: cursor.locations(strings)?,
+            initializer: cursor.source_call(strings)?,
+        });
+    }
+    let function_count = cursor.count("functions")?;
+    let mut functions = Vec::with_capacity(function_count);
+    for _ in 0..function_count {
+        let mut state = PackedLocationState::default();
+        let name = cursor.location(strings, &mut state)?;
+        let body = cursor.location(strings, &mut state)?;
+        let parameters = cursor.locations(strings)?;
+        let flags = cursor.u64()?;
+        if flags & !(FUNCTION_FLAG_EXPORTED | FUNCTION_FLAG_ASYNC | FUNCTION_FLAG_ARROW) != 0 {
+            return Err(format!("packed function has unknown flags {flags}"));
+        }
+        functions.push(SourceFunction {
+            name,
+            body,
+            parameters,
+            exported: flags & FUNCTION_FLAG_EXPORTED != 0,
+            r#async: flags & FUNCTION_FLAG_ASYNC != 0,
+            arrow: flags & FUNCTION_FLAG_ARROW != 0,
+        });
+    }
+    let async_count = cursor.count("async functions")?;
+    let mut async_functions = Vec::with_capacity(async_count);
+    for _ in 0..async_count {
+        let mut state = PackedLocationState::default();
+        let expression = cursor.location(strings, &mut state)?;
+        let symbol = cursor.string_index(strings, "async symbol")?;
+        let target = cursor.string_index(strings, "async target")?;
+        let flags = cursor.u64()?;
+        if flags & !ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0 {
+            return Err(format!("packed async function has unknown flags {flags}"));
+        }
+        async_functions.push(AsyncFunctionFact {
+            expression,
+            symbol,
+            target,
+            can_return_async: flags & ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0,
+            calls_after_await: cursor.locations(strings)?,
+        });
+    }
+    Ok(FileFact {
+        path,
+        calls: calls.into(),
+        bindings: bindings.into(),
+        functions: functions.into(),
+        async_functions: async_functions.into(),
+    })
+}
+
 /// Decodes the opaque v3 cold frame directly into the retained fact table.
 /// No intermediate compact rows or second full-table expansion are created.
 pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<FactTable, String> {
@@ -508,47 +638,7 @@ pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<Fact
     let mut entities = Vec::new();
     for _ in 0..entity_file_count {
         let path = cursor.string_index(&strings, "entity path")?;
-        let count = cursor.count("entities")?;
-        let mut previous_start = 0;
-        for _ in 0..count {
-            let start = add_signed(previous_start, cursor.signed()?, "entity start")?;
-            let end = start
-                .checked_add(cursor.u64()?)
-                .ok_or_else(|| "packed entity end overflow".to_owned())?;
-            let symbol = cursor.string_index(&strings, "entity symbol")?;
-            let flags = cursor.u64()?;
-            if flags & !3 != 0 {
-                return Err(format!("packed entity has unknown flags {flags}"));
-            }
-            let type_descriptor = if flags & 1 != 0 {
-                Some(TypeDescriptor {
-                    text: cursor.string_index(&strings, "type text")?,
-                    origin_module: cursor.string_index(&strings, "origin module")?,
-                    alias_declarations: cursor.declarations(&strings)?.into(),
-                })
-            } else {
-                None
-            };
-            let resolved_call = if flags & 2 != 0 {
-                Some(ResolvedCall {
-                    target: cursor.string_index(&strings, "resolved target")?,
-                    return_type_text: cursor.string_index(&strings, "return type")?,
-                })
-            } else {
-                None
-            };
-            entities.push(EntityFact {
-                location: Location {
-                    path: path.clone(),
-                    start_byte: start,
-                    end_byte: end,
-                },
-                symbol,
-                type_descriptor,
-                resolved_call,
-            });
-            previous_start = start;
-        }
+        decode_entity_run(&mut cursor, &strings, &path, &mut entities)?;
     }
 
     let symbol_count = cursor.count("symbols")?;
@@ -566,70 +656,7 @@ pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<Fact
     let mut files = Vec::with_capacity(file_count);
     for _ in 0..file_count {
         let path = cursor.string_index(&strings, "file path")?;
-        let call_count = cursor.count("calls")?;
-        let mut calls = Vec::with_capacity(call_count);
-        for _ in 0..call_count {
-            calls.push(cursor.source_call(&strings)?);
-        }
-        let binding_count = cursor.count("bindings")?;
-        let mut bindings = Vec::with_capacity(binding_count);
-        for _ in 0..binding_count {
-            let flags = cursor.u64()?;
-            if flags & !BINDING_FLAG_ARRAY != 0 {
-                return Err(format!("packed binding has unknown flags {flags}"));
-            }
-            bindings.push(SourceBinding {
-                array: flags & BINDING_FLAG_ARRAY != 0,
-                names: cursor.locations(&strings)?,
-                initializer: cursor.source_call(&strings)?,
-            });
-        }
-        let function_count = cursor.count("functions")?;
-        let mut functions = Vec::with_capacity(function_count);
-        for _ in 0..function_count {
-            let mut state = PackedLocationState::default();
-            let name = cursor.location(&strings, &mut state)?;
-            let body = cursor.location(&strings, &mut state)?;
-            let parameters = cursor.locations(&strings)?;
-            let flags = cursor.u64()?;
-            if flags & !(FUNCTION_FLAG_EXPORTED | FUNCTION_FLAG_ASYNC | FUNCTION_FLAG_ARROW) != 0 {
-                return Err(format!("packed function has unknown flags {flags}"));
-            }
-            functions.push(SourceFunction {
-                name,
-                body,
-                parameters,
-                exported: flags & FUNCTION_FLAG_EXPORTED != 0,
-                r#async: flags & FUNCTION_FLAG_ASYNC != 0,
-                arrow: flags & FUNCTION_FLAG_ARROW != 0,
-            });
-        }
-        let async_count = cursor.count("async functions")?;
-        let mut async_functions = Vec::with_capacity(async_count);
-        for _ in 0..async_count {
-            let mut state = PackedLocationState::default();
-            let expression = cursor.location(&strings, &mut state)?;
-            let symbol = cursor.string_index(&strings, "async symbol")?;
-            let target = cursor.string_index(&strings, "async target")?;
-            let flags = cursor.u64()?;
-            if flags & !ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0 {
-                return Err(format!("packed async function has unknown flags {flags}"));
-            }
-            async_functions.push(AsyncFunctionFact {
-                expression,
-                symbol,
-                target,
-                can_return_async: flags & ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC != 0,
-                calls_after_await: cursor.locations(&strings)?,
-            });
-        }
-        files.push(FileFact {
-            path,
-            calls: calls.into(),
-            bindings: bindings.into(),
-            functions: functions.into(),
-            async_functions: async_functions.into(),
-        });
+        files.push(decode_file_fact(&mut cursor, &strings, path)?);
     }
     if cursor.offset != input.len() {
         return Err("packed table has trailing bytes".into());
@@ -642,6 +669,109 @@ pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<Fact
         entities: entities.into(),
         symbols: symbols.into(),
         files: files.into(),
+    })
+}
+
+const PACKED_FACT_TABLE_DELTA_VERSION: u64 = 1;
+
+fn decode_packed_texts(
+    cursor: &mut PackedCursor<'_>,
+    strings: &[Arc<str>],
+    label: &str,
+) -> Result<Vec<String>, String> {
+    let count = cursor.count(label)?;
+    let mut values = Vec::with_capacity(count);
+    for _ in 0..count {
+        values.push(cursor.string_index(strings, label)?.to_string());
+    }
+    Ok(values)
+}
+
+/// Decodes the opaque v3 delta frame emitted by the producer's
+/// PackedFactTableDeltaV3From: version, generation, dictionary, then sources,
+/// removed source paths, entity files, removed entity paths, symbols, removed
+/// symbol IDs, symbol reference files, files, and removed file paths, in that
+/// fixed order.
+pub fn decode_packed_fact_table_delta(input: &[u8]) -> Result<FactTableDelta, String> {
+    let mut cursor = PackedCursor::new(input);
+    let version = cursor.u64()?;
+    if version != PACKED_FACT_TABLE_DELTA_VERSION {
+        return Err(format!("unsupported packed delta version {version}"));
+    }
+    let generation = cursor.u64()?;
+    let strings = decode_packed_strings(&mut cursor)?;
+
+    let source_count = cursor.count("delta sources")?;
+    let mut sources = Vec::with_capacity(source_count);
+    for _ in 0..source_count {
+        sources.push(SourceDigest {
+            path: cursor.string_index(&strings, "delta source path")?,
+            sha256: raw_digest(cursor.raw(32)?)?,
+        });
+    }
+    let removed_source_paths = decode_packed_texts(&mut cursor, &strings, "removed source paths")?;
+
+    let entity_file_count = cursor.count("delta entity files")?;
+    let mut entity_files = Vec::with_capacity(entity_file_count);
+    for _ in 0..entity_file_count {
+        let path = cursor.string_index(&strings, "delta entity path")?;
+        let mut entities = Vec::new();
+        decode_entity_run(&mut cursor, &strings, &path, &mut entities)?;
+        entity_files.push(EntityFileDelta {
+            path: path.to_string(),
+            entities,
+        });
+    }
+    let removed_entity_paths = decode_packed_texts(&mut cursor, &strings, "removed entity paths")?;
+
+    let symbol_count = cursor.count("delta symbols")?;
+    let mut symbols = Vec::with_capacity(symbol_count);
+    for _ in 0..symbol_count {
+        symbols.push(SymbolFact {
+            id: cursor.string_index(&strings, "delta symbol id")?,
+            alias_target: cursor.string_index(&strings, "delta alias target")?,
+            declarations: cursor.declarations(&strings)?.into(),
+            references: cursor.locations(&strings)?.into(),
+        });
+    }
+    let removed_symbol_ids = decode_packed_texts(&mut cursor, &strings, "removed symbol ids")?;
+
+    let reference_file_count = cursor.count("delta reference files")?;
+    let mut symbol_reference_files = Vec::with_capacity(reference_file_count);
+    for _ in 0..reference_file_count {
+        symbol_reference_files.push(SymbolReferenceFileDelta {
+            id: cursor
+                .string_index(&strings, "delta reference id")?
+                .to_string(),
+            path: cursor
+                .string_index(&strings, "delta reference path")?
+                .to_string(),
+            references: cursor.locations(&strings)?,
+        });
+    }
+
+    let file_count = cursor.count("delta files")?;
+    let mut files = Vec::with_capacity(file_count);
+    for _ in 0..file_count {
+        let path = cursor.string_index(&strings, "delta file path")?;
+        files.push(decode_file_fact(&mut cursor, &strings, path)?);
+    }
+    let removed_file_paths = decode_packed_texts(&mut cursor, &strings, "removed file paths")?;
+
+    if cursor.offset != input.len() {
+        return Err("packed delta has trailing bytes".into());
+    }
+    Ok(FactTableDelta {
+        generation,
+        sources,
+        removed_source_paths,
+        entity_files,
+        removed_entity_paths,
+        symbols,
+        removed_symbol_ids,
+        symbol_reference_files,
+        files,
+        removed_file_paths,
     })
 }
 

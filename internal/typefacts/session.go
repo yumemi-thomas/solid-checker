@@ -190,7 +190,11 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 				response.TableMode = TableModeReuse
 			} else {
 				response.TableMode = TableModeDelta
-				response.TableDelta = &delta
+				packedDelta, err := PackedFactTableDeltaV3From(delta)
+				if err != nil {
+					return fail("assembly-failed", err)
+				}
+				response.PackedDelta = packedDelta
 			}
 		}
 		if s.trace != nil {

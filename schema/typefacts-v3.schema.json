@@ -164,7 +164,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["generation"],
-      "description": "Transforms the table named by the request's state token into the response generation. Collections stay canonically ordered after application.",
+      "description": "The expanded form of packedDelta: transforms the table named by the request's state token into the response generation. Collections stay canonically ordered after application. Not itself carried on the wire — the packed frame encodes exactly these fields, in this shape, and decoders expand back into it.",
       "properties": {
         "generation": { "type": "integer", "minimum": 1 },
         "sources": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/sourceDigest" } },
@@ -226,7 +226,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["schema", "requestId", "projectId", "generation", "ok"],
-      "description": "tableMode selects how the analyze result is carried: \"full\" ships packedTable, \"delta\" ships tableDelta, and \"reuse\" ships neither because the retained table is unchanged.",
+      "description": "tableMode selects how the analyze result is carried: \"full\" ships packedTable, \"delta\" ships packedDelta, and \"reuse\" ships neither because the retained table is unchanged.",
       "properties": {
         "schema": { "const": 3 },
         "requestId": { "type": "integer", "minimum": 1 },
@@ -237,7 +237,10 @@
           "$ref": "#/$defs/bytes",
           "description": "Opaque columnar fact-table frame. Its own leading version varint is the compatibility gate; see internal/typefacts/protocolv3_packed.go and crates/typefacts/src/v3.rs."
         },
-        "tableDelta": { "$ref": "#/$defs/factTableDelta" },
+        "packedDelta": {
+          "$ref": "#/$defs/bytes",
+          "description": "Opaque columnar fact-table-delta frame. Its own leading version varint is the compatibility gate; see internal/typefacts/protocolv3_packed.go and crates/typefacts/src/v3.rs."
+        },
         "tableMode": { "enum": ["full", "delta", "reuse"] },
         "stateToken": { "type": "string" },
         "affected": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } },

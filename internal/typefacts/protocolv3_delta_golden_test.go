@@ -12,10 +12,13 @@ import (
 
 // deltaGoldenStep is one retained-table transition: apply Delta to the table
 // packed in Base and the result must equal the table packed in Expected.
+// Packed is the same delta as the opaque frame responses actually carry; the
+// Rust side must expand it back to Delta exactly.
 type deltaGoldenStep struct {
 	Label    string           `cbor:"label" json:"label"`
 	Base     []byte           `cbor:"base" json:"base"`
 	Delta    FactTableDeltaV3 `cbor:"delta" json:"delta"`
+	Packed   []byte           `cbor:"packed" json:"packed"`
 	Expected []byte           `cbor:"expected" json:"expected"`
 }
 
@@ -85,16 +88,27 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 	deleted.transport = transportManifest(&edit, &deleted, exact, map[string]struct{}{"b.ts": {}})
 	shrunk.transport = transportManifest(&deleted, &shrunk, exact, map[string]struct{}{"a.ts": {}})
 
+	packDelta := func(delta FactTableDeltaV3) []byte {
+		t.Helper()
+		packed, err := PackedFactTableDeltaV3From(delta)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return packed
+	}
+
 	steps := make([]deltaGoldenStep, 0, 4)
 	previous := base
 	for _, next := range []struct {
 		label string
 		table FactTable
 	}{{"edit", edit}, {"delete", deleted}, {"demand-shrink", shrunk}} {
+		delta := DiffFactTablesV3FromInternal(previous, next.table, next.table.Generation)
 		steps = append(steps, deltaGoldenStep{
 			Label:    next.label,
 			Base:     pack(previous, previous.Generation),
-			Delta:    DiffFactTablesV3FromInternal(previous, next.table, next.table.Generation),
+			Delta:    delta,
+			Packed:   packDelta(delta),
 			Expected: pack(next.table, next.table.Generation),
 		})
 		previous = next.table
@@ -121,10 +135,12 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 		referenceChangesExact: true,
 		changedSymbols:        testChangedSet(newSymbolInterner(), "shared"),
 	}, map[string]struct{}{"a.ts": {}})
+	sharedDelta := DiffFactTablesV3FromInternal(sharedBase, sharedEdit, sharedEdit.Generation)
 	steps = append(steps, deltaGoldenStep{
 		Label:    "symbol-reference-file",
 		Base:     pack(sharedBase, sharedBase.Generation),
-		Delta:    DiffFactTablesV3FromInternal(sharedBase, sharedEdit, sharedEdit.Generation),
+		Delta:    sharedDelta,
+		Packed:   packDelta(sharedDelta),
 		Expected: pack(sharedEdit, sharedEdit.Generation),
 	})
 	return steps
@@ -141,13 +157,20 @@ func deltaGoldenPath(t *testing.T) string {
 
 // The Rust client applies these same deltas in the apply_table_delta tests in
 // crates/typefacts/src/session.rs. Keeping the fixture in the repo is what
-// makes the two appliers answer for the same input.
+// makes the two appliers answer for the same input. Set
+// TYPEFACTS_UPDATE_GOLDEN=1 to regenerate the fixture after a deliberate,
+// coordinated format change.
 func TestDeltaGoldenMatchesProducerOutput(t *testing.T) {
-	golden, err := os.ReadFile(deltaGoldenPath(t))
+	encoded, err := wirecbor.Marshal(deltaGolden{Steps: deltaGoldenSteps(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
-	encoded, err := wirecbor.Marshal(deltaGolden{Steps: deltaGoldenSteps(t)})
+	if os.Getenv("TYPEFACTS_UPDATE_GOLDEN") != "" {
+		if err := os.WriteFile(deltaGoldenPath(t), encoded, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	golden, err := os.ReadFile(deltaGoldenPath(t))
 	if err != nil {
 		t.Fatal(err)
 	}
