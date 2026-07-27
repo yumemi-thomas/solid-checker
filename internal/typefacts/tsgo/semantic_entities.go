@@ -34,10 +34,20 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 	if p.closed {
 		return nil, nil, ErrClosed
 	}
+	// suppression and descriptorSeed are read for the duration of this call
+	// only, under the project lock, while the caller blocks — so they are
+	// borrowed rather than copied. suppression is the project-wide
+	// structural-accessor union and descriptorSeed every retained descriptor;
+	// duplicating both per batch cost more than most batches themselves. This
+	// batch's own additions layer on top in small local maps.
 	prefetchedSymbols := make(map[int]typefacts.SymbolID)
-	structuralAccessorSymbols := make(map[typefacts.SymbolID]struct{}, len(suppression))
-	for symbol := range suppression {
-		structuralAccessorSymbols[symbol] = struct{}{}
+	batchStructural := make(map[typefacts.SymbolID]struct{})
+	structuralSuppressed := func(symbol typefacts.SymbolID) bool {
+		if _, hit := batchStructural[symbol]; hit {
+			return true
+		}
+		_, hit := suppression[symbol]
+		return hit
 	}
 	structural := make([]typefacts.SymbolID, len(demands))
 	var markerPath, markerCleanPath string
@@ -62,7 +72,7 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 		if symbol := p.checker.GetSymbolAtLocation(node); symbol != nil {
 			id := p.idFor(symbol)
 			prefetchedSymbols[index] = id
-			structuralAccessorSymbols[id] = struct{}{}
+			batchStructural[id] = struct{}{}
 			structural[index] = id
 		}
 	}
@@ -70,9 +80,12 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 	var currentDemandPath, currentCleanPath string
 	var currentSourceFile *ast.SourceFile
 	var currentSourceError error
-	descriptorCache := make(map[typefacts.SymbolID]*typefacts.TypeDescriptor, len(descriptorSeed))
-	for symbol, descriptor := range descriptorSeed {
-		descriptorCache[symbol] = descriptor
+	batchDescriptors := make(map[typefacts.SymbolID]*typefacts.TypeDescriptor)
+	cachedDescriptor := func(symbol typefacts.SymbolID) *typefacts.TypeDescriptor {
+		if descriptor := batchDescriptors[symbol]; descriptor != nil {
+			return descriptor
+		}
+		return descriptorSeed[symbol]
 	}
 	for demandIndex, demand := range demands {
 		if err := ctx.Err(); err != nil {
@@ -113,8 +126,8 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 			queryNode = deepestNodeAt(ast.GetNodeAtPosition(currentSourceFile, query.StartByte, false), query.StartByte)
 		}
 		if demand.TypeDescriptor && queryNode != nil {
-			if _, structural := structuralAccessorSymbols[entity.Symbol]; !structural {
-				if cached := descriptorCache[entity.Symbol]; cached != nil {
+			if !structuralSuppressed(entity.Symbol) {
+				if cached := cachedDescriptor(entity.Symbol); cached != nil {
 					entity.TypeDescriptor = cached
 				} else if value := p.checker.GetTypeAtLocation(queryNode); value != nil {
 					descriptor := typefacts.TypeDescriptor{Text: p.checker.TypeToString(value)}
@@ -123,7 +136,7 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 						descriptor.OriginModule = declarationModule(alias.Symbol())
 					}
 					if entity.Symbol != "" {
-						descriptorCache[entity.Symbol] = &descriptor
+						batchDescriptors[entity.Symbol] = &descriptor
 					}
 					entity.TypeDescriptor = &descriptor
 				}
