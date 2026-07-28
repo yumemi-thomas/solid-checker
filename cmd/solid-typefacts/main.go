@@ -4,6 +4,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -12,7 +13,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"runtime/pprof"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -235,7 +238,13 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 			if next.release != nil {
 				next.release()
 			}
+			// Ownership has moved to the response queue. Clear the worker's
+			// request (including the decoded compact demand frame) and its
+			// response copy before blocking for the next job; otherwise this
+			// idle goroutine pins both complete cold sides of the exchange.
+			next = job{}
 			responses.push(value)
+			value = typefacts.LifecycleResponse{}
 		}
 	}()
 
@@ -247,26 +256,20 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 			if !ok {
 				return
 			}
-			encodeStarted := time.Now()
-			encoded, err := wirecbor.Marshal(value)
+			responseBytes, err := writeLifecycleResponse(output, value, trace)
 			if err != nil {
-				fatal <- fmt.Errorf("encode response: %w", err)
-				return
-			}
-			if trace != nil {
-				trace.Stage("encode-response", time.Since(encodeStarted))
-			}
-			writeStarted := time.Now()
-			if err := writeFrame(output, encoded); err != nil {
 				fatal <- err
 				return
 			}
-			if err := output.Flush(); err != nil {
-				fatal <- err
-				return
-			}
-			if trace != nil {
-				trace.Stage("write-response", time.Since(writeStarted))
+			// A cold materialization transfers ownership of a large packed
+			// frame to the client and releases checker query state. Drop both
+			// complete payload owners before reclaiming pages. Encoding lives
+			// in a helper frame so its full-size CBOR buffer is unreachable
+			// here; clearing value drops the semantic frame. Ordinary cached
+			// and incremental responses stay off this path.
+			value = typefacts.LifecycleResponse{}
+			if responseBytes >= 1<<20 {
+				debug.FreeOSMemory()
 			}
 		}
 	}()
@@ -344,6 +347,154 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 	}
 }
 
+func writeLifecycleResponse(
+	output *bufio.Writer,
+	value typefacts.LifecycleResponse,
+	trace typefacts.Trace,
+) (int, error) {
+	encodeStarted := time.Now()
+	if len(value.TableTransition) >= 1<<20 {
+		chunks, encodedSize, err := lifecycleResponseChunks(value)
+		if err != nil {
+			return 0, fmt.Errorf("encode response: %w", err)
+		}
+		if trace != nil {
+			trace.Stage("encode-response", time.Since(encodeStarted))
+		}
+		writeStarted := time.Now()
+		if err := writeFrameHeader(output, encodedSize); err != nil {
+			return 0, err
+		}
+		for _, chunk := range chunks {
+			if _, err := output.Write(chunk); err != nil {
+				return 0, err
+			}
+		}
+		if err := output.Flush(); err != nil {
+			return 0, err
+		}
+		if trace != nil {
+			trace.Stage("write-response", time.Since(writeStarted))
+		}
+		return encodedSize, nil
+	}
+	encoded, err := wirecbor.Marshal(value)
+	if err != nil {
+		return 0, fmt.Errorf("encode response: %w", err)
+	}
+	if trace != nil {
+		trace.Stage("encode-response", time.Since(encodeStarted))
+	}
+	writeStarted := time.Now()
+	if err := writeFrame(output, encoded); err != nil {
+		return 0, err
+	}
+	if err := output.Flush(); err != nil {
+		return 0, err
+	}
+	if trace != nil {
+		trace.Stage("write-response", time.Since(writeStarted))
+	}
+	return len(encoded), nil
+}
+
+type lifecycleResponseChunk struct {
+	key   []byte
+	value []byte
+}
+
+// lifecycleResponseChunks encodes a response as deterministic-CBOR map
+// fragments, keeping tableTransition as a borrowed byte slice. This is the
+// only large field in a cold response, so the outer frame can be written
+// incrementally without a second complete 5+ MiB payload.
+func lifecycleResponseChunks(value typefacts.LifecycleResponse) ([][]byte, int, error) {
+	fields := make([]lifecycleResponseChunk, 0, 13)
+	add := func(key string, field any) error {
+		encodedKey, err := wirecbor.Marshal(key)
+		if err != nil {
+			return err
+		}
+		encodedValue, err := wirecbor.Marshal(field)
+		if err != nil {
+			return err
+		}
+		fields = append(fields, lifecycleResponseChunk{key: encodedKey, value: encodedValue})
+		return nil
+	}
+	for _, field := range []struct {
+		key   string
+		value any
+	}{
+		{"schema", value.Schema},
+		{"requestId", value.RequestID},
+		{"projectId", value.ProjectID},
+		{"generation", value.Generation},
+		{"ok", value.OK},
+	} {
+		if err := add(field.key, field.value); err != nil {
+			return nil, 0, err
+		}
+	}
+	optional := []struct {
+		present bool
+		key     string
+		value   any
+	}{
+		{value.StateToken != "", "stateToken", value.StateToken},
+		{len(value.Affected) != 0, "affected", value.Affected},
+		{len(value.Sources) != 0, "sources", value.Sources},
+		{value.SourceArena != "", "sourceArena", value.SourceArena},
+		{len(value.SourceLengths) != 0, "sourceLengths", value.SourceLengths},
+		{value.Timings != nil, "timings", value.Timings},
+		{value.Error != nil, "error", value.Error},
+	}
+	for _, field := range optional {
+		if field.present {
+			if err := add(field.key, field.value); err != nil {
+				return nil, 0, err
+			}
+		}
+	}
+	transitionKey, err := wirecbor.Marshal("tableTransition")
+	if err != nil {
+		return nil, 0, err
+	}
+	fields = append(fields, lifecycleResponseChunk{
+		key:   transitionKey,
+		value: appendCBORByteStringHeader(nil, len(value.TableTransition)),
+	})
+	sort.Slice(fields, func(i, j int) bool {
+		return bytes.Compare(fields[i].key, fields[j].key) < 0
+	})
+	chunks := make([][]byte, 0, 1+len(fields)*2+1)
+	chunks = append(chunks, []byte{0xa0 | byte(len(fields))})
+	total := 1
+	for _, field := range fields {
+		chunks = append(chunks, field.key, field.value)
+		total += len(field.key) + len(field.value)
+		if bytes.Equal(field.key, transitionKey) {
+			chunks = append(chunks, value.TableTransition)
+			total += len(value.TableTransition)
+		}
+	}
+	return chunks, total, nil
+}
+
+func appendCBORByteStringHeader(target []byte, size int) []byte {
+	switch {
+	case size < 24:
+		return append(target, 0x40|byte(size))
+	case size <= 0xff:
+		return append(target, 0x58, byte(size))
+	case size <= 0xffff:
+		return binary.BigEndian.AppendUint16(append(target, 0x59), uint16(size))
+	case uint64(size) <= uint64(^uint32(0)):
+		return binary.BigEndian.AppendUint32(append(target, 0x5a), uint32(size))
+	default:
+		return binary.BigEndian.AppendUint64(append(target, 0x5b), uint64(size))
+	}
+}
+
 // queue is an unbounded FIFO. The reader must never block on enqueue — a full
 // bounded queue would stop it from reading cancel frames.
 type queue[T any] struct {
@@ -409,14 +560,19 @@ func readFrame(reader io.Reader) ([]byte, error) {
 }
 
 func writeFrame(writer io.Writer, payload []byte) error {
-	if len(payload) > wirecbor.MaxMessageBytes {
-		return fmt.Errorf("response is %d bytes, limit is %d", len(payload), wirecbor.MaxMessageBytes)
-	}
-	var prefix [4]byte
-	binary.LittleEndian.PutUint32(prefix[:], uint32(len(payload)))
-	if _, err := writer.Write(prefix[:]); err != nil {
+	if err := writeFrameHeader(writer, len(payload)); err != nil {
 		return err
 	}
 	_, err := writer.Write(payload)
+	return err
+}
+
+func writeFrameHeader(writer io.Writer, size int) error {
+	if size > wirecbor.MaxMessageBytes {
+		return fmt.Errorf("response is %d bytes, limit is %d", size, wirecbor.MaxMessageBytes)
+	}
+	var prefix [4]byte
+	binary.LittleEndian.PutUint32(prefix[:], uint32(size))
+	_, err := writer.Write(prefix[:])
 	return err
 }

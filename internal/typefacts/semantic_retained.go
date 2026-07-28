@@ -159,9 +159,9 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		changedSymbols:          newChangedSymbolSet(p.interner, p.changedScratch, p.changedIDScratch),
 		factIndexScratch:        p.factIndexScratch,
 		descriptors:             make(map[SymbolID]*TypeDescriptor),
-		cachedSymbolFacts:       p.symbolFacts,
 		cachedReferences:        p.symbolReferences,
 		cachedCanonicalStore:    cachedCanonicalStore,
+		invalidatedSymbols:      p.invalidatedSymbols,
 		symbolFactsBuffer:       p.symbolScratch,
 		symbolOrderBuffer:       table.Symbols,
 		removedSymbolCandidates: retainedSymbolCandidates(p.previousTable, p.transportChangedPaths),
@@ -169,14 +169,22 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	// The generation's handle sets and queue live on closure-owned scratch;
 	// hand the backing back for the next generation whichever way this one
 	// ends.
+	releaseLinearScratch := false
 	defer func() {
 		p.seenScratch = builder.symbolSeen.members
 		p.fullScratch = builder.fullTier.members
 		p.changedScratch = builder.changedSymbols.set.members
-		p.changedIDScratch = builder.changedSymbols.ids[:0]
-		p.queueScratch = builder.symbolQueue[:0]
-		p.queueHandleScratch = builder.queueHandles[:0]
-		p.factIndexScratch = builder.factIndexScratch
+		if releaseLinearScratch {
+			p.changedIDScratch = nil
+			p.queueScratch = nil
+			p.queueHandleScratch = nil
+			p.factIndexScratch = nil
+		} else {
+			p.changedIDScratch = builder.changedSymbols.ids[:0]
+			p.queueScratch = builder.symbolQueue[:0]
+			p.queueHandleScratch = builder.queueHandles[:0]
+			p.factIndexScratch = builder.factIndexScratch
+		}
 	}()
 	// The async runs are rebuilt every generation, but into retained scratch:
 	// counting first sizes the flat backing exactly, so it never reallocates
@@ -500,7 +508,13 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	}
 	for index := range groups {
 		group := &groups[index]
+		start := len(entities)
 		entities = append(entities, group.contribution.entities...)
+		// The canonical table is the retained entity backing store. Repoint
+		// each contribution at its capped path window so the per-file
+		// preparation arrays become collectible instead of duplicating the
+		// complete entity table for the rest of the session.
+		group.contribution.entities = entities[start:len(entities):len(entities)]
 		for _, symbol := range group.contribution.enqueued {
 			builder.enqueueSymbol(symbol)
 		}
@@ -562,66 +576,36 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	retention.PatchedSymbolRows = builder.patchedSymbolRows
 	retention.SharedSymbolChunks = builder.sharedSymbolChunks
 	retention.StableSymbolClosure = builder.stableUniversePatch
-	nextSymbolFacts := p.symbolFacts
-	if nextSymbolFacts == nil {
-		nextSymbolFacts = make(map[SymbolID]SymbolFact, len(symbols))
-	}
-	removeRetainedSymbol := func(id SymbolID) {
-		if fact, retained := nextSymbolFacts[id]; retained {
-			p.unindexSymbolFact(fact)
-			delete(nextSymbolFacts, id)
-		}
-	}
-	updateRetainedSymbol := func(fact SymbolFact) {
-		// Only declaration-backed durable identities are safe across
-		// generations. A declaration-less synthetic symbol may change its
-		// alias meaning without giving Update a path by which to evict it.
-		if !DurableSymbolID(fact.ID) || !DurableSymbolID(fact.AliasTarget) || len(fact.Declarations) == 0 {
-			removeRetainedSymbol(fact.ID)
-			return
-		}
-		if previous, retained := nextSymbolFacts[fact.ID]; retained {
-			p.unindexSymbolFact(previous)
-		}
-		retainedFact := SymbolFact{
-			ID:           fact.ID,
-			AliasTarget:  fact.AliasTarget,
-			Declarations: fact.Declarations,
-		}
-		nextSymbolFacts[fact.ID] = retainedFact
-		p.indexSymbolFact(retainedFact)
-	}
-	if builder.closedSymbolStore != nil {
-		// The retained store already proved the complete current universe and
-		// reports its exact removals. Synchronize the memo from that delta
-		// instead of scanning both the memo and canonical store.
+	// symbolsByPath is the only auxiliary index the immutable canonical store
+	// needs. Synchronize it from exact deltas when possible; cold/fallback
+	// closure scans the canonical rows once without retaining a duplicate map.
+	if builder.closedSymbolStore != nil && p.symbolsByPath != nil {
 		for _, id := range builder.removedSymbolIDs {
-			removeRetainedSymbol(id)
+			if fact, present := cachedCanonicalStore.Get(id); present {
+				p.unindexSymbolFact(fact)
+			}
 		}
 		for _, id := range builder.changedSymbols.ids {
-			if fact, present := symbolStore.Get(id); present {
-				updateRetainedSymbol(fact)
+			if previous, present := cachedCanonicalStore.Get(id); present {
+				p.unindexSymbolFact(previous)
+			}
+			if fact, present := symbolStore.Get(id); present &&
+				DurableSymbolID(fact.ID) && DurableSymbolID(fact.AliasTarget) && len(fact.Declarations) != 0 {
+				p.indexSymbolFact(fact)
 			}
 		}
 	} else {
-		for id, fact := range nextSymbolFacts {
-			if !builder.symbolSeen.containsID(id) {
-				p.unindexSymbolFact(fact)
-				delete(nextSymbolFacts, id)
-			}
-		}
+		p.symbolsByPath = nil
+		p.symbolMemoComplete = true
 		symbolStore.Range(func(fact SymbolFact) {
-			if builder.changedSymbols.containsID(fact.ID) ||
-				!DurableSymbolID(fact.ID) ||
-				!DurableSymbolID(fact.AliasTarget) ||
-				len(fact.Declarations) == 0 {
-				updateRetainedSymbol(fact)
+			if !DurableSymbolID(fact.ID) || !DurableSymbolID(fact.AliasTarget) || len(fact.Declarations) == 0 {
+				p.symbolMemoComplete = false
+				return
 			}
+			p.indexSymbolFact(fact)
 		})
 	}
-	p.symbolFacts = nextSymbolFacts
 	p.symbolReferences = builder.closedReferences
-	p.symbolMemoComplete = len(nextSymbolFacts) == symbolStore.Len()
 	clear(p.invalidatedSymbols)
 	table.Symbols = symbols
 	table.symbols = symbolStore
@@ -654,6 +638,23 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	p.recyclableTable = p.previousTable
 	p.previousTable = nil
 	p.transportChangedPaths = nil
+	// The descriptor seed is a generation-local lookup derived entirely from
+	// retained contributions. Its cold-sized buckets otherwise duplicate that
+	// durable state for the whole session; rebuild the small changed-generation
+	// view instead of retaining the cold map.
+	p.descriptorSeedScratch = nil
+	// The canonical chunk store now owns every closed SymbolFact. A spare flat
+	// full-closure buffer is useful only for fallback rebuilds and duplicates
+	// that store after the normal cold path; incremental patches allocate only
+	// their changed subset when this buffer is absent.
+	p.symbolScratch = nil
+	// Async filtering and closure queues are linear working sets, not retained
+	// semantic state. Keep the dense membership snapshots that prove the next
+	// incremental fixed point, but release these duplicate cold-sized rows.
+	p.asyncDemandScratch = nil
+	p.asyncGroupScratch = nil
+	releaseLinearScratch = true
+	p.backend.ReleaseAnalysisState()
 	// The table is transport-only: it exists to be converted to the wire shape
 	// or diffed against its predecessor, and answers no per-location queries.
 	stages.symbol = stages.assembly + stages.sort + stages.close

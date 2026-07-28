@@ -169,7 +169,20 @@ func CompactDemandsV3From(demands []EntityDemand) CompactDemandsV3 {
 // Expand converts the compact demand snapshot back into plain demands.
 func (compact CompactDemandsV3) Expand() ([]EntityDemand, error) {
 	strings := stringUntableV3(compact.Strings)
-	demands := make([]EntityDemand, 0, 64)
+	demandCount, queryCount, err := compact.demandShape()
+	if err != nil {
+		return nil, err
+	}
+	// The expanded slice becomes retained session state. Allocate it once at
+	// its final size instead of geometrically growing a large array whose
+	// unused tail would remain live for the session lifetime.
+	demands := make([]EntityDemand, 0, demandCount)
+	// Query locations used to escape one allocation at a time. They have the
+	// same lifetime as the retained demand slice, so one exact arena removes
+	// tens of thousands of tiny heap objects without changing pointer-based
+	// model or wire semantics.
+	queries := make([]Location, queryCount)
+	queryIndex := 0
 	for _, group := range compact.Groups {
 		path, err := strings.lookup(group.Path)
 		if err != nil {
@@ -228,11 +241,13 @@ func (compact CompactDemandsV3) Expand() ([]EntityDemand, error) {
 				if err != nil {
 					return nil, err
 				}
-				demand.QueryLocation = &Location{
+				queries[queryIndex] = Location{
 					Path:      queryPath,
 					StartByte: int(queryStart),
 					EndByte:   int(queryStart + queryLength),
 				}
+				demand.QueryLocation = &queries[queryIndex]
+				queryIndex++
 				rest = next
 			}
 			packed = rest
@@ -240,6 +255,36 @@ func (compact CompactDemandsV3) Expand() ([]EntityDemand, error) {
 		}
 	}
 	return demands, nil
+}
+
+func (compact CompactDemandsV3) demandShape() (demandCount, queryCount int, err error) {
+	for _, group := range compact.Groups {
+		packed := group.Demands
+		for len(packed) != 0 {
+			header, rest, err := takeCompactUvarint(packed)
+			if err != nil {
+				return 0, 0, err
+			}
+			for range 2 {
+				_, rest, err = takeCompactUvarint(rest)
+				if err != nil {
+					return 0, 0, err
+				}
+			}
+			if header&1 != 0 {
+				queryCount++
+				for range 3 {
+					_, rest, err = takeCompactUvarint(rest)
+					if err != nil {
+						return 0, 0, err
+					}
+				}
+			}
+			packed = rest
+			demandCount++
+		}
+	}
+	return demandCount, queryCount, nil
 }
 
 func takeCompactUvarint(input []byte) (uint64, []byte, error) {

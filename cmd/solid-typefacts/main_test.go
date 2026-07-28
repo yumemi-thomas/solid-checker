@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"io"
 	"sync"
@@ -11,6 +12,38 @@ import (
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
 )
+
+func TestChunkedLifecycleResponseIsWireIdentical(t *testing.T) {
+	value := typefacts.LifecycleResponse{
+		Schema:          typefacts.TypeFactsSchemaVersionV5,
+		RequestID:       9,
+		ProjectID:       "/project/tsconfig.json",
+		Generation:      3,
+		OK:              true,
+		TableTransition: []byte("packed transition"),
+		StateToken:      "state",
+		Affected:        []string{"a.ts"},
+		Sources:         []typefacts.SourceFileV3{{Path: "a.ts", Source: []byte("source")}},
+		SourceArena:     "/tmp/sources",
+		SourceLengths:   []uint64{6},
+		Timings:         &typefacts.LifecycleTimings{AnalyzeNs: 17, Materialized: true},
+	}
+	expected, err := wirecbor.Marshal(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chunks, size, err := lifecycleResponseChunks(value)
+	if err != nil {
+		t.Fatal(err)
+	}
+	actual := bytes.Join(chunks, nil)
+	if size != len(expected) {
+		t.Fatalf("chunked size = %d, want %d", size, len(expected))
+	}
+	if !bytes.Equal(actual, expected) {
+		t.Fatalf("chunked response differs:\n%x\n%x", actual, expected)
+	}
+}
 
 // orderedResponder mimics the generation discipline of the real service: an
 // update must arrive at generation+1 and an analyze at the current

@@ -24,6 +24,9 @@ func (p *project) SemanticDemandRuns(
 	if p.closed {
 		return nil, ErrClosed
 	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, err
+	}
 
 	totalDemands := 0
 	for index := range runs {

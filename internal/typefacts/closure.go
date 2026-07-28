@@ -46,6 +46,7 @@ type ClosureBackend interface {
 	AsyncFunctionsAt(context.Context, []Location) ([]AsyncFunctionFact, error)
 	ReferencesBatch(context.Context, []SymbolID) (map[SymbolID][]Location, error)
 	ChangedReferences(context.Context) (ids []SymbolID, exact bool, err error)
+	ReleaseAnalysisState()
 }
 
 // ClosureStats reports the cost of one generation's closed fact table.
@@ -132,18 +133,15 @@ type DemandClosure struct {
 	// suppression-delta comparison.
 	suppressionScratch    map[SymbolID]struct{}
 	descriptorSeedScratch map[SymbolID]*TypeDescriptor
-	// symbolFacts memoizes the generation-independent half of durable
-	// symbol closure: alias targets and declarations. Update removes facts
-	// declared in affected files. symbolReferences separately retains lists
-	// whose presence is known (including known-empty lists); because an edit
-	// can add a reference to an otherwise unchanged symbol, they are reused
-	// only when the backend supplies an exact changed-symbol delta.
-	symbolFacts      map[SymbolID]SymbolFact
+	// The canonical symbol store itself memoizes alias targets and
+	// declarations; keeping a second SymbolID -> SymbolFact map duplicated
+	// every row. symbolReferences separately retains lists whose presence is
+	// known (including known-empty lists).
 	symbolReferences map[SymbolID][]Location
-	// symbolsByPath indexes symbolFacts by cleaned declaring path, so Update
+	// symbolsByPath indexes durable canonical facts by cleaned declaring path, so Update
 	// evicts an affected set by looking up its paths instead of scanning every
-	// retained fact. Every write to symbolFacts goes through indexSymbolFact /
-	// unindexSymbolFact to keep the two exactly in sync.
+	// retained fact. Every canonical-store change goes through
+	// indexSymbolFact / unindexSymbolFact to keep the index in sync.
 	symbolsByPath map[string]map[SymbolID]struct{}
 	symbolScratch []SymbolFact
 	// invalidatedSymbols names every previously reached durable fact evicted
@@ -173,7 +171,7 @@ func NewDemandClosure(backend Project, trace Trace) (*DemandClosure, error) {
 }
 
 // indexSymbolFact records a retained fact under each clean declaring path.
-// Callers must pair it with every insert into symbolFacts.
+// Callers pair it with every durable insert into the canonical symbol store.
 func (p *DemandClosure) indexSymbolFact(fact SymbolFact) {
 	if p.symbolsByPath == nil {
 		p.symbolsByPath = make(map[string]map[SymbolID]struct{})
@@ -190,7 +188,7 @@ func (p *DemandClosure) indexSymbolFact(fact SymbolFact) {
 }
 
 // unindexSymbolFact removes a retained fact from the path index. Callers must
-// pair it with every delete from symbolFacts, passing the fact being removed.
+// pair it with every canonical deletion, passing the fact being removed.
 func (p *DemandClosure) unindexSymbolFact(fact SymbolFact) {
 	for _, declaration := range fact.Declarations {
 		path := declaration.Location.Path
@@ -242,9 +240,8 @@ func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (Affec
 				p.invalidatedSymbols = make(map[SymbolID]struct{})
 			}
 			p.invalidatedSymbols[id] = struct{}{}
-			if fact, retained := p.symbolFacts[id]; retained {
+			if fact, retained := p.table.canonicalSymbol(id); retained {
 				p.unindexSymbolFact(fact)
-				delete(p.symbolFacts, id)
 			}
 			delete(p.symbolReferences, id)
 		}
@@ -275,7 +272,6 @@ func (p *DemandClosure) resetAnalysisStateLocked() {
 	p.previousTable = nil
 	p.recyclableTable = nil
 	p.transportChangedPaths = nil
-	p.symbolFacts = nil
 	p.symbolReferences = nil
 	p.symbolsByPath = nil
 	p.symbolScratch = nil

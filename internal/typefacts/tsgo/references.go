@@ -17,8 +17,13 @@ import (
 // retained closure consumers.
 type referenceIndex struct {
 	// merged is nil until the first reference query of a generation.
-	merged map[typefacts.SymbolID][]typefacts.Location
-	spaces map[typefacts.SymbolID]typefacts.ReferenceSpace
+	merged map[typefacts.SymbolID][]indexedReference
+	spaces map[typefacts.SymbolID]uint8
+	paths  []string
+	// used records the canonical symbols whose merged rows escaped into a
+	// retained fact. ReleaseAnalysisState prunes every other merged bucket;
+	// per-file symbol evidence remains sufficient for exact invalidation.
+	used map[typefacts.SymbolID]struct{}
 	// refreshPaths are affected files removed from an already-materialized
 	// merged index. They are rescanned lazily at the established reference
 	// closure point so symbol counter minting retains its order.
@@ -57,25 +62,24 @@ func (r *referenceIndex) invalidate(
 			continue
 		}
 		if hadExactBase {
-			for id := range entry.refs {
-				changedSymbols[id] = struct{}{}
+			for _, group := range entry.refs {
+				changedSymbols[group.id] = struct{}{}
 			}
 		}
 		if incremental {
-			for id := range entry.refs {
-				locations := r.merged[id]
-				kept := locations[:0]
-				for _, location := range locations {
-					// scan stores the already-clean contribution key in every
-					// location, and merged only concatenates those rows.
-					if location.Path != path {
-						kept = append(kept, location)
+			pathIndex := sort.SearchStrings(r.paths, path)
+			for _, group := range entry.refs {
+				references := r.merged[group.id]
+				kept := references[:0]
+				for _, reference := range references {
+					if int(reference.path) != pathIndex {
+						kept = append(kept, reference)
 					}
 				}
 				if len(kept) == 0 {
-					delete(r.merged, id)
+					delete(r.merged, group.id)
 				} else {
-					r.merged[id] = kept
+					r.merged[group.id] = kept
 				}
 			}
 			if sourceFile := program.GetSourceFile(path); sourceFile != nil && !sourceFile.IsDeclarationFile {
@@ -92,6 +96,7 @@ func (r *referenceIndex) invalidate(
 	}
 	r.merged = nil
 	r.spaces = nil
+	r.paths = nil
 	r.refreshPaths = nil
 	r.changedSymbols = changedSymbols
 	r.deltaExact = hadExactBase
@@ -104,6 +109,8 @@ func (r *referenceIndex) reset() {
 	r.changedSymbols = nil
 	r.deltaExact = false
 	r.files = nil
+	r.paths = nil
+	r.used = nil
 }
 
 func (p *project) References(ctx context.Context, id typefacts.SymbolID) ([]typefacts.Location, error) {
@@ -115,6 +122,9 @@ func (p *project) References(ctx context.Context, id typefacts.SymbolID) ([]type
 	if p.closed {
 		return nil, ErrClosed
 	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, err
+	}
 	target, ok := p.symbolFor(id)
 	if !ok {
 		// A durable ID whose declaration no longer re-resolves fails closed
@@ -124,7 +134,8 @@ func (p *project) References(ctx context.Context, id typefacts.SymbolID) ([]type
 	canonical := p.idFor(p.canonicalSymbol(target))
 
 	p.referenceIndex.ensure(p)
-	return append([]typefacts.Location(nil), p.referenceIndex.merged[canonical]...), nil
+	p.referenceIndex.markUsed(canonical)
+	return p.referenceIndex.locations(canonical), nil
 }
 
 // ReferencesBatch is the closure-oriented counterpart of References. TS-Go's
@@ -140,6 +151,9 @@ func (p *project) ReferencesBatch(ctx context.Context, ids []typefacts.SymbolID)
 	if p.closed {
 		return nil, ErrClosed
 	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, err
+	}
 	p.referenceIndex.ensure(p)
 	result := make(map[typefacts.SymbolID][]typefacts.Location, len(ids))
 	for _, id := range ids {
@@ -148,7 +162,8 @@ func (p *project) ReferencesBatch(ctx context.Context, ids []typefacts.SymbolID)
 			continue
 		}
 		canonical := p.idFor(p.canonicalSymbol(target))
-		result[id] = append([]typefacts.Location(nil), p.referenceIndex.merged[canonical]...)
+		p.referenceIndex.markUsed(canonical)
+		result[id] = p.referenceIndex.locations(canonical)
 	}
 	return result, nil
 }
@@ -164,6 +179,9 @@ func (p *project) ChangedReferences(ctx context.Context) ([]typefacts.SymbolID, 
 	defer p.mu.Unlock()
 	if p.closed {
 		return nil, false, ErrClosed
+	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, false, err
 	}
 	p.referenceIndex.ensure(p)
 	if !p.referenceIndex.deltaExact {
@@ -199,24 +217,41 @@ func (r *referenceIndex) ensure(p *project) {
 		}
 		entry := r.scan(p, path, sourceFile)
 		r.files[path] = entry
-		for id, locations := range entry.refs {
-			touched[id] = struct{}{}
+		pathIndex := sort.SearchStrings(r.paths, path)
+		if pathIndex == len(r.paths) || r.paths[pathIndex] != path {
+			// Incremental refresh is only selected when program membership is
+			// unchanged, so every refreshed path belongs to the established
+			// compact path table.
+			continue
+		}
+		for groupIndex := range entry.refs {
+			group := &entry.refs[groupIndex]
+			touched[group.id] = struct{}{}
 			if r.deltaExact {
-				r.changedSymbols[id] = struct{}{}
+				r.changedSymbols[group.id] = struct{}{}
 			}
-			r.merged[id] = append(r.merged[id], locations...)
+			references := r.merged[group.id]
+			for _, span := range group.spans {
+				references = append(references, indexedReference{
+					path:  uint32(pathIndex),
+					start: span.start,
+					end:   span.end,
+				})
+			}
+			r.merged[group.id] = references
+			group.spans = nil
 		}
 	}
 	for id := range touched {
-		locations := r.merged[id]
-		sort.Slice(locations, func(i, j int) bool {
-			if locations[i].Path != locations[j].Path {
-				return locations[i].Path < locations[j].Path
+		references := r.merged[id]
+		sort.Slice(references, func(i, j int) bool {
+			if references[i].path != references[j].path {
+				return references[i].path < references[j].path
 			}
-			if locations[i].StartByte != locations[j].StartByte {
-				return locations[i].StartByte < locations[j].StartByte
+			if references[i].start != references[j].start {
+				return references[i].start < references[j].start
 			}
-			return locations[i].EndByte < locations[j].EndByte
+			return references[i].end < references[j].end
 		})
 	}
 	r.refreshPaths = nil
@@ -228,9 +263,34 @@ func (r *referenceIndex) ensure(p *project) {
 // order. durable reports whether every grouped ID is durable; an entry with
 // generation-scoped counter IDs cannot outlive its generation.
 type fileReferences struct {
-	refs    map[typefacts.SymbolID][]typefacts.Location
-	spaces  map[typefacts.SymbolID]uint8
+	refs    []fileReferenceGroup
+	spaces  []fileReferenceSpace
 	durable bool
+}
+
+// Per-file contributions deliberately omit the file path: referenceIndex.files
+// already owns it once. AST offsets are compiler positions and fit in 32 bits,
+// cutting each retained reference from a Location's string header plus two ints
+// to one compact eight-byte span.
+type fileReferenceSpan struct {
+	start int32
+	end   int32
+}
+
+type indexedReference struct {
+	path  uint32
+	start int32
+	end   int32
+}
+
+type fileReferenceGroup struct {
+	id    typefacts.SymbolID
+	spans []fileReferenceSpan
+}
+
+type fileReferenceSpace struct {
+	id   typefacts.SymbolID
+	bits uint8
 }
 
 // build merges the per-file contributions into the current
@@ -239,7 +299,7 @@ type fileReferences struct {
 // Merging in path order, with each per-file group already in byte order,
 // preserves the References ordering contract (path, then start byte)
 // without a global sort.
-func (r *referenceIndex) build(p *project) map[typefacts.SymbolID][]typefacts.Location {
+func (r *referenceIndex) build(p *project) map[typefacts.SymbolID][]indexedReference {
 	if r.files == nil {
 		r.files = make(map[string]*fileReferences)
 	}
@@ -255,37 +315,78 @@ func (r *referenceIndex) build(p *project) map[typefacts.SymbolID][]typefacts.Lo
 			entry := r.scan(p, path, sourceFile)
 			r.files[path] = entry
 			if r.deltaExact {
-				for id := range entry.refs {
-					r.changedSymbols[id] = struct{}{}
+				for _, group := range entry.refs {
+					r.changedSymbols[group.id] = struct{}{}
 				}
 			}
 		}
 	}
 	sort.Strings(paths)
-	references := make(map[typefacts.SymbolID][]typefacts.Location)
+	r.paths = paths
+	references := make(map[typefacts.SymbolID][]indexedReference)
 	spaces := make(map[typefacts.SymbolID]uint8)
-	for _, path := range paths {
-		for id, locations := range r.files[path].refs {
-			references[id] = append(references[id], locations...)
+	for pathIndex, path := range paths {
+		for groupIndex := range r.files[path].refs {
+			group := &r.files[path].refs[groupIndex]
+			indexed := references[group.id]
+			for _, span := range group.spans {
+				indexed = append(indexed, indexedReference{
+					path:  uint32(pathIndex),
+					start: span.start,
+					end:   span.end,
+				})
+			}
+			references[group.id] = indexed
+			group.spans = nil
 		}
-		for id, meaning := range r.files[path].spaces {
-			spaces[id] |= meaning
+		for _, space := range r.files[path].spaces {
+			spaces[space.id] |= space.bits
 		}
 	}
-	r.spaces = make(map[typefacts.SymbolID]typefacts.ReferenceSpace, len(spaces))
-	for id, meaning := range spaces {
-		r.spaces[id] = referenceSpaceFromBits(meaning)
-	}
+	r.spaces = spaces
 	return references
+}
+
+func (r *referenceIndex) locations(id typefacts.SymbolID) []typefacts.Location {
+	references := r.merged[id]
+	if len(references) == 0 {
+		return nil
+	}
+	locations := make([]typefacts.Location, len(references))
+	for index, reference := range references {
+		locations[index] = typefacts.Location{
+			Path:      r.paths[reference.path],
+			StartByte: int(reference.start),
+			EndByte:   int(reference.end),
+		}
+	}
+	return locations
+}
+
+func (r *referenceIndex) markUsed(id typefacts.SymbolID) {
+	if r.used == nil {
+		r.used = make(map[typefacts.SymbolID]struct{})
+	}
+	r.used[id] = struct{}{}
+}
+
+func (r *referenceIndex) releaseAnalysisState() {
+	for id := range r.merged {
+		if _, retained := r.used[id]; !retained {
+			delete(r.merged, id)
+		}
+	}
+	clear(r.used)
+	// Reference-space rows are cheap to rebuild from the compact per-file
+	// entries and otherwise duplicate that complete union between analyses.
+	r.spaces = nil
 }
 
 // scan resolves every non-declaration identifier in one file.
 func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFile) *fileReferences {
-	entry := &fileReferences{
-		refs:    make(map[typefacts.SymbolID][]typefacts.Location),
-		spaces:  make(map[typefacts.SymbolID]uint8),
-		durable: true,
-	}
+	references := make(map[typefacts.SymbolID][]fileReferenceSpan)
+	spaces := make(map[typefacts.SymbolID]uint8)
+	durable := true
 	var visit func(*ast.Node) bool
 	visit = func(node *ast.Node) bool {
 		if ast.IsIdentifier(node) && !ast.IsDeclarationNameOrImportPropertyName(node) {
@@ -293,17 +394,16 @@ func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFil
 				referenceID := p.idFor(symbol)
 				id := p.idFor(p.canonicalSymbol(symbol))
 				if !durableSymbolID(id) || !durableSymbolID(referenceID) {
-					entry.durable = false
+					durable = false
 				}
-				entry.refs[id] = append(entry.refs[id], typefacts.Location{
-					Path:      path,
-					StartByte: scanner.SkipTrivia(sourceFile.Text(), node.Pos()),
-					EndByte:   node.End(),
+				references[id] = append(references[id], fileReferenceSpan{
+					start: int32(scanner.SkipTrivia(sourceFile.Text(), node.Pos())),
+					end:   int32(node.End()),
 				})
 				if isTypeSpaceReference(node) {
-					entry.spaces[referenceID] |= 2
+					spaces[referenceID] |= 2
 				} else {
-					entry.spaces[referenceID] |= 1
+					spaces[referenceID] |= 1
 				}
 			}
 		}
@@ -313,10 +413,20 @@ func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFil
 	for _, statement := range sourceFile.Statements.Nodes {
 		visit(statement)
 	}
-	for id, locations := range entry.refs {
-		sort.Slice(locations, func(i, j int) bool { return locations[i].StartByte < locations[j].StartByte })
-		entry.refs[id] = locations
+	entry := &fileReferences{
+		refs:    make([]fileReferenceGroup, 0, len(references)),
+		spaces:  make([]fileReferenceSpace, 0, len(spaces)),
+		durable: durable,
 	}
+	for id, spans := range references {
+		sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
+		entry.refs = append(entry.refs, fileReferenceGroup{id: id, spans: spans})
+	}
+	sort.Slice(entry.refs, func(i, j int) bool { return entry.refs[i].id < entry.refs[j].id })
+	for id, bits := range spaces {
+		entry.spaces = append(entry.spaces, fileReferenceSpace{id: id, bits: bits})
+	}
+	sort.Slice(entry.spaces, func(i, j int) bool { return entry.spaces[i].id < entry.spaces[j].id })
 	return entry
 }
 
@@ -349,17 +459,14 @@ func (r *referenceIndex) spaceFor(p *project, id typefacts.SymbolID) typefacts.R
 	if r.spaces == nil {
 		spaces := make(map[typefacts.SymbolID]uint8)
 		for _, entry := range r.files {
-			for symbol, meaning := range entry.spaces {
-				spaces[symbol] |= meaning
+			for _, space := range entry.spaces {
+				spaces[space.id] |= space.bits
 			}
 		}
-		r.spaces = make(map[typefacts.SymbolID]typefacts.ReferenceSpace, len(spaces))
-		for symbol, meaning := range spaces {
-			r.spaces[symbol] = referenceSpaceFromBits(meaning)
-		}
+		r.spaces = spaces
 	}
-	if space := r.spaces[id]; space != "" {
-		return space
+	if bits := r.spaces[id]; bits != 0 {
+		return referenceSpaceFromBits(bits)
 	}
 	return typefacts.ReferenceSpaceNeither
 }

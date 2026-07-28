@@ -62,7 +62,15 @@ func newSymbolHandleSet(interner *symbolInterner, scratch []bool) *symbolHandleS
 // add reports whether handle was newly inserted.
 func (s *symbolHandleSet) add(handle int32) bool {
 	if int(handle) >= len(s.members) {
-		grown := make([]bool, max(s.interner.size(), int(handle)+1))
+		// Cold materialization interns symbols while it builds the set. Growing
+		// exactly to interner.size() here would copy the complete bitset once
+		// per newly discovered symbol: quadratic allocation and copying for a
+		// set whose final representation is already dense. Grow geometrically
+		// and keep len as the addressable handle range; the caller returns the
+		// spare capacity as reusable generation scratch.
+		next := max(64, len(s.members)*2)
+		next = max(next, s.interner.size(), int(handle)+1)
+		grown := make([]bool, next)
 		copy(grown, s.members)
 		s.members = grown
 	}

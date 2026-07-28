@@ -78,6 +78,7 @@ func (lifecycleBenchmarkBackend) ReferencesBatch(context.Context, []typefacts.Sy
 func (lifecycleBenchmarkBackend) ChangedReferences(context.Context) ([]typefacts.SymbolID, bool, error) {
 	return nil, true, nil
 }
+func (lifecycleBenchmarkBackend) ReleaseAnalysisState() {}
 
 var lifecycleBenchmarkResponse typefacts.LifecycleResponse
 

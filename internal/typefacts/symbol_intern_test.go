@@ -37,6 +37,49 @@ func TestMaybeResetInternerBoundsDeadIdentities(t *testing.T) {
 	}
 }
 
+func TestSymbolHandleSetGrowsGeometricallyDuringColdInterning(t *testing.T) {
+	interner := newSymbolInterner()
+	set := newSymbolHandleSet(interner, nil)
+	previousCapacity := cap(set.members)
+	growths := 0
+	for index := range 50_000 {
+		set.addID(SymbolID(fmt.Sprintf("symbol:h:%024d", index)))
+		if capacity := cap(set.members); capacity != previousCapacity {
+			growths++
+			if previousCapacity != 0 && capacity < previousCapacity*2 {
+				t.Fatalf("growth %d -> %d is not geometric", previousCapacity, capacity)
+			}
+			previousCapacity = capacity
+		}
+	}
+	if growths > 11 {
+		t.Fatalf("50,000 cold symbols caused %d backing allocations, want at most 11", growths)
+	}
+	if set.len() != 50_000 {
+		t.Fatalf("set length = %d, want 50,000", set.len())
+	}
+}
+
+func BenchmarkColdSymbolHandleSetMemory(b *testing.B) {
+	const symbols = 50_000
+	ids := make([]SymbolID, symbols)
+	for index := range ids {
+		ids[index] = SymbolID(fmt.Sprintf("symbol:h:%024d", index))
+	}
+	b.ReportAllocs()
+	b.ReportMetric(symbols, "symbols/op")
+	for b.Loop() {
+		interner := newSymbolInterner()
+		set := newSymbolHandleSet(interner, nil)
+		for _, id := range ids {
+			set.addID(id)
+		}
+		if set.len() != symbols {
+			b.Fatalf("set length = %d, want %d", set.len(), symbols)
+		}
+	}
+}
+
 // Test constructors for the interned symbol sets, so white-box fixtures can
 // state memberships as ID lists the way they used to state map literals.
 

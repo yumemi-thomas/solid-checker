@@ -8,10 +8,48 @@ import (
 	"path/filepath"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 )
+
+func TestReleaseAnalysisStateRehydratesDurableIdentity(t *testing.T) {
+	dir := t.TempDir()
+	write := writeProject(t, dir)
+	write("tsconfig.json", `{"compilerOptions":{"module":"esnext","moduleResolution":"bundler","target":"esnext"},"include":["*.ts"]}`)
+	path := write("source.ts", "export function target() { return 1 }\nexport const value = target();\n")
+	ctx := context.Background()
+	opened, err := OpenProject(ctx, filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	project := opened.(*project)
+	source := "export function target() { return 1 }\nexport const value = target();\n"
+	start := strings.LastIndex(source, "target")
+	location := typefacts.Location{Path: path, StartByte: start, EndByte: start + len("target")}
+
+	before, err := opened.SymbolAt(ctx, location)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !typefacts.DurableSymbolID(before) {
+		t.Fatalf("symbol %q is not durable", before)
+	}
+	project.ReleaseAnalysisState()
+	if project.checker != nil || len(project.idsBySymbol) != 0 || len(project.symbolsByID) != 0 {
+		t.Fatal("checker-owned state survived ReleaseAnalysisState")
+	}
+
+	after, err := opened.SymbolAt(ctx, location)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after != before {
+		t.Fatalf("rehydrated symbol = %q, want %q", after, before)
+	}
+}
 
 func writeProject(t *testing.T, dir string) func(name, source string) string {
 	t.Helper()
@@ -80,6 +118,13 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 	entryA, entryB := proj.referenceIndex.files[cleanA], proj.referenceIndex.files[cleanB]
 	if entryA == nil || entryB == nil {
 		t.Fatalf("expected per-file contributions for a.ts and b.ts, got %v", proj.referenceIndex.files)
+	}
+	for path, entry := range proj.referenceIndex.files {
+		for _, group := range entry.refs {
+			if group.spans != nil {
+				t.Fatalf("merged index still duplicates retained spans for %s", path)
+			}
+		}
 	}
 
 	t.Run("unrelated update keeps contributions and answers", func(t *testing.T) {
@@ -172,7 +217,7 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 func TestReferenceIndexBroadInvalidationKeepsExactSymbolEvidence(t *testing.T) {
 	const files = 65
 	index := referenceIndex{
-		merged:         make(map[typefacts.SymbolID][]typefacts.Location, files),
+		merged:         make(map[typefacts.SymbolID][]indexedReference, files),
 		changedSymbols: make(map[typefacts.SymbolID]struct{}),
 		files:          make(map[string]*fileReferences, files),
 	}
@@ -180,12 +225,15 @@ func TestReferenceIndexBroadInvalidationKeepsExactSymbolEvidence(t *testing.T) {
 	for file := range files {
 		path := filepath.Clean(filepath.Join("/project", fmt.Sprintf("file-%02d.ts", file)))
 		id := typefacts.SymbolID(fmt.Sprintf("symbol-%02d", file))
-		location := typefacts.Location{Path: path, StartByte: 1, EndByte: 2}
+		index.paths = append(index.paths, path)
 		index.files[path] = &fileReferences{
-			refs:    map[typefacts.SymbolID][]typefacts.Location{id: {location}},
+			refs: []fileReferenceGroup{{
+				id:    id,
+				spans: []fileReferenceSpan{{start: 1, end: 2}},
+			}},
 			durable: true,
 		}
-		index.merged[id] = []typefacts.Location{location}
+		index.merged[id] = []indexedReference{{path: uint32(file), start: 1, end: 2}}
 		affected = append(affected, path)
 	}
 

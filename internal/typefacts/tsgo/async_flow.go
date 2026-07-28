@@ -38,6 +38,9 @@ func (p *project) AsyncFunctionsAt(ctx context.Context, locations []typefacts.Lo
 	if p.closed {
 		return nil, ErrClosed
 	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, err
+	}
 	facts := make([]typefacts.AsyncFunctionFact, 0, len(locations))
 	seen := make(map[asyncFactKey]struct{}, len(locations))
 	for _, location := range locations {
@@ -184,6 +187,9 @@ func (p *project) SourceAsyncFunctions(ctx context.Context, path string) ([]type
 	memo := p.memoFor(path)
 	if memo != nil && memo.hasAsync {
 		return append([]typefacts.AsyncFunctionFact(nil), memo.async...), nil
+	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, err
 	}
 	sourceFile, err := p.sourceFileFor(typefacts.Location{Path: path})
 	if err != nil {

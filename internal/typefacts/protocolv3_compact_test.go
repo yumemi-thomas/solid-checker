@@ -48,6 +48,9 @@ func TestCompactDemandsRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if cap(expanded) != len(expanded) {
+		t.Fatalf("expanded demand capacity = %d, want exact %d", cap(expanded), len(expanded))
+	}
 	expectedBytes, err := wirecbor.Marshal(demands)
 	if err != nil {
 		t.Fatal(err)

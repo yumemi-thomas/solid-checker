@@ -17,7 +17,14 @@ func TestWireTransitionFrameOwnershipMatchesBufferLifetime(t *testing.T) {
 
 	large := make([]byte, maxRetainedWireTransitionBuffer)
 	largeRows := make([]byte, maxRetainedWireTransitionBuffer)
-	largeEncoder := wireTransitionEncoder{}
+	largeEncoder := wireTransitionEncoder{
+		dict:      newStringTableV3(),
+		pathOps:   make([]wireTransitionPathOp, 1),
+		symbolOps: make([]wireTransitionSymbolOp, 1),
+		paths:     make([]string, 1),
+		symbolIDs: make([]SymbolID, 1),
+	}
+	largeEncoder.dict.intern("cold-only")
 	largeOwned := largeEncoder.detachFrame(large, largeRows)
 	large[0] = 1
 	if largeOwned[0] != 1 {
@@ -25,5 +32,12 @@ func TestWireTransitionFrameOwnershipMatchesBufferLifetime(t *testing.T) {
 	}
 	if largeEncoder.frame != nil || largeEncoder.rows != nil {
 		t.Fatal("large response scratch stayed retained after ownership transfer")
+	}
+	if largeEncoder.dict != nil {
+		t.Fatal("large response dictionary stayed retained after ownership transfer")
+	}
+	if largeEncoder.pathOps != nil || largeEncoder.symbolOps != nil ||
+		largeEncoder.paths != nil || largeEncoder.symbolIDs != nil {
+		t.Fatal("large response plan stayed retained after ownership transfer")
 	}
 }

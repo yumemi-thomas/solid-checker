@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"testing"
 )
 
 type transportOnlyBackend struct {
@@ -145,4 +146,37 @@ func (transportOnlyBackend) ReferencesBatch(_ context.Context, ids []SymbolID) (
 // closure reach patchCanonicalSymbolStore and the retained reference path.
 func (transportOnlyBackend) ChangedReferences(context.Context) ([]SymbolID, bool, error) {
 	return nil, true, nil
+}
+
+func (transportOnlyBackend) ReleaseAnalysisState() {}
+
+func TestRetainedContributionSharesCanonicalEntityBacking(t *testing.T) {
+	path := filepath.Clean("/project/source.ts")
+	closure, err := NewDemandClosure(transportOnlyBackend{
+		source: SourceFile{Path: path, Source: []byte("const value = 1\n")},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closure.Close()
+	demand := EntityDemand{
+		Location: Location{Path: path, StartByte: 6, EndByte: 11},
+		Symbol:   true,
+	}
+	table, err := closure.DemandTableForGroups(
+		context.Background(),
+		1,
+		[]DemandGroup{{Path: path, Demands: []EntityDemand{demand}}},
+		[]string{path},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	contribution := closure.retained.get(path)
+	if contribution == nil || len(contribution.entities) != 1 || len(table.Entities) != 1 {
+		t.Fatalf("unexpected retained state: contribution=%+v entities=%d", contribution, len(table.Entities))
+	}
+	if &contribution.entities[0] != &table.Entities[0] {
+		t.Fatal("retained contribution duplicates the canonical entity backing")
+	}
 }

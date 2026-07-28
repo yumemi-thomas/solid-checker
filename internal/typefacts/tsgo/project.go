@@ -43,6 +43,7 @@ type project struct {
 	versions       map[string]uint64
 	program        *compiler.Program
 	checker        *checker.Checker
+	checkerPool    *singleCheckerPool
 	release        func()
 	closed         bool
 	generation     uint64
@@ -135,6 +136,7 @@ func OpenProject(ctx context.Context, configPath string, trace typefacts.Trace) 
 		versions:        make(map[string]uint64),
 		program:         program,
 		checker:         typeChecker,
+		checkerPool:     program.GetCheckerPool().(*singleCheckerPool),
 		release:         release,
 		generation:      1,
 		idsBySymbol:     make(map[*ast.Symbol]typefacts.SymbolID),
@@ -195,6 +197,60 @@ func (p *singleCheckerPool) GetChecker(ctx context.Context, file *ast.SourceFile
 	}
 	p.lock.Lock()
 	return p.checker, sync.OnceFunc(p.lock.Unlock)
+}
+
+func (p *singleCheckerPool) drop() {
+	p.once = sync.Once{}
+	p.checker = nil
+	p.lock = nil
+}
+
+func (p *project) ensureCheckerLocked(ctx context.Context) error {
+	if p.checker != nil {
+		return nil
+	}
+	typeChecker, release := p.program.GetTypeChecker(ctx)
+	if typeChecker == nil {
+		if release != nil {
+			release()
+		}
+		return errors.New("create TypeScript checker")
+	}
+	p.checker = typeChecker
+	p.release = release
+	return nil
+}
+
+// ReleaseAnalysisState drops checker-expanded query state once its immutable
+// facts have transferred into the closure. Pointer-keyed identity maps must go
+// with the checker: retaining them both pins checker arenas and prevents a
+// recreated equivalent symbol from reclaiming its durable ID. Durable
+// declaration refs, retained source facts, and compact reference
+// contributions are pointer-free and remain the rehydration boundary.
+func (p *project) ReleaseAnalysisState() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed || p.checker == nil {
+		return
+	}
+	if p.release != nil {
+		p.release()
+		p.release = nil
+	}
+	p.checker = nil
+	p.checkerPool.drop()
+	p.idsBySymbol = make(map[*ast.Symbol]typefacts.SymbolID)
+	p.symbolsByID = make(map[typefacts.SymbolID]*ast.Symbol)
+	p.exportedIdentities = nil
+	p.filesByName = nil
+	p.currentSourceFiles = nil
+	p.resolvedDeclarations = nil
+	p.resolvedParameters = nil
+	p.callDiagnostics = nil
+	p.callDemandScratch = nil
+	p.typeDescriptors = nil
+	p.nextSymbol = 0
+	p.referenceIndex.releaseAnalysisState()
 }
 
 func buildProgram(ctx context.Context, configPath string, fs vfs.FS) (*compiler.Program, *checker.Checker, func(), error) {
@@ -304,6 +360,9 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	defer p.mu.Unlock()
 	if p.closed {
 		return typefacts.AffectedSet{}, ErrClosed
+	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return typefacts.AffectedSet{}, err
 	}
 
 	stageStarted := time.Now()
@@ -422,15 +481,18 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	}
 	p.program = program
 	p.checker = typeChecker
+	p.checkerPool = program.GetCheckerPool().(*singleCheckerPool)
 	p.release = release
 	p.fs = candidateFS
 	p.versions = candidateVersions
 	p.generation++
 	if incremental && incrementalPath != "" && currentExportsKnown {
-		for symbol, identity := range p.exportedIdentities {
-			if identity.ref.path == incrementalPath {
-				delete(p.exportedIdentities, symbol)
-				delete(p.exportedIdentitiesByRef, identity.ref)
+		if p.exportedIdentities == nil {
+			p.exportedIdentities = make(map[*ast.Symbol]preservedExportIdentity)
+		}
+		for ref := range p.exportedIdentitiesByRef {
+			if ref.path == incrementalPath {
+				delete(p.exportedIdentitiesByRef, ref)
 			}
 		}
 		for symbol, identity := range currentExports {
@@ -925,6 +987,9 @@ func (p *project) SymbolAt(ctx context.Context, location typefacts.Location) (ty
 	if p.closed {
 		return "", ErrClosed
 	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return "", err
+	}
 	sourceFile, err := p.sourceFileFor(location)
 	if err != nil {
 		return "", err
@@ -964,6 +1029,9 @@ func (p *project) ResolveAlias(ctx context.Context, id typefacts.SymbolID) (type
 	if p.closed {
 		return "", ErrClosed
 	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return "", err
+	}
 	symbol, ok := p.symbolFor(id)
 	if !ok {
 		return "", fmt.Errorf("%w: symbol %s", typefacts.ErrNotFound, id)
@@ -986,6 +1054,9 @@ func (p *project) Declarations(ctx context.Context, id typefacts.SymbolID) ([]ty
 	defer p.mu.Unlock()
 	if p.closed {
 		return nil, ErrClosed
+	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, err
 	}
 	symbol, ok := p.symbolFor(id)
 	if !ok {
@@ -1025,6 +1096,9 @@ func (p *project) DescribeTypeAt(ctx context.Context, location typefacts.Locatio
 	defer p.mu.Unlock()
 	if p.closed {
 		return typefacts.TypeDescriptor{}, ErrClosed
+	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return typefacts.TypeDescriptor{}, err
 	}
 	sourceFile, err := p.sourceFileFor(location)
 	if err != nil {
@@ -1136,6 +1210,9 @@ func (p *project) SourceCalls(ctx context.Context, path string) ([]typefacts.Sou
 	if memo != nil && memo.hasCalls {
 		return append([]typefacts.SourceCall(nil), memo.calls...), nil
 	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, err
+	}
 	sourceFile, err := p.sourceFileFor(typefacts.Location{Path: path})
 	if err != nil {
 		return nil, err
@@ -1173,6 +1250,9 @@ func (p *project) SourceBindings(ctx context.Context, path string) ([]typefacts.
 	memo := p.memoFor(path)
 	if memo != nil && memo.hasBindings {
 		return append([]typefacts.SourceBinding(nil), memo.bindings...), nil
+	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, err
 	}
 	sourceFile, err := p.sourceFileFor(typefacts.Location{Path: path})
 	if err != nil {

@@ -192,6 +192,15 @@ func (e *wireTransitionEncoder) detachFrame(frame, rows []byte) []byte {
 		} else {
 			e.rows = rows[:0]
 		}
+		// The cold dictionary is much larger than ordinary deltas. Clearing
+		// entries retains its hash buckets and value backing, so discard the
+		// whole table alongside the detached cold frame; the deferred reset
+		// installs a fresh, minimal dictionary for incremental responses.
+		e.dict = nil
+		e.pathOps = nil
+		e.symbolOps = nil
+		e.paths = nil
+		e.symbolIDs = nil
 		return frame
 	}
 	owned := append([]byte(nil), frame...)

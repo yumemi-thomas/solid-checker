@@ -36,9 +36,9 @@ type closureBuilder struct {
 	// before fanning out on references.
 	fullTier                *symbolHandleSet
 	descriptors             map[SymbolID]*TypeDescriptor
-	cachedSymbolFacts       map[SymbolID]SymbolFact
 	cachedReferences        map[SymbolID][]Location
 	cachedCanonicalStore    *symbolFactStore
+	invalidatedSymbols      map[SymbolID]struct{}
 	symbolFactsBuffer       []SymbolFact
 	symbolOrderBuffer       []SymbolFact
 	closedSymbolStore       *symbolFactStore
@@ -236,6 +236,16 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 		facts = facts[:len(b.symbolQueue)]
 	}
 	cached := make([]bool, initialSymbolCount)
+	cachedFact := func(id SymbolID) (SymbolFact, bool) {
+		if _, invalidated := b.invalidatedSymbols[id]; invalidated {
+			return SymbolFact{}, false
+		}
+		fact, ok := b.cachedCanonicalStore.Get(id)
+		if !ok || !DurableSymbolID(fact.ID) || !DurableSymbolID(fact.AliasTarget) || len(fact.Declarations) == 0 {
+			return SymbolFact{}, false
+		}
+		return fact, true
+	}
 	workers := min(runtime.GOMAXPROCS(0), initialSymbolCount)
 	if workers > 1 && initialSymbolCount >= 1024 {
 		chunkSize := (initialSymbolCount + workers - 1) / workers
@@ -247,7 +257,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 				defer wait.Done()
 				for index := start; index < end; index++ {
 					id := b.symbolQueue[index]
-					if retained, ok := b.cachedSymbolFacts[id]; ok {
+					if retained, ok := cachedFact(id); ok {
 						facts[index] = SymbolFact{
 							ID:           id,
 							AliasTarget:  retained.AliasTarget,
@@ -264,7 +274,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 	} else {
 		for index := 0; index < initialSymbolCount; index++ {
 			id := b.symbolQueue[index]
-			if retained, ok := b.cachedSymbolFacts[id]; ok {
+			if retained, ok := cachedFact(id); ok {
 				facts[index] = SymbolFact{
 					ID:           id,
 					AliasTarget:  retained.AliasTarget,
@@ -311,7 +321,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 		}
 		id := b.symbolQueue[index]
 		fact := SymbolFact{ID: id}
-		if retained, ok := b.cachedSymbolFacts[id]; ok {
+		if retained, ok := cachedFact(id); ok {
 			fact.AliasTarget = retained.AliasTarget
 			fact.Declarations = retained.Declarations
 			b.enqueueSymbol(fact.AliasTarget)
