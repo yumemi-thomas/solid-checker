@@ -14,15 +14,13 @@ func retainedStoreTestContribution(
 	durable bool,
 ) *retainedContribution {
 	entities := make([]EntityFact, len(descriptorSymbols))
-	indices := make([]uint32, len(descriptorSymbols))
 	for index, symbol := range descriptorSymbols {
 		entities[index].Symbol = symbol
-		indices[index] = uint32(index)
 	}
 	return &retainedContribution{
 		dependencies:      append([]string(nil), dependencies...),
 		entities:          entities,
-		descriptorSymbols: indices,
+		descriptorSymbols: append([]SymbolID(nil), descriptorSymbols...),
 		durable:           durable,
 	}
 }

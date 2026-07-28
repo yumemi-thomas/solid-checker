@@ -1109,6 +1109,60 @@ func (p *project) Declarations(ctx context.Context, id typefacts.SymbolID) ([]ty
 	return declarations, nil
 }
 
+// SymbolEvidence resolves a complete Rust closure worklist batch under one
+// project and checker lease. Missing/stale identities return an ID-only row,
+// matching the historical closure's independent ErrNotFound handling.
+func (p *project) SymbolEvidence(
+	ctx context.Context,
+	queries []typefacts.SymbolQueryV6,
+) ([]typefacts.SymbolFact, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, ErrClosed
+	}
+	if err := p.ensureCheckerLocked(ctx); err != nil {
+		return nil, err
+	}
+	needReferences := false
+	for _, query := range queries {
+		needReferences = needReferences || query.References
+	}
+	if needReferences {
+		p.referenceIndex.ensure(p)
+	}
+	facts := make([]typefacts.SymbolFact, len(queries))
+	for index, query := range queries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		fact := typefacts.SymbolFact{ID: query.ID}
+		symbol, ok := p.symbolFor(query.ID)
+		if !ok {
+			facts[index] = fact
+			continue
+		}
+		if !query.ReferencesOnly {
+			if symbol.Flags&ast.SymbolFlagsAlias != 0 {
+				if original := p.checker.GetAliasedSymbol(symbol); original != nil {
+					fact.AliasTarget = p.idFor(original)
+				}
+			}
+			fact.Declarations = declarationsForSymbol(symbol)
+		}
+		if query.References {
+			canonical := p.idFor(p.canonicalSymbol(symbol))
+			p.referenceIndex.markUsed(canonical)
+			fact.References = p.referenceIndex.locations(canonical)
+		}
+		facts[index] = fact
+	}
+	return facts, nil
+}
+
 func (p *project) DescribeTypeAt(ctx context.Context, location typefacts.Location) (typefacts.TypeDescriptor, error) {
 	if err := ctx.Err(); err != nil {
 		return typefacts.TypeDescriptor{}, err

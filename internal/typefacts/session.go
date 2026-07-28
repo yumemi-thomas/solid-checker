@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"time"
 )
@@ -28,6 +29,7 @@ type Session struct {
 	sourceArenaPath string
 	closed          bool
 	closeErr        error
+	schema          uint64
 }
 
 type retainedSessionState struct {
@@ -40,12 +42,23 @@ type retainedSessionState struct {
 // NewSession assumes ownership of backend, including when construction fails.
 // trace may be nil, which disables producer-side tracing.
 func NewSession(backend Project, projectID string, trace Trace) (*Session, error) {
+	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV5)
+}
+
+// NewSessionV6 transfers expanded path-row ownership to the Rust client after
+// every successful transition. V5 remains available as the compatibility
+// adapter for existing consumers.
+func NewSessionV6(backend Project, projectID string, trace Trace) (*Session, error) {
+	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV6)
+}
+
+func newSession(backend Project, projectID string, trace Trace, schema uint64) (*Session, error) {
 	projectID = filepath.Clean(projectID)
 	if projectID == "" || projectID == "." {
 		_ = backend.Close()
 		return nil, errors.New("Type Facts session requires a project identity")
 	}
-	closure, err := NewDemandClosure(backend, trace)
+	closure, err := newDemandClosure(backend, trace, schema == TypeFactsSchemaVersionV6)
 	if err != nil {
 		_ = backend.Close()
 		return nil, err
@@ -54,6 +67,7 @@ func NewSession(backend Project, projectID string, trace Trace) (*Session, error
 		closure:   closure,
 		trace:     trace,
 		projectID: projectID,
+		schema:    schema,
 	}, nil
 }
 
@@ -64,7 +78,7 @@ func (s *Session) Lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) LifecycleResponse {
 	generation := s.closure.generation
 	response := LifecycleResponse{
-		Schema: TypeFactsSchemaVersionV5, RequestID: request.RequestID,
+		Schema: s.schema, RequestID: request.RequestID,
 		ProjectID: s.projectID, Generation: generation,
 	}
 	fail := func(code string, err error) LifecycleResponse {
@@ -73,6 +87,9 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 	}
 	if err := ValidateLifecycleRequest(request); err != nil {
 		return fail("invalid-request", err)
+	}
+	if request.Schema != s.schema {
+		return fail("invalid-request", fmt.Errorf("unsupported TypeFacts schema %d", request.Schema))
 	}
 	if filepath.Clean(request.ProjectID) != s.projectID {
 		return fail("project-mismatch", ErrGenerationMismatch)
@@ -203,12 +220,32 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		transitionInput := wireTransitionInput{
 			ProjectID: s.projectID,
 			Target:    analyzedTable,
+			Sparse:    s.schema == TypeFactsSchemaVersionV6,
 		}
 		if !request.ResetState && s.retained.table != nil {
 			transitionInput.Base = s.retained.table
 			transitionInput.BaseStateToken = s.retained.tokenText
 		}
 		transition, err := s.transition.Encode(transitionInput)
+		if errors.Is(err, errSparseTransitionUnavailable) {
+			// Exact reference evidence can be unavailable after broad compiler
+			// invalidation. Rebuild once and send a full replacement; the normal
+			// sparse edit path remains proportional to changed files.
+			s.closure.forceFullMaterialization()
+			analyzedTable, err = s.closure.demandTableForCanonicalGroups(
+				ctx,
+				generation,
+				demandTransaction.groups(),
+				demandTransaction.paths(),
+			)
+			if err == nil {
+				transitionInput.Base = nil
+				transitionInput.BaseStateToken = ""
+				transitionInput.Target = analyzedTable
+				transitionInput.Sparse = false
+				transition, err = s.transition.Encode(transitionInput)
+			}
+		}
 		if err != nil {
 			return fail("assembly-failed", err)
 		}
@@ -236,7 +273,41 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		demandsPublished = true
 		table := *analyzedTable
 		s.retained.table = &table
+		if s.schema == TypeFactsSchemaVersionV6 {
+			if err := s.populateSymbolEvidence(ctx, request, &response); err != nil {
+				return fail("analysis-failed", err)
+			}
+			s.closure.releaseTransportRows()
+			// retained.table is an intentionally detached header used to
+			// authenticate the next transition. Clear its borrowed expanded
+			// slices too; otherwise the header alone pins the transferred
+			// backing arrays even though the closure released its copy.
+			s.retained.table.Entities = nil
+			s.retained.table.Files = nil
+			s.retained.table.sourceDigests = nil
+		}
 		analysisPublished = true
+	case LifecycleSymbols:
+		if s.schema != TypeFactsSchemaVersionV6 {
+			return fail("invalid-request", errors.New("symbol evidence requires TypeFacts schema v6"))
+		}
+		if request.Generation != generation {
+			return fail("generation-mismatch", ErrGenerationMismatch)
+		}
+		if request.StateToken == "" || request.StateToken != s.retained.tokenText {
+			return fail("state-mismatch", fmt.Errorf(
+				"%w: symbol evidence token %q, retained token %q",
+				ErrGenerationMismatch,
+				request.StateToken,
+				s.retained.tokenText,
+			))
+		}
+		if err := s.populateSymbolEvidence(ctx, request, &response); err != nil {
+			if ctx.Err() != nil {
+				return fail("analysis-cancelled", ctx.Err())
+			}
+			return fail("analysis-failed", err)
+		}
 	case LifecycleSources:
 		if request.Generation != generation {
 			return fail("generation-mismatch", ErrGenerationMismatch)
@@ -267,6 +338,73 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 	}
 	response.OK = true
 	return response
+}
+
+func (s *Session) populateSymbolEvidence(
+	ctx context.Context,
+	request LifecycleRequest,
+	response *LifecycleResponse,
+) error {
+	evidence, err := s.closure.resolveSymbolEvidence(ctx, request.SymbolQueries)
+	if err != nil {
+		return err
+	}
+	if request.Operation == LifecycleSymbols && len(evidence) != 0 {
+		sort.Slice(evidence, func(i, j int) bool { return evidence[i].ID < evidence[j].ID })
+		packed, err := s.transition.Encode(wireTransitionInput{
+			ProjectID: s.projectID,
+			Target: &FactTable{
+				Schema:     TypeFactsSchemaVersion,
+				Generation: request.Generation,
+				ProjectID:  s.projectID,
+				Symbols:    evidence,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("pack symbol evidence: %w", err)
+		}
+		response.TableTransition = packed.Bytes
+	} else {
+		response.SymbolEvidence = evidence
+	}
+	if request.ReferenceChanges {
+		ids, exact, err := s.closure.changedReferences(ctx)
+		if err != nil {
+			return err
+		}
+		response.ChangedReferenceSymbols = ids
+		response.ReferenceChangesExact = exact
+		if exact && len(ids) != 0 {
+			queries := make([]SymbolQueryV6, len(ids))
+			for index, id := range ids {
+				queries[index] = SymbolQueryV6{ID: id, References: true}
+			}
+			response.ReferenceEvidence, err = s.closure.resolveSymbolEvidence(ctx, queries)
+			if err != nil {
+				return err
+			}
+			if len(request.ReferencePaths) != 0 {
+				paths := make(map[string]struct{}, len(request.ReferencePaths))
+				for _, path := range request.ReferencePaths {
+					paths[filepath.Clean(path)] = struct{}{}
+				}
+				for index := range response.ReferenceEvidence {
+					fact := &response.ReferenceEvidence[index]
+					kept := fact.References[:0]
+					for _, location := range fact.References {
+						if _, ok := paths[location.Path]; ok {
+							kept = append(kept, location)
+						}
+					}
+					fact.References = kept
+				}
+			}
+		}
+	}
+	if request.ReleaseAnalysis {
+		s.closure.releaseBackendAnalysisState()
+	}
+	return nil
 }
 
 func (s *Session) Close() error {

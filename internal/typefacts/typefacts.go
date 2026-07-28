@@ -137,16 +137,16 @@ type AsyncFunctionLookup interface {
 
 // Location identifies a UTF-8 byte range in original source.
 type Location struct {
-	Path      string
-	StartByte int
-	EndByte   int
+	Path      string `cbor:"path" json:"path"`
+	StartByte int    `cbor:"startByte" json:"startByte"`
+	EndByte   int    `cbor:"endByte" json:"endByte"`
 }
 
 // Declaration is the source-only description of a symbol declaration.
 type Declaration struct {
-	Name     string
-	Kind     string
-	Location Location
+	Name     string   `cbor:"name" json:"name"`
+	Kind     string   `cbor:"kind" json:"kind"`
+	Location Location `cbor:"location" json:"location"`
 }
 
 // ResolvedCallValidity distinguishes a compiler-selected signature from the

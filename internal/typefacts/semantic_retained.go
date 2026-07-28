@@ -230,31 +230,43 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 			cachedCanonicalStore = newSymbolFactStore(p.previousTable.Symbols)
 		}
 	}
-	p.maybeResetInterner(cachedCanonicalStore.Len())
 	builder := &closureBuilder{
-		backend:                 p.backend,
-		trace:                   p.trace,
-		entities:                make(map[Location]*EntityFact),
-		interner:                p.interner,
-		symbolQueue:             p.queueScratch[:0],
-		queueHandles:            p.queueHandleScratch[:0],
-		symbolSeen:              newSymbolHandleSet(p.interner, p.seenScratch),
-		fullTier:                newSymbolHandleSet(p.interner, p.fullScratch),
-		changedSymbols:          newChangedSymbolSet(p.interner, p.changedScratch, p.changedIDScratch),
-		factIndexScratch:        p.factIndexScratch,
-		descriptors:             make(map[SymbolID]*TypeDescriptor),
-		cachedReferences:        p.symbolReferences,
-		cachedCanonicalStore:    cachedCanonicalStore,
-		invalidatedSymbols:      p.invalidatedSymbols,
-		symbolFactsBuffer:       p.symbolScratch,
-		symbolOrderBuffer:       table.Symbols,
-		removedSymbolCandidates: retainedSymbolCandidates(p.previousTable, p.transportChangedPaths),
+		backend: p.backend,
+		trace:   p.trace,
+	}
+	if !p.sparseTransport {
+		p.maybeResetInterner(cachedCanonicalStore.Len())
+		builder.entities = make(map[Location]*EntityFact)
+		builder.interner = p.interner
+		builder.symbolQueue = p.queueScratch[:0]
+		builder.queueHandles = p.queueHandleScratch[:0]
+		builder.symbolSeen = newSymbolHandleSet(p.interner, p.seenScratch)
+		builder.fullTier = newSymbolHandleSet(p.interner, p.fullScratch)
+		builder.changedSymbols = newChangedSymbolSet(p.interner, p.changedScratch, p.changedIDScratch)
+		builder.factIndexScratch = p.factIndexScratch
+		builder.descriptors = make(map[SymbolID]*TypeDescriptor)
+		builder.cachedReferences = p.symbolReferences
+		builder.cachedCanonicalStore = cachedCanonicalStore
+		builder.invalidatedSymbols = p.invalidatedSymbols
+		builder.symbolFactsBuffer = p.symbolScratch
+		builder.symbolOrderBuffer = table.Symbols
+		builder.removedSymbolCandidates = retainedSymbolCandidates(p.previousTable, p.transportChangedPaths)
 	}
 	// The generation's handle sets and queue live on closure-owned scratch;
 	// hand the backing back for the next generation whichever way this one
 	// ends.
 	releaseLinearScratch := false
 	defer func() {
+		if p.sparseTransport {
+			p.seenScratch = nil
+			p.fullScratch = nil
+			p.changedScratch = nil
+			p.changedIDScratch = nil
+			p.queueScratch = nil
+			p.queueHandleScratch = nil
+			p.factIndexScratch = nil
+			return
+		}
 		p.seenScratch = builder.symbolSeen.members
 		p.fullScratch = builder.fullTier.members
 		p.changedScratch = builder.changedSymbols.set.members
@@ -368,8 +380,10 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		path := source.Path
 		asyncFunctions := asyncByPath[path]
 		for _, function := range asyncFunctions {
-			builder.enqueueSymbol(function.Symbol)
-			builder.enqueueSymbol(function.Target)
+			if !p.sparseTransport {
+				builder.enqueueSymbol(function.Symbol)
+				builder.enqueueSymbol(function.Target)
+			}
 		}
 		table.Files = append(table.Files, FileFact{
 			Path:           path,
@@ -423,11 +437,19 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 			// Batch-wide first-wins descriptor dedup: descriptors the
 			// retained files already carry are what a whole-batch run
 			// would have cached before reaching the recomputed demands.
-			for entityIndex := range contribution.entities {
-				entity := &contribution.entities[entityIndex]
-				if entity.Symbol != "" && entity.TypeDescriptor != nil {
-					if _, ok := descriptorSeed[entity.Symbol]; !ok {
-						descriptorSeed[entity.Symbol] = entity.TypeDescriptor
+			if contribution.entities != nil {
+				for entityIndex := range contribution.entities {
+					entity := &contribution.entities[entityIndex]
+					if entity.Symbol != "" && entity.TypeDescriptor != nil {
+						if _, ok := descriptorSeed[entity.Symbol]; !ok {
+							descriptorSeed[entity.Symbol] = entity.TypeDescriptor
+						}
+					}
+				}
+			} else {
+				for _, retained := range contribution.descriptors {
+					if _, ok := descriptorSeed[retained.symbol]; !ok {
+						descriptorSeed[retained.symbol] = retained.descriptor
 					}
 				}
 			}
@@ -586,6 +608,17 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	}
 	for index := range groups {
 		group := &groups[index]
+		if group.contribution.entities == nil {
+			if !p.sparseTransport {
+				for _, symbol := range group.contribution.roots {
+					builder.enqueueSymbol(symbol)
+				}
+				for _, symbol := range group.contribution.fullTierSymbols {
+					builder.fullTier.addID(symbol)
+				}
+			}
+			continue
+		}
 		start := len(entities)
 		entities = append(entities, group.contribution.entities...)
 		// The canonical table is the retained entity backing store. Repoint
@@ -595,14 +628,71 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		group.contribution.entities = entities[start:len(entities):len(entities)]
 		for entityIndex := range group.contribution.entities {
 			entity := &group.contribution.entities[entityIndex]
-			builder.enqueueSymbol(entity.Symbol)
-			if entity.ResolvedCall != nil {
-				builder.enqueueSymbol(entity.ResolvedCall.Target)
+			if !p.sparseTransport {
+				builder.enqueueSymbol(entity.Symbol)
+				if entity.ResolvedCall != nil {
+					builder.enqueueSymbol(entity.ResolvedCall.Target)
+				}
 			}
 		}
-		for _, entityIndex := range group.contribution.fullTier {
-			builder.fullTier.addID(group.contribution.entities[entityIndex].Symbol)
+		if !p.sparseTransport {
+			for _, entityIndex := range group.contribution.fullTier {
+				builder.fullTier.addID(group.contribution.entities[entityIndex].Symbol)
+			}
 		}
+	}
+	if p.sparseTransport {
+		// V6 stops here. Entity/call/async facts cross the seam immediately;
+		// Rust owns the symbol worklist, alias fixed point, reference tier, and
+		// retained symbol rows. None of those structures are materialized in Go.
+		stages.assembly = time.Since(started)
+		table.Entities = entities
+		table.Symbols = nil
+		table.symbols = nil
+		table.pathSymbols = make(map[string][]SymbolID, len(groups))
+		for index := range groups {
+			group := &groups[index]
+			group.contribution.prepareTransportSeeds()
+			table.pathSymbols[group.path] = group.contribution.roots
+		}
+		for path, functions := range asyncByPath {
+			roots := table.pathSymbols[path]
+			for _, function := range functions {
+				if function.Symbol != "" {
+					roots = append(roots, function.Symbol)
+				}
+				if function.Target != "" {
+					roots = append(roots, function.Target)
+				}
+			}
+			table.pathSymbols[path] = roots
+		}
+		p.nextTableStateID++
+		if p.nextTableStateID == 0 {
+			p.nextTableStateID++
+		}
+		table.stateID = p.nextTableStateID
+		table.transport = rustOwnedTransportManifest(p.previousTable, manifestChangedPaths)
+		if p.retainedPathScratch == nil {
+			p.retainedPathScratch = make(map[string]struct{}, len(groups))
+		}
+		p.retained.commit(groups, p.retainedPathScratch)
+		previousSuppression := p.lastSuppression
+		p.lastSuppression = union
+		p.suppressionScratch = previousSuppression
+		suppressionCommitted = true
+		p.recyclableTable = p.previousTable
+		p.previousTable = nil
+		p.transportChangedPaths = nil
+		p.descriptorSeedScratch = nil
+		p.asyncDemandScratch = nil
+		p.asyncGroupScratch = nil
+		p.symbolReferences = nil
+		p.symbolsByPath = nil
+		p.invalidatedSymbols = nil
+		p.symbolMemoComplete = false
+		releaseLinearScratch = true
+		return table, 0, stages, retention, nil
 	}
 	rootSnapshot := copyHandleMembership(builder.symbolSeen.members, p.rootSnapshotScratch)
 	fullRootSnapshot := copyHandleMembership(builder.fullTier.members, p.fullRootSnapshotScratch)
@@ -692,6 +782,24 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	table.Symbols = symbols
 	table.symbols = symbolStore
 	table.Entities = entities
+	table.pathSymbols = make(map[string][]SymbolID, len(groups))
+	for index := range groups {
+		group := &groups[index]
+		group.contribution.prepareTransportSeeds()
+		table.pathSymbols[group.path] = group.contribution.roots
+	}
+	for path, functions := range asyncByPath {
+		roots := table.pathSymbols[path]
+		for _, function := range functions {
+			if function.Symbol != "" {
+				roots = append(roots, function.Symbol)
+			}
+			if function.Target != "" {
+				roots = append(roots, function.Target)
+			}
+		}
+		table.pathSymbols[path] = roots
+	}
 	p.nextTableStateID++
 	if p.nextTableStateID == 0 {
 		// Zero is reserved for hand-built/non-retained tables, whose
@@ -736,7 +844,9 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	p.asyncDemandScratch = nil
 	p.asyncGroupScratch = nil
 	releaseLinearScratch = true
-	p.backend.ReleaseAnalysisState()
+	if !p.sparseTransport {
+		p.backend.ReleaseAnalysisState()
+	}
 	// The table is transport-only: it exists to be converted to the wire shape
 	// or diffed against its predecessor, and answers no per-location queries.
 	stages.symbol = stages.assembly + stages.sort + stages.close

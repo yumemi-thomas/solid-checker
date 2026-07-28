@@ -75,6 +75,73 @@ fn rust_client_consumes_compiler_semantic_facts_across_retained_updates() {
     session.close().unwrap();
 }
 
+#[test]
+fn rust_owns_alias_and_reference_closure() {
+    let project = project();
+    let use_path = project.parent().unwrap().join("use.ts");
+    let source = fs::read_to_string(&use_path).unwrap();
+    let import_start = source.find("localCount").unwrap();
+    let demand = EntityDemand {
+        location: Location {
+            path: use_path.to_string_lossy().into_owned().into(),
+            start_byte: import_start as u64,
+            end_byte: (import_start + "localCount".len()) as u64,
+        },
+        symbol: true,
+        references: true,
+        ..EntityDemand::default()
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let first = session
+        .analyze(&AnalysisDemand {
+            entities: vec![demand.clone()],
+        })
+        .unwrap();
+    let alias_id = first.entities().next().unwrap().symbol.as_ref();
+    let alias = first
+        .symbol(alias_id)
+        .expect("Rust closed the demanded alias");
+    assert!(!alias.alias_target().is_empty());
+    let canonical = first
+        .symbol(alias.alias_target())
+        .expect("Rust followed the alias target");
+    assert!(!canonical.references().collect::<Vec<_>>().is_empty());
+
+    let unrelated_path = project.parent().unwrap().join("unrelated.ts");
+    session
+        .update([FileChange {
+            path: unrelated_path.to_string_lossy().into_owned(),
+            source: fs::read(&unrelated_path).unwrap(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let second = session
+        .analyze(&AnalysisDemand {
+            entities: vec![demand],
+        })
+        .unwrap();
+    assert_eq!(
+        second
+            .symbol(alias_id)
+            .expect("alias survives unrelated update")
+            .alias_target(),
+        alias.alias_target()
+    );
+    assert!(
+        session
+            .take_last_table_changes()
+            .expect("incremental changes")
+            .symbol_ids
+            .is_empty()
+    );
+}
+
 fn repository_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
 }

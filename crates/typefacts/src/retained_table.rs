@@ -270,6 +270,20 @@ impl StoredSymbol {
         self.reference_count = self.reference_count - old_len + new_len;
         self
     }
+
+    fn to_fact(&self) -> SymbolFact {
+        SymbolFact {
+            id: Arc::clone(&self.id),
+            alias_target: Arc::clone(&self.alias_target),
+            declarations: Arc::clone(&self.declarations),
+            references: self
+                .references
+                .iter()
+                .flat_map(|run| run.locations.iter().cloned())
+                .collect::<Vec<_>>()
+                .into(),
+        }
+    }
 }
 
 impl fmt::Debug for StoredSymbol {
@@ -343,6 +357,89 @@ pub struct FactTable {
 }
 
 impl FactTable {
+    pub(crate) fn symbol_fact(&self, id: &str) -> Option<SymbolFact> {
+        self.symbols.get(id).map(StoredSymbol::to_fact)
+    }
+
+    pub(crate) fn replace_symbols(&mut self, mut symbols: Vec<SymbolFact>) -> Vec<String> {
+        symbols.sort_by(|left, right| left.id.cmp(&right.id));
+        let next = symbols
+            .into_iter()
+            .map(StoredSymbol::from_fact)
+            .collect::<Vec<_>>();
+        let mut previous = self.symbols.iter().peekable();
+        let mut successor = next.iter().peekable();
+        let mut changed = Vec::new();
+        while previous.peek().is_some() || successor.peek().is_some() {
+            match (previous.peek(), successor.peek()) {
+                (Some(left), Some(right)) if left.id == right.id => {
+                    if left != right {
+                        changed.push(left.id.to_string());
+                    }
+                    previous.next();
+                    successor.next();
+                }
+                (Some(left), Some(right)) if left.id < right.id => {
+                    changed.push(left.id.to_string());
+                    previous.next();
+                }
+                (Some(_), Some(right)) => {
+                    changed.push(right.id.to_string());
+                    successor.next();
+                }
+                (Some(left), None) => {
+                    changed.push(left.id.to_string());
+                    previous.next();
+                }
+                (None, Some(right)) => {
+                    changed.push(right.id.to_string());
+                    successor.next();
+                }
+                (None, None) => break,
+            }
+        }
+        self.symbols = PackedIndex::from_sorted(next);
+        changed
+    }
+
+    pub(crate) fn patch_symbols(&mut self, symbols: Vec<SymbolFact>) -> Vec<String> {
+        let mut changed = Vec::with_capacity(symbols.len());
+        for fact in symbols {
+            let replacement = StoredSymbol::from_fact(fact);
+            let id = Arc::clone(&replacement.id);
+            if self.symbols.get(&id) != Some(&replacement) {
+                changed.push(id.to_string());
+                self.symbols = self.symbols.updated(&id, Some(replacement));
+            }
+        }
+        changed
+    }
+
+    pub(crate) fn patch_reference_paths(
+        &mut self,
+        id: &Arc<str>,
+        paths: &[String],
+        references: &[Location],
+    ) -> bool {
+        let Some(mut replacement) = self.symbols.get(id).cloned() else {
+            return false;
+        };
+        let previous = replacement.clone();
+        for path in paths {
+            let run = references
+                .iter()
+                .filter(|location| location.path.as_ref() == path)
+                .cloned()
+                .collect();
+            replacement = replacement.replace_reference_path(path.as_str().into(), run);
+        }
+        if replacement == previous {
+            return false;
+        }
+        self.symbols = self.symbols.updated(id, Some(replacement));
+        true
+    }
+
     #[must_use]
     pub const fn schema(&self) -> u64 {
         self.schema

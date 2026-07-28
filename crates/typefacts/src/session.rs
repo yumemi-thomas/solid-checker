@@ -19,7 +19,7 @@ use crate::{
     FactTable, TypeFactsError, decode, decode_trusted, encode_sidecar_request, read_frame,
     v3::{
         self, EntityDemand, FileChange, Handshake, Operation, Request, Response, SlotOp,
-        SourceFile, TransitionMode, WireTableTransition,
+        SourceFile, SymbolQuery, TransitionMode, WireTableTransition,
     },
     write_frame,
 };
@@ -232,7 +232,7 @@ impl Connection {
     fn spawn(producer: &Producer, project_id: &str) -> Result<Self, SessionError> {
         let mut child = Command::new(&producer.path)
             .args(&producer.args)
-            .args(["-project", project_id])
+            .args(["-schema=6", "-project", project_id])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -279,7 +279,7 @@ impl Connection {
             .map_err(|error| SessionError::Handshake(format!("invalid startup frame: {error}")))?;
         let expected = (
             v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
-            v3::TYPE_FACTS_SCHEMA_SHA256,
+            v3::TYPE_FACTS_SCHEMA_V6_SHA256,
             v3::TYPE_FACTS_BUILD_ID,
         );
         let actual = (
@@ -351,7 +351,7 @@ impl Connection {
     fn send(&self, request: &mut Request) -> Result<SentRequest, SessionError> {
         request.request_id = self.next_request_id.fetch_add(1, Ordering::Relaxed);
         let request_id = request.request_id;
-        let cancellable = request.operation == Operation::Analyze;
+        let cancellable = matches!(request.operation, Operation::Analyze | Operation::Symbols);
         if cancellable {
             self.active_request_id.store(request_id, Ordering::Release);
         }
@@ -486,6 +486,9 @@ pub struct Session {
     state_token: String,
     retained_demands: HashMap<String, Vec<EntityDemand>>,
     retained_table: Option<FactTable>,
+    affected_paths: HashSet<String>,
+    reference_tier: HashSet<Arc<str>>,
+    symbols_by_path: HashMap<Arc<str>, Vec<Arc<str>>>,
     last_exchange_timings: Option<ExchangeTimings>,
     last_update_timings: Option<UpdateTimings>,
     last_table_changes: Option<TableChanges>,
@@ -551,6 +554,9 @@ impl Session {
             state_token: String::new(),
             retained_demands: HashMap::new(),
             retained_table: None,
+            affected_paths: HashSet::new(),
+            reference_tier: HashSet::new(),
+            symbols_by_path: HashMap::new(),
             last_exchange_timings: None,
             last_update_timings: None,
             last_table_changes: None,
@@ -672,8 +678,21 @@ impl Session {
             .iter()
             .flat_map(|group| group.demands().iter().cloned())
             .collect::<Vec<_>>();
+        let reference_locations = groups
+            .iter()
+            .flat_map(|group| group.demands())
+            .filter(|demand| demand.references)
+            .map(|demand| demand.location.clone())
+            .collect::<HashSet<_>>();
+        let demand_roots_changed = reset_state || !changed.is_empty() || !removed.is_empty();
 
-        match self.analyze_exchange(wire_demands, removed.clone(), reset_state) {
+        match self.analyze_exchange(
+            wire_demands,
+            removed.clone(),
+            reset_state,
+            &reference_locations,
+            demand_roots_changed,
+        ) {
             Err(SessionError::Service { code, .. }) if code == "state-mismatch" => {
                 // The producer lost the state this delta was relative to, so the
                 // next request must carry the complete demand set.
@@ -683,7 +702,8 @@ impl Session {
                     .iter()
                     .flat_map(|group| group.demands().iter().cloned())
                     .collect::<Vec<_>>();
-                let table = self.analyze_exchange(complete, Vec::new(), true)?;
+                let table =
+                    self.analyze_exchange(complete, Vec::new(), true, &reference_locations, true)?;
                 self.retain_all_groups(groups);
                 Ok(table)
             }
@@ -815,8 +835,8 @@ impl Session {
         let wait = wait_started.elapsed();
         self.last_update_timings = Some(UpdateTimings { send, wait });
         match outcome {
-            Ok(_) => {
-                self.commit_update(changes);
+            Ok(response) => {
+                self.commit_update(changes, response.affected);
                 Ok(())
             }
             Err(error) if error.is_transport_failure() => {
@@ -825,8 +845,8 @@ impl Session {
                 self.restart_and_replay()?;
                 let mut retry = request(Operation::Update, &self.project_id, self.generation + 1);
                 retry.changes.clone_from(&changes);
-                self.exchange_once(&mut retry)?;
-                self.commit_update(changes);
+                let response = self.exchange_once(&mut retry)?;
+                self.commit_update(changes, response.affected);
                 Ok(())
             }
             Err(error) => Err(error),
@@ -834,8 +854,11 @@ impl Session {
     }
 
     /// Records an acknowledged update: one generation, one replay batch.
-    fn commit_update(&mut self, changes: Vec<FileChange>) {
+    fn commit_update(&mut self, changes: Vec<FileChange>, affected: Vec<String>) {
         self.generation += 1;
+        self.affected_paths.extend(affected);
+        self.affected_paths
+            .extend(changes.iter().map(|change| change.path.clone()));
         self.supersede_replayed_overlays(&changes);
         self.replay_batches.push(changes);
     }
@@ -900,6 +923,8 @@ impl Session {
         wire_demands: Vec<EntityDemand>,
         removed_demand_paths: Vec<String>,
         reset_state: bool,
+        reference_locations: &HashSet<crate::Location>,
+        demand_roots_changed: bool,
     ) -> Result<FactTable, SessionError> {
         let (demands, compact_demands) = if reset_state && !wire_demands.is_empty() {
             (Vec::new(), Some(v3::compact_demands(&wire_demands)))
@@ -916,22 +941,432 @@ impl Session {
         };
         analyze.reset_state = reset_state;
         analyze.removed_demand_paths = removed_demand_paths;
+        if !demand_roots_changed && self.retained_table.is_some() {
+            let invalidated = self.invalidated_symbol_ids();
+            analyze.symbol_queries = invalidated
+                .into_iter()
+                .map(|id| SymbolQuery {
+                    id,
+                    references: false,
+                    references_only: false,
+                })
+                .collect();
+            analyze.reference_paths = self.affected_paths.iter().cloned().collect();
+            analyze.reference_paths.sort();
+            analyze.release_analysis = true;
+            analyze.reference_changes = true;
+        }
         let response = self.exchange(analyze)?;
         self.last_exchange_timings = Some(exchange_timings(&response));
-        let (candidate, changes) = prepare_analyze_response(
+        let (mut candidate, mut changes) = prepare_analyze_response(
             &response,
             &self.project_id,
             self.generation,
             &mut self.retained_table,
             &self.state_token,
         )?;
+        if response.timings.is_some_and(|timings| timings.materialized) {
+            changes.symbol_ids = self.close_symbols(
+                &mut candidate,
+                reference_locations,
+                demand_roots_changed
+                    || !changes.entity_paths.is_empty()
+                    || !changes.file_paths.is_empty(),
+                &response.state_token,
+                Some(&response),
+            )?;
+            changes.unchanged = changes.entity_paths.is_empty()
+                && changes.file_paths.is_empty()
+                && changes.symbol_ids.is_empty();
+        }
         let returned = candidate.clone();
         // The candidate and successor token publish together. All decoding,
         // identity checks, and candidate construction completed above.
         self.retained_table = Some(candidate);
+        self.affected_paths.clear();
         self.state_token = response.state_token;
         self.last_table_changes = Some(changes);
         Ok(returned)
+    }
+
+    /// Closes Rust-owned symbol reachability through the one batched TSGo
+    /// oracle operation. Rows cross the process seam exactly once per phase
+    /// and are retained only in Rust.
+    fn close_symbols(
+        &mut self,
+        table: &mut FactTable,
+        reference_locations: &HashSet<crate::Location>,
+        seeds_changed: bool,
+        state_token: &str,
+        prefetched: Option<&Response>,
+    ) -> Result<Vec<String>, SessionError> {
+        if !seeds_changed
+            && table.symbol_count() != 0
+            && let Some(changed) = self.patch_stable_symbols(table, state_token, prefetched)?
+        {
+            return Ok(changed);
+        }
+        let mut seen = HashSet::<Arc<str>>::with_capacity(table.entity_count());
+        let mut pending = Vec::<Arc<str>>::with_capacity(table.entity_count());
+        let mut reference_roots = Vec::with_capacity(reference_locations.len());
+        {
+            let mut enqueue = |id: &Arc<str>| {
+                if !id.is_empty() && seen.insert(Arc::clone(id)) {
+                    pending.push(Arc::clone(id));
+                }
+            };
+            for entity in table.entities() {
+                enqueue(&entity.symbol);
+                if let Some(call) = &entity.resolved_call {
+                    enqueue(&call.target);
+                }
+                if reference_locations.contains(&entity.location) && !entity.symbol.is_empty() {
+                    reference_roots.push(Arc::clone(&entity.symbol));
+                }
+            }
+            for file in table.files() {
+                for function in file.async_functions.iter() {
+                    enqueue(&function.symbol);
+                    enqueue(&function.target);
+                }
+            }
+        }
+        let mut facts = HashMap::<Arc<str>, crate::SymbolFact>::with_capacity(pending.len());
+        let mut requested_reference_changes = false;
+        let mut reference_changes_exact = false;
+        let mut changed_references = HashSet::<Arc<str>>::new();
+        while !pending.is_empty() {
+            let mut request = request(Operation::Symbols, &self.project_id, self.generation);
+            request.state_token = state_token.to_owned();
+            request.symbol_queries = pending
+                .drain(..)
+                .map(|id| SymbolQuery {
+                    id,
+                    references: false,
+                    references_only: false,
+                })
+                .collect();
+            request
+                .symbol_queries
+                .sort_by(|left, right| left.id.cmp(&right.id));
+            request.reference_changes = !requested_reference_changes;
+            requested_reference_changes = true;
+            let expected = request
+                .symbol_queries
+                .iter()
+                .map(|query| Arc::clone(&query.id))
+                .collect::<Vec<_>>();
+            let response = self.exchange_once(&mut request)?;
+            if request.reference_changes {
+                reference_changes_exact = response.reference_changes_exact;
+                changed_references.extend(response.changed_reference_symbols.iter().cloned());
+            }
+            if response.symbol_evidence.len() != expected.len() {
+                return Err(SessionError::InvalidResponse(format!(
+                    "symbol oracle returned {} rows for {} queries",
+                    response.symbol_evidence.len(),
+                    expected.len()
+                )));
+            }
+            for (expected_id, fact) in expected.into_iter().zip(response.symbol_evidence) {
+                if fact.id != expected_id {
+                    return Err(SessionError::InvalidResponse(format!(
+                        "symbol oracle returned {:?}, expected {:?}",
+                        fact.id, expected_id
+                    )));
+                }
+                if !fact.alias_target.is_empty() && seen.insert(Arc::clone(&fact.alias_target)) {
+                    pending.push(Arc::clone(&fact.alias_target));
+                }
+                facts.insert(expected_id, fact);
+            }
+        }
+        if !requested_reference_changes {
+            let mut request = request(Operation::Symbols, &self.project_id, self.generation);
+            request.state_token = state_token.to_owned();
+            request.reference_changes = true;
+            let response = self.exchange_once(&mut request)?;
+            reference_changes_exact = response.reference_changes_exact;
+            changed_references.extend(response.changed_reference_symbols);
+        }
+
+        let mut full = HashSet::<Arc<str>>::with_capacity(reference_roots.len());
+        let mut full_queue = Vec::with_capacity(reference_roots.len());
+        for id in &reference_roots {
+            if !id.is_empty() && full.insert(Arc::clone(id)) {
+                full_queue.push(Arc::clone(id));
+            }
+        }
+        let mut full_index = 0;
+        while full_index < full_queue.len() {
+            let id = &full_queue[full_index];
+            if let Some(fact) = facts.get(id)
+                && !fact.alias_target.is_empty()
+                && full.insert(Arc::clone(&fact.alias_target))
+            {
+                full_queue.push(Arc::clone(&fact.alias_target));
+            }
+            full_index += 1;
+        }
+        let full_ids = full
+            .into_iter()
+            .filter(|id| {
+                facts
+                    .get(id)
+                    .is_some_and(|fact| fact.alias_target.is_empty())
+            })
+            .collect::<Vec<_>>();
+        let mut reference_ids = full_ids
+            .iter()
+            .filter(|id| {
+                !reference_changes_exact
+                    || changed_references.contains(*id)
+                    || table.symbol_fact(id).is_none()
+            })
+            .cloned()
+            .collect::<Vec<_>>();
+        reference_ids.sort();
+        let mut released = false;
+        if !reference_ids.is_empty() {
+            let mut request = request(Operation::Symbols, &self.project_id, self.generation);
+            request.state_token = state_token.to_owned();
+            request.symbol_queries = reference_ids
+                .iter()
+                .map(|id| SymbolQuery {
+                    id: Arc::clone(id),
+                    references: true,
+                    references_only: true,
+                })
+                .collect();
+            request.release_analysis = true;
+            let response = self.exchange_once(&mut request)?;
+            released = true;
+            if response.symbol_evidence.len() != reference_ids.len() {
+                return Err(SessionError::InvalidResponse(format!(
+                    "reference oracle returned {} rows for {} queries",
+                    response.symbol_evidence.len(),
+                    reference_ids.len()
+                )));
+            }
+            for (expected, fact) in reference_ids.into_iter().zip(response.symbol_evidence) {
+                if fact.id != expected
+                    || !fact.alias_target.is_empty()
+                    || !fact.declarations.is_empty()
+                {
+                    return Err(SessionError::InvalidResponse(format!(
+                        "reference oracle returned invalid row for {expected:?}"
+                    )));
+                }
+                let retained = facts.get_mut(&expected).ok_or_else(|| {
+                    SessionError::InvalidResponse(format!(
+                        "reference oracle returned unreachable row for {expected:?}"
+                    ))
+                })?;
+                retained.references = fact.references;
+            }
+        }
+        if reference_changes_exact {
+            for id in &full_ids {
+                if changed_references.contains(id) {
+                    continue;
+                }
+                if let Some(retained) = table.symbol_fact(id)
+                    && let Some(fact) = facts.get_mut(id)
+                {
+                    fact.references = retained.references;
+                }
+            }
+        }
+        let mut facts = facts.into_values().collect::<Vec<_>>();
+        facts.sort_by(|left, right| left.id.cmp(&right.id));
+        if !released {
+            let mut release = request(Operation::Symbols, &self.project_id, self.generation);
+            release.state_token = state_token.to_owned();
+            release.release_analysis = true;
+            self.exchange_once(&mut release)?;
+        }
+        self.reference_tier = full_ids.into_iter().collect();
+        let changed = table.replace_symbols(facts);
+        self.rebuild_symbol_path_index(table);
+        Ok(changed)
+    }
+
+    fn patch_stable_symbols(
+        &mut self,
+        table: &mut FactTable,
+        state_token: &str,
+        prefetched: Option<&Response>,
+    ) -> Result<Option<Vec<String>>, SessionError> {
+        let invalidated = self.invalidated_symbol_ids();
+        let owned_response;
+        let response = if let Some(response) = prefetched {
+            response
+        } else {
+            let mut probe = request(Operation::Symbols, &self.project_id, self.generation);
+            probe.state_token = state_token.to_owned();
+            probe.reference_changes = true;
+            probe.symbol_queries = invalidated
+                .iter()
+                .map(|id| SymbolQuery {
+                    id: Arc::clone(id),
+                    references: false,
+                    references_only: false,
+                })
+                .collect();
+            owned_response = self.exchange_once(&mut probe)?;
+            &owned_response
+        };
+        if !response.reference_changes_exact {
+            return Ok(None);
+        }
+        if response.symbol_evidence.len() != invalidated.len() {
+            return Err(SessionError::InvalidResponse(format!(
+                "stable symbol oracle returned {} rows for {} queries",
+                response.symbol_evidence.len(),
+                invalidated.len()
+            )));
+        }
+        let invalidated_set = invalidated.iter().cloned().collect::<HashSet<_>>();
+        let mut patches = HashMap::<Arc<str>, crate::SymbolFact>::new();
+        for mut fact in response.symbol_evidence.iter().cloned() {
+            let expected = Arc::clone(&fact.id);
+            if !invalidated_set.contains(&expected) {
+                return Err(SessionError::InvalidResponse(format!(
+                    "stable symbol oracle returned unexpected row {:?}",
+                    fact.id
+                )));
+            }
+            let retained = table.symbol_fact(&expected).ok_or_else(|| {
+                SessionError::InvalidResponse(format!("retained symbol {expected:?} disappeared"))
+            })?;
+            if fact.alias_target != retained.alias_target {
+                return Ok(None);
+            }
+            fact.references = retained.references;
+            patches.insert(expected, fact);
+        }
+        let mut refresh = response
+            .changed_reference_symbols
+            .iter()
+            .filter(|&id| self.reference_tier.contains(id) && table.symbol(id).is_some())
+            .cloned()
+            .collect::<Vec<_>>();
+        refresh.sort();
+        refresh.dedup();
+        let mut released = prefetched.is_some();
+        let mut reference_patches = Vec::new();
+        if !response.reference_evidence.is_empty() {
+            let eligible = refresh.iter().cloned().collect::<HashSet<_>>();
+            for fact in &response.reference_evidence {
+                if eligible.contains(&fact.id) && fact.alias_target.is_empty() {
+                    reference_patches.push(fact.clone());
+                }
+            }
+            let covered = reference_patches
+                .iter()
+                .map(|fact| Arc::clone(&fact.id))
+                .collect::<HashSet<_>>();
+            refresh.retain(|id| !covered.contains(id));
+        }
+        if !refresh.is_empty() {
+            let mut request = request(Operation::Symbols, &self.project_id, self.generation);
+            request.state_token = state_token.to_owned();
+            request.symbol_queries = refresh
+                .iter()
+                .map(|id| SymbolQuery {
+                    id: Arc::clone(id),
+                    references: true,
+                    references_only: false,
+                })
+                .collect();
+            request.release_analysis = true;
+            let response = self.exchange_once(&mut request)?;
+            released = true;
+            if response.symbol_evidence.len() != refresh.len() {
+                return Err(SessionError::InvalidResponse(format!(
+                    "stable reference oracle returned {} rows for {} queries",
+                    response.symbol_evidence.len(),
+                    refresh.len()
+                )));
+            }
+            for (expected, fact) in refresh.into_iter().zip(response.symbol_evidence) {
+                if fact.id != expected || !fact.alias_target.is_empty() {
+                    return Err(SessionError::InvalidResponse(format!(
+                        "stable reference oracle returned invalid row for {expected:?}"
+                    )));
+                }
+                patches.insert(expected, fact);
+            }
+        }
+        for id in &invalidated_set {
+            if let Some(previous) = table.symbol_fact(id) {
+                for declaration in previous.declarations.iter() {
+                    let path = declaration.location.path.as_ref();
+                    if let Some(ids) = self.symbols_by_path.get_mut(path) {
+                        ids.retain(|candidate| candidate != id);
+                        if ids.is_empty() {
+                            self.symbols_by_path.remove(path);
+                        }
+                    }
+                }
+            }
+        }
+        let structural = patches
+            .values()
+            .filter(|fact| invalidated_set.contains(&fact.id))
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut changed = table.patch_symbols(patches.into_values().collect());
+        let mut reference_paths = self.affected_paths.iter().cloned().collect::<Vec<_>>();
+        reference_paths.sort();
+        for fact in reference_patches {
+            if table.patch_reference_paths(&fact.id, &reference_paths, &fact.references) {
+                changed.push(fact.id.to_string());
+            }
+        }
+        changed.sort();
+        changed.dedup();
+        for fact in structural {
+            for declaration in fact.declarations.iter() {
+                let ids = self
+                    .symbols_by_path
+                    .entry(Arc::clone(&declaration.location.path))
+                    .or_default();
+                if !ids.contains(&fact.id) {
+                    ids.push(Arc::clone(&fact.id));
+                }
+            }
+        }
+        if !released {
+            let mut release = request(Operation::Symbols, &self.project_id, self.generation);
+            release.state_token = state_token.to_owned();
+            release.release_analysis = true;
+            self.exchange_once(&mut release)?;
+        }
+        Ok(Some(changed))
+    }
+
+    fn invalidated_symbol_ids(&self) -> Vec<Arc<str>> {
+        self.affected_paths
+            .iter()
+            .filter_map(|path| self.symbols_by_path.get(path.as_str()))
+            .flatten()
+            .cloned()
+            .collect::<HashSet<_>>()
+            .into_iter()
+            .collect()
+    }
+
+    fn rebuild_symbol_path_index(&mut self, table: &FactTable) {
+        self.symbols_by_path.clear();
+        for symbol in table.symbols() {
+            for declaration in symbol.declarations() {
+                self.symbols_by_path
+                    .entry(Arc::clone(&declaration.location.path))
+                    .or_default()
+                    .push(Arc::from(symbol.id()));
+            }
+        }
     }
 
     fn exchange(&mut self, mut request: Request) -> Result<Response, SessionError> {
@@ -945,10 +1380,40 @@ impl Session {
     }
 
     fn exchange_once(&self, request: &mut Request) -> Result<Response, SessionError> {
-        self.connection
+        let operation = request.operation;
+        let mut response = self
+            .connection
             .as_ref()
             .ok_or(SessionError::Closed)?
-            .exchange(request)
+            .exchange(request)?;
+        if operation == Operation::Symbols
+            && response.symbol_evidence.is_empty()
+            && !response.table_transition.is_empty()
+        {
+            let packed = v3::decode_table_transition(&response.table_transition)
+                .map_err(SessionError::InvalidResponse)?;
+            if packed.mode != TransitionMode::Full
+                || packed.project_id.as_ref() != self.project_id
+                || packed.target_generation != self.generation
+                || !packed.paths.is_empty()
+            {
+                return Err(SessionError::InvalidResponse(
+                    "packed symbol evidence has an invalid table identity".into(),
+                ));
+            }
+            response.symbol_evidence = packed
+                .symbols
+                .into_iter()
+                .map(|operation| match operation {
+                    v3::SymbolOp::Replace(fact) => Ok(fact),
+                    _ => Err(SessionError::InvalidResponse(
+                        "packed symbol evidence contains a delta operation".into(),
+                    )),
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+            response.table_transition.clear();
+        }
+        Ok(response)
     }
 
     fn restart_and_replay(&mut self) -> Result<(), SessionError> {
@@ -973,6 +1438,9 @@ impl Session {
         self.state_token.clear();
         self.retained_demands.clear();
         self.retained_table = None;
+        self.affected_paths.clear();
+        self.reference_tier.clear();
+        self.symbols_by_path.clear();
     }
 
     fn ensure_open(&self) -> Result<(), SessionError> {
@@ -992,7 +1460,7 @@ impl Drop for Session {
 
 fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
     Request {
-        schema: v3::TYPE_FACTS_SCHEMA_V5,
+        schema: v3::TYPE_FACTS_SCHEMA_V6,
         request_id: 0,
         operation,
         project_id: project_id.into(),
@@ -1003,6 +1471,10 @@ fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
         state_token: String::new(),
         reset_state: false,
         removed_demand_paths: Vec::new(),
+        symbol_queries: Vec::new(),
+        release_analysis: false,
+        reference_changes: false,
+        reference_paths: Vec::new(),
         cancel_request_id: 0,
     }
 }
@@ -1036,11 +1508,11 @@ fn prepare_analyze_response(
     retained: &mut Option<FactTable>,
     retained_state_token: &str,
 ) -> Result<(FactTable, TableChanges), SessionError> {
-    if response.schema != v3::TYPE_FACTS_SCHEMA_V5 {
+    if response.schema != v3::TYPE_FACTS_SCHEMA_V6 {
         return Err(SessionError::InvalidResponse(format!(
             "response schema is {}, expected {}",
             response.schema,
-            v3::TYPE_FACTS_SCHEMA_V5
+            v3::TYPE_FACTS_SCHEMA_V6
         )));
     }
     if response.project_id != expected_project || response.generation != expected_generation {
@@ -1103,7 +1575,7 @@ fn prepare_analyze_response(
                 ));
             }
             validate_table_transition_application(retained_table, &transition)?;
-            let changes = table_changes(&transition);
+            let changes = table_changes_against(retained_table, &transition);
             let candidate = retained_table.apply_delta(transition);
             Ok((candidate, changes))
         }
@@ -1131,6 +1603,46 @@ fn table_changes(transition: &WireTableTransition) -> TableChanges {
         && entity_paths.is_empty()
         && symbol_ids.is_empty()
         && file_paths.is_empty();
+    TableChanges {
+        unchanged,
+        entity_paths,
+        symbol_ids,
+        file_paths,
+    }
+}
+
+// V6 path replacements are intentionally unconditional: Rust owns the base
+// rows and Go no longer retains them merely to decide equality. Resolve the
+// sparse transport candidates against the canonical retained table here so a
+// source-only edit does not invalidate downstream entity/file consumers.
+fn table_changes_against(table: &FactTable, transition: &WireTableTransition) -> TableChanges {
+    let mut entity_paths = Vec::new();
+    let mut file_paths = Vec::new();
+    for path in &transition.paths {
+        let entities_changed = match &path.entities {
+            SlotOp::Unchanged => false,
+            SlotOp::Replace(entities) => table.entities_for_path(&path.path) != entities,
+            SlotOp::Remove => !table.entities_for_path(&path.path).is_empty(),
+        };
+        if entities_changed {
+            entity_paths.push(path.path.to_string());
+        }
+        let file_changed = match &path.file {
+            SlotOp::Unchanged => false,
+            SlotOp::Replace(file) => table.file(&path.path) != Some(file),
+            SlotOp::Remove => table.file(&path.path).is_some(),
+        };
+        if file_changed {
+            file_paths.push(path.path.to_string());
+        }
+    }
+    let mut symbol_ids = transition
+        .symbols
+        .iter()
+        .map(|operation| operation.id().to_string())
+        .collect::<Vec<_>>();
+    symbol_ids.dedup();
+    let unchanged = entity_paths.is_empty() && symbol_ids.is_empty() && file_paths.is_empty();
     TableChanges {
         unchanged,
         entity_paths,
@@ -1342,12 +1854,16 @@ mod tests {
 
     fn response(generation: u64, state_token: &str, table_transition: Vec<u8>) -> Response {
         Response {
-            schema: v3::TYPE_FACTS_SCHEMA_V5,
+            schema: v3::TYPE_FACTS_SCHEMA_V6,
             request_id: 1,
             project_id: "/p/tsconfig.json".into(),
             generation,
             ok: true,
             table_transition,
+            symbol_evidence: Vec::new(),
+            reference_evidence: Vec::new(),
+            changed_reference_symbols: Vec::new(),
+            reference_changes_exact: false,
             state_token: state_token.into(),
             affected: Vec::new(),
             sources: Vec::new(),
@@ -1390,6 +1906,9 @@ mod tests {
             state_token: String::new(),
             retained_demands: HashMap::new(),
             retained_table: None,
+            affected_paths: HashSet::new(),
+            reference_tier: HashSet::new(),
+            symbols_by_path: HashMap::new(),
             last_exchange_timings: None,
             last_update_timings: None,
             last_table_changes: None,

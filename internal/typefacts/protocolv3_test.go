@@ -11,13 +11,21 @@ import (
 )
 
 func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "schema", "typefacts-v5.schema.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	actual := fmt.Sprintf("sha256:%x", sha256.Sum256(data))
-	if actual != typefacts.TypeFactsSchemaSHA256 {
-		t.Fatalf("schema hash = %q, handshake declares %q", actual, typefacts.TypeFactsSchemaSHA256)
+	for _, schema := range []struct {
+		name string
+		hash string
+	}{
+		{"typefacts-v5.schema.json", typefacts.TypeFactsSchemaSHA256},
+		{"typefacts-v6.schema.json", typefacts.TypeFactsSchemaV6SHA256},
+	} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "schema", schema.name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		actual := fmt.Sprintf("sha256:%x", sha256.Sum256(data))
+		if actual != schema.hash {
+			t.Fatalf("%s hash = %q, handshake declares %q", schema.name, actual, schema.hash)
+		}
 	}
 }
 

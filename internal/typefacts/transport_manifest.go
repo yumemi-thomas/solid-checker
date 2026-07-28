@@ -79,7 +79,41 @@ func transportManifest(previous, next *FactTable, builder *closureBuilder, chang
 	return manifest
 }
 
+// rustOwnedTransportManifest names only path rows. V6 symbol rows never enter
+// a Go table, so Rust derives and retains their successor directly from oracle
+// evidence instead of receiving a second symbol delta from Go.
+func rustOwnedTransportManifest(
+	previous *FactTable,
+	changedPaths map[string]struct{},
+) *factTableTransportChanges {
+	if previous == nil || changedPaths == nil {
+		return nil
+	}
+	manifest := &factTableTransportChanges{
+		baseGeneration: previous.Generation,
+		baseStateID:    previous.stateID,
+		sourcePaths:    make(map[string]struct{}, len(changedPaths)),
+		entityPaths:    make(map[string]struct{}, len(changedPaths)),
+		filePaths:      make(map[string]struct{}, len(changedPaths)),
+		symbolIDs:      make(map[SymbolID]struct{}),
+		exact:          true,
+	}
+	for path := range changedPaths {
+		path = filepath.Clean(path)
+		manifest.sourcePaths[path] = struct{}{}
+		manifest.entityPaths[path] = struct{}{}
+		manifest.filePaths[path] = struct{}{}
+	}
+	return manifest
+}
+
 func collectPathSymbols(table *FactTable, path string, symbols map[SymbolID]struct{}) {
+	if table.pathSymbols != nil {
+		for _, symbol := range table.pathSymbols[path] {
+			symbols[symbol] = struct{}{}
+		}
+		return
+	}
 	start := sort.Search(len(table.Entities), func(index int) bool {
 		return table.Entities[index].Location.Path >= path
 	})

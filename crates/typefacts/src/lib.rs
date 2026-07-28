@@ -660,6 +660,10 @@ mod tests {
             state_token: "9".into(),
             reset_state: false,
             removed_demand_paths: vec!["old.ts".into()],
+            symbol_queries: Vec::new(),
+            release_analysis: false,
+            reference_changes: false,
+            reference_paths: Vec::new(),
             cancel_request_id: 2,
         };
         assert_eq!(

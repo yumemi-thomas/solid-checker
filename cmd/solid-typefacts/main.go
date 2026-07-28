@@ -73,12 +73,16 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	flags := flag.NewFlagSet("solid-typefacts", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	project := flags.String("project", "", "path to tsconfig.json")
+	schema := flags.Uint64("schema", typefacts.TypeFactsSchemaVersionV5, "lifecycle schema version")
 	cpuProfile := flags.String("cpuprofile", "", "write a CPU profile to this path")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
 	if *project == "" {
 		return errors.New("-project is required")
+	}
+	if *schema != typefacts.TypeFactsSchemaVersionV5 && *schema != typefacts.TypeFactsSchemaVersionV6 {
+		return fmt.Errorf("unsupported TypeFacts schema %d", *schema)
 	}
 	if *cpuProfile != "" {
 		profile, err := os.Create(*cpuProfile)
@@ -105,9 +109,13 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	// the program build below. Early client frames simply queue in the pipe
 	// until the reader starts; the ordered worker preserves arrival order.
 	writer := bufio.NewWriter(output)
+	schemaHash := typefacts.TypeFactsSchemaSHA256
+	if *schema == typefacts.TypeFactsSchemaVersionV6 {
+		schemaHash = typefacts.TypeFactsSchemaV6SHA256
+	}
 	handshake, err := wirecbor.Marshal(typefacts.ServiceHandshake{
 		Protocol:   typefacts.TypeFactsHandshakeProtocol,
-		SchemaHash: typefacts.TypeFactsSchemaSHA256,
+		SchemaHash: schemaHash,
 		BuildID:    buildID,
 	})
 	if err != nil {
@@ -130,7 +138,12 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	if trace != nil {
 		trace.Stage("open", time.Since(started))
 	}
-	session, err := typefacts.NewSession(backend, projectID, trace)
+	var session *typefacts.Session
+	if *schema == typefacts.TypeFactsSchemaVersionV6 {
+		session, err = typefacts.NewSessionV6(backend, projectID, trace)
+	} else {
+		session, err = typefacts.NewSession(backend, projectID, trace)
+	}
 	if err != nil {
 		return err
 	}
@@ -445,6 +458,10 @@ func lifecycleResponseChunks(value typefacts.LifecycleResponse) ([][]byte, int, 
 		{len(value.Sources) != 0, "sources", value.Sources},
 		{value.SourceArena != "", "sourceArena", value.SourceArena},
 		{len(value.SourceLengths) != 0, "sourceLengths", value.SourceLengths},
+		{len(value.SymbolEvidence) != 0, "symbolEvidence", value.SymbolEvidence},
+		{len(value.ReferenceEvidence) != 0, "referenceEvidence", value.ReferenceEvidence},
+		{len(value.ChangedReferenceSymbols) != 0, "changedReferenceSymbols", value.ChangedReferenceSymbols},
+		{value.ReferenceChangesExact, "referenceChangesExact", value.ReferenceChangesExact},
 		{value.Timings != nil, "timings", value.Timings},
 		{value.Error != nil, "error", value.Error},
 	}

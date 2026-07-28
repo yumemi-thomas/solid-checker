@@ -111,6 +111,70 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	}
 }
 
+func TestV6TransfersExpandedRowsAndKeepsSparseIncrementalProof(t *testing.T) {
+	t.Parallel()
+	projectID := "/project/tsconfig.json"
+	demand := EntityDemand{
+		Location: Location{Path: "/project/source.ts", StartByte: 7, EndByte: 12},
+		Symbol:   true, References: true,
+	}
+	v5, err := NewSession(newSessionTestBackend(), projectID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v5.Close()
+	v6, err := NewSessionV6(newSessionTestBackend(), projectID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v6.Close()
+
+	analyze := func(session *Session, schema uint64) LifecycleResponse {
+		request := LifecycleRequest{
+			Schema: schema, RequestID: 1, Operation: LifecycleAnalyze,
+			ProjectID: projectID, Generation: 1, ResetState: true,
+			Demands: []EntityDemand{demand},
+		}
+		return session.Lifecycle(context.Background(), request)
+	}
+	v5Cold := analyze(v5, TypeFactsSchemaVersionV5)
+	v6Cold := analyze(v6, TypeFactsSchemaVersionV6)
+	if !v5Cold.OK || !v6Cold.OK {
+		t.Fatalf("cold responses: v5=%+v v6=%+v", v5Cold.Error, v6Cold.Error)
+	}
+	if len(v6Cold.TableTransition) >= len(v5Cold.TableTransition) {
+		t.Fatal("v6 cold transition still contains Go-materialized symbol rows")
+	}
+	contribution := v6.closure.retained.get("/project/source.ts")
+	if contribution == nil || contribution.entities != nil || len(contribution.roots) == 0 {
+		t.Fatalf("v6 retained contribution did not transfer rows: %+v", contribution)
+	}
+	if len(v6.closure.table.Entities) != 0 || len(v6.closure.table.Files) != 0 ||
+		len(v6.closure.table.sourceDigests) != 0 {
+		t.Fatal("v6 retained an expanded transport table after publication")
+	}
+
+	update := LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV6, RequestID: 2, Operation: LifecycleUpdate,
+		ProjectID: projectID, Generation: 2,
+	}
+	if response := v6.Lifecycle(context.Background(), update); !response.OK {
+		t.Fatalf("v6 update: %+v", response.Error)
+	}
+	next := LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV6, RequestID: 3, Operation: LifecycleAnalyze,
+		ProjectID: projectID, Generation: 2, StateToken: v6Cold.StateToken,
+	}
+	response := v6.Lifecycle(context.Background(), next)
+	if !response.OK || len(response.TableTransition) == 0 {
+		t.Fatalf("v6 sparse successor: %+v", response.Error)
+	}
+	if contribution := v6.closure.retained.get("/project/source.ts"); contribution == nil ||
+		contribution.entities != nil {
+		t.Fatal("v6 sparse successor reacquired expanded retained rows")
+	}
+}
+
 func TestSessionReturnsSourcesThroughOneSharedArena(t *testing.T) {
 	t.Parallel()
 	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", nil)

@@ -1,9 +1,14 @@
 package typefacts
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 const wireTransitionVersion uint64 = 1
 const maxRetainedWireTransitionBuffer = 1 << 20
+
+var errSparseTransitionUnavailable = errors.New("sparse transition requires an exact manifest")
 
 type wireTransitionMode uint64
 
@@ -31,6 +36,9 @@ type wireTransitionInput struct {
 	BaseStateToken string
 	Base           *FactTable
 	Target         *FactTable
+	// Sparse emits unconditional upserts/removals for exact manifest keys.
+	// The client owns the base table, so Go need not retain expanded base rows.
+	Sparse bool
 }
 
 type encodedWireTransition struct {
@@ -64,6 +72,11 @@ func (e *wireTransitionEncoder) Encode(input wireTransitionInput) (encodedWireTr
 	e.releasePlan()
 	if mode == wireTransitionFull {
 		e.planFull(input.Target)
+	} else if input.Sparse {
+		if input.Target.transport == nil || !input.Target.transport.exact {
+			return encodedWireTransition{}, errSparseTransitionUnavailable
+		}
+		e.planSparseDelta(input.Base, input.Target)
 	} else {
 		e.planDelta(input.Base, input.Target)
 	}
@@ -178,6 +191,51 @@ func (e *wireTransitionEncoder) Encode(input wireTransitionInput) (encodedWireTr
 		PathOperations:   pathOperationCount,
 		SymbolOperations: symbolOperationCount,
 	}, nil
+}
+
+func (e *wireTransitionEncoder) planSparseDelta(base, target *FactTable) {
+	manifest := target.transport
+	for path := range manifest.sourcePaths {
+		e.paths = append(e.paths, path)
+	}
+	for path := range manifest.entityPaths {
+		e.paths = append(e.paths, path)
+	}
+	for path := range manifest.filePaths {
+		e.paths = append(e.paths, path)
+	}
+	e.paths = sortUniqueWireTransitionPaths(e.paths)
+	for _, path := range e.paths {
+		rows := wireTransitionPathRowsAt(target, path)
+		operation := wireTransitionPathOp{path: path}
+		if _, candidate := manifest.sourcePaths[path]; candidate {
+			if rows.hasSource {
+				operation.sourceOp, operation.source = wireTransitionReplace, rows.source
+			} else {
+				operation.sourceOp = wireTransitionRemove
+			}
+		}
+		if _, candidate := manifest.entityPaths[path]; candidate {
+			if len(rows.entities) != 0 {
+				operation.entityOp, operation.entities = wireTransitionReplace, rows.entities
+			} else {
+				operation.entityOp = wireTransitionRemove
+			}
+		}
+		if _, candidate := manifest.filePaths[path]; candidate {
+			if rows.hasFile {
+				operation.fileOp, operation.file = wireTransitionReplace, rows.file
+			} else {
+				operation.fileOp = wireTransitionRemove
+			}
+		}
+		e.pathOps = append(e.pathOps, operation)
+	}
+	// Expanded path rows moved to Rust, but Go deliberately retains the much
+	// smaller canonical symbol store and reference runs. Preserve v5's exact
+	// reference-path patches; replacing a high-fanout symbol wholesale turns a
+	// one-file edit into a six-figure response.
+	e.planExactSymbolDelta(base, target, manifest)
 }
 
 // detachFrame gives a large cold frame directly to the response pipeline.

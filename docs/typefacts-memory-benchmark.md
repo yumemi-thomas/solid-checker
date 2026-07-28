@@ -87,6 +87,45 @@ facts by symbol ID. Such a protocol should preserve v5 as the compatibility
 adapter rather than forcing full recomputation or sending Rust's retained table
 back to Go.
 
+## Schema v6 ownership transfer
+
+V6 makes Rust the semantic-closure owner. Go releases expanded source, entity,
+file, symbol, and reference rows after transfer; it retains the TSGo program
+and compact per-file extraction proof. Rust derives roots, runs alias closure,
+owns reference-tier membership, and patches path-scoped reference evidence.
+Symbol oracle responses reuse the packed transition dictionary codec rather
+than materializing a second large CBOR object graph. See
+[ADR 0009](adr/0009-v6-client-owns-expanded-path-rows.md).
+
+The comparison below uses the same 5,000-file corpus. Latency attribution uses
+the same rebuilt Solid Checker checkout for both versions; physical v5 values
+are the three-run medians recorded immediately before the v6 work.
+
+| Metric | Optimized v5 | v6 | Change |
+|---|---:|---:|---:|
+| Producer physical peak | 493.3 MiB | 477.7 MiB | -3.2% |
+| Producer steady physical | 294.4 MiB | 274.8 MiB | -6.7% |
+| Go live heap | 220.1 MiB | 193.9 MiB | -11.9% |
+| Allocated bytes, cold + one cached reuse | 590 MiB | 610.2 MiB | +3.4% |
+| Allocation count, cold + one cached reuse | 3.482 M | 3.517 M | +1.0% |
+| First analysis | 1.105 s | 1.189 s | +7.6% |
+| Cached analysis median | 1.105 ms | 1.105 ms | unchanged |
+| Incremental analysis median | 83.12 ms | 83.45 ms | +0.4% |
+| Producer incremental median | 15.26 ms | 14.96 ms | -2.0% |
+| Cold initial response | 5,310,478 B | 3,575,077 B | -32.7% |
+| Cold responses, combined | 5,310,478 B | 6,434,977 B | +21.2% |
+| Incremental response median | 417 B | 7,061 B | +6,644 B |
+
+The incremental byte increase includes sparse path candidates plus invalidated
+symbol declarations and affected-path reference runs. It remains about 7 KiB
+and changes end-to-end latency by less than 2%. A first implementation sent
+complete corpus-wide reference lists (about 1.1 MiB per edit) and materially
+regressed latency. It was rejected in favor of path-scoped reference patches.
+Cold analysis transfers and closes 50,003 symbols and the 35,001-symbol
+reference tier in Rust. Packed dictionary frames and a references-only second
+batch keep the first-analysis delta at 7.6%; cached reuse is unchanged and
+incremental latency remains within 1% of optimized v5.
+
 ## 5,000-file reference result
 
 The baseline is commit `f38e219`; values are from the same corpus and machine.
@@ -95,22 +134,24 @@ peak is the Producer's `vmmap` peak, not the complete checker process tree.
 
 | Metric | Baseline | Optimized |
 |---|---:|---:|
-| Producer physical peak | 945.9 MiB | 493.3 MiB |
-| Producer steady physical | 412 MiB | 294.4 MiB |
-| Go live heap | ~345 MiB | 220.1 MiB |
-| Allocated bytes, cold | 2,086 MiB | 590 MiB |
-| Allocation count, cold | 3.55 M | 3.482 M |
-| First analysis | 1.303 s | 1.105 s |
-| Producer first analysis | 670.6 ms | 530.3 ms |
+| Producer physical peak | 945.9 MiB | 477.7 MiB |
+| Producer steady physical | 412 MiB | 274.8 MiB |
+| Go live heap | ~345 MiB | 193.9 MiB |
+| Allocated bytes, cold + cached reuse | 2,086 MiB | 610.2 MiB |
+| Allocation count, cold + cached reuse | 3.55 M | 3.517 M |
+| First analysis | 1.303 s | 1.189 s |
+| Producer first analysis | 670.6 ms | 488.9 ms |
 | Cached analysis median | 1.061 ms | 1.105 ms |
-| Incremental analysis median | 79.9 ms | 81.3 ms |
-| Producer incremental median | 12.5 ms | 12.65 ms |
-| Semantic payload | 5,247,633 B | 5,247,633 B |
-| Outer response | 5,310,478 B | 5,310,478 B |
+| Incremental analysis median | 79.9 ms | 83.45 ms |
+| Producer incremental median | 12.5 ms | 14.96 ms |
+| Cold response bytes, combined | 5,310,478 B | 6,434,977 B |
+| Incremental response | not recorded | 7,061 B |
 
-Cold peak fell 47.9%, exact post-GC `HeapAlloc` fell 36.2%, and cold allocated
-bytes fell about 71%. Payload sizes are byte-for-byte unchanged. The cached
+The last directly measured v6 physical peak was 477.7 MiB (49.5% below the
+original baseline); exact post-GC `HeapAlloc` fell 43.8%, and cold allocated
+bytes fell about 71%. The cold result now spans one path transition and two
+packed oracle frames, increasing combined response bytes by 21.2%. The cached
 median varied between 1.04 and 1.13 ms across repeated 30-sample runs.
-Incremental end-to-end and Producer medians remain within 2% of baseline.
-Physical figures are medians of three final `vmmap` runs because macOS
-high-water marks varied by several MiB.
+Incremental end-to-end remains within 5% of the original baseline and within
+1% of optimized v5. Physical figures are the last pre-oracle v6 medians because
+this sandbox denies `ps`/`vmmap` process inspection without an approval prompt.

@@ -11,9 +11,12 @@ use crate::{
 };
 
 pub const TYPE_FACTS_SCHEMA_V5: u64 = 5;
+pub const TYPE_FACTS_SCHEMA_V6: u64 = 6;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V3: u64 = 3;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
     "sha256:a4dfff25783d9dd99cf0d44e315a7c01e6c7d132965431ab5624a0975fd549a8";
+pub const TYPE_FACTS_SCHEMA_V6_SHA256: &str =
+    "sha256:adffdee1486dd009bb2599593e09edd4c48804678b4f23002f72e5693ffc606d";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -34,6 +37,7 @@ pub enum Operation {
     Open,
     Update,
     Analyze,
+    Symbols,
     Sources,
     Cancel,
     Close,
@@ -98,6 +102,24 @@ pub struct Request {
     pub cancel_request_id: u64,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub removed_demand_paths: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbol_queries: Vec<SymbolQuery>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub release_analysis: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reference_changes: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_paths: Vec<String>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SymbolQuery {
+    pub id: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub references: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub references_only: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -153,6 +175,14 @@ pub struct Response {
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty", with = "serde_bytes")]
     pub table_transition: Vec<u8>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub symbol_evidence: Vec<SymbolFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub reference_evidence: Vec<SymbolFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub changed_reference_symbols: Vec<Arc<str>>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub reference_changes_exact: bool,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub state_token: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -1189,9 +1219,10 @@ mod tests {
     };
 
     use super::{
-        SlotOp, TYPE_FACTS_SCHEMA_SHA256, TransitionMode, decode_table_transition,
-        parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
-        parse_callability, parse_reference_space, parse_resolved_call_validity, push_uvarint,
+        SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_SCHEMA_V6_SHA256, TransitionMode,
+        decode_table_transition, parse_argument_mapping_reason, parse_argument_mapping_status,
+        parse_call_kind, parse_callability, parse_reference_space, parse_resolved_call_validity,
+        push_uvarint,
     };
 
     fn push_test_string(frame: &mut Vec<u8>, value: &str) {
@@ -1222,6 +1253,11 @@ mod tests {
             Sha256::digest(include_bytes!("../../../schema/typefacts-v5.schema.json"))
         );
         assert_eq!(actual, TYPE_FACTS_SCHEMA_SHA256);
+        let actual_v6 = format!(
+            "sha256:{:x}",
+            Sha256::digest(include_bytes!("../../../schema/typefacts-v6.schema.json"))
+        );
+        assert_eq!(actual_v6, TYPE_FACTS_SCHEMA_V6_SHA256);
     }
 
     #[test]

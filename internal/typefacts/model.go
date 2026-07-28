@@ -96,6 +96,9 @@ type FactTable struct {
 	// Hand-built tables may still populate Sources; the wire layer derives
 	// this compact form lazily for compatibility.
 	sourceDigests []SourceDigest
+	// pathSymbols is the compact transport/invalidation view retained by v6
+	// after Rust has taken ownership of the expanded path rows.
+	pathSymbols map[string][]SymbolID
 }
 
 // SourceDigest is the source identity transferred to Rust's retained table.

@@ -12,10 +12,58 @@ type retainedContribution struct {
 	demandHash        uint64
 	entities          []EntityFact
 	fullTier          []uint32
+	roots             []SymbolID
+	fullTierSymbols   []SymbolID
+	descriptors       []retainedDescriptor
 	structural        []SymbolID
 	dependencies      []string
-	descriptorSymbols []uint32
+	descriptorSymbols []SymbolID
 	durable           bool
+	seedsPrepared     bool
+}
+
+type retainedDescriptor struct {
+	symbol     SymbolID
+	descriptor *TypeDescriptor
+}
+
+// releaseTransportRows transfers expanded entity ownership to the v6 client.
+// The compact semantic seeds are sufficient to prove and patch later closure
+// generations; source locations and resolved-call bodies remain solely in
+// Rust's retained table.
+func (c *retainedContribution) prepareTransportSeeds() {
+	if c == nil || c.entities == nil || c.seedsPrepared {
+		return
+	}
+	for index := range c.entities {
+		entity := &c.entities[index]
+		if entity.Symbol != "" {
+			c.roots = append(c.roots, entity.Symbol)
+		}
+		if entity.ResolvedCall != nil && entity.ResolvedCall.Target != "" {
+			c.roots = append(c.roots, entity.ResolvedCall.Target)
+		}
+		if entity.Symbol != "" && entity.TypeDescriptor != nil {
+			c.descriptors = append(c.descriptors, retainedDescriptor{
+				symbol: entity.Symbol, descriptor: entity.TypeDescriptor,
+			})
+		}
+	}
+	for _, entityIndex := range c.fullTier {
+		if symbol := c.entities[entityIndex].Symbol; symbol != "" {
+			c.fullTierSymbols = append(c.fullTierSymbols, symbol)
+		}
+	}
+	c.seedsPrepared = true
+}
+
+func (c *retainedContribution) releaseTransportRows() {
+	if c == nil || c.entities == nil {
+		return
+	}
+	c.prepareTransportSeeds()
+	c.entities = nil
+	c.fullTier = nil
 }
 
 // prepareRetainedContribution merges an aligned Semantic demand-run result
@@ -111,7 +159,7 @@ func prepareRetainedContribution(
 		}
 	}
 
-	descriptorSymbols := make([]uint32, 0)
+	descriptorSymbols := make([]SymbolID, 0)
 	entityIndex := -1
 	for index := range demands {
 		if index == 0 || result.Entities[index].Location != result.Entities[index-1].Location {
@@ -119,22 +167,19 @@ func prepareRetainedContribution(
 		}
 		if demands[index].TypeDescriptor {
 			if symbol := contribution.entities[entityIndex].Symbol; symbol != "" {
-				descriptorSymbols = append(descriptorSymbols, uint32(entityIndex))
+				descriptorSymbols = append(descriptorSymbols, symbol)
 			}
 		}
 	}
 	sort.Slice(descriptorSymbols, func(i, j int) bool {
-		return contribution.entities[descriptorSymbols[i]].Symbol <
-			contribution.entities[descriptorSymbols[j]].Symbol
+		return descriptorSymbols[i] < descriptorSymbols[j]
 	})
 	write := 0
-	for _, entityIndex := range descriptorSymbols {
-		if write != 0 &&
-			contribution.entities[descriptorSymbols[write-1]].Symbol ==
-				contribution.entities[entityIndex].Symbol {
+	for _, symbol := range descriptorSymbols {
+		if write != 0 && descriptorSymbols[write-1] == symbol {
 			continue
 		}
-		descriptorSymbols[write] = entityIndex
+		descriptorSymbols[write] = symbol
 		write++
 	}
 	contribution.descriptorSymbols = descriptorSymbols[:write:write]
@@ -259,8 +304,7 @@ func (s *retainedContributionStore) add(path string, contribution *retainedContr
 		}
 		s.dependentsByPath[dependency] = s.dependentsByPath[dependency].add(path)
 	}
-	for _, entityIndex := range contribution.descriptorSymbols {
-		symbol := contribution.entities[entityIndex].Symbol
+	for _, symbol := range contribution.descriptorSymbols {
 		if s.descriptorUsers == nil {
 			s.descriptorUsers = make(map[SymbolID]pathMembership)
 		}
@@ -282,8 +326,7 @@ func (s *retainedContributionStore) remove(path string) {
 			s.dependentsByPath[dependency] = users
 		}
 	}
-	for _, entityIndex := range contribution.descriptorSymbols {
-		symbol := contribution.entities[entityIndex].Symbol
+	for _, symbol := range contribution.descriptorSymbols {
 		users := s.descriptorUsers[symbol].remove(path)
 		if users.len() == 0 {
 			delete(s.descriptorUsers, symbol)

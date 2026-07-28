@@ -49,6 +49,14 @@ type ClosureBackend interface {
 	ReleaseAnalysisState()
 }
 
+// symbolEvidenceBackend is the production TSGo oracle seam used by v6. One
+// call holds the checker once for the whole batch. The fallback in
+// resolveSymbolEvidence keeps compiler-independent test adapters small while
+// v5 is being retired.
+type symbolEvidenceBackend interface {
+	SymbolEvidence(context.Context, []SymbolQueryV6) ([]SymbolFact, error)
+}
+
 // ClosureStats reports the cost of one generation's closed fact table.
 type ClosureStats struct {
 	BuildSequence    uint64           `json:"-"`
@@ -158,16 +166,48 @@ type DemandClosure struct {
 	asyncDemandScratch []EntityDemand
 	asyncGroupScratch  []demandGroup
 	demandSeed         maphash.Seed
+	// sparseTransport is the v6 ownership mode: expanded path rows transfer to
+	// Rust after each encoded transition and only compact closure seeds remain.
+	sparseTransport bool
 }
 
 // NewDemandClosure wraps a live backend, which must satisfy every capability
 // the closure calls. trace may be nil, which disables tracing entirely.
 func NewDemandClosure(backend Project, trace Trace) (*DemandClosure, error) {
+	return newDemandClosure(backend, trace, false)
+}
+
+func newDemandClosure(backend Project, trace Trace, sparseTransport bool) (*DemandClosure, error) {
 	full, ok := backend.(ClosureBackend)
 	if !ok {
 		return nil, errors.New("demand closure requires the demand-run semantic, async, and reference-batch capabilities")
 	}
-	return &DemandClosure{backend: full, trace: trace, generation: 1}, nil
+	return &DemandClosure{
+		backend: full, trace: trace, generation: 1, sparseTransport: sparseTransport,
+	}, nil
+}
+
+// releaseTransportRows is called only after the packed v6 transition owns all
+// expanded rows. Rust's retained table is then canonical; Go keeps the smaller
+// semantic proof needed to produce sparse successor upserts.
+func (p *DemandClosure) releaseTransportRows() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if !p.sparseTransport || p.table == nil {
+		return
+	}
+	for _, contribution := range p.retained.byPath {
+		contribution.releaseTransportRows()
+	}
+	p.table.Entities = nil
+	p.table.Files = nil
+	p.table.sourceDigests = nil
+}
+
+func (p *DemandClosure) forceFullMaterialization() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.resetAnalysisStateLocked()
 }
 
 // indexSymbolFact records a retained fact under each clean declaring path.
@@ -342,4 +382,65 @@ func (p *DemandClosure) SourceFiles(ctx context.Context) ([]SourceFile, error) {
 		return nil, errors.New("closure project is closed")
 	}
 	return p.backend.SourceFiles(ctx)
+}
+
+// resolveSymbolEvidence answers one Rust-owned closure worklist batch. It does
+// not retain the returned rows: ownership crosses the process seam immediately.
+func (p *DemandClosure) resolveSymbolEvidence(
+	ctx context.Context,
+	queries []SymbolQueryV6,
+) ([]SymbolFact, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, errors.New("closure project is closed")
+	}
+	if batched, ok := p.backend.(symbolEvidenceBackend); ok {
+		return batched.SymbolEvidence(ctx, queries)
+	}
+	facts := make([]SymbolFact, len(queries))
+	referenceIDs := make([]SymbolID, 0, len(queries))
+	for index, query := range queries {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		facts[index].ID = query.ID
+		if !query.ReferencesOnly {
+			if target, err := p.backend.ResolveAlias(ctx, query.ID); err == nil {
+				facts[index].AliasTarget = target
+			} else if !errors.Is(err, ErrNotFound) {
+				return nil, err
+			}
+			if declarations, err := p.backend.Declarations(ctx, query.ID); err == nil {
+				facts[index].Declarations = declarations
+			} else if !errors.Is(err, ErrNotFound) {
+				return nil, err
+			}
+		}
+		if query.References {
+			referenceIDs = append(referenceIDs, query.ID)
+		}
+	}
+	references, err := p.backend.ReferencesBatch(ctx, referenceIDs)
+	if err != nil {
+		return nil, err
+	}
+	for index, query := range queries {
+		if query.References {
+			facts[index].References = references[query.ID]
+		}
+	}
+	return facts, nil
+}
+
+func (p *DemandClosure) releaseBackendAnalysisState() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.backend.ReleaseAnalysisState()
+}
+
+func (p *DemandClosure) changedReferences(ctx context.Context) ([]SymbolID, bool, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.backend.ChangedReferences(ctx)
 }
