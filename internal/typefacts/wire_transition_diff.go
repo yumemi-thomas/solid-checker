@@ -231,7 +231,7 @@ type wireTransitionPathRows struct {
 func wireTransitionPathRowsAt(table *FactTable, path string) wireTransitionPathRows {
 	rows := wireTransitionPathRows{path: path}
 	rows.source, rows.hasSource = wireTransitionSource(table.wireSourceDigests(), path)
-	rows.entities = canonicalEntityPath(table.Entities, path)
+	rows.entities = wireTransitionEntityPath(table, path)
 	rows.file, rows.hasFile = canonicalFileFact(table.Files, path)
 	return rows
 }
@@ -420,7 +420,7 @@ func (c *wireTransitionTablePathCursor) valid() bool {
 	sources := c.table.wireSourceDigests()
 	return c.table != nil &&
 		(c.source < len(sources) ||
-			c.entity < len(c.table.Entities) ||
+			c.entity < wireTransitionEntityRunCount(c.table) ||
 			c.file < len(c.table.Files))
 }
 
@@ -437,8 +437,8 @@ func (c *wireTransitionTablePathCursor) path() string {
 	if c.source < len(sources) {
 		consider(sources[c.source].Path)
 	}
-	if c.entity < len(c.table.Entities) {
-		consider(c.table.Entities[c.entity].Location.Path)
+	if c.entity < wireTransitionEntityRunCount(c.table) {
+		consider(wireTransitionEntityRunPath(c.table, c.entity))
 	}
 	if c.file < len(c.table.Files) {
 		consider(c.table.Files[c.file].Path)
@@ -454,10 +454,9 @@ func (c *wireTransitionTablePathCursor) rows() wireTransitionPathRows {
 		rows.source = sources[c.source]
 		rows.hasSource = true
 	}
-	if c.entity < len(c.table.Entities) &&
-		c.table.Entities[c.entity].Location.Path == path {
-		end := entityPathEnd(c.table.Entities, c.entity)
-		rows.entities = c.table.Entities[c.entity:end]
+	if c.entity < wireTransitionEntityRunCount(c.table) &&
+		wireTransitionEntityRunPath(c.table, c.entity) == path {
+		rows.entities = wireTransitionEntityRun(c.table, c.entity)
 	}
 	if c.file < len(c.table.Files) && c.table.Files[c.file].Path == path {
 		rows.file = c.table.Files[c.file]
@@ -472,13 +471,53 @@ func (c *wireTransitionTablePathCursor) next() {
 	if c.source < len(sources) && sources[c.source].Path == path {
 		c.source++
 	}
-	if c.entity < len(c.table.Entities) &&
-		c.table.Entities[c.entity].Location.Path == path {
-		c.entity = entityPathEnd(c.table.Entities, c.entity)
+	if c.entity < wireTransitionEntityRunCount(c.table) &&
+		wireTransitionEntityRunPath(c.table, c.entity) == path {
+		if c.table.entityRuns != nil {
+			c.entity++
+		} else {
+			c.entity = entityPathEnd(c.table.Entities, c.entity)
+		}
 	}
 	if c.file < len(c.table.Files) && c.table.Files[c.file].Path == path {
 		c.file++
 	}
+}
+
+func wireTransitionEntityRunCount(table *FactTable) int {
+	if table.entityRuns != nil {
+		return len(table.entityRuns)
+	}
+	return len(table.Entities)
+}
+
+func wireTransitionEntityRunPath(table *FactTable, index int) string {
+	if table.entityRuns != nil {
+		return table.entityRuns[index].entities[0].Location.Path
+	}
+	return table.Entities[index].Location.Path
+}
+
+func wireTransitionEntityRun(table *FactTable, index int) []EntityFact {
+	if table.entityRuns != nil {
+		return table.entityRuns[index].entities
+	}
+	end := entityPathEnd(table.Entities, index)
+	return table.Entities[index:end]
+}
+
+func wireTransitionEntityPath(table *FactTable, path string) []EntityFact {
+	if table.entityRuns == nil {
+		return canonicalEntityPath(table.Entities, path)
+	}
+	index := sort.Search(len(table.entityRuns), func(index int) bool {
+		return table.entityRuns[index].entities[0].Location.Path >= path
+	})
+	if index == len(table.entityRuns) ||
+		table.entityRuns[index].entities[0].Location.Path != path {
+		return nil
+	}
+	return table.entityRuns[index].entities
 }
 
 func sortUniqueWireTransitionPaths(paths []string) []string {

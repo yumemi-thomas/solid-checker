@@ -218,6 +218,8 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	table.sourceDigests = sourceDigests
 	table.Files = table.Files[:0]
 	table.Entities = table.Entities[:0]
+	clear(table.entityRuns)
+	table.entityRuns = table.entityRuns[:0]
 	// A recycled table may own chunks still shared by the immediately
 	// preceding generation. Never reuse its flat symbol backing array.
 	table.Symbols = nil
@@ -602,40 +604,50 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	// Groups are path-sorted and unique, and each immutable contribution was
 	// prepared from one canonical demand run. Concatenation therefore already
 	// is the fact table's canonical location order.
-	entities := table.Entities[:0]
-	if cap(entities) < entityTotal {
-		entities = make([]EntityFact, 0, entityTotal)
-	}
-	for index := range groups {
-		group := &groups[index]
-		if group.contribution.entities == nil {
-			if !p.sparseTransport {
+	var entities []EntityFact
+	if p.sparseTransport {
+		runs := table.entityRuns[:0]
+		if cap(runs) < len(groups) {
+			runs = make([]factTableEntityRun, 0, len(groups))
+		}
+		for index := range groups {
+			contribution := groups[index].contribution
+			if len(contribution.entities) != 0 {
+				runs = append(runs, factTableEntityRun{
+					entities: contribution.entities,
+				})
+			}
+		}
+		table.entityRuns = runs
+	} else {
+		entities = table.Entities[:0]
+		if cap(entities) < entityTotal {
+			entities = make([]EntityFact, 0, entityTotal)
+		}
+		for index := range groups {
+			group := &groups[index]
+			if group.contribution.entities == nil {
 				for _, symbol := range group.contribution.roots {
 					builder.enqueueSymbol(symbol)
 				}
 				for _, symbol := range group.contribution.fullTierSymbols {
 					builder.fullTier.addID(symbol)
 				}
+				continue
 			}
-			continue
-		}
-		start := len(entities)
-		entities = append(entities, group.contribution.entities...)
-		// The canonical table is the retained entity backing store. Repoint
-		// each contribution at its capped path window so the per-file
-		// preparation arrays become collectible instead of duplicating the
-		// complete entity table for the rest of the session.
-		group.contribution.entities = entities[start:len(entities):len(entities)]
-		for entityIndex := range group.contribution.entities {
-			entity := &group.contribution.entities[entityIndex]
-			if !p.sparseTransport {
+			start := len(entities)
+			entities = append(entities, group.contribution.entities...)
+			// The canonical table is the retained entity backing store.
+			// Repoint each contribution at its capped path window so the
+			// per-file preparation arrays become collectible.
+			group.contribution.entities = entities[start:len(entities):len(entities)]
+			for entityIndex := range group.contribution.entities {
+				entity := &group.contribution.entities[entityIndex]
 				builder.enqueueSymbol(entity.Symbol)
 				if entity.ResolvedCall != nil {
 					builder.enqueueSymbol(entity.ResolvedCall.Target)
 				}
 			}
-		}
-		if !p.sparseTransport {
 			for _, entityIndex := range group.contribution.fullTier {
 				builder.fullTier.addID(group.contribution.entities[entityIndex].Symbol)
 			}
@@ -646,7 +658,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		// Rust owns the symbol worklist, alias fixed point, reference tier, and
 		// retained symbol rows. None of those structures are materialized in Go.
 		stages.assembly = time.Since(started)
-		table.Entities = entities
+		table.Entities = nil
 		table.Symbols = nil
 		table.symbols = nil
 		table.pathSymbols = make(map[string][]SymbolID, len(groups))

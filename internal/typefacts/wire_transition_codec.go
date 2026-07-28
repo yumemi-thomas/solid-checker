@@ -34,12 +34,17 @@ func wireSymbolName(name string) string {
 // packedWriter appends varint-coded rows and interns every string into the
 // transition's shared dictionary.
 type packedWriter struct {
-	bytes []byte
-	dict  *stringTableV3
+	bytes      []byte
+	dict       *stringTableV3
+	flush      func([]byte) error
+	flushLimit int
+	flushed    int
+	err        error
 }
 
 func (w *packedWriter) u64(value uint64) {
 	w.bytes = binary.AppendUvarint(w.bytes, value)
+	w.maybeFlush()
 }
 
 func (w *packedWriter) signed(value int64) {
@@ -48,10 +53,35 @@ func (w *packedWriter) signed(value int64) {
 
 func (w *packedWriter) raw(value []byte) {
 	w.bytes = append(w.bytes, value...)
+	w.maybeFlush()
 }
 
 func (w *packedWriter) text(value string) {
 	w.u64(w.dict.intern(value))
+}
+
+func (w *packedWriter) maybeFlush() {
+	if w.flush == nil || w.err != nil || len(w.bytes) < w.flushLimit {
+		return
+	}
+	length := len(w.bytes)
+	w.err = w.flush(w.bytes)
+	if w.err == nil {
+		w.flushed += length
+	}
+	w.bytes = w.bytes[:0]
+}
+
+func (w *packedWriter) finish() error {
+	if w.err == nil && w.flush != nil && len(w.bytes) != 0 {
+		length := len(w.bytes)
+		w.err = w.flush(w.bytes)
+		if w.err == nil {
+			w.flushed += length
+		}
+		w.bytes = w.bytes[:0]
+	}
+	return w.err
 }
 
 type packedLocationState struct {

@@ -72,10 +72,24 @@ func newSession(backend Project, projectID string, trace Trace, schema uint64) (
 }
 
 func (s *Session) Lifecycle(ctx context.Context, request LifecycleRequest) LifecycleResponse {
-	return s.lifecycle(ctx, request)
+	return s.lifecycle(ctx, request, nil)
 }
 
-func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) LifecycleResponse {
+// LifecycleInto writes packed table transitions into arena while retaining
+// lifecycle metadata in the ordinary response.
+func (s *Session) LifecycleInto(
+	ctx context.Context,
+	request LifecycleRequest,
+	arena TransitionArena,
+) LifecycleResponse {
+	return s.lifecycle(ctx, request, arena)
+}
+
+func (s *Session) lifecycle(
+	ctx context.Context,
+	request LifecycleRequest,
+	arena TransitionArena,
+) LifecycleResponse {
 	generation := s.closure.generation
 	response := LifecycleResponse{
 		Schema: s.schema, RequestID: request.RequestID,
@@ -226,7 +240,12 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 			transitionInput.Base = s.retained.table
 			transitionInput.BaseStateToken = s.retained.tokenText
 		}
-		transition, err := s.transition.Encode(transitionInput)
+		var transition encodedWireTransition
+		if arena == nil {
+			transition, err = s.transition.Encode(transitionInput)
+		} else {
+			transition, err = s.transition.EncodeInto(transitionInput, arena)
+		}
 		if errors.Is(err, errSparseTransitionUnavailable) {
 			// Exact reference evidence can be unavailable after broad compiler
 			// invalidation. Rebuild once and send a full replacement; the normal
@@ -243,7 +262,11 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 				transitionInput.BaseStateToken = ""
 				transitionInput.Target = analyzedTable
 				transitionInput.Sparse = false
-				transition, err = s.transition.Encode(transitionInput)
+				if arena == nil {
+					transition, err = s.transition.Encode(transitionInput)
+				} else {
+					transition, err = s.transition.EncodeInto(transitionInput, arena)
+				}
 			}
 		}
 		if err != nil {
@@ -274,7 +297,7 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		table := *analyzedTable
 		s.retained.table = &table
 		if s.schema == TypeFactsSchemaVersionV6 {
-			if err := s.populateSymbolEvidence(ctx, request, &response); err != nil {
+			if err := s.populateSymbolEvidence(ctx, request, &response, nil); err != nil {
 				return fail("analysis-failed", err)
 			}
 			s.closure.releaseTransportRows()
@@ -283,6 +306,8 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 			// slices too; otherwise the header alone pins the transferred
 			// backing arrays even though the closure released its copy.
 			s.retained.table.Entities = nil
+			clear(s.retained.table.entityRuns)
+			s.retained.table.entityRuns = nil
 			s.retained.table.Files = nil
 			s.retained.table.sourceDigests = nil
 		}
@@ -302,7 +327,7 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 				s.retained.tokenText,
 			))
 		}
-		if err := s.populateSymbolEvidence(ctx, request, &response); err != nil {
+		if err := s.populateSymbolEvidence(ctx, request, &response, arena); err != nil {
 			if ctx.Err() != nil {
 				return fail("analysis-cancelled", ctx.Err())
 			}
@@ -344,6 +369,7 @@ func (s *Session) populateSymbolEvidence(
 	ctx context.Context,
 	request LifecycleRequest,
 	response *LifecycleResponse,
+	arena TransitionArena,
 ) error {
 	evidence, err := s.closure.resolveSymbolEvidence(ctx, request.SymbolQueries)
 	if err != nil {
@@ -351,7 +377,7 @@ func (s *Session) populateSymbolEvidence(
 	}
 	if request.Operation == LifecycleSymbols && len(evidence) != 0 {
 		sort.Slice(evidence, func(i, j int) bool { return evidence[i].ID < evidence[j].ID })
-		packed, err := s.transition.Encode(wireTransitionInput{
+		input := wireTransitionInput{
 			ProjectID: s.projectID,
 			Target: &FactTable{
 				Schema:     TypeFactsSchemaVersion,
@@ -359,7 +385,13 @@ func (s *Session) populateSymbolEvidence(
 				ProjectID:  s.projectID,
 				Symbols:    evidence,
 			},
-		})
+		}
+		var packed encodedWireTransition
+		if arena == nil {
+			packed, err = s.transition.Encode(input)
+		} else {
+			packed, err = s.transition.EncodeInto(input, arena)
+		}
 		if err != nil {
 			return fmt.Errorf("pack symbol evidence: %w", err)
 		}

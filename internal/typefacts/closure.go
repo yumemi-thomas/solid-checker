@@ -200,6 +200,8 @@ func (p *DemandClosure) releaseTransportRows() {
 		contribution.releaseTransportRows()
 	}
 	p.table.Entities = nil
+	clear(p.table.entityRuns)
+	p.table.entityRuns = p.table.entityRuns[:0]
 	p.table.Files = nil
 	p.table.sourceDigests = nil
 }

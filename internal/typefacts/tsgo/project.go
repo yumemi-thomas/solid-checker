@@ -72,6 +72,11 @@ type project struct {
 	// canonical path lookup per resolved call. A stale incremental node is
 	// absent and takes the current-declaration remapping path.
 	currentSourceFiles map[*ast.SourceFile]struct{}
+	// runtimePaths memoizes filesystem-resolved declaration paths for one
+	// checker generation. Runtime identity is demanded many times per file;
+	// EvalSymlinks is semantic for linked packages but must not be repeated
+	// for every entity carrying the same declaration path.
+	runtimePaths map[string]string
 	// resolved-call caches are generation-scoped and populated only by
 	// resolvedCall demands. Signatures and symbols are checker-owned pointers,
 	// so every accepted update drops the maps as it installs the new checker.
@@ -238,6 +243,7 @@ func (p *project) ReleaseAnalysisState() {
 	p.exportedIdentities = nil
 	p.filesByName = nil
 	p.currentSourceFiles = nil
+	p.runtimePaths = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
 	p.callDiagnostics = nil
@@ -507,6 +513,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.fs = candidateFS
 	p.versions = candidateVersions
 	p.generation++
+	p.runtimePaths = nil
 	if incremental && incrementalPath != "" && currentExportsKnown {
 		if p.exportedIdentities == nil {
 			p.exportedIdentities = make(map[*ast.Symbol]preservedExportIdentity)
@@ -1629,11 +1636,22 @@ func (ref durableSymbolRef) exportedID() typefacts.SymbolID {
 	return hashedSymbolID(sha256.Sum256(input))
 }
 
-func (ref durableSymbolRef) runtimeID() typefacts.RuntimeSymbolID {
-	path := ref.path
-	if resolved, err := filepath.EvalSymlinks(path); err == nil {
-		path = filepath.Clean(resolved)
+func (p *project) runtimePath(path string) string {
+	if resolved := p.runtimePaths[path]; resolved != "" {
+		return resolved
 	}
+	resolved := path
+	if realPath, err := filepath.EvalSymlinks(path); err == nil {
+		resolved = filepath.Clean(realPath)
+	}
+	if p.runtimePaths == nil {
+		p.runtimePaths = make(map[string]string)
+	}
+	p.runtimePaths[path] = resolved
+	return resolved
+}
+
+func (ref durableSymbolRef) runtimeID(path string) typefacts.RuntimeSymbolID {
 	input := make([]byte, 0, len(path)+len(ref.name)+32)
 	input = append(input, path...)
 	input = append(input, 0)

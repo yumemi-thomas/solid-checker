@@ -386,6 +386,7 @@ func (r *referenceIndex) releaseAnalysisState() {
 func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFile) *fileReferences {
 	references := make(map[typefacts.SymbolID][]fileReferenceSpan)
 	spaces := make(map[typefacts.SymbolID]uint8)
+	var unordered map[typefacts.SymbolID]struct{}
 	durable := true
 	var visit func(*ast.Node) bool
 	visit = func(node *ast.Node) bool {
@@ -396,8 +397,19 @@ func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFil
 				if !durableSymbolID(id) || !durableSymbolID(referenceID) {
 					durable = false
 				}
-				references[id] = append(references[id], fileReferenceSpan{
-					start: int32(scanner.SkipTrivia(sourceFile.Text(), node.Pos())),
+				spans := references[id]
+				start := int32(scanner.SkipTrivia(sourceFile.Text(), node.Pos()))
+				// Parsed children normally arrive in source order. Preserve the
+				// ordering contract without sorting every bucket, but detect and
+				// repair any non-lexical compiler traversal defensively.
+				if len(spans) != 0 && spans[len(spans)-1].start > start {
+					if unordered == nil {
+						unordered = make(map[typefacts.SymbolID]struct{})
+					}
+					unordered[id] = struct{}{}
+				}
+				references[id] = append(spans, fileReferenceSpan{
+					start: start,
 					end:   int32(node.End()),
 				})
 				if isTypeSpaceReference(node) {
@@ -419,7 +431,9 @@ func (r *referenceIndex) scan(p *project, path string, sourceFile *ast.SourceFil
 		durable: durable,
 	}
 	for id, spans := range references {
-		sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
+		if _, needsSort := unordered[id]; needsSort {
+			sort.Slice(spans, func(i, j int) bool { return spans[i].start < spans[j].start })
+		}
 		entry.refs = append(entry.refs, fileReferenceGroup{id: id, spans: spans})
 	}
 	sort.Slice(entry.refs, func(i, j int) bool { return entry.refs[i].id < entry.refs[j].id })

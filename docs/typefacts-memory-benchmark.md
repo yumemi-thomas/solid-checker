@@ -87,6 +87,38 @@ facts by symbol ID. Such a protocol should preserve v5 as the compatibility
 adapter rather than forcing full recomputation or sending Rust's retained table
 back to Go.
 
+## Shared transition arena and direct result ownership
+
+The V6 process adapter now creates and owns a private transition arena. Go
+streams packed rows into it in bounded 64 KiB chunks; Rust validates the
+committed request identity and range before decoding. Standalone producer
+responses remain inline and byte-compatible. Against the inline process
+adapter, three alternating 5,000-file runs measured:
+
+| Metric | Inline adapter | Shared arena | Change |
+|---|---:|---:|---:|
+| Producer peak physical memory | 464.6 MiB | 443.7 MiB | -4.5% |
+| Go `HeapSys` | 438.6 MiB | 423.0 MiB | -3.6% |
+| Go live heap | 249.2 MiB | 249.6 MiB | noise |
+| First analysis | 1,217.9 ms | 1,214.1 ms | -0.3% |
+| Incremental analysis | 84.12 ms | 84.19 ms | +0.1% |
+
+The next direct-ingestion experiment removed two Go-side ownership stages:
+
+- Retained-contribution preparation compacts `EntityFact` and structural-symbol
+  results in place and takes ownership of the TypeScript-Go result arenas.
+- Sparse V6 transport borrows those canonical per-file runs directly instead
+  of copying them into a generation-wide `FactTable.Entities` slice.
+
+The full-table allocation benchmark fell from about 7.97 MiB/op to 7.67
+MiB/op (-3.8%) and removed roughly 100 allocations. Cold Go assembly fell from
+about 1.24-1.29 ms to 15-22 us. The 5,000-file physical peak moved only from
+443.7 MiB to 443.2 MiB and live heap was unchanged, establishing that the
+remaining floor is the persistent TypeScript-Go program, AST, and binder state
+rather than fact handoff. The ownership changes remain because they remove
+copies, simplify the V6 lifetime, preserve exact transition bytes, and do not
+regress cached or incremental latency.
+
 ## Schema v6 ownership transfer
 
 V6 makes Rust the semantic-closure owner. Go releases expanded source, entity,
@@ -155,3 +187,101 @@ median varied between 1.04 and 1.13 ms across repeated 30-sample runs.
 Incremental end-to-end remains within 5% of the original baseline and within
 1% of optimized v5. Physical figures are the last pre-oracle v6 medians because
 this sandbox denies `ps`/`vmmap` process inspection without an approval prompt.
+
+## Cold-query performance follow-up
+
+CPU profiling on the same corpus found that runtime-symbol identity repeatedly
+called `filepath.EvalSymlinks` for declarations in the same file. The project
+now resolves each declaration path once per checker generation and drops that
+cache with the checker. Semantic extraction also resolves each result AST node
+once, shares it between the structural and semantic phases, and reuses adjacent
+query-position lookups. Checker calls remain in their original deterministic
+order, preserving generation-scoped symbol-handle minting.
+
+Three alternating cold runs against the same Rust checker measured:
+
+| Metric | Before | After | Change |
+|---|---:|---:|---:|
+| First analysis, median | 1,162.0 ms | 1,111.6 ms | -4.3% |
+| Producer demand stage, median | 376.0 ms | 314.3 ms | -16.4% |
+| Cached analysis | 1.07-1.13 ms | 1.04-1.13 ms | noise |
+| Incremental analysis, 30-sample median | 79.0-81.7 ms | 79.0-79.4 ms | no regression |
+| Incremental Producer median | 14.0 ms | 14.1 ms | noise |
+| Initial response | 3,575,177 B | 3,575,177 B | unchanged |
+| Incremental response | 7,166 B | 7,166 B | unchanged |
+
+The reference scanner now verifies source-order appends and sorts only a symbol
+bucket that actually arrives out of order. This reduced the isolated demand
+stage by about 3% in alternating samples, but did not move end-to-end time
+outside run noise.
+
+Two larger experiments were rejected:
+
+- Parallel checker calls would require multiple TypeScript checkers for one
+  Program. That conflicts with the project mutex and file-affine single-checker
+  lease described in ADR 0004, duplicates checker caches, and makes
+  generation-scoped symbol-handle order nondeterministic. Pure AST lookup was
+  separated and fused instead.
+- Loading references during structural symbol-closure rounds increased cold
+  first analysis from a 1,089 ms median to 1,292 ms (+18.6%). The packed
+  references-only frame is materially cheaper than embedding large reference
+  vectors in 50,000 structural rows, so the dedicated final reference round
+  remains.
+
+A fully demand-driven reference index was also rejected for this workload:
+the cold reference tier contains roughly 35,000 of 50,000 closed symbols,
+reference-space classification is project-wide, and exact incremental
+invalidation depends on retained per-file symbol contributions. It would still
+scan nearly the whole AST while either adding a second scan or weakening exact
+changed-reference evidence.
+
+## Whole-pipeline performance follow-up
+
+The final TypeFacts pass removed two more avoidable ownership/query costs:
+
+- Structural and semantic demands now share the already-selected AST node and,
+  when JSX normalization leaves it unchanged, the checker symbol. Type
+  descriptor and callability demands also share one `GetTypeAtLocation` result.
+  Against a fresh 5,000-file control, the Producer demand stage improved about
+  3.6% (311.4 ms to 300.1 ms median). End-to-end cold analysis improved about
+  0.5%; cached analysis was unchanged and the 30-sample incremental median
+  improved from 78.59 ms to 76.66 ms.
+- Rust source-arena decoding now reads directly into each final `SourceFile`
+  buffer. The former corpus-sized `std::fs::read` allocation and per-file
+  `to_vec` copies no longer coexist. Stable source-setup samples improved about
+  3.1% (117.49 ms to 113.81 ms) while preserving the exact payload.
+
+Profiling the consuming Solid Checker exposed independent per-file work inside
+Reactive IR. The repository includes an apply-ready patch at
+[`solid-checker-reactive-ir-performance.patch`](solid-checker-reactive-ir-performance.patch).
+It keeps cache mutation and merging sequential and ordered, while parallelizing
+summary-node discovery, graph-contribution discovery, cold result reads,
+contract-node construction, and contract-fragment construction. On the same
+corpus:
+
+| Metric | Before patch | With patch | Change |
+|---|---:|---:|---:|
+| First analysis, median | 1,066.1 ms | 1,014.4 ms | -4.8% |
+| Reactive IR, median | 408.8 ms | 337.9 ms | -17.3% |
+| Interprocedural graph | ~54 ms | ~21 ms | -61% |
+| Interprocedural export summaries | ~47 ms | ~26 ms | -46% |
+| Incremental analysis, median | 79.5-80.2 ms | 78.7-79.1 ms | no regression |
+| Incremental response | 7,167 B | 7,167 B | unchanged |
+
+The checker patch was validated in a writable mirror of the current dirty
+Solid Checker checkout because that checkout was mounted read-only for this
+task. Apply it from the Solid Checker root with
+`git apply /path/to/solid-ts-facts/docs/solid-checker-reactive-ir-performance.patch`.
+
+Rejected experiments were retained in the attribution record, not in
+production:
+
+- Combining async-flow and semantic-demand extraction behind one shared
+  cross-phase hash-map module increased Producer analysis about 3.8%.
+- Server-side transitive structural closure increased first analysis about
+  2.3%; compact request/response rounds remained faster.
+- Parallel local-access discovery halved that isolated stage but contended with
+  the concurrently running interprocedural worker, so total Reactive IR did not
+  improve.
+- Generation-scoped canonical-symbol memoization added hash lookups and
+  regressed the demand-stage median about 1.5%.

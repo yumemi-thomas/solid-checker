@@ -75,6 +75,7 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	project := flags.String("project", "", "path to tsconfig.json")
 	schema := flags.Uint64("schema", typefacts.TypeFactsSchemaVersionV5, "lifecycle schema version")
 	cpuProfile := flags.String("cpuprofile", "", "write a CPU profile to this path")
+	transitionArenaPath := flags.String("transition-arena", "", "Rust-owned transition arena path")
 	if err := flags.Parse(args); err != nil {
 		return err
 	}
@@ -100,6 +101,13 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 		return fmt.Errorf("resolve project: %w", err)
 	}
 	projectID = filepath.Clean(projectID)
+	transitionArena, err := openTransitionFileArena(*transitionArenaPath)
+	if err != nil {
+		return err
+	}
+	if transitionArena != nil {
+		defer transitionArena.Close()
+	}
 
 	// The startup handshake carries only the protocol version, schema hash,
 	// and build id — nothing derived from the project — so write and flush it
@@ -153,6 +161,7 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	responder := &lifecycleResponder{
 		session:            session,
 		trace:              trace,
+		transitionArena:    transitionArena,
 		crashBeforeUpdate:  os.Getenv("SOLID_TYPEFACTS_CRASH_BEFORE_UPDATE"),
 		crashBeforeAnalyze: os.Getenv("SOLID_TYPEFACTS_CRASH_BEFORE_ANALYZE"),
 	}
@@ -166,8 +175,9 @@ type responder interface {
 }
 
 type lifecycleResponder struct {
-	session *typefacts.Session
-	trace   typefacts.Trace
+	session         *typefacts.Session
+	trace           typefacts.Trace
+	transitionArena *transitionFileArena
 	// Marker paths for test-only fault injection, resolved once at startup so
 	// no environment lookup sits on the per-request path.
 	crashBeforeUpdate  string
@@ -182,7 +192,22 @@ func (r *lifecycleResponder) lifecycle(ctx context.Context, request typefacts.Li
 		crashOnMarker(r.crashBeforeAnalyze)
 	}
 	started := time.Now()
-	response := r.session.Lifecycle(ctx, request)
+	var response typefacts.LifecycleResponse
+	if r.transitionArena != nil &&
+		(request.Operation == typefacts.LifecycleAnalyze ||
+			request.Operation == typefacts.LifecycleSymbols) {
+		if err := r.transitionArena.Begin(request.RequestID); err == nil {
+			response = r.session.LifecycleInto(ctx, request, r.transitionArena)
+			if path, descriptor, ok := r.transitionArena.descriptor(); ok && response.OK {
+				response.SourceArena = path
+				response.SourceLengths = descriptor
+			}
+		} else {
+			response = r.session.Lifecycle(ctx, request)
+		}
+	} else {
+		response = r.session.Lifecycle(ctx, request)
+	}
 	if r.trace == nil {
 		return response
 	}
@@ -269,6 +294,13 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 			if !ok {
 				return
 			}
+			logicalResponseBytes := uint64(len(value.TableTransition))
+			if value.SourceArena != "" && len(value.SourceLengths) == 3 {
+				logicalResponseBytes = max(
+					logicalResponseBytes,
+					value.SourceLengths[2],
+				)
+			}
 			responseBytes, err := writeLifecycleResponse(output, value, trace)
 			if err != nil {
 				fatal <- err
@@ -281,7 +313,7 @@ func serve(ctx context.Context, respond responder, input io.Reader, output *bufi
 			// here; clearing value drops the semantic frame. Ordinary cached
 			// and incremental responses stay off this path.
 			value = typefacts.LifecycleResponse{}
-			if responseBytes >= 1<<20 {
+			if max(uint64(responseBytes), logicalResponseBytes) >= 1<<20 {
 				debug.FreeOSMemory()
 			}
 		}

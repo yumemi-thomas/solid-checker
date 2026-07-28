@@ -175,7 +175,7 @@ func (p *DemandClosure) materializeDemandTableLocked(
 		BuildSequence:    p.stats.BuildSequence + 1,
 		Generation:       generation,
 		Files:            len(table.Files),
-		Entities:         len(table.Entities),
+		Entities:         table.wireEntityCount(),
 		Symbols:          table.symbolFactsCount(),
 		FullTierSymbols:  fullTierSymbols,
 		BuildDuration:    time.Since(started),
@@ -192,14 +192,14 @@ func (p *DemandClosure) materializeDemandTableLocked(
 		// references is a full pass over the table, and it must not run when
 		// nobody is listening.
 		descriptors, calls, references := 0, 0, 0
-		for _, entity := range table.Entities {
+		table.rangeWireEntities(func(entity EntityFact) {
 			if entity.TypeDescriptor != nil {
 				descriptors++
 			}
 			if entity.ResolvedCall != nil {
 				calls++
 			}
-		}
+		})
 		table.rangeSymbolFacts(func(symbol SymbolFact) {
 			references += len(symbol.References)
 		})
@@ -208,7 +208,7 @@ func (p *DemandClosure) materializeDemandTableLocked(
 		p.trace.Stage("analyze-demand", stages.demand)
 		p.trace.Stage("analyze-symbols", stages.symbol)
 		p.trace.Metrics("counts",
-			Count("entities", len(table.Entities)), Count("symbols", table.symbolFactsCount()),
+			Count("entities", table.wireEntityCount()), Count("symbols", table.symbolFactsCount()),
 			Count("descriptors", descriptors), Count("calls", calls), Count("references", references),
 			Count("cachedSymbolFacts", retention.CachedSymbolFacts),
 			Count("recomputedSymbolFacts", retention.RecomputedSymbolFacts),

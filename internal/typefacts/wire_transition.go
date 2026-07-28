@@ -7,6 +7,7 @@ import (
 
 const wireTransitionVersion uint64 = 1
 const maxRetainedWireTransitionBuffer = 1 << 20
+const streamedWireTransitionChunk = 64 << 10
 
 var errSparseTransitionUnavailable = errors.New("sparse transition requires an exact manifest")
 
@@ -48,6 +49,14 @@ type encodedWireTransition struct {
 	SymbolOperations int
 }
 
+// TransitionArena receives one packed transition without taking ownership of
+// Go memory. AppendRows receives bounded temporary chunks, and Finish prepends
+// the compact header and dictionary logically before those rows.
+type TransitionArena interface {
+	AppendRows([]byte) error
+	Finish([]byte) error
+}
+
 // wireTransitionEncoder is owned by one serialized Session. Its buffers and
 // dictionary are reusable, but Encode returns a detached byte slice that the
 // next call cannot overwrite.
@@ -65,6 +74,23 @@ type wireTransitionEncoder struct {
 }
 
 func (e *wireTransitionEncoder) Encode(input wireTransitionInput) (encodedWireTransition, error) {
+	return e.encode(input, nil)
+}
+
+func (e *wireTransitionEncoder) EncodeInto(
+	input wireTransitionInput,
+	arena TransitionArena,
+) (encodedWireTransition, error) {
+	if arena == nil {
+		return encodedWireTransition{}, errors.New("transition arena is nil")
+	}
+	return e.encode(input, arena)
+}
+
+func (e *wireTransitionEncoder) encode(
+	input wireTransitionInput,
+	arena TransitionArena,
+) (encodedWireTransition, error) {
 	mode, baseGeneration, err := validateWireTransitionInput(input)
 	if err != nil {
 		return encodedWireTransition{}, err
@@ -97,6 +123,11 @@ func (e *wireTransitionEncoder) Encode(input wireTransitionInput) (encodedWireTr
 	defer e.resetDictionary()
 
 	rows := packedWriter{bytes: e.rows[:0], dict: e.dict}
+	if arena != nil {
+		rows.bytes = make([]byte, 0, streamedWireTransitionChunk)
+		rows.flush = arena.AppendRows
+		rows.flushLimit = streamedWireTransitionChunk
+	}
 	rows.text(input.ProjectID)
 	rows.text(input.BaseStateToken)
 	if mode == wireTransitionFull {
@@ -173,7 +204,15 @@ func (e *wireTransitionEncoder) Encode(input wireTransitionInput) (encodedWireTr
 			}
 		}
 	}
-	e.rows = rows.bytes
+	if err := rows.finish(); err != nil {
+		e.rows = nil
+		return encodedWireTransition{}, fmt.Errorf("stream transition rows: %w", err)
+	}
+	if arena == nil {
+		e.rows = rows.bytes
+	} else {
+		e.rows = nil
+	}
 
 	frame := packedWriter{bytes: e.frame[:0]}
 	frame.u64(wireTransitionVersion)
@@ -182,6 +221,28 @@ func (e *wireTransitionEncoder) Encode(input wireTransitionInput) (encodedWireTr
 	frame.u64(baseGeneration)
 	frame.u64(input.Target.Generation)
 	appendPackedDictionary(&frame, e.dict)
+	if arena != nil {
+		if err := arena.Finish(frame.bytes); err != nil {
+			e.frame = frame.bytes[:0]
+			return encodedWireTransition{}, fmt.Errorf("finish transition arena: %w", err)
+		}
+		if rows.flushed+len(frame.bytes) >= maxRetainedWireTransitionBuffer {
+			// Match detachFrame's cold-lifecycle policy. The streamed adapter
+			// never owns the complete frame, but its one-shot dictionary and
+			// planning buckets are just as oversized for incremental work.
+			e.dict = nil
+			e.pathOps = nil
+			e.symbolOps = nil
+			e.paths = nil
+			e.symbolIDs = nil
+		}
+		e.frame = frame.bytes[:0]
+		return encodedWireTransition{
+			Mode:             mode,
+			PathOperations:   pathOperationCount,
+			SymbolOperations: symbolOperationCount,
+		}, nil
+	}
 	frame.raw(rows.bytes)
 
 	owned := e.detachFrame(frame.bytes, rows.bytes)

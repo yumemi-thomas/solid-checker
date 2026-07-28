@@ -12,6 +12,7 @@ use thiserror::Error;
 
 mod retained_table;
 mod session;
+mod shared_transition_arena;
 pub mod v3;
 
 pub use retained_table::{FactTable, Symbol};

@@ -7,6 +7,78 @@ use typefacts::{
 };
 
 #[test]
+fn shared_transition_arena_matches_the_inline_process_adapter() {
+    let project = project();
+    let use_path = project.parent().unwrap().join("use.ts");
+    let source = fs::read_to_string(&use_path).unwrap();
+    let import_start = source.find("localCount").unwrap();
+    let demand = EntityDemand {
+        location: Location {
+            path: use_path.to_string_lossy().into_owned().into(),
+            start_byte: import_start as u64,
+            end_byte: (import_start + "localCount".len()) as u64,
+        },
+        symbol: true,
+        references: true,
+        ..EntityDemand::default()
+    };
+    let mut inline = Session::open(
+        Producer::at(producer()).without_shared_transition_arena(),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let mut shared = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let expected = inline
+        .analyze(&AnalysisDemand {
+            entities: vec![demand.clone()],
+        })
+        .unwrap();
+    let actual = shared
+        .analyze(&AnalysisDemand {
+            entities: vec![demand.clone()],
+        })
+        .unwrap();
+    assert_eq!(
+        actual.entities().collect::<Vec<_>>(),
+        expected.entities().collect::<Vec<_>>()
+    );
+
+    let unrelated_path = project.parent().unwrap().join("unrelated.ts");
+    let change = FileChange {
+        path: unrelated_path.to_string_lossy().into_owned(),
+        source: fs::read(&unrelated_path).unwrap(),
+        deleted: false,
+        version: 1,
+    };
+    inline.update([change.clone()]).unwrap();
+    shared.update([change]).unwrap();
+    let expected = inline
+        .analyze(&AnalysisDemand {
+            entities: vec![demand.clone()],
+        })
+        .unwrap();
+    let actual = shared
+        .analyze(&AnalysisDemand {
+            entities: vec![demand],
+        })
+        .unwrap();
+    assert_eq!(
+        actual.entities().collect::<Vec<_>>(),
+        expected.entities().collect::<Vec<_>>()
+    );
+    assert_eq!(
+        shared.take_last_table_changes(),
+        inline.take_last_table_changes()
+    );
+}
+
+#[test]
 fn rust_client_consumes_compiler_semantic_facts_across_retained_updates() {
     let project = project();
     let use_path = project.parent().unwrap().join("use.ts");

@@ -85,28 +85,25 @@ func prepareRetainedContribution(
 		)
 	}
 
-	entityCount := 0
 	fullTierCount := 0
-	structuralCount := 0
 	for index := range demands {
-		if index == 0 || result.Entities[index].Location != result.Entities[index-1].Location {
-			entityCount++
-		}
 		if result.Entities[index].Symbol != "" {
 			if demands[index].References {
 				fullTierCount++
 			}
 		}
-		if result.Structural[index] != "" {
-			structuralCount++
-		}
 	}
 
 	contribution := &retainedContribution{
-		demandHash:   hash,
-		entities:     make([]EntityFact, 0, entityCount),
-		fullTier:     make([]uint32, 0, fullTierCount),
-		structural:   make([]SymbolID, 0, structuralCount),
+		demandHash: hash,
+		// SemanticDemandRuns transfers this result exactly once. Compact
+		// adjacent same-location demand rows in place so the contribution
+		// takes ownership of TS-Go's entity arena instead of cloning it.
+		entities: result.Entities[:0],
+		fullTier: make([]uint32, 0, fullTierCount),
+		// Structural evidence is consumed by this same transaction, so
+		// compact its non-empty rows into the transferred TS-Go arena too.
+		structural:   result.Structural[:0],
 		dependencies: result.Dependencies,
 		durable:      result.Durable,
 	}
@@ -125,9 +122,12 @@ func prepareRetainedContribution(
 			)
 		}
 		demand := &demands[index]
-		entity := &result.Entities[index]
+		// Copy before append: contribution.entities and result.Entities share
+		// backing, and the write cursor may overwrite this source slot.
+		entity := result.Entities[index]
 		var target *EntityFact
-		if last := len(contribution.entities) - 1; last >= 0 && contribution.entities[last].Location == entity.Location {
+		if last := len(contribution.entities) - 1; last >= 0 &&
+			contribution.entities[last].Location == entity.Location {
 			target = &contribution.entities[last]
 		} else {
 			contribution.entities = append(contribution.entities, EntityFact{Location: entity.Location})
@@ -162,7 +162,9 @@ func prepareRetainedContribution(
 	descriptorSymbols := make([]SymbolID, 0)
 	entityIndex := -1
 	for index := range demands {
-		if index == 0 || result.Entities[index].Location != result.Entities[index-1].Location {
+		// result.Entities has been compacted in place, so the immutable demand
+		// run is the canonical source for original row boundaries here.
+		if index == 0 || demands[index].Location != demands[index-1].Location {
 			entityIndex++
 		}
 		if demands[index].TypeDescriptor {

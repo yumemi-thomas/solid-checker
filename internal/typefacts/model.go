@@ -99,6 +99,42 @@ type FactTable struct {
 	// pathSymbols is the compact transport/invalidation view retained by v6
 	// after Rust has taken ownership of the expanded path rows.
 	pathSymbols map[string][]SymbolID
+	// entityRuns borrows the canonical per-file contribution rows until the
+	// v6 transition has streamed them into Rust. It avoids copying those rows
+	// into the generation-wide public Entities slice solely for transport.
+	entityRuns []factTableEntityRun
+}
+
+type factTableEntityRun struct {
+	entities []EntityFact
+}
+
+func (t *FactTable) wireEntityCount() int {
+	if t == nil {
+		return 0
+	}
+	if t.entityRuns == nil {
+		return len(t.Entities)
+	}
+	count := 0
+	for index := range t.entityRuns {
+		count += len(t.entityRuns[index].entities)
+	}
+	return count
+}
+
+func (t *FactTable) rangeWireEntities(visit func(EntityFact)) {
+	if t.entityRuns == nil {
+		for index := range t.Entities {
+			visit(t.Entities[index])
+		}
+		return
+	}
+	for runIndex := range t.entityRuns {
+		for entityIndex := range t.entityRuns[runIndex].entities {
+			visit(t.entityRuns[runIndex].entities[entityIndex])
+		}
+	}
 }
 
 // SourceDigest is the source identity transferred to Rust's retained table.

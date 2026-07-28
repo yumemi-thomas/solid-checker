@@ -15,6 +15,79 @@ type transitionEnvelopeForTest struct {
 	symbolOperations          uint64
 }
 
+type transitionArenaForTest struct {
+	rows   []byte
+	prefix []byte
+}
+
+func (a *transitionArenaForTest) AppendRows(chunk []byte) error {
+	a.rows = append(a.rows, chunk...)
+	return nil
+}
+
+func (a *transitionArenaForTest) Finish(prefix []byte) error {
+	a.prefix = append(a.prefix, prefix...)
+	return nil
+}
+
+func TestStreamedWireTransitionIsByteIdentical(t *testing.T) {
+	table := goldenWireTable()
+	expected, err := (&wireTransitionEncoder{}).Encode(wireTransitionInput{
+		ProjectID: table.ProjectID,
+		Target:    &table,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	arena := &transitionArenaForTest{}
+	actual, err := (&wireTransitionEncoder{}).EncodeInto(wireTransitionInput{
+		ProjectID: table.ProjectID,
+		Target:    &table,
+	}, arena)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if actual.Bytes != nil {
+		t.Fatalf("streamed transition retained %d bytes", len(actual.Bytes))
+	}
+	streamed := append(arena.prefix, arena.rows...)
+	if !bytes.Equal(streamed, expected.Bytes) {
+		t.Fatal("streamed transition differs from the owned transition")
+	}
+}
+
+func TestBorrowedEntityRunsEncodeByteIdentically(t *testing.T) {
+	flat := goldenWireTable()
+	expected, err := (&wireTransitionEncoder{}).Encode(wireTransitionInput{
+		ProjectID: flat.ProjectID,
+		Target:    &flat,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	borrowed := flat
+	borrowed.entityRuns = make([]factTableEntityRun, 0, len(flat.Entities))
+	for start := 0; start < len(flat.Entities); {
+		end := entityPathEnd(flat.Entities, start)
+		borrowed.entityRuns = append(borrowed.entityRuns, factTableEntityRun{
+			entities: flat.Entities[start:end],
+		})
+		start = end
+	}
+	borrowed.Entities = nil
+	actual, err := (&wireTransitionEncoder{}).Encode(wireTransitionInput{
+		ProjectID: borrowed.ProjectID,
+		Target:    &borrowed,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(actual.Bytes, expected.Bytes) {
+		t.Fatal("borrowed per-file entity runs changed the wire transition")
+	}
+}
+
 func decodeTransitionEnvelopeForTest(t *testing.T, frame []byte) transitionEnvelopeForTest {
 	t.Helper()
 	read := func() uint64 {

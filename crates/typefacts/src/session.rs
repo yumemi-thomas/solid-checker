@@ -1,7 +1,7 @@
 use std::{
     collections::{HashMap, HashSet},
     ffi::OsString,
-    io::BufWriter,
+    io::{BufReader, BufWriter, Read},
     path::{Component, Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
@@ -15,6 +15,7 @@ use std::{
 
 use thiserror::Error;
 
+use crate::shared_transition_arena::SharedTransitionArena;
 use crate::{
     FactTable, TypeFactsError, decode, decode_trusted, encode_sidecar_request, read_frame,
     v3::{
@@ -34,6 +35,7 @@ type PendingResponses = Arc<Mutex<HashMap<u64, mpsc::SyncSender<Result<Response,
 pub struct Producer {
     path: PathBuf,
     args: Vec<OsString>,
+    shared_transition_arena: bool,
 }
 
 impl Producer {
@@ -42,7 +44,16 @@ impl Producer {
         Self {
             path: path.into(),
             args: Vec::new(),
+            shared_transition_arena: true,
         }
+    }
+
+    /// Uses the legacy inline transition payload instead of the default
+    /// Rust-owned shared arena.
+    #[must_use]
+    pub fn without_shared_transition_arena(mut self) -> Self {
+        self.shared_transition_arena = false;
+        self
     }
 
     /// Adds producer-specific arguments before the crate-owned `-project`
@@ -195,6 +206,7 @@ struct Connection {
     next_request_id: Arc<AtomicU64>,
     active_request_id: Arc<AtomicU64>,
     reader: Option<JoinHandle<()>>,
+    _transition_arena: Option<Arc<SharedTransitionArena>>,
 }
 
 /// A thread-safe handle that asks the producer to cancel the active analysis.
@@ -230,8 +242,19 @@ impl Cancellation {
 
 impl Connection {
     fn spawn(producer: &Producer, project_id: &str) -> Result<Self, SessionError> {
-        let mut child = Command::new(&producer.path)
-            .args(&producer.args)
+        let transition_arena = producer
+            .shared_transition_arena
+            .then(SharedTransitionArena::create)
+            .transpose()?
+            .map(Arc::new);
+        let mut command = Command::new(&producer.path);
+        command.args(&producer.args);
+        if let Some(arena) = &transition_arena {
+            let mut argument = OsString::from("-transition-arena=");
+            argument.push(arena.path());
+            command.arg(argument);
+        }
+        let mut child = command
             .args(["-schema=6", "-project", project_id])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -298,6 +321,7 @@ impl Connection {
         let writer = Arc::new(Mutex::new(BufWriter::new(input)));
         let pending = PendingResponses::default();
         let reader_pending = Arc::clone(&pending);
+        let reader_arena = transition_arena.as_ref().map(Arc::clone);
         let reader = std::thread::spawn(move || {
             loop {
                 let payload = match read_frame(&mut output) {
@@ -310,10 +334,16 @@ impl Connection {
                 let decode_started = Instant::now();
                 let response = match decode_trusted::<Response>(&payload) {
                     Ok(mut response) => {
-                        response.client_decode_ns =
-                            u64::try_from(decode_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
                         response.client_response_bytes =
                             u64::try_from(payload.len()).unwrap_or(u64::MAX);
+                        if let Some(arena) = &reader_arena
+                            && let Err(error) = arena.attach(&mut response)
+                        {
+                            fail_pending(&reader_pending, error.to_string());
+                            break;
+                        }
+                        response.client_decode_ns =
+                            u64::try_from(decode_started.elapsed().as_nanos()).unwrap_or(u64::MAX);
                         response
                     }
                     Err(error) => {
@@ -336,6 +366,7 @@ impl Connection {
             next_request_id: Arc::new(AtomicU64::new(1)),
             active_request_id: Arc::new(AtomicU64::new(0)),
             reader: Some(reader),
+            _transition_arena: transition_arena,
         })
     }
 
@@ -1715,38 +1746,42 @@ fn decode_sources(response: Response) -> Result<Vec<SourceFile>, SessionError> {
     if response.source_arena.is_empty() {
         return Ok(response.sources);
     }
-    let bytes = std::fs::read(&response.source_arena)
-        .map_err(|error| SessionError::Process(format!("read source arena: {error}")))?;
-    let _ = std::fs::remove_file(&response.source_arena);
     if response.source_lengths.len() != response.sources.len() {
         return Err(SessionError::InvalidResponse(
             "source arena descriptor count mismatch".into(),
         ));
     }
-    let mut offset = 0usize;
-    let mut sources = Vec::with_capacity(response.sources.len());
-    for (mut source, length) in response.sources.into_iter().zip(response.source_lengths) {
-        let length = usize::try_from(length)
-            .map_err(|_| SessionError::InvalidResponse("source arena length overflow".into()))?;
-        let end = offset
-            .checked_add(length)
-            .ok_or_else(|| SessionError::InvalidResponse("source arena range overflow".into()))?;
-        source.source = bytes
-            .get(offset..end)
-            .ok_or_else(|| {
-                SessionError::InvalidResponse("source arena range is out of bounds".into())
-            })?
-            .to_vec();
-        source.local = false;
-        sources.push(source);
-        offset = end;
-    }
-    if offset != bytes.len() {
-        return Err(SessionError::InvalidResponse(
-            "source arena has trailing bytes".into(),
-        ));
-    }
-    Ok(sources)
+    let arena_path = response.source_arena;
+    let decoded = (|| {
+        let file = std::fs::File::open(&arena_path)
+            .map_err(|error| SessionError::Process(format!("open source arena: {error}")))?;
+        let mut reader = BufReader::with_capacity(1 << 20, file);
+        let mut sources = Vec::with_capacity(response.sources.len());
+        for (mut source, length) in response.sources.into_iter().zip(response.source_lengths) {
+            let length = usize::try_from(length).map_err(|_| {
+                SessionError::InvalidResponse("source arena length overflow".into())
+            })?;
+            source.source.resize(length, 0);
+            reader
+                .read_exact(&mut source.source)
+                .map_err(|error| SessionError::Process(format!("read source arena: {error}")))?;
+            source.local = false;
+            sources.push(source);
+        }
+        let mut trailing = [0_u8; 1];
+        if reader
+            .read(&mut trailing)
+            .map_err(|error| SessionError::Process(format!("finish source arena: {error}")))?
+            != 0
+        {
+            return Err(SessionError::InvalidResponse(
+                "source arena has trailing bytes".into(),
+            ));
+        }
+        Ok(sources)
+    })();
+    let _ = std::fs::remove_file(arena_path);
+    decoded
 }
 
 fn fail_pending(pending: &PendingResponses, message: String) {
