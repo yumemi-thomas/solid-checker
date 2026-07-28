@@ -10,37 +10,52 @@ import (
 	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
 )
 
-// deltaGoldenStep is one retained-table transition: apply Delta to the table
-// packed in Base and the result must equal the table packed in Expected.
-// Packed is the same delta as the opaque frame responses actually carry; the
-// Rust side must expand it back to Delta exactly.
-type deltaGoldenStep struct {
-	Label    string           `cbor:"label" json:"label"`
-	Base     []byte           `cbor:"base" json:"base"`
-	Delta    FactTableDeltaV3 `cbor:"delta" json:"delta"`
-	Packed   []byte           `cbor:"packed" json:"packed"`
-	Expected []byte           `cbor:"expected" json:"expected"`
+// transitionGoldenStep is one retained-table transition. The Rust client
+// materializes BaseTransition, applies Transition against BaseToken, and
+// compares the result with ExpectedTransition.
+type transitionGoldenStep struct {
+	Label              string `cbor:"label" json:"label"`
+	BaseToken          string `cbor:"baseToken" json:"baseToken"`
+	BaseTransition     []byte `cbor:"baseTransition" json:"baseTransition"`
+	Transition         []byte `cbor:"transition" json:"transition"`
+	ExpectedTransition []byte `cbor:"expectedTransition" json:"expectedTransition"`
 }
 
-type deltaGolden struct {
-	Steps []deltaGoldenStep `cbor:"steps" json:"steps"`
+type transitionGolden struct {
+	Steps []transitionGoldenStep `cbor:"steps" json:"steps"`
 }
 
 const deltaGoldenProjectID = "/p/tsconfig.json"
 
-// deltaGoldenSteps drives the production differ over the same transitions the
-// Go round-trip tests use — an edit, a file deletion, a demand shrink, and a
-// per-path reference replacement — and records each (base, delta, expected)
-// triple in wire form.
-func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
+// transitionGoldenSteps drives the production encoder over an edit, deletion,
+// demand shrink, and per-path reference replacement. Full and delta frames use
+// the same decoder and row writers.
+func transitionGoldenSteps(t *testing.T) []transitionGoldenStep {
 	t.Helper()
-	pack := func(table FactTable, generation uint64) []byte {
+	encoder := &wireTransitionEncoder{}
+	packFull := func(table *FactTable) []byte {
 		t.Helper()
-		packed, err := PackedFactTableV3From(FactTableV2From(table, deltaGoldenProjectID, generation))
+		encoded, err := encoder.Encode(wireTransitionInput{
+			ProjectID: deltaGoldenProjectID,
+			Target:    table,
+		})
 		if err != nil {
 			t.Fatal(err)
 		}
-		return packed
+		return encoded.Bytes
+	}
+	packDelta := func(base, target *FactTable, token string) []byte {
+		t.Helper()
+		encoded, err := encoder.Encode(wireTransitionInput{
+			ProjectID:      deltaGoldenProjectID,
+			BaseStateToken: token,
+			Base:           base,
+			Target:         target,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return encoded.Bytes
 	}
 
 	location := func(path string, start int) Location {
@@ -55,6 +70,7 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 		},
 		Symbols: []SymbolFact{{ID: "a"}, {ID: "b"}},
 		Files:   []FileFact{{Path: "a.ts"}, {Path: "b.ts"}},
+		stateID: 1,
 	}
 	edit := FactTable{
 		Schema: 1, Generation: 2, ProjectID: deltaGoldenProjectID,
@@ -65,6 +81,7 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 		},
 		Symbols: []SymbolFact{{ID: "a2"}, {ID: "b"}},
 		Files:   []FileFact{{Path: "a.ts", Calls: []SourceCall{{Target: "a2"}}}, {Path: "b.ts"}},
+		stateID: 2,
 	}
 	deleted := FactTable{
 		Schema: 1, Generation: 3, ProjectID: deltaGoldenProjectID,
@@ -72,6 +89,7 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 		Entities: []EntityFact{{Location: location("a.ts", 3), Symbol: "a2"}},
 		Symbols:  []SymbolFact{{ID: "a2"}},
 		Files:    []FileFact{{Path: "a.ts", Calls: []SourceCall{{Target: "a2"}}}},
+		stateID:  3,
 	}
 	shrunk := FactTable{
 		Schema: 1, Generation: 4, ProjectID: deltaGoldenProjectID,
@@ -79,6 +97,7 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 		Entities: []EntityFact{},
 		Symbols:  []SymbolFact{},
 		Files:    []FileFact{{Path: "a.ts", Calls: []SourceCall{{Target: "a2"}}}},
+		stateID:  4,
 	}
 	exact := &closureBuilder{
 		referenceChangesExact: true,
@@ -88,28 +107,19 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 	deleted.transport = transportManifest(&edit, &deleted, exact, map[string]struct{}{"b.ts": {}})
 	shrunk.transport = transportManifest(&deleted, &shrunk, exact, map[string]struct{}{"a.ts": {}})
 
-	packDelta := func(delta FactTableDeltaV3) []byte {
-		t.Helper()
-		packed, err := PackedFactTableDeltaV3From(delta)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return packed
-	}
-
-	steps := make([]deltaGoldenStep, 0, 4)
+	steps := make([]transitionGoldenStep, 0, 4)
 	previous := base
-	for _, next := range []struct {
+	for index, next := range []struct {
 		label string
 		table FactTable
 	}{{"edit", edit}, {"delete", deleted}, {"demand-shrink", shrunk}} {
-		delta := DiffFactTablesV3FromInternal(previous, next.table, next.table.Generation)
-		steps = append(steps, deltaGoldenStep{
-			Label:    next.label,
-			Base:     pack(previous, previous.Generation),
-			Delta:    delta,
-			Packed:   packDelta(delta),
-			Expected: pack(next.table, next.table.Generation),
+		token := []string{"base-1", "base-2", "base-3"}[index]
+		steps = append(steps, transitionGoldenStep{
+			Label:              next.label,
+			BaseToken:          token,
+			BaseTransition:     packFull(&previous),
+			Transition:         packDelta(&previous, &next.table, token),
+			ExpectedTransition: packFull(&next.table),
 		})
 		previous = next.table
 	}
@@ -124,57 +134,58 @@ func deltaGoldenSteps(t *testing.T) []deltaGoldenStep {
 		Symbols: []SymbolFact{{ID: "shared", References: []Location{
 			reference("a.ts", 1), reference("b.ts", 1),
 		}}},
+		stateID: 5,
 	}
 	sharedEdit := FactTable{
 		Schema: 1, Generation: 2, ProjectID: deltaGoldenProjectID,
 		Symbols: []SymbolFact{{ID: "shared", References: []Location{
 			reference("a.ts", 3), reference("a.ts", 5), reference("b.ts", 1),
 		}}},
+		stateID: 6,
 	}
 	sharedEdit.transport = transportManifest(&sharedBase, &sharedEdit, &closureBuilder{
 		referenceChangesExact: true,
 		changedSymbols:        testChangedSet(newSymbolInterner(), "shared"),
 	}, map[string]struct{}{"a.ts": {}})
-	sharedDelta := DiffFactTablesV3FromInternal(sharedBase, sharedEdit, sharedEdit.Generation)
-	steps = append(steps, deltaGoldenStep{
-		Label:    "symbol-reference-file",
-		Base:     pack(sharedBase, sharedBase.Generation),
-		Delta:    sharedDelta,
-		Packed:   packDelta(sharedDelta),
-		Expected: pack(sharedEdit, sharedEdit.Generation),
+	steps = append(steps, transitionGoldenStep{
+		Label:              "symbol-reference-file",
+		BaseToken:          "base-reference",
+		BaseTransition:     packFull(&sharedBase),
+		Transition:         packDelta(&sharedBase, &sharedEdit, "base-reference"),
+		ExpectedTransition: packFull(&sharedEdit),
 	})
 	return steps
 }
 
-func deltaGoldenPath(t *testing.T) string {
+func transitionGoldenPath(t *testing.T) string {
 	t.Helper()
 	_, filename, _, ok := runtime.Caller(0)
 	if !ok {
 		t.Fatal("resolve test path")
 	}
-	return filepath.Join(filepath.Dir(filename), "..", "..", "benchmarks", "phase1", "typefacts-v3-delta-golden.cbor")
+	return filepath.Join(filepath.Dir(filename), "..", "..", "benchmarks", "phase1", "typefacts-v5-transition-golden.cbor")
 }
 
-// The Rust client applies these same deltas in the apply_table_delta tests in
-// crates/typefacts/src/session.rs. Keeping the fixture in the repo is what
-// makes the two appliers answer for the same input. Set
+// The Rust client applies these same transitions in crates/typefacts/src.
+// Keeping the fixture in the repo makes both languages answer for the same
+// input. Set
 // TYPEFACTS_UPDATE_GOLDEN=1 to regenerate the fixture after a deliberate,
 // coordinated format change.
-func TestDeltaGoldenMatchesProducerOutput(t *testing.T) {
-	encoded, err := wirecbor.Marshal(deltaGolden{Steps: deltaGoldenSteps(t)})
+func TestV5TransitionGoldenMatchesProducerOutput(t *testing.T) {
+	encoded, err := wirecbor.Marshal(transitionGolden{Steps: transitionGoldenSteps(t)})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if os.Getenv("TYPEFACTS_UPDATE_GOLDEN") != "" {
-		if err := os.WriteFile(deltaGoldenPath(t), encoded, 0o644); err != nil {
+		if err := os.WriteFile(transitionGoldenPath(t), encoded, 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	golden, err := os.ReadFile(deltaGoldenPath(t))
+	golden, err := os.ReadFile(transitionGoldenPath(t))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if !bytes.Equal(encoded, golden) {
-		t.Fatalf("delta golden is stale: producer emits %d bytes, fixture has %d", len(encoded), len(golden))
+		t.Fatalf("transition golden is stale: producer emits %d bytes, fixture has %d", len(encoded), len(golden))
 	}
 }

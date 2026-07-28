@@ -5,12 +5,15 @@ status: accepted
 # One checker per project
 
 The tsgo adapter installs a custom checker pool that holds exactly one
-`checker.Checker` for the lifetime of a project, instead of the compiler's
-default pool of four. The default builds its checkers afresh on **every** program
-update, so on the editor path — where a generation is one keystroke-scale edit —
-it charges four checker constructions per edit for concurrency the adapter cannot
-use anyway: every entry point is already serialized behind the project mutex, and
-requests are dispatched through a single ordered worker.
+`checker.Checker` for each immutable compiler Program, instead of the compiler's
+default pool of four. A Program update necessarily receives a new checker:
+checker caches own Program-specific AST nodes, symbols, types, links, and global
+state and TypeScript-Go exposes no correct rebase operation. The default builds
+four such checkers on **every** Program update, so on the editor path — where a
+generation is one keystroke-scale edit — it charges four constructions per edit
+for concurrency the adapter cannot use anyway: every entry point is already
+serialized behind the project mutex, and requests are dispatched through a
+single ordered worker.
 
 ## Why a custom pool rather than `SingleThreaded`
 
@@ -55,6 +58,11 @@ single one of them should be credited.
   accounts for roughly 2.3 ms of a ~15 ms client-side edit, already near its
   parallel ceiling. The wins available on that path have been transport shape and
   allocation, not more cores.
+- **Leaf modules do not emit a declaration proof.** Declaration-shape equality
+  exists to decide whether importers may retain facts. When the retained reverse
+  graph proves a module has no importers, the adapter refreshes its checker-owned
+  export pointers and durable identities directly. If it later gains an importer,
+  ordinary declaration emission resumes.
 - **Reversing this is a real project, not a flag flip.** It means restoring
   per-update checker construction, giving the adapter a concurrency story above
   the project mutex, and replacing the ordered worker with something that can run

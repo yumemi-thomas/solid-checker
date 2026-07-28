@@ -32,7 +32,8 @@ func TestOrderSymbolFactsReusesCanonicalOrderAcrossDelta(t *testing.T) {
 		factIndex[interner.handle(facts[index].ID)] = int32(index) + 1
 	}
 
-	got, _ := orderSymbolFacts(facts, factIndex, interner, []SymbolID{"a", "c", "d"}, nil)
+	previous := newSymbolFactStore([]SymbolFact{{ID: "a"}, {ID: "c"}, {ID: "d"}})
+	got, _ := orderSymbolFacts(facts, factIndex, interner, previous, nil)
 	want := []SymbolFact{
 		{ID: "a"},
 		{ID: "b"},

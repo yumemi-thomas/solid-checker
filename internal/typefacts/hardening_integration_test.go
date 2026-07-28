@@ -29,10 +29,7 @@ func TestProjectResolvesChainedReexportsNamespaceGenericsAndPackageSubpaths(t *t
 
 	for _, test := range tests {
 		t.Run(test.call, func(t *testing.T) {
-			call, err := project.ResolvedCall(context.Background(), locationOf(t, usePath, test.call))
-			if err != nil {
-				t.Fatal(err)
-			}
+			call := resolvedCall(t, project, locationOf(t, usePath, test.call))
 			if call.ReturnTypeText != test.returnType {
 				t.Fatalf("return type = %q, want %q", call.ReturnTypeText, test.returnType)
 			}
@@ -255,10 +252,7 @@ identity("mixed");
 		"referenced()":      "number",
 		`identity("mixed")`: `"mixed"`,
 	} {
-		call, err := project.ResolvedCall(context.Background(), locationOf(t, path, callText))
-		if err != nil {
-			t.Fatalf("ResolvedCall(%s): %v", callText, err)
-		}
+		call := resolvedCall(t, project, locationOf(t, path, callText))
 		if call.ReturnTypeText != want {
 			t.Errorf("ResolvedCall(%s) return type = %q, want %q", callText, call.ReturnTypeText, want)
 		}
@@ -338,10 +332,7 @@ func TestProjectFailedUpdateIsTransactional(t *testing.T) {
 	}}); err != nil {
 		t.Fatalf("valid update after rejected update = %v, want success", err)
 	}
-	call, err := project.ResolvedCall(context.Background(), locationOf(t, filepath.Join(root, "use.ts"), "value()"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	call := resolvedCall(t, project, locationOf(t, filepath.Join(root, "use.ts"), "value()"))
 	if call.ReturnTypeText != "string" {
 		t.Fatalf("return type = %q, want string", call.ReturnTypeText)
 	}
@@ -363,14 +354,8 @@ func TestProjectOverlayAndCleanBuildProduceEquivalentPublicFacts(t *testing.T) {
 	writeProjectFile(t, root, "source.ts", string(updated))
 	clean := openProject(t, root)
 	callLocation := locationOf(t, filepath.Join(root, "use.ts"), "value()")
-	overlayCall, err := overlay.ResolvedCall(context.Background(), callLocation)
-	if err != nil {
-		t.Fatal(err)
-	}
-	cleanCall, err := clean.ResolvedCall(context.Background(), callLocation)
-	if err != nil {
-		t.Fatal(err)
-	}
+	overlayCall := resolvedCall(t, overlay, callLocation)
+	cleanCall := resolvedCall(t, clean, callLocation)
 	if overlayCall.ReturnTypeText != cleanCall.ReturnTypeText {
 		t.Fatalf("overlay return type = %q, clean = %q", overlayCall.ReturnTypeText, cleanCall.ReturnTypeText)
 	}
@@ -408,12 +393,9 @@ func TestProjectImportChangeFallsBackToEquivalentProgram(t *testing.T) {
 	}}); err != nil {
 		t.Fatal(err)
 	}
-	call, err := project.ResolvedCall(context.Background(), typefacts.Location{
+	call := resolvedCall(t, project, typefacts.Location{
 		Path: usePath, StartByte: strings.Index(string(updated), "value()"), EndByte: len(updated),
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
 	if call.ReturnTypeText != "string" {
 		t.Fatalf("return type after import change = %q, want string", call.ReturnTypeText)
 	}

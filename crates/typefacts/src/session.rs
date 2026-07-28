@@ -2,7 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     ffi::OsString,
     io::BufWriter,
-    path::{Path, PathBuf},
+    path::{Component, Path, PathBuf},
     process::{Child, ChildStdin, Command, Stdio},
     sync::{
         Arc, Mutex, Weak,
@@ -16,11 +16,10 @@ use std::{
 use thiserror::Error;
 
 use crate::{
-    EntityFact, FactTable, TypeFactsError, decode, decode_trusted, encode_sidecar_request,
-    read_frame,
+    FactTable, TypeFactsError, decode, decode_trusted, encode_sidecar_request, read_frame,
     v3::{
-        self, EntityDemand, FactTableDelta, FileChange, Handshake, Operation, Request, Response,
-        SourceFile,
+        self, EntityDemand, FileChange, Handshake, Operation, Request, Response, SlotOp,
+        SourceFile, TransitionMode, WireTableTransition,
     },
     write_frame,
 };
@@ -469,7 +468,7 @@ impl Drop for Connection {
 
 /// A retained Type Facts session.
 ///
-/// Framing, request identities, handshake validation, retained table deltas,
+/// Framing, request identities, handshake validation, Wire table transitions,
 /// and subprocess recovery are private implementation details.
 pub struct Session {
     producer: Producer,
@@ -493,7 +492,45 @@ pub struct Session {
     closed: bool,
 }
 
+fn normalize_project_id(project_id: String) -> Result<String, SessionError> {
+    if project_id.trim().is_empty() {
+        return Err(SessionError::InvalidResponse(
+            "project identity is empty".into(),
+        ));
+    }
+    let path = PathBuf::from(project_id);
+    let absolute = if path.is_absolute() {
+        path
+    } else {
+        std::env::current_dir()
+            .map_err(|error| {
+                SessionError::InvalidResponse(format!(
+                    "could not resolve project identity: {error}"
+                ))
+            })?
+            .join(path)
+    };
+    let mut normalized = PathBuf::new();
+    for component in absolute.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                let _ = normalized.pop();
+            }
+            Component::Prefix(_) | Component::RootDir | Component::Normal(_) => {
+                normalized.push(component.as_os_str());
+            }
+        }
+    }
+    normalized
+        .into_os_string()
+        .into_string()
+        .map_err(|_| SessionError::InvalidResponse("project identity is not valid UTF-8".into()))
+}
+
 impl Session {
+    /// Opens a session for a project path. Relative and lexically non-canonical
+    /// paths are normalized to the same absolute identity used by the producer.
     pub fn open<I>(
         producer: Producer,
         project_id: impl Into<String>,
@@ -502,12 +539,7 @@ impl Session {
     where
         I: IntoIterator<Item = FileChange>,
     {
-        let project_id = project_id.into();
-        if project_id.trim().is_empty() {
-            return Err(SessionError::InvalidResponse(
-                "project identity is empty".into(),
-            ));
-        }
+        let project_id = normalize_project_id(project_id.into())?;
         let connection = Connection::spawn(&producer, &project_id)?;
         let mut session = Self {
             producer,
@@ -884,80 +916,22 @@ impl Session {
         };
         analyze.reset_state = reset_state;
         analyze.removed_demand_paths = removed_demand_paths;
-        let mut response = self.exchange(analyze)?;
-        // Deltas travel as the opaque packed frame; expand it once here so
-        // everything downstream keeps working on the semantic delta.
-        if !response.packed_delta.is_empty() {
-            response.table_delta = Some(
-                v3::decode_packed_fact_table_delta(&response.packed_delta)
-                    .map_err(SessionError::InvalidResponse)?,
-            );
-        }
+        let response = self.exchange(analyze)?;
         self.last_exchange_timings = Some(exchange_timings(&response));
-        self.last_table_changes = Some(table_changes(&response)?);
-        let table = match response.table_mode.as_str() {
-            "full" => {
-                if response.packed_table.is_empty() {
-                    return Err(SessionError::InvalidResponse(
-                        "full response has no packed table".into(),
-                    ));
-                }
-                v3::decode_packed_fact_table(&response.packed_table, response.project_id.clone())
-                    .map_err(|error| SessionError::InvalidResponse(error.to_string()))?
-            }
-            // Both retained modes take the table rather than cloning it: the
-            // retained copy is replaced below anyway, so cloning here would deep
-            // copy every entity and symbol in the project twice per analysis.
-            "reuse" => {
-                let mut table = self.retained_table.take().ok_or_else(|| {
-                    SessionError::InvalidResponse("reuse response has no retained table".into())
-                })?;
-                table.generation = response.generation;
-                table.project_id.clone_from(&response.project_id);
-                table
-            }
-            "delta" => {
-                let mut table = self.retained_table.take().ok_or_else(|| {
-                    SessionError::InvalidResponse("delta response has no retained table".into())
-                })?;
-                let delta = match response.table_delta.as_ref() {
-                    Some(delta) => delta,
-                    None => {
-                        self.clear_retained_state();
-                        return Err(SessionError::InvalidResponse(
-                            "delta response has no delta".into(),
-                        ));
-                    }
-                };
-                if let Err(error) = apply_table_delta(&mut table, delta) {
-                    // The table was taken and is now of unknown shape, so the
-                    // retained state it belonged to is no longer trustworthy.
-                    // Failing closed here makes the next analysis a full reset
-                    // instead of a delta against something half-applied.
-                    self.clear_retained_state();
-                    return Err(error);
-                }
-                table
-            }
-            other => {
-                return Err(SessionError::InvalidResponse(format!(
-                    "unsupported table mode {other:?}"
-                )));
-            }
-        };
-        if table.project_id != response.project_id || table.generation != response.generation {
-            return Err(SessionError::InvalidResponse(
-                "table identity does not match response".into(),
-            ));
-        }
-        if response.state_token.is_empty() {
-            return Err(SessionError::InvalidResponse(
-                "retained response has no state token".into(),
-            ));
-        }
+        let (candidate, changes) = prepare_analyze_response(
+            &response,
+            &self.project_id,
+            self.generation,
+            &mut self.retained_table,
+            &self.state_token,
+        )?;
+        let returned = candidate.clone();
+        // The candidate and successor token publish together. All decoding,
+        // identity checks, and candidate construction completed above.
+        self.retained_table = Some(candidate);
         self.state_token = response.state_token;
-        self.retained_table = Some(table.clone());
-        Ok(table)
+        self.last_table_changes = Some(changes);
+        Ok(returned)
     }
 
     fn exchange(&mut self, mut request: Request) -> Result<Response, SessionError> {
@@ -1018,7 +992,7 @@ impl Drop for Session {
 
 fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
     Request {
-        schema: v3::TYPE_FACTS_SCHEMA_V4,
+        schema: v3::TYPE_FACTS_SCHEMA_V5,
         request_id: 0,
         operation,
         project_id: project_id.into(),
@@ -1055,56 +1029,113 @@ fn exchange_timings(response: &Response) -> ExchangeTimings {
     }
 }
 
-fn table_changes(response: &Response) -> Result<TableChanges, SessionError> {
-    match response.table_mode.as_str() {
-        "reuse" => Ok(TableChanges {
-            unchanged: true,
-            ..TableChanges::default()
-        }),
-        "delta" => {
-            let delta = response.table_delta.as_ref().ok_or_else(|| {
-                SessionError::InvalidResponse("delta response has no delta".into())
-            })?;
-            let mut entity_paths = delta
-                .entity_files
-                .iter()
-                .map(|file| file.path.clone())
-                .chain(delta.removed_entity_paths.iter().cloned())
-                .collect::<Vec<_>>();
-            let mut symbol_ids = delta
-                .symbols
-                .iter()
-                .map(|symbol| symbol.id.to_string())
-                .chain(
-                    delta
-                        .symbol_reference_files
-                        .iter()
-                        .map(|references| references.id.clone()),
-                )
-                .chain(delta.removed_symbol_ids.iter().cloned())
-                .collect::<Vec<_>>();
-            let mut file_paths = delta
-                .files
-                .iter()
-                .map(|file| file.path.to_string())
-                .chain(delta.removed_file_paths.iter().cloned())
-                .collect::<Vec<_>>();
-            entity_paths.sort();
-            entity_paths.dedup();
-            symbol_ids.sort();
-            symbol_ids.dedup();
-            file_paths.sort();
-            file_paths.dedup();
-            let unchanged =
-                entity_paths.is_empty() && symbol_ids.is_empty() && file_paths.is_empty();
-            Ok(TableChanges {
-                unchanged,
-                entity_paths,
-                symbol_ids,
-                file_paths,
-            })
+fn prepare_analyze_response(
+    response: &Response,
+    expected_project: &str,
+    expected_generation: u64,
+    retained: &mut Option<FactTable>,
+    retained_state_token: &str,
+) -> Result<(FactTable, TableChanges), SessionError> {
+    if response.schema != v3::TYPE_FACTS_SCHEMA_V5 {
+        return Err(SessionError::InvalidResponse(format!(
+            "response schema is {}, expected {}",
+            response.schema,
+            v3::TYPE_FACTS_SCHEMA_V5
+        )));
+    }
+    if response.project_id != expected_project || response.generation != expected_generation {
+        return Err(SessionError::InvalidResponse(format!(
+            "response identity is project {:?} generation {}, expected {:?} generation {}",
+            response.project_id, response.generation, expected_project, expected_generation
+        )));
+    }
+    if response.state_token.is_empty() {
+        return Err(SessionError::InvalidResponse(
+            "retained response has no state token".into(),
+        ));
+    }
+
+    if response.table_transition.is_empty() {
+        let candidate = retained.as_ref().ok_or_else(|| {
+            SessionError::InvalidResponse("reuse response has no retained table".into())
+        })?;
+        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V3
+            || candidate.project_id() != expected_project
+            || candidate.generation() != response.generation
+        {
+            return Err(SessionError::InvalidResponse(
+                "retained Wire table identity is invalid".into(),
+            ));
         }
-        _ => Ok(TableChanges::default()),
+        let candidate = candidate.clone();
+        return Ok((
+            candidate,
+            TableChanges {
+                unchanged: true,
+                ..TableChanges::default()
+            },
+        ));
+    }
+
+    let transition = v3::decode_table_transition(&response.table_transition)
+        .map_err(SessionError::InvalidResponse)?;
+    if transition.project_id.as_ref() != response.project_id.as_str()
+        || transition.target_generation != response.generation
+        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V3
+    {
+        return Err(SessionError::InvalidResponse(
+            "table transition identity does not match response".into(),
+        ));
+    }
+    match transition.mode {
+        TransitionMode::Full => Ok(materialize_full_transition(transition)),
+        TransitionMode::Delta => {
+            let retained_table = retained.as_ref().ok_or_else(|| {
+                SessionError::InvalidResponse("delta transition has no retained table".into())
+            })?;
+            if retained_table.schema() != transition.table_schema
+                || retained_table.generation() != transition.base_generation
+                || retained_table.project_id() != transition.project_id.as_ref()
+                || retained_state_token != transition.base_state_token.as_ref()
+            {
+                return Err(SessionError::InvalidResponse(
+                    "delta transition base identity does not match retained state".into(),
+                ));
+            }
+            validate_table_transition_application(retained_table, &transition)?;
+            let changes = table_changes(&transition);
+            let candidate = retained_table.apply_delta(transition);
+            Ok((candidate, changes))
+        }
+    }
+}
+
+fn table_changes(transition: &WireTableTransition) -> TableChanges {
+    let mut entity_paths = Vec::new();
+    let mut file_paths = Vec::new();
+    for path in &transition.paths {
+        if !matches!(&path.entities, SlotOp::Unchanged) {
+            entity_paths.push(path.path.to_string());
+        }
+        if !matches!(&path.file, SlotOp::Unchanged) {
+            file_paths.push(path.path.to_string());
+        }
+    }
+    let mut symbol_ids = transition
+        .symbols
+        .iter()
+        .map(|operation| operation.id().to_string())
+        .collect::<Vec<_>>();
+    symbol_ids.dedup();
+    let unchanged = transition.mode == TransitionMode::Delta
+        && entity_paths.is_empty()
+        && symbol_ids.is_empty()
+        && file_paths.is_empty();
+    TableChanges {
+        unchanged,
+        entity_paths,
+        symbol_ids,
+        file_paths,
     }
 }
 
@@ -1128,140 +1159,44 @@ fn group_demands(demands: &[EntityDemand]) -> Vec<Vec<EntityDemand>> {
     order
 }
 
-/// Replaces or inserts one row of a vector kept sorted and unique by `key`.
-fn upsert_sorted_row<T: Clone>(rows: &mut Vec<T>, row: &T, key: impl Fn(&T) -> &str) {
-    match rows.binary_search_by(|value| key(value).cmp(key(row))) {
-        Ok(index) => rows[index] = row.clone(),
-        Err(index) => rows.insert(index, row.clone()),
+// Checks the only table-relative invariant the packed decoder cannot know:
+// reference-path operations must name a non-alias symbol that exists after
+// preceding operations for the same canonical symbol ID.
+fn validate_table_transition_application(
+    table: &FactTable,
+    transition: &WireTableTransition,
+) -> Result<(), SessionError> {
+    table
+        .validate_delta(transition)
+        .map_err(SessionError::InvalidResponse)
+}
+
+/// Validates and applies one fully decoded transition to a private test
+/// candidate. Session uses the split validation/application calls so it can
+/// take unique ownership only after every fallible check succeeds.
+#[cfg(test)]
+fn apply_table_transition(
+    table: &mut FactTable,
+    transition: WireTableTransition,
+) -> Result<TableChanges, SessionError> {
+    validate_table_transition_application(table, &transition)?;
+    match transition.mode {
+        TransitionMode::Full => {
+            let (replacement, changes) = materialize_full_transition(transition);
+            *table = replacement;
+            Ok(changes)
+        }
+        TransitionMode::Delta => {
+            let changes = table_changes(&transition);
+            *table = table.apply_delta(transition);
+            Ok(changes)
+        }
     }
 }
 
-/// Removes the row carrying `removed` from a vector kept sorted and unique by
-/// `key`. A miss is fine: removal of a row the client never demanded.
-fn remove_sorted_row<T>(rows: &mut Vec<T>, removed: &str, key: impl Fn(&T) -> &str) {
-    if let Ok(index) = rows.binary_search_by(|value| key(value).cmp(removed)) {
-        rows.remove(index);
-    }
-}
-
-/// The bounds of one path's contiguous run in the path-major entity order.
-fn entity_run(entities: &[EntityFact], path: &str) -> std::ops::Range<usize> {
-    let start = entities.partition_point(|entity| entity.location.path.as_ref() < path);
-    let end = entities.partition_point(|entity| entity.location.path.as_ref() <= path);
-    start..end
-}
-
-/// Applies a delta by splicing each changed row or run into its place in the
-/// retained table's canonical order. Every section is ordered and the delta
-/// names only the rows that may differ, so nothing here scans, hashes, or
-/// re-sorts the unchanged remainder — the previous retain/extend/sort walked
-/// the entire table per generation.
-fn apply_table_delta(table: &mut FactTable, delta: &FactTableDelta) -> Result<(), SessionError> {
-    let sources = Arc::make_mut(&mut table.sources);
-    for removed in &delta.removed_source_paths {
-        remove_sorted_row(sources, removed, |value| value.path.as_ref());
-    }
-    for source in &delta.sources {
-        upsert_sorted_row(sources, source, |value| value.path.as_ref());
-    }
-
-    let entities = Arc::make_mut(&mut table.entities);
-    for removed in &delta.removed_entity_paths {
-        let run = entity_run(entities, removed);
-        entities.drain(run);
-    }
-    for file in &delta.entity_files {
-        // The splice below replaces the path's whole run in place, so the
-        // table only stays canonically ordered if the replacement is a valid
-        // run itself: every entity on the named path, in span order. The
-        // producer emits it that way; check rather than assume, because an
-        // unordered splice would corrupt every later delta.
-        if file
-            .entities
-            .iter()
-            .any(|entity| entity.location.path.as_ref() != file.path.as_str())
-        {
-            return Err(SessionError::InvalidResponse(format!(
-                "entity delta for {:?} contains another path",
-                file.path
-            )));
-        }
-        if !file.entities.windows(2).all(|pair| {
-            (pair[0].location.start_byte, pair[0].location.end_byte)
-                <= (pair[1].location.start_byte, pair[1].location.end_byte)
-        }) {
-            return Err(SessionError::InvalidResponse(format!(
-                "entity delta for {:?} is not in canonical order",
-                file.path
-            )));
-        }
-        let run = entity_run(entities, &file.path);
-        entities.splice(run, file.entities.iter().cloned());
-    }
-
-    let symbols = Arc::make_mut(&mut table.symbols);
-    for removed in &delta.removed_symbol_ids {
-        remove_sorted_row(symbols, removed, |value| value.id.as_ref());
-    }
-    for symbol in &delta.symbols {
-        upsert_sorted_row(symbols, symbol, |value| value.id.as_ref());
-    }
-    for replacement in &delta.symbol_reference_files {
-        if replacement
-            .references
-            .iter()
-            .any(|reference| reference.path.as_ref() != replacement.path.as_str())
-        {
-            return Err(SessionError::InvalidResponse(format!(
-                "reference delta for {:?} contains another path",
-                replacement.path
-            )));
-        }
-        // The splice below locates the path's run with `partition_point`, so a
-        // retained list only stays canonically ordered if the replacement is
-        // ordered too. The producer emits it that way; check rather than
-        // assume, because an unsorted splice would corrupt every later delta.
-        if !replacement.references.windows(2).all(|pair| {
-            (pair[0].start_byte, pair[0].end_byte) <= (pair[1].start_byte, pair[1].end_byte)
-        }) {
-            return Err(SessionError::InvalidResponse(format!(
-                "reference delta for {:?} is not in canonical order",
-                replacement.path
-            )));
-        }
-        let symbol_index = symbols
-            .binary_search_by(|symbol| symbol.id.as_ref().cmp(replacement.id.as_str()))
-            .map_err(|_| {
-                SessionError::InvalidResponse(format!(
-                    "reference delta names missing symbol {:?}",
-                    replacement.id
-                ))
-            })?;
-        let symbol = &mut symbols[symbol_index];
-        // The reference list is shared with older generations, so replace the
-        // path's run by rebuilding the list — sized once, no splice-shifting.
-        let references = &symbol.references;
-        let start = references
-            .partition_point(|reference| reference.path.as_ref() < replacement.path.as_str());
-        let end = references
-            .partition_point(|reference| reference.path.as_ref() <= replacement.path.as_str());
-        let mut next =
-            Vec::with_capacity(references.len() - (end - start) + replacement.references.len());
-        next.extend_from_slice(&references[..start]);
-        next.extend(replacement.references.iter().cloned());
-        next.extend_from_slice(&references[end..]);
-        symbol.references = next.into();
-    }
-
-    let files = Arc::make_mut(&mut table.files);
-    for removed in &delta.removed_file_paths {
-        remove_sorted_row(files, removed, |value| value.path.as_ref());
-    }
-    for file in &delta.files {
-        upsert_sorted_row(files, file, |value| value.path.as_ref());
-    }
-    table.generation = delta.generation;
-    Ok(())
+fn materialize_full_transition(transition: WireTableTransition) -> (FactTable, TableChanges) {
+    let changes = table_changes(&transition);
+    (FactTable::materialize_full(transition), changes)
 }
 
 fn decode_sources(response: Response) -> Result<Vec<SourceFile>, SessionError> {
@@ -1318,8 +1253,28 @@ fn terminate_child(child: &mut Child) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Location, SourceDigest, SourceHash, SymbolFact};
+    use crate::{EntityFact, Location, SourceDigest, SourceHash, SymbolFact, v3::SymbolOp};
     use serde::Deserialize;
+
+    #[test]
+    fn project_identity_matches_the_producers_absolute_clean_path() {
+        let current = std::env::current_dir().unwrap();
+        let dirty = current
+            .join("nested")
+            .join("..")
+            .join("project")
+            .join(".")
+            .join("tsconfig.json");
+        let normalized = normalize_project_id(dirty.to_string_lossy().into_owned()).unwrap();
+        assert_eq!(
+            normalized,
+            current.join("project/tsconfig.json").to_string_lossy()
+        );
+
+        let relative = normalize_project_id("project/../tsconfig.json".into()).unwrap();
+        assert_eq!(relative, current.join("tsconfig.json").to_string_lossy());
+        assert!(normalize_project_id("  ".into()).is_err());
+    }
 
     fn location(path: &str, start: u64) -> Location {
         Location {
@@ -1330,38 +1285,95 @@ mod tests {
     }
 
     fn table_with_symbol(symbol: SymbolFact) -> FactTable {
-        FactTable {
-            schema: 2,
-            generation: 1,
+        fact_table(Vec::new(), Vec::new(), vec![symbol], Vec::new())
+    }
+
+    fn fact_table(
+        sources: Vec<SourceDigest>,
+        entities: Vec<EntityFact>,
+        symbols: Vec<SymbolFact>,
+        files: Vec<crate::FileFact>,
+    ) -> FactTable {
+        FactTable::from_parts(
+            v3::TYPE_FACTS_TABLE_SCHEMA_V3,
+            1,
+            "/p/tsconfig.json",
+            sources,
+            entities,
+            symbols,
+            files,
+        )
+    }
+
+    fn delta_transition(
+        base_generation: u64,
+        target_generation: u64,
+        paths: Vec<v3::PathOp>,
+        symbols: Vec<SymbolOp>,
+    ) -> WireTableTransition {
+        WireTableTransition {
+            mode: TransitionMode::Delta,
+            table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V3,
+            base_generation,
+            target_generation,
             project_id: "/p/tsconfig.json".into(),
-            sources: Vec::new().into(),
-            entities: Vec::new().into(),
-            symbols: vec![symbol].into(),
-            files: Vec::new().into(),
+            base_state_token: format!("base-{base_generation}").into(),
+            paths,
+            symbols,
         }
     }
 
-    fn reference_delta(id: &str, path: &str, references: Vec<Location>) -> FactTableDelta {
-        FactTableDelta {
-            generation: 2,
-            symbol_reference_files: vec![v3::SymbolReferenceFileDelta {
+    fn reference_transition(
+        id: &str,
+        path: &str,
+        references: Vec<Location>,
+    ) -> WireTableTransition {
+        delta_transition(
+            1,
+            2,
+            Vec::new(),
+            vec![SymbolOp::ReplaceReferencePath {
                 id: id.into(),
                 path: path.into(),
                 references,
             }],
+        )
+    }
+
+    fn response(generation: u64, state_token: &str, table_transition: Vec<u8>) -> Response {
+        Response {
+            schema: v3::TYPE_FACTS_SCHEMA_V5,
+            request_id: 1,
+            project_id: "/p/tsconfig.json".into(),
+            generation,
+            ok: true,
+            table_transition,
+            state_token: state_token.into(),
+            affected: Vec::new(),
             sources: Vec::new(),
-            removed_source_paths: Vec::new(),
-            entity_files: Vec::new(),
-            removed_entity_paths: Vec::new(),
-            symbols: Vec::new(),
-            removed_symbol_ids: Vec::new(),
-            files: Vec::new(),
-            removed_file_paths: Vec::new(),
+            source_arena: String::new(),
+            source_lengths: Vec::new(),
+            timings: None,
+            error: None,
+            client_decode_ns: 0,
+            client_response_bytes: 0,
+            client_request_send_ns: 0,
+            client_request_bytes: 0,
+            client_roundtrip_ns: 0,
         }
     }
 
-    /// A reference replacement touches only its own path's run and leaves the
-    /// surrounding path-sorted order intact.
+    fn materialize_full(frame: &[u8], label: &str) -> FactTable {
+        let transition = v3::decode_table_transition(frame)
+            .unwrap_or_else(|error| panic!("{label}: decode full transition: {error}"));
+        assert_eq!(
+            transition.mode,
+            TransitionMode::Full,
+            "{label}: expected full transition"
+        );
+        materialize_full_transition(transition).0
+    }
+
     #[test]
     fn repeated_edits_to_one_path_keep_only_the_newest_replay_overlay() {
         // A long editing session sends the same handful of files over and over.
@@ -1410,8 +1422,10 @@ mod tests {
         assert_eq!(newest.version, 32);
     }
 
+    /// A reference replacement touches only its own path's run and leaves the
+    /// surrounding path-sorted order intact.
     #[test]
-    fn reference_delta_replaces_only_the_named_paths_run() {
+    fn reference_transition_replaces_only_the_named_paths_run() {
         let mut table = table_with_symbol(SymbolFact {
             id: "shared".into(),
             alias_target: "".into(),
@@ -1423,99 +1437,40 @@ mod tests {
             ]
             .into(),
         });
-        apply_table_delta(
-            &mut table,
-            &reference_delta(
-                "shared",
-                "b.ts",
-                vec![location("b.ts", 4), location("b.ts", 9)],
-            ),
-        )
-        .expect("apply the reference delta");
+        let transition = reference_transition(
+            "shared",
+            "b.ts",
+            vec![location("b.ts", 4), location("b.ts", 9)],
+        );
+        let changes =
+            apply_table_transition(&mut table, transition).expect("apply the reference transition");
 
-        assert_eq!(table.generation, 2);
+        assert_eq!(table.generation(), 2);
         assert_eq!(
-            table.symbols[0]
-                .references
-                .iter()
+            table
+                .symbol("shared")
+                .expect("shared symbol")
+                .references()
                 .map(|reference| (reference.path.as_ref(), reference.start_byte))
                 .collect::<Vec<_>>(),
             vec![("a.ts", 1), ("b.ts", 4), ("b.ts", 9), ("c.ts", 1)],
         );
-    }
-
-    /// An empty replacement drops the path's references without disturbing
-    /// the neighbours.
-    #[test]
-    fn empty_reference_delta_clears_only_that_path() {
-        let mut table = table_with_symbol(SymbolFact {
-            id: "shared".into(),
-            alias_target: "".into(),
-            declarations: Vec::new().into(),
-            references: vec![
-                location("a.ts", 1),
-                location("b.ts", 1),
-                location("c.ts", 1),
-            ]
-            .into(),
-        });
-        apply_table_delta(&mut table, &reference_delta("shared", "b.ts", Vec::new()))
-            .expect("apply the empty reference delta");
         assert_eq!(
-            table.symbols[0]
-                .references
-                .iter()
-                .map(|reference| reference.path.as_ref())
-                .collect::<Vec<_>>(),
-            vec!["a.ts", "c.ts"],
+            changes,
+            TableChanges {
+                unchanged: false,
+                entity_paths: Vec::new(),
+                symbol_ids: vec!["shared".into()],
+                file_paths: Vec::new(),
+            }
         );
-    }
-
-    /// Both of these mean the client and producer disagree about the retained
-    /// table, so the frame fails closed rather than corrupting it silently.
-    #[test]
-    fn reference_delta_fails_closed_on_desync() {
-        let mut table = table_with_symbol(SymbolFact {
-            id: "shared".into(),
-            alias_target: "".into(),
-            declarations: Vec::new().into(),
-            references: vec![location("a.ts", 1)].into(),
-        });
-        assert!(matches!(
-            apply_table_delta(
-                &mut table.clone(),
-                &reference_delta("missing", "a.ts", vec![location("a.ts", 2)]),
-            ),
-            Err(SessionError::InvalidResponse(_))
-        ));
-        assert!(matches!(
-            apply_table_delta(
-                &mut table.clone(),
-                &reference_delta("shared", "a.ts", vec![location("elsewhere.ts", 2)]),
-            ),
-            Err(SessionError::InvalidResponse(_))
-        ));
-        assert!(matches!(
-            apply_table_delta(
-                &mut table,
-                &reference_delta(
-                    "shared",
-                    "a.ts",
-                    vec![location("a.ts", 9), location("a.ts", 2)],
-                ),
-            ),
-            Err(SessionError::InvalidResponse(_))
-        ));
     }
 
     /// Rows keyed by path or id are replaced, removed, and re-sorted.
     #[test]
     fn keyed_rows_are_replaced_removed_and_reordered() {
-        let mut table = FactTable {
-            schema: 2,
-            generation: 1,
-            project_id: "/p/tsconfig.json".into(),
-            sources: vec![
+        let mut table = fact_table(
+            vec![
                 SourceDigest {
                     path: "a.ts".into(),
                     sha256: SourceHash::of("a"),
@@ -1524,79 +1479,250 @@ mod tests {
                     path: "b.ts".into(),
                     sha256: SourceHash::of("b"),
                 },
-            ]
-            .into(),
-            entities: Vec::new().into(),
-            symbols: Vec::new().into(),
-            files: Vec::new().into(),
-        };
-        let mut delta = reference_delta("unused", "a.ts", Vec::new());
-        delta.symbol_reference_files.clear();
-        delta.sources = vec![SourceDigest {
-            path: "a.ts".into(),
-            sha256: SourceHash::of("a2"),
-        }];
-        delta.removed_source_paths = vec!["b.ts".into()];
-        apply_table_delta(&mut table, &delta).expect("apply the keyed delta");
+            ],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let transition = delta_transition(
+            1,
+            2,
+            vec![
+                v3::PathOp {
+                    path: "a.ts".into(),
+                    source: SlotOp::Replace(SourceHash::of("a2")),
+                    entities: SlotOp::Unchanged,
+                    file: SlotOp::Unchanged,
+                },
+                v3::PathOp {
+                    path: "b.ts".into(),
+                    source: SlotOp::Remove,
+                    entities: SlotOp::Unchanged,
+                    file: SlotOp::Unchanged,
+                },
+            ],
+            Vec::new(),
+        );
+        apply_table_transition(&mut table, transition).expect("apply the keyed transition");
 
-        assert_eq!(table.sources.len(), 1);
-        assert_eq!(table.sources[0].path.as_ref(), "a.ts");
-        assert_eq!(table.sources[0].sha256, SourceHash::of("a2"));
+        assert_eq!(table.source_count(), 1);
+        let source = table.source("a.ts").expect("retained a.ts source");
+        assert_eq!(source.path.as_ref(), "a.ts");
+        assert_eq!(source.sha256, SourceHash::of("a2"));
     }
 
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct DeltaGoldenStep {
-        label: String,
-        #[serde(with = "serde_bytes")]
-        base: Vec<u8>,
-        delta: FactTableDelta,
-        #[serde(with = "serde_bytes")]
-        packed: Vec<u8>,
-        #[serde(with = "serde_bytes")]
-        expected: Vec<u8>,
-    }
-
-    #[derive(Deserialize)]
-    #[serde(rename_all = "camelCase", deny_unknown_fields)]
-    struct DeltaGolden {
-        steps: Vec<DeltaGoldenStep>,
-    }
-
-    /// The authoritative check that this applier — the one the client actually
-    /// runs — reproduces what the Go producer means by each delta. The fixture
-    /// is emitted by the production differ in
-    /// internal/typefacts/protocolv3_delta_golden_test.go.
     #[test]
-    fn applies_the_producers_deltas_exactly() {
+    fn invalid_candidate_never_mutates_the_retained_table() {
+        let retained = fact_table(
+            vec![SourceDigest {
+                path: "a.ts".into(),
+                sha256: SourceHash::of("old"),
+            }],
+            Vec::new(),
+            Vec::new(),
+            Vec::new(),
+        );
+        let transition = delta_transition(
+            1,
+            2,
+            vec![v3::PathOp {
+                path: "a.ts".into(),
+                source: SlotOp::Replace(SourceHash::of("new")),
+                entities: SlotOp::Unchanged,
+                file: SlotOp::Unchanged,
+            }],
+            vec![SymbolOp::ReplaceReferencePath {
+                id: "missing".into(),
+                path: "a.ts".into(),
+                references: vec![location("a.ts", 1)],
+            }],
+        );
+        let mut candidate = retained.clone();
+        let candidate_root = candidate.path_root_identity();
+        assert!(matches!(
+            apply_table_transition(&mut candidate, transition),
+            Err(SessionError::InvalidResponse(_))
+        ));
+        assert_eq!(
+            candidate.path_root_identity(),
+            candidate_root,
+            "a rejected transition copied storage before validation finished"
+        );
+        assert_eq!(candidate, retained);
+        assert_eq!(
+            retained.source("a.ts").expect("a.ts").sha256,
+            SourceHash::of("old")
+        );
+        assert_eq!(retained.generation(), 1);
+    }
+
+    #[test]
+    fn sparse_transition_copies_only_the_touched_leaf() {
+        let table = || {
+            fact_table(
+                (0..128)
+                    .map(|index| SourceDigest {
+                        path: format!("file-{index:03}.ts").into(),
+                        sha256: SourceHash::of("old"),
+                    })
+                    .collect(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            )
+        };
+        let transition = delta_transition(
+            1,
+            2,
+            vec![v3::PathOp {
+                path: "file-000.ts".into(),
+                source: SlotOp::Replace(SourceHash::of("new")),
+                entities: SlotOp::Unchanged,
+                file: SlotOp::Unchanged,
+            }],
+            Vec::new(),
+        );
+
+        let mut shared = table();
+        let held = shared.clone();
+        let touched_leaf = shared.path_leaf_identity("file-000.ts");
+        let untouched_leaf = shared.path_leaf_identity("file-127.ts");
+        apply_table_transition(&mut shared, transition).unwrap();
+        assert_ne!(shared.path_leaf_identity("file-000.ts"), touched_leaf);
+        assert_eq!(shared.path_leaf_identity("file-127.ts"), untouched_leaf);
+        assert_eq!(
+            shared.source("file-000.ts").expect("new source").sha256,
+            SourceHash::of("new")
+        );
+        assert_eq!(
+            held.source("file-000.ts").expect("held source").sha256,
+            SourceHash::of("old")
+        );
+    }
+
+    #[test]
+    fn broad_transition_uses_one_canonical_merge() {
+        const BROAD_OPERATION_COUNT: usize = 32;
+        let sources = (0..64)
+            .map(|index| {
+                let path: Arc<str> = format!("file-{index:03}.ts").into();
+                SourceDigest {
+                    path,
+                    sha256: SourceHash::of("old"),
+                }
+            })
+            .collect::<Vec<_>>();
+        let paths = (0..BROAD_OPERATION_COUNT)
+            .map(|index| v3::PathOp {
+                path: format!("file-{index:03}.ts").into(),
+                source: SlotOp::Replace(SourceHash::of("new")),
+                entities: SlotOp::Unchanged,
+                file: SlotOp::Unchanged,
+            })
+            .collect();
+        let mut table = fact_table(sources, Vec::new(), Vec::new(), Vec::new());
+        let original_root = table.path_root_identity();
+
+        apply_table_transition(&mut table, delta_transition(1, 2, paths, Vec::new()))
+            .expect("apply the broad transition");
+
+        assert_ne!(
+            table.path_root_identity(),
+            original_root,
+            "the broad branch should build one merged index"
+        );
+        assert_eq!(table.source_count(), 64);
+        let sources = table.sources().collect::<Vec<_>>();
+        assert!(sources.windows(2).all(|pair| pair[0].path < pair[1].path));
+        assert!(
+            sources[..BROAD_OPERATION_COUNT]
+                .iter()
+                .all(|source| source.sha256 == SourceHash::of("new"))
+        );
+        assert!(
+            sources[BROAD_OPERATION_COUNT..]
+                .iter()
+                .all(|source| source.sha256 == SourceHash::of("old"))
+        );
+    }
+
+    #[test]
+    fn reuse_requires_the_retained_table_generation() {
+        let retained = fact_table(Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        let valid = response(1, "successor", Vec::new());
+        let mut valid_retained = Some(retained.clone());
+        let (reused, changes) =
+            prepare_analyze_response(&valid, "/p/tsconfig.json", 1, &mut valid_retained, "base")
+                .expect("reuse the retained table");
+        assert_eq!(reused, retained);
+        assert!(changes.unchanged);
+
+        let invalid = response(2, "successor", Vec::new());
+        let mut invalid_retained = Some(retained.clone());
+        assert!(matches!(
+            prepare_analyze_response(
+                &invalid,
+                "/p/tsconfig.json",
+                2,
+                &mut invalid_retained,
+                "base"
+            ),
+            Err(SessionError::InvalidResponse(_))
+        ));
+        assert_eq!(invalid_retained.as_ref(), Some(&retained));
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct TransitionGoldenStep {
+        label: String,
+        base_token: String,
+        #[serde(with = "serde_bytes")]
+        base_transition: Vec<u8>,
+        #[serde(with = "serde_bytes")]
+        transition: Vec<u8>,
+        #[serde(with = "serde_bytes")]
+        expected_transition: Vec<u8>,
+    }
+
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase", deny_unknown_fields)]
+    struct TransitionGolden {
+        steps: Vec<TransitionGoldenStep>,
+    }
+
+    /// The production Go encoder and this decoder/applier must assign exactly
+    /// the same meaning to full and delta transitions.
+    #[test]
+    fn applies_the_producers_transitions_exactly() {
         let path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../../benchmarks/phase1/typefacts-v3-delta-golden.cbor");
+            .join("../../benchmarks/phase1/typefacts-v5-transition-golden.cbor");
         let bytes =
             std::fs::read(&path).unwrap_or_else(|error| panic!("read {}: {error}", path.display()));
-        let golden: DeltaGolden = crate::decode(&bytes).expect("decode the delta golden");
+        let golden: TransitionGolden = crate::decode(&bytes).expect("decode the transition golden");
         assert_eq!(golden.steps.len(), 4, "fixture lost a transition");
 
         for step in &golden.steps {
-            let project = "/p/tsconfig.json".to_owned();
-            let mut table = v3::decode_packed_fact_table(&step.base, project.clone())
-                .unwrap_or_else(|error| panic!("{}: decode base: {error}", step.label));
-            let expected = v3::decode_packed_fact_table(&step.expected, project)
-                .unwrap_or_else(|error| panic!("{}: decode expected: {error}", step.label));
-
-            // Responses carry the packed frame; it must expand to exactly the
-            // semantic delta the fixture also pins in plain CBOR.
-            let unpacked = v3::decode_packed_fact_table_delta(&step.packed)
-                .unwrap_or_else(|error| panic!("{}: decode packed delta: {error}", step.label));
+            let mut actual = materialize_full(&step.base_transition, &step.label);
+            let expected = materialize_full(&step.expected_transition, &step.label);
+            let transition = v3::decode_table_transition(&step.transition)
+                .unwrap_or_else(|error| panic!("{}: decode delta: {error}", step.label));
+            assert_eq!(transition.mode, TransitionMode::Delta, "{}", step.label);
             assert_eq!(
-                unpacked, step.delta,
-                "{} packed frame expands to the wrong delta",
+                transition.base_state_token.as_ref(),
+                step.base_token,
+                "{}",
                 step.label
             );
-
-            apply_table_delta(&mut table, &unpacked)
+            assert_eq!(
+                actual.generation(),
+                transition.base_generation,
+                "{}",
+                step.label
+            );
+            apply_table_transition(&mut actual, transition)
                 .unwrap_or_else(|error| panic!("{}: apply delta: {error}", step.label));
-
-            assert_eq!(table, expected, "{} produced the wrong table", step.label);
+            assert_eq!(actual, expected, "{} produced the wrong table", step.label);
         }
     }
 }

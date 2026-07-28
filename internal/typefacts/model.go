@@ -19,6 +19,30 @@ type EntityDemand struct {
 	StructuralAccessor bool      `cbor:"structuralAccessor,omitempty" json:"structuralAccessor,omitempty"`
 }
 
+// SemanticDemandRun is one source file's canonically ordered demands.
+// Path is the ownership key for every demand and query location in the run.
+type SemanticDemandRun struct {
+	Path    string
+	Demands []EntityDemand
+}
+
+// SemanticScope carries the batch-wide state that makes a recomputed subset
+// equivalent to resolving the complete demand closure.
+type SemanticScope struct {
+	Suppression    map[SymbolID]struct{}
+	DescriptorSeed map[SymbolID]*TypeDescriptor
+}
+
+// SemanticDemandRunResult is one input run's aligned semantic answer.
+// Dependencies excludes the run's own path and Durable covers every symbol
+// identity embedded anywhere in the result.
+type SemanticDemandRunResult struct {
+	Entities     []EntityFact
+	Structural   []SymbolID
+	Dependencies []string
+	Durable      bool
+}
+
 // EntityFact is one legal location-keyed entity in the finite fact universe.
 // Location ranges are ordered from outermost to innermost during encoding.
 type EntityFact struct {
@@ -58,12 +82,17 @@ type FactTable struct {
 	Entities   []EntityFact `cbor:"entities" json:"entities"`
 	Symbols    []SymbolFact `cbor:"symbols" json:"symbols"`
 	Files      []FileFact   `cbor:"files" json:"files"`
-	transport  *factTableTransportChanges
-	symbols    *symbolFactStore
+	// stateID identifies one private retained table state. Multiple demand
+	// snapshots can materialize within the same source generation, so the
+	// generation alone cannot authenticate an exact transport manifest.
+	stateID   uint64
+	transport *factTableTransportChanges
+	symbols   *symbolFactStore
 }
 
 type factTableTransportChanges struct {
 	baseGeneration uint64
+	baseStateID    uint64
 	sourcePaths    map[string]struct{}
 	entityPaths    map[string]struct{}
 	filePaths      map[string]struct{}

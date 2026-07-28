@@ -147,6 +147,74 @@ const unresolved = takesNumber;
 	}
 }
 
+func TestResolvedCallValidityPreservesDiagnosticFallbacks(t *testing.T) {
+	dir := t.TempDir()
+	source := `function takesNumber(value: number): string { return String(value); }
+function generic<T extends string>(value: T): T { return value; }
+declare const maybe: ((value: number) => void) | undefined;
+declare const either: ((value: string) => void) | ((value: number) => void);
+const notCallable = 1;
+takesNumber(1);
+takesNumber("wrong");
+takesNumber();
+generic<number>(1);
+maybe(1);
+either(true);
+notCallable();
+`
+	sourcePath := filepath.Join(dir, "calls.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	cases := []struct {
+		needle string
+		want   typefacts.ResolvedCallValidity
+	}{
+		{needle: "takesNumber(1);", want: typefacts.ResolvedCallValid},
+		{needle: `takesNumber("wrong")`, want: typefacts.ResolvedCallRecovery},
+		{needle: "takesNumber();", want: typefacts.ResolvedCallRecovery},
+		{needle: "generic<number>(1)", want: typefacts.ResolvedCallRecovery},
+		{needle: "maybe(1)", want: typefacts.ResolvedCallRecovery},
+		{needle: "either(true)", want: typefacts.ResolvedCallRecovery},
+		{needle: "notCallable()", want: typefacts.ResolvedCallRecovery},
+	}
+	demands := make([]typefacts.EntityDemand, len(cases))
+	for index, testCase := range cases {
+		start := strings.LastIndex(source, testCase.needle)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.needle)
+		}
+		demands[index] = typefacts.EntityDemand{
+			Location: typefacts.Location{
+				Path:      sourcePath,
+				StartByte: start,
+				EndByte:   start + len(testCase.needle),
+			},
+			ResolvedCall: true,
+		}
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, testCase := range cases {
+		call := entities[index].ResolvedCall
+		if call == nil || call.Validity != testCase.want {
+			t.Errorf("%q resolved call = %+v, want validity %q", testCase.needle, call, testCase.want)
+		}
+	}
+}
+
 func TestResolvedCallIdentifiesSelectedOverloadAndMapsArguments(t *testing.T) {
 	dir := t.TempDir()
 	source := `function select(value: string, callback: (value: string) => void): void;

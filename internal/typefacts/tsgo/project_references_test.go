@@ -3,6 +3,7 @@ package tsgo
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -166,6 +167,39 @@ func TestReferenceIndexAcrossGenerations(t *testing.T) {
 			t.Fatalf("references diverged after a full rebuild:\nbefore %+v\nafter  %+v", references, rebuilt)
 		}
 	})
+}
+
+func TestReferenceIndexBroadInvalidationKeepsExactSymbolEvidence(t *testing.T) {
+	const files = 65
+	index := referenceIndex{
+		merged:         make(map[typefacts.SymbolID][]typefacts.Location, files),
+		changedSymbols: make(map[typefacts.SymbolID]struct{}),
+		files:          make(map[string]*fileReferences, files),
+	}
+	affected := make([]string, 0, files)
+	for file := range files {
+		path := filepath.Clean(filepath.Join("/project", fmt.Sprintf("file-%02d.ts", file)))
+		id := typefacts.SymbolID(fmt.Sprintf("symbol-%02d", file))
+		location := typefacts.Location{Path: path, StartByte: 1, EndByte: 2}
+		index.files[path] = &fileReferences{
+			refs:    map[typefacts.SymbolID][]typefacts.Location{id: {location}},
+			durable: true,
+		}
+		index.merged[id] = []typefacts.Location{location}
+		affected = append(affected, path)
+	}
+
+	index.invalidate(nil, affected, func(string) bool { return false })
+
+	if index.merged != nil {
+		t.Fatal("broad invalidation should select a full merged-index rebuild")
+	}
+	if !index.deltaExact {
+		t.Fatal("broad rebuild discarded exact changed-symbol evidence")
+	}
+	if len(index.changedSymbols) != files {
+		t.Fatalf("changed symbols = %d, want %d", len(index.changedSymbols), files)
+	}
 }
 
 // A durable ID whose declaration disappears must fail closed even though

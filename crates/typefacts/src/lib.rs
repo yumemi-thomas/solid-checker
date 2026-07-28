@@ -10,9 +10,11 @@ use std::io::{Read, Write};
 use std::sync::Arc;
 use thiserror::Error;
 
+mod retained_table;
 mod session;
 pub mod v3;
 
+pub use retained_table::{FactTable, Symbol};
 pub use session::{
     AnalysisDemand, Cancellation, DemandGroup, ExchangeTimings, Producer, Session, SessionError,
     TableChanges, UpdateTimings,
@@ -23,13 +25,9 @@ pub const MAX_NESTING_DEPTH: usize = 32;
 pub const MAX_COLLECTION_LENGTH: usize = 1_000_000;
 pub const SHA256_PREFIX: &str = "sha256:";
 
-// Fact rows keep their heap data behind `Arc`, so cloning a row — which the
-// retained session does for every row of a section whose storage the caller
-// still co-owns — bumps reference counts instead of copying strings and
-// lists. Types that only ever live inside one of those shared lists
-// (`Declaration`, `SourceCall`, …) keep plain owned fields: they are never
-// cloned row by row. The wire shape is unchanged; `Arc<str>` and `Arc<[T]>`
-// serialize exactly as the string and list they hold.
+// Fact rows keep heap data behind `Arc`, so persistent retained-table leaves
+// can share unchanged values between generations. The wire shape is unchanged;
+// `Arc<str>` and `Arc<[T]>` serialize exactly as the string and list they hold.
 
 /// serde `skip_serializing_if` helper for `Arc<[T]>` fields.
 fn is_empty_slice<T>(values: &[T]) -> bool {
@@ -325,18 +323,6 @@ pub struct FileFact {
 pub struct SourceDigest {
     pub path: Arc<str>,
     pub sha256: SourceHash,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct FactTable {
-    pub schema: u64,
-    pub generation: u64,
-    pub project_id: String,
-    pub sources: Arc<Vec<SourceDigest>>,
-    pub entities: Arc<Vec<EntityFact>>,
-    pub symbols: Arc<Vec<SymbolFact>>,
-    pub files: Arc<Vec<FileFact>>,
 }
 
 #[derive(Debug, Error)]
@@ -643,7 +629,7 @@ mod tests {
             end_byte: 2,
         };
         let request = v3::Request {
-            schema: v3::TYPE_FACTS_SCHEMA_V4,
+            schema: v3::TYPE_FACTS_SCHEMA_V5,
             request_id: 7,
             operation: v3::Operation::Analyze,
             project_id: "project".into(),

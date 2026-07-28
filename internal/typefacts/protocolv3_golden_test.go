@@ -10,6 +10,86 @@ import (
 	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
 )
 
+func goldenWireTable() FactTable {
+	path := "/p/a.tsx"
+	descriptor := &TypeDescriptor{
+		Text:         "Accessor<number>",
+		OriginModule: "solid-js",
+		AliasDeclarations: []Declaration{{
+			Name: "Accessor", Kind: "TypeAlias",
+			Location: Location{Path: "/p/solid-js.d.ts", StartByte: 10, EndByte: 30},
+		}},
+	}
+	call := &Call{
+		Target: "symbol:h:1", ReturnTypeText: "() => number",
+		Validity: ResolvedCallValid, Kind: CallKindCall,
+		Declaration: &ResolvedDeclaration{
+			Symbol: "symbol:h:1", Name: "count", Kind: "FunctionDeclaration",
+			Location: Location{Path: path, StartByte: 1, EndByte: 4},
+			Owners: []DeclarationOwner{{
+				Symbol: "symbol:h:4", Name: "Counter", Kind: "InterfaceDeclaration",
+				Location: Location{Path: path, StartByte: 0, EndByte: 1},
+			}},
+			QualifiedName: "Counter.count", SourceFile: path,
+		},
+		Arguments: []ArgumentMapping{{
+			ArgumentIndex: 0, Status: ArgumentMappingResolved,
+			Parameter: &ParameterFact{
+				Index: 0, Symbol: "symbol:h:5", Callability: CallabilityCallable,
+				Declaration: &Declaration{
+					Name: "callback", Kind: "declaration",
+					Location: Location{Path: path, StartByte: 5, EndByte: 13},
+				},
+				TypeDescriptor: descriptor,
+			},
+		}},
+	}
+	return FactTable{
+		Schema: TypeFactsSchemaVersion, Generation: 3, ProjectID: "/p/tsconfig.json",
+		Sources: []SourceFile{{Path: path, Source: []byte("export const value = 1\n")}},
+		Entities: []EntityFact{{
+			Location: Location{Path: path, StartByte: 2, EndByte: 8},
+			Symbol:   "symbol:h:2", TypeDescriptor: descriptor, ResolvedCall: call,
+			Callability: CallabilityCallable, ReferenceSpace: ReferenceSpaceBoth,
+			RuntimeIdentity: "runtime:h:1",
+		}},
+		Symbols: []SymbolFact{
+			{ID: "symbol:h:1", Declarations: []Declaration{{
+				Name: "count", Kind: "Variable",
+				Location: Location{Path: path, StartByte: 1, EndByte: 4},
+			}}, References: []Location{{Path: path, StartByte: 2, EndByte: 8}}},
+			{ID: "symbol:h:3", AliasTarget: "symbol:h:1"},
+		},
+		Files: []FileFact{{
+			Path: path,
+			Calls: []SourceCall{{
+				Location:  Location{Path: path, StartByte: 2, EndByte: 8},
+				Callee:    Location{Path: path, StartByte: 2, EndByte: 7},
+				Arguments: []Location{{Path: path, StartByte: 7, EndByte: 8}},
+				Target:    "symbol:h:1",
+			}},
+			Bindings: []SourceBinding{{
+				Array: true, Names: []Location{{Path: path, StartByte: 0, EndByte: 1}},
+				Initializer: SourceCall{
+					Location: Location{Path: path, StartByte: 2, EndByte: 8},
+					Callee:   Location{Path: path, StartByte: 2, EndByte: 7},
+				},
+			}},
+			Functions: []SourceFunction{{
+				Name:       Location{Path: path, StartByte: 20, EndByte: 25},
+				Body:       Location{Path: path, StartByte: 26, EndByte: 40},
+				Parameters: []Location{{Path: path, StartByte: 21, EndByte: 22}},
+				Exported:   true, Arrow: true,
+			}},
+			AsyncFunctions: []AsyncFunctionFact{{
+				Expression: Location{Path: path, StartByte: 26, EndByte: 40},
+				Symbol:     "symbol:h:2", Target: "symbol:h:1", CanReturnAsync: true,
+				CallsAfterAwait: []Location{{Path: path, StartByte: 30, EndByte: 34}},
+			}},
+		}},
+	}
+}
+
 // v3GoldenFixtures builds the request and response the frozen fixtures under
 // benchmarks/phase1 pin. The pair is deliberately dense: an analyze carrying a
 // compact demand snapshot, and a full response carrying a packed fact table,
@@ -18,7 +98,7 @@ import (
 func v3GoldenFixtures(t *testing.T) (LifecycleRequest, LifecycleResponse) {
 	t.Helper()
 	request := LifecycleRequest{
-		Schema:     TypeFactsSchemaVersionV4,
+		Schema:     TypeFactsSchemaVersionV5,
 		RequestID:  7,
 		Operation:  LifecycleAnalyze,
 		ProjectID:  "/p/tsconfig.json",
@@ -38,21 +118,24 @@ func v3GoldenFixtures(t *testing.T) (LifecycleRequest, LifecycleResponse) {
 		RemovedDemandPaths: []string{"/p/dropped.tsx"},
 	}
 
-	packed, err := PackedFactTableV3From(goldenPackedTable(t))
+	table := goldenWireTable()
+	transition, err := (&wireTransitionEncoder{}).Encode(wireTransitionInput{
+		ProjectID: "/p/tsconfig.json",
+		Target:    &table,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	response := LifecycleResponse{
-		Schema:      TypeFactsSchemaVersionV4,
-		RequestID:   7,
-		ProjectID:   "/p/tsconfig.json",
-		Generation:  3,
-		OK:          true,
-		PackedTable: packed,
-		TableMode:   TableModeFull,
-		StateToken:  "5",
-		Affected:    []string{"/p/a.tsx"},
-		Timings:     &LifecycleTimings{AnalyzeNs: 1234, Materialized: true, RetainedFiles: 2},
+		Schema:          TypeFactsSchemaVersionV5,
+		RequestID:       7,
+		ProjectID:       "/p/tsconfig.json",
+		Generation:      3,
+		OK:              true,
+		TableTransition: transition.Bytes,
+		StateToken:      "5",
+		Affected:        []string{"/p/a.tsx"},
+		Timings:         &LifecycleTimings{AnalyzeNs: 1234, Materialized: true, RetainedFiles: 2},
 	}
 	return request, response
 }
@@ -131,7 +214,7 @@ func TestV3ResponseGoldenRoundTripsIdentically(t *testing.T) {
 	if err := wirecbor.Unmarshal(golden, &response); err != nil {
 		t.Fatal(err)
 	}
-	if !response.OK || response.TableMode != TableModeFull || len(response.PackedTable) == 0 {
+	if !response.OK || len(response.TableTransition) == 0 {
 		t.Fatalf("golden response = %+v", response)
 	}
 	encoded, err := wirecbor.Marshal(response)

@@ -2,11 +2,11 @@ package typefacts
 
 import "fmt"
 
-const TypeFactsSchemaVersionV4 uint64 = 4
+const TypeFactsSchemaVersionV5 uint64 = 5
 
 const (
 	TypeFactsHandshakeProtocol uint64 = 1
-	TypeFactsSchemaSHA256             = "sha256:45a65287dec3d5f75b1be174eb19cce2898c739dd55035c4ab8e6c4a9ba106ef"
+	TypeFactsSchemaSHA256             = "sha256:a4dfff25783d9dd99cf0d44e315a7c01e6c7d132965431ab5624a0975fd549a8"
 )
 
 type ServiceHandshake struct {
@@ -74,62 +74,23 @@ type LifecycleTimings struct {
 }
 
 type LifecycleResponse struct {
-	Schema        uint64            `cbor:"schema" json:"schema"`
-	RequestID     uint64            `cbor:"requestId" json:"requestId"`
-	ProjectID     string            `cbor:"projectId" json:"projectId"`
-	Generation    uint64            `cbor:"generation" json:"generation"`
-	OK            bool              `cbor:"ok" json:"ok"`
-	PackedTable   []byte            `cbor:"packedTable,omitempty" json:"packedTable,omitempty"`
-	PackedDelta   []byte            `cbor:"packedDelta,omitempty" json:"packedDelta,omitempty"`
-	TableMode     string            `cbor:"tableMode,omitempty" json:"tableMode,omitempty"`
-	StateToken    string            `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`
-	Affected      []string          `cbor:"affected,omitempty" json:"affected,omitempty"`
-	Sources       []SourceFileV3    `cbor:"sources,omitempty" json:"sources,omitempty"`
-	SourceArena   string            `cbor:"sourceArena,omitempty" json:"sourceArena,omitempty"`
-	SourceLengths []uint64          `cbor:"sourceLengths,omitempty" json:"sourceLengths,omitempty"`
-	Timings       *LifecycleTimings `cbor:"timings,omitempty" json:"timings,omitempty"`
-	Error         *LifecycleError   `cbor:"error,omitempty" json:"error,omitempty"`
-}
-
-const (
-	TableModeFull  = "full"
-	TableModeDelta = "delta"
-	TableModeReuse = "reuse"
-)
-
-// EntityFileV3 replaces all demanded entities for one source path.
-type EntityFileV3 struct {
-	Path     string         `cbor:"path" json:"path"`
-	Entities []EntityFactV2 `cbor:"entities" json:"entities"`
-}
-
-// SymbolReferenceFileV3 replaces one symbol's references for one source path.
-// It avoids retransmitting project-wide reference lists when an edit changes
-// locations in only one file.
-type SymbolReferenceFileV3 struct {
-	ID         string       `cbor:"id" json:"id"`
-	Path       string       `cbor:"path" json:"path"`
-	References []LocationV2 `cbor:"references,omitempty" json:"references,omitempty"`
-}
-
-// FactTableDeltaV3 transforms the table identified by the request's state
-// token into the response generation. Collections remain canonically ordered
-// after application.
-type FactTableDeltaV3 struct {
-	Generation           uint64                  `cbor:"generation" json:"generation"`
-	Sources              []SourceDigestV2        `cbor:"sources,omitempty" json:"sources,omitempty"`
-	RemovedSourcePaths   []string                `cbor:"removedSourcePaths,omitempty" json:"removedSourcePaths,omitempty"`
-	EntityFiles          []EntityFileV3          `cbor:"entityFiles,omitempty" json:"entityFiles,omitempty"`
-	RemovedEntityPaths   []string                `cbor:"removedEntityPaths,omitempty" json:"removedEntityPaths,omitempty"`
-	Symbols              []SymbolFactV2          `cbor:"symbols,omitempty" json:"symbols,omitempty"`
-	RemovedSymbolIDs     []string                `cbor:"removedSymbolIds,omitempty" json:"removedSymbolIds,omitempty"`
-	SymbolReferenceFiles []SymbolReferenceFileV3 `cbor:"symbolReferenceFiles,omitempty" json:"symbolReferenceFiles,omitempty"`
-	Files                []FileFactV2            `cbor:"files,omitempty" json:"files,omitempty"`
-	RemovedFilePaths     []string                `cbor:"removedFilePaths,omitempty" json:"removedFilePaths,omitempty"`
+	Schema          uint64            `cbor:"schema" json:"schema"`
+	RequestID       uint64            `cbor:"requestId" json:"requestId"`
+	ProjectID       string            `cbor:"projectId" json:"projectId"`
+	Generation      uint64            `cbor:"generation" json:"generation"`
+	OK              bool              `cbor:"ok" json:"ok"`
+	TableTransition []byte            `cbor:"tableTransition,omitempty" json:"tableTransition,omitempty"`
+	StateToken      string            `cbor:"stateToken,omitempty" json:"stateToken,omitempty"`
+	Affected        []string          `cbor:"affected,omitempty" json:"affected,omitempty"`
+	Sources         []SourceFileV3    `cbor:"sources,omitempty" json:"sources,omitempty"`
+	SourceArena     string            `cbor:"sourceArena,omitempty" json:"sourceArena,omitempty"`
+	SourceLengths   []uint64          `cbor:"sourceLengths,omitempty" json:"sourceLengths,omitempty"`
+	Timings         *LifecycleTimings `cbor:"timings,omitempty" json:"timings,omitempty"`
+	Error           *LifecycleError   `cbor:"error,omitempty" json:"error,omitempty"`
 }
 
 func ValidateLifecycleRequest(request LifecycleRequest) error {
-	if request.Schema != TypeFactsSchemaVersionV4 {
+	if request.Schema != TypeFactsSchemaVersionV5 {
 		return fmt.Errorf("unsupported TypeFacts schema %d", request.Schema)
 	}
 	if request.RequestID == 0 || request.ProjectID == "" || request.Generation == 0 {

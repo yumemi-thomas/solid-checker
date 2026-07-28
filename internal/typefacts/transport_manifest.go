@@ -5,8 +5,6 @@ import (
 	"sort"
 )
 
-const transportManifestPathLimit = 64
-
 func retainedSymbolCandidates(table *FactTable, changedPaths map[string]struct{}) map[SymbolID]struct{} {
 	candidates := make(map[SymbolID]struct{})
 	if table == nil {
@@ -36,11 +34,12 @@ func retainedSymbolCandidates(table *FactTable, changedPaths map[string]struct{}
 // immediately preceding semantic-demand table. It is private implementation
 // metadata: the frozen wire schema remains unchanged.
 func transportManifest(previous, next *FactTable, builder *closureBuilder, changedPaths map[string]struct{}) *factTableTransportChanges {
-	if previous == nil || builder == nil || !builder.referenceChangesExact || len(changedPaths) > transportManifestPathLimit {
+	if previous == nil || builder == nil || !builder.referenceChangesExact {
 		return nil
 	}
 	manifest := &factTableTransportChanges{
 		baseGeneration: previous.Generation,
+		baseStateID:    previous.stateID,
 		sourcePaths:    make(map[string]struct{}, len(changedPaths)),
 		entityPaths:    make(map[string]struct{}, len(changedPaths)),
 		filePaths:      make(map[string]struct{}, len(changedPaths)),

@@ -8,12 +8,12 @@ import (
 func TestWireSymbolNameEscapesTypeScriptInternalNames(t *testing.T) {
 	t.Parallel()
 
-	got := declarationV2(Declaration{Name: "\xfeindex"})
-	if got.Name != "__index" {
-		t.Fatalf("declaration name = %q, want %q", got.Name, "__index")
+	got := wireSymbolName("\xfeindex")
+	if got != "__index" {
+		t.Fatalf("wire symbol name = %q, want %q", got, "__index")
 	}
-	if !utf8.ValidString(got.Name) {
-		t.Fatalf("wire declaration name is not valid UTF-8: %q", got.Name)
+	if !utf8.ValidString(got) {
+		t.Fatalf("wire symbol name is not valid UTF-8: %q", got)
 	}
 }
 

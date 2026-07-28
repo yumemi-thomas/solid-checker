@@ -37,9 +37,6 @@ func (transportOnlyBackend) Declarations(_ context.Context, id SymbolID) ([]Decl
 func (transportOnlyBackend) References(context.Context, SymbolID) ([]Location, error) {
 	return nil, ErrNotFound
 }
-func (transportOnlyBackend) ResolvedCall(context.Context, Location) (Call, error) {
-	return Call{}, ErrNotFound
-}
 func (transportOnlyBackend) Close() error { return nil }
 func (transportOnlyBackend) DescribeTypeAt(context.Context, Location) (TypeDescriptor, error) {
 	return TypeDescriptor{}, ErrNotFound
@@ -59,7 +56,7 @@ func (transportOnlyBackend) SourceAsyncFunctions(context.Context, string) ([]Asy
 
 // The capabilities below are the ones the production path actually uses, so
 // tests built on this double traverse the same branches the producer ships:
-// SemanticEntitiesScoped, AsyncFunctionsAt, ReferencesBatch and an exact
+// SemanticDemandRuns, AsyncFunctionsAt, ReferencesBatch and an exact
 // ChangedReferences.
 
 // doubleSymbolPrefix keeps minted identities durable in the sense of ADR 0001
@@ -98,32 +95,36 @@ func doubleSymbolLocation(id SymbolID) (Location, bool) {
 	return Location{Path: rest[:firstColon], StartByte: start, EndByte: end}, true
 }
 
-// SemanticEntitiesScoped returns one entity per demand, index-aligned as the
-// contract requires. The suppression set and descriptor seed are deliberately
-// ignored: honouring them here would be a second implementation of a rule the
-// tsgo backend already owns, and the retained-versus-fresh oracle checks that
-// rule against a real compiler.
-func (transportOnlyBackend) SemanticEntitiesScoped(
+// SemanticDemandRuns returns one aligned answer per per-file run. The scope is
+// deliberately ignored: honouring it here would be a second implementation of
+// a rule the tsgo adapter already owns, and the retained-versus-fresh oracle
+// checks that rule against a real compiler.
+func (transportOnlyBackend) SemanticDemandRuns(
 	_ context.Context,
-	demands []EntityDemand,
-	_ map[SymbolID]struct{},
-	_ map[SymbolID]*TypeDescriptor,
-) ([]EntityFact, []SymbolID, error) {
-	entities := make([]EntityFact, len(demands))
-	structural := make([]SymbolID, len(demands))
-	for index := range demands {
-		demand := &demands[index]
-		location := demand.Location
-		location.Path = filepath.Clean(location.Path)
-		entities[index] = EntityFact{Location: location}
-		if demand.Symbol {
-			entities[index].Symbol = doubleSymbolID(location)
-		}
-		if demand.StructuralAccessor {
-			structural[index] = entities[index].Symbol
+	runs []SemanticDemandRun,
+	_ SemanticScope,
+) ([]SemanticDemandRunResult, error) {
+	results := make([]SemanticDemandRunResult, len(runs))
+	for runIndex := range runs {
+		run := &runs[runIndex]
+		result := &results[runIndex]
+		result.Entities = make([]EntityFact, len(run.Demands))
+		result.Structural = make([]SymbolID, len(run.Demands))
+		result.Durable = true
+		for demandIndex := range run.Demands {
+			demand := &run.Demands[demandIndex]
+			location := demand.Location
+			location.Path = filepath.Clean(location.Path)
+			result.Entities[demandIndex] = EntityFact{Location: location}
+			if demand.Symbol {
+				result.Entities[demandIndex].Symbol = doubleSymbolID(location)
+			}
+			if demand.StructuralAccessor {
+				result.Structural[demandIndex] = result.Entities[demandIndex].Symbol
+			}
 		}
 	}
-	return entities, structural, nil
+	return results, nil
 }
 
 func (transportOnlyBackend) AsyncFunctionsAt(context.Context, []Location) ([]AsyncFunctionFact, error) {

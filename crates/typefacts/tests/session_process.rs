@@ -42,7 +42,7 @@ fn rust_client_consumes_compiler_semantic_facts_across_retained_updates() {
             entities: vec![demand.clone()],
         })
         .unwrap();
-    let entity = &first.entities[0];
+    let entity = first.entities().next().expect("one demanded entity");
     assert_eq!(entity.callability, Some(Callability::Callable));
     assert_eq!(entity.reference_space, Some(ReferenceSpace::Value));
     assert!(entity.runtime_identity.starts_with("runtime:h:"));
@@ -71,7 +71,7 @@ fn rust_client_consumes_compiler_semantic_facts_across_retained_updates() {
             entities: vec![demand],
         })
         .unwrap();
-    assert_eq!(second.entities[0], first.entities[0]);
+    assert_eq!(second.entities().next(), first.entities().next());
     session.close().unwrap();
 }
 
@@ -139,8 +139,8 @@ fn public_session_owns_the_retained_process_lifecycle() {
     );
 
     let first = session.analyze(&AnalysisDemand::default()).unwrap();
-    assert_eq!(first.generation, 1);
-    assert_eq!(first.project_id, project.to_string_lossy());
+    assert_eq!(first.generation(), 1);
+    assert_eq!(first.project_id(), project.to_string_lossy());
     let timings = session.take_last_exchange_timings().unwrap();
     assert!(!timings.roundtrip.is_zero());
     assert!(timings.response_bytes > 0);
@@ -158,7 +158,7 @@ fn public_session_owns_the_retained_process_lifecycle() {
         }])
         .unwrap();
     let second = session.analyze(&AnalysisDemand::default()).unwrap();
-    assert_eq!(second.generation, 2);
+    assert_eq!(second.generation(), 2);
     assert!(session.take_last_exchange_timings().is_some());
     assert!(session.take_last_table_changes().is_some());
     session.close().unwrap();
@@ -215,7 +215,7 @@ fn analyze_restarts_the_producer_and_replays_updates_after_a_crash() {
             .success()
     );
     let facts = session.analyze(&AnalysisDemand::default()).unwrap();
-    assert_eq!(facts.generation, 2);
+    assert_eq!(facts.generation(), 2);
     session.close().unwrap();
 
     fs::remove_file(wrapper).unwrap();
@@ -429,7 +429,8 @@ fn update_during_returns_the_work_and_advances_one_generation() {
 
     let facts = session.analyze(&AnalysisDemand::default()).unwrap();
     assert_eq!(
-        facts.generation, 2,
+        facts.generation(),
+        2,
         "analysis must see the acknowledged generation"
     );
     session.close().unwrap();
@@ -458,7 +459,7 @@ fn update_during_finishes_the_update_when_work_fails() {
         "a failed caller must not cost the session its acknowledgement"
     );
     let facts = session.analyze(&AnalysisDemand::default()).unwrap();
-    assert_eq!(facts.generation, 2);
+    assert_eq!(facts.generation(), 2);
     session.close().unwrap();
 }
 
@@ -497,7 +498,7 @@ fn update_during_finishes_the_update_when_work_panics() {
         "the acknowledgement must land even when the caller panics"
     );
     let facts = session.analyze(&AnalysisDemand::default()).unwrap();
-    assert_eq!(facts.generation, 2, "the session must still be usable");
+    assert_eq!(facts.generation(), 2, "the session must still be usable");
     session.close().unwrap();
 }
 
@@ -550,7 +551,7 @@ fn update_during_recovers_when_the_producer_dies_before_acknowledging() {
     );
 
     let facts = session.analyze(&AnalysisDemand::default()).unwrap();
-    assert_eq!(facts.generation, 2);
+    assert_eq!(facts.generation(), 2);
     session.close().unwrap();
 
     // Non-vacuity: the producer consumes the marker as it dies, so a surviving
@@ -590,6 +591,6 @@ fn cancellation_cannot_strand_a_sent_update() {
         "a cancellation during the caller's work must not abandon the update"
     );
     let facts = session.analyze(&AnalysisDemand::default()).unwrap();
-    assert_eq!(facts.generation, 2);
+    assert_eq!(facts.generation(), 2);
     session.close().unwrap();
 }

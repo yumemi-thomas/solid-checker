@@ -40,7 +40,6 @@ type closureBuilder struct {
 	descriptors             map[SymbolID]*TypeDescriptor
 	cachedSymbolFacts       map[SymbolID]SymbolFact
 	cachedReferences        map[SymbolID][]Location
-	cachedSymbolOrder       []SymbolID
 	cachedCanonicalStore    *symbolFactStore
 	symbolFactsBuffer       []SymbolFact
 	symbolOrderBuffer       []SymbolFact
@@ -54,10 +53,42 @@ type closureBuilder struct {
 	sharedSymbolChunks      int
 	changedSymbols          *changedSymbolSet
 	removedSymbolCandidates map[SymbolID]struct{}
+	removedSymbolIDs        []SymbolID
 	referenceChangesExact   bool
+	stableUniversePatch     bool
 	// factIndexScratch backs closeSymbols' handle-to-fact index; the closure
 	// reclaims it after every generation.
 	factIndexScratch []int32
+}
+
+func equalHandleMembership(left, right []bool) bool {
+	common := min(len(left), len(right))
+	for index := range common {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	for _, member := range left[common:] {
+		if member {
+			return false
+		}
+	}
+	for _, member := range right[common:] {
+		if member {
+			return false
+		}
+	}
+	return true
+}
+
+func copyHandleMembership(source, scratch []bool) []bool {
+	if cap(scratch) < len(source) {
+		scratch = make([]bool, len(source))
+	} else {
+		scratch = scratch[:len(source)]
+	}
+	copy(scratch, source)
+	return scratch
 }
 
 func (b *closureBuilder) cleanPath(path string) string {
@@ -89,6 +120,117 @@ func (b *closureBuilder) enqueueSymbol(id SymbolID) {
 	}
 	b.symbolQueue = append(b.symbolQueue, id)
 	b.queueHandles = append(b.queueHandles, handle)
+}
+
+// patchStableSymbolUniverse is a proof-gated specialization for generations
+// whose raw reachability and reference-tier seeds are unchanged. Re-resolving
+// every invalidated reached fact proves that its one outgoing alias edge is
+// unchanged; together those predicates prove that both alias fixed points are
+// identical to the preceding generation.
+func (b *closureBuilder) patchStableSymbolUniverse(
+	ctx context.Context,
+	invalidated map[SymbolID]struct{},
+	memoComplete bool,
+	expandedFullTier []bool,
+) (bool, error) {
+	previous := b.cachedCanonicalStore
+	if previous == nil || previous.Len() == 0 || b.cachedReferences == nil ||
+		!memoComplete || expandedFullTier == nil {
+		return false, nil
+	}
+
+	patches := make(map[SymbolID]SymbolFact, len(invalidated))
+	for id := range invalidated {
+		if err := ctx.Err(); err != nil {
+			return false, err
+		}
+		retained, present := previous.Get(id)
+		if !present {
+			return false, nil
+		}
+		current := SymbolFact{ID: id, References: retained.References}
+		target, err := b.backend.ResolveAlias(ctx, id)
+		switch {
+		case err == nil:
+			current.AliasTarget = target
+		case !errors.Is(err, ErrNotFound):
+			return false, err
+		}
+		if current.AliasTarget != retained.AliasTarget {
+			return false, nil
+		}
+		declarations, err := b.backend.Declarations(ctx, id)
+		switch {
+		case err == nil:
+			current.Declarations = declarations
+		case !errors.Is(err, ErrNotFound):
+			return false, err
+		}
+		patches[id] = current
+		b.changedSymbols.add(id)
+	}
+
+	changedReferences, exact, err := b.backend.ChangedReferences(ctx)
+	if err != nil {
+		return false, err
+	}
+	if !exact {
+		return false, nil
+	}
+	refresh := make([]SymbolID, 0, len(changedReferences))
+	for _, id := range changedReferences {
+		if _, eligible := b.cachedReferences[id]; !eligible {
+			continue
+		}
+		refresh = append(refresh, id)
+		b.changedSymbols.add(id)
+	}
+	references, err := b.backend.ReferencesBatch(ctx, refresh)
+	if err != nil {
+		return false, err
+	}
+	for _, id := range refresh {
+		fact, present := patches[id]
+		if !present {
+			fact, present = previous.Get(id)
+		}
+		if !present {
+			return false, nil
+		}
+		fact.References = references[id]
+		patches[id] = fact
+	}
+	for id, fact := range patches {
+		if retained, present := previous.Get(id); present && symbolFactEqual(fact, retained) {
+			delete(patches, id)
+		}
+	}
+	next, shared, complete := previous.PatchExisting(patches)
+	if !complete {
+		return false, nil
+	}
+
+	b.fullTier.members = copyHandleMembership(expandedFullTier, b.fullTier.members)
+	b.fullTier.count = 0
+	for _, member := range b.fullTier.members {
+		if member {
+			b.fullTier.count++
+		}
+	}
+	for _, id := range refresh {
+		b.cachedReferences[id] = references[id]
+	}
+	b.closedReferences = b.cachedReferences
+	b.closedSymbolStore = next
+	b.referenceChangesExact = true
+	b.stableUniversePatch = true
+	b.recomputedSymbolFacts = len(invalidated)
+	b.cachedSymbolHits = previous.Len() - b.recomputedSymbolFacts
+	b.recomputedReferences = len(refresh)
+	b.cachedReferenceHits = len(b.cachedReferences) - len(refresh)
+	b.patchedSymbolRows = len(patches)
+	b.sharedSymbolChunks = shared
+	return true, nil
 }
 
 // closeSymbols drains the worklist to a fixed point: every reached symbol
@@ -392,7 +534,7 @@ func (b *closureBuilder) closeSymbols(ctx context.Context) ([]SymbolFact, error)
 	referencesDuration := time.Since(started)
 	started = time.Now()
 	var spare []SymbolFact
-	facts, spare = orderSymbolFacts(facts, factIndex, b.interner, b.cachedSymbolOrder, b.symbolOrderBuffer[:0])
+	facts, spare = orderSymbolFacts(facts, factIndex, b.interner, b.cachedCanonicalStore, b.symbolOrderBuffer[:0])
 	b.symbolFactsBuffer = spare[:0]
 	sortDuration := time.Since(started)
 	if b.trace != nil {
@@ -516,6 +658,7 @@ func (b *closureBuilder) patchCanonicalSymbolStore(ctx context.Context, facts []
 	for _, id := range removed {
 		delete(b.cachedReferences, id)
 	}
+	b.removedSymbolIDs = removed
 	b.cachedReferenceHits += len(b.cachedReferences) - len(refresh)
 	b.closedReferences = b.cachedReferences
 	b.symbolFactsBuffer = facts[:0]
@@ -537,7 +680,7 @@ func orderSymbolFacts(
 	facts []SymbolFact,
 	factIndex []int32,
 	interner *symbolInterner,
-	previous []SymbolID,
+	previous *symbolFactStore,
 	output []SymbolFact,
 ) ([]SymbolFact, []SymbolFact) {
 	factFor := func(id SymbolID) (int32, bool) {
@@ -547,35 +690,36 @@ func orderSymbolFacts(
 		}
 		return handle, true
 	}
-	if len(previous) == 0 {
+	if previous == nil || previous.Len() == 0 {
 		sort.Slice(facts, func(i, j int) bool { return facts[i].ID < facts[j].ID })
 		return facts, output
 	}
-	if len(previous) == len(facts) {
+	if previous.Len() == len(facts) {
 		ordered := output
 		if cap(ordered) < len(facts) {
 			ordered = make([]SymbolFact, 0, len(facts))
 		}
-		for _, id := range previous {
-			handle, ok := factFor(id)
+		complete := true
+		previous.Range(func(previousFact SymbolFact) {
+			handle, ok := factFor(previousFact.ID)
 			if !ok {
-				ordered = ordered[:0]
-				break
+				complete = false
+				return
 			}
 			ordered = append(ordered, facts[factIndex[handle]-1])
-		}
-		if len(ordered) == len(facts) {
+		})
+		if complete {
 			return ordered, facts
 		}
 	}
 
 	retained := make([]SymbolFact, 0, len(facts))
-	for _, id := range previous {
-		if handle, ok := factFor(id); ok {
+	previous.Range(func(previousFact SymbolFact) {
+		if handle, ok := factFor(previousFact.ID); ok {
 			retained = append(retained, facts[factIndex[handle]-1])
 			factIndex[handle] = 0
 		}
-	}
+	})
 	if len(retained) == len(facts) {
 		output = append(output[:0], retained...)
 		return output, facts

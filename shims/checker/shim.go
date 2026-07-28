@@ -37,6 +37,9 @@ func Checker_getAwaitedType(recv *checker.Checker, t *checker.Type) *checker.Typ
 //go:linkname Checker_isTypeIdenticalTo github.com/microsoft/typescript-go/internal/checker.(*Checker).isTypeIdenticalTo
 func Checker_isTypeIdenticalTo(recv *checker.Checker, source *checker.Type, target *checker.Type) bool
 
+//go:linkname Checker_isContextSensitive github.com/microsoft/typescript-go/internal/checker.(*Checker).isContextSensitive
+func Checker_isContextSensitive(recv *checker.Checker, node *ast.Node) bool
+
 //go:linkname NewChecker github.com/microsoft/typescript-go/internal/checker.NewChecker
 func NewChecker(program checker.Program, tracer *checker.Tracer) (*checker.Checker, *sync.Mutex)
 
@@ -45,6 +48,8 @@ const SignatureFlagsIsSignatureCandidateForOverloadFailure = checker.SignatureFl
 const TypeFlagsAny = checker.TypeFlagsAny
 const TypeFlagsUnknown = checker.TypeFlagsUnknown
 const TypeFlagsNever = checker.TypeFlagsNever
+const TypeFlagsUndefined = checker.TypeFlagsUndefined
+const TypeFlagsNull = checker.TypeFlagsNull
 const TypeFlagsUnion = checker.TypeFlagsUnion
 const TypeFlagsIncludesError = checker.TypeFlagsIncludesError
 

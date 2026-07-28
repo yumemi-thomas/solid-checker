@@ -3,6 +3,7 @@ package typefacts_test
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"os"
 	"path/filepath"
 	"sort"
@@ -11,6 +12,19 @@ import (
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts/tsgo"
 )
+
+func tableTransitionMode(t *testing.T, transition []byte) uint64 {
+	t.Helper()
+	_, width := binary.Uvarint(transition)
+	if width <= 0 {
+		t.Fatal("table transition has no version")
+	}
+	mode, width := binary.Uvarint(transition[width:])
+	if width <= 0 {
+		t.Fatal("table transition has no mode")
+	}
+	return mode
+}
 
 // nonDurableDemands asks for a symbol at every property name after a dot, plus
 // every binding name. The mapped-type accesses in the fixture resolve to
@@ -74,7 +88,7 @@ func openNonDurableSession(t *testing.T, root string) (*typefacts.Session, strin
 
 func nonDurableRequest(id uint64, operation typefacts.LifecycleOperation, projectID string, generation uint64) typefacts.LifecycleRequest {
 	return typefacts.LifecycleRequest{
-		Schema:     typefacts.TypeFactsSchemaVersionV4,
+		Schema:     typefacts.TypeFactsSchemaVersionV5,
 		RequestID:  id,
 		Operation:  operation,
 		ProjectID:  projectID,
@@ -105,7 +119,7 @@ func TestNonDurableFilesStillGetADelta(t *testing.T) {
 	cold.ResetState = true
 	cold.Demands = demands
 	first := session.Lifecycle(ctx, cold)
-	if !first.OK || first.TableMode != typefacts.TableModeFull {
+	if !first.OK || len(first.TableTransition) == 0 || tableTransitionMode(t, first.TableTransition) != 0 {
 		t.Fatalf("cold analyze = %+v", first)
 	}
 	if first.Timings == nil || first.Timings.NonDurableFiles == 0 {
@@ -146,22 +160,19 @@ func TestNonDurableFilesStillGetADelta(t *testing.T) {
 		if analyzed.Timings == nil || analyzed.Timings.NonDurableFiles == 0 {
 			t.Fatalf("edit %d stopped being non-durable; the cliff is no longer under test", edit)
 		}
-		if analyzed.TableMode == typefacts.TableModeFull {
+		if len(analyzed.TableTransition) == 0 || tableTransitionMode(t, analyzed.TableTransition) != 1 {
 			t.Fatalf(
-				"edit %d packed the whole table because %d file(s) are non-durable; "+
+				"edit %d did not carry a delta because %d file(s) are non-durable; "+
 					"one synthesized symbol must not cost a project-wide pack per keystroke",
 				edit, analyzed.Timings.NonDurableFiles)
-		}
-		if len(analyzed.PackedTable) != 0 {
-			t.Fatalf("edit %d carried a packed table in %q mode", edit, analyzed.TableMode)
 		}
 	}
 }
 
-// TestNonDurableDeltaMatchesFreshMaterialization is the correctness half: the
-// delta a client applies must reproduce a fresh whole-batch table even when
-// identities inside it were re-minted this generation.
-func TestNonDurableDeltaMatchesFreshMaterialization(t *testing.T) {
+// TestNonDurableRetentionMatchesFreshMaterialization is the correctness half:
+// retained contributions must reproduce a fresh whole-batch table even when
+// identities inside them were re-minted this generation.
+func TestNonDurableRetentionMatchesFreshMaterialization(t *testing.T) {
 	ctx := context.Background()
 	root, err := filepath.Abs(filepath.Join("testdata", "non-durable"))
 	if err != nil {
@@ -196,11 +207,10 @@ func TestNonDurableDeltaMatchesFreshMaterialization(t *testing.T) {
 	}
 
 	incremental := openClosure()
-	previous, err := incremental.DemandTableForGroups(ctx, 1, groupedDemands(demands), demandPaths(demands))
+	_, err = incremental.DemandTableForGroups(ctx, 1, groupedDemands(demands), demandPaths(demands))
 	if err != nil {
 		t.Fatal(err)
 	}
-	previousWire := typefacts.FactTableV2From(*previous, projectID, 1)
 	if incremental.Stats().Retention.NonDurableFiles == 0 {
 		t.Fatal("the fixture is durable, so this test proves nothing")
 	}
@@ -212,8 +222,6 @@ func TestNonDurableDeltaMatchesFreshMaterialization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	retainedWire := typefacts.FactTableV2From(*table, projectID, 2)
-
 	fresh := openClosure()
 	if _, err := fresh.Update(ctx, []typefacts.FileChange{edit}); err != nil {
 		t.Fatal(err)
@@ -222,12 +230,5 @@ func TestNonDurableDeltaMatchesFreshMaterialization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	freshWire := typefacts.FactTableV2From(*freshTable, projectID, 2)
-
-	assertWireTablesIdentical(t, "retained table with non-durable files", 0, 2, &retainedWire, &freshWire)
-
-	// The client only ever sees the delta, so this is the assertion that matters.
-	delta := typefacts.DiffFactTablesV3FromInternal(*previous, *table, 2)
-	applied := typefacts.ApplyFactTableDeltaV3ForTest(t, previousWire, delta)
-	assertWireTablesIdentical(t, "delta-applied client table with non-durable files", 0, 2, &applied, &freshWire)
+	assertFullWireTransitionsIdentical(t, "retained table with non-durable files", 0, projectID, table, freshTable)
 }

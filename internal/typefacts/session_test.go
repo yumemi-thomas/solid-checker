@@ -2,6 +2,7 @@ package typefacts
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 )
@@ -25,8 +26,35 @@ func (b *sessionTestBackend) Close() error {
 
 func lifecycleRequest(id uint64, operation LifecycleOperation, generation uint64) LifecycleRequest {
 	return LifecycleRequest{
-		Schema: TypeFactsSchemaVersionV4, RequestID: id,
+		Schema: TypeFactsSchemaVersionV5, RequestID: id,
 		Operation: operation, ProjectID: "/project/tsconfig.json", Generation: generation,
+	}
+}
+
+func BenchmarkSessionDemandPreparation(b *testing.B) {
+	const paths = 1_000
+	initial := make([]EntityDemand, 0, paths)
+	for index := range paths {
+		path := fmt.Sprintf("/project/file-%04d.ts", index)
+		initial = append(initial, EntityDemand{
+			Location: Location{Path: path, StartByte: 1, EndByte: 2},
+			Symbol:   true,
+		})
+	}
+	var retained retainedDemandStore
+	initialTransaction := retained.begin(initial, nil, true)
+	initialTransaction.commit()
+	change := []EntityDemand{{
+		Location: Location{Path: "/project/file-0500.ts", StartByte: 2, EndByte: 3},
+		Symbol:   true,
+	}}
+	b.ReportAllocs()
+	for b.Loop() {
+		transaction := retained.begin(change, nil, false)
+		if len(transaction.groups()) != paths {
+			b.Fatalf("groups = %d, want %d", len(transaction.groups()), paths)
+		}
+		transaction.commit()
 	}
 }
 
@@ -47,13 +75,13 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	firstRequest := lifecycleRequest(2, LifecycleAnalyze, 1)
 	firstRequest.ResetState = true
 	first := session.Lifecycle(context.Background(), firstRequest)
-	if !first.OK || first.TableMode != TableModeFull || first.StateToken != "1" || len(first.PackedTable) == 0 {
+	if !first.OK || first.StateToken != "1" || len(first.TableTransition) == 0 {
 		t.Fatalf("initial analyze response = %+v", first)
 	}
 	reuseRequest := lifecycleRequest(3, LifecycleAnalyze, 1)
 	reuseRequest.StateToken = first.StateToken
 	reuse := session.Lifecycle(context.Background(), reuseRequest)
-	if !reuse.OK || reuse.TableMode != TableModeReuse || reuse.StateToken != first.StateToken {
+	if !reuse.OK || len(reuse.TableTransition) != 0 || reuse.StateToken != first.StateToken {
 		t.Fatalf("warm analyze response = %+v", reuse)
 	}
 
@@ -72,7 +100,7 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	nextRequest := lifecycleRequest(6, LifecycleAnalyze, 2)
 	nextRequest.StateToken = first.StateToken
 	next := session.Lifecycle(context.Background(), nextRequest)
-	if !next.OK || next.TableMode != TableModeDelta || next.StateToken != "2" || len(next.PackedDelta) == 0 {
+	if !next.OK || next.StateToken != "2" || len(next.TableTransition) == 0 {
 		t.Fatalf("post-update analyze response = %+v", next)
 	}
 	// The frame's expansion and application are the Rust side's obligation,
@@ -142,7 +170,7 @@ func TestSessionCancellationDoesNotCommitRetainedState(t *testing.T) {
 	}
 
 	retry := session.Lifecycle(context.Background(), request)
-	if !retry.OK || retry.StateToken != "1" || retry.TableMode != TableModeFull {
+	if !retry.OK || retry.StateToken != "1" || len(retry.TableTransition) == 0 {
 		t.Fatalf("retry response = %+v", retry)
 	}
 }
@@ -190,7 +218,7 @@ type twoFileBackend struct {
 }
 
 func (b twoFileBackend) SourceFiles(context.Context) ([]SourceFile, error) {
-	return []SourceFile{b.transportOnlyBackend.source, b.second}, nil
+	return []SourceFile{b.second, b.transportOnlyBackend.source}, nil
 }
 
 // TestSessionAnalysisTraversesTheRetainedPath pins that the in-package doubles
@@ -223,7 +251,7 @@ func TestSessionAnalysisTraversesTheRetainedPath(t *testing.T) {
 	cold := lifecycleRequest(1, LifecycleAnalyze, 1)
 	cold.ResetState = true
 	cold.Demands = demands
-	if response := session.Lifecycle(context.Background(), cold); !response.OK || response.TableMode != TableModeFull {
+	if response := session.Lifecycle(context.Background(), cold); !response.OK || len(response.TableTransition) == 0 {
 		t.Fatalf("cold analyze = %+v", response)
 	}
 	token := "1"
@@ -258,7 +286,7 @@ func TestSessionAnalysisTraversesTheRetainedPath(t *testing.T) {
 	if retention.PatchedSymbolRows != 0 {
 		t.Fatalf("a span-stable edit patched %d identical rows; retention = %+v", retention.PatchedSymbolRows, retention)
 	}
-	if warmResponse.TableMode != TableModeDelta {
-		t.Fatalf("warm analyze table mode = %q, want %q; retention = %+v", warmResponse.TableMode, TableModeDelta, retention)
+	if len(warmResponse.TableTransition) == 0 {
+		t.Fatalf("warm analyze omitted its generation-advancing transition; retention = %+v", retention)
 	}
 }

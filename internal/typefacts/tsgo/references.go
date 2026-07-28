@@ -31,29 +31,38 @@ type referenceIndex struct {
 	files map[string]*fileReferences
 }
 
-// invalidate retains safe contributions after a single-file incremental
-// update and prepares an exact lazy refresh when the affected set is small.
+// invalidate retains safe contributions and records exact symbol evidence for
+// every discarded file. Small updates patch the merged index in place; broad
+// updates rebuild it, but no longer discard the exact changed-symbol set.
 func (r *referenceIndex) invalidate(
 	program *compiler.Program,
 	affected []string,
 	retained func(string) bool,
 ) {
 	r.spaces = nil
-	// A second update before pending fragments are rescanned cannot safely
-	// compose an exact symbol delta. Large affected sets also favor a full
-	// merged-index rebuild.
-	incremental := r.merged != nil && len(affected) <= 64 && len(r.refreshPaths) == 0
+	composing := r.deltaExact && (r.merged == nil || len(r.refreshPaths) != 0)
+	hadExactBase := r.merged != nil || composing
+	// Large affected sets still favor a full merged-index rebuild. Exactness
+	// and the physical update strategy are independent decisions.
+	incremental := r.merged != nil && len(affected) <= 64 && !composing
 	refreshPaths := make(map[string]struct{}, len(affected))
-	changedSymbols := make(map[typefacts.SymbolID]struct{})
+	changedSymbols := r.changedSymbols
+	if !composing {
+		changedSymbols = make(map[typefacts.SymbolID]struct{})
+	}
 	for path, entry := range r.files {
 		// A non-durable entry holds generation-scoped counter IDs no later
 		// generation can resolve; fail closed and re-scan.
 		if retained(path) && entry.durable {
 			continue
 		}
-		if incremental {
+		if hadExactBase {
 			for id := range entry.refs {
 				changedSymbols[id] = struct{}{}
+			}
+		}
+		if incremental {
+			for id := range entry.refs {
 				locations := r.merged[id]
 				kept := locations[:0]
 				for _, location := range locations {
@@ -82,8 +91,8 @@ func (r *referenceIndex) invalidate(
 	r.merged = nil
 	r.spaces = nil
 	r.refreshPaths = nil
-	r.changedSymbols = nil
-	r.deltaExact = false
+	r.changedSymbols = changedSymbols
+	r.deltaExact = hadExactBase
 }
 
 func (r *referenceIndex) reset() {
@@ -241,7 +250,13 @@ func (r *referenceIndex) build(p *project) map[typefacts.SymbolID][]typefacts.Lo
 		path := filepath.Clean(sourceFile.FileName())
 		paths = append(paths, path)
 		if _, ok := r.files[path]; !ok {
-			r.files[path] = r.scan(p, path, sourceFile)
+			entry := r.scan(p, path, sourceFile)
+			r.files[path] = entry
+			if r.deltaExact {
+				for id := range entry.refs {
+					r.changedSymbols[id] = struct{}{}
+				}
+			}
 		}
 	}
 	sort.Strings(paths)

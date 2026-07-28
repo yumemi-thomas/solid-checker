@@ -105,9 +105,17 @@ const internerResetSlack = 1024
 // outgrown the live universe, using the preceding table's canonical symbol
 // count as the liveness estimate. Called between generations only — never
 // while a build holds handles.
-func (p *DemandClosure) maybeResetInterner() {
-	if p.interner == nil || p.interner.size() > 2*len(p.symbolOrder)+internerResetSlack {
+func (p *DemandClosure) maybeResetInterner(liveSymbols int) {
+	if p.interner == nil || p.interner.size() > 2*liveSymbols+internerResetSlack {
 		p.interner = newSymbolInterner()
+		// Seed snapshots are indexed by this interner's handles and cannot
+		// cross an interner replacement.
+		p.lastRoots = nil
+		p.lastFullRoots = nil
+		p.lastFullTier = nil
+		p.rootSnapshotScratch = nil
+		p.fullRootSnapshotScratch = nil
+		p.fullTierSnapshotScratch = nil
 	}
 }
 

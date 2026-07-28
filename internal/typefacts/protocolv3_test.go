@@ -11,7 +11,7 @@ import (
 )
 
 func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join("..", "..", "schema", "typefacts-v4.schema.json"))
+	data, err := os.ReadFile(filepath.Join("..", "..", "schema", "typefacts-v5.schema.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -23,7 +23,7 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 
 func TestLifecycleSourcesIsAValidReadOnlyGenerationOperation(t *testing.T) {
 	request := typefacts.LifecycleRequest{
-		Schema:     typefacts.TypeFactsSchemaVersionV4,
+		Schema:     typefacts.TypeFactsSchemaVersionV5,
 		RequestID:  1,
 		Operation:  typefacts.LifecycleSources,
 		ProjectID:  "/project/tsconfig.json",

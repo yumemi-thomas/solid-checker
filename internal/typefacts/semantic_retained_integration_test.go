@@ -2,7 +2,6 @@ package typefacts_test
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts/tsgo"
-	"github.com/yumemi-thomas/solid-ts-facts/internal/wirecbor"
 )
 
 // demandSource is what a test needs in order to synthesise a client's demand
@@ -70,105 +68,6 @@ func realisticDemands(t testing.TB, backend demandSource, ctx context.Context) [
 		}
 	}
 	return demands
-}
-
-// assertWireTablesIdentical byte-compares two wire tables and, on mismatch,
-// reports the first differing row so a divergence names its own cause.
-func assertWireTablesIdentical(t *testing.T, what string, step int, generation uint64, got, want *typefacts.FactTableV2) {
-	t.Helper()
-	gotBytes, err := wirecbor.Marshal(*got)
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantBytes, err := wirecbor.Marshal(*want)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(gotBytes) == string(wantBytes) {
-		return
-	}
-	t.Fatalf("step %d (generation %d): %s diverges from fresh materialization (%d vs %d bytes)\ngot:  %s\nwant: %s\nfirst mismatch: %s",
-		step, generation, what, len(gotBytes), len(wantBytes),
-		describeWireTable(got), describeWireTable(want), firstWireMismatch(got, want))
-}
-
-func describeWireTable(table *typefacts.FactTableV2) string {
-	references, descriptors := 0, 0
-	for _, symbol := range table.Symbols {
-		references += len(symbol.References)
-	}
-	for _, entity := range table.Entities {
-		if entity.TypeDescriptor != nil {
-			descriptors++
-		}
-	}
-	return fmt.Sprintf("entities=%d symbols=%d references=%d descriptors=%d files=%d",
-		len(table.Entities), len(table.Symbols), references, descriptors, len(table.Files))
-}
-
-func firstWireMismatch(left, right *typefacts.FactTableV2) string {
-	differs := func(a, b any) bool {
-		l, _ := wirecbor.Marshal(a)
-		r, _ := wirecbor.Marshal(b)
-		return string(l) != string(r)
-	}
-	for index := range min(len(left.Sources), len(right.Sources)) {
-		if differs(left.Sources[index], right.Sources[index]) {
-			return fmt.Sprintf("sources[%d]:\n  got  %+v\n  want %+v", index, left.Sources[index].Path, right.Sources[index].Path)
-		}
-	}
-	for index := range min(len(left.Entities), len(right.Entities)) {
-		if differs(left.Entities[index], right.Entities[index]) {
-			gotCall, wantCall := left.Entities[index].ResolvedCall, right.Entities[index].ResolvedCall
-			return fmt.Sprintf("entities[%d]:\n  got  %+v\n  want %+v\n  got call: %#v\n  want call: %#v\n  got declaration: %#v\n  want declaration: %#v\n  got arguments: %#v\n  want arguments: %#v",
-				index, left.Entities[index], right.Entities[index],
-				gotCall, wantCall,
-				func() any {
-					if gotCall == nil {
-						return nil
-					}
-					return gotCall.Declaration
-				}(),
-				func() any {
-					if wantCall == nil {
-						return nil
-					}
-					return wantCall.Declaration
-				}(),
-				func() any {
-					if gotCall == nil {
-						return nil
-					}
-					return gotCall.Arguments
-				}(),
-				func() any {
-					if wantCall == nil {
-						return nil
-					}
-					return wantCall.Arguments
-				}(),
-			)
-		}
-	}
-	for index := range min(len(left.Symbols), len(right.Symbols)) {
-		if differs(left.Symbols[index], right.Symbols[index]) {
-			return fmt.Sprintf("symbols[%d]:\n  got  %+v\n  want %+v", index, left.Symbols[index], right.Symbols[index])
-		}
-	}
-	for index := range min(len(left.Files), len(right.Files)) {
-		if differs(left.Files[index], right.Files[index]) {
-			return fmt.Sprintf("files[%d]:\n  got  %+v\n  want %+v", index, left.Files[index], right.Files[index])
-		}
-	}
-	switch {
-	case len(left.Entities) != len(right.Entities):
-		return fmt.Sprintf("entity count: got %d, want %d", len(left.Entities), len(right.Entities))
-	case len(left.Symbols) != len(right.Symbols):
-		return fmt.Sprintf("symbol count: got %d, want %d", len(left.Symbols), len(right.Symbols))
-	case len(left.Files) != len(right.Files):
-		return fmt.Sprintf("file count: got %d, want %d", len(left.Files), len(right.Files))
-	}
-	return "no element-level mismatch found (header fields?)"
 }
 
 func groupedDemands(demands []typefacts.EntityDemand) []typefacts.DemandGroup {
@@ -313,14 +212,6 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 		t.Fatal(err)
 	}
 
-	// The previous generation's table, kept exactly one generation the way
-	// Session keeps s.retained.table. Holding it longer is unsafe: the closure
-	// recycles the table from two generations back as recyclableTable and
-	// overwrites its slice storage in place.
-	var previousInternal *typefacts.FactTable
-	var previousWire typefacts.FactTableV2
-	deltaAppliedSeen := false
-
 	generation := uint64(1)
 	retainedSeen := false
 	asyncCacheSeen := false
@@ -355,20 +246,8 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 		if err != nil {
 			t.Fatal(err)
 		}
-		retainedTable := typefacts.FactTableV2From(*table, projectID, generation)
 		stats := incremental.Stats()
 
-		// The delta the producer would actually put on the wire, applied by the
-		// model of the Rust client's applicator. Comparing only full tables
-		// cannot see a delta that omits a row, which is the failure mode the
-		// transport manifest is responsible for preventing.
-		var deltaApplied *typefacts.FactTableV2
-		if previousInternal != nil {
-			delta := typefacts.DiffFactTablesV3FromInternal(*previousInternal, *table, generation)
-			applied := typefacts.ApplyFactTableDeltaV3ForTest(t, previousWire, delta)
-			deltaApplied = &applied
-			deltaAppliedSeen = true
-		}
 		if stats.Retention.RetainedFiles > 0 {
 			retainedSeen = true
 		}
@@ -421,25 +300,12 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 		if err != nil {
 			t.Fatal(err)
 		}
-		freshWireTable := typefacts.FactTableV2From(*freshTable, projectID, generation)
 		freshStats := fresh.Stats()
 		if freshStats.Retention.RetainedFiles != 0 {
 			t.Fatalf("step %d: fresh session retained %d files; the oracle must be a whole-batch run", step, freshStats.Retention.RetainedFiles)
 		}
 
-		assertWireTablesIdentical(t, "retained materialization", step, generation, &retainedTable, &freshWireTable)
-		if deltaApplied != nil {
-			// The client that applied the producer's delta must hold exactly
-			// what a fresh materialization would have produced. A delta that
-			// omits a changed row shows up here and nowhere else.
-			assertWireTablesIdentical(t, "delta-applied client table", step, generation, deltaApplied, &freshWireTable)
-		}
-
-		previousInternal = table
-		previousWire = retainedTable
-	}
-	if !deltaAppliedSeen {
-		t.Fatal("no generation produced a delta to apply; the delta parity check is vacuous")
+		assertFullWireTransitionsIdentical(t, "retained materialization", step, projectID, table, freshTable)
 	}
 	if !retainedSeen {
 		t.Fatal("the edit script never exercised retention; the test is vacuous")

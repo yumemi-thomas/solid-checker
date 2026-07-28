@@ -15,12 +15,15 @@ import (
 // (the tsgo adapter) and it satisfies all of them. A capability probe with one
 // adapter encodes a second adapter that has never existed.
 //
-// SemanticEntitiesScoped resolves a demand subset whose output must match a
-// larger batch's semantics: the suppression set carries structural-accessor
-// symbols from outside the subset, the descriptor seed carries type descriptors
-// already computed for demands outside it (batch-wide first-wins dedup), and
-// the second result reports the subset's structural-accessor symbol per demand.
-// That is what lets per-file retention reproduce whole-batch output.
+// SourceFiles returns clean, strictly path-ordered rows. SemanticDemandRuns
+// returns clean, strictly ordered, unique dependency paths that exclude their
+// owning run. These are adapter-boundary invariants: the closure checks them
+// and rejects malformed internal evidence, but never normalizes it again.
+//
+// SemanticDemandRuns resolves a demand subset whose output must match a larger
+// batch's semantics. The scope carries structural-accessor symbols and type
+// descriptors from outside the subset; aligned per-file results carry explicit
+// retention evidence without flattening and repartitioning file ownership.
 //
 // ReferencesBatch resolves reference lists under one backend lock, keyed by the
 // requested ID; an absent key means the same as an empty list.
@@ -37,7 +40,7 @@ type ClosureBackend interface {
 	ResolveAlias(context.Context, SymbolID) (SymbolID, error)
 	Declarations(context.Context, SymbolID) ([]Declaration, error)
 
-	SemanticEntitiesScoped(context.Context, []EntityDemand, map[SymbolID]struct{}, map[SymbolID]*TypeDescriptor) ([]EntityFact, []SymbolID, error)
+	SemanticDemandRuns(context.Context, []SemanticDemandRun, SemanticScope) ([]SemanticDemandRunResult, error)
 	AsyncFunctionsAt(context.Context, []Location) ([]AsyncFunctionFact, error)
 	ReferencesBatch(context.Context, []SymbolID) (map[SymbolID][]Location, error)
 	ChangedReferences(context.Context) (ids []SymbolID, exact bool, err error)
@@ -96,17 +99,27 @@ type DemandClosure struct {
 	queueScratch       []SymbolID
 	queueHandleScratch []int32
 	factIndexScratch   []int32
-	stats              ClosureStats
-	generation         uint64
-	closed             bool
-	// retained carries per-file demand-closure contributions across
-	// generations (ADR 0001): an accepted update drops exactly the affected
-	// set, and a file whose demands are unchanged reuses its entity facts
-	// instead of re-resolving them against the checker. lastSuppression is
-	// the previous generation's structural-accessor union; when the union
-	// changes, every file is recomputed so descriptor suppression keeps
-	// whole-batch semantics.
-	retained        map[string]*fileClosureContribution
+	// lastRoots and lastFullRoots retain the raw, pre-alias seed sets of the
+	// preceding successful generation. lastFullTier is the expanded reference
+	// tier. Stable seeds plus unchanged alias edges prove the same fixed point
+	// without walking the complete symbol universe again.
+	lastRoots               []bool
+	lastFullRoots           []bool
+	lastFullTier            []bool
+	rootSnapshotScratch     []bool
+	fullRootSnapshotScratch []bool
+	fullTierSnapshotScratch []bool
+	stats                   ClosureStats
+	generation              uint64
+	nextTableStateID        uint64
+	closed                  bool
+	// retained owns immutable per-file Retained contributions and the reverse
+	// indexes used to invalidate exact dependents and structural-descriptor
+	// users. retainedPathScratch is the transaction's reusable desired set.
+	retained            retainedContributionStore
+	retainedPathScratch map[string]struct{}
+	// lastSuppression is the preceding generation's structural-accessor union.
+	// A changed union refreshes only paths named by retained.descriptorUsers.
 	lastSuppression map[SymbolID]struct{}
 	// suppressionScratch and descriptorSeedScratch back the per-generation
 	// suppression union and descriptor seed. Both are derived in full every
@@ -130,11 +143,12 @@ type DemandClosure struct {
 	// retained fact. Every write to symbolFacts goes through indexSymbolFact /
 	// unindexSymbolFact to keep the two exactly in sync.
 	symbolsByPath map[string]map[SymbolID]struct{}
-	// symbolOrder is the preceding materialized table's canonical ID order.
-	// Retained closure uses it as an ordering index so an ordinary edit only
-	// sorts genuinely new symbols instead of re-sorting the complete table.
-	symbolOrder   []SymbolID
 	symbolScratch []SymbolFact
+	// invalidatedSymbols names every previously reached durable fact evicted
+	// by accepted source updates. symbolMemoComplete proves that this evidence
+	// covered the entire preceding canonical store.
+	invalidatedSymbols map[SymbolID]struct{}
+	symbolMemoComplete bool
 	// asyncFiles retains complete durable async-function contributions by
 	// demand path. Exact changed-path manifests let ordinary edits query only
 	// changed files; cross-file selections fall back to a full async batch.
@@ -146,31 +160,12 @@ type DemandClosure struct {
 	demandSeed         maphash.Seed
 }
 
-// fileClosureContribution is one file's share of the semantic demand
-// closure, valid while the file stays outside every accepted update's
-// affected set and its demand list hashes identically.
-type fileClosureContribution struct {
-	demandHash   uint64
-	entities     []EntityFact
-	descriptors  []symbolDescriptor
-	enqueued     []SymbolID
-	fullTier     []SymbolID
-	structural   []SymbolID
-	dependencies map[string]struct{}
-	durable      bool
-}
-
-type symbolDescriptor struct {
-	symbol     SymbolID
-	descriptor *TypeDescriptor
-}
-
 // NewDemandClosure wraps a live backend, which must satisfy every capability
 // the closure calls. trace may be nil, which disables tracing entirely.
 func NewDemandClosure(backend Project, trace Trace) (*DemandClosure, error) {
 	full, ok := backend.(ClosureBackend)
 	if !ok {
-		return nil, errors.New("demand closure requires the scoped semantic, async, and reference-batch capabilities")
+		return nil, errors.New("demand closure requires the demand-run semantic, async, and reference-batch capabilities")
 	}
 	return &DemandClosure{backend: full, trace: trace, generation: 1}, nil
 }
@@ -241,6 +236,10 @@ func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (Affec
 	}
 	for path := range invalidPaths {
 		for id := range p.symbolsByPath[path] {
+			if p.invalidatedSymbols == nil {
+				p.invalidatedSymbols = make(map[SymbolID]struct{})
+			}
+			p.invalidatedSymbols[id] = struct{}{}
 			if fact, retained := p.symbolFacts[id]; retained {
 				p.unindexSymbolFact(fact)
 				delete(p.symbolFacts, id)
@@ -251,14 +250,10 @@ func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (Affec
 	p.previousTable = p.table
 	p.table = nil
 	p.transportChangedPaths = invalidPaths
-	// Retained contributions survive except the affected set; a
-	// departed file must be evicted now, not when next queried.
-	for _, path := range affected.Files {
-		delete(p.retained, filepath.Clean(path))
-	}
-	for _, change := range changes {
-		delete(p.retained, filepath.Clean(change.Path))
-	}
+	// Accepted source state invalidates the exact Retained contributions and
+	// their direct dependency users immediately. Analyze-time preparation is
+	// transactional, but an accepted update itself cannot be rolled back.
+	p.retained.invalidate(invalidPaths)
 	// Every accepted protocol update advances exactly one generation, even
 	// when the backend reports no affected source files.
 	p.generation++
@@ -269,6 +264,11 @@ func (p *DemandClosure) Close() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.closed = true
+	p.resetAnalysisStateLocked()
+	return p.backend.Close()
+}
+
+func (p *DemandClosure) resetAnalysisStateLocked() {
 	p.table = nil
 	p.previousTable = nil
 	p.recyclableTable = nil
@@ -276,8 +276,9 @@ func (p *DemandClosure) Close() error {
 	p.symbolFacts = nil
 	p.symbolReferences = nil
 	p.symbolsByPath = nil
-	p.symbolOrder = nil
 	p.symbolScratch = nil
+	p.retained.reset()
+	p.retainedPathScratch = nil
 	p.lastSuppression = nil
 	p.suppressionScratch = nil
 	p.descriptorSeedScratch = nil
@@ -292,7 +293,25 @@ func (p *DemandClosure) Close() error {
 	p.queueScratch = nil
 	p.queueHandleScratch = nil
 	p.factIndexScratch = nil
-	return p.backend.Close()
+	p.lastRoots = nil
+	p.lastFullRoots = nil
+	p.lastFullTier = nil
+	p.rootSnapshotScratch = nil
+	p.fullRootSnapshotScratch = nil
+	p.fullTierSnapshotScratch = nil
+	p.invalidatedSymbols = nil
+	p.symbolMemoComplete = false
+}
+
+// abandonAnalysis drops every derived analysis cache after a materialized
+// table failed to publish through its owning Session. Reconstructing on the
+// next analyze is intentionally conservative and rare: retaining any part of
+// the rejected demand snapshot could make it observable through a later,
+// otherwise unrelated demand delta.
+func (p *DemandClosure) abandonAnalysis() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.resetAnalysisStateLocked()
 }
 
 // SourceFiles answers from the retained backend without materializing the

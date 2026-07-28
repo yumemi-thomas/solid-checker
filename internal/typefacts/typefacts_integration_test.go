@@ -178,10 +178,7 @@ func TestProjectResolvesCallTargetAndReturnType(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	call, err := project.ResolvedCall(context.Background(), callLocation)
-	if err != nil {
-		t.Fatal(err)
-	}
+	call := resolvedCall(t, project, callLocation)
 	if call.Target != originalID {
 		t.Errorf("call target = %q, want %q", call.Target, originalID)
 	}
@@ -246,10 +243,7 @@ func TestProjectUpdateRechecksChangedFileAndImporter(t *testing.T) {
 		}
 	}
 
-	call, err := project.ResolvedCall(context.Background(), locationOf(t, usePath, "localCount()"))
-	if err != nil {
-		t.Fatal(err)
-	}
+	call := resolvedCall(t, project, locationOf(t, usePath, "localCount()"))
 	if call.ReturnTypeText != "string" {
 		t.Errorf("return type after update = %q, want string", call.ReturnTypeText)
 	}

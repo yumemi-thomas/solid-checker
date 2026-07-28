@@ -27,9 +27,6 @@ func (lifecycleBenchmarkBackend) Declarations(context.Context, typefacts.SymbolI
 func (lifecycleBenchmarkBackend) References(context.Context, typefacts.SymbolID) ([]typefacts.Location, error) {
 	return nil, typefacts.ErrNotFound
 }
-func (lifecycleBenchmarkBackend) ResolvedCall(context.Context, typefacts.Location) (typefacts.Call, error) {
-	return typefacts.Call{}, typefacts.ErrNotFound
-}
 func (lifecycleBenchmarkBackend) Close() error { return nil }
 func (lifecycleBenchmarkBackend) DescribeTypeAt(context.Context, typefacts.Location) (typefacts.TypeDescriptor, error) {
 	return typefacts.TypeDescriptor{}, typefacts.ErrNotFound
@@ -50,18 +47,24 @@ func (lifecycleBenchmarkBackend) SourceAsyncFunctions(context.Context, string) (
 // The production capability quartet. Without these the double only satisfies
 // the unscoped surface, and the benchmark would drive a materializer no release
 // runs.
-func (lifecycleBenchmarkBackend) SemanticEntitiesScoped(
+func (lifecycleBenchmarkBackend) SemanticDemandRuns(
 	_ context.Context,
-	demands []typefacts.EntityDemand,
-	_ map[typefacts.SymbolID]struct{},
-	_ map[typefacts.SymbolID]*typefacts.TypeDescriptor,
-) ([]typefacts.EntityFact, []typefacts.SymbolID, error) {
-	entities := make([]typefacts.EntityFact, len(demands))
-	structural := make([]typefacts.SymbolID, len(demands))
-	for index := range demands {
-		entities[index] = typefacts.EntityFact{Location: demands[index].Location}
+	runs []typefacts.SemanticDemandRun,
+	_ typefacts.SemanticScope,
+) ([]typefacts.SemanticDemandRunResult, error) {
+	results := make([]typefacts.SemanticDemandRunResult, len(runs))
+	for runIndex := range runs {
+		run := &runs[runIndex]
+		results[runIndex].Entities = make([]typefacts.EntityFact, len(run.Demands))
+		results[runIndex].Structural = make([]typefacts.SymbolID, len(run.Demands))
+		results[runIndex].Durable = true
+		for demandIndex := range run.Demands {
+			results[runIndex].Entities[demandIndex] = typefacts.EntityFact{
+				Location: run.Demands[demandIndex].Location,
+			}
+		}
 	}
-	return entities, structural, nil
+	return results, nil
 }
 
 func (lifecycleBenchmarkBackend) AsyncFunctionsAt(context.Context, []typefacts.Location) ([]typefacts.AsyncFunctionFact, error) {
@@ -94,15 +97,15 @@ func BenchmarkLifecycleWarmReuse(b *testing.B) {
 	projectID := "/project/tsconfig.json"
 	generation := uint64(1)
 	first := session.Lifecycle(ctx, typefacts.LifecycleRequest{
-		Schema: typefacts.TypeFactsSchemaVersionV4, RequestID: 1,
+		Schema: typefacts.TypeFactsSchemaVersionV5, RequestID: 1,
 		Operation: typefacts.LifecycleAnalyze, ProjectID: projectID, Generation: generation,
 		ResetState: true,
 	})
-	if !first.OK || first.TableMode != typefacts.TableModeFull {
+	if !first.OK || len(first.TableTransition) == 0 {
 		b.Fatalf("initialize retained state: %+v", first)
 	}
 	request := typefacts.LifecycleRequest{
-		Schema: typefacts.TypeFactsSchemaVersionV4, RequestID: 2,
+		Schema: typefacts.TypeFactsSchemaVersionV5, RequestID: 2,
 		Operation: typefacts.LifecycleAnalyze, ProjectID: projectID, Generation: generation,
 		StateToken: first.StateToken,
 	}
@@ -112,7 +115,7 @@ func BenchmarkLifecycleWarmReuse(b *testing.B) {
 	for b.Loop() {
 		lifecycleBenchmarkResponse = session.Lifecycle(ctx, request)
 	}
-	if !lifecycleBenchmarkResponse.OK || lifecycleBenchmarkResponse.TableMode != typefacts.TableModeReuse {
+	if !lifecycleBenchmarkResponse.OK || len(lifecycleBenchmarkResponse.TableTransition) != 0 {
 		b.Fatalf("warm retained response: %+v", lifecycleBenchmarkResponse)
 	}
 }

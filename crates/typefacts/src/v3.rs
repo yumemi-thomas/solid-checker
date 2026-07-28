@@ -1,19 +1,19 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, AsyncFunctionFact, CallKind,
-    Callability, Declaration, DeclarationOwner, EntityFact, FactTable, FileFact, Location,
-    ParameterFact, ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration,
-    SourceBinding, SourceCall, SourceDigest, SourceFunction, SourceHash, SymbolFact,
-    TypeDescriptor,
+    Callability, Declaration, DeclarationOwner, EntityFact, FileFact, Location, ParameterFact,
+    ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, SourceBinding,
+    SourceCall, SourceFunction, SourceHash, SymbolFact, TypeDescriptor,
 };
 
-pub const TYPE_FACTS_SCHEMA_V4: u64 = 4;
+pub const TYPE_FACTS_SCHEMA_V5: u64 = 5;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V3: u64 = 3;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:45a65287dec3d5f75b1be174eb19cce2898c739dd55035c4ab8e6c4a9ba106ef";
+    "sha256:a4dfff25783d9dd99cf0d44e315a7c01e6c7d132965431ab5624a0975fd549a8";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -102,46 +102,6 @@ pub struct Request {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct EntityFileDelta {
-    pub path: String,
-    pub entities: Vec<EntityFact>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SymbolReferenceFileDelta {
-    pub id: String,
-    pub path: String,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub references: Vec<Location>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct FactTableDelta {
-    pub generation: u64,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub sources: Vec<SourceDigest>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub removed_source_paths: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub entity_files: Vec<EntityFileDelta>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub removed_entity_paths: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub symbols: Vec<SymbolFact>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub removed_symbol_ids: Vec<String>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub symbol_reference_files: Vec<SymbolReferenceFileDelta>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub files: Vec<FileFact>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub removed_file_paths: Vec<String>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Error {
     pub code: String,
     pub message: String,
@@ -192,11 +152,7 @@ pub struct Response {
     pub generation: u64,
     pub ok: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty", with = "serde_bytes")]
-    pub packed_table: Vec<u8>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty", with = "serde_bytes")]
-    pub packed_delta: Vec<u8>,
-    #[serde(default, skip_serializing_if = "String::is_empty")]
-    pub table_mode: String,
+    pub table_transition: Vec<u8>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub state_token: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -211,10 +167,6 @@ pub struct Response {
     pub timings: Option<ServerTimings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Error>,
-    /// The expanded form of `packed_delta`, filled by the session after the
-    /// frame decodes. Never on the wire.
-    #[serde(skip)]
-    pub table_delta: Option<FactTableDelta>,
     #[serde(skip)]
     pub client_decode_ns: u64,
     #[serde(skip)]
@@ -246,8 +198,7 @@ const fn is_false(value: &bool) -> bool {
 // Element order mirrors the Go `toarray` structs in
 // internal/typefacts/protocolv3_compact.go.
 //
-// A response carries the fact table in exactly one shape: the opaque packed
-// frame read by [`decode_packed_fact_table`].
+// An analyze response carries at most one opaque table-transition frame.
 
 /// `[path-index, packed demand rows]`. Each byte string stores unsigned
 /// LEB128 rows as `(flags << 1 | hasQuery, startDelta, length)`, followed by
@@ -289,8 +240,63 @@ pub const FUNCTION_FLAG_ASYNC: u64 = 1 << 1;
 pub const FUNCTION_FLAG_ARROW: u64 = 1 << 2;
 pub const ASYNC_FUNCTION_FLAG_CAN_RETURN_ASYNC: u64 = 1 << 0;
 
-const PACKED_FACT_TABLE_VERSION: u64 = 4;
+const TABLE_TRANSITION_VERSION: u64 = 1;
 const PACKED_COLLECTION_LIMIT: usize = 1_000_000;
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum TransitionMode {
+    Full,
+    Delta,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum SlotOp<T> {
+    Unchanged,
+    Replace(T),
+    Remove,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct PathOp {
+    pub path: Arc<str>,
+    pub source: SlotOp<SourceHash>,
+    pub entities: SlotOp<Vec<EntityFact>>,
+    pub file: SlotOp<FileFact>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum SymbolOp {
+    Replace(SymbolFact),
+    Remove {
+        id: Arc<str>,
+    },
+    ReplaceReferencePath {
+        id: Arc<str>,
+        path: Arc<str>,
+        references: Vec<Location>,
+    },
+}
+
+impl SymbolOp {
+    pub(crate) fn id(&self) -> &Arc<str> {
+        match self {
+            Self::Replace(symbol) => &symbol.id,
+            Self::Remove { id } | Self::ReplaceReferencePath { id, .. } => id,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) struct WireTableTransition {
+    pub mode: TransitionMode,
+    pub table_schema: u64,
+    pub base_generation: u64,
+    pub target_generation: u64,
+    pub project_id: Arc<str>,
+    pub base_state_token: Arc<str>,
+    pub paths: Vec<PathOp>,
+    pub symbols: Vec<SymbolOp>,
+}
 
 struct PackedCursor<'a> {
     input: &'a [u8],
@@ -322,6 +328,9 @@ impl<'a> PackedCursor<'a> {
             }
             value |= u64::from(byte & 0x7f) << shift;
             if byte & 0x80 == 0 {
+                if shift != 0 && byte == 0 {
+                    return Err("packed table integer is not shortest-form encoded".into());
+                }
                 return Ok(value);
             }
         }
@@ -474,9 +483,8 @@ impl<'a> PackedCursor<'a> {
     fn resolved_call(&mut self, strings: &[Arc<str>]) -> Result<ResolvedCall, String> {
         let target = self.string_index(strings, "resolved target")?;
         let return_type_text = self.string_index(strings, "return type")?;
-        let validity =
-            parse_resolved_call_validity(&self.string_index(strings, "resolved call validity")?)?;
-        let kind = parse_call_kind(&self.string_index(strings, "resolved call kind")?)?;
+        let validity = parse_resolved_call_validity(self.u64()?)?;
+        let kind = parse_call_kind(self.u64()?)?;
         let declaration = if self.boolean("resolved declaration presence")? {
             Some(self.resolved_declaration(strings)?)
         } else {
@@ -486,14 +494,8 @@ impl<'a> PackedCursor<'a> {
         let mut arguments = Vec::with_capacity(argument_count);
         for _ in 0..argument_count {
             let argument_index = self.u64()?;
-            let status =
-                parse_argument_mapping_status(&self.string_index(strings, "mapping status")?)?;
-            let unresolved_text = self.string_index(strings, "mapping unresolved reason")?;
-            let unresolved = if unresolved_text.is_empty() {
-                None
-            } else {
-                Some(parse_argument_mapping_reason(&unresolved_text)?)
-            };
+            let status = parse_argument_mapping_status(self.u64()?)?;
+            let unresolved = parse_argument_mapping_reason(status, self.u64()?)?;
             let parameter = if self.boolean("mapped parameter presence")? {
                 let index = self.u64()?;
                 let symbol = self.string_index(strings, "parameter symbol")?;
@@ -513,8 +515,7 @@ impl<'a> PackedCursor<'a> {
                 } else {
                     None
                 };
-                let callability =
-                    parse_callability(&self.string_index(strings, "parameter callability")?)?;
+                let callability = parse_callability(self.u64()?)?;
                 let type_descriptor = if flags & 8 != 0 {
                     Some(self.type_descriptor(strings)?)
                 } else {
@@ -656,16 +657,12 @@ fn decode_entity_run(
             None
         };
         let callability = if flags & 4 != 0 {
-            Some(parse_callability(
-                &cursor.string_index(strings, "callability")?,
-            )?)
+            Some(parse_callability(cursor.u64()?)?)
         } else {
             None
         };
         let reference_space = if flags & 8 != 0 {
-            Some(parse_reference_space(
-                &cursor.string_index(strings, "reference space")?,
-            )?)
+            Some(parse_reference_space(cursor.u64()?)?)
         } else {
             None
         };
@@ -692,60 +689,70 @@ fn decode_entity_run(
     Ok(())
 }
 
-fn parse_callability(value: &str) -> Result<Callability, String> {
+fn parse_callability(value: u64) -> Result<Callability, String> {
     match value {
-        "callable" => Ok(Callability::Callable),
-        "nonCallable" => Ok(Callability::NonCallable),
-        "mixed" => Ok(Callability::Mixed),
-        "unknown" => Ok(Callability::Unknown),
-        _ => Err(format!("unknown callability {value:?}")),
+        0 => Ok(Callability::Callable),
+        1 => Ok(Callability::NonCallable),
+        2 => Ok(Callability::Mixed),
+        3 => Ok(Callability::Unknown),
+        _ => Err(format!("unknown callability tag {value}")),
     }
 }
 
-fn parse_reference_space(value: &str) -> Result<ReferenceSpace, String> {
+fn parse_reference_space(value: u64) -> Result<ReferenceSpace, String> {
     match value {
-        "value" => Ok(ReferenceSpace::Value),
-        "type" => Ok(ReferenceSpace::Type),
-        "both" => Ok(ReferenceSpace::Both),
-        "neither" => Ok(ReferenceSpace::Neither),
-        _ => Err(format!("unknown reference space {value:?}")),
+        0 => Ok(ReferenceSpace::Value),
+        1 => Ok(ReferenceSpace::Type),
+        2 => Ok(ReferenceSpace::Both),
+        3 => Ok(ReferenceSpace::Neither),
+        _ => Err(format!("unknown reference-space tag {value}")),
     }
 }
 
-fn parse_resolved_call_validity(value: &str) -> Result<ResolvedCallValidity, String> {
+fn parse_resolved_call_validity(value: u64) -> Result<ResolvedCallValidity, String> {
     match value {
-        "valid" => Ok(ResolvedCallValidity::Valid),
-        "recovery" => Ok(ResolvedCallValidity::Recovery),
-        "unresolved" => Ok(ResolvedCallValidity::Unresolved),
-        _ => Err(format!("unknown resolved call validity {value:?}")),
+        0 => Ok(ResolvedCallValidity::Valid),
+        1 => Ok(ResolvedCallValidity::Recovery),
+        2 => Ok(ResolvedCallValidity::Unresolved),
+        _ => Err(format!("unknown resolved-call validity tag {value}")),
     }
 }
 
-fn parse_call_kind(value: &str) -> Result<CallKind, String> {
+fn parse_call_kind(value: u64) -> Result<CallKind, String> {
     match value {
-        "unknown" => Ok(CallKind::Unknown),
-        "call" => Ok(CallKind::Call),
-        "construct" => Ok(CallKind::Construct),
-        _ => Err(format!("unknown resolved call kind {value:?}")),
+        0 => Ok(CallKind::Unknown),
+        1 => Ok(CallKind::Call),
+        2 => Ok(CallKind::Construct),
+        _ => Err(format!("unknown call-kind tag {value}")),
     }
 }
 
-fn parse_argument_mapping_status(value: &str) -> Result<ArgumentMappingStatus, String> {
+fn parse_argument_mapping_status(value: u64) -> Result<ArgumentMappingStatus, String> {
     match value {
-        "resolved" => Ok(ArgumentMappingStatus::Resolved),
-        "unresolved" => Ok(ArgumentMappingStatus::Unresolved),
-        _ => Err(format!("unknown argument mapping status {value:?}")),
+        0 => Ok(ArgumentMappingStatus::Resolved),
+        1 => Ok(ArgumentMappingStatus::Unresolved),
+        _ => Err(format!("unknown argument-mapping status tag {value}")),
     }
 }
 
-fn parse_argument_mapping_reason(value: &str) -> Result<ArgumentMappingReason, String> {
-    match value {
-        "callUnresolved" => Ok(ArgumentMappingReason::CallUnresolved),
-        "recoverySignature" => Ok(ArgumentMappingReason::RecoverySignature),
-        "compositeSignature" => Ok(ArgumentMappingReason::CompositeSignature),
-        "spreadArgument" => Ok(ArgumentMappingReason::SpreadArgument),
-        "parameterUnavailable" => Ok(ArgumentMappingReason::ParameterUnavailable),
-        _ => Err(format!("unknown argument mapping reason {value:?}")),
+fn parse_argument_mapping_reason(
+    status: ArgumentMappingStatus,
+    value: u64,
+) -> Result<Option<ArgumentMappingReason>, String> {
+    let reason = match value {
+        0 => Ok(None),
+        1 => Ok(Some(ArgumentMappingReason::CallUnresolved)),
+        2 => Ok(Some(ArgumentMappingReason::RecoverySignature)),
+        3 => Ok(Some(ArgumentMappingReason::CompositeSignature)),
+        4 => Ok(Some(ArgumentMappingReason::SpreadArgument)),
+        5 => Ok(Some(ArgumentMappingReason::ParameterUnavailable)),
+        _ => Err(format!("unknown argument-mapping reason tag {value}")),
+    }?;
+    match (status, reason) {
+        (ArgumentMappingStatus::Resolved, Some(_)) | (ArgumentMappingStatus::Unresolved, None) => {
+            Err("packed argument status and reason disagree".into())
+        }
+        _ => Ok(reason),
     }
 }
 
@@ -822,165 +829,256 @@ fn decode_file_fact(
     })
 }
 
-/// Decodes the opaque v3 cold frame directly into the retained fact table.
-/// No intermediate compact rows or second full-table expansion are created.
-pub fn decode_packed_fact_table(input: &[u8], project_id: String) -> Result<FactTable, String> {
-    let mut cursor = PackedCursor::new(input);
-    let version = cursor.u64()?;
-    if version != PACKED_FACT_TABLE_VERSION {
-        return Err(format!("unsupported packed table version {version}"));
+fn slot_tag(value: u64, label: &str) -> Result<u64, String> {
+    if value <= 2 {
+        Ok(value)
+    } else {
+        Err(format!(
+            "table transition {label} has invalid operation {value}"
+        ))
     }
-    let schema = cursor.u64()?;
-    let generation = cursor.u64()?;
-    let strings = decode_packed_strings(&mut cursor)?;
+}
 
-    let source_count = cursor.count("sources")?;
-    let mut sources = Vec::with_capacity(source_count);
-    for _ in 0..source_count {
-        sources.push(SourceDigest {
-            path: cursor.string_index(&strings, "source path")?,
-            sha256: raw_digest(cursor.raw(32)?)?,
-        });
-    }
-
-    let entity_file_count = cursor.count("entity files")?;
-    let mut entities = Vec::new();
-    for _ in 0..entity_file_count {
-        let path = cursor.string_index(&strings, "entity path")?;
-        decode_entity_run(&mut cursor, &strings, &path, &mut entities)?;
-    }
-
-    let symbol_count = cursor.count("symbols")?;
-    let mut symbols = Vec::with_capacity(symbol_count);
-    for _ in 0..symbol_count {
-        symbols.push(SymbolFact {
-            id: cursor.string_index(&strings, "symbol id")?,
-            alias_target: cursor.string_index(&strings, "alias target")?,
-            declarations: cursor.declarations(&strings)?.into(),
-            references: cursor.locations(&strings)?.into(),
-        });
-    }
-
-    let file_count = cursor.count("files")?;
-    let mut files = Vec::with_capacity(file_count);
-    for _ in 0..file_count {
-        let path = cursor.string_index(&strings, "file path")?;
-        files.push(decode_file_fact(&mut cursor, &strings, path)?);
-    }
-    if cursor.offset != input.len() {
-        return Err("packed table has trailing bytes".into());
-    }
-    Ok(FactTable {
-        schema,
-        generation,
-        project_id,
-        sources: sources.into(),
-        entities: entities.into(),
-        symbols: symbols.into(),
-        files: files.into(),
+fn locations_are_canonical(locations: &[Location]) -> bool {
+    locations.windows(2).all(|pair| {
+        (pair[0].path.as_ref(), pair[0].start_byte, pair[0].end_byte)
+            <= (pair[1].path.as_ref(), pair[1].start_byte, pair[1].end_byte)
     })
 }
 
-const PACKED_FACT_TABLE_DELTA_VERSION: u64 = 2;
-
-fn decode_packed_texts(
-    cursor: &mut PackedCursor<'_>,
-    strings: &[Arc<str>],
-    label: &str,
-) -> Result<Vec<String>, String> {
-    let count = cursor.count(label)?;
-    let mut values = Vec::with_capacity(count);
-    for _ in 0..count {
-        values.push(cursor.string_index(strings, label)?.to_string());
-    }
-    Ok(values)
+fn entity_run_is_canonical(path: &str, entities: &[EntityFact]) -> bool {
+    entities
+        .iter()
+        .all(|entity| entity.location.path.as_ref() == path)
+        && entities.windows(2).all(|pair| {
+            (pair[0].location.start_byte, pair[0].location.end_byte)
+                <= (pair[1].location.start_byte, pair[1].location.end_byte)
+        })
 }
 
-/// Decodes the opaque v3 delta frame emitted by the producer's
-/// PackedFactTableDeltaV3From: version, generation, dictionary, then sources,
-/// removed source paths, entity files, removed entity paths, symbols, removed
-/// symbol IDs, symbol reference files, files, and removed file paths, in that
-/// fixed order.
-pub fn decode_packed_fact_table_delta(input: &[u8]) -> Result<FactTableDelta, String> {
+/// Decodes and validates one complete v5 Wire table transition.
+///
+/// The returned plan owns every replacement row but is not yet applied to the
+/// retained table. This keeps malformed frames from partially mutating
+/// published Session state.
+pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransition, String> {
     let mut cursor = PackedCursor::new(input);
     let version = cursor.u64()?;
-    if version != PACKED_FACT_TABLE_DELTA_VERSION {
-        return Err(format!("unsupported packed delta version {version}"));
+    if version != TABLE_TRANSITION_VERSION {
+        return Err(format!("unsupported table transition version {version}"));
     }
-    let generation = cursor.u64()?;
+    let mode = match cursor.u64()? {
+        0 => TransitionMode::Full,
+        1 => TransitionMode::Delta,
+        value => return Err(format!("unsupported table transition mode {value}")),
+    };
+    let table_schema = cursor.u64()?;
+    if table_schema != TYPE_FACTS_TABLE_SCHEMA_V3 {
+        return Err(format!("unsupported Wire table schema {table_schema}"));
+    }
+    let base_generation = cursor.u64()?;
+    let target_generation = cursor.u64()?;
+    if target_generation == 0 {
+        return Err("table transition target generation is zero".into());
+    }
     let strings = decode_packed_strings(&mut cursor)?;
-
-    let source_count = cursor.count("delta sources")?;
-    let mut sources = Vec::with_capacity(source_count);
-    for _ in 0..source_count {
-        sources.push(SourceDigest {
-            path: cursor.string_index(&strings, "delta source path")?,
-            sha256: raw_digest(cursor.raw(32)?)?,
-        });
+    if strings.first().is_none_or(|value| !value.is_empty()) {
+        return Err("table transition dictionary does not begin with the empty string".into());
     }
-    let removed_source_paths = decode_packed_texts(&mut cursor, &strings, "removed source paths")?;
+    let mut unique_strings = HashSet::with_capacity(strings.len());
+    if strings
+        .iter()
+        .any(|value| !unique_strings.insert(value.as_ref()))
+    {
+        return Err("table transition dictionary contains a duplicate string".into());
+    }
+    let project_id = cursor.string_index(&strings, "project id")?;
+    if project_id.is_empty() {
+        return Err("table transition project id is empty".into());
+    }
+    let base_state_token = cursor.string_index(&strings, "base state token")?;
+    match mode {
+        TransitionMode::Full if base_generation != 0 || !base_state_token.is_empty() => {
+            return Err("full table transition has a base identity".into());
+        }
+        TransitionMode::Delta if base_generation == 0 || base_state_token.is_empty() => {
+            return Err("delta table transition has no base identity".into());
+        }
+        TransitionMode::Delta if target_generation < base_generation => {
+            return Err("delta table transition target precedes its base".into());
+        }
+        _ => {}
+    }
 
-    let entity_file_count = cursor.count("delta entity files")?;
-    let mut entity_files = Vec::with_capacity(entity_file_count);
-    for _ in 0..entity_file_count {
-        let path = cursor.string_index(&strings, "delta entity path")?;
-        let mut entities = Vec::new();
-        decode_entity_run(&mut cursor, &strings, &path, &mut entities)?;
-        entity_files.push(EntityFileDelta {
-            path: path.to_string(),
+    let path_count = cursor.count("path operations")?;
+    let mut paths = Vec::with_capacity(path_count);
+    let mut previous_path: Option<Arc<str>> = None;
+    for _ in 0..path_count {
+        let path = cursor.string_index(&strings, "path operation")?;
+        if path.is_empty() {
+            return Err("table transition path is empty".into());
+        }
+        if previous_path
+            .as_ref()
+            .is_some_and(|previous| previous.as_ref() >= path.as_ref())
+        {
+            return Err("table transition paths are not strictly ordered".into());
+        }
+        previous_path = Some(path.clone());
+        let flags = cursor.u64()?;
+        if flags & !0x3f != 0 {
+            return Err(format!("table transition path has unknown flags {flags}"));
+        }
+        let source_tag = slot_tag(flags & 3, "source")?;
+        let entity_tag = slot_tag((flags >> 2) & 3, "entity")?;
+        let file_tag = slot_tag((flags >> 4) & 3, "file")?;
+        if source_tag == 0 && entity_tag == 0 && file_tag == 0 {
+            return Err("table transition contains an empty path operation".into());
+        }
+        if mode == TransitionMode::Full && [source_tag, entity_tag, file_tag].contains(&2) {
+            return Err("full table transition contains a remove operation".into());
+        }
+
+        let source = match source_tag {
+            0 => SlotOp::Unchanged,
+            1 => SlotOp::Replace(raw_digest(cursor.raw(32)?)?),
+            2 => SlotOp::Remove,
+            _ => unreachable!(),
+        };
+        let entities = match entity_tag {
+            0 => SlotOp::Unchanged,
+            1 => {
+                let mut entities = Vec::new();
+                decode_entity_run(&mut cursor, &strings, &path, &mut entities)?;
+                if entities.is_empty() {
+                    return Err(format!(
+                        "entity replacement for {path:?} is empty; use remove"
+                    ));
+                }
+                if !entity_run_is_canonical(&path, &entities) {
+                    return Err(format!("entity replacement for {path:?} is not canonical"));
+                }
+                SlotOp::Replace(entities)
+            }
+            2 => SlotOp::Remove,
+            _ => unreachable!(),
+        };
+        let file = match file_tag {
+            0 => SlotOp::Unchanged,
+            1 => SlotOp::Replace(decode_file_fact(&mut cursor, &strings, path.clone())?),
+            2 => SlotOp::Remove,
+            _ => unreachable!(),
+        };
+        paths.push(PathOp {
+            path,
+            source,
             entities,
+            file,
         });
     }
-    let removed_entity_paths = decode_packed_texts(&mut cursor, &strings, "removed entity paths")?;
 
-    let symbol_count = cursor.count("delta symbols")?;
+    let symbol_count = cursor.count("symbol operations")?;
     let mut symbols = Vec::with_capacity(symbol_count);
+    let mut previous_symbol_key: Option<(Arc<str>, u64, Arc<str>)> = None;
     for _ in 0..symbol_count {
-        symbols.push(SymbolFact {
-            id: cursor.string_index(&strings, "delta symbol id")?,
-            alias_target: cursor.string_index(&strings, "delta alias target")?,
-            declarations: cursor.declarations(&strings)?.into(),
-            references: cursor.locations(&strings)?.into(),
-        });
+        let header = cursor.u64()?;
+        let (id_index, tag) = match mode {
+            TransitionMode::Full => (header, 0),
+            TransitionMode::Delta => {
+                let tag = header & 3;
+                if tag == 3 {
+                    return Err("table transition symbol has invalid tag 3".into());
+                }
+                (header >> 2, tag)
+            }
+        };
+        let id_index = usize::try_from(id_index)
+            .map_err(|_| "packed symbol id string index overflows usize".to_owned())?;
+        let id = strings
+            .get(id_index)
+            .cloned()
+            .ok_or_else(|| format!("packed symbol id string index {id_index} is out of range"))?;
+        if id.is_empty() {
+            return Err("table transition symbol id is empty".into());
+        }
+        if mode == TransitionMode::Full && tag != 0 {
+            return Err("full table transition contains a non-replace symbol operation".into());
+        }
+        let (operation, reference_path) = match tag {
+            0 => {
+                let alias_target = cursor.string_index(&strings, "alias target")?;
+                let declarations = cursor.declarations(&strings)?;
+                let references = cursor.locations(&strings)?;
+                if !locations_are_canonical(&references) {
+                    return Err(format!(
+                        "symbol replacement for {id:?} has non-canonical references"
+                    ));
+                }
+                if !alias_target.is_empty() && !references.is_empty() {
+                    return Err(format!(
+                        "alias symbol replacement for {id:?} carries references"
+                    ));
+                }
+                (
+                    SymbolOp::Replace(SymbolFact {
+                        id: id.clone(),
+                        alias_target,
+                        declarations: declarations.into(),
+                        references: references.into(),
+                    }),
+                    Arc::from(""),
+                )
+            }
+            1 => (SymbolOp::Remove { id: id.clone() }, Arc::from("")),
+            2 => {
+                let path = cursor.string_index(&strings, "symbol reference path")?;
+                if path.is_empty() {
+                    return Err("symbol reference path is empty".into());
+                }
+                let references = cursor.locations(&strings)?;
+                if references
+                    .iter()
+                    .any(|reference| reference.path.as_ref() != path.as_ref())
+                    || !locations_are_canonical(&references)
+                {
+                    return Err(format!(
+                        "symbol reference replacement for {id:?} and {path:?} is not canonical"
+                    ));
+                }
+                (
+                    SymbolOp::ReplaceReferencePath {
+                        id: id.clone(),
+                        path: path.clone(),
+                        references,
+                    },
+                    path,
+                )
+            }
+            _ => unreachable!(),
+        };
+        let key = (id, tag, reference_path);
+        if previous_symbol_key.as_ref().is_some_and(|previous| {
+            (previous.0.as_ref(), previous.1, previous.2.as_ref())
+                >= (key.0.as_ref(), key.1, key.2.as_ref())
+        }) {
+            return Err("table transition symbol operations are not strictly ordered".into());
+        }
+        previous_symbol_key = Some(key);
+        symbols.push(operation);
     }
-    let removed_symbol_ids = decode_packed_texts(&mut cursor, &strings, "removed symbol ids")?;
-
-    let reference_file_count = cursor.count("delta reference files")?;
-    let mut symbol_reference_files = Vec::with_capacity(reference_file_count);
-    for _ in 0..reference_file_count {
-        symbol_reference_files.push(SymbolReferenceFileDelta {
-            id: cursor
-                .string_index(&strings, "delta reference id")?
-                .to_string(),
-            path: cursor
-                .string_index(&strings, "delta reference path")?
-                .to_string(),
-            references: cursor.locations(&strings)?,
-        });
-    }
-
-    let file_count = cursor.count("delta files")?;
-    let mut files = Vec::with_capacity(file_count);
-    for _ in 0..file_count {
-        let path = cursor.string_index(&strings, "delta file path")?;
-        files.push(decode_file_fact(&mut cursor, &strings, path)?);
-    }
-    let removed_file_paths = decode_packed_texts(&mut cursor, &strings, "removed file paths")?;
 
     if cursor.offset != input.len() {
-        return Err("packed delta has trailing bytes".into());
+        return Err("table transition has trailing bytes".into());
     }
-    Ok(FactTableDelta {
-        generation,
-        sources,
-        removed_source_paths,
-        entity_files,
-        removed_entity_paths,
+    Ok(WireTableTransition {
+        mode,
+        table_schema,
+        base_generation,
+        target_generation,
+        project_id,
+        base_state_token,
+        paths,
         symbols,
-        removed_symbol_ids,
-        symbol_reference_files,
-        files,
-        removed_file_paths,
     })
 }
 
@@ -1085,35 +1183,160 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
 mod tests {
     use sha2::{Digest, Sha256};
 
-    use super::{TYPE_FACTS_SCHEMA_SHA256, decode_packed_fact_table};
+    use crate::{
+        ArgumentMappingReason, ArgumentMappingStatus, CallKind, Callability, ReferenceSpace,
+        ResolvedCallValidity,
+    };
+
+    use super::{
+        SlotOp, TYPE_FACTS_SCHEMA_SHA256, TransitionMode, decode_table_transition,
+        parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
+        parse_callability, parse_reference_space, parse_resolved_call_validity, push_uvarint,
+    };
+
+    fn push_test_string(frame: &mut Vec<u8>, value: &str) {
+        push_uvarint(frame, 0);
+        push_uvarint(frame, 0);
+        push_uvarint(frame, value.len() as u64);
+        frame.extend_from_slice(value.as_bytes());
+    }
+
+    fn empty_full_transition() -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, 3, 0, 1, 2] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        // project, empty base token, no path operations, no symbol operations.
+        for value in [1, 0, 0, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
 
     #[test]
     fn handshake_hash_matches_frozen_schema() {
         let actual = format!(
             "sha256:{:x}",
-            Sha256::digest(include_bytes!("../../../schema/typefacts-v4.schema.json"))
+            Sha256::digest(include_bytes!("../../../schema/typefacts-v5.schema.json"))
         );
         assert_eq!(actual, TYPE_FACTS_SCHEMA_SHA256);
     }
 
     #[test]
-    fn packed_table_decoder_is_strict_and_direct() {
-        // version, schema, generation, one prefix-coded empty string, then
-        // four empty top-level collections.
-        let valid = [4, 3, 1, 1, 0, 0, 0, 0, 0, 0, 0];
-        let table = decode_packed_fact_table(&valid, "/p/tsconfig.json".into()).unwrap();
-        assert_eq!(table.schema, 3);
-        assert_eq!(table.generation, 1);
-        assert_eq!(table.project_id, "/p/tsconfig.json");
-        assert!(table.sources.is_empty());
-        assert!(table.entities.is_empty());
-        assert!(table.symbols.is_empty());
-        assert!(table.files.is_empty());
+    fn full_transition_header_is_strict_and_self_identifying() {
+        let valid = empty_full_transition();
+        let transition = decode_table_transition(&valid).unwrap();
+        assert_eq!(transition.mode, TransitionMode::Full);
+        assert_eq!(transition.table_schema, 3);
+        assert_eq!(transition.base_generation, 0);
+        assert_eq!(transition.target_generation, 1);
+        assert_eq!(transition.project_id.as_ref(), "/p/tsconfig.json");
+        assert!(transition.base_state_token.is_empty());
+        assert!(transition.paths.is_empty());
+        assert!(transition.symbols.is_empty());
 
-        assert!(decode_packed_fact_table(&valid[..valid.len() - 1], "/p".into()).is_err());
-        assert!(decode_packed_fact_table(&[4, 3, 1], "/p".into()).is_err());
+        assert!(decode_table_transition(&valid[..valid.len() - 1]).is_err());
+        assert!(decode_table_transition(&[1, 0, 3, 0, 1]).is_err());
         let mut trailing = valid.to_vec();
         trailing.push(0);
-        assert!(decode_packed_fact_table(&trailing, "/p".into()).is_err());
+        assert!(decode_table_transition(&trailing).is_err());
+
+        let mut overlong_version = vec![0x81, 0];
+        overlong_version.extend_from_slice(&valid[1..]);
+        assert!(decode_table_transition(&overlong_version).is_err());
+    }
+
+    #[test]
+    fn numeric_enum_tags_decode_the_dense_go_golden() {
+        let response: super::Response = crate::decode(include_bytes!(
+            "../../../benchmarks/phase1/typefacts-v3-response-golden.cbor"
+        ))
+        .expect("decode response golden");
+        let transition =
+            decode_table_transition(&response.table_transition).expect("decode transition");
+        let entity = transition
+            .paths
+            .iter()
+            .find_map(|path| match &path.entities {
+                SlotOp::Replace(entities) => entities.first(),
+                SlotOp::Unchanged | SlotOp::Remove => None,
+            })
+            .expect("golden entity");
+        assert_eq!(entity.callability, Some(Callability::Callable));
+        assert_eq!(entity.reference_space, Some(ReferenceSpace::Both));
+        let call = entity.resolved_call.as_ref().expect("golden resolved call");
+        assert_eq!(call.validity, ResolvedCallValidity::Valid);
+        assert_eq!(call.kind, CallKind::Call);
+        assert_eq!(call.arguments[0].status, ArgumentMappingStatus::Resolved);
+        assert_eq!(call.arguments[0].unresolved, None);
+        assert_eq!(
+            call.arguments[0]
+                .parameter
+                .as_ref()
+                .expect("golden parameter")
+                .callability,
+            Callability::Callable
+        );
+    }
+
+    #[test]
+    fn closed_wire_enum_tags_reject_unknown_and_inconsistent_values() {
+        assert_eq!(parse_callability(0).unwrap(), Callability::Callable);
+        assert_eq!(parse_callability(1).unwrap(), Callability::NonCallable);
+        assert_eq!(parse_callability(2).unwrap(), Callability::Mixed);
+        assert_eq!(parse_callability(3).unwrap(), Callability::Unknown);
+        assert!(parse_callability(4).is_err());
+
+        assert_eq!(parse_reference_space(0).unwrap(), ReferenceSpace::Value);
+        assert_eq!(parse_reference_space(1).unwrap(), ReferenceSpace::Type);
+        assert_eq!(parse_reference_space(2).unwrap(), ReferenceSpace::Both);
+        assert_eq!(parse_reference_space(3).unwrap(), ReferenceSpace::Neither);
+        assert!(parse_reference_space(4).is_err());
+
+        assert_eq!(
+            parse_resolved_call_validity(0).unwrap(),
+            ResolvedCallValidity::Valid
+        );
+        assert_eq!(
+            parse_resolved_call_validity(1).unwrap(),
+            ResolvedCallValidity::Recovery
+        );
+        assert_eq!(
+            parse_resolved_call_validity(2).unwrap(),
+            ResolvedCallValidity::Unresolved
+        );
+        assert!(parse_resolved_call_validity(3).is_err());
+
+        assert_eq!(parse_call_kind(0).unwrap(), CallKind::Unknown);
+        assert_eq!(parse_call_kind(1).unwrap(), CallKind::Call);
+        assert_eq!(parse_call_kind(2).unwrap(), CallKind::Construct);
+        assert!(parse_call_kind(3).is_err());
+
+        assert_eq!(
+            parse_argument_mapping_status(0).unwrap(),
+            ArgumentMappingStatus::Resolved
+        );
+        assert_eq!(
+            parse_argument_mapping_status(1).unwrap(),
+            ArgumentMappingStatus::Unresolved
+        );
+        assert!(parse_argument_mapping_status(2).is_err());
+        assert_eq!(
+            parse_argument_mapping_reason(ArgumentMappingStatus::Resolved, 0).unwrap(),
+            None
+        );
+        assert_eq!(
+            parse_argument_mapping_reason(ArgumentMappingStatus::Unresolved, 1).unwrap(),
+            Some(ArgumentMappingReason::CallUnresolved)
+        );
+        assert_eq!(
+            parse_argument_mapping_reason(ArgumentMappingStatus::Unresolved, 5).unwrap(),
+            Some(ArgumentMappingReason::ParameterUnavailable)
+        );
+        assert!(parse_argument_mapping_reason(ArgumentMappingStatus::Resolved, 1).is_err());
+        assert!(parse_argument_mapping_reason(ArgumentMappingStatus::Unresolved, 0).is_err());
+        assert!(parse_argument_mapping_reason(ArgumentMappingStatus::Unresolved, 6).is_err());
     }
 }

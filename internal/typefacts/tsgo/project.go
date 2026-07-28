@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -77,6 +78,8 @@ type project struct {
 	// so every accepted update drops the maps as it installs the new checker.
 	resolvedDeclarations map[resolvedDeclarationCacheKey]*typefacts.ResolvedDeclaration
 	resolvedParameters   map[resolvedParameterCacheKey]*typefacts.ParameterFact
+	callDiagnostics      map[*ast.SourceFile]callDiagnosticIndex
+	callDemandScratch    []resolvedCallDemand
 	// typeDescriptors interns compiler-identical instantiated and return
 	// types. TypeToString is presentation work, not a semantic decision, and
 	// is disproportionately allocation-heavy when repeated per call.
@@ -90,7 +93,8 @@ type project struct {
 	// span-insensitive identity derived from declaring path and symbol name.
 	// Module-scope export uniqueness makes this deterministic across process
 	// restart while nested/non-exported symbols keep span-based identities.
-	exportedIdentities map[*ast.Symbol]preservedExportIdentity
+	exportedIdentities      map[*ast.Symbol]preservedExportIdentity
+	exportedIdentitiesByRef map[durableSymbolRef]preservedExportIdentity
 	// sourceBytes carries each program file's text as bytes across
 	// generations, keyed by the file's AST node. Incremental program updates
 	// reuse the node for every unchanged file, and a node's text is immutable,
@@ -102,15 +106,11 @@ type project struct {
 	// The retained module graph of the accepted program, which the affected
 	// walk consumes instead of re-resolving every import edge per update.
 	// forwardDeps holds each non-declaration file's cleaned resolved
-	// dependencies, reverseDeps the inverted index, and graphFiles the graph's
-	// node set. A content edit to an existing file can change only that file's
-	// own outgoing edges — resolution never depends on another file's content —
-	// so the ordinary keystroke patches one file's edges; anything that can
-	// change program membership or other files' resolution (new files, deletes,
-	// config changes, imports pulling files in or out) rebuilds the graph.
+	// dependencies and reverseDeps the inverted index. A content edit whose
+	// resolved edges are unchanged carries the graph directly; anything that
+	// can change membership rebuilds it.
 	forwardDeps map[string][]string
 	reverseDeps map[string]map[string]struct{}
-	graphFiles  map[string]struct{}
 }
 
 // OpenProject loads and binds the TypeScript project at configPath.
@@ -144,6 +144,7 @@ func OpenProject(ctx context.Context, configPath string, trace typefacts.Trace) 
 		mintedIDs:       make(map[durableSymbolRef]typefacts.SymbolID),
 	}
 	opened.exportedIdentities = collectExportedIdentities(program, typeChecker)
+	opened.exportedIdentitiesByRef = indexExportedIdentitiesByRef(opened.exportedIdentities)
 	opened.rebuildImportGraph(program)
 	return opened, nil
 }
@@ -344,8 +345,9 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	var oldShape declarationShape
 	var oldShapeOK bool
 	oldShapeCached := false
+	noImporters := incremental && incrementalPath != "" && len(p.reverseDeps[incrementalPath]) == 0
 	stageStarted = time.Now()
-	if incremental && incrementalPath != "" {
+	if incremental && incrementalPath != "" && !noImporters {
 		oldShape, oldShapeCached = p.declarationShapes[incrementalPath]
 		oldShapeOK = oldShapeCached
 		if !oldShapeCached {
@@ -377,10 +379,23 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	}
 	programDuration := time.Since(stageStarted)
 	semanticCutoff := false
+	leafCutoff := false
 	var newShape declarationShape
 	var newShapeOK bool
 	var currentExports map[*ast.Symbol]preservedExportIdentity
+	currentExportsKnown := false
 	stageStarted = time.Now()
+	if noImporters {
+		sourceFile := program.GetSourceFile(incrementalPath)
+		if sourceFile != nil && ast.IsExternalModule(sourceFile) && !hasGlobalOrModuleAugmentation(sourceFile) {
+			if exports, ok := exportedDurableSymbols(typeChecker, sourceFile); ok {
+				currentExports = declarationExportIdentities(declarationShape{exports: exports})
+				currentExportsKnown = true
+				semanticCutoff = true
+				leafCutoff = true
+			}
+		}
+	}
 	if oldShapeOK {
 		newShape, typeChecker, release, newShapeOK = declarationShapeFor(
 			ctx,
@@ -391,6 +406,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 		)
 		if newShapeOK {
 			currentExports = declarationExportIdentities(newShape)
+			currentExportsKnown = true
 			_, semanticCutoff = preserveExportIdentities(oldShape, newShape)
 		}
 		if err := ctx.Err(); err != nil {
@@ -410,17 +426,20 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.fs = candidateFS
 	p.versions = candidateVersions
 	p.generation++
-	if incremental && incrementalPath != "" && newShapeOK {
+	if incremental && incrementalPath != "" && currentExportsKnown {
 		for symbol, identity := range p.exportedIdentities {
 			if identity.ref.path == incrementalPath {
 				delete(p.exportedIdentities, symbol)
+				delete(p.exportedIdentitiesByRef, identity.ref)
 			}
 		}
 		for symbol, identity := range currentExports {
 			p.exportedIdentities[symbol] = identity
+			p.exportedIdentitiesByRef[identity.ref] = identity
 		}
 	} else {
 		p.exportedIdentities = collectExportedIdentities(program, typeChecker)
+		p.exportedIdentitiesByRef = indexExportedIdentitiesByRef(p.exportedIdentities)
 	}
 	clear(p.idsBySymbol)
 	clear(p.symbolsByID)
@@ -433,6 +452,8 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 	p.currentSourceFiles = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
+	p.callDiagnostics = nil
+	p.callDemandScratch = nil
 	p.typeDescriptors = nil
 	p.nextSymbol = 0
 
@@ -530,6 +551,7 @@ func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (t
 			typefacts.Flag("oldShapeCached", oldShapeCached),
 			typefacts.Nanos("programNs", programDuration),
 			typefacts.Nanos("newShapeNs", newShapeDuration),
+			typefacts.Flag("leafCutoff", leafCutoff),
 			typefacts.Nanos("affectedNs", affectedDuration),
 			typefacts.Nanos("invalidationNs", invalidationDuration))
 	}
@@ -739,6 +761,16 @@ func collectExportedIdentities(program *compiler.Program, typeChecker *checker.C
 	return identities
 }
 
+func indexExportedIdentitiesByRef(
+	identities map[*ast.Symbol]preservedExportIdentity,
+) map[durableSymbolRef]preservedExportIdentity {
+	byRef := make(map[durableSymbolRef]preservedExportIdentity, len(identities))
+	for _, identity := range identities {
+		byRef[identity.ref] = identity
+	}
+	return byRef
+}
+
 func resolvedImportPaths(program *compiler.Program, sourceFile *ast.SourceFile) ([]string, bool) {
 	imports := make([]string, 0, len(sourceFile.Imports()))
 	for _, specifier := range sourceFile.Imports() {
@@ -824,13 +856,11 @@ func (p *project) rebuildImportGraph(program *compiler.Program) {
 	sourceFiles := program.SourceFiles()
 	p.forwardDeps = make(map[string][]string, len(sourceFiles))
 	p.reverseDeps = make(map[string]map[string]struct{}, len(sourceFiles))
-	p.graphFiles = make(map[string]struct{}, len(sourceFiles))
 	for _, sourceFile := range sourceFiles {
 		if sourceFile.IsDeclarationFile {
 			continue
 		}
 		importer := filepath.Clean(sourceFile.FileName())
-		p.graphFiles[importer] = struct{}{}
 		edges := moduleEdges(program, sourceFile)
 		if len(edges) != 0 {
 			p.forwardDeps[importer] = edges
@@ -839,47 +869,18 @@ func (p *project) rebuildImportGraph(program *compiler.Program) {
 	}
 }
 
-// patchImportGraph carries the retained graph across a single-file content
-// edit by re-resolving only the edited file's outgoing edges. It reports false
-// — leaving the graph untouched for rebuildImportGraph — whenever the premise
-// does not hold: the program's membership changed (a new import can pull files
-// in, and a new file can redirect other files' resolution), or the edited file
-// is not a file of the program.
+// patchImportGraph proves the common content-only edit from the edited file's
+// own resolved edges. Equal old/new edges imply unchanged program membership:
+// with config and filesystem membership fixed, only a changed import can pull
+// a file in or let one leave. Edge changes take the conservative full rebuild.
 func (p *project) patchImportGraph(program *compiler.Program, path string) bool {
 	path = filepath.Clean(path)
-	var edited *ast.SourceFile
-	nodes := 0
-	for _, sourceFile := range program.SourceFiles() {
-		if sourceFile.IsDeclarationFile {
-			continue
-		}
-		nodes++
-		name := filepath.Clean(sourceFile.FileName())
-		if _, known := p.graphFiles[name]; !known {
-			return false
-		}
-		if name == path {
-			edited = sourceFile
-		}
-	}
-	if nodes != len(p.graphFiles) || edited == nil {
+	edited := program.GetSourceFile(path)
+	if edited == nil || edited.IsDeclarationFile {
 		return false
 	}
-	for _, dependency := range p.forwardDeps[path] {
-		importers := p.reverseDeps[dependency]
-		delete(importers, path)
-		if len(importers) == 0 {
-			delete(p.reverseDeps, dependency)
-		}
-	}
 	edges := moduleEdges(program, edited)
-	if len(edges) != 0 {
-		p.forwardDeps[path] = edges
-	} else {
-		delete(p.forwardDeps, path)
-	}
-	p.addImportEdges(path, edges)
-	return true
+	return slices.Equal(edges, p.forwardDeps[path])
 }
 
 // affectedFromReverseDeps walks the reverse-dependency indexes from the
@@ -1070,69 +1071,6 @@ func declarationsForSymbol(symbol *ast.Symbol) []typefacts.Declaration {
 		declarations = append(declarations, typefacts.Declaration{Name: symbol.Name, Kind: declarationKind(node), Location: typefacts.Location{Path: filepath.Clean(sourceFile.FileName()), StartByte: scanner.SkipTrivia(sourceFile.Text(), nameNode.Pos()), EndByte: nameNode.End()}})
 	}
 	return declarations
-}
-
-func (p *project) ResolvedCall(ctx context.Context, location typefacts.Location) (typefacts.Call, error) {
-	if err := ctx.Err(); err != nil {
-		return typefacts.Call{}, err
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if p.closed {
-		return typefacts.Call{}, ErrClosed
-	}
-	sourceFile, err := p.sourceFileFor(location)
-	if err != nil {
-		return typefacts.Call{}, err
-	}
-	node := ast.GetNodeAtPosition(sourceFile, location.StartByte, false)
-	for node != nil && !ast.IsCallExpression(node) {
-		node = node.Parent
-	}
-	if node == nil {
-		return typefacts.Call{}, fmt.Errorf("%w: call at byte %d", typefacts.ErrNotFound, location.StartByte)
-	}
-	callee := node.AsCallExpression().Expression
-	target := p.checker.GetSymbolAtLocation(callee)
-	if target == nil {
-		return typefacts.Call{}, fmt.Errorf("%w: call target at byte %d", typefacts.ErrNotFound, location.StartByte)
-	}
-	target = p.canonicalSymbol(target)
-	signature := checker.Checker_getResolvedSignature(p.checker, node, nil, checker.CheckModeNormal)
-	if signature == nil {
-		return typefacts.Call{}, fmt.Errorf("%w: call signature at byte %d", typefacts.ErrNotFound, location.StartByte)
-	}
-	candidates := []*checker.Signature{}
-	_ = checker.Checker_getResolvedSignature(p.checker, node, &candidates, checker.CheckModeNormal)
-	returnType := checker.Checker_getReturnTypeOfSignature(p.checker, signature)
-	if returnType == nil {
-		return typefacts.Call{}, fmt.Errorf("%w: return type at byte %d", typefacts.ErrNotFound, location.StartByte)
-	}
-	validity := typefacts.ResolvedCallValid
-	if len(candidates) == 0 ||
-		signature.Flags()&checker.SignatureFlagsIsSignatureCandidateForOverloadFailure != 0 ||
-		hasCallResolutionDiagnostic(node, sourceFile, p.program.GetSemanticDiagnostics(ctx, sourceFile)) {
-		validity = typefacts.ResolvedCallRecovery
-	}
-	call := typefacts.Call{
-		Target:         p.idFor(target),
-		ReturnTypeText: p.typeDescriptorFor(returnType).Text,
-		Validity:       validity,
-		Kind:           typefacts.CallKindCall,
-	}
-	if validity == typefacts.ResolvedCallRecovery {
-		call.Arguments = unresolvedArgumentMappings(node.Arguments(), typefacts.ArgumentMappingRecoverySignature)
-		return call, nil
-	}
-	calleeType := p.checker.GetTypeAtLocation(callee)
-	if calleeType != nil && calleeType.Flags()&checker.TypeFlagsUnion != 0 {
-		call.Arguments = unresolvedArgumentMappings(node.Arguments(), typefacts.ArgumentMappingCompositeSignature)
-		return call, nil
-	}
-	declaration := p.currentSignatureDeclaration(signature, target)
-	call.Declaration = p.resolvedDeclaration(signature, declaration, target)
-	call.Arguments = p.argumentMappings(node, signature, declaration)
-	return call, nil
 }
 
 // fileFactsMemo is one file's source-fact memo entry. Each fact set is
@@ -1430,9 +1368,12 @@ func (p *project) Close() error {
 	p.currentSourceFiles = nil
 	p.resolvedDeclarations = nil
 	p.resolvedParameters = nil
+	p.callDiagnostics = nil
+	p.callDemandScratch = nil
 	p.typeDescriptors = nil
 	p.declarationShapes = nil
 	p.exportedIdentities = nil
+	p.exportedIdentitiesByRef = nil
 	return nil
 }
 
@@ -1575,6 +1516,20 @@ func (p *project) idFor(symbol *ast.Symbol) typefacts.SymbolID {
 		}
 	}
 	if ref, ok := durableRefFor(symbol); ok {
+		// Checker rebuilds can expose an equivalent declaration through a
+		// different symbol pointer from the one GetExportsOfModule returned.
+		// Pointer-only lookup made identity depend on whether an intermediate
+		// generation happened to populate retained source facts. The durable
+		// declaration ref is the cross-generation proof and therefore the
+		// authoritative secondary key.
+		if exported, ok := p.exportedIdentitiesByRef[ref]; ok {
+			if existing, taken := p.symbolsByID[exported.id]; !taken || existing == symbol {
+				p.idsBySymbol[symbol] = exported.id
+				p.symbolsByID[exported.id] = symbol
+				p.durableRefs[exported.id] = ref
+				return exported.id
+			}
+		}
 		// The symbol-keyed maps are generation-scoped, but the ref is the
 		// durable identity itself: an unchanged declaration always hashes to
 		// the same ID, so mint once per distinct ref for the session instead

@@ -3,6 +3,7 @@ package typefacts
 import (
 	"context"
 	"encoding/binary"
+	"fmt"
 	"hash/maphash"
 	"maps"
 	"path/filepath"
@@ -16,35 +17,20 @@ type demandGroup struct {
 	path         string // clean path, the retention key
 	demands      []EntityDemand
 	hash         uint64
-	contribution *fileClosureContribution
+	contribution *retainedContribution
 }
 
-// canonicalDemandRun returns the run sorted by location, allocating only when
-// the input is not already in that order — which is the common case, since both
-// the Rust client and the protocol adapter build runs from sorted input.
-func canonicalDemandRun(demands []EntityDemand) []EntityDemand {
-	sorted := true
-	for index := 1; index < len(demands); index++ {
-		previous, current := demands[index-1].Location, demands[index].Location
-		if previous.StartByte > current.StartByte ||
-			(previous.StartByte == current.StartByte && previous.EndByte > current.EndByte) {
-			sorted = false
-			break
+func validateCanonicalSourceFiles(files []SourceFile) error {
+	for index := range files {
+		path := files[index].Path
+		if path == "" || filepath.Clean(path) != path {
+			return fmt.Errorf("source file path %q is not clean and non-empty", path)
+		}
+		if index != 0 && files[index-1].Path >= path {
+			return fmt.Errorf("source files are not strictly path-ordered at %q", path)
 		}
 	}
-	if sorted {
-		return demands
-	}
-	canonical := make([]EntityDemand, len(demands))
-	copy(canonical, demands)
-	sort.SliceStable(canonical, func(i, j int) bool {
-		left, right := canonical[i].Location, canonical[j].Location
-		if left.StartByte != right.StartByte {
-			return left.StartByte < right.StartByte
-		}
-		return left.EndByte < right.EndByte
-	})
-	return canonical
+	return nil
 }
 
 // demandListHash digests one file's demand run. The hash only ever compares
@@ -113,140 +99,6 @@ func symbolSetsEqual(left, right map[SymbolID]struct{}) bool {
 	return true
 }
 
-// entityAccumulator merges one file's aligned demand/entity/structural
-// results with the same rules as the whole-batch builder. Same-location
-// demands are adjacent in canonical order, so merging is a compare-with-last
-// linear pass — no maps. Symbol lists may carry duplicates; the global
-// assembly (builder queue, full-tier and union sets) deduplicates them.
-type entityAccumulator struct {
-	entities   []EntityFact
-	enqueued   []SymbolID
-	fullTier   []SymbolID
-	structural []SymbolID
-}
-
-func newEntityAccumulator() *entityAccumulator {
-	return &entityAccumulator{}
-}
-
-func (a *entityAccumulator) enqueue(symbol SymbolID) {
-	if symbol == "" {
-		return
-	}
-	a.enqueued = append(a.enqueued, symbol)
-}
-
-func (a *entityAccumulator) add(demand EntityDemand, entity EntityFact, structural SymbolID) {
-	var target *EntityFact
-	if last := len(a.entities) - 1; last >= 0 && a.entities[last].Location == entity.Location {
-		target = &a.entities[last]
-	} else {
-		a.entities = append(a.entities, EntityFact{Location: entity.Location})
-		target = &a.entities[len(a.entities)-1]
-	}
-	if entity.Symbol != "" {
-		target.Symbol = entity.Symbol
-		a.enqueue(entity.Symbol)
-		if demand.References {
-			a.fullTier = append(a.fullTier, entity.Symbol)
-		}
-	}
-	if entity.TypeDescriptor != nil {
-		target.TypeDescriptor = entity.TypeDescriptor
-	}
-	if entity.ResolvedCall != nil {
-		target.ResolvedCall = entity.ResolvedCall
-		a.enqueue(entity.ResolvedCall.Target)
-		// Declaration, owner, and parameter identities are self-contained
-		// metadata on the resolved-call fact. Only the call target is a symbol
-		// closure lookup handle; hydrating standalone rows for every embedded
-		// identity duplicates declarations and references across large call
-		// sets.
-	}
-	if entity.Callability != "" {
-		target.Callability = entity.Callability
-	}
-	if entity.ReferenceSpace != "" {
-		target.ReferenceSpace = entity.ReferenceSpace
-	}
-	if entity.RuntimeIdentity != "" {
-		target.RuntimeIdentity = entity.RuntimeIdentity
-	}
-	if structural != "" {
-		a.structural = append(a.structural, structural)
-	}
-}
-
-func (a *entityAccumulator) contribution(hash uint64) *fileClosureContribution {
-	durable := true
-	for _, symbol := range a.enqueued {
-		if !DurableSymbolID(symbol) {
-			durable = false
-			break
-		}
-	}
-	if durable {
-		for _, symbol := range a.structural {
-			if !DurableSymbolID(symbol) {
-				durable = false
-				break
-			}
-		}
-	}
-	descriptors := make([]symbolDescriptor, 0)
-	dependencies := make(map[string]struct{})
-	for index := range a.entities {
-		entity := &a.entities[index]
-		if entity.Symbol != "" && entity.TypeDescriptor != nil {
-			descriptors = append(descriptors, symbolDescriptor{
-				symbol:     entity.Symbol,
-				descriptor: entity.TypeDescriptor,
-			})
-		}
-		addDependency := func(location Location) {
-			if location.Path != "" && filepath.Clean(location.Path) != filepath.Clean(entity.Location.Path) {
-				dependencies[filepath.Clean(location.Path)] = struct{}{}
-			}
-		}
-		if entity.TypeDescriptor != nil {
-			for _, declaration := range entity.TypeDescriptor.AliasDeclarations {
-				addDependency(declaration.Location)
-			}
-		}
-		if call := entity.ResolvedCall; call != nil {
-			if call.Declaration != nil {
-				addDependency(call.Declaration.Location)
-				for _, owner := range call.Declaration.Owners {
-					addDependency(owner.Location)
-				}
-			}
-			for _, mapping := range call.Arguments {
-				if mapping.Parameter == nil {
-					continue
-				}
-				if mapping.Parameter.Declaration != nil {
-					addDependency(mapping.Parameter.Declaration.Location)
-				}
-				if mapping.Parameter.TypeDescriptor != nil {
-					for _, declaration := range mapping.Parameter.TypeDescriptor.AliasDeclarations {
-						addDependency(declaration.Location)
-					}
-				}
-			}
-		}
-	}
-	return &fileClosureContribution{
-		demandHash:   hash,
-		entities:     a.entities,
-		descriptors:  descriptors,
-		enqueued:     a.enqueued,
-		fullTier:     a.fullTier,
-		structural:   a.structural,
-		dependencies: dependencies,
-		durable:      durable,
-	}
-}
-
 // materializeSemanticDemandRetained is the retained-aware counterpart of
 // materializeSemanticDemand: files outside every accepted update's affected
 // set whose demand lists hash identically reuse their previous
@@ -268,7 +120,9 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	if err != nil {
 		return nil, 0, semanticDemandStages{}, retention, err
 	}
-	sort.Slice(sources, func(i, j int) bool { return sources[i].Path < sources[j].Path })
+	if err := validateCanonicalSourceFiles(sources); err != nil {
+		return nil, 0, semanticDemandStages{}, retention, err
+	}
 	table := p.recyclableTable
 	p.recyclableTable = nil
 	if table == nil {
@@ -285,7 +139,14 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	table.Symbols = nil
 	table.symbols = nil
 	table.transport = nil
-	p.maybeResetInterner()
+	var cachedCanonicalStore *symbolFactStore
+	if p.previousTable != nil {
+		cachedCanonicalStore = p.previousTable.symbols
+		if cachedCanonicalStore == nil {
+			cachedCanonicalStore = newSymbolFactStore(p.previousTable.Symbols)
+		}
+	}
+	p.maybeResetInterner(cachedCanonicalStore.Len())
 	builder := &closureBuilder{
 		backend:                 p.backend,
 		trace:                   p.trace,
@@ -301,7 +162,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		cleanPaths:              make(map[string]string),
 		cachedSymbolFacts:       p.symbolFacts,
 		cachedReferences:        p.symbolReferences,
-		cachedSymbolOrder:       p.symbolOrder,
+		cachedCanonicalStore:    cachedCanonicalStore,
 		symbolFactsBuffer:       p.symbolScratch,
 		symbolOrderBuffer:       table.Symbols,
 		removedSymbolCandidates: retainedSymbolCandidates(p.previousTable, p.transportChangedPaths),
@@ -318,12 +179,6 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		p.queueHandleScratch = builder.queueHandles[:0]
 		p.factIndexScratch = builder.factIndexScratch
 	}()
-	if p.previousTable != nil {
-		builder.cachedCanonicalStore = p.previousTable.symbols
-		if builder.cachedCanonicalStore == nil {
-			builder.cachedCanonicalStore = newSymbolFactStore(p.previousTable.Symbols)
-		}
-	}
 	// The async runs are rebuilt every generation, but into retained scratch:
 	// counting first sizes the flat backing exactly, so it never reallocates
 	// and each group's run is a stable capped window into it. The windows are
@@ -447,9 +302,6 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	}
 	stages.async = time.Since(started)
 	started = time.Now()
-	if p.retained == nil {
-		p.retained = make(map[string]*fileClosureContribution)
-	}
 	union := p.suppressionScratch
 	p.suppressionScratch = nil
 	if union == nil {
@@ -457,6 +309,12 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	} else {
 		clear(union)
 	}
+	suppressionCommitted := false
+	defer func() {
+		if !suppressionCommitted {
+			p.suppressionScratch = union
+		}
+	}()
 	descriptorSeed := p.descriptorSeedScratch
 	if descriptorSeed == nil {
 		descriptorSeed = make(map[SymbolID]*TypeDescriptor)
@@ -465,33 +323,20 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		clear(descriptorSeed)
 	}
 	var changed []int
-	var changedDemands []EntityDemand
+	var changedRuns []SemanticDemandRun
 	for index := range groups {
 		group := &groups[index]
-		contribution := p.retained[group.path]
+		contribution := p.retained.get(group.path)
 		_, pathChanged := p.transportChangedPaths[group.path]
-		dependencyChanged := false
-		for dependency := range contributionDependencies(contribution) {
-			if _, changed := p.transportChangedPaths[dependency]; changed {
-				dependencyChanged = true
-				break
-			}
-		}
 		// Update and demand-delta handling already name every path whose
 		// demand run may differ. Hash unchanged runs only when no exact
 		// changed-path set is available (initial/full materialization).
 		if contribution == nil || p.transportChangedPaths == nil || pathChanged {
-			// The accumulator merges same-location demands only when they are
-			// adjacent, and the hash is order-sensitive, so a client that emits
-			// a run in varying order would both mis-merge and defeat retention.
-			// Canonicalize rather than reject: it costs nothing for a run that
-			// already arrives sorted, and no caller can get it silently wrong.
-			group.demands = canonicalDemandRun(group.demands)
 			group.hash = demandListHash(group.demands, p.demandHashSeed())
 		} else {
 			group.hash = contribution.demandHash
 		}
-		if contribution != nil && !dependencyChanged && contribution.demandHash == group.hash {
+		if contribution != nil && contribution.demandHash == group.hash {
 			group.contribution = contribution
 			for _, symbol := range contribution.structural {
 				union[symbol] = struct{}{}
@@ -507,26 +352,41 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 			continue
 		}
 		changed = append(changed, index)
-		changedDemands = append(changedDemands, group.demands...)
+		changedRuns = append(changedRuns, SemanticDemandRun{
+			Path:    group.path,
+			Demands: group.demands,
+		})
 	}
-	rebuildContributions := func(entities []EntityFact, structural []SymbolID, indices []int) {
-		offset := 0
-		for _, index := range indices {
-			group := &groups[index]
-			accumulator := newEntityAccumulator()
-			for _, demand := range group.demands {
-				accumulator.add(demand, entities[offset], structural[offset])
-				offset++
-			}
-			group.contribution = accumulator.contribution(group.hash)
+	rebuildContributions := func(results []SemanticDemandRunResult, indices []int) error {
+		if len(results) != len(indices) {
+			return fmt.Errorf("semantic demand run results = %d, want %d", len(results), len(indices))
 		}
+		for resultIndex, index := range indices {
+			group := &groups[index]
+			contribution, err := prepareRetainedContribution(
+				group.path,
+				group.hash,
+				group.demands,
+				results[resultIndex],
+			)
+			if err != nil {
+				return err
+			}
+			group.contribution = contribution
+		}
+		return nil
 	}
-	if len(changedDemands) != 0 {
-		entities, structural, err := p.backend.SemanticEntitiesScoped(ctx, changedDemands, union, descriptorSeed)
+	if len(changedRuns) != 0 {
+		results, err := p.backend.SemanticDemandRuns(ctx, changedRuns, SemanticScope{
+			Suppression:    union,
+			DescriptorSeed: descriptorSeed,
+		})
 		if err != nil {
 			return nil, 0, stages, retention, err
 		}
-		rebuildContributions(entities, structural, changed)
+		if err := rebuildContributions(results, changed); err != nil {
+			return nil, 0, stages, retention, err
+		}
 		for _, index := range changed {
 			for _, symbol := range groups[index].contribution.structural {
 				// Non-durable structural symbols re-mint each generation and
@@ -556,45 +416,43 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 				delta[symbol] = struct{}{}
 			}
 		}
-		var refresh []int
-		var refreshDemands []EntityDemand
-		wasChanged := make(map[int]bool, len(changed))
-		for _, index := range changed {
-			wasChanged[index] = true
+		refreshSet := make(map[int]struct{})
+		for symbol := range delta {
+			p.retained.rangeDescriptorUsers(symbol, func(path string) {
+				index := sort.Search(len(groups), func(index int) bool {
+					return groups[index].path >= path
+				})
+				if index == len(groups) ||
+					groups[index].path != path ||
+					groups[index].contribution != p.retained.get(path) {
+					return
+				}
+				refreshSet[index] = struct{}{}
+			})
 		}
-		for index := range groups {
-			if wasChanged[index] {
-				continue
-			}
-			group := &groups[index]
-			var symbolAt map[Location]SymbolID
-			for _, demand := range group.demands {
-				if !demand.TypeDescriptor {
-					continue
-				}
-				if symbolAt == nil {
-					symbolAt = make(map[Location]SymbolID, len(group.contribution.entities))
-					for entityIndex := range group.contribution.entities {
-						entity := &group.contribution.entities[entityIndex]
-						symbolAt[entity.Location] = entity.Symbol
-					}
-				}
-				location := demand.Location
-				location.Path = group.path
-				if _, hit := delta[symbolAt[location]]; hit {
-					refresh = append(refresh, index)
-					refreshDemands = append(refreshDemands, group.demands...)
-					break
-				}
-			}
+		refresh := make([]int, 0, len(refreshSet))
+		for index := range refreshSet {
+			refresh = append(refresh, index)
+		}
+		sort.Ints(refresh)
+		refreshRuns := make([]SemanticDemandRun, 0, len(refresh))
+		for _, index := range refresh {
+			refreshRuns = append(refreshRuns, SemanticDemandRun{
+				Path:    groups[index].path,
+				Demands: groups[index].demands,
+			})
 		}
 		if len(refresh) != 0 {
 			retention.SuppressionRecompute = true
-			entities, structural, err := p.backend.SemanticEntitiesScoped(ctx, refreshDemands, union, nil)
+			results, err := p.backend.SemanticDemandRuns(ctx, refreshRuns, SemanticScope{
+				Suppression: union,
+			})
 			if err != nil {
 				return nil, 0, stages, retention, err
 			}
-			rebuildContributions(entities, structural, refresh)
+			if err := rebuildContributions(results, refresh); err != nil {
+				return nil, 0, stages, retention, err
+			}
 			changed = append(changed, refresh...)
 		}
 	}
@@ -617,7 +475,6 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		}
 	}
 
-	nextRetained := make(map[string]*fileClosureContribution, len(groups))
 	entityTotal := 0
 	for index := range groups {
 		group := &groups[index]
@@ -626,27 +483,18 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		// generation-scoped counter IDs recompute every generation — all of
 		// them together, in canonical order, so their minted counters match
 		// a fresh whole-batch run.
-		if group.contribution.durable {
-			nextRetained[group.path] = group.contribution
-		} else {
+		if !group.contribution.durable {
 			retention.NonDurableFiles++
 		}
 		entityTotal += len(group.contribution.entities)
 	}
 	retention.RetainedFiles = len(groups) - len(changed)
 	retention.RecomputedFiles = len(changed)
-	// Files no longer demanded drop out here rather than lingering.
-	p.retained = nextRetained
-	// The outgoing lastSuppression becomes the next generation's union
-	// scratch; it was built two generations ago, so it is never the map the
-	// suppression-delta comparison above just read against.
-	p.suppressionScratch = p.lastSuppression
-	p.lastSuppression = union
 	stages.demand = time.Since(started)
 	started = time.Now()
-	// Contributions are per-file and files are disjoint, so assembly is
-	// concatenation plus one global sort — the same output order as the
-	// whole-batch builder's location-keyed map.
+	// Groups are path-sorted and unique, and each immutable contribution was
+	// prepared from one canonical demand run. Concatenation therefore already
+	// is the fact table's canonical location order.
 	entities := table.Entities[:0]
 	if cap(entities) < entityTotal {
 		entities = make([]EntityFact, 0, entityTotal)
@@ -661,24 +509,47 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 			builder.fullTier.addID(symbol)
 		}
 	}
+	rootSnapshot := copyHandleMembership(builder.symbolSeen.members, p.rootSnapshotScratch)
+	fullRootSnapshot := copyHandleMembership(builder.fullTier.members, p.fullRootSnapshotScratch)
+	p.rootSnapshotScratch = nil
+	p.fullRootSnapshotScratch = nil
+	snapshotsCommitted := false
+	defer func() {
+		if !snapshotsCommitted {
+			p.rootSnapshotScratch = rootSnapshot
+			p.fullRootSnapshotScratch = fullRootSnapshot
+		}
+	}()
 	stages.assembly = time.Since(started)
 	started = time.Now()
-	sort.Slice(entities, func(i, j int) bool {
-		left, right := entities[i].Location, entities[j].Location
-		if left.Path != right.Path {
-			return left.Path < right.Path
+	var symbols []SymbolFact
+	stableSeeds := equalHandleMembership(rootSnapshot, p.lastRoots) &&
+		equalHandleMembership(fullRootSnapshot, p.lastFullRoots)
+	if stableSeeds {
+		patched, err := builder.patchStableSymbolUniverse(
+			ctx,
+			p.invalidatedSymbols,
+			p.symbolMemoComplete,
+			p.lastFullTier,
+		)
+		if err != nil {
+			return nil, 0, stages, retention, err
 		}
-		if left.StartByte != right.StartByte {
-			return left.StartByte < right.StartByte
+		if !patched {
+			symbols, err = builder.closeSymbols(ctx)
+			if err != nil {
+				return nil, 0, stages, retention, err
+			}
 		}
-		return left.EndByte < right.EndByte
-	})
-	stages.sort = time.Since(started)
-	started = time.Now()
-	symbols, err := builder.closeSymbols(ctx)
-	if err != nil {
-		return nil, 0, stages, retention, err
+	} else {
+		var err error
+		symbols, err = builder.closeSymbols(ctx)
+		if err != nil {
+			return nil, 0, stages, retention, err
+		}
 	}
+	fullTierSnapshot := copyHandleMembership(builder.fullTier.members, p.fullTierSnapshotScratch)
+	p.fullTierSnapshotScratch = nil
 	p.symbolScratch = builder.symbolFactsBuffer
 	symbolStore := builder.closedSymbolStore
 	if symbolStore == nil {
@@ -691,56 +562,96 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	retention.RecomputedReferences = builder.recomputedReferences
 	retention.PatchedSymbolRows = builder.patchedSymbolRows
 	retention.SharedSymbolChunks = builder.sharedSymbolChunks
+	retention.StableSymbolClosure = builder.stableUniversePatch
 	nextSymbolFacts := p.symbolFacts
 	if nextSymbolFacts == nil {
 		nextSymbolFacts = make(map[SymbolID]SymbolFact, len(symbols))
 	}
-	for id, fact := range nextSymbolFacts {
-		if !builder.symbolSeen.containsID(id) {
+	removeRetainedSymbol := func(id SymbolID) {
+		if fact, retained := nextSymbolFacts[id]; retained {
 			p.unindexSymbolFact(fact)
 			delete(nextSymbolFacts, id)
 		}
 	}
-	symbolStore.Range(func(fact SymbolFact) {
+	updateRetainedSymbol := func(fact SymbolFact) {
 		// Only declaration-backed durable identities are safe across
 		// generations. A declaration-less synthetic symbol may change its
 		// alias meaning without giving Update a path by which to evict it.
 		if !DurableSymbolID(fact.ID) || !DurableSymbolID(fact.AliasTarget) || len(fact.Declarations) == 0 {
-			if previous, retained := nextSymbolFacts[fact.ID]; retained {
-				p.unindexSymbolFact(previous)
-				delete(nextSymbolFacts, fact.ID)
-			}
+			removeRetainedSymbol(fact.ID)
 			return
 		}
-		if builder.changedSymbols.containsID(fact.ID) {
-			if previous, retained := nextSymbolFacts[fact.ID]; retained {
-				p.unindexSymbolFact(previous)
-			}
-			retainedFact := SymbolFact{
-				ID:           fact.ID,
-				AliasTarget:  fact.AliasTarget,
-				Declarations: fact.Declarations,
-			}
-			nextSymbolFacts[fact.ID] = retainedFact
-			p.indexSymbolFact(retainedFact)
+		if previous, retained := nextSymbolFacts[fact.ID]; retained {
+			p.unindexSymbolFact(previous)
 		}
-	})
+		retainedFact := SymbolFact{
+			ID:           fact.ID,
+			AliasTarget:  fact.AliasTarget,
+			Declarations: fact.Declarations,
+		}
+		nextSymbolFacts[fact.ID] = retainedFact
+		p.indexSymbolFact(retainedFact)
+	}
+	if builder.closedSymbolStore != nil {
+		// The retained store already proved the complete current universe and
+		// reports its exact removals. Synchronize the memo from that delta
+		// instead of scanning both the memo and canonical store.
+		for _, id := range builder.removedSymbolIDs {
+			removeRetainedSymbol(id)
+		}
+		for _, id := range builder.changedSymbols.ids {
+			if fact, present := symbolStore.Get(id); present {
+				updateRetainedSymbol(fact)
+			}
+		}
+	} else {
+		for id, fact := range nextSymbolFacts {
+			if !builder.symbolSeen.containsID(id) {
+				p.unindexSymbolFact(fact)
+				delete(nextSymbolFacts, id)
+			}
+		}
+		symbolStore.Range(func(fact SymbolFact) {
+			if builder.changedSymbols.containsID(fact.ID) ||
+				!DurableSymbolID(fact.ID) ||
+				!DurableSymbolID(fact.AliasTarget) ||
+				len(fact.Declarations) == 0 {
+				updateRetainedSymbol(fact)
+			}
+		})
+	}
 	p.symbolFacts = nextSymbolFacts
 	p.symbolReferences = builder.closedReferences
-	if cap(p.symbolOrder) < symbolStore.Len() {
-		p.symbolOrder = make([]SymbolID, symbolStore.Len())
-	} else {
-		p.symbolOrder = p.symbolOrder[:symbolStore.Len()]
-	}
-	symbolIndex := 0
-	symbolStore.Range(func(fact SymbolFact) {
-		p.symbolOrder[symbolIndex] = fact.ID
-		symbolIndex++
-	})
+	p.symbolMemoComplete = len(nextSymbolFacts) == symbolStore.Len()
+	clear(p.invalidatedSymbols)
 	table.Symbols = symbols
 	table.symbols = symbolStore
 	table.Entities = entities
+	p.nextTableStateID++
+	if p.nextTableStateID == 0 {
+		// Zero is reserved for hand-built/non-retained tables, whose
+		// manifests always take the canonical fallback diff.
+		p.nextTableStateID++
+	}
+	table.stateID = p.nextTableStateID
 	table.transport = transportManifest(p.previousTable, table, builder, manifestChangedPaths)
+	if p.retainedPathScratch == nil {
+		p.retainedPathScratch = make(map[string]struct{}, len(groups))
+	}
+	p.retained.commit(groups, p.retainedPathScratch)
+	// Retained contributions and their suppression context commit together
+	// only after every fallible preparation stage has succeeded.
+	previousSuppression := p.lastSuppression
+	p.lastSuppression = union
+	p.suppressionScratch = previousSuppression
+	suppressionCommitted = true
+	p.rootSnapshotScratch = p.lastRoots
+	p.lastRoots = rootSnapshot
+	p.fullRootSnapshotScratch = p.lastFullRoots
+	p.lastFullRoots = fullRootSnapshot
+	p.fullTierSnapshotScratch = p.lastFullTier
+	p.lastFullTier = fullTierSnapshot
+	snapshotsCommitted = true
 	p.recyclableTable = p.previousTable
 	p.previousTable = nil
 	p.transportChangedPaths = nil
@@ -748,13 +659,6 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	// or diffed against its predecessor, and answers no per-location queries.
 	stages.symbol = stages.assembly + stages.sort + stages.close
 	return table, builder.fullTier.len(), stages, retention, nil
-}
-
-func contributionDependencies(contribution *fileClosureContribution) map[string]struct{} {
-	if contribution == nil {
-		return nil
-	}
-	return contribution.dependencies
 }
 
 // ClosureRetention reports how much of a generation's demand closure was
@@ -772,4 +676,5 @@ type ClosureRetention struct {
 	RecomputedReferences  int  `json:"recomputedReferences,omitempty"`
 	PatchedSymbolRows     int  `json:"patchedSymbolRows,omitempty"`
 	SharedSymbolChunks    int  `json:"sharedSymbolChunks,omitempty"`
+	StableSymbolClosure   bool `json:"stableSymbolClosure,omitempty"`
 }

@@ -143,6 +143,42 @@ func (s *symbolFactStore) Patch(
 	return next, shared, removed, next.Len() == present.len()
 }
 
+// PatchExisting replaces rows in a proven-stable symbol universe. It refuses
+// additions so the caller's fixed-point proof cannot accidentally publish an
+// incomplete store.
+func (s *symbolFactStore) PatchExisting(patches map[SymbolID]SymbolFact) (*symbolFactStore, int, bool) {
+	if s == nil {
+		return nil, 0, false
+	}
+	affected := make(map[int]struct{}, len(patches))
+	for id := range patches {
+		if _, present := s.Get(id); !present {
+			return nil, 0, false
+		}
+		affected[s.chunkFor(id)] = struct{}{}
+	}
+	next := &symbolFactStore{
+		chunks: make([][]SymbolFact, len(s.chunks)),
+		length: s.length,
+	}
+	shared := 0
+	for chunkIndex, chunk := range s.chunks {
+		if _, changed := affected[chunkIndex]; !changed {
+			next.chunks[chunkIndex] = chunk
+			shared++
+			continue
+		}
+		rows := append([]SymbolFact(nil), chunk...)
+		for index := range rows {
+			if replacement, changed := patches[rows[index].ID]; changed {
+				rows[index] = replacement
+			}
+		}
+		next.chunks[chunkIndex] = rows
+	}
+	return next, shared, true
+}
+
 func (t FactTable) symbolFactsCount() int {
 	if t.symbols != nil {
 		return t.symbols.Len()

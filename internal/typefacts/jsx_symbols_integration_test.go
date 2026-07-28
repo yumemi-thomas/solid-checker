@@ -205,7 +205,6 @@ func TestJSXTagDemandsUseCompilerSymbolIdentity(t *testing.T) {
 	if !reflect.DeepEqual(table.Entities, direct) {
 		t.Fatalf("batched SemanticEntities and demand closure differ:\ndirect: %+v\nclosure: %+v", direct, table.Entities)
 	}
-	batchedWire := typefacts.FactTableV2From(*table, fixture.projectPath, 1)
 
 	entities := entitiesByLocation(table.Entities)
 	symbols := symbolFactsByID(table.Symbols)
@@ -265,9 +264,10 @@ func TestJSXTagDemandsUseCompilerSymbolIdentity(t *testing.T) {
 		t.Errorf("intrinsic JSX runtime identity = %q, want empty", entity("intrinsic").RuntimeIdentity)
 	}
 
-	if _, err := closure.Update(ctx, []typefacts.FileChange{{
+	unrelatedChange := typefacts.FileChange{
 		Path: fixture.unrelatedPath, Version: 1, Source: []byte("export const unrelated = 2;\n"),
-	}}); err != nil {
+	}
+	if _, err := closure.Update(ctx, []typefacts.FileChange{unrelatedChange}); err != nil {
 		t.Fatal(err)
 	}
 	retained, err := closure.DemandTableForGroups(ctx, 2, []typefacts.DemandGroup{{
@@ -276,11 +276,34 @@ func TestJSXTagDemandsUseCompilerSymbolIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	retainedWire := typefacts.FactTableV2From(*retained, fixture.projectPath, 2)
-	if !reflect.DeepEqual(retainedWire.Entities, batchedWire.Entities) ||
-		!reflect.DeepEqual(retainedWire.Symbols, batchedWire.Symbols) {
-		t.Fatalf("retained JSX facts differ from the batched facts")
+
+	freshBackend, err := tsgo.OpenProject(ctx, fixture.projectPath, nil)
+	if err != nil {
+		t.Fatal(err)
 	}
+	fresh, err := typefacts.NewDemandClosure(freshBackend, nil)
+	if err != nil {
+		_ = freshBackend.Close()
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = fresh.Close() })
+	if _, err := fresh.Update(ctx, []typefacts.FileChange{unrelatedChange}); err != nil {
+		t.Fatal(err)
+	}
+	freshTable, err := fresh.DemandTableForGroups(ctx, 2, []typefacts.DemandGroup{{
+		Path: fixture.consumerPath, Demands: fixture.demands,
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFullWireTransitionsIdentical(
+		t,
+		"retained JSX facts",
+		0,
+		fixture.projectPath,
+		retained,
+		freshTable,
+	)
 	if closure.Stats().Retention.RetainedFiles == 0 {
 		t.Fatal("JSX demand contribution was not retained across an unrelated edit")
 	}

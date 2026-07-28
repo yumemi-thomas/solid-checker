@@ -144,7 +144,6 @@ func TestSuppressionFlipReachesTheTransportDelta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	previousWire := typefacts.FactTableV2From(*previous, projectID, 2)
 
 	// The flip: alpha stops demanding a structural accessor. The union loses
 	// the shared symbol, so beta and gamma must now carry its descriptor even
@@ -162,7 +161,6 @@ func TestSuppressionFlipReachesTheTransportDelta(t *testing.T) {
 	if stats.Retention.RetainedFiles == 0 {
 		t.Fatalf("the flip retained no files, so nothing was at risk; retention = %+v", stats.Retention)
 	}
-	revealedWire := typefacts.FactTableV2From(*table, projectID, 2)
 
 	// A fresh whole-batch run at the same generation with the same demands.
 	fresh, freshBackend := openClosure()
@@ -174,17 +172,16 @@ func TestSuppressionFlipReachesTheTransportDelta(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	freshWire := typefacts.FactTableV2From(*freshTable, projectID, 2)
 	if fresh.Stats().Retention.RetainedFiles != 0 {
 		t.Fatalf("the oracle session retained files; it must be a whole-batch run")
 	}
 
 	// The producer's own table is expected to be right either way.
-	assertWireTablesIdentical(t, "retained table after suppression flip", 0, 2, &revealedWire, &freshWire)
+	assertFullWireTransitionsIdentical(t, "retained table after suppression flip", 0, projectID, table, freshTable)
 
 	// Guard the premise: the flip must actually change descriptor visibility,
 	// or this test would pass without exercising anything.
-	descriptors := func(table *typefacts.FactTableV2) int {
+	descriptors := func(table *typefacts.FactTable) int {
 		count := 0
 		for _, entity := range table.Entities {
 			if entity.TypeDescriptor != nil {
@@ -193,16 +190,11 @@ func TestSuppressionFlipReachesTheTransportDelta(t *testing.T) {
 		}
 		return count
 	}
-	if descriptors(&revealedWire) <= descriptors(&previousWire) {
+	if descriptors(table) <= descriptors(previous) {
 		t.Fatalf("the flip revealed no descriptors (%d before, %d after); demands = %d",
-			descriptors(&previousWire), descriptors(&revealedWire), len(flat))
+			descriptors(previous), descriptors(table), len(flat))
 	}
 
-	// The client only ever sees the delta. This is the assertion the manifest
-	// is responsible for.
-	delta := typefacts.DiffFactTablesV3FromInternal(*previous, *table, 2)
-	applied := typefacts.ApplyFactTableDeltaV3ForTest(t, previousWire, delta)
-	assertWireTablesIdentical(t, "delta-applied client table after suppression flip", 0, 2, &applied, &freshWire)
 }
 
 // TestSplitSameLocationDemandsStillMergeIntoOneRow pins that a client may emit
@@ -221,7 +213,7 @@ func TestSplitSameLocationDemandsStillMergeIntoOneRow(t *testing.T) {
 	}
 	projectID := filepath.Join(root, "tsconfig.json")
 
-	analyze := func(demands []typefacts.EntityDemand) typefacts.FactTableV2 {
+	analyze := func(demands []typefacts.EntityDemand) *typefacts.FactTable {
 		t.Helper()
 		backend, err := tsgo.OpenProject(ctx, projectID, nil)
 		if err != nil {
@@ -236,7 +228,7 @@ func TestSplitSameLocationDemandsStillMergeIntoOneRow(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		return typefacts.FactTableV2From(*table, projectID, 1)
+		return table
 	}
 
 	backend, err := tsgo.OpenProject(ctx, projectID, nil)
@@ -272,12 +264,12 @@ func TestSplitSameLocationDemandsStillMergeIntoOneRow(t *testing.T) {
 
 	rows := 0
 	for _, entity := range splitTable.Entities {
-		if entity.Location.Path == usePath && entity.Location.StartByte == uint64(target.StartByte) {
+		if entity.Location.Path == usePath && entity.Location.StartByte == target.StartByte {
 			rows++
 		}
 	}
 	if rows != 1 {
 		t.Fatalf("the split run produced %d entity rows for one location, want 1; a location must appear exactly once", rows)
 	}
-	assertWireTablesIdentical(t, "table from a split same-location demand run", 0, 1, &splitTable, &adjacentTable)
+	assertFullWireTransitionsIdentical(t, "table from a split same-location demand run", 0, projectID, splitTable, adjacentTable)
 }

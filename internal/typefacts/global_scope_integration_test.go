@@ -88,8 +88,6 @@ func TestGlobalScopeEditFailsClosedAndKeepsParity(t *testing.T) {
 		t.Fatalf("a global-scope edit retained %d files; every identity in the project may have moved, so none may be reused (retention = %+v)",
 			retention.RetainedFiles, retention)
 	}
-	retainedWire := typefacts.FactTableV2From(*table, projectID, 2)
-
 	fresh, freshBackend := openClosure()
 	if _, err := fresh.Update(ctx, []typefacts.FileChange{edit}); err != nil {
 		t.Fatal(err)
@@ -99,7 +97,5 @@ func TestGlobalScopeEditFailsClosedAndKeepsParity(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	freshWire := typefacts.FactTableV2From(*freshTable, projectID, 2)
-
-	assertWireTablesIdentical(t, "table after a global-scope edit", 0, 2, &retainedWire, &freshWire)
+	assertFullWireTransitionsIdentical(t, "table after a global-scope edit", 0, projectID, table, freshTable)
 }

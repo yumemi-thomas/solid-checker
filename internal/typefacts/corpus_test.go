@@ -138,3 +138,62 @@ func TestRetainedDemandClosureAtScaleMatchesFreshMaterialization(t *testing.T) {
 	root := generateCorpus(t)
 	assertRetainedMatchesFreshMaterialization(t, root, "mod00.ts", fmt.Sprintf("mod%02d.ts", corpusModules-1))
 }
+
+func TestStableSymbolClosureAtScaleMatchesFreshMaterialization(t *testing.T) {
+	if testing.Short() {
+		t.Skip("scale coverage is skipped under -short; the default run includes it")
+	}
+	ctx := context.Background()
+	root := generateCorpus(t)
+	projectID := filepath.Clean(filepath.Join(root, "tsconfig.json"))
+	editPath := filepath.Clean(filepath.Join(root, "mod00.ts"))
+	original, err := os.ReadFile(editPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := append(append([]byte(nil), original...), "\n// stable closure edit\n"...)
+
+	open := func() (*typefacts.DemandClosure, demandSource) {
+		backend, err := tsgo.OpenProject(ctx, projectID, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		closure, err := typefacts.NewDemandClosure(backend, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = closure.Close() })
+		return closure, backend.(demandSource)
+	}
+
+	incremental, incrementalBackend := open()
+	demands := realisticDemands(t, incrementalBackend, ctx)
+	if _, err := incremental.DemandTableForGroups(ctx, 1, groupedDemands(demands), demandPaths(demands)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := incremental.Update(ctx, []typefacts.FileChange{{
+		Path: editPath, Version: 1, Source: edited,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	retained, err := incremental.DemandTableForGroups(ctx, 2, groupedDemands(demands), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !incremental.Stats().Retention.StableSymbolClosure {
+		t.Fatal("stable edit did not exercise the stable Symbol closure path")
+	}
+
+	fresh, freshBackend := open()
+	if _, err := fresh.Update(ctx, []typefacts.FileChange{{
+		Path: editPath, Version: 1, Source: edited,
+	}}); err != nil {
+		t.Fatal(err)
+	}
+	freshDemands := realisticDemands(t, freshBackend, ctx)
+	whole, err := fresh.DemandTableForGroups(ctx, 2, canonicalDemandGroups(freshDemands), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertFullWireTransitionsIdentical(t, "stable symbol closure", 0, projectID, retained, whole)
+}

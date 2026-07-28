@@ -10,8 +10,8 @@ import (
 // bound unless the reset policy replaces it once dead identities outnumber
 // the live universe.
 func TestMaybeResetInternerBoundsDeadIdentities(t *testing.T) {
-	closure := &DemandClosure{symbolOrder: make([]SymbolID, 10)}
-	closure.maybeResetInterner()
+	closure := &DemandClosure{}
+	closure.maybeResetInterner(10)
 	healthy := closure.interner
 	if healthy == nil {
 		t.Fatal("no interner was created")
@@ -19,7 +19,7 @@ func TestMaybeResetInternerBoundsDeadIdentities(t *testing.T) {
 	for index := range 100 {
 		healthy.handle(SymbolID(fmt.Sprintf("symbol:h:%024d", index)))
 	}
-	closure.maybeResetInterner()
+	closure.maybeResetInterner(10)
 	if closure.interner != healthy {
 		t.Fatal("an interner within bounds was reset")
 	}
@@ -28,7 +28,7 @@ func TestMaybeResetInternerBoundsDeadIdentities(t *testing.T) {
 			healthy.handle(SymbolID(fmt.Sprintf("symbol:%d:%d", generation, index)))
 		}
 	}
-	closure.maybeResetInterner()
+	closure.maybeResetInterner(10)
 	if closure.interner == healthy {
 		t.Fatalf("an interner holding %d identities for a 10-symbol universe survived", healthy.size())
 	}

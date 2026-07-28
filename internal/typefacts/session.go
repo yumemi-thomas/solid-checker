@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"time"
 )
@@ -25,6 +24,7 @@ type Session struct {
 	trace           Trace
 	projectID       string
 	retained        retainedSessionState
+	transition      wireTransitionEncoder
 	sourceArenaPath string
 	closed          bool
 	closeErr        error
@@ -33,7 +33,7 @@ type Session struct {
 type retainedSessionState struct {
 	token     uint64
 	tokenText string
-	demands   map[string][]EntityDemand
+	demands   retainedDemandStore
 	table     *FactTable
 }
 
@@ -64,7 +64,7 @@ func (s *Session) Lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) LifecycleResponse {
 	generation := s.closure.generation
 	response := LifecycleResponse{
-		Schema: TypeFactsSchemaVersionV4, RequestID: request.RequestID,
+		Schema: TypeFactsSchemaVersionV5, RequestID: request.RequestID,
 		ProjectID: s.projectID, Generation: generation,
 	}
 	fail := func(code string, err error) LifecycleResponse {
@@ -130,20 +130,35 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 			len(request.RemovedDemandPaths) == 0 &&
 			s.retained.table != nil &&
 			s.retained.table.Generation == generation {
-			response.TableMode = TableModeReuse
 			response.StateToken = s.retained.tokenText
 			response.Timings = &LifecycleTimings{}
 			response.OK = true
 			return response
 		}
-		nextDemands := applySessionDemandChanges(s.retained.demands, request.Demands, request.RemovedDemandPaths, request.ResetState)
+		demandTransaction := s.retained.demands.begin(
+			request.Demands,
+			request.RemovedDemandPaths,
+			request.ResetState,
+		)
+		demandsPublished := false
+		defer func() {
+			if !demandsPublished {
+				demandTransaction.rollback()
+			}
+		}()
 		started := time.Now()
 		buildSequence := s.closure.Stats().BuildSequence
-		analyzedTable, err := s.closure.DemandTableForGroups(
+		analysisPublished := false
+		defer func() {
+			if !analysisPublished {
+				s.closure.abandonAnalysis()
+			}
+		}()
+		analyzedTable, err := s.closure.demandTableForCanonicalGroups(
 			ctx,
 			generation,
-			sessionDemandGroups(nextDemands),
-			sessionDemandChangedPaths(request.Demands, request.RemovedDemandPaths),
+			demandTransaction.groups(),
+			demandTransaction.paths(),
 		)
 		if err != nil {
 			if ctx.Err() != nil {
@@ -178,33 +193,43 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		// reports, so it is traced separately. Without this the cost shows up
 		// nowhere and reads as client or transport overhead.
 		transportStarted := time.Now()
-		// A non-durable file no longer forces a whole-table pack: its recomputed
-		// paths reach the transport manifest, so the delta describes its
-		// re-minted identities like any other change.
-		if request.ResetState || s.retained.table == nil {
-			response.TableMode = TableModeFull
-			response.PackedTable = PackedFactTableV3FromInternal(*analyzedTable, generation)
+		transitionInput := wireTransitionInput{
+			ProjectID: s.projectID,
+			Target:    analyzedTable,
+		}
+		if !request.ResetState && s.retained.table != nil {
+			transitionInput.Base = s.retained.table
+			transitionInput.BaseStateToken = s.retained.tokenText
+		}
+		transition, err := s.transition.Encode(transitionInput)
+		if err != nil {
+			return fail("assembly-failed", err)
+		}
+		transitionMode := transition.Mode.String()
+		// Within one source generation an empty delta is genuine reuse and
+		// needs no frame. Across generations the empty delta header still
+		// advances the retained table identity.
+		if transition.Mode != wireTransitionDelta ||
+			analyzedTable.Generation != s.retained.table.Generation ||
+			transition.PathOperations != 0 ||
+			transition.SymbolOperations != 0 {
+			response.TableTransition = transition.Bytes
 		} else {
-			delta := DiffFactTablesV3FromInternal(*s.retained.table, *analyzedTable, generation)
-			if s.retained.table.Generation == analyzedTable.Generation && delta.Empty() {
-				response.TableMode = TableModeReuse
-			} else {
-				response.TableMode = TableModeDelta
-				packedDelta, err := PackedFactTableDeltaV3From(delta)
-				if err != nil {
-					return fail("assembly-failed", err)
-				}
-				response.PackedDelta = packedDelta
-			}
+			transitionMode = "reuse"
 		}
 		if s.trace != nil {
-			s.trace.Stage("analyze-transport-"+response.TableMode, time.Since(transportStarted))
+			s.trace.Stage("analyze-transport-"+transitionMode, time.Since(transportStarted))
+		}
+		if err := ctx.Err(); err != nil {
+			return fail("analysis-cancelled", err)
 		}
 		s.retained.token = nextToken
 		s.retained.tokenText = nextTokenText
-		s.retained.demands = nextDemands
+		demandTransaction.commit()
+		demandsPublished = true
 		table := *analyzedTable
 		s.retained.table = &table
+		analysisPublished = true
 	case LifecycleSources:
 		if request.Generation != generation {
 			return fail("generation-mismatch", ErrGenerationMismatch)
@@ -294,54 +319,4 @@ func removeSourceArena(path string) error {
 		return nil
 	}
 	return err
-}
-
-func applySessionDemandChanges(previous map[string][]EntityDemand, changes []EntityDemand, removed []string, reset bool) map[string][]EntityDemand {
-	next := make(map[string][]EntityDemand)
-	if !reset {
-		for path, demands := range previous {
-			next[path] = demands
-		}
-	}
-	changed := make(map[string][]EntityDemand)
-	for _, demand := range changes {
-		path := filepath.Clean(demand.Location.Path)
-		changed[path] = append(changed[path], demand)
-	}
-	for path, demands := range changed {
-		next[path] = demands
-	}
-	for _, path := range removed {
-		delete(next, filepath.Clean(path))
-	}
-	return next
-}
-
-func sessionDemandGroups(grouped map[string][]EntityDemand) []DemandGroup {
-	paths := make([]string, 0, len(grouped))
-	for path := range grouped {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
-	result := make([]DemandGroup, 0, len(paths))
-	for _, path := range paths {
-		result = append(result, DemandGroup{Path: path, Demands: grouped[path]})
-	}
-	return result
-}
-
-func sessionDemandChangedPaths(changes []EntityDemand, removed []string) []string {
-	paths := make(map[string]struct{}, len(changes)+len(removed))
-	for _, demand := range changes {
-		paths[filepath.Clean(demand.Location.Path)] = struct{}{}
-	}
-	for _, path := range removed {
-		paths[filepath.Clean(path)] = struct{}{}
-	}
-	result := make([]string, 0, len(paths))
-	for path := range paths {
-		result = append(result, path)
-	}
-	sort.Strings(result)
-	return result
 }

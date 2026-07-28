@@ -1,0 +1,391 @@
+package typefacts
+
+import (
+	"fmt"
+	"path/filepath"
+	"sort"
+)
+
+// retainedContribution is the immutable canonical form of one file's share of
+// a Demand closure. It owns every slice reachable from the retained store.
+type retainedContribution struct {
+	demandHash        uint64
+	entities          []EntityFact
+	descriptors       []symbolDescriptor
+	enqueued          []SymbolID
+	fullTier          []SymbolID
+	structural        []SymbolID
+	dependencies      []string
+	descriptorSymbols []SymbolID
+	durable           bool
+}
+
+type symbolDescriptor struct {
+	symbol     SymbolID
+	descriptor *TypeDescriptor
+}
+
+// prepareRetainedContribution merges an aligned Semantic demand-run result
+// exactly once. Same-location demands are adjacent in canonical order, so no
+// location map or post-build normalization is needed.
+func prepareRetainedContribution(
+	path string,
+	hash uint64,
+	demands []EntityDemand,
+	result SemanticDemandRunResult,
+) (*retainedContribution, error) {
+	if len(result.Entities) != len(demands) || len(result.Structural) != len(demands) {
+		return nil, fmt.Errorf(
+			"semantic demand run %q returned %d entities and %d structural symbols for %d demands",
+			path,
+			len(result.Entities),
+			len(result.Structural),
+			len(demands),
+		)
+	}
+
+	entityCount := 0
+	enqueuedCount := 0
+	fullTierCount := 0
+	structuralCount := 0
+	for index := range demands {
+		if index == 0 || result.Entities[index].Location != result.Entities[index-1].Location {
+			entityCount++
+		}
+		if result.Entities[index].Symbol != "" {
+			enqueuedCount++
+			if demands[index].References {
+				fullTierCount++
+			}
+		}
+		if result.Entities[index].ResolvedCall != nil && result.Entities[index].ResolvedCall.Target != "" {
+			enqueuedCount++
+		}
+		if result.Structural[index] != "" {
+			structuralCount++
+		}
+	}
+
+	contribution := &retainedContribution{
+		demandHash:   hash,
+		entities:     make([]EntityFact, 0, entityCount),
+		enqueued:     make([]SymbolID, 0, enqueuedCount),
+		fullTier:     make([]SymbolID, 0, fullTierCount),
+		structural:   make([]SymbolID, 0, structuralCount),
+		dependencies: result.Dependencies,
+		durable:      result.Durable,
+	}
+	if err := validateCanonicalDependencyPaths(path, contribution.dependencies); err != nil {
+		return nil, err
+	}
+	for index := range demands {
+		expected := demands[index].Location
+		expected.Path = filepath.Clean(expected.Path)
+		if result.Entities[index].Location != expected {
+			return nil, fmt.Errorf(
+				"semantic demand run %q entity %d location = %+v, want %+v",
+				path,
+				index,
+				result.Entities[index].Location,
+				expected,
+			)
+		}
+		demand := &demands[index]
+		entity := &result.Entities[index]
+		var target *EntityFact
+		if last := len(contribution.entities) - 1; last >= 0 && contribution.entities[last].Location == entity.Location {
+			target = &contribution.entities[last]
+		} else {
+			contribution.entities = append(contribution.entities, EntityFact{Location: entity.Location})
+			target = &contribution.entities[len(contribution.entities)-1]
+		}
+		if entity.Symbol != "" {
+			target.Symbol = entity.Symbol
+			contribution.enqueued = append(contribution.enqueued, entity.Symbol)
+			if demand.References {
+				contribution.fullTier = append(contribution.fullTier, entity.Symbol)
+			}
+		}
+		if entity.TypeDescriptor != nil {
+			target.TypeDescriptor = entity.TypeDescriptor
+		}
+		if entity.ResolvedCall != nil {
+			target.ResolvedCall = entity.ResolvedCall
+			if entity.ResolvedCall.Target != "" {
+				contribution.enqueued = append(contribution.enqueued, entity.ResolvedCall.Target)
+			}
+		}
+		if entity.Callability != "" {
+			target.Callability = entity.Callability
+		}
+		if entity.ReferenceSpace != "" {
+			target.ReferenceSpace = entity.ReferenceSpace
+		}
+		if entity.RuntimeIdentity != "" {
+			target.RuntimeIdentity = entity.RuntimeIdentity
+		}
+		if result.Structural[index] != "" {
+			contribution.structural = append(contribution.structural, result.Structural[index])
+		}
+	}
+
+	descriptorCount := 0
+	for index := range contribution.entities {
+		entity := &contribution.entities[index]
+		if entity.Symbol != "" && entity.TypeDescriptor != nil {
+			descriptorCount++
+		}
+	}
+	contribution.descriptors = make([]symbolDescriptor, 0, descriptorCount)
+	for index := range contribution.entities {
+		entity := &contribution.entities[index]
+		if entity.Symbol != "" && entity.TypeDescriptor != nil {
+			contribution.descriptors = append(contribution.descriptors, symbolDescriptor{
+				symbol:     entity.Symbol,
+				descriptor: entity.TypeDescriptor,
+			})
+		}
+	}
+
+	descriptorSymbols := make([]SymbolID, 0)
+	entityIndex := -1
+	for index := range demands {
+		if index == 0 || result.Entities[index].Location != result.Entities[index-1].Location {
+			entityIndex++
+		}
+		if demands[index].TypeDescriptor {
+			if symbol := contribution.entities[entityIndex].Symbol; symbol != "" {
+				descriptorSymbols = append(descriptorSymbols, symbol)
+			}
+		}
+	}
+	sort.Slice(descriptorSymbols, func(i, j int) bool { return descriptorSymbols[i] < descriptorSymbols[j] })
+	write := 0
+	for _, symbol := range descriptorSymbols {
+		if write != 0 && descriptorSymbols[write-1] == symbol {
+			continue
+		}
+		descriptorSymbols[write] = symbol
+		write++
+	}
+	contribution.descriptorSymbols = descriptorSymbols[:write:write]
+	contribution.entities = contribution.entities[:len(contribution.entities):len(contribution.entities)]
+	contribution.descriptors = contribution.descriptors[:len(contribution.descriptors):len(contribution.descriptors)]
+	contribution.enqueued = contribution.enqueued[:len(contribution.enqueued):len(contribution.enqueued)]
+	contribution.fullTier = contribution.fullTier[:len(contribution.fullTier):len(contribution.fullTier)]
+	contribution.structural = contribution.structural[:len(contribution.structural):len(contribution.structural)]
+	return contribution, nil
+}
+
+func validateCanonicalDependencyPaths(owner string, paths []string) error {
+	owner = filepath.Clean(owner)
+	for index, path := range paths {
+		if path == "" || filepath.Clean(path) != path {
+			return fmt.Errorf("semantic dependency path %q is not clean and non-empty", path)
+		}
+		if path == owner {
+			return fmt.Errorf("semantic dependency paths include owner %q", owner)
+		}
+		if index != 0 && paths[index-1] >= path {
+			return fmt.Errorf("semantic dependency paths are not strictly ordered at %q", path)
+		}
+	}
+	return nil
+}
+
+// retainedContributionStore owns retained contributions and the two reverse
+// indexes that make source invalidation and suppression refresh targeted.
+type retainedContributionStore struct {
+	byPath           map[string]*retainedContribution
+	dependentsByPath map[string]pathMembership
+	descriptorUsers  map[SymbolID]pathMembership
+}
+
+// pathMembership keeps the overwhelmingly common small reverse-index bucket
+// compact, then promotes high fanout to constant-time unordered membership.
+// Neither consumer observes bucket order; deterministic output is established
+// only after membership has been translated to canonical group indices.
+const pathMembershipMapThreshold = 16
+
+type pathMembership struct {
+	small []string
+	large map[string]struct{}
+}
+
+func (m pathMembership) add(path string) pathMembership {
+	if m.large != nil {
+		m.large[path] = struct{}{}
+		return m
+	}
+	for _, existing := range m.small {
+		if existing == path {
+			return m
+		}
+	}
+	if len(m.small) < pathMembershipMapThreshold {
+		m.small = append(m.small, path)
+		return m
+	}
+	m.large = make(map[string]struct{}, len(m.small)+1)
+	for _, existing := range m.small {
+		m.large[existing] = struct{}{}
+	}
+	m.large[path] = struct{}{}
+	m.small = nil
+	return m
+}
+
+func (m pathMembership) remove(path string) pathMembership {
+	if m.large != nil {
+		delete(m.large, path)
+		return m
+	}
+	for index, existing := range m.small {
+		if existing != path {
+			continue
+		}
+		last := len(m.small) - 1
+		m.small[index] = m.small[last]
+		m.small[last] = ""
+		m.small = m.small[:last]
+		break
+	}
+	return m
+}
+
+func (m pathMembership) len() int {
+	if m.large != nil {
+		return len(m.large)
+	}
+	return len(m.small)
+}
+
+func (m pathMembership) rangePaths(visit func(string)) {
+	if m.large != nil {
+		for path := range m.large {
+			visit(path)
+		}
+		return
+	}
+	for _, path := range m.small {
+		visit(path)
+	}
+}
+
+func (s *retainedContributionStore) get(path string) *retainedContribution {
+	return s.byPath[filepath.Clean(path)]
+}
+
+func (s *retainedContributionStore) add(path string, contribution *retainedContribution) {
+	path = filepath.Clean(path)
+	if s.byPath == nil {
+		s.byPath = make(map[string]*retainedContribution)
+	}
+	if previous := s.byPath[path]; previous != nil {
+		s.remove(path)
+	}
+	s.byPath[path] = contribution
+	for _, dependency := range contribution.dependencies {
+		if s.dependentsByPath == nil {
+			s.dependentsByPath = make(map[string]pathMembership)
+		}
+		s.dependentsByPath[dependency] = s.dependentsByPath[dependency].add(path)
+	}
+	for _, symbol := range contribution.descriptorSymbols {
+		if s.descriptorUsers == nil {
+			s.descriptorUsers = make(map[SymbolID]pathMembership)
+		}
+		s.descriptorUsers[symbol] = s.descriptorUsers[symbol].add(path)
+	}
+}
+
+func (s *retainedContributionStore) remove(path string) {
+	path = filepath.Clean(path)
+	contribution := s.byPath[path]
+	if contribution == nil {
+		return
+	}
+	delete(s.byPath, path)
+	for _, dependency := range contribution.dependencies {
+		users := s.dependentsByPath[dependency].remove(path)
+		if users.len() == 0 {
+			delete(s.dependentsByPath, dependency)
+		} else {
+			s.dependentsByPath[dependency] = users
+		}
+	}
+	for _, symbol := range contribution.descriptorSymbols {
+		users := s.descriptorUsers[symbol].remove(path)
+		if users.len() == 0 {
+			delete(s.descriptorUsers, symbol)
+		} else {
+			s.descriptorUsers[symbol] = users
+		}
+	}
+}
+
+// invalidate removes the named paths and their direct dependents. It extends
+// paths with those dependents so the Transport manifest names every recomputed
+// contribution, but deliberately does not recurse beyond the source evidence
+// the previous implementation used.
+func (s *retainedContributionStore) invalidate(paths map[string]struct{}) {
+	direct := make([]string, 0, len(paths))
+	for path := range paths {
+		direct = append(direct, filepath.Clean(path))
+	}
+	for _, path := range direct {
+		s.dependentsByPath[path].rangePaths(func(dependent string) {
+			paths[dependent] = struct{}{}
+		})
+	}
+	for path := range paths {
+		s.remove(path)
+	}
+}
+
+// discard removes only the named Demand runs. Changing what one file asks for
+// cannot change a different file's source-derived semantic facts.
+func (s *retainedContributionStore) discard(paths map[string]struct{}) {
+	for path := range paths {
+		s.remove(path)
+	}
+}
+
+func (s *retainedContributionStore) rangeDescriptorUsers(symbol SymbolID, visit func(string)) {
+	s.descriptorUsers[symbol].rangePaths(visit)
+}
+
+// commit publishes a Retained contribution transaction. It is called
+// only after semantic resolution, symbol closure, assembly and the Transport
+// manifest have all succeeded.
+func (s *retainedContributionStore) commit(
+	groups []demandGroup,
+	desired map[string]struct{},
+) {
+	clear(desired)
+	for index := range groups {
+		group := &groups[index]
+		if group.contribution != nil && group.contribution.durable {
+			desired[group.path] = struct{}{}
+		}
+	}
+	for path := range s.byPath {
+		if _, keep := desired[path]; !keep {
+			s.remove(path)
+		}
+	}
+	for index := range groups {
+		group := &groups[index]
+		if group.contribution == nil || !group.contribution.durable || s.byPath[group.path] == group.contribution {
+			continue
+		}
+		s.add(group.path, group.contribution)
+	}
+	clear(desired)
+}
+
+func (s *retainedContributionStore) reset() {
+	s.byPath = nil
+	s.dependentsByPath = nil
+	s.descriptorUsers = nil
+}

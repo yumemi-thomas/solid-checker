@@ -1,15 +1,40 @@
 package typefacts
 
-import "testing"
+// WireTransitionEncoderForTest exposes the session-owned encoder to external
+// benchmarks without widening the production API.
+type WireTransitionEncoderForTest struct {
+	encoder wireTransitionEncoder
+}
 
-// ApplyFactTableDeltaV3ForTest exposes the delta applicator model to the
-// external test package, which cannot live in package typefacts because it
-// imports the tsgo backend (which imports typefacts).
-//
-// The model mirrors apply_table_delta in crates/typefacts/src/session.rs and
-// enforces the same invariants, so a delta the Rust client would reject fails
-// here too. See protocolv3_delta_oracle_test.go.
-func ApplyFactTableDeltaV3ForTest(t *testing.T, previous FactTableV2, delta FactTableDeltaV3) FactTableV2 {
-	t.Helper()
-	return applyFactTableDeltaV3(t, previous, delta)
+func (e *WireTransitionEncoderForTest) Full(projectID string, target *FactTable) ([]byte, error) {
+	transition, err := e.encoder.Encode(wireTransitionInput{
+		ProjectID: projectID,
+		Target:    target,
+	})
+	return transition.Bytes, err
+}
+
+func (e *WireTransitionEncoderForTest) Delta(
+	projectID, baseStateToken string,
+	base, target *FactTable,
+) ([]byte, error) {
+	transition, err := e.encoder.Encode(wireTransitionInput{
+		ProjectID:      projectID,
+		BaseStateToken: baseStateToken,
+		Base:           base,
+		Target:         target,
+	})
+	return transition.Bytes, err
+}
+
+func DropTransportEvidenceForTest(table *FactTable) {
+	table.transport = nil
+}
+
+func SymbolFactsForTest(table *FactTable) []SymbolFact {
+	facts := make([]SymbolFact, 0, table.symbolFactsCount())
+	table.rangeSymbolFacts(func(fact SymbolFact) {
+		facts = append(facts, fact)
+	})
+	return facts
 }

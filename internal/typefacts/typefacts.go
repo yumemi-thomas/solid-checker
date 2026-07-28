@@ -276,6 +276,5 @@ type Project interface {
 	ResolveAlias(context.Context, SymbolID) (SymbolID, error)
 	Declarations(context.Context, SymbolID) ([]Declaration, error)
 	References(context.Context, SymbolID) ([]Location, error)
-	ResolvedCall(context.Context, Location) (Call, error)
 	Close() error
 }

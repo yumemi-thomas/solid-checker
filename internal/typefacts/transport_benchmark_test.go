@@ -106,17 +106,14 @@ func BenchmarkUpdateShapeChangeAtScale(b *testing.B) {
 // for precisely one generation before the closure recycles its storage, and
 // no further materialization happens here.
 //
-// With forceFallback the changed-path list handed to the second
-// materialization is padded past the transport manifest's 64-path limit with
-// paths that exist in no generation. Naming a path that never held a demand
-// run is a harmless over-approximation, but pushing the count over the limit
-// suppresses the manifest, which is exactly the state a >64-file change
-// (branch switch, format-on-save across a package) puts the producer in.
-func diffBenchTables(b *testing.B, forceFallback bool) (previous, next *typefacts.FactTable) {
+// extraPaths pads the exact changed-path evidence with paths that exist in no
+// generation. Naming one is a harmless over-approximation and isolates the
+// planning cost of a broad manifest from actual checker recomputation.
+func diffBenchTables(b *testing.B, extraPaths int) (previous, next *typefacts.FactTable, projectID string) {
 	b.Helper()
 	ctx := context.Background()
 	root := generateCorpus(b)
-	projectID := filepath.Clean(filepath.Join(root, "tsconfig.json"))
+	projectID = filepath.Clean(filepath.Join(root, "tsconfig.json"))
 	backend, err := tsgo.OpenProject(ctx, projectID, nil)
 	if err != nil {
 		b.Fatal(err)
@@ -144,55 +141,76 @@ func diffBenchTables(b *testing.B, forceFallback bool) (previous, next *typefact
 	}
 
 	changed := []string{editPath}
-	if forceFallback {
-		for phantom := 0; phantom < 70; phantom++ {
-			changed = append(changed, filepath.Join(root, fmt.Sprintf("phantom%02d.ts", phantom)))
-		}
+	for phantom := 0; phantom < extraPaths; phantom++ {
+		changed = append(changed, filepath.Join(root, fmt.Sprintf("phantom%02d.ts", phantom)))
 	}
 	next, err = closure.DemandTableForGroups(ctx, 2, groupedDemands(demands), changed)
 	if err != nil {
 		b.Fatal(err)
 	}
-	return previous, next
+	return previous, next, projectID
 }
 
-// BenchmarkManifestTableDiff prices the ordinary delta construction: the
-// transport manifest names the rows that may differ, so the diff touches
-// candidates instead of tables.
-func BenchmarkManifestTableDiff(b *testing.B) {
-	previous, next := diffBenchTables(b, false)
+// BenchmarkManifestDeltaWireTableTransition prices the ordinary warm response:
+// the exact manifest limits planning to candidates, then the shared encoder
+// writes the delta transition directly from internal rows.
+func BenchmarkManifestDeltaWireTableTransition(b *testing.B) {
+	previous, next, projectID := diffBenchTables(b, 0)
+	encoder := &typefacts.WireTransitionEncoderForTest{}
+	var transitionBytes int
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		delta := typefacts.DiffFactTablesV3FromInternal(*previous, *next, 2)
-		if delta.Empty() {
-			b.Fatal("leaf edit must produce a non-empty delta")
+		transition, err := encoder.Delta(projectID, "1", previous, next)
+		if err != nil {
+			b.Fatal(err)
 		}
+		transitionBytes = len(transition)
 	}
+	b.ReportMetric(float64(transitionBytes), "transition-B/op")
 }
 
-// BenchmarkFallbackTableDiff prices the same one-edit delta computed without
-// the manifest's help: every source, file, symbol, and entity row of both
-// tables is visited and compared. The gap between this and
-// BenchmarkManifestTableDiff is what a client pays extra per analyze once a
-// change exceeds the manifest's path limit.
-func BenchmarkFallbackTableDiff(b *testing.B) {
-	previous, next := diffBenchTables(b, true)
+// BenchmarkBroadManifestDeltaWireTableTransition prices the former 64-path
+// cliff: one real edit plus 70 exact, empty path candidates.
+func BenchmarkBroadManifestDeltaWireTableTransition(b *testing.B) {
+	previous, next, projectID := diffBenchTables(b, 70)
+	encoder := &typefacts.WireTransitionEncoderForTest{}
+	var transitionBytes int
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		delta := typefacts.DiffFactTablesV3FromInternal(*previous, *next, 2)
-		if delta.Empty() {
-			b.Fatal("leaf edit must produce a non-empty delta")
+		transition, err := encoder.Delta(projectID, "1", previous, next)
+		if err != nil {
+			b.Fatal(err)
 		}
+		transitionBytes = len(transition)
 	}
+	b.ReportMetric(float64(transitionBytes), "transition-B/op")
 }
 
-// BenchmarkColdTablePack prices the full-mode response body: packing the
-// internal table into the columnar frame, which is what a client's first
-// analyze and every retained-state desync pays on top of the analysis itself.
-// packed-B/op records the frame size the client must then decode.
-func BenchmarkColdTablePack(b *testing.B) {
+// BenchmarkFallbackDeltaWireTableTransition retains the evidence-free
+// correctness fallback as an explicit comparison.
+func BenchmarkFallbackDeltaWireTableTransition(b *testing.B) {
+	previous, next, projectID := diffBenchTables(b, 0)
+	typefacts.DropTransportEvidenceForTest(next)
+	encoder := &typefacts.WireTransitionEncoderForTest{}
+	var transitionBytes int
+	b.ReportAllocs()
+	b.ResetTimer()
+	for b.Loop() {
+		transition, err := encoder.Delta(projectID, "1", previous, next)
+		if err != nil {
+			b.Fatal(err)
+		}
+		transitionBytes = len(transition)
+	}
+	b.ReportMetric(float64(transitionBytes), "transition-B/op")
+}
+
+// BenchmarkFullWireTableTransition prices the cold response with the same
+// session-owned encoder used in production. transition-B/op records the frame
+// size the client decodes.
+func BenchmarkFullWireTableTransition(b *testing.B) {
 	ctx := context.Background()
 	root := generateCorpus(b)
 	projectID := filepath.Clean(filepath.Join(root, "tsconfig.json"))
@@ -212,11 +230,16 @@ func BenchmarkColdTablePack(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	var packedBytes int
+	encoder := &typefacts.WireTransitionEncoderForTest{}
+	var transitionBytes int
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		packedBytes = len(typefacts.PackedFactTableV3FromInternal(*table, 1))
+		transition, err := encoder.Full(projectID, table)
+		if err != nil {
+			b.Fatal(err)
+		}
+		transitionBytes = len(transition)
 	}
-	b.ReportMetric(float64(packedBytes), "packed-B/op")
+	b.ReportMetric(float64(transitionBytes), "transition-B/op")
 }
