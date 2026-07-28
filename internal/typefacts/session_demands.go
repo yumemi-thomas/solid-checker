@@ -46,7 +46,7 @@ func (s *retainedDemandStore) begin(
 ) retainedDemandTransaction {
 	changedRuns := sessionChangedDemandRuns(changes, s.runScratch[:0])
 	for index := range changedRuns {
-		changedRuns[index].Demands = canonicalDemandRun(changedRuns[index].Demands)
+		changedRuns[index].Demands = canonicalDemandRun(changedRuns[index].Path, changedRuns[index].Demands)
 	}
 	s.runScratch = nil
 	changedPaths := s.changedPathScratch[:0]

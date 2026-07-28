@@ -1,6 +1,9 @@
 package typefacts
 
-import "testing"
+import (
+	"path/filepath"
+	"testing"
+)
 
 func demandAt(path string, start int) EntityDemand {
 	return EntityDemand{
@@ -56,5 +59,32 @@ func TestRetainedDemandTransactionCanonicalizesOnlyUnorderedChanges(t *testing.T
 		store.groups[0].Demands[0].Location.StartByte != 1 ||
 		store.groups[0].Demands[1].Location.StartByte != 2 {
 		t.Fatalf("canonical groups = %#v", store.groups)
+	}
+}
+
+func TestRetainedDemandTransactionCleansPathsWithoutMutatingRequest(t *testing.T) {
+	clean := filepath.Join("project", "source.ts")
+	separator := string(filepath.Separator)
+	dirty := "project" + separator + "." + separator + "nested" + separator + ".." + separator + "source.ts"
+	query := Location{Path: dirty, StartByte: 2, EndByte: 3}
+	request := []EntityDemand{{
+		Location:      Location{Path: dirty, StartByte: 1, EndByte: 2},
+		QueryLocation: &query,
+		Symbol:        true,
+	}}
+
+	var store retainedDemandStore
+	transaction := store.begin(request, nil, true)
+	transaction.commit()
+
+	if len(store.groups) != 1 ||
+		store.groups[0].Path != clean ||
+		store.groups[0].Demands[0].Location.Path != clean ||
+		store.groups[0].Demands[0].QueryLocation == nil ||
+		store.groups[0].Demands[0].QueryLocation.Path != clean {
+		t.Fatalf("canonical groups = %#v", store.groups)
+	}
+	if request[0].Location.Path != dirty || request[0].QueryLocation.Path != dirty {
+		t.Fatalf("request was mutated: %#v", request)
 	}
 }

@@ -44,7 +44,7 @@ type semanticEvidence struct {
 }
 
 func newSemanticEvidence(path string) semanticEvidence {
-	return semanticEvidence{path: filepath.Clean(path), durable: true}
+	return semanticEvidence{path: path, durable: true}
 }
 
 func (p *project) currentSignatureDeclaration(signature *checker.Signature, target *ast.Symbol) *ast.Node {
@@ -228,7 +228,7 @@ func (e *semanticEvidence) dependency(location typefacts.Location) {
 	if location.Path == "" {
 		return
 	}
-	path := filepath.Clean(location.Path)
+	path := location.Path
 	if path != e.path {
 		e.dependencies = append(e.dependencies, path)
 	}

@@ -66,7 +66,9 @@ func (r *referenceIndex) invalidate(
 				locations := r.merged[id]
 				kept := locations[:0]
 				for _, location := range locations {
-					if filepath.Clean(location.Path) != path {
+					// scan stores the already-clean contribution key in every
+					// location, and merged only concatenates those rows.
+					if location.Path != path {
 						kept = append(kept, location)
 					}
 				}

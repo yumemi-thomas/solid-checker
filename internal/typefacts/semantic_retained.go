@@ -159,7 +159,6 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		changedSymbols:          newChangedSymbolSet(p.interner, p.changedScratch, p.changedIDScratch),
 		factIndexScratch:        p.factIndexScratch,
 		descriptors:             make(map[SymbolID]*TypeDescriptor),
-		cleanPaths:              make(map[string]string),
 		cachedSymbolFacts:       p.symbolFacts,
 		cachedReferences:        p.symbolReferences,
 		cachedCanonicalStore:    cachedCanonicalStore,
@@ -289,7 +288,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		if err := ctx.Err(); err != nil {
 			return nil, 0, stages, retention, err
 		}
-		path := filepath.Clean(source.Path)
+		path := source.Path
 		asyncFunctions := asyncByPath[path]
 		for _, function := range asyncFunctions {
 			builder.enqueueSymbol(function.Symbol)

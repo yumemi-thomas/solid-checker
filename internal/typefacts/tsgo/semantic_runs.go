@@ -3,7 +3,6 @@ package tsgo
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
@@ -26,27 +25,34 @@ func (p *project) SemanticDemandRuns(
 		return nil, ErrClosed
 	}
 
+	totalDemands := 0
+	for index := range runs {
+		totalDemands += len(runs[index].Demands)
+	}
 	results := make([]typefacts.SemanticDemandRunResult, len(runs))
-	cleanPaths := make([]string, len(runs))
+	entityArena := make([]typefacts.EntityFact, totalDemands)
+	structuralArena := make([]typefacts.SymbolID, totalDemands)
 	sourceFiles := make([]*ast.SourceFile, len(runs))
 	sourceErrors := make([]error, len(runs))
 	evidence := make([]semanticEvidence, len(runs))
 	batchStructural := make(map[typefacts.SymbolID]struct{})
 
+	demandOffset := 0
 	for runIndex := range runs {
 		run := &runs[runIndex]
-		path := filepath.Clean(run.Path)
-		cleanPaths[runIndex] = path
+		path := run.Path
 		evidence[runIndex] = newSemanticEvidence(path)
-		results[runIndex].Entities = make([]typefacts.EntityFact, len(run.Demands))
-		results[runIndex].Structural = make([]typefacts.SymbolID, len(run.Demands))
+		nextOffset := demandOffset + len(run.Demands)
+		results[runIndex].Entities = entityArena[demandOffset:nextOffset:nextOffset]
+		results[runIndex].Structural = structuralArena[demandOffset:nextOffset:nextOffset]
+		demandOffset = nextOffset
 		sourceFiles[runIndex], sourceErrors[runIndex] = p.sourceFileFor(typefacts.Location{Path: path})
 		for demandIndex := range run.Demands {
 			demand := &run.Demands[demandIndex]
-			if filepath.Clean(demand.Location.Path) != path {
+			if demand.Location.Path != path {
 				return nil, fmt.Errorf("semantic demand run %q contains location from %q", path, demand.Location.Path)
 			}
-			if demand.QueryLocation != nil && filepath.Clean(demand.QueryLocation.Path) != path {
+			if demand.QueryLocation != nil && demand.QueryLocation.Path != path {
 				return nil, fmt.Errorf("semantic demand run %q contains query location from %q", path, demand.QueryLocation.Path)
 			}
 			location := demand.Location
@@ -90,7 +96,7 @@ func (p *project) SemanticDemandRuns(
 	for runIndex := range runs {
 		run := &runs[runIndex]
 		result := &results[runIndex]
-		path := cleanPaths[runIndex]
+		path := run.Path
 		sourceFile := sourceFiles[runIndex]
 		sourceError := sourceErrors[runIndex]
 		callDemands := p.callDemandScratch[:0]

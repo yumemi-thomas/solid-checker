@@ -3,7 +3,6 @@ package typefacts
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"runtime"
 	"sort"
 	"sync"
@@ -20,10 +19,9 @@ import (
 // symbols reached from the demanded entities, the facts resolved for them, and
 // the retained state carried over from the preceding generation.
 type closureBuilder struct {
-	backend    ClosureBackend
-	trace      Trace
-	cleanPaths map[string]string
-	entities   map[Location]*EntityFact
+	backend  ClosureBackend
+	trace    Trace
+	entities map[Location]*EntityFact
 	// interner assigns SymbolIDs their session-stable dense handles;
 	// symbolQueue and queueHandles grow in lockstep, so the fact built for
 	// queue position i carries handle queueHandles[i].
@@ -91,17 +89,7 @@ func copyHandleMembership(source, scratch []bool) []bool {
 	return scratch
 }
 
-func (b *closureBuilder) cleanPath(path string) string {
-	if cleaned, ok := b.cleanPaths[path]; ok {
-		return cleaned
-	}
-	cleaned := filepath.Clean(path)
-	b.cleanPaths[path] = cleaned
-	return cleaned
-}
-
 func (b *closureBuilder) entity(location Location) *EntityFact {
-	location.Path = b.cleanPath(location.Path)
 	if existing, ok := b.entities[location]; ok {
 		return existing
 	}

@@ -80,7 +80,6 @@ func prepareRetainedContribution(
 	}
 	for index := range demands {
 		expected := demands[index].Location
-		expected.Path = filepath.Clean(expected.Path)
 		if result.Entities[index].Location != expected {
 			return nil, fmt.Errorf(
 				"semantic demand run %q entity %d location = %+v, want %+v",
@@ -178,7 +177,9 @@ func prepareRetainedContribution(
 }
 
 func validateCanonicalDependencyPaths(owner string, paths []string) error {
-	owner = filepath.Clean(owner)
+	if owner == "" || filepath.Clean(owner) != owner {
+		return fmt.Errorf("semantic dependency owner %q is not clean and non-empty", owner)
+	}
 	for index, path := range paths {
 		if path == "" || filepath.Clean(path) != path {
 			return fmt.Errorf("semantic dependency path %q is not clean and non-empty", path)
@@ -273,11 +274,10 @@ func (m pathMembership) rangePaths(visit func(string)) {
 }
 
 func (s *retainedContributionStore) get(path string) *retainedContribution {
-	return s.byPath[filepath.Clean(path)]
+	return s.byPath[path]
 }
 
 func (s *retainedContributionStore) add(path string, contribution *retainedContribution) {
-	path = filepath.Clean(path)
 	if s.byPath == nil {
 		s.byPath = make(map[string]*retainedContribution)
 	}
@@ -300,7 +300,6 @@ func (s *retainedContributionStore) add(path string, contribution *retainedContr
 }
 
 func (s *retainedContributionStore) remove(path string) {
-	path = filepath.Clean(path)
 	contribution := s.byPath[path]
 	if contribution == nil {
 		return
@@ -331,7 +330,7 @@ func (s *retainedContributionStore) remove(path string) {
 func (s *retainedContributionStore) invalidate(paths map[string]struct{}) {
 	direct := make([]string, 0, len(paths))
 	for path := range paths {
-		direct = append(direct, filepath.Clean(path))
+		direct = append(direct, path)
 	}
 	for _, path := range direct {
 		s.dependentsByPath[path].rangePaths(func(dependent string) {

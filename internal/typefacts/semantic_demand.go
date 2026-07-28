@@ -16,17 +16,45 @@ type DemandGroup struct {
 	Demands []EntityDemand
 }
 
-// canonicalDemandRun establishes the retained closure's ordering invariant at
-// its external input boundary. Already-canonical runs stay borrowed; only an
-// unordered changed run is copied and sorted.
-func canonicalDemandRun(demands []EntityDemand) []EntityDemand {
-	for index := 1; index < len(demands); index++ {
-		previous, current := demands[index-1].Location, demands[index].Location
-		if previous.StartByte < current.StartByte ||
-			(previous.StartByte == current.StartByte && previous.EndByte <= current.EndByte) {
+// canonicalDemandRun establishes the retained closure's ordering and clean-path
+// invariants at its external input seam. Already-canonical runs stay borrowed;
+// only a dirty-path or unordered changed run is copied.
+func canonicalDemandRun(path string, demands []EntityDemand) []EntityDemand {
+	copyRequired := false
+	ordered := true
+	for index := range demands {
+		demand := &demands[index]
+		if demand.Location.Path != path && filepath.Clean(demand.Location.Path) != demand.Location.Path {
+			copyRequired = true
+		}
+		if demand.QueryLocation != nil &&
+			demand.QueryLocation.Path != path &&
+			filepath.Clean(demand.QueryLocation.Path) != demand.QueryLocation.Path {
+			copyRequired = true
+		}
+		if index == 0 {
 			continue
 		}
-		canonical := append([]EntityDemand(nil), demands...)
+		previous, current := demands[index-1].Location, demand.Location
+		if previous.StartByte > current.StartByte ||
+			(previous.StartByte == current.StartByte && previous.EndByte > current.EndByte) {
+			ordered = false
+		}
+	}
+	if !copyRequired && ordered {
+		return demands
+	}
+
+	canonical := append([]EntityDemand(nil), demands...)
+	for index := range canonical {
+		canonical[index].Location.Path = filepath.Clean(canonical[index].Location.Path)
+		if canonical[index].QueryLocation != nil {
+			query := *canonical[index].QueryLocation
+			query.Path = filepath.Clean(query.Path)
+			canonical[index].QueryLocation = &query
+		}
+	}
+	if !ordered {
 		sort.SliceStable(canonical, func(i, j int) bool {
 			left, right := canonical[i].Location, canonical[j].Location
 			if left.StartByte != right.StartByte {
@@ -34,9 +62,8 @@ func canonicalDemandRun(demands []EntityDemand) []EntityDemand {
 			}
 			return left.EndByte < right.EndByte
 		})
-		return canonical
 	}
-	return demands
+	return canonical
 }
 
 // DemandTableForGroups is the retained-v3 interface. changedPaths must name
@@ -97,11 +124,12 @@ func (p *DemandClosure) demandTableForGroups(
 		retainedGroups := make([]demandGroup, 0, len(groups))
 		for _, group := range groups {
 			demands := group.Demands
+			path := filepath.Clean(group.Path)
 			if !canonical {
-				demands = canonicalDemandRun(demands)
+				demands = canonicalDemandRun(path, demands)
 			}
 			retainedGroups = append(retainedGroups, demandGroup{
-				path:    filepath.Clean(group.Path),
+				path:    path,
 				demands: demands,
 			})
 		}

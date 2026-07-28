@@ -15,10 +15,12 @@ import (
 // (the tsgo adapter) and it satisfies all of them. A capability probe with one
 // adapter encodes a second adapter that has never existed.
 //
-// SourceFiles returns clean, strictly path-ordered rows. SemanticDemandRuns
+// Every path returned by a backend method is clean. SourceFiles returns
+// strictly path-ordered rows. SemanticDemandRuns
+// accepts runs whose paths and every nested location are already clean and
 // returns clean, strictly ordered, unique dependency paths that exclude their
-// owning run. These are adapter-boundary invariants: the closure checks them
-// and rejects malformed internal evidence, but never normalizes it again.
+// owning run. These are adapter-seam invariants: the closure checks returned
+// evidence and rejects malformed rows, but neither side normalizes paths again.
 //
 // SemanticDemandRuns resolves a demand subset whose output must match a larger
 // batch's semantics. The scope carries structural-accessor symbols and type
@@ -170,14 +172,14 @@ func NewDemandClosure(backend Project, trace Trace) (*DemandClosure, error) {
 	return &DemandClosure{backend: full, trace: trace, generation: 1}, nil
 }
 
-// indexSymbolFact records a retained fact under each of its cleaned declaring
-// paths. Callers must pair it with every insert into symbolFacts.
+// indexSymbolFact records a retained fact under each clean declaring path.
+// Callers must pair it with every insert into symbolFacts.
 func (p *DemandClosure) indexSymbolFact(fact SymbolFact) {
 	if p.symbolsByPath == nil {
 		p.symbolsByPath = make(map[string]map[SymbolID]struct{})
 	}
 	for _, declaration := range fact.Declarations {
-		path := filepath.Clean(declaration.Location.Path)
+		path := declaration.Location.Path
 		ids := p.symbolsByPath[path]
 		if ids == nil {
 			ids = make(map[SymbolID]struct{})
@@ -191,7 +193,7 @@ func (p *DemandClosure) indexSymbolFact(fact SymbolFact) {
 // pair it with every delete from symbolFacts, passing the fact being removed.
 func (p *DemandClosure) unindexSymbolFact(fact SymbolFact) {
 	for _, declaration := range fact.Declarations {
-		path := filepath.Clean(declaration.Location.Path)
+		path := declaration.Location.Path
 		ids := p.symbolsByPath[path]
 		delete(ids, fact.ID)
 		if len(ids) == 0 {
@@ -229,7 +231,7 @@ func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (Affec
 	}
 	invalidPaths := make(map[string]struct{}, len(affected.Files)+len(changes))
 	for _, path := range affected.Files {
-		invalidPaths[filepath.Clean(path)] = struct{}{}
+		invalidPaths[path] = struct{}{}
 	}
 	for _, change := range changes {
 		invalidPaths[filepath.Clean(change.Path)] = struct{}{}
