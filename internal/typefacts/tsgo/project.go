@@ -57,13 +57,11 @@ type project struct {
 	// set on the incremental path and clears the memo on full rebuilds.
 	sourceFactsMemo map[string]*fileFactsMemo
 	// durableRefs maps a durable SymbolID back to its declaration so the
-	// symbol can be re-resolved lazily in a later generation. mintedIDs is
-	// the inverse mint cache: a durable ref always hashes to the same ID, so
-	// each distinct ref pays the digest once per session. Both grow with the
-	// distinct identities the session touches and share whatever eviction
-	// story bounds that.
+	// symbol can be re-resolved lazily in a later generation. Generation-
+	// scoped pointer caches prevent repeat hashing within an analysis; keeping
+	// the inverse declaration-to-ID map duplicated every durable identity for
+	// the entire session.
 	durableRefs map[typefacts.SymbolID]durableSymbolRef
-	mintedIDs   map[durableSymbolRef]typefacts.SymbolID
 	// filesByName is a generation-scoped index of program files keyed by
 	// their cleaned file name. Program.GetSourceFile does not round-trip
 	// virtual bundled-lib names (bundled:/… is resolved against the working
@@ -96,14 +94,11 @@ type project struct {
 	// restart while nested/non-exported symbols keep span-based identities.
 	exportedIdentities      map[*ast.Symbol]preservedExportIdentity
 	exportedIdentitiesByRef map[durableSymbolRef]preservedExportIdentity
-	// sourceBytes carries each program file's text as bytes across
-	// generations, keyed by the file's AST node. Incremental program updates
-	// reuse the node for every unchanged file, and a node's text is immutable,
-	// so a hit is always the same bytes — without this, every materializing
-	// analyze re-copies the entire project's source text. SourceFiles rebuilds
-	// the map from the current program on each call, which is also what evicts
-	// files that left the program.
-	sourceBytes map[*ast.SourceFile][]byte
+	// sourceDigests carries compact source identities across generations.
+	// Incremental programs reuse unchanged AST nodes, so unchanged files pay
+	// neither a text copy nor another hash. Raw bodies are materialized only
+	// for the explicit LifecycleSources operation and are never retained.
+	sourceDigests map[*ast.SourceFile][sha256.Size]byte
 	// The retained module graph of the accepted program, which the affected
 	// walk consumes instead of re-resolving every import edge per update.
 	// forwardDeps holds each non-declaration file's cleaned resolved
@@ -143,7 +138,6 @@ func OpenProject(ctx context.Context, configPath string, trace typefacts.Trace) 
 		symbolsByID:     make(map[typefacts.SymbolID]*ast.Symbol),
 		sourceFactsMemo: make(map[string]*fileFactsMemo),
 		durableRefs:     make(map[typefacts.SymbolID]durableSymbolRef),
-		mintedIDs:       make(map[durableSymbolRef]typefacts.SymbolID),
 	}
 	opened.exportedIdentities = collectExportedIdentities(program, typeChecker)
 	opened.exportedIdentitiesByRef = indexExportedIdentitiesByRef(opened.exportedIdentities)
@@ -331,24 +325,51 @@ func (p *project) SourceFiles(ctx context.Context) ([]typefacts.SourceFile, erro
 	}
 	programFiles := p.program.SourceFiles()
 	files := make([]typefacts.SourceFile, 0, len(programFiles))
-	bytesByFile := make(map[*ast.SourceFile][]byte, len(programFiles))
 	for _, sourceFile := range programFiles {
 		if sourceFile.IsDeclarationFile {
 			continue
 		}
-		source, cached := p.sourceBytes[sourceFile]
-		if !cached {
-			source = []byte(sourceFile.Text())
-		}
-		bytesByFile[sourceFile] = source
 		files = append(files, typefacts.SourceFile{
 			Path:   filepath.Clean(sourceFile.FileName()),
-			Source: source,
+			Source: []byte(sourceFile.Text()),
 		})
 	}
-	p.sourceBytes = bytesByFile
 	sort.Slice(files, func(i, j int) bool { return files[i].Path < files[j].Path })
 	return files, nil
+}
+
+// SourceDigests is the semantic table's compact source inventory. Rust owns
+// the retained source rows; Go keeps only this AST-node memo so incremental
+// analyses do not re-hash unchanged text.
+func (p *project) SourceDigests(ctx context.Context) ([]typefacts.SourceDigest, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, ErrClosed
+	}
+	programFiles := p.program.SourceFiles()
+	digests := make([]typefacts.SourceDigest, 0, len(programFiles))
+	byFile := make(map[*ast.SourceFile][sha256.Size]byte, len(programFiles))
+	for _, sourceFile := range programFiles {
+		if sourceFile.IsDeclarationFile {
+			continue
+		}
+		digest, cached := p.sourceDigests[sourceFile]
+		if !cached {
+			digest = sha256.Sum256([]byte(sourceFile.Text()))
+		}
+		byFile[sourceFile] = digest
+		digests = append(digests, typefacts.SourceDigest{
+			Path:   filepath.Clean(sourceFile.FileName()),
+			SHA256: digest,
+		})
+	}
+	p.sourceDigests = byFile
+	sort.Slice(digests, func(i, j int) bool { return digests[i].Path < digests[j].Path })
+	return digests, nil
 }
 
 func (p *project) Update(ctx context.Context, changes []typefacts.FileChange) (typefacts.AffectedSet, error) {
@@ -1442,7 +1463,6 @@ func (p *project) Close() error {
 	clear(p.symbolsByID)
 	clear(p.sourceFactsMemo)
 	clear(p.durableRefs)
-	clear(p.mintedIDs)
 	p.referenceIndex.reset()
 	p.filesByName = nil
 	p.currentSourceFiles = nil
@@ -1477,11 +1497,6 @@ func (p *project) sweepDurableIdentities(program *compiler.Program) {
 	for id, ref := range p.durableRefs {
 		if _, ok := present[ref.path]; !ok {
 			delete(p.durableRefs, id)
-		}
-	}
-	for ref := range p.mintedIDs {
-		if _, ok := present[ref.path]; !ok {
-			delete(p.mintedIDs, ref)
 		}
 	}
 }
@@ -1610,15 +1625,11 @@ func (p *project) idFor(symbol *ast.Symbol) typefacts.SymbolID {
 				return exported.id
 			}
 		}
-		// The symbol-keyed maps are generation-scoped, but the ref is the
-		// durable identity itself: an unchanged declaration always hashes to
-		// the same ID, so mint once per distinct ref for the session instead
-		// of re-running the digest for every touched symbol of every update.
-		id, minted := p.mintedIDs[ref]
-		if !minted {
-			id = ref.id()
-			p.mintedIDs[ref] = id
-		}
+		// Pointer-keyed maps avoid repeat hashing within a generation. Across
+		// checker recreation only changed/recomputed symbols reach this path,
+		// so hashing those sparse refs is cheaper than retaining a complete
+		// inverse map alongside durableRefs.
+		id := ref.id()
 		if existing, taken := p.symbolsByID[id]; !taken || existing == symbol {
 			p.idsBySymbol[symbol] = id
 			p.symbolsByID[id] = symbol

@@ -1,7 +1,6 @@
 package typefacts
 
 import (
-	"crypto/sha256"
 	"fmt"
 )
 
@@ -45,8 +44,7 @@ func writeWireTransitionPathOp(w *packedWriter, operation *wireTransitionPathOp)
 				operation.path,
 			)
 		}
-		digest := sha256.Sum256(operation.source.Source)
-		w.raw(digest[:])
+		w.raw(operation.source.SHA256[:])
 	}
 	if operation.entityOp == wireTransitionReplace {
 		if err := writeWireTransitionEntityRun(w, operation.path, operation.entities); err != nil {

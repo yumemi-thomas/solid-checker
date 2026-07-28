@@ -49,9 +49,6 @@ func TestFullRebuildSweepsDepartedFilesDurableIdentities(t *testing.T) {
 		for _, ref := range project.durableRefs {
 			paths[ref.path] = true
 		}
-		for ref := range project.mintedIDs {
-			paths[ref.path] = true
-		}
 		return paths
 	}
 	before := refPaths()

@@ -298,3 +298,91 @@ func takeCompactUvarint(input []byte) (uint64, []byte, error) {
 		return value, input[count:], nil
 	}
 }
+
+// appendCompactDemandsWithFlag visits a retained packed run without expanding
+// unrelated rows. It is the semantic-oracle seam used for batch-wide flags
+// such as Async; full EntityDemand rows are materialized only when selected.
+func appendCompactDemandsWithFlag(
+	target []EntityDemand,
+	group CompactDemandGroupV3,
+	stringTable []string,
+	requiredFlag uint64,
+) ([]EntityDemand, error) {
+	strings := stringUntableV3(stringTable)
+	path, err := strings.lookup(group.Path)
+	if err != nil {
+		return nil, err
+	}
+	packed := group.Demands
+	previousStart := uint64(0)
+	for len(packed) != 0 {
+		header, rest, err := takeCompactUvarint(packed)
+		if err != nil {
+			return nil, err
+		}
+		startDelta, rest, err := takeCompactUvarint(rest)
+		if err != nil {
+			return nil, err
+		}
+		length, rest, err := takeCompactUvarint(rest)
+		if err != nil {
+			return nil, err
+		}
+		start := previousStart + startDelta
+		if start < previousStart || start+length < start {
+			return nil, fmt.Errorf("compact demand location overflow")
+		}
+		previousStart = start
+		flags := header >> 1
+		selected := flags&requiredFlag != 0
+		demand := EntityDemand{}
+		if selected {
+			demand = EntityDemand{
+				Location:           Location{Path: path, StartByte: int(start), EndByte: int(start + length)},
+				Symbol:             flags&demandFlagSymbol != 0,
+				References:         flags&demandFlagReferences != 0,
+				TypeDescriptor:     flags&demandFlagTypeDescriptor != 0,
+				ResolvedCall:       flags&demandFlagResolvedCall != 0,
+				Async:              flags&demandFlagAsync != 0,
+				StructuralAccessor: flags&demandFlagStructuralAccessor != 0,
+				Callability:        flags&demandFlagCallability != 0,
+				ReferenceSpace:     flags&demandFlagReferenceSpace != 0,
+				RuntimeIdentity:    flags&demandFlagRuntimeIdentity != 0,
+			}
+		}
+		if header&1 != 0 {
+			queryPathIndex, next, err := takeCompactUvarint(rest)
+			if err != nil {
+				return nil, err
+			}
+			queryStart, next, err := takeCompactUvarint(next)
+			if err != nil {
+				return nil, err
+			}
+			queryLength, next, err := takeCompactUvarint(next)
+			if err != nil {
+				return nil, err
+			}
+			if queryStart+queryLength < queryStart {
+				return nil, fmt.Errorf("compact demand query location overflow")
+			}
+			if selected {
+				queryPath, err := strings.lookup(queryPathIndex)
+				if err != nil {
+					return nil, err
+				}
+				demand.QueryLocation = &Location{
+					Path:      queryPath,
+					StartByte: int(queryStart),
+					EndByte:   int(queryStart + queryLength),
+				}
+			}
+			rest = next
+		}
+		if selected {
+			target = append(target, demand)
+		}
+		packed = rest
+	}
+	return target, nil
+}

@@ -11,18 +11,11 @@ import (
 type retainedContribution struct {
 	demandHash        uint64
 	entities          []EntityFact
-	descriptors       []symbolDescriptor
-	enqueued          []SymbolID
-	fullTier          []SymbolID
+	fullTier          []uint32
 	structural        []SymbolID
 	dependencies      []string
-	descriptorSymbols []SymbolID
+	descriptorSymbols []uint32
 	durable           bool
-}
-
-type symbolDescriptor struct {
-	symbol     SymbolID
-	descriptor *TypeDescriptor
 }
 
 // prepareRetainedContribution merges an aligned Semantic demand-run result
@@ -45,7 +38,6 @@ func prepareRetainedContribution(
 	}
 
 	entityCount := 0
-	enqueuedCount := 0
 	fullTierCount := 0
 	structuralCount := 0
 	for index := range demands {
@@ -53,13 +45,9 @@ func prepareRetainedContribution(
 			entityCount++
 		}
 		if result.Entities[index].Symbol != "" {
-			enqueuedCount++
 			if demands[index].References {
 				fullTierCount++
 			}
-		}
-		if result.Entities[index].ResolvedCall != nil && result.Entities[index].ResolvedCall.Target != "" {
-			enqueuedCount++
 		}
 		if result.Structural[index] != "" {
 			structuralCount++
@@ -69,8 +57,7 @@ func prepareRetainedContribution(
 	contribution := &retainedContribution{
 		demandHash:   hash,
 		entities:     make([]EntityFact, 0, entityCount),
-		enqueued:     make([]SymbolID, 0, enqueuedCount),
-		fullTier:     make([]SymbolID, 0, fullTierCount),
+		fullTier:     make([]uint32, 0, fullTierCount),
 		structural:   make([]SymbolID, 0, structuralCount),
 		dependencies: result.Dependencies,
 		durable:      result.Durable,
@@ -100,9 +87,8 @@ func prepareRetainedContribution(
 		}
 		if entity.Symbol != "" {
 			target.Symbol = entity.Symbol
-			contribution.enqueued = append(contribution.enqueued, entity.Symbol)
 			if demand.References {
-				contribution.fullTier = append(contribution.fullTier, entity.Symbol)
+				contribution.fullTier = append(contribution.fullTier, uint32(len(contribution.entities)-1))
 			}
 		}
 		if entity.TypeDescriptor != nil {
@@ -110,9 +96,6 @@ func prepareRetainedContribution(
 		}
 		if entity.ResolvedCall != nil {
 			target.ResolvedCall = entity.ResolvedCall
-			if entity.ResolvedCall.Target != "" {
-				contribution.enqueued = append(contribution.enqueued, entity.ResolvedCall.Target)
-			}
 		}
 		if entity.Callability != "" {
 			target.Callability = entity.Callability
@@ -128,25 +111,7 @@ func prepareRetainedContribution(
 		}
 	}
 
-	descriptorCount := 0
-	for index := range contribution.entities {
-		entity := &contribution.entities[index]
-		if entity.Symbol != "" && entity.TypeDescriptor != nil {
-			descriptorCount++
-		}
-	}
-	contribution.descriptors = make([]symbolDescriptor, 0, descriptorCount)
-	for index := range contribution.entities {
-		entity := &contribution.entities[index]
-		if entity.Symbol != "" && entity.TypeDescriptor != nil {
-			contribution.descriptors = append(contribution.descriptors, symbolDescriptor{
-				symbol:     entity.Symbol,
-				descriptor: entity.TypeDescriptor,
-			})
-		}
-	}
-
-	descriptorSymbols := make([]SymbolID, 0)
+	descriptorSymbols := make([]uint32, 0)
 	entityIndex := -1
 	for index := range demands {
 		if index == 0 || result.Entities[index].Location != result.Entities[index-1].Location {
@@ -154,23 +119,26 @@ func prepareRetainedContribution(
 		}
 		if demands[index].TypeDescriptor {
 			if symbol := contribution.entities[entityIndex].Symbol; symbol != "" {
-				descriptorSymbols = append(descriptorSymbols, symbol)
+				descriptorSymbols = append(descriptorSymbols, uint32(entityIndex))
 			}
 		}
 	}
-	sort.Slice(descriptorSymbols, func(i, j int) bool { return descriptorSymbols[i] < descriptorSymbols[j] })
+	sort.Slice(descriptorSymbols, func(i, j int) bool {
+		return contribution.entities[descriptorSymbols[i]].Symbol <
+			contribution.entities[descriptorSymbols[j]].Symbol
+	})
 	write := 0
-	for _, symbol := range descriptorSymbols {
-		if write != 0 && descriptorSymbols[write-1] == symbol {
+	for _, entityIndex := range descriptorSymbols {
+		if write != 0 &&
+			contribution.entities[descriptorSymbols[write-1]].Symbol ==
+				contribution.entities[entityIndex].Symbol {
 			continue
 		}
-		descriptorSymbols[write] = symbol
+		descriptorSymbols[write] = entityIndex
 		write++
 	}
 	contribution.descriptorSymbols = descriptorSymbols[:write:write]
 	contribution.entities = contribution.entities[:len(contribution.entities):len(contribution.entities)]
-	contribution.descriptors = contribution.descriptors[:len(contribution.descriptors):len(contribution.descriptors)]
-	contribution.enqueued = contribution.enqueued[:len(contribution.enqueued):len(contribution.enqueued)]
 	contribution.fullTier = contribution.fullTier[:len(contribution.fullTier):len(contribution.fullTier)]
 	contribution.structural = contribution.structural[:len(contribution.structural):len(contribution.structural)]
 	return contribution, nil
@@ -291,7 +259,8 @@ func (s *retainedContributionStore) add(path string, contribution *retainedContr
 		}
 		s.dependentsByPath[dependency] = s.dependentsByPath[dependency].add(path)
 	}
-	for _, symbol := range contribution.descriptorSymbols {
+	for _, entityIndex := range contribution.descriptorSymbols {
+		symbol := contribution.entities[entityIndex].Symbol
 		if s.descriptorUsers == nil {
 			s.descriptorUsers = make(map[SymbolID]pathMembership)
 		}
@@ -313,7 +282,8 @@ func (s *retainedContributionStore) remove(path string) {
 			s.dependentsByPath[dependency] = users
 		}
 	}
-	for _, symbol := range contribution.descriptorSymbols {
+	for _, entityIndex := range contribution.descriptorSymbols {
+		symbol := contribution.entities[entityIndex].Symbol
 		users := s.descriptorUsers[symbol].remove(path)
 		if users.len() == 0 {
 			delete(s.descriptorUsers, symbol)

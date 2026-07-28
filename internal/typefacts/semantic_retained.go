@@ -2,6 +2,7 @@ package typefacts
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
 	"hash/maphash"
@@ -16,8 +17,47 @@ import (
 type demandGroup struct {
 	path         string // clean path, the retention key
 	demands      []EntityDemand
+	compact      CompactDemandGroupV3
+	strings      []string
 	hash         uint64
 	contribution *retainedContribution
+}
+
+func (g *demandGroup) isCompact() bool {
+	return g.strings != nil
+}
+
+func (g *demandGroup) ensureExpanded() error {
+	if g.demands != nil || !g.isCompact() {
+		return nil
+	}
+	demands, err := (CompactDemandsV3{
+		Groups:  []CompactDemandGroupV3{g.compact},
+		Strings: g.strings,
+	}).Expand()
+	if err != nil {
+		return err
+	}
+	g.demands = demands
+	return nil
+}
+
+func (g *demandGroup) releaseExpanded() {
+	if g.isCompact() {
+		g.demands = nil
+	}
+}
+
+func (g *demandGroup) appendAsyncDemands(target []EntityDemand) ([]EntityDemand, error) {
+	if !g.isCompact() {
+		for _, demand := range g.demands {
+			if demand.Async {
+				target = append(target, demand)
+			}
+		}
+		return target, nil
+	}
+	return appendCompactDemandsWithFlag(target, g.compact, g.strings, demandFlagAsync)
 }
 
 func validateCanonicalSourceFiles(files []SourceFile) error {
@@ -31,6 +71,47 @@ func validateCanonicalSourceFiles(files []SourceFile) error {
 		}
 	}
 	return nil
+}
+
+type sourceDigestBackend interface {
+	SourceDigests(context.Context) ([]SourceDigest, error)
+}
+
+func semanticSourceDigests(ctx context.Context, backend ClosureBackend) ([]SourceDigest, error) {
+	if compact, ok := backend.(sourceDigestBackend); ok {
+		digests, err := compact.SourceDigests(ctx)
+		if err != nil {
+			return nil, err
+		}
+		for index := range digests {
+			path := digests[index].Path
+			if path == "" || filepath.Clean(path) != path {
+				return nil, fmt.Errorf("source digest path %q is not clean and non-empty", path)
+			}
+			if index != 0 && digests[index-1].Path >= path {
+				return nil, fmt.Errorf("source digests are not strictly path-ordered at %q", path)
+			}
+		}
+		return digests, nil
+	}
+
+	// Test and alternate backends keep the original seam. Production's tsgo
+	// adapter implements SourceDigests and never materializes these bodies.
+	sources, err := backend.SourceFiles(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateCanonicalSourceFiles(sources); err != nil {
+		return nil, err
+	}
+	digests := make([]SourceDigest, len(sources))
+	for index := range sources {
+		digests[index] = SourceDigest{
+			Path:   sources[index].Path,
+			SHA256: sha256.Sum256(sources[index].Source),
+		}
+	}
+	return digests, nil
 }
 
 // demandListHash digests one file's demand run. The hash only ever compares
@@ -116,11 +197,13 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	generation uint64,
 ) (*FactTable, int, semanticDemandStages, ClosureRetention, error) {
 	retention := ClosureRetention{}
-	sources, err := p.backend.SourceFiles(ctx)
+	defer func() {
+		for index := range groups {
+			groups[index].releaseExpanded()
+		}
+	}()
+	sourceDigests, err := semanticSourceDigests(ctx, p.backend)
 	if err != nil {
-		return nil, 0, semanticDemandStages{}, retention, err
-	}
-	if err := validateCanonicalSourceFiles(sources); err != nil {
 		return nil, 0, semanticDemandStages{}, retention, err
 	}
 	table := p.recyclableTable
@@ -131,7 +214,8 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	table.Schema = TypeFactsSchemaVersion
 	table.Generation = generation
 	table.ProjectID = "semantic-demand"
-	table.Sources = sources
+	table.Sources = nil
+	table.sourceDigests = sourceDigests
 	table.Files = table.Files[:0]
 	table.Entities = table.Entities[:0]
 	// A recycled table may own chunks still shared by the immediately
@@ -191,38 +275,23 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	// and each group's run is a stable capped window into it. The windows are
 	// only ever read within the async section below — refresh lists copy the
 	// demands out — so reusing the backing next generation is safe.
-	asyncTotal := 0
-	for index := range groups {
-		for _, demand := range groups[index].demands {
-			if demand.Async {
-				asyncTotal++
-			}
-		}
-	}
 	asyncGroups := p.asyncGroupScratch[:0]
-	if asyncTotal != 0 {
-		flat := p.asyncDemandScratch
-		if cap(flat) < asyncTotal {
-			flat = make([]EntityDemand, 0, asyncTotal)
-		} else {
-			flat = flat[:0]
+	flat := p.asyncDemandScratch[:0]
+	for index := range groups {
+		start := len(flat)
+		var err error
+		flat, err = groups[index].appendAsyncDemands(flat)
+		if err != nil {
+			return nil, 0, semanticDemandStages{}, retention, err
 		}
-		for index := range groups {
-			start := len(flat)
-			for _, demand := range groups[index].demands {
-				if demand.Async {
-					flat = append(flat, demand)
-				}
-			}
-			if len(flat) > start {
-				asyncGroups = append(asyncGroups, demandGroup{
-					path:    groups[index].path,
-					demands: flat[start:len(flat):len(flat)],
-				})
-			}
+		if len(flat) > start {
+			asyncGroups = append(asyncGroups, demandGroup{
+				path:    groups[index].path,
+				demands: flat[start:len(flat):len(flat)],
+			})
 		}
-		p.asyncDemandScratch = flat
 	}
+	p.asyncDemandScratch = flat
 	stages := semanticDemandStages{}
 	started := time.Now()
 	refreshAllAsync := p.asyncFiles == nil || p.transportChangedPaths == nil
@@ -292,7 +361,7 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		p.asyncFiles = nil
 	}
 	p.asyncGroupScratch = asyncGroups[:0]
-	for _, source := range sources {
+	for _, source := range sourceDigests {
 		if err := ctx.Err(); err != nil {
 			return nil, 0, stages, retention, err
 		}
@@ -339,6 +408,9 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		// demand run may differ. Hash unchanged runs only when no exact
 		// changed-path set is available (initial/full materialization).
 		if contribution == nil || p.transportChangedPaths == nil || pathChanged {
+			if err := group.ensureExpanded(); err != nil {
+				return nil, 0, stages, retention, err
+			}
 			group.hash = demandListHash(group.demands, p.demandHashSeed())
 		} else {
 			group.hash = contribution.demandHash
@@ -351,9 +423,12 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 			// Batch-wide first-wins descriptor dedup: descriptors the
 			// retained files already carry are what a whole-batch run
 			// would have cached before reaching the recomputed demands.
-			for _, entry := range contribution.descriptors {
-				if _, ok := descriptorSeed[entry.symbol]; !ok {
-					descriptorSeed[entry.symbol] = entry.descriptor
+			for entityIndex := range contribution.entities {
+				entity := &contribution.entities[entityIndex]
+				if entity.Symbol != "" && entity.TypeDescriptor != nil {
+					if _, ok := descriptorSeed[entity.Symbol]; !ok {
+						descriptorSeed[entity.Symbol] = entity.TypeDescriptor
+					}
 				}
 			}
 			continue
@@ -444,6 +519,9 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		sort.Ints(refresh)
 		refreshRuns := make([]SemanticDemandRun, 0, len(refresh))
 		for _, index := range refresh {
+			if err := groups[index].ensureExpanded(); err != nil {
+				return nil, 0, stages, retention, err
+			}
 			refreshRuns = append(refreshRuns, SemanticDemandRun{
 				Path:    groups[index].path,
 				Demands: groups[index].demands,
@@ -515,11 +593,15 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		// preparation arrays become collectible instead of duplicating the
 		// complete entity table for the rest of the session.
 		group.contribution.entities = entities[start:len(entities):len(entities)]
-		for _, symbol := range group.contribution.enqueued {
-			builder.enqueueSymbol(symbol)
+		for entityIndex := range group.contribution.entities {
+			entity := &group.contribution.entities[entityIndex]
+			builder.enqueueSymbol(entity.Symbol)
+			if entity.ResolvedCall != nil {
+				builder.enqueueSymbol(entity.ResolvedCall.Target)
+			}
 		}
-		for _, symbol := range group.contribution.fullTier {
-			builder.fullTier.addID(symbol)
+		for _, entityIndex := range group.contribution.fullTier {
+			builder.fullTier.addID(group.contribution.entities[entityIndex].Symbol)
 		}
 	}
 	rootSnapshot := copyHandleMembership(builder.symbolSeen.members, p.rootSnapshotScratch)

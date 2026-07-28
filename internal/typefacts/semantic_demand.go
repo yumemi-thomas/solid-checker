@@ -85,10 +85,10 @@ func (p *DemandClosure) DemandTableForGroups(
 func (p *DemandClosure) demandTableForCanonicalGroups(
 	ctx context.Context,
 	generation uint64,
-	groups []DemandGroup,
+	groups []demandGroup,
 	changedPaths []string,
 ) (*FactTable, error) {
-	return p.demandTableForGroups(ctx, generation, groups, changedPaths, true)
+	return p.demandTableForPreparedGroups(ctx, generation, groups, changedPaths)
 }
 
 func (p *DemandClosure) demandTableForGroups(
@@ -97,6 +97,27 @@ func (p *DemandClosure) demandTableForGroups(
 	groups []DemandGroup,
 	changedPaths []string,
 	canonical bool,
+) (*FactTable, error) {
+	retainedGroups := make([]demandGroup, 0, len(groups))
+	for _, group := range groups {
+		demands := group.Demands
+		path := filepath.Clean(group.Path)
+		if !canonical {
+			demands = canonicalDemandRun(path, demands)
+		}
+		retainedGroups = append(retainedGroups, demandGroup{
+			path:    path,
+			demands: demands,
+		})
+	}
+	return p.demandTableForPreparedGroups(ctx, generation, retainedGroups, changedPaths)
+}
+
+func (p *DemandClosure) demandTableForPreparedGroups(
+	ctx context.Context,
+	generation uint64,
+	retainedGroups []demandGroup,
+	changedPaths []string,
 ) (*FactTable, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -121,18 +142,6 @@ func (p *DemandClosure) demandTableForGroups(
 		}
 	}
 	if p.table == nil {
-		retainedGroups := make([]demandGroup, 0, len(groups))
-		for _, group := range groups {
-			demands := group.Demands
-			path := filepath.Clean(group.Path)
-			if !canonical {
-				demands = canonicalDemandRun(path, demands)
-			}
-			retainedGroups = append(retainedGroups, demandGroup{
-				path:    path,
-				demands: demands,
-			})
-		}
 		sort.Slice(retainedGroups, func(i, j int) bool {
 			return retainedGroups[i].path < retainedGroups[j].path
 		})

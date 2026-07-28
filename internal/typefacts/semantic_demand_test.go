@@ -2,12 +2,27 @@ package typefacts
 
 import (
 	"context"
+	"crypto/sha256"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 )
+
+type digestOnlyBackend struct {
+	transportOnlyBackend
+	digests []SourceDigest
+}
+
+func (b digestOnlyBackend) SourceFiles(context.Context) ([]SourceFile, error) {
+	return nil, errors.New("semantic materialization retained raw sources")
+}
+
+func (b digestOnlyBackend) SourceDigests(context.Context) ([]SourceDigest, error) {
+	return append([]SourceDigest(nil), b.digests...), nil
+}
 
 type transportOnlyBackend struct {
 	source SourceFile
@@ -178,5 +193,67 @@ func TestRetainedContributionSharesCanonicalEntityBacking(t *testing.T) {
 	}
 	if &contribution.entities[0] != &table.Entities[0] {
 		t.Fatal("retained contribution duplicates the canonical entity backing")
+	}
+}
+
+func TestSemanticTableRetainsOnlySourceDigests(t *testing.T) {
+	path := filepath.Clean("/project/source.ts")
+	digest := sha256.Sum256([]byte("const value = 1\n"))
+	closure, err := NewDemandClosure(digestOnlyBackend{
+		transportOnlyBackend: transportOnlyBackend{},
+		digests:              []SourceDigest{{Path: path, SHA256: digest}},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closure.Close()
+
+	table, err := closure.DemandTableForGroups(
+		context.Background(),
+		1,
+		[]DemandGroup{{Path: path}},
+		[]string{path},
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(table.Sources) != 0 {
+		t.Fatalf("semantic table retained %d raw sources", len(table.Sources))
+	}
+	if len(table.sourceDigests) != 1 || table.sourceDigests[0].SHA256 != digest {
+		t.Fatalf("semantic table source digests = %#v", table.sourceDigests)
+	}
+}
+
+func TestSemanticMaterializationReleasesExpandedCompactDemands(t *testing.T) {
+	path := filepath.Clean("/project/source.ts")
+	demand := EntityDemand{
+		Location: Location{Path: path, StartByte: 6, EndByte: 11},
+		Symbol:   true,
+	}
+	compact := CompactDemandsV3From([]EntityDemand{demand})
+	groups := []demandGroup{{
+		path:    path,
+		compact: compact.Groups[0],
+		strings: compact.Strings,
+	}}
+	closure, err := NewDemandClosure(transportOnlyBackend{
+		source: SourceFile{Path: path, Source: []byte("const value = 1\n")},
+	}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer closure.Close()
+
+	if _, err := closure.demandTableForCanonicalGroups(
+		context.Background(),
+		1,
+		groups,
+		[]string{path},
+	); err != nil {
+		t.Fatal(err)
+	}
+	if groups[0].demands != nil {
+		t.Fatalf("semantic materialization retained %d expanded demands", len(groups[0].demands))
 	}
 }

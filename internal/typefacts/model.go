@@ -1,5 +1,7 @@
 package typefacts
 
+import "crypto/sha256"
+
 // EntityDemand selects only the fields consumed for one canonical entity.
 //
 // Every flag here is honoured. Alias targets and declarations are not flags:
@@ -88,6 +90,36 @@ type FactTable struct {
 	stateID   uint64
 	transport *factTableTransportChanges
 	symbols   *symbolFactStore
+	// sourceDigests is the retained source representation. Source bodies are
+	// needed only by LifecycleSources; retaining them in every semantic table
+	// duplicated the compiler's immutable text solely to hash it for Rust.
+	// Hand-built tables may still populate Sources; the wire layer derives
+	// this compact form lazily for compatibility.
+	sourceDigests []SourceDigest
+}
+
+// SourceDigest is the source identity transferred to Rust's retained table.
+// It is deliberately not part of the public FactTable schema.
+type SourceDigest struct {
+	Path   string
+	SHA256 [sha256.Size]byte
+}
+
+func (t *FactTable) wireSourceDigests() []SourceDigest {
+	if t == nil {
+		return nil
+	}
+	if t.sourceDigests != nil || len(t.Sources) == 0 {
+		return t.sourceDigests
+	}
+	t.sourceDigests = make([]SourceDigest, len(t.Sources))
+	for index := range t.Sources {
+		t.sourceDigests[index] = SourceDigest{
+			Path:   t.Sources[index].Path,
+			SHA256: sha256.Sum256(t.Sources[index].Source),
+		}
+	}
+	return t.sourceDigests
 }
 
 type factTableTransportChanges struct {

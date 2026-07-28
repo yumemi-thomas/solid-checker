@@ -1,6 +1,7 @@
 package typefacts
 
 import (
+	"fmt"
 	"path/filepath"
 	"sort"
 )
@@ -9,7 +10,7 @@ import (
 // groups are mutated transactionally: sparse analyzes edit only named paths,
 // while an undo log restores the preceding state if any later stage fails.
 type retainedDemandStore struct {
-	groups             []DemandGroup
+	groups             []demandGroup
 	undoScratch        []demandUndo
 	changedPathScratch []string
 	runScratch         []DemandGroup
@@ -26,15 +27,15 @@ const (
 type demandUndo struct {
 	kind     demandUndoKind
 	index    int
-	previous DemandGroup
+	previous demandGroup
 }
 
 type retainedDemandTransaction struct {
 	store        *retainedDemandStore
 	undo         []demandUndo
 	changedPaths []string
-	changedRuns  []DemandGroup
-	resetOld     []DemandGroup
+	changedRuns  []demandGroup
+	resetOld     []demandGroup
 	reset        bool
 	finished     bool
 }
@@ -44,14 +45,66 @@ func (s *retainedDemandStore) begin(
 	removed []string,
 	reset bool,
 ) retainedDemandTransaction {
-	changedRuns := sessionChangedDemandRuns(changes, s.runScratch[:0])
-	for index := range changedRuns {
-		changedRuns[index].Demands = canonicalDemandRun(changedRuns[index].Path, changedRuns[index].Demands)
+	plainRuns := sessionChangedDemandRuns(changes, s.runScratch[:0])
+	changedRuns := make([]demandGroup, len(plainRuns))
+	for index := range plainRuns {
+		path := filepath.Clean(plainRuns[index].Path)
+		changedRuns[index] = demandGroup{
+			path:    path,
+			demands: canonicalDemandRun(path, plainRuns[index].Demands),
+		}
 	}
 	s.runScratch = nil
+	return s.beginRuns(changedRuns, removed, reset)
+}
+
+func (s *retainedDemandStore) beginCompact(
+	compact CompactDemandsV3,
+	removed []string,
+	reset bool,
+) (retainedDemandTransaction, error) {
+	strings := stringUntableV3(compact.Strings)
+	changedRuns := make([]demandGroup, len(compact.Groups))
+	for index := range compact.Groups {
+		group := compact.Groups[index]
+		path, err := strings.lookup(group.Path)
+		if err != nil {
+			return retainedDemandTransaction{}, err
+		}
+		if _, _, err := (CompactDemandsV3{
+			Groups:  []CompactDemandGroupV3{group},
+			Strings: compact.Strings,
+		}).demandShape(); err != nil {
+			return retainedDemandTransaction{}, err
+		}
+		changedRuns[index] = demandGroup{
+			path:    filepath.Clean(path),
+			compact: group,
+			strings: compact.Strings,
+		}
+	}
+	sort.Slice(changedRuns, func(i, j int) bool {
+		return changedRuns[i].path < changedRuns[j].path
+	})
+	for index := 1; index < len(changedRuns); index++ {
+		if changedRuns[index-1].path == changedRuns[index].path {
+			return retainedDemandTransaction{}, fmt.Errorf(
+				"compact demand groups name %q twice; each path may appear once",
+				changedRuns[index].path,
+			)
+		}
+	}
+	return s.beginRuns(changedRuns, removed, reset), nil
+}
+
+func (s *retainedDemandStore) beginRuns(
+	changedRuns []demandGroup,
+	removed []string,
+	reset bool,
+) retainedDemandTransaction {
 	changedPaths := s.changedPathScratch[:0]
 	for _, group := range changedRuns {
-		changedPaths = append(changedPaths, filepath.Clean(group.Path))
+		changedPaths = append(changedPaths, group.path)
 	}
 	for _, path := range removed {
 		changedPaths = append(changedPaths, filepath.Clean(path))
@@ -70,7 +123,7 @@ func (s *retainedDemandStore) begin(
 	s.undoScratch = nil
 	if reset {
 		transaction.resetOld = s.groups
-		s.groups = make([]DemandGroup, 0, len(changedRuns))
+		s.groups = make([]demandGroup, 0, len(changedRuns))
 	}
 	for _, group := range changedRuns {
 		transaction.replace(group)
@@ -81,7 +134,7 @@ func (s *retainedDemandStore) begin(
 	return transaction
 }
 
-func (t *retainedDemandTransaction) groups() []DemandGroup {
+func (t *retainedDemandTransaction) groups() []demandGroup {
 	return t.store.groups
 }
 
@@ -89,12 +142,12 @@ func (t *retainedDemandTransaction) paths() []string {
 	return t.changedPaths
 }
 
-func (t *retainedDemandTransaction) replace(group DemandGroup) {
+func (t *retainedDemandTransaction) replace(group demandGroup) {
 	groups := t.store.groups
 	index := sort.Search(len(groups), func(index int) bool {
-		return groups[index].Path >= group.Path
+		return groups[index].path >= group.path
 	})
-	if index < len(groups) && groups[index].Path == group.Path {
+	if index < len(groups) && groups[index].path == group.path {
 		t.undo = append(t.undo, demandUndo{
 			kind:     demandUndoReplace,
 			index:    index,
@@ -104,7 +157,7 @@ func (t *retainedDemandTransaction) replace(group DemandGroup) {
 		return
 	}
 	t.undo = append(t.undo, demandUndo{kind: demandUndoInsert, index: index})
-	groups = append(groups, DemandGroup{})
+	groups = append(groups, demandGroup{})
 	copy(groups[index+1:], groups[index:])
 	groups[index] = group
 	t.store.groups = groups
@@ -113,9 +166,9 @@ func (t *retainedDemandTransaction) replace(group DemandGroup) {
 func (t *retainedDemandTransaction) remove(path string) {
 	groups := t.store.groups
 	index := sort.Search(len(groups), func(index int) bool {
-		return groups[index].Path >= path
+		return groups[index].path >= path
 	})
-	if index == len(groups) || groups[index].Path != path {
+	if index == len(groups) || groups[index].path != path {
 		return
 	}
 	t.undo = append(t.undo, demandUndo{
@@ -124,7 +177,7 @@ func (t *retainedDemandTransaction) remove(path string) {
 		previous: groups[index],
 	})
 	copy(groups[index:], groups[index+1:])
-	groups[len(groups)-1] = DemandGroup{}
+	groups[len(groups)-1] = demandGroup{}
 	t.store.groups = groups[:len(groups)-1]
 }
 
@@ -150,10 +203,10 @@ func (t *retainedDemandTransaction) rollback() {
 			groups[undo.index] = undo.previous
 		case demandUndoInsert:
 			copy(groups[undo.index:], groups[undo.index+1:])
-			groups[len(groups)-1] = DemandGroup{}
+			groups[len(groups)-1] = demandGroup{}
 			t.store.groups = groups[:len(groups)-1]
 		case demandUndoRemove:
-			groups = append(groups, DemandGroup{})
+			groups = append(groups, demandGroup{})
 			copy(groups[undo.index+1:], groups[undo.index:])
 			groups[undo.index] = undo.previous
 			t.store.groups = groups
@@ -172,19 +225,22 @@ func (t *retainedDemandTransaction) finish() {
 	clear(t.changedPaths)
 	t.store.changedPathScratch = t.changedPaths[:0]
 	clear(t.changedRuns)
-	t.store.runScratch = t.changedRuns[:0]
+	t.store.runScratch = nil
 	t.resetOld = nil
 }
 
 func (s *retainedDemandStore) at(path string) []EntityDemand {
 	path = filepath.Clean(path)
 	index := sort.Search(len(s.groups), func(index int) bool {
-		return s.groups[index].Path >= path
+		return s.groups[index].path >= path
 	})
-	if index == len(s.groups) || s.groups[index].Path != path {
+	if index == len(s.groups) || s.groups[index].path != path {
 		return nil
 	}
-	return s.groups[index].Demands
+	if err := s.groups[index].ensureExpanded(); err != nil {
+		return nil
+	}
+	return s.groups[index].demands
 }
 
 // sessionChangedDemandRuns borrows contiguous path-ordered runs directly from

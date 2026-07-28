@@ -1,7 +1,6 @@
 package typefacts
 
 import (
-	"bytes"
 	"slices"
 	"sort"
 )
@@ -18,7 +17,7 @@ type wireTransitionPathOp struct {
 	path string
 
 	sourceOp wireTransitionCollectionOp
-	source   SourceFile
+	source   SourceDigest
 
 	entityOp wireTransitionCollectionOp
 	entities []EntityFact
@@ -220,7 +219,7 @@ func wireTransitionPathDifference(
 type wireTransitionPathRows struct {
 	path string
 
-	source    SourceFile
+	source    SourceDigest
 	hasSource bool
 
 	entities []EntityFact
@@ -231,7 +230,7 @@ type wireTransitionPathRows struct {
 
 func wireTransitionPathRowsAt(table *FactTable, path string) wireTransitionPathRows {
 	rows := wireTransitionPathRows{path: path}
-	rows.source, rows.hasSource = wireTransitionSource(table.Sources, path)
+	rows.source, rows.hasSource = wireTransitionSource(table.wireSourceDigests(), path)
 	rows.entities = canonicalEntityPath(table.Entities, path)
 	rows.file, rows.hasFile = canonicalFileFact(table.Files, path)
 	return rows
@@ -247,7 +246,7 @@ func wireTransitionPathRowsDifference(
 		case previous.hasSource && !next.hasSource:
 			operation.sourceOp = wireTransitionRemove
 		case next.hasSource &&
-			(!previous.hasSource || !bytes.Equal(previous.source.Source, next.source.Source)):
+			(!previous.hasSource || previous.source.SHA256 != next.source.SHA256):
 			operation.sourceOp = wireTransitionReplace
 			operation.source = next.source
 		}
@@ -418,8 +417,9 @@ func newWireTransitionTablePathCursor(table *FactTable) wireTransitionTablePathC
 }
 
 func (c *wireTransitionTablePathCursor) valid() bool {
+	sources := c.table.wireSourceDigests()
 	return c.table != nil &&
-		(c.source < len(c.table.Sources) ||
+		(c.source < len(sources) ||
 			c.entity < len(c.table.Entities) ||
 			c.file < len(c.table.Files))
 }
@@ -433,8 +433,9 @@ func (c *wireTransitionTablePathCursor) path() string {
 			set = true
 		}
 	}
-	if c.source < len(c.table.Sources) {
-		consider(c.table.Sources[c.source].Path)
+	sources := c.table.wireSourceDigests()
+	if c.source < len(sources) {
+		consider(sources[c.source].Path)
 	}
 	if c.entity < len(c.table.Entities) {
 		consider(c.table.Entities[c.entity].Location.Path)
@@ -448,8 +449,9 @@ func (c *wireTransitionTablePathCursor) path() string {
 func (c *wireTransitionTablePathCursor) rows() wireTransitionPathRows {
 	path := c.path()
 	rows := wireTransitionPathRows{path: path}
-	if c.source < len(c.table.Sources) && c.table.Sources[c.source].Path == path {
-		rows.source = c.table.Sources[c.source]
+	sources := c.table.wireSourceDigests()
+	if c.source < len(sources) && sources[c.source].Path == path {
+		rows.source = sources[c.source]
 		rows.hasSource = true
 	}
 	if c.entity < len(c.table.Entities) &&
@@ -466,7 +468,8 @@ func (c *wireTransitionTablePathCursor) rows() wireTransitionPathRows {
 
 func (c *wireTransitionTablePathCursor) next() {
 	path := c.path()
-	if c.source < len(c.table.Sources) && c.table.Sources[c.source].Path == path {
+	sources := c.table.wireSourceDigests()
+	if c.source < len(sources) && sources[c.source].Path == path {
 		c.source++
 	}
 	if c.entity < len(c.table.Entities) &&
@@ -492,12 +495,12 @@ func sortUniqueWireTransitionPaths(paths []string) []string {
 	return paths[:write]
 }
 
-func wireTransitionSource(sources []SourceFile, path string) (SourceFile, bool) {
+func wireTransitionSource(sources []SourceDigest, path string) (SourceDigest, bool) {
 	index := sort.Search(len(sources), func(index int) bool {
 		return sources[index].Path >= path
 	})
 	if index == len(sources) || sources[index].Path != path {
-		return SourceFile{}, false
+		return SourceDigest{}, false
 	}
 	return sources[index], true
 }

@@ -142,7 +142,7 @@ type DemandClosure struct {
 	// evicts an affected set by looking up its paths instead of scanning every
 	// retained fact. Every canonical-store change goes through
 	// indexSymbolFact / unindexSymbolFact to keep the index in sync.
-	symbolsByPath map[string]map[SymbolID]struct{}
+	symbolsByPath map[string][]SymbolID
 	symbolScratch []SymbolFact
 	// invalidatedSymbols names every previously reached durable fact evicted
 	// by accepted source updates. symbolMemoComplete proves that this evidence
@@ -174,16 +174,21 @@ func NewDemandClosure(backend Project, trace Trace) (*DemandClosure, error) {
 // Callers pair it with every durable insert into the canonical symbol store.
 func (p *DemandClosure) indexSymbolFact(fact SymbolFact) {
 	if p.symbolsByPath == nil {
-		p.symbolsByPath = make(map[string]map[SymbolID]struct{})
+		p.symbolsByPath = make(map[string][]SymbolID)
 	}
 	for _, declaration := range fact.Declarations {
 		path := declaration.Location.Path
 		ids := p.symbolsByPath[path]
-		if ids == nil {
-			ids = make(map[SymbolID]struct{})
-			p.symbolsByPath[path] = ids
+		present := false
+		for _, existing := range ids {
+			if existing == fact.ID {
+				present = true
+				break
+			}
 		}
-		ids[fact.ID] = struct{}{}
+		if !present {
+			p.symbolsByPath[path] = append(ids, fact.ID)
+		}
 	}
 }
 
@@ -193,9 +198,19 @@ func (p *DemandClosure) unindexSymbolFact(fact SymbolFact) {
 	for _, declaration := range fact.Declarations {
 		path := declaration.Location.Path
 		ids := p.symbolsByPath[path]
-		delete(ids, fact.ID)
+		for index, existing := range ids {
+			if existing != fact.ID {
+				continue
+			}
+			copy(ids[index:], ids[index+1:])
+			ids[len(ids)-1] = ""
+			ids = ids[:len(ids)-1]
+			break
+		}
 		if len(ids) == 0 {
 			delete(p.symbolsByPath, path)
+		} else {
+			p.symbolsByPath[path] = ids
 		}
 	}
 }
@@ -235,13 +250,17 @@ func (p *DemandClosure) Update(ctx context.Context, changes []FileChange) (Affec
 		invalidPaths[filepath.Clean(change.Path)] = struct{}{}
 	}
 	for path := range invalidPaths {
-		for id := range p.symbolsByPath[path] {
+		for len(p.symbolsByPath[path]) != 0 {
+			ids := p.symbolsByPath[path]
+			id := ids[len(ids)-1]
 			if p.invalidatedSymbols == nil {
 				p.invalidatedSymbols = make(map[SymbolID]struct{})
 			}
 			p.invalidatedSymbols[id] = struct{}{}
 			if fact, retained := p.table.canonicalSymbol(id); retained {
 				p.unindexSymbolFact(fact)
+			} else {
+				p.symbolsByPath[path] = ids[:len(ids)-1]
 			}
 			delete(p.symbolReferences, id)
 		}

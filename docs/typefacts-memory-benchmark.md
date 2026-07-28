@@ -64,6 +64,28 @@ Major variables were applied and measured separately:
   deterministic CBOR fragments around the borrowed transition bytes, so the
   complete semantic payload and a complete second encoded payload do not
   coexist.
+- Rust's packed retained table is the sole owner of client-visible retained
+  source rows. Go now retains only SHA-256 rows and an AST-node digest memo;
+  original source bytes are materialized only for an explicit `sources`
+  lifecycle response. On the same 5,000-file corpus this isolated change moved
+  the Producer peak from 521.7 to 483.9 MiB and steady physical memory from
+  320.6 to 308.2 MiB. Exact post-GC live heap moved from 241.2 to 238.3 MiB.
+- Rust's compact demand runs now transfer directly into Go's retained query
+  plan. Go expands only changed runs at the TypeScript-Go semantic-query seam
+  and releases those rows immediately after extraction. The retained
+  contribution module also derives descriptor seeds and closure roots from its
+  canonical entities rather than cloning them, and stores reference/descriptor
+  membership as entity indexes. The symbol invalidation index uses compact
+  per-path ID slices instead of one hash map per path, and TypeScript-Go no
+  longer retains the inverse durable-ID mint map.
+
+The remaining Go floor is primarily the TypeScript-Go program/AST plus the
+canonical entity and symbol rows required to construct v5 deltas. Making Go a
+fully stateless semantic oracle requires a new multi-round protocol: v5 can ask
+questions only by source location and cannot request alias/declaration/reference
+facts by symbol ID. Such a protocol should preserve v5 as the compatibility
+adapter rather than forcing full recomputation or sending Rust's retained table
+back to Go.
 
 ## 5,000-file reference result
 
@@ -73,20 +95,22 @@ peak is the Producer's `vmmap` peak, not the complete checker process tree.
 
 | Metric | Baseline | Optimized |
 |---|---:|---:|
-| Producer physical peak | 945.9 MiB | 521.7 MiB |
-| Producer steady physical | 412 MiB | 320.6 MiB |
-| Go live heap | ~345 MiB | 241.2 MiB |
-| Allocated bytes, cold | 2,086 MiB | 597 MiB |
-| Allocation count, cold | 3.55 M | 3.48 M |
-| First analysis | 1.303 s | 1.204 s |
-| Producer first analysis | 670.6 ms | 559.0 ms |
-| Cached analysis median | 1.061 ms | 1.128 ms |
-| Incremental analysis median | 79.9 ms | 77.8 ms |
-| Producer incremental median | 12.5 ms | 10.7 ms |
+| Producer physical peak | 945.9 MiB | 493.3 MiB |
+| Producer steady physical | 412 MiB | 294.4 MiB |
+| Go live heap | ~345 MiB | 220.1 MiB |
+| Allocated bytes, cold | 2,086 MiB | 590 MiB |
+| Allocation count, cold | 3.55 M | 3.482 M |
+| First analysis | 1.303 s | 1.105 s |
+| Producer first analysis | 670.6 ms | 530.3 ms |
+| Cached analysis median | 1.061 ms | 1.105 ms |
+| Incremental analysis median | 79.9 ms | 81.3 ms |
+| Producer incremental median | 12.5 ms | 12.65 ms |
 | Semantic payload | 5,247,633 B | 5,247,633 B |
 | Outer response | 5,310,478 B | 5,310,478 B |
 
-Cold peak fell 44.8%, exact post-GC `HeapAlloc` fell 30.1%, and cold allocated
+Cold peak fell 47.9%, exact post-GC `HeapAlloc` fell 36.2%, and cold allocated
 bytes fell about 71%. Payload sizes are byte-for-byte unchanged. The cached
-median varied between 1.04 and 1.13 ms across repeated 30-sample runs; the
-incremental end-to-end and Producer medians both improved in the final run.
+median varied between 1.04 and 1.13 ms across repeated 30-sample runs.
+Incremental end-to-end and Producer medians remain within 2% of baseline.
+Physical figures are medians of three final `vmmap` runs because macOS
+high-water marks varied by several MiB.

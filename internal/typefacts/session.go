@@ -110,15 +110,8 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		if request.Generation != generation {
 			return fail("generation-mismatch", ErrGenerationMismatch)
 		}
-		if request.CompactDemands != nil {
-			if len(request.Demands) != 0 {
-				return fail("invalid-demands", fmt.Errorf("analyze carries both demands and compactDemands"))
-			}
-			expanded, err := request.CompactDemands.Expand()
-			if err != nil {
-				return fail("invalid-demands", err)
-			}
-			request.Demands = expanded
+		if request.CompactDemands != nil && len(request.Demands) != 0 {
+			return fail("invalid-demands", fmt.Errorf("analyze carries both demands and compactDemands"))
 		}
 		// Analyze is always retained-state scoped: a caller either resets the
 		// state or presents the token the previous analyze handed back.
@@ -127,6 +120,7 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 		}
 		if !request.ResetState &&
 			len(request.Demands) == 0 &&
+			(request.CompactDemands == nil || len(request.CompactDemands.Groups) == 0) &&
 			len(request.RemovedDemandPaths) == 0 &&
 			s.retained.table != nil &&
 			s.retained.table.Generation == generation {
@@ -135,11 +129,24 @@ func (s *Session) lifecycle(ctx context.Context, request LifecycleRequest) Lifec
 			response.OK = true
 			return response
 		}
-		demandTransaction := s.retained.demands.begin(
-			request.Demands,
-			request.RemovedDemandPaths,
-			request.ResetState,
-		)
+		var demandTransaction retainedDemandTransaction
+		if request.CompactDemands != nil {
+			var err error
+			demandTransaction, err = s.retained.demands.beginCompact(
+				*request.CompactDemands,
+				request.RemovedDemandPaths,
+				request.ResetState,
+			)
+			if err != nil {
+				return fail("invalid-demands", err)
+			}
+		} else {
+			demandTransaction = s.retained.demands.begin(
+				request.Demands,
+				request.RemovedDemandPaths,
+				request.ResetState,
+			)
+		}
 		demandsPublished := false
 		defer func() {
 			if !demandsPublished {
