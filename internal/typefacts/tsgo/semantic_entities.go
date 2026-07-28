@@ -118,7 +118,7 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 		resultNode := deepestNodeAt(ast.GetNodeAtPosition(currentSourceFile, location.StartByte, false), location.StartByte)
 		var resultSymbol *ast.Symbol
 		if resultNode != nil && (demand.Symbol || demand.ReferenceSpace || demand.RuntimeIdentity) {
-			resultSymbol = p.checker.GetSymbolAtLocation(resultNode)
+			resultSymbol = p.checker.GetSymbolAtLocation(jsxTagNameAt(resultNode, location))
 			if demand.Symbol && entity.Symbol == "" && resultSymbol != nil {
 				entity.Symbol = p.idFor(resultSymbol)
 			}
@@ -130,8 +130,7 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 			}
 		}
 		if demand.RuntimeIdentity && resultSymbol != nil {
-			runtimeSymbol := p.canonicalSymbol(resultSymbol)
-			if runtimeSymbol.Flags&ast.SymbolFlagsValue != 0 {
+			if runtimeSymbol := p.runtimeIdentitySymbol(resultSymbol); runtimeSymbol != nil {
 				if ref, ok := durableRuntimeRefFor(runtimeSymbol); ok {
 					entity.RuntimeIdentity = ref.runtimeID()
 				}
@@ -238,6 +237,52 @@ func (p *project) SemanticEntitiesScoped(ctx context.Context, demands []typefact
 		result = append(result, entity)
 	}
 	return result, structural, nil
+}
+
+// jsxTagNameAt normalizes a node selected from a JSX name span to the complete
+// compiler tag-name expression. In particular, a position at the start of
+// `Runtime.Component` selects the `Runtime` identifier; asking the checker
+// about that child resolves the namespace object, while asking about the
+// enclosing property-access tag resolves `Component`.
+func jsxTagNameAt(node *ast.Node, location typefacts.Location) *ast.Node {
+	for current := node; current != nil; current = current.Parent {
+		switch current.Kind {
+		case ast.KindJsxOpeningElement, ast.KindJsxSelfClosingElement, ast.KindJsxClosingElement:
+		default:
+			continue
+		}
+		tagName := current.TagName()
+		if tagName == nil ||
+			location.StartByte < tagName.Pos() ||
+			location.StartByte >= tagName.End() ||
+			location.EndByte > tagName.End() {
+			return node
+		}
+		return tagName
+	}
+	return node
+}
+
+// runtimeIdentitySymbol rejects aliases and declarations which the compiler
+// represents semantically but which cannot denote a runtime value. That
+// includes type-only import/export aliases and type-level property signatures
+// such as JSX intrinsic entries.
+func (p *project) runtimeIdentitySymbol(symbol *ast.Symbol) *ast.Symbol {
+	if symbol.Flags&ast.SymbolFlagsAlias != 0 {
+		for _, declaration := range symbol.Declarations {
+			if ast.IsPartOfTypeOnlyImportOrExportDeclaration(declaration) {
+				return nil
+			}
+		}
+	}
+	symbol = p.canonicalSymbol(symbol)
+	if symbol == nil ||
+		symbol.Flags&ast.SymbolFlagsValue == 0 ||
+		symbol.ValueDeclaration == nil ||
+		symbol.ValueDeclaration.Kind == ast.KindPropertySignature {
+		return nil
+	}
+	return symbol
 }
 
 func isCallLikeExpression(node *ast.Node) bool {

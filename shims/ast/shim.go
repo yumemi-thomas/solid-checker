@@ -90,6 +90,9 @@ func IsNewExpression(node *ast.Node) bool
 //go:linkname IsPartOfTypeNode github.com/microsoft/typescript-go/internal/ast.IsPartOfTypeNode
 func IsPartOfTypeNode(node *ast.Node) bool
 
+//go:linkname IsPartOfTypeOnlyImportOrExportDeclaration github.com/microsoft/typescript-go/internal/ast.IsPartOfTypeOnlyImportOrExportDeclaration
+func IsPartOfTypeOnlyImportOrExportDeclaration(node *ast.Node) bool
+
 //go:linkname IsQualifiedName github.com/microsoft/typescript-go/internal/ast.IsQualifiedName
 func IsQualifiedName(node *ast.Node) bool
 
@@ -117,6 +120,10 @@ func IsVariableStatement(node *ast.Node) bool
 const KindAmpersandAmpersandToken = ast.KindAmpersandAmpersandToken
 const KindBarBarToken = ast.KindBarBarToken
 const KindDefaultClause = ast.KindDefaultClause
+const KindJsxClosingElement = ast.KindJsxClosingElement
+const KindJsxOpeningElement = ast.KindJsxOpeningElement
+const KindJsxSelfClosingElement = ast.KindJsxSelfClosingElement
+const KindPropertySignature = ast.KindPropertySignature
 const KindQuestionQuestionToken = ast.KindQuestionQuestionToken
 const InternalSymbolNamePrefix = ast.InternalSymbolNamePrefix
 const ModifierFlagsAsync = ast.ModifierFlagsAsync
