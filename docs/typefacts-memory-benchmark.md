@@ -285,3 +285,30 @@ production:
   improve.
 - Generation-scoped canonical-symbol memoization added hash lookups and
   regressed the demand-stage median about 1.5%.
+
+## Packed retained client rows
+
+Whole-process profiling after the v6 ownership work found that the remaining
+large Rust allocation was not the packed transition itself. It was the
+materialized `EntityFact` row: inline optional `TypeDescriptor` and
+`ResolvedCall` values made every retained entity pay for the largest nested
+evidence shape, including rows where both values were absent.
+
+The retained client now keeps those two uncommon, large values behind `Arc`.
+This preserves the serialized shape and the opaque `FactTable` interface while
+making the common row at most 96 bytes. `DemandGroup::shared` also lets a
+grouped caller transfer its immutable `Arc<[EntityDemand]>` allocation into the
+session by reference count instead of retaining a second owned run.
+
+Measured through Solid Checker's 5,000-file retained actor with balanced IR
+retention:
+
+| Metric | Before | Packed/shared | Change |
+|---|---:|---:|---:|
+| Checker physical footprint | 328.8 MiB | 294.0 MiB | -34.8 MiB (-10.6%) |
+| Process-tree physical footprint | 584.2 MiB | 554.9 MiB | -29.3 MiB (-5.0%) |
+| Incremental certification median | 23.1 ms | 21.8 ms | no regression |
+| Type Facts bytes per source | 695 B | 695 B | unchanged |
+
+The producer varies by several MiB between runs; the checker-local reduction is
+the attributable result. The wire schema and response bytes are unchanged.

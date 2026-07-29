@@ -677,12 +677,12 @@ fn decode_entity_run(
             return Err(format!("packed entity has unknown flags {flags}"));
         }
         let type_descriptor = if flags & 1 != 0 {
-            Some(cursor.type_descriptor(strings)?)
+            Some(Arc::new(cursor.type_descriptor(strings)?))
         } else {
             None
         };
         let resolved_call = if flags & 2 != 0 {
-            Some(cursor.resolved_call(strings)?)
+            Some(Arc::new(cursor.resolved_call(strings)?))
         } else {
             None
         };

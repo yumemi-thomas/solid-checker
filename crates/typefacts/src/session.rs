@@ -88,6 +88,7 @@ pub struct AnalysisDemand {
 #[derive(Clone, Copy, Debug)]
 pub struct DemandGroup<'a> {
     demands: &'a [EntityDemand],
+    shared: Option<&'a Arc<[EntityDemand]>>,
 }
 
 impl<'a> DemandGroup<'a> {
@@ -98,7 +99,23 @@ impl<'a> DemandGroup<'a> {
         if demands.is_empty() {
             return None;
         }
-        Some(Self { demands })
+        Some(Self {
+            demands,
+            shared: None,
+        })
+    }
+
+    /// Borrows an immutable run that the session may retain by incrementing
+    /// its reference count instead of cloning every demand row.
+    #[must_use]
+    pub fn shared(demands: &'a Arc<[EntityDemand]>) -> Option<Self> {
+        if demands.is_empty() {
+            return None;
+        }
+        Some(Self {
+            demands,
+            shared: Some(demands),
+        })
     }
 
     /// The file every demand in the run belongs to.
@@ -110,6 +127,11 @@ impl<'a> DemandGroup<'a> {
     #[must_use]
     pub fn demands(&self) -> &'a [EntityDemand] {
         self.demands
+    }
+
+    fn retained(&self) -> Arc<[EntityDemand]> {
+        self.shared
+            .map_or_else(|| Arc::from(self.demands), Arc::clone)
     }
 
     /// Reports the first demand whose location leaves this group's file. A
@@ -515,7 +537,7 @@ pub struct Session {
     /// superseding an earlier copy costs one lookup rather than a scan.
     replay_index: HashMap<String, usize>,
     state_token: String,
-    retained_demands: HashMap<String, Vec<EntityDemand>>,
+    retained_demands: HashMap<String, Arc<[EntityDemand]>>,
     retained_table: Option<FactTable>,
     affected_paths: HashSet<String>,
     reference_tier: HashSet<Arc<str>>,
@@ -685,7 +707,7 @@ impl Session {
                 let unchanged = self
                     .retained_demands
                     .get(group.path())
-                    .is_some_and(|retained| retained.as_slice() == group.demands());
+                    .is_some_and(|retained| retained.as_ref() == group.demands());
                 if !unchanged {
                     changed.push(*group);
                 }
@@ -765,18 +787,8 @@ impl Session {
             self.retained_demands.remove(path);
         }
         for group in changed {
-            match self.retained_demands.get_mut(group.path()) {
-                // Reuse the existing allocation rather than freeing it and taking
-                // a new one for a run that is usually the same length.
-                Some(retained) => {
-                    retained.clear();
-                    retained.extend_from_slice(group.demands());
-                }
-                None => {
-                    self.retained_demands
-                        .insert(group.path().to_owned(), group.demands().to_vec());
-                }
-            }
+            self.retained_demands
+                .insert(group.path().to_owned(), group.retained());
         }
     }
 
@@ -784,7 +796,7 @@ impl Session {
         self.retained_demands.clear();
         for group in groups {
             self.retained_demands
-                .insert(group.path().to_owned(), group.demands().to_vec());
+                .insert(group.path().to_owned(), group.retained());
         }
     }
 
@@ -1829,6 +1841,21 @@ mod tests {
             start_byte: start,
             end_byte: start + 1,
         }
+    }
+
+    #[test]
+    fn shared_demand_groups_retain_the_callers_allocation() {
+        let run: Arc<[EntityDemand]> = vec![EntityDemand {
+            location: location("/p/a.ts", 1),
+            symbol: true,
+            ..EntityDemand::default()
+        }]
+        .into();
+        let shared = DemandGroup::shared(&run).expect("non-empty shared run");
+        let retained = shared.retained();
+
+        assert!(Arc::ptr_eq(&run, &retained));
+        assert_eq!(retained.as_ref(), shared.demands());
     }
 
     fn table_with_symbol(symbol: SymbolFact) -> FactTable {

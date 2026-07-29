@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"time"
@@ -435,6 +436,12 @@ func (s *Session) populateSymbolEvidence(
 	}
 	if request.ReleaseAnalysis {
 		s.closure.releaseBackendAnalysisState()
+		// ReleaseAnalysis marks a cold materialization boundary: the immutable
+		// transport table now belongs to the client and checker-expanded query
+		// state has just been discarded. Force a collection here so the Go
+		// runtime returns those now-unreachable pages instead of retaining a
+		// cold-sized heap for the rest of the editor session.
+		debug.FreeOSMemory()
 	}
 	return nil
 }

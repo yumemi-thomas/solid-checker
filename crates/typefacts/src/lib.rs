@@ -233,9 +233,9 @@ pub struct EntityFact {
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub symbol: Arc<str>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub type_descriptor: Option<TypeDescriptor>,
+    pub type_descriptor: Option<Arc<TypeDescriptor>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resolved_call: Option<ResolvedCall>,
+    pub resolved_call: Option<Arc<ResolvedCall>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callability: Option<Callability>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -621,6 +621,15 @@ const fn is_false(value: &bool) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retained_entity_rows_keep_large_optional_evidence_indirect() {
+        assert!(
+            std::mem::size_of::<EntityFact>() <= 96,
+            "EntityFact is {} bytes; large optional evidence must not inflate every retained row",
+            std::mem::size_of::<EntityFact>()
+        );
+    }
 
     #[test]
     fn sidecar_request_fast_path_preserves_canonical_cbor() {
