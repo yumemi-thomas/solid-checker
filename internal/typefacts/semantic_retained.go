@@ -661,24 +661,10 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		table.Entities = nil
 		table.Symbols = nil
 		table.symbols = nil
-		table.pathSymbols = make(map[string][]SymbolID, len(groups))
-		for index := range groups {
-			group := &groups[index]
-			group.contribution.prepareTransportSeeds()
-			table.pathSymbols[group.path] = group.contribution.roots
-		}
-		for path, functions := range asyncByPath {
-			roots := table.pathSymbols[path]
-			for _, function := range functions {
-				if function.Symbol != "" {
-					roots = append(roots, function.Symbol)
-				}
-				if function.Target != "" {
-					roots = append(roots, function.Target)
-				}
-			}
-			table.pathSymbols[path] = roots
-		}
+		// V6 never computes symbol invalidation from a Go table: Rust owns the
+		// complete symbol successor, and rustOwnedTransportManifest contains
+		// path rows only.
+		table.pathSymbols = nil
 		p.nextTableStateID++
 		if p.nextTableStateID == 0 {
 			p.nextTableStateID++

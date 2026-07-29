@@ -231,6 +231,12 @@ func TestSparseTransportBorrowsPerFileEntityRuns(t *testing.T) {
 	if &contribution.entities[0] != &table.entityRuns[0].entities[0] {
 		t.Fatal("sparse transport copied the per-file entity run")
 	}
+	if table.pathSymbols != nil {
+		t.Fatalf(
+			"sparse transport retained %d redundant path-symbol rows",
+			len(table.pathSymbols),
+		)
+	}
 }
 
 func TestSemanticTableRetainsOnlySourceDigests(t *testing.T) {
