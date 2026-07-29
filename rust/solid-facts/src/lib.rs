@@ -8,7 +8,7 @@ use solid_facts_core::{Generation, SourceHash, SourcePath, Span};
 use std::collections::HashMap;
 use std::sync::Arc;
 use thiserror::Error;
-use typefacts::{FactTable, Location};
+use typefacts::{EntityFact, FactTable, FileFact, Location, SourceDigest, Symbol, SymbolFact};
 
 pub use solid_ast_facts;
 pub use solid_compiler_facts;
@@ -21,19 +21,340 @@ pub struct FileFacts {
     pub generation: Generation,
     pub path: SourcePath,
     pub source_hash: SourceHash,
-    pub source: String,
+    pub source: Arc<str>,
     pub ast: Arc<AstFacts>,
     pub compiler: Arc<ExecutionMap>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize)]
 pub struct ProjectFacts {
     pub generation: Generation,
     pub project_id: String,
     pub files: Vec<FileFacts>,
-    pub typescript: FactTable,
+    pub typescript: TypeScriptTable,
     #[serde(skip)]
     pub typescript_changes: Option<TypeScriptChanges>,
+}
+
+#[derive(Clone)]
+pub struct TypeScriptTable {
+    retained: Option<FactTable>,
+    synthetic: Option<Arc<TypeScriptSnapshot>>,
+    file_overrides: Option<Arc<[FileFact]>>,
+}
+
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct TypeScriptSnapshot {
+    schema: u64,
+    generation: u64,
+    project_id: String,
+    sources: Vec<SourceDigest>,
+    entities: Vec<EntityFact>,
+    symbols: Vec<SymbolFact>,
+    files: Vec<FileFact>,
+}
+
+#[derive(Clone, Copy)]
+pub enum TypeScriptSymbol<'a> {
+    Retained(Symbol<'a>),
+    Synthetic(&'a SymbolFact),
+}
+
+impl<'a> TypeScriptSymbol<'a> {
+    #[must_use]
+    pub fn id(self) -> &'a str {
+        match self {
+            Self::Retained(symbol) => symbol.id(),
+            Self::Synthetic(symbol) => &symbol.id,
+        }
+    }
+
+    #[must_use]
+    pub fn alias_target(self) -> &'a str {
+        match self {
+            Self::Retained(symbol) => symbol.alias_target(),
+            Self::Synthetic(symbol) => &symbol.alias_target,
+        }
+    }
+
+    #[must_use]
+    pub fn declarations(self) -> &'a [typefacts::Declaration] {
+        match self {
+            Self::Retained(symbol) => symbol.declarations(),
+            Self::Synthetic(symbol) => &symbol.declarations,
+        }
+    }
+
+    pub fn references(self) -> impl Iterator<Item = &'a Location> {
+        let retained = match self {
+            Self::Retained(symbol) => Some(symbol),
+            Self::Synthetic(_) => None,
+        };
+        let synthetic = match self {
+            Self::Synthetic(symbol) => Some(symbol),
+            Self::Retained(_) => None,
+        };
+        retained.into_iter().flat_map(Symbol::references).chain(
+            synthetic
+                .into_iter()
+                .flat_map(|symbol| symbol.references.iter()),
+        )
+    }
+}
+
+impl TypeScriptTable {
+    #[must_use]
+    pub fn retained(table: FactTable) -> Self {
+        Self {
+            retained: Some(table),
+            synthetic: None,
+            file_overrides: None,
+        }
+    }
+
+    #[must_use]
+    pub fn from_parts(
+        schema: u64,
+        generation: u64,
+        project_id: impl Into<String>,
+        sources: Vec<SourceDigest>,
+        entities: Vec<EntityFact>,
+        symbols: Vec<SymbolFact>,
+        files: Vec<FileFact>,
+    ) -> Self {
+        Self {
+            retained: None,
+            synthetic: Some(Arc::new(TypeScriptSnapshot {
+                schema,
+                generation,
+                project_id: project_id.into(),
+                sources,
+                entities,
+                symbols,
+                files,
+            })),
+            file_overrides: None,
+        }
+    }
+
+    #[must_use]
+    pub fn with_files(mut self, files: Vec<FileFact>) -> Self {
+        self.file_overrides = Some(files.into());
+        self
+    }
+
+    #[must_use]
+    pub fn schema(&self) -> u64 {
+        self.retained
+            .as_ref()
+            .map_or_else(|| self.synthetic().schema, FactTable::schema)
+    }
+
+    #[must_use]
+    pub fn generation(&self) -> u64 {
+        self.retained
+            .as_ref()
+            .map_or_else(|| self.synthetic().generation, FactTable::generation)
+    }
+
+    #[must_use]
+    pub fn project_id(&self) -> &str {
+        self.retained.as_ref().map_or_else(
+            || self.synthetic().project_id.as_str(),
+            FactTable::project_id,
+        )
+    }
+
+    #[must_use]
+    pub fn source(&self, path: &str) -> Option<&SourceDigest> {
+        self.retained.as_ref().map_or_else(
+            || {
+                self.synthetic()
+                    .sources
+                    .iter()
+                    .find(|source| source.path.as_ref() == path)
+            },
+            |table| table.source(path),
+        )
+    }
+
+    #[must_use]
+    pub fn entities_for_path(&self, path: &str) -> &[EntityFact] {
+        self.retained.as_ref().map_or_else(
+            || {
+                let entities = &self.synthetic().entities;
+                let start = entities.partition_point(|entity| entity.location.path.as_ref() < path);
+                let end = entities.partition_point(|entity| entity.location.path.as_ref() <= path);
+                &entities[start..end]
+            },
+            |table| table.entities_for_path(path),
+        )
+    }
+
+    #[must_use]
+    pub fn file(&self, path: &str) -> Option<&FileFact> {
+        if let Some(files) = &self.file_overrides {
+            return files.iter().find(|file| file.path.as_ref() == path);
+        }
+        self.retained.as_ref().map_or_else(
+            || {
+                self.synthetic()
+                    .files
+                    .iter()
+                    .find(|file| file.path.as_ref() == path)
+            },
+            |table| table.file(path),
+        )
+    }
+
+    pub fn sources(&self) -> impl Iterator<Item = &SourceDigest> {
+        self.retained
+            .iter()
+            .flat_map(FactTable::sources)
+            .chain(self.synthetic.iter().flat_map(|table| table.sources.iter()))
+    }
+
+    pub fn entities(&self) -> impl Iterator<Item = &EntityFact> {
+        self.retained.iter().flat_map(FactTable::entities).chain(
+            self.synthetic
+                .iter()
+                .flat_map(|table| table.entities.iter()),
+        )
+    }
+
+    pub fn files(&self) -> impl Iterator<Item = &FileFact> {
+        self.file_overrides
+            .iter()
+            .flat_map(|files| files.iter())
+            .chain(
+                self.retained
+                    .iter()
+                    .filter(|_| self.file_overrides.is_none())
+                    .flat_map(FactTable::files),
+            )
+            .chain(
+                self.synthetic
+                    .iter()
+                    .filter(|_| self.file_overrides.is_none())
+                    .flat_map(|table| table.files.iter()),
+            )
+    }
+
+    pub fn symbols(&self) -> impl Iterator<Item = TypeScriptSymbol<'_>> {
+        self.retained
+            .iter()
+            .flat_map(FactTable::symbols)
+            .map(TypeScriptSymbol::Retained)
+            .chain(
+                self.synthetic
+                    .iter()
+                    .flat_map(|table| table.symbols.iter())
+                    .map(TypeScriptSymbol::Synthetic),
+            )
+    }
+
+    #[must_use]
+    pub fn symbol(&self, id: &str) -> Option<TypeScriptSymbol<'_>> {
+        self.retained
+            .as_ref()
+            .and_then(|table| table.symbol(id))
+            .map(TypeScriptSymbol::Retained)
+            .or_else(|| {
+                self.synthetic
+                    .iter()
+                    .flat_map(|table| table.symbols.iter())
+                    .find(|symbol| symbol.id.as_ref() == id)
+                    .map(TypeScriptSymbol::Synthetic)
+            })
+    }
+
+    fn synthetic(&self) -> &TypeScriptSnapshot {
+        self.synthetic
+            .as_deref()
+            .expect("TypeScript table must be retained or synthetic")
+    }
+}
+
+impl From<FactTable> for TypeScriptTable {
+    fn from(table: FactTable) -> Self {
+        Self::retained(table)
+    }
+}
+
+impl std::fmt::Debug for TypeScriptTable {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("TypeScriptTable")
+            .field("schema", &self.schema())
+            .field("generation", &self.generation())
+            .field("project_id", &self.project_id())
+            .field("sources", &self.sources().count())
+            .field("entities", &self.entities().count())
+            .field("symbols", &self.symbols().count())
+            .field("files", &self.files().count())
+            .finish()
+    }
+}
+
+impl Serialize for TypeScriptTable {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        #[derive(Serialize)]
+        struct SerializableSymbol<'a> {
+            id: &'a str,
+            #[serde(rename = "aliasTarget")]
+            alias_target: &'a str,
+            declarations: &'a [typefacts::Declaration],
+            references: Vec<&'a Location>,
+        }
+
+        #[derive(Serialize)]
+        #[serde(rename_all = "camelCase")]
+        struct SerializableTable<'a> {
+            schema: u64,
+            generation: u64,
+            project_id: &'a str,
+            sources: Vec<&'a SourceDigest>,
+            entities: Vec<&'a EntityFact>,
+            symbols: Vec<SerializableSymbol<'a>>,
+            files: Vec<&'a FileFact>,
+        }
+
+        SerializableTable {
+            schema: self.schema(),
+            generation: self.generation(),
+            project_id: self.project_id(),
+            sources: self.sources().collect(),
+            entities: self.entities().collect(),
+            symbols: self
+                .symbols()
+                .map(|symbol| SerializableSymbol {
+                    id: symbol.id(),
+                    alias_target: symbol.alias_target(),
+                    declarations: symbol.declarations(),
+                    references: symbol.references().collect(),
+                })
+                .collect(),
+            files: self.files().collect(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for TypeScriptTable {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        Ok(Self {
+            retained: None,
+            synthetic: Some(Arc::new(TypeScriptSnapshot::deserialize(deserializer)?)),
+            file_overrides: None,
+        })
+    }
 }
 
 /// Process-local description of how the retained TypeFacts table changed.
@@ -67,7 +388,7 @@ pub enum JoinError {
 impl FileFacts {
     pub fn new(
         generation: Generation,
-        source: impl Into<String>,
+        source: impl Into<Arc<str>>,
         ast: impl Into<Arc<AstFacts>>,
         compiler: impl Into<Arc<ExecutionMap>>,
     ) -> Result<Self, JoinError> {
@@ -92,7 +413,7 @@ impl FileFacts {
             .into_iter()
             .map(|span| {
                 Ok(Location {
-                    path: self.path.to_string().into(),
+                    path: self.path.shared(),
                     start_byte: u64::from(span.start),
                     end_byte: u64::from(span.end),
                 })
@@ -115,7 +436,7 @@ impl FileFacts {
             .structural_seed_spans()
             .into_iter()
             .map(|span| Location {
-                path: self.path.to_string().into(),
+                path: self.path.shared(),
                 start_byte: u64::from(span.start),
                 end_byte: u64::from(span.end),
             })
@@ -128,19 +449,19 @@ impl ProjectFacts {
         generation: Generation,
         project_id: impl Into<String>,
         mut files: Vec<FileFacts>,
-        typescript: FactTable,
+        typescript: impl Into<TypeScriptTable>,
     ) -> Result<Self, JoinError> {
         let project_id = project_id.into();
-        if typescript.project_id != project_id {
+        let typescript = typescript.into();
+        if typescript.project_id() != project_id {
             return Err(JoinError::ProjectIdentity);
         }
-        if typescript.generation != generation.get() {
+        if typescript.generation() != generation.get() {
             return Err(JoinError::Generation);
         }
         files.sort_by(|left, right| left.path.cmp(&right.path));
         let source_hashes = typescript
-            .sources
-            .iter()
+            .sources()
             .map(|digest| (digest.path.replace('\\', "/"), &digest.sha256))
             .collect::<HashMap<_, _>>();
         for file in &files {
@@ -168,8 +489,6 @@ mod tests {
     use super::*;
     use solid_ast_facts::extract;
     use solid_compiler_facts::COMPILER_FACTS_PROTOCOL;
-    use typefacts::SourceDigest;
-
     #[test]
     fn joins_one_coherent_generation() {
         let source = "const value = 1;";
@@ -185,21 +504,44 @@ mod tests {
         };
         let generation = Generation::new(1).unwrap();
         let file = FileFacts::new(generation, source, ast, compiler).unwrap();
-        let table = FactTable {
-            schema: 2,
-            generation: 1,
-            project_id: "project".into(),
-            sources: vec![SourceDigest {
+        let table = TypeScriptTable::from_parts(
+            2,
+            1,
+            "project",
+            vec![SourceDigest {
                 path: "src/a.ts".into(),
                 sha256: typefacts::SourceHash::of(source),
-            }]
-            .into(),
-            entities: vec![].into(),
-            symbols: vec![].into(),
-            files: vec![].into(),
-        };
+            }],
+            vec![],
+            vec![],
+            vec![],
+        );
         let joined = ProjectFacts::join(generation, "project", vec![file], table).unwrap();
         assert_eq!(joined.files.len(), 1);
+    }
+
+    #[test]
+    fn file_facts_share_the_callers_source_buffer() {
+        let source: Arc<str> = Arc::from("const value = 1;");
+        let ast = extract("src/a.ts", source.as_ref()).unwrap();
+        let compiler = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: SourceHash::of(source.as_ref()),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            ownership_regions: vec![],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        };
+        let file = FileFacts::new(
+            Generation::new(1).unwrap(),
+            Arc::clone(&source),
+            ast,
+            compiler,
+        )
+        .unwrap();
+
+        assert!(Arc::ptr_eq(&source, &file.source));
     }
 
     #[test]

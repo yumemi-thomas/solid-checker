@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use solid_facts_core::Span;
 
 use super::{
-    EntitySymbols, ExecutionRole, SemanticLookup, containing_ast_function,
+    EntitySymbols, ExecutionRole, SemanticLookup, SymbolId, containing_ast_function,
     enclosing_function_label, function_binding_name, jsx_primitive_name, location, primitive_name,
 };
 
@@ -55,9 +55,12 @@ pub(super) fn semantic_execution_role(
     span: Span,
     allowed: &[Span],
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
+    if assigned_member_function_contains(file, span, entities) {
+        return ExecutionRole::DeferredCallback;
+    }
     if let Some(role) = named_callback_execution_role(file, span, entities, symbol_names, lookup) {
         return role;
     }
@@ -127,11 +130,54 @@ pub(super) fn semantic_execution_role(
     execution_role(&file.compiler, span, allowed)
 }
 
+pub(super) fn assigned_member_function_contains(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    entities: &EntitySymbols,
+) -> bool {
+    containing_ast_function(&file.ast, span).is_some_and(|function| {
+        file.ast.assignments.iter().any(|assignment| {
+            if assignment.value != solid_ast_facts::AssignmentValueKind::Function
+                || !assignment.value_span.contains(function.span)
+            {
+                return false;
+            }
+            let Some(member) = file
+                .ast
+                .members
+                .iter()
+                .find(|member| member.span == assignment.target)
+            else {
+                return false;
+            };
+            let Some(object_symbol) = entities.at(file.path.as_str(), member.object) else {
+                return false;
+            };
+            let Some(owner) = containing_ast_function(&file.ast, assignment.target) else {
+                return false;
+            };
+            let caller_owned = owner.parameters.iter().any(|parameter| {
+                parameter
+                    .names
+                    .iter()
+                    .any(|name| entities.at(file.path.as_str(), name.span) == Some(object_symbol))
+            });
+            let returned = file.ast.returns.iter().any(|returned| {
+                returned.value == solid_ast_facts::ReturnValueKind::Identifier
+                    && containing_ast_function(&file.ast, returned.span)
+                        .is_some_and(|candidate| candidate.span == owner.span)
+                    && entities.at(file.path.as_str(), returned.span) == Some(object_symbol)
+            });
+            caller_owned || returned
+        })
+    })
+}
+
 pub(super) fn control_flow_execution_role(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> Option<ExecutionRole> {
     let element = file
         .ast
@@ -169,7 +215,7 @@ pub(super) fn named_callback_execution_role(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
     let primitives = lookup.primitives(file);
@@ -226,8 +272,9 @@ pub(super) fn named_callback_execution_role(
                             && !file.ast.jsx_containing(identifier.span).any(|nested| {
                                 nested.span != element.span && element.span.contains(nested.span)
                             })
-                            && (entities.get(&location(file.path.as_str(), identifier.span))
-                                == Some(symbol)
+                            && (entities
+                                .get(&location(file.path.shared(), identifier.span))
+                                .is_some_and(|candidate| candidate.as_str() == symbol.as_str())
                                 || binding_name == file.source_text(identifier.span))
                     })
             })
@@ -275,7 +322,7 @@ pub(super) fn named_callback_execution_role(
             )
         ) && call.arguments.first().is_some_and(|argument| {
             function_symbol(file, callback, entities).is_some_and(|symbol| {
-                entities.get(&location(file.path.as_str(), argument.span)) == Some(symbol)
+                entities.get(&location(file.path.shared(), argument.span)) == Some(symbol)
             })
         })
     }) {
@@ -287,7 +334,7 @@ pub(super) fn named_callback_execution_role(
             Some("flush" | "untrack" | "onSettled" | "createReaction" | "action")
         ) && call.arguments.first().is_some_and(|argument| {
             function_symbol(file, callback, entities).is_some_and(|symbol| {
-                entities.get(&location(file.path.as_str(), argument.span)) == Some(symbol)
+                entities.get(&location(file.path.shared(), argument.span)) == Some(symbol)
             })
         })
     }) {
@@ -308,12 +355,12 @@ pub(super) fn function_symbol<'a>(
     file: &solid_facts::FileFacts,
     function: &solid_ast_facts::FunctionFact,
     entities: &'a EntitySymbols,
-) -> Option<&'a String> {
+) -> Option<&'a SymbolId> {
     let name = function
         .name
         .as_ref()
         .or_else(|| function_binding_name(file, function))?;
-    entities.get(&location(file.path.as_str(), name.span))
+    entities.get(&location(file.path.shared(), name.span))
 }
 
 pub(super) fn argument_references_callback_symbol(
@@ -321,18 +368,18 @@ pub(super) fn argument_references_callback_symbol(
     argument: &solid_ast_facts::ArgumentFact,
     symbol: &str,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> bool {
     entities
-        .get(&location(file.path.as_str(), argument.span))
-        .map(String::as_str)
+        .get(&location(file.path.shared(), argument.span))
+        .map(SymbolId::as_str)
         == Some(symbol)
         || argument.identifier_properties.iter().any(|property| {
             entities
-                .get(&location(file.path.as_str(), property.span))
-                .map(String::as_str)
+                .get(&location(file.path.shared(), property.span))
+                .map(SymbolId::as_str)
                 == Some(symbol)
-                || symbol_names.get(symbol).map(String::as_str) == file.source_text(property.span)
+                || symbol_names.get(symbol).map(SymbolId::as_str) == file.source_text(property.span)
         })
 }
 

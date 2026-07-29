@@ -8,23 +8,25 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
-use solid_facts::{FileFacts, ProjectFacts};
+use solid_facts::{FileFacts, ProjectFacts, TypeScriptSymbol, TypeScriptTable};
 use solid_facts_core::Span;
-use typefacts::{EntityFact, FactTable, FileFact, Location, SymbolFact, TypeDescriptor};
+use typefacts::{Callability, EntityFact, FileFact, Location, ResolvedCall, TypeDescriptor};
+
+use super::{SymbolId, SymbolName};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
-    pub(super) by_path: HashMap<String, HashMap<(u64, u64), String>>,
+    pub(super) by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
 }
 
 impl EntitySymbols {
-    pub(super) fn get(&self, location: &Location) -> Option<&String> {
+    pub(super) fn get(&self, location: &Location) -> Option<&SymbolId> {
         self.by_path
             .get(location.path.as_ref())
             .and_then(|entities| entities.get(&(location.start_byte, location.end_byte)))
     }
 
-    pub(super) fn at(&self, path: &str, span: Span) -> Option<&String> {
+    pub(super) fn at(&self, path: &str, span: Span) -> Option<&SymbolId> {
         self.by_path
             .get(path)
             .and_then(|entities| entities.get(&(u64::from(span.start), u64::from(span.end))))
@@ -34,14 +36,14 @@ impl EntitySymbols {
 pub(super) struct ProjectIndexes<'a> {
     pub(super) files_by_path: HashMap<&'a str, &'a FileFacts>,
     pub(super) ast_files_by_path: HashMap<&'a str, &'a CachedAstFileIndex>,
-    typescript: &'a FactTable,
-    pub(super) symbols_by_id: HashMap<&'a str, &'a SymbolFact>,
+    typescript: &'a TypeScriptTable,
+    pub(super) symbols_by_id: HashMap<&'a str, TypeScriptSymbol<'a>>,
 }
 
 impl<'a> ProjectIndexes<'a> {
     pub(super) fn new(
         facts: &'a ProjectFacts,
-        ast_indexes: &'a HashMap<String, CachedAstFileIndex>,
+        ast_indexes: &'a HashMap<solid_facts_core::SourcePath, CachedAstFileIndex>,
     ) -> Self {
         let files_by_path = facts
             .files
@@ -59,9 +61,8 @@ impl<'a> ProjectIndexes<'a> {
             .collect();
         let symbols_by_id = facts
             .typescript
-            .symbols
-            .iter()
-            .map(|symbol| (symbol.id.as_ref(), symbol))
+            .symbols()
+            .map(|symbol| (symbol.id(), symbol))
             .collect();
         Self {
             files_by_path,
@@ -72,23 +73,11 @@ impl<'a> ProjectIndexes<'a> {
     }
 
     pub(super) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
-        self.typescript
-            .files
-            .binary_search_by(|file| file.path.as_ref().cmp(path))
-            .ok()
-            .map(|index| &self.typescript.files[index])
+        self.typescript.file(path)
     }
 
     pub(super) fn entities_for_path(&self, path: &str) -> &'a [EntityFact] {
-        let start = self
-            .typescript
-            .entities
-            .partition_point(|entity| entity.location.path.as_ref() < path);
-        let end = self
-            .typescript
-            .entities
-            .partition_point(|entity| entity.location.path.as_ref() <= path);
-        &self.typescript.entities[start..end]
+        self.typescript.entities_for_path(path)
     }
 }
 
@@ -98,6 +87,7 @@ pub(super) struct CachedAstFileIndex {
     calls_by_callee: HashMap<Span, Vec<usize>>,
     direct_calls_by_callee: HashMap<Span, usize>,
     functions_by_span: HashMap<Span, usize>,
+    member_properties_by_span: HashMap<Span, Span>,
 }
 
 impl CachedAstFileIndex {
@@ -116,12 +106,19 @@ impl CachedAstFileIndex {
         for (index, function) in file.ast.functions.iter().enumerate() {
             functions_by_span.entry(function.span).or_insert(index);
         }
+        let member_properties_by_span = file
+            .ast
+            .members
+            .iter()
+            .map(|member| (member.span, member.property))
+            .collect();
         Self {
             ast: file.ast.clone(),
             calls_by_span,
             calls_by_callee,
             direct_calls_by_callee,
             functions_by_span,
+            member_properties_by_span,
         }
     }
 
@@ -154,10 +151,18 @@ impl CachedAstFileIndex {
             .map(|index| self.call(*index))
     }
 
+    pub(super) fn call_by_callee(&self, span: Span) -> Option<&solid_ast_facts::CallFact> {
+        self.calls_by_callee(span).next()
+    }
+
     pub(super) fn function_by_span(&self, span: Span) -> Option<&solid_ast_facts::FunctionFact> {
         self.functions_by_span
             .get(&span)
             .map(|index| self.function(*index))
+    }
+
+    pub(super) fn member_property(&self, span: Span) -> Option<Span> {
+        self.member_properties_by_span.get(&span).copied()
     }
 }
 
@@ -188,10 +193,14 @@ pub(super) struct CallSiteLoading {
 /// never pay for an index.
 pub(super) struct SemanticLookup<'a> {
     facts: &'a ProjectFacts,
+    ast_indexes: &'a HashMap<solid_facts_core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
-    symbol_names: &'a HashMap<String, String>,
+    symbol_names: &'a HashMap<SymbolId, SymbolName>,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
-    entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), usize>>,
+    entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
+    contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
+    descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
+    callability_by_symbol: OnceLock<HashMap<&'a str, Callability>>,
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
     file_primitives: OnceLock<Vec<OnceLock<FilePrimitives>>>,
@@ -209,23 +218,28 @@ pub(super) struct FilePrimitives {
 impl<'a> SemanticLookup<'a> {
     pub(super) fn new(
         facts: &'a ProjectFacts,
+        ast_indexes: &'a HashMap<solid_facts_core::SourcePath, CachedAstFileIndex>,
         entities: &'a EntitySymbols,
-        symbol_names: &'a HashMap<String, String>,
+        symbol_names: &'a HashMap<SymbolId, SymbolName>,
     ) -> Self {
         debug_assert!(
             facts
                 .typescript
-                .entities
-                .windows(2)
-                .all(|pair| pair[0].location.path <= pair[1].location.path),
+                .entities()
+                .map(|entity| entity.location.path.as_ref())
+                .is_sorted(),
             "entity table must be sorted by path for per-path containment slices"
         );
         Self {
             facts,
+            ast_indexes,
             entities,
             symbol_names,
             functions_by_symbol: OnceLock::new(),
             entities_by_location: OnceLock::new(),
+            contained_entities_by_path: OnceLock::new(),
+            descriptors_by_symbol: OnceLock::new(),
+            callability_by_symbol: OnceLock::new(),
             jsx_call_sites: OnceLock::new(),
             files_by_path: OnceLock::new(),
             file_primitives: OnceLock::new(),
@@ -281,6 +295,42 @@ impl<'a> SemanticLookup<'a> {
         self.entities
     }
 
+    pub(super) fn call_by_callee(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&solid_ast_facts::CallFact> {
+        self.ast_indexes
+            .get(file.path.as_str())
+            .and_then(|index| index.call_by_callee(callee))
+    }
+
+    /// The compiler-selected signature and argument mapping for this call.
+    ///
+    /// Resolved-call facts are demanded at the complete callee expression,
+    /// unlike member declaration identity which lives on its property span.
+    pub(super) fn resolved_callee_call(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<&'a ResolvedCall> {
+        let call_span = self
+            .call_by_callee(file, callee)
+            .map_or(callee, |call| call.span);
+        self.entity_at(file.path.as_str(), callee)
+            .and_then(|entity| entity.resolved_call.as_deref())
+            .or_else(|| {
+                self.entity_at(file.path.as_str(), call_span)
+                    .and_then(|entity| entity.resolved_call.as_deref())
+            })
+            .or_else(|| {
+                self.smallest_contained(file.path.as_str(), callee, |entity| {
+                    entity.resolved_call.is_some()
+                })
+                .and_then(|entity| entity.resolved_call.as_deref())
+            })
+    }
+
     pub(super) fn function_called_at(
         &self,
         path: &str,
@@ -306,26 +356,31 @@ impl<'a> SemanticLookup<'a> {
     pub(super) fn entity_at(&self, path: &str, span: Span) -> Option<&'a EntityFact> {
         self.entities_by_location()
             .get(&(path, u64::from(span.start), u64::from(span.end)))
-            .map(|index| &self.facts.typescript.entities[*index])
+            .copied()
     }
 
     pub(super) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
-        let files = &self.facts.typescript.files;
-        files
-            .binary_search_by(|file| file.path.as_ref().cmp(path))
-            .ok()
-            .map(|index| &files[index])
+        self.facts.typescript.file(path)
     }
 
     /// The symbol a callee span resolves to: the exact entity at the span,
     /// falling back to the smallest symbol-bearing entity contained in it.
-    pub(super) fn callee_symbol(&self, path: &str, callee: Span) -> Option<&'a str> {
-        self.entities
-            .at(path, callee)
-            .map(String::as_str)
+    pub(super) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
+        self.ast_indexes
+            .get(file.path.as_str())
+            .and_then(|index| index.member_property(callee))
+            .and_then(|property| self.entities.at(file.path.as_str(), property))
+            .map(SymbolId::as_str)
             .or_else(|| {
-                self.smallest_contained(path, callee, |entity| !entity.symbol.is_empty())
-                    .map(|entity| entity.symbol.as_ref())
+                self.entities
+                    .at(file.path.as_str(), callee)
+                    .map(SymbolId::as_str)
+            })
+            .or_else(|| {
+                self.smallest_contained(file.path.as_str(), callee, |entity| {
+                    !entity.symbol.is_empty()
+                })
+                .map(|entity| entity.symbol.as_ref())
             })
     }
 
@@ -336,7 +391,52 @@ impl<'a> SemanticLookup<'a> {
         span: Span,
     ) -> Option<&'a TypeDescriptor> {
         self.smallest_contained(path, span, |entity| entity.type_descriptor.is_some())
-            .and_then(|entity| entity.type_descriptor.as_ref())
+            .and_then(|entity| entity.type_descriptor.as_deref())
+            .or_else(|| {
+                let symbol = self.entities.at(path, span)?;
+                self.descriptors_by_symbol
+                    .get_or_init(|| {
+                        self.facts
+                            .typescript
+                            .entities()
+                            .filter_map(|entity| {
+                                (!entity.symbol.is_empty())
+                                    .then_some(entity.symbol.as_ref())
+                                    .zip(entity.type_descriptor.as_deref())
+                            })
+                            .collect()
+                    })
+                    .get(symbol.as_str())
+                    .copied()
+            })
+    }
+
+    /// Compiler-derived callability for the smallest demanded entity in a
+    /// span, falling back to another demanded occurrence of the same symbol.
+    pub(super) fn smallest_contained_callability(
+        &self,
+        path: &str,
+        span: Span,
+    ) -> Option<Callability> {
+        self.smallest_contained(path, span, |entity| entity.callability.is_some())
+            .and_then(|entity| entity.callability)
+            .or_else(|| {
+                let symbol = self.entities.at(path, span)?;
+                self.callability_by_symbol
+                    .get_or_init(|| {
+                        self.facts
+                            .typescript
+                            .entities()
+                            .filter_map(|entity| {
+                                (!entity.symbol.is_empty())
+                                    .then_some(entity.symbol.as_ref())
+                                    .zip(entity.callability)
+                            })
+                            .collect()
+                    })
+                    .get(symbol.as_str())
+                    .copied()
+            })
     }
 
     /// Whether any JSX call site renders the function at `(path, function)`,
@@ -348,27 +448,46 @@ impl<'a> SemanticLookup<'a> {
             .unwrap_or_default()
     }
 
-    fn entities_for_path(&self, path: &str) -> &'a [EntityFact] {
-        let entities = &self.facts.typescript.entities;
-        let start = entities.partition_point(|entity| entity.location.path.as_ref() < path);
-        let end = entities.partition_point(|entity| entity.location.path.as_ref() <= path);
-        &entities[start..end]
-    }
-
     fn smallest_contained(
         &self,
         path: &str,
         span: Span,
         predicate: impl Fn(&EntityFact) -> bool,
     ) -> Option<&'a EntityFact> {
-        self.entities_for_path(path)
+        let start = u64::from(span.start);
+        let end = u64::from(span.end);
+        let entities = self.contained_entities_by_path().get(path)?;
+        let first = entities.partition_point(|entity| entity.location.start_byte < start);
+        let last = entities.partition_point(|entity| entity.location.start_byte <= end);
+        entities[first..last]
             .iter()
-            .filter(|entity| {
-                u64::from(span.start) <= entity.location.start_byte
-                    && entity.location.end_byte <= u64::from(span.end)
-                    && predicate(entity)
+            .enumerate()
+            .filter_map(|(index, entity)| {
+                (entity.location.end_byte <= end && predicate(entity)).then_some((index, *entity))
             })
-            .min_by_key(|entity| entity.location.end_byte - entity.location.start_byte)
+            .min_by_key(|(index, entity)| {
+                (
+                    entity.location.end_byte - entity.location.start_byte,
+                    *index,
+                )
+            })
+            .map(|(_, entity)| entity)
+    }
+
+    fn contained_entities_by_path(&self) -> &HashMap<&'a str, Vec<&'a EntityFact>> {
+        self.contained_entities_by_path.get_or_init(|| {
+            let mut by_path = HashMap::<&str, Vec<&EntityFact>>::new();
+            for entity in self.facts.typescript.entities() {
+                by_path
+                    .entry(entity.location.path.as_ref())
+                    .or_default()
+                    .push(entity);
+            }
+            for entities in by_path.values_mut() {
+                entities.sort_by_key(|entity| entity.location.start_byte);
+            }
+            by_path
+        })
     }
 
     fn functions_by_symbol(&self) -> &HashMap<&'a str, SymbolFunction> {
@@ -457,17 +576,16 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
-    fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), usize> {
+    fn entities_by_location(&self) -> &HashMap<(&'a str, u64, u64), &'a EntityFact> {
         self.entities_by_location.get_or_init(|| {
-            let entities = &self.facts.typescript.entities;
-            let mut map = HashMap::with_capacity(entities.len());
-            for (index, entity) in entities.iter().enumerate() {
+            let mut map = HashMap::new();
+            for entity in self.facts.typescript.entities() {
                 map.entry((
                     entity.location.path.as_ref(),
                     entity.location.start_byte,
                     entity.location.end_byte,
                 ))
-                .or_insert(index);
+                .or_insert(entity);
             }
             map
         })

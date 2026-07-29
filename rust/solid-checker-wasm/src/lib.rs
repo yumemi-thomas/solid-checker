@@ -4,11 +4,11 @@ use std::path::Path;
 
 use napi_derive::napi;
 use serde::Deserialize;
+use solid_facts::TypeScriptTable;
 use solid_facts_backend::SemanticDemandGroup;
 use solid_facts_backend::{
     BackendError, SourceFile, TypeFactsProvider, analyze_project, build_project_native,
 };
-use typefacts::FactTable;
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -16,19 +16,19 @@ struct CheckRequest {
     project_id: String,
     generation: u64,
     sources: Vec<SourceFile>,
-    type_facts: FactTable,
+    type_facts: TypeScriptTable,
 }
 
 /// The host has already run TypeScript and hands the finished table in, so
 /// there is no producer and no demand round trip: the one table answers the
 /// single analysis this entry point performs.
-struct InMemoryTypeFacts(Option<FactTable>);
+struct InMemoryTypeFacts(Option<TypeScriptTable>);
 
 impl TypeFactsProvider for InMemoryTypeFacts {
     fn semantic_grouped(
         &mut self,
         _groups: &[SemanticDemandGroup<'_>],
-    ) -> Result<FactTable, BackendError> {
+    ) -> Result<TypeScriptTable, BackendError> {
         self.0
             .take()
             .ok_or_else(|| BackendError::Process("TypeFacts response was already consumed".into()))

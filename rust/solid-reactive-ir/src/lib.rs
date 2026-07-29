@@ -2,13 +2,16 @@ mod cleanup;
 mod contracts;
 mod directives;
 mod execution_role;
+mod identity;
 mod indexes;
 mod interproc;
 mod reachability;
+mod runtime_semantics;
 mod static_api;
 mod symbols;
 
 use std::{
+    cell::Cell,
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
@@ -21,10 +24,11 @@ use contracts::{
 };
 use directives::{DirectiveCreationCollector, is_created_primitive, push_directive_creation};
 use execution_role::{
-    allowed_callback_spans, argument_references_callback_symbol, async_execution_role,
-    control_flow_execution_role, execution_role, function_symbol, named_callback_execution_role,
-    read_analysis_context, semantic_execution_role,
+    allowed_callback_spans, argument_references_callback_symbol, assigned_member_function_contains,
+    async_execution_role, control_flow_execution_role, execution_role, function_symbol,
+    named_callback_execution_role, read_analysis_context, semantic_execution_role,
 };
+use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
 use indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
 use interproc::{
     InterproceduralContext, InterproceduralResult, InterproceduralTimings, SummaryNode,
@@ -35,16 +39,17 @@ use reachability::{
     reachable_call_multiplicity_incremental,
 };
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use solid_facts::{FileFacts, ProjectFacts};
-use solid_facts_core::{SourceHash, Span};
+use solid_facts_core::{SourceHash, SourcePath, Span};
 use static_api::StaticApiContext;
 use symbols::{
-    add_solid_namespace_names, alias_roots_and_source_declarations, async_symbol_root,
-    entity_symbols, patch_typescript_indexes, references_by_source,
-    source_discovery_symbol_semantics, symbol_alias_targets, symbol_names, symbols_by_root,
+    add_solid_import_names, alias_roots_and_source_declarations, async_symbol_root, entity_symbols,
+    patch_typescript_indexes, references_for_sources, source_discovery_symbol_semantics,
+    symbol_alias_targets, symbol_names, symbols_by_root,
 };
 use thiserror::Error;
-use typefacts::{Declaration, EntityFact, FileFact, Location};
+use typefacts::{Declaration, Location, ResolvedCallValidity};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -60,36 +65,36 @@ pub enum ExecutionRole {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReactiveRead {
-    pub kind: String,
-    pub accessor: String,
+    pub kind: Arc<str>,
+    pub accessor: Arc<str>,
     pub location: Location,
     pub declaration: Location,
     pub execution: ExecutionRole,
-    pub context: String,
-    pub via: String,
+    pub context: Arc<str>,
+    pub via: Arc<str>,
     pub origin: Option<Location>,
-    pub origin_context: String,
+    pub origin_context: Arc<str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ReactiveWrite {
-    pub setter: String,
+    pub setter: Arc<str>,
     pub location: Location,
     pub declaration: Location,
     pub execution: ExecutionRole,
     pub allowed_by_option: bool,
-    pub context: String,
+    pub context: Arc<str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ActionInvocation {
-    pub action: String,
+    pub action: Arc<str>,
     pub location: Location,
     pub declaration: Location,
     pub execution: ExecutionRole,
-    pub context: String,
+    pub context: Arc<str>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -163,11 +168,11 @@ pub struct OwnerRequirement {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AsyncRead {
-    pub accessor: String,
+    pub accessor: Arc<str>,
     pub location: Location,
     pub declaration: Location,
     pub execution: ExecutionRole,
-    pub leaf_owner: Option<String>,
+    pub leaf_owner: Option<Arc<str>>,
     pub under_loading: bool,
 }
 
@@ -181,7 +186,7 @@ pub struct PackageContract {
     #[serde(default)]
     pub artifacts: ContractArtifacts,
     #[serde(default)]
-    pub exports: BTreeMap<String, ContractExport>,
+    pub entrypoints: BTreeMap<String, ContractEntrypoint>,
     #[serde(default)]
     pub evidence: ContractEvidence,
     #[serde(skip)]
@@ -190,12 +195,23 @@ pub struct PackageContract {
     pub source_path: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractPackage {
     pub name: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub version: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub integrity: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContractEntrypoint {
+    #[serde(default)]
+    pub exports: BTreeMap<String, ContractExport>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub conditions: Vec<String>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -246,7 +262,7 @@ pub struct ContractReturn {
     pub label: String,
 }
 
-#[derive(Clone, Debug, Default, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractArtifacts {
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -255,7 +271,7 @@ pub struct ContractArtifacts {
     pub implementation: Option<ContractArtifact>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractArtifact {
     pub path: String,
@@ -270,21 +286,36 @@ impl PackageContract {
                 self.schema_version
             ));
         }
-        if self.compiler_facts_protocol > 1 {
+        if self.compiler_facts_protocol != 1 {
             return Err(format!(
                 "package contract compiler facts protocol {} is unsupported",
                 self.compiler_facts_protocol
             ));
         }
-        if self.package.name.is_empty() {
-            return Err("package contract requires package.name".into());
+        if self.package.name.is_empty() || self.package.version.is_empty() {
+            return Err("package contract requires package.name and package.version".into());
         }
-        if self.exports.is_empty() {
-            return Err("package contract requires at least one export".into());
+        if !self.package.integrity.is_empty() && !valid_sha512_integrity(&self.package.integrity) {
+            return Err("package contract package.integrity is invalid".into());
+        }
+        if self.entrypoints.is_empty()
+            || self.entrypoints.iter().any(|(name, entrypoint)| {
+                (name != "." && !name.starts_with("./"))
+                    || name == "./"
+                    || entrypoint.exports.is_empty()
+                    || entrypoint.conditions.iter().any(String::is_empty)
+                    || entrypoint.conditions.iter().collect::<HashSet<_>>().len()
+                        != entrypoint.conditions.len()
+            })
+        {
+            return Err(
+                "package contract entrypoints require exact package subpaths, exports, and unique nonempty conditions"
+                    .into(),
+            );
         }
         if !matches!(
             self.evidence.kind.as_str(),
-            "generated" | "reviewed" | "trusted"
+            "generated" | "inferred" | "verified" | "reviewed" | "trusted" | "attested"
         ) {
             return Err(format!(
                 "package contract evidence kind {:?} is unsupported",
@@ -296,68 +327,143 @@ impl PackageContract {
             ("implementation", self.artifacts.implementation.as_ref()),
         ] {
             if let Some(artifact) = artifact
-                && (artifact.path.is_empty() || !artifact.hash.starts_with("sha256:"))
+                && (artifact.path.is_empty() || !valid_sha256_hash(&artifact.hash))
             {
                 return Err(format!("package contract {name} artifact is invalid"));
             }
         }
-        for (name, summary) in &self.exports {
-            if name.is_empty() || !matches!(summary.kind.as_str(), "function" | "value") {
-                return Err(format!(
-                    "package contract export {name:?} has unsupported kind {:?}",
-                    summary.kind
-                ));
-            }
-            if summary.kind == "value"
-                && (!summary.reactive_reads.is_empty()
-                    || summary.returns.is_some()
-                    || !summary.callbacks.is_empty()
-                    || !summary.async_behavior.is_empty())
-            {
-                return Err(format!(
-                    "package contract value export {name:?} cannot have function effects"
-                ));
-            }
-            for read in &summary.reactive_reads {
-                if !matches!(read.kind.as_str(), "accessor" | "store-path") || read.label.is_empty()
-                {
-                    return Err(format!(
-                        "package contract export {name:?} has an invalid reactive read"
-                    ));
-                }
-            }
-            if let Some(returned) = &summary.returns
-                && (!matches!(returned.kind.as_str(), "accessor" | "store-path")
-                    || returned.label.is_empty())
-            {
-                return Err(format!(
-                    "package contract export {name:?} has an invalid reactive return"
-                ));
-            }
-            if summary.callbacks.iter().any(|callback| {
-                !matches!(
-                    callback.execution.as_str(),
-                    "inline" | "tracked" | "deferred"
-                )
-            }) {
-                return Err(format!(
-                    "package contract export {name:?} has an invalid callback execution"
-                ));
-            }
-            if !summary.async_behavior.is_empty()
-                && !matches!(
-                    summary.async_behavior.as_str(),
-                    "promise" | "async-iterable"
-                )
-            {
-                return Err(format!(
-                    "package contract export {name:?} has unsupported async behavior {:?}",
-                    summary.async_behavior
-                ));
+        for (entrypoint, exports) in self.export_maps() {
+            for (name, summary) in exports {
+                self.validate_export(entrypoint, name, summary)?;
             }
         }
         Ok(())
     }
+
+    fn validate_export(
+        &self,
+        entrypoint: &str,
+        name: &str,
+        summary: &ContractExport,
+    ) -> Result<(), String> {
+        if name.is_empty() || !matches!(summary.kind.as_str(), "function" | "value") {
+            return Err(format!(
+                "package contract export {entrypoint}:{name} has unsupported kind {:?}",
+                summary.kind
+            ));
+        }
+        if summary.kind == "value"
+            && (!summary.reactive_reads.is_empty()
+                || summary.returns.is_some()
+                || !summary.callbacks.is_empty()
+                || !summary.async_behavior.is_empty())
+        {
+            return Err(format!(
+                "package contract value export {entrypoint}:{name} cannot have function effects"
+            ));
+        }
+        for read in &summary.reactive_reads {
+            if !matches!(read.kind.as_str(), "accessor" | "store-path") || read.label.is_empty() {
+                return Err(format!(
+                    "package contract export {entrypoint}:{name} has an invalid reactive read"
+                ));
+            }
+        }
+        if let Some(returned) = &summary.returns
+            && (!matches!(returned.kind.as_str(), "accessor" | "store-path")
+                || returned.label.is_empty())
+        {
+            return Err(format!(
+                "package contract export {entrypoint}:{name} has an invalid reactive return"
+            ));
+        }
+        if summary.callbacks.iter().any(|callback| {
+            !matches!(
+                callback.execution.as_str(),
+                "inline" | "tracked" | "deferred"
+            )
+        }) {
+            return Err(format!(
+                "package contract export {entrypoint}:{name} has an invalid callback execution"
+            ));
+        }
+        if !summary.async_behavior.is_empty()
+            && !matches!(
+                summary.async_behavior.as_str(),
+                "promise" | "async-iterable"
+            )
+        {
+            return Err(format!(
+                "package contract export {entrypoint}:{name} has unsupported async behavior {:?}",
+                summary.async_behavior
+            ));
+        }
+        Ok(())
+    }
+
+    pub fn exports_for_module(&self, module: &str) -> Option<&BTreeMap<String, ContractExport>> {
+        let suffix = module.strip_prefix(&self.package.name)?;
+        if !suffix.is_empty() && !suffix.starts_with('/') {
+            return None;
+        }
+        let entrypoint = if suffix.is_empty() {
+            "."
+        } else {
+            // Package export maps spell subpaths as "./foo".
+            // `suffix` starts with '/', so prefixing '.' produces that form.
+            return self
+                .entrypoints
+                .get(&format!(".{suffix}"))
+                .map(|entry| &entry.exports);
+        };
+        self.entrypoints.get(entrypoint).map(|entry| &entry.exports)
+    }
+
+    pub fn root_exports(&self) -> &BTreeMap<String, ContractExport> {
+        match self.entrypoints.get(".") {
+            Some(entrypoint) => &entrypoint.exports,
+            None => empty_contract_exports(),
+        }
+    }
+
+    pub fn export_count(&self) -> usize {
+        self.export_maps().map(|(_, exports)| exports.len()).sum()
+    }
+
+    fn export_maps(
+        &self,
+    ) -> Box<dyn Iterator<Item = (&str, &BTreeMap<String, ContractExport>)> + '_> {
+        Box::new(
+            self.entrypoints
+                .iter()
+                .map(|(name, entrypoint)| (name.as_str(), &entrypoint.exports)),
+        )
+    }
+}
+
+fn valid_sha256_hash(hash: &str) -> bool {
+    hash.strip_prefix("sha256:").is_some_and(|digest| {
+        digest.len() == 64
+            && digest
+                .bytes()
+                .all(|byte| byte.is_ascii_digit() || matches!(byte, b'a'..=b'f'))
+    })
+}
+
+fn valid_sha512_integrity(integrity: &str) -> bool {
+    integrity.strip_prefix("sha512-").is_some_and(|digest| {
+        digest.len() == 88
+            && digest.ends_with("==")
+            && digest[..86]
+                .bytes()
+                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'+' | b'/'))
+    })
+}
+
+fn empty_contract_exports() -> &'static BTreeMap<String, ContractExport> {
+    static EMPTY: std::sync::OnceLock<BTreeMap<String, ContractExport>> =
+        std::sync::OnceLock::new();
+    EMPTY.get_or_init(BTreeMap::new)
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -374,7 +480,17 @@ pub struct Program {
     pub missing_owners: Vec<OwnerRequirement>,
     pub async_reads: Vec<AsyncRead>,
     pub contract_exports: Arc<BTreeMap<String, ContractExport>>,
+    pub contract_generation_obligations: Vec<ContractGenerationObligation>,
     pub obligation_counts: ObligationCounts,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ContractGenerationObligation {
+    pub function: String,
+    pub parameter: usize,
+    pub location: Location,
+    pub message: String,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -449,38 +565,29 @@ struct BuildIdentity {
 
 struct RetainedBuild {
     identity: BuildIdentity,
-    program: Program,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct SourceSymbolIdentity {
-    id: String,
-    alias_target: String,
-    declarations: Vec<SourceDiscoveryDeclarationSemantics>,
+    program: Arc<Program>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct SourceDiscoveryIdentity {
     source_hash: SourceHash,
-    entities: Vec<EntityFact>,
-    typescript_file: Option<FileFact>,
-    symbols: Vec<SourceSymbolIdentity>,
+    symbols: Vec<SymbolId>,
 }
 
 #[derive(Clone, Default)]
 struct SourceDiscoveryContribution {
-    accessors: Vec<(String, (String, Location))>,
-    accessor_origins: Vec<(String, (String, String, Location))>,
-    setters: Vec<(String, (String, Location, bool))>,
-    actions: Vec<(String, (String, Location))>,
-    source_kinds: Vec<(String, ReactiveSourceKind)>,
-    source_primitives: Vec<(String, String)>,
-    source_phases: Vec<(String, u8)>,
-    returned_source_symbols: Vec<String>,
-    summary_source_symbols: Vec<String>,
-    source_owned_write: Vec<(String, bool)>,
-    async_sources: Vec<String>,
-    contracted_accessor_symbols: Vec<String>,
+    accessors: Vec<(SymbolId, (SymbolId, Location))>,
+    accessor_origins: Vec<(SymbolId, (SymbolId, SymbolId, Location))>,
+    setters: Vec<(SymbolId, (SymbolId, Location, bool))>,
+    actions: Vec<(SymbolId, (SymbolId, Location))>,
+    source_kinds: Vec<(SymbolId, ReactiveSourceKind)>,
+    source_primitives: Vec<(SymbolId, SymbolName)>,
+    source_phases: Vec<(SymbolId, u8)>,
+    returned_source_symbols: Vec<SymbolId>,
+    summary_source_symbols: Vec<SymbolId>,
+    source_owned_write: Vec<(SymbolId, bool)>,
+    async_sources: Vec<SymbolId>,
+    contracted_accessor_symbols: Vec<SymbolId>,
 }
 
 struct CachedSourceDiscovery {
@@ -500,7 +607,7 @@ struct CachedTypedAccessors {
 
 #[derive(Clone)]
 enum InterproceduralGraphTarget {
-    Symbol(String),
+    Symbol(SymbolId),
     LocalSpan(Span),
 }
 
@@ -510,8 +617,10 @@ struct InterproceduralGraphContribution {
     edges: Vec<(Span, InterproceduralGraphTarget)>,
     invoked_parameters: Vec<(Span, usize)>,
     callbacks: Vec<(Span, ContractCallback)>,
-    returned_bindings: Vec<(String, String)>,
-    factory_calls: Vec<(Span, String)>,
+    callback_forwardings: Vec<(Span, InterproceduralGraphTarget, usize, usize)>,
+    contract_generation_obligations: Vec<(Span, ContractGenerationObligation)>,
+    returned_bindings: Vec<(SymbolId, SymbolId)>,
+    factory_calls: Vec<(Span, SymbolId)>,
 }
 
 struct CachedInterproceduralGraph {
@@ -522,7 +631,7 @@ struct CachedInterproceduralGraph {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 enum InterproceduralResultDependency {
-    Symbol(String),
+    Symbol(SymbolId),
     InlineFunction(String, Span),
 }
 
@@ -546,8 +655,8 @@ struct CachedInterproceduralResultFile {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct CachedReactiveSource {
-    symbol: String,
-    display: String,
+    symbol: SymbolId,
+    display: SymbolId,
     declaration: Location,
     phase: u8,
 }
@@ -557,7 +666,7 @@ struct CachedInterproceduralResults {
     dependency_states:
         HashMap<InterproceduralResultDependency, InterproceduralResultDependencyState>,
     dependency_users: HashMap<InterproceduralResultDependency, usize>,
-    files: HashMap<String, CachedInterproceduralResultFile>,
+    files: HashMap<SourcePath, CachedInterproceduralResultFile>,
     reactive_sources: Option<Arc<Vec<CachedReactiveSource>>>,
     contract_exports: CachedContractExports,
 }
@@ -582,26 +691,13 @@ struct CachedContractExports {
     aggregate: Option<Arc<BTreeMap<String, ContractExport>>>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct SourceDiscoverySymbolSemantics {
-    alias_target: String,
-    declarations: Vec<SourceDiscoveryDeclarationSemantics>,
-}
+type SourceDiscoverySymbolFingerprint = [u8; 32];
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct SourceDiscoveryDeclarationSemantics {
     name: String,
     kind: String,
     runtime: bool,
-}
-
-fn source_discovery_declaration_semantics(
-    declarations: &[Declaration],
-) -> Vec<SourceDiscoveryDeclarationSemantics> {
-    declarations
-        .iter()
-        .map(source_discovery_declaration_semantic)
-        .collect()
 }
 
 fn source_discovery_declaration_semantic(
@@ -614,35 +710,123 @@ fn source_discovery_declaration_semantic(
     }
 }
 
+fn source_discovery_symbol_fingerprint(
+    alias_target: &str,
+    declarations: &[Declaration],
+) -> SourceDiscoverySymbolFingerprint {
+    fn field(hasher: &mut Sha256, value: &str) {
+        hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+        hasher.update(value.as_bytes());
+    }
+
+    let mut hasher = Sha256::new();
+    field(&mut hasher, alias_target);
+    hasher.update(
+        u64::try_from(declarations.len())
+            .unwrap_or(u64::MAX)
+            .to_le_bytes(),
+    );
+    for declaration in declarations {
+        field(&mut hasher, declaration.name.as_ref());
+        field(&mut hasher, declaration.kind.as_ref());
+        hasher.update([u8::from(!declaration.location.path.ends_with(".d.ts"))]);
+    }
+    hasher.finalize().into()
+}
+
 struct SourceDiscoveryTypeScriptDelta {
     entity_paths: HashSet<String>,
     file_paths: HashSet<String>,
-    semantic_symbol_ids: HashSet<String>,
+    semantic_symbol_ids: HashSet<SymbolId>,
 }
 
 struct CachedTypeScriptIndexes {
-    symbol_alias_targets: HashMap<String, String>,
-    aliases: HashMap<String, String>,
-    symbols_by_root: HashMap<String, Vec<String>>,
-    source_declarations: HashMap<String, Declaration>,
+    interner: SymbolInterner,
+    symbol_alias_targets: HashMap<SymbolId, SymbolId>,
+    aliases: HashMap<SymbolId, SymbolId>,
+    symbols_by_root: HashMap<SymbolId, Vec<SymbolId>>,
+    source_declarations: HashMap<SymbolId, Declaration>,
     entities: EntitySymbols,
-    symbol_names: HashMap<String, String>,
-    references_by_source: HashMap<String, Vec<Location>>,
-    source_discovery_symbol_semantics: HashMap<String, SourceDiscoverySymbolSemantics>,
+    symbol_names: HashMap<SymbolId, SymbolName>,
+    source_discovery_symbol_semantics: HashMap<SymbolId, SourceDiscoverySymbolFingerprint>,
     source_discovery_delta: Option<SourceDiscoveryTypeScriptDelta>,
+}
+
+fn build_typescript_indexes(
+    table: &solid_facts::TypeScriptTable,
+    parallel: bool,
+) -> (CachedTypeScriptIndexes, Duration, Duration) {
+    let interner = SymbolInterner::from_table(table);
+    let aliases_started = Instant::now();
+    let (aliases, source_declarations) = alias_roots_and_source_declarations(table, &interner);
+    let aliases_elapsed = aliases_started.elapsed();
+    let (
+        (entities, entities_elapsed),
+        symbol_names,
+        symbol_alias_targets,
+        symbols_by_root,
+        source_discovery_symbol_semantics,
+    ) = if parallel {
+        std::thread::scope(|scope| {
+            let entities = scope.spawn(|| {
+                let started = Instant::now();
+                let entities = entity_symbols(table, &aliases, &interner);
+                (entities, started.elapsed())
+            });
+            let names = scope.spawn(|| symbol_names(table, &aliases, &interner));
+            let targets = scope.spawn(|| symbol_alias_targets(table, &interner));
+            let roots = scope.spawn(|| symbols_by_root(table, &aliases, &interner));
+            let semantics = scope.spawn(|| source_discovery_symbol_semantics(table, &interner));
+            (
+                entities.join().expect("entity index worker panicked"),
+                names.join().expect("symbol name index worker panicked"),
+                targets.join().expect("symbol target index worker panicked"),
+                roots.join().expect("symbol root index worker panicked"),
+                semantics
+                    .join()
+                    .expect("source discovery semantics worker panicked"),
+            )
+        })
+    } else {
+        let entities_started = Instant::now();
+        let entities = entity_symbols(table, &aliases, &interner);
+        let entities_elapsed = entities_started.elapsed();
+        (
+            (entities, entities_elapsed),
+            symbol_names(table, &aliases, &interner),
+            symbol_alias_targets(table, &interner),
+            symbols_by_root(table, &aliases, &interner),
+            source_discovery_symbol_semantics(table, &interner),
+        )
+    };
+    (
+        CachedTypeScriptIndexes {
+            interner,
+            symbol_alias_targets,
+            aliases,
+            symbols_by_root,
+            source_declarations,
+            entities,
+            symbol_names,
+            source_discovery_symbol_semantics,
+            source_discovery_delta: None,
+        },
+        aliases_elapsed,
+        entities_elapsed,
+    )
 }
 
 struct CachedReachability {
     inputs: HashMap<String, (SourceHash, Arc<solid_ast_facts::AstFacts>)>,
-    files: HashMap<String, CachedReachabilityFile>,
+    files: HashMap<SourcePath, CachedReachabilityFile>,
     calls: HashMap<Location, usize>,
     multiplicity_by_path: HashMap<String, Vec<usize>>,
-    function_symbols: HashSet<String>,
+    function_symbols: HashSet<SymbolId>,
 }
 
 #[derive(Clone)]
 enum ReachabilityTarget {
-    Symbol(String),
+    Symbol(SymbolId),
     LocalSpan(Span),
 }
 
@@ -664,27 +848,22 @@ struct CachedReachabilityFile {
     topology: ReachabilityTopology,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-struct LateStageSourceSemantics {
-    callees: Vec<Option<String>>,
-    binding_call_shapes: Vec<Option<bool>>,
-    returned_arrow_shapes: Vec<bool>,
-}
+type LateStageSourceFingerprint = [u8; 32];
 
 #[derive(Clone)]
 struct LateStageFileInput {
     source_hash: SourceHash,
     ast: Arc<solid_ast_facts::AstFacts>,
     compiler: Arc<solid_facts::solid_compiler_facts::ExecutionMap>,
-    source_semantics: LateStageSourceSemantics,
+    source_fingerprint: LateStageSourceFingerprint,
 }
 
 #[derive(Clone, Default)]
 struct LocalAccessResult {
-    reads: Vec<ReactiveRead>,
-    writes: Vec<ReactiveWrite>,
-    action_invocations: Vec<ActionInvocation>,
-    async_reads: Vec<AsyncRead>,
+    reads: Vec<Arc<ReactiveRead>>,
+    writes: Vec<Arc<ReactiveWrite>>,
+    action_invocations: Vec<Arc<ActionInvocation>>,
+    async_reads: Vec<Arc<AsyncRead>>,
     strict_read_obligations: usize,
     write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
 }
@@ -698,23 +877,23 @@ struct LocalAccessBuild {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct LocalAccessSymbolState {
-    accessor: Option<(String, Location)>,
-    accessor_origin: Option<(String, String, Location)>,
-    setter: Option<(String, Location, bool)>,
-    action: Option<(String, Location)>,
-    source_primitive: Option<String>,
+    accessor: Option<(SymbolId, Location)>,
+    accessor_origin: Option<(SymbolId, SymbolId, Location)>,
+    setter: Option<(SymbolId, Location, bool)>,
+    action: Option<(SymbolId, Location)>,
+    source_primitive: Option<SymbolId>,
     async_source: bool,
     contract_reads: Option<Vec<(String, String, Location, String)>>,
     source_kind: Option<ReactiveSourceKind>,
-    prop_source: Option<(String, Location)>,
+    prop_source: Option<(SymbolId, Location)>,
     source_declaration: Option<Declaration>,
-    symbol_name: Option<String>,
+    symbol_name: Option<SymbolId>,
 }
 
 struct CachedLocalAccessFile {
     source_hash: SourceHash,
     compiler: Arc<solid_facts::solid_compiler_facts::ExecutionMap>,
-    dependencies: HashSet<String>,
+    dependencies: HashSet<SymbolId>,
     call_multiplicities: Vec<(Location, Option<usize>)>,
     contribution: LocalAccessResult,
 }
@@ -722,17 +901,17 @@ struct CachedLocalAccessFile {
 #[derive(Default)]
 struct CachedLocalAccesses {
     aggregate: Option<LocalAccessResult>,
-    files: HashMap<String, CachedLocalAccessFile>,
-    dependency_states: HashMap<String, LocalAccessSymbolState>,
-    prop_sources: HashMap<String, (String, Location)>,
+    files: HashMap<SourcePath, CachedLocalAccessFile>,
+    dependency_states: HashMap<SymbolId, LocalAccessSymbolState>,
+    prop_sources: HashMap<SymbolId, (SymbolId, Location)>,
 }
 
 struct CachedLateStages {
-    inputs: HashMap<String, LateStageFileInput>,
+    inputs: HashMap<SourcePath, LateStageFileInput>,
     local_accesses: CachedLocalAccesses,
     interprocedural: Option<InterproceduralResult>,
     missing_owners: Option<Vec<OwnerRequirement>>,
-    owner_files: HashMap<String, CachedOwnerFile>,
+    owner_files: HashMap<SourcePath, CachedOwnerFile>,
 }
 
 fn same_reachability_ast(
@@ -767,49 +946,61 @@ fn same_compiler_semantics(
         && previous.jsx_operations == current.jsx_operations
 }
 
-fn late_stage_source_semantics(file: &solid_facts::FileFacts) -> LateStageSourceSemantics {
-    let callees = file
-        .ast
-        .calls
-        .iter()
-        .map(|call| {
-            usize::try_from(call.callee.start)
-                .ok()
-                .zip(usize::try_from(call.callee.end).ok())
-                .and_then(|(start, end)| file.source.get(start..end))
-                .map(str::to_owned)
-        })
-        .collect();
-    let binding_call_shapes = file
-        .ast
-        .bindings
-        .iter()
-        .map(|binding| {
-            let initializer = binding.call_initializer?;
-            let call = file.ast.call_at(initializer)?;
-            Some(go_binding_pattern_accepts_call(
-                file.source.as_str(),
-                binding,
-                call,
-            ))
-        })
-        .collect();
-    let returned_arrow_shapes = file
-        .ast
-        .returns
-        .iter()
-        .filter_map(|returned| {
-            (returned.value == solid_ast_facts::ReturnValueKind::Function)
-                .then_some(returned.argument)
-                .flatten()
-        })
-        .map(|argument| go_returned_arrow_pattern_accepts(file.source.as_str(), argument))
-        .collect();
-    LateStageSourceSemantics {
-        callees,
-        binding_call_shapes,
-        returned_arrow_shapes,
+fn late_stage_source_fingerprint(file: &solid_facts::FileFacts) -> LateStageSourceFingerprint {
+    fn optional_bool(hasher: &mut Sha256, value: Option<bool>) {
+        hasher.update([match value {
+            None => 0,
+            Some(false) => 1,
+            Some(true) => 2,
+        }]);
     }
+
+    let mut hasher = Sha256::new();
+    hasher.update(
+        u64::try_from(file.ast.calls.len())
+            .unwrap_or(u64::MAX)
+            .to_le_bytes(),
+    );
+    for call in &file.ast.calls {
+        let callee = usize::try_from(call.callee.start)
+            .ok()
+            .zip(usize::try_from(call.callee.end).ok())
+            .and_then(|(start, end)| file.source.get(start..end));
+        optional_bool(&mut hasher, callee.map(|_| false));
+        if let Some(callee) = callee {
+            hasher.update(
+                u64::try_from(callee.len())
+                    .unwrap_or(u64::MAX)
+                    .to_le_bytes(),
+            );
+            hasher.update(callee.as_bytes());
+        }
+    }
+    hasher.update(
+        u64::try_from(file.ast.bindings.len())
+            .unwrap_or(u64::MAX)
+            .to_le_bytes(),
+    );
+    for binding in &file.ast.bindings {
+        let shape = binding.call_initializer.and_then(|initializer| {
+            file.ast
+                .call_at(initializer)
+                .map(|call| go_binding_pattern_accepts_call(file.source.as_ref(), binding, call))
+        });
+        optional_bool(&mut hasher, shape);
+    }
+    let returned_functions = file.ast.returns.iter().filter_map(|returned| {
+        (returned.value == solid_ast_facts::ReturnValueKind::Function)
+            .then_some(returned.argument)
+            .flatten()
+    });
+    for argument in returned_functions {
+        hasher.update([u8::from(go_returned_arrow_pattern_accepts(
+            file.source.as_ref(),
+            argument,
+        ))]);
+    }
+    hasher.finalize().into()
 }
 
 fn late_stage_inputs_match(cache: &CachedLateStages, facts: &ProjectFacts) -> bool {
@@ -823,23 +1014,23 @@ fn late_stage_inputs_match(cache: &CachedLateStages, facts: &ProjectFacts) -> bo
                         || same_reachability_ast(&previous.ast, &file.ast)
                             && (Arc::ptr_eq(&previous.compiler, &file.compiler)
                                 || same_compiler_semantics(&previous.compiler, &file.compiler))
-                            && previous.source_semantics == late_stage_source_semantics(file)
+                            && previous.source_fingerprint == late_stage_source_fingerprint(file)
                 })
         })
 }
 
-fn current_late_stage_inputs(facts: &ProjectFacts) -> HashMap<String, LateStageFileInput> {
+fn current_late_stage_inputs(facts: &ProjectFacts) -> HashMap<SourcePath, LateStageFileInput> {
     facts
         .files
         .iter()
         .map(|file| {
             (
-                file.path.to_string(),
+                file.path.clone(),
                 LateStageFileInput {
                     source_hash: file.source_hash.clone(),
                     ast: file.ast.clone(),
                     compiler: file.compiler.clone(),
-                    source_semantics: late_stage_source_semantics(file),
+                    source_fingerprint: late_stage_source_fingerprint(file),
                 },
             )
         })
@@ -847,7 +1038,7 @@ fn current_late_stage_inputs(facts: &ProjectFacts) -> HashMap<String, LateStageF
 }
 
 fn refresh_late_stage_inputs(
-    inputs: &mut HashMap<String, LateStageFileInput>,
+    inputs: &mut HashMap<SourcePath, LateStageFileInput>,
     facts: &ProjectFacts,
 ) {
     let current_paths = facts
@@ -864,12 +1055,12 @@ fn refresh_late_stage_inputs(
             continue;
         }
         inputs.insert(
-            file.path.to_string(),
+            file.path.clone(),
             LateStageFileInput {
                 source_hash: file.source_hash.clone(),
                 ast: file.ast.clone(),
                 compiler: file.compiler.clone(),
-                source_semantics: late_stage_source_semantics(file),
+                source_fingerprint: late_stage_source_fingerprint(file),
             },
         );
     }
@@ -884,10 +1075,10 @@ fn refresh_late_stage_inputs(
 #[derive(Default)]
 pub struct IncrementalBuilder {
     retained: Option<RetainedBuild>,
-    ast_indexes: HashMap<String, CachedAstFileIndex>,
-    source_discovery: HashMap<String, CachedSourceDiscovery>,
-    typed_accessors: HashMap<String, CachedTypedAccessors>,
-    interprocedural_graph: HashMap<String, CachedInterproceduralGraph>,
+    ast_indexes: HashMap<SourcePath, CachedAstFileIndex>,
+    source_discovery: HashMap<SourcePath, CachedSourceDiscovery>,
+    typed_accessors: HashMap<SourcePath, CachedTypedAccessors>,
+    interprocedural_graph: HashMap<SourcePath, CachedInterproceduralGraph>,
     interprocedural_results: CachedInterproceduralResults,
     typescript_indexes: Option<CachedTypeScriptIndexes>,
     reachability: Option<CachedReachability>,
@@ -895,12 +1086,29 @@ pub struct IncrementalBuilder {
     source_discovery_domain: Option<(String, Vec<String>)>,
 }
 
+/// How much derived cross-generation state an idle retained session keeps.
+///
+/// The current coherent [`Program`] is always retained, so a repeated request
+/// for the same generation remains a constant-time shared-pointer lookup.
+/// These levels only control the intermediate indexes used to accelerate the
+/// next changed generation.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum CacheRetention {
+    /// Keep every incremental index for the lowest edit latency.
+    #[default]
+    Performance,
+    /// Drop the largest low-cost-to-rebuild indexes.
+    Balanced,
+    /// Keep only the current coherent program.
+    Compact,
+}
+
 #[derive(Default)]
 struct BuildCaches<'a> {
-    ast_indexes: Option<&'a mut HashMap<String, CachedAstFileIndex>>,
-    source_discovery: Option<&'a mut HashMap<String, CachedSourceDiscovery>>,
-    typed_accessors: Option<&'a mut HashMap<String, CachedTypedAccessors>>,
-    interprocedural_graph: Option<&'a mut HashMap<String, CachedInterproceduralGraph>>,
+    ast_indexes: Option<&'a mut HashMap<SourcePath, CachedAstFileIndex>>,
+    source_discovery: Option<&'a mut HashMap<SourcePath, CachedSourceDiscovery>>,
+    typed_accessors: Option<&'a mut HashMap<SourcePath, CachedTypedAccessors>>,
+    interprocedural_graph: Option<&'a mut HashMap<SourcePath, CachedInterproceduralGraph>>,
     interprocedural_results: Option<&'a mut CachedInterproceduralResults>,
     typescript_indexes: Option<&'a mut Option<CachedTypeScriptIndexes>>,
     reachability: Option<&'a mut Option<CachedReachability>>,
@@ -912,11 +1120,31 @@ impl IncrementalBuilder {
         self.build_with_contracts(facts, &[])
     }
 
+    /// Build a program behind shared ownership. This is the preferred service
+    /// interface: retained generations are returned with an atomic reference
+    /// increment instead of cloning every program table.
+    pub fn build_shared(
+        &mut self,
+        facts: &ProjectFacts,
+    ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
+        self.build_with_contracts_shared(facts, &[])
+    }
+
     pub fn build_with_contracts(
         &mut self,
         facts: &ProjectFacts,
         contracts: &[PackageContract],
     ) -> Result<(Program, BuildTimings), BuildError> {
+        self.build_with_contracts_shared(facts, contracts)
+            .map(|(program, timings)| ((*program).clone(), timings))
+    }
+
+    /// Build a contract-aware program behind shared ownership.
+    pub fn build_with_contracts_shared(
+        &mut self,
+        facts: &ProjectFacts,
+        contracts: &[PackageContract],
+    ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
         let total_started = Instant::now();
         let lookup_started = Instant::now();
         let identity = BuildIdentity {
@@ -943,7 +1171,7 @@ impl IncrementalBuilder {
         if let Some(retained) = &self.retained
             && retained.identity == identity
         {
-            let program = retained.program.clone();
+            let program = Arc::clone(&retained.program);
             return Ok((
                 program,
                 BuildTimings {
@@ -968,9 +1196,10 @@ impl IncrementalBuilder {
                 late_stages: Some(&mut self.late_stages),
             },
         )?;
+        let program = Arc::new(program);
         self.retained = Some(RetainedBuild {
             identity,
-            program: program.clone(),
+            program: Arc::clone(&program),
         });
         timings.total = total_started.elapsed();
         timings.cache_lookup = cache_lookup;
@@ -988,6 +1217,30 @@ impl IncrementalBuilder {
         self.reachability = None;
         self.late_stages = None;
         self.source_discovery_domain = None;
+    }
+
+    /// Applies the idle-memory policy without invalidating the current result.
+    ///
+    /// `Balanced` targets the three cache families that profiling found to
+    /// account for most retained bytes per millisecond of recomputation.
+    /// `Compact` releases every derived index while preserving the current
+    /// generation and its source-discovery domain identity.
+    pub fn retain_for_idle(&mut self, retention: CacheRetention) {
+        if retention == CacheRetention::Performance {
+            return;
+        }
+
+        self.interprocedural_graph.clear();
+        self.interprocedural_results = CachedInterproceduralResults::default();
+        self.typescript_indexes = None;
+        self.reachability = None;
+
+        if retention == CacheRetention::Compact {
+            self.ast_indexes.clear();
+            self.source_discovery.clear();
+            self.typed_accessors.clear();
+            self.late_stages = None;
+        }
     }
 }
 
@@ -1011,7 +1264,7 @@ struct FunctionNode {
     span: Span,
     body: Span,
     name: Option<String>,
-    symbol: Option<String>,
+    symbol: Option<SymbolId>,
 }
 
 impl FunctionBoundary for FunctionNode {
@@ -1034,16 +1287,16 @@ fn source_discovery_identity(
     file: &FileFacts,
     indexes: &ProjectIndexes<'_>,
 ) -> SourceDiscoveryIdentity {
-    let entities = indexes.entities_for_path(file.path.as_str()).to_vec();
-    let mut symbol_ids = HashSet::<String>::new();
-    for entity in &entities {
+    let mut symbol_ids = HashSet::<SymbolId>::new();
+    for entity in indexes.entities_for_path(file.path.as_str()) {
         if !entity.symbol.is_empty() {
-            symbol_ids.insert(entity.symbol.to_string());
+            symbol_ids.insert(symbol_id(entity.symbol.as_ref()));
         }
         if let Some(call) = &entity.resolved_call
+            && call.validity == ResolvedCallValidity::Valid
             && !call.target.is_empty()
         {
-            symbol_ids.insert(call.target.to_string());
+            symbol_ids.insert(symbol_id(call.target.as_ref()));
         }
     }
     let mut pending = symbol_ids.iter().cloned().collect::<Vec<_>>();
@@ -1051,49 +1304,34 @@ fn source_discovery_identity(
         let Some(symbol) = indexes.symbols_by_id.get(id.as_str()) else {
             continue;
         };
-        if !symbol.alias_target.is_empty() && symbol_ids.insert(symbol.alias_target.to_string()) {
-            pending.push(symbol.alias_target.to_string());
+        if !symbol.alias_target().is_empty() && symbol_ids.insert(symbol_id(symbol.alias_target()))
+        {
+            pending.push(symbol_id(symbol.alias_target()));
         }
     }
-    let mut symbols = symbol_ids
-        .into_iter()
-        .filter_map(|id| {
-            indexes
-                .symbols_by_id
-                .get(id.as_str())
-                .map(|symbol| SourceSymbolIdentity {
-                    id,
-                    alias_target: symbol.alias_target.to_string(),
-                    declarations: source_discovery_declaration_semantics(&symbol.declarations),
-                })
-        })
-        .collect::<Vec<_>>();
-    symbols.sort_by(|left, right| left.id.cmp(&right.id));
+    let mut symbols = symbol_ids.into_iter().collect::<Vec<_>>();
+    symbols.sort_unstable();
     SourceDiscoveryIdentity {
         source_hash: file.source_hash.clone(),
-        entities,
-        typescript_file: indexes.typescript_file(file.path.as_str()).cloned(),
         symbols,
     }
 }
 
 fn source_discovery_identity_matches(
     cached: &SourceDiscoveryIdentity,
-    file: &FileFacts,
-    indexes: &ProjectIndexes<'_>,
+    path: &str,
+    source_hash: &SourceHash,
     typescript_unchanged: bool,
     typescript_delta: Option<&SourceDiscoveryTypeScriptDelta>,
 ) -> bool {
-    if cached.source_hash != file.source_hash {
+    if &cached.source_hash != source_hash {
         return false;
     }
     if typescript_unchanged {
         return true;
     }
     if let Some(delta) = typescript_delta {
-        if delta.entity_paths.contains(file.path.as_str())
-            || delta.file_paths.contains(file.path.as_str())
-        {
+        if delta.entity_paths.contains(path) || delta.file_paths.contains(path) {
             return false;
         }
         if delta.semantic_symbol_ids.is_empty() {
@@ -1102,30 +1340,9 @@ fn source_discovery_identity_matches(
         return cached
             .symbols
             .iter()
-            .all(|symbol| !delta.semantic_symbol_ids.contains(symbol.id.as_str()));
+            .all(|symbol| !delta.semantic_symbol_ids.contains(symbol.as_str()));
     }
-    let current_entities = indexes.entities_for_path(file.path.as_str());
-    if current_entities.len() != cached.entities.len()
-        || current_entities
-            .iter()
-            .zip(&cached.entities)
-            .any(|(current, retained)| *current != *retained)
-    {
-        return false;
-    }
-    if indexes.typescript_file(file.path.as_str()) != cached.typescript_file.as_ref() {
-        return false;
-    }
-    cached.symbols.iter().all(|retained| {
-        indexes
-            .symbols_by_id
-            .get(retained.id.as_str())
-            .is_some_and(|current| {
-                current.alias_target == retained.alias_target.clone().into()
-                    && source_discovery_declaration_semantics(&current.declarations)
-                        == retained.declarations
-            })
-    })
+    false
 }
 
 fn discover_file_sources(
@@ -1133,9 +1350,9 @@ fn discover_file_sources(
     file: &FileFacts,
     ast_index: &CachedAstFileIndex,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     resolved_contracts: &ResolvedContracts,
-    bundled_returns: &HashMap<String, ContractReturn>,
+    bundled_returns: &HashMap<SymbolId, ContractReturn>,
 ) -> SourceDiscoveryContribution {
     let mut result = SourceDiscoveryContribution::default();
     for binding in &file.ast.bindings {
@@ -1146,18 +1363,18 @@ fn discover_file_sources(
             continue;
         };
         let contracted = entities
-            .get(&location(file.path.as_str(), call.callee))
+            .get(&location(file.path.shared(), call.callee))
             .and_then(|symbol| resolved_contracts.by_symbol.get(symbol));
         if let Some(contracted) = contracted
             && let Some(contracted_return) = contracted.summary.returns.as_ref()
         {
             if let Some(name) = binding.names.first() {
-                let declaration = location(file.path.as_str(), name.span);
+                let declaration = location(file.path.shared(), name.span);
                 if let Some(symbol) = entities.get(&declaration) {
                     result.accessors.push((
                         symbol.clone(),
                         (
-                            file.source_text(name.span).unwrap_or_default().to_owned(),
+                            symbol_id(file.source_text(name.span).unwrap_or_default()),
                             contracted.contract_location.clone(),
                         ),
                     ));
@@ -1165,8 +1382,8 @@ fn discover_file_sources(
                     result.accessor_origins.push((
                         symbol.clone(),
                         (
-                            contracted_return.label.clone(),
-                            contracted.local_name.clone(),
+                            symbol_id(&contracted_return.label),
+                            symbol_id(&contracted.local_name),
                             contracted.contract_location.clone(),
                         ),
                     ));
@@ -1191,12 +1408,12 @@ fn discover_file_sources(
         );
         if primitive.as_deref() == Some("action") {
             if let Some(name) = binding.names.first() {
-                let location = location(file.path.as_str(), name.span);
+                let location = location(file.path.shared(), name.span);
                 if let Some(symbol) = entities.get(&location) {
                     result.actions.push((
                         symbol.clone(),
                         (
-                            file.source_text(name.span).unwrap_or_default().to_owned(),
+                            symbol_id(file.source_text(name.span).unwrap_or_default()),
                             location,
                         ),
                     ));
@@ -1206,7 +1423,7 @@ fn discover_file_sources(
         }
         if primitive.as_deref() == Some("dynamic") {
             if let Some(name) = binding.names.first() {
-                let declaration = location(file.path.as_str(), name.span);
+                let declaration = location(file.path.shared(), name.span);
                 if let Some(symbol) = entities.get(&declaration) {
                     result
                         .source_primitives
@@ -1244,18 +1461,18 @@ fn discover_file_sources(
             binding.names.first()
         };
         if let Some(name) = source_name {
-            let declaration = location(file.path.as_str(), name.span);
+            let declaration = location(file.path.shared(), name.span);
             if let Some(symbol) = entities.get(&declaration) {
                 result.accessors.push((
                     symbol.clone(),
                     (
-                        file.source_text(name.span).unwrap_or_default().to_owned(),
+                        symbol_id(file.source_text(name.span).unwrap_or_default()),
                         declaration,
                     ),
                 ));
                 let go_returned_source = binding.shape == solid_ast_facts::BindingShape::Array
                     && matches!(primitive.as_deref(), Some("createSignal" | "createStore"))
-                    && go_binding_pattern_accepts_call(file.source.as_str(), binding, call);
+                    && go_binding_pattern_accepts_call(file.source.as_ref(), binding, call);
                 result.source_phases.push((
                     symbol.clone(),
                     if go_returned_source && primitive.as_deref() == Some("createStore") {
@@ -1283,7 +1500,7 @@ fn discover_file_sources(
                     result.accessor_origins.push((
                         symbol.clone(),
                         (
-                            returned.label.clone(),
+                            symbol_id(&returned.label),
                             primitive.into(),
                             Location {
                                 path: format!("bundled://solid-js.json#{primitive}").into(),
@@ -1333,12 +1550,12 @@ fn discover_file_sources(
                 binding.names.get(1)
             }
         {
-            let declaration = location(file.path.as_str(), name.span);
+            let declaration = location(file.path.shared(), name.span);
             if let Some(symbol) = entities.get(&declaration) {
                 result.setters.push((
                     symbol.clone(),
                     (
-                        file.source_text(name.span).unwrap_or_default().to_owned(),
+                        symbol_id(file.source_text(name.span).unwrap_or_default()),
                         declaration,
                         call.owned_write_option,
                     ),
@@ -1350,34 +1567,34 @@ fn discover_file_sources(
 }
 
 struct SourceDiscoveryMergeTarget<'a> {
-    accessors: &'a mut HashMap<String, (String, Location)>,
-    accessor_origins: &'a mut HashMap<String, (String, String, Location)>,
-    setters: &'a mut HashMap<String, (String, Location, bool)>,
-    actions: &'a mut HashMap<String, (String, Location)>,
-    source_kinds: &'a mut HashMap<String, ReactiveSourceKind>,
-    source_primitives: &'a mut HashMap<String, String>,
-    source_phases: &'a mut HashMap<String, u8>,
-    returned_source_symbols: &'a mut HashSet<String>,
-    summary_source_symbols: &'a mut HashSet<String>,
-    source_owned_write: &'a mut HashMap<String, bool>,
-    async_sources: &'a mut HashSet<String>,
-    contracted_accessor_symbols: &'a mut HashSet<String>,
+    accessors: &'a mut HashMap<SymbolId, (SymbolId, Location)>,
+    accessor_origins: &'a mut HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
+    setters: &'a mut HashMap<SymbolId, (SymbolId, Location, bool)>,
+    actions: &'a mut HashMap<SymbolId, (SymbolId, Location)>,
+    source_kinds: &'a mut HashMap<SymbolId, ReactiveSourceKind>,
+    source_primitives: &'a mut HashMap<SymbolId, SymbolId>,
+    source_phases: &'a mut HashMap<SymbolId, u8>,
+    returned_source_symbols: &'a mut HashSet<SymbolId>,
+    summary_source_symbols: &'a mut HashSet<SymbolId>,
+    source_owned_write: &'a mut HashMap<SymbolId, bool>,
+    async_sources: &'a mut HashSet<SymbolId>,
+    contracted_accessor_symbols: &'a mut HashSet<SymbolId>,
 }
 
 #[derive(Default)]
 struct SourceDiscoveryAggregate {
-    accessors: HashMap<String, (String, Location)>,
-    accessor_origins: HashMap<String, (String, String, Location)>,
-    setters: HashMap<String, (String, Location, bool)>,
-    actions: HashMap<String, (String, Location)>,
-    source_kinds: HashMap<String, ReactiveSourceKind>,
-    source_primitives: HashMap<String, String>,
-    source_phases: HashMap<String, u8>,
-    returned_source_symbols: HashSet<String>,
-    summary_source_symbols: HashSet<String>,
-    source_owned_write: HashMap<String, bool>,
-    async_sources: HashSet<String>,
-    contracted_accessor_symbols: HashSet<String>,
+    accessors: HashMap<SymbolId, (SymbolId, Location)>,
+    accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
+    setters: HashMap<SymbolId, (SymbolId, Location, bool)>,
+    actions: HashMap<SymbolId, (SymbolId, Location)>,
+    source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
+    source_primitives: HashMap<SymbolId, SymbolId>,
+    source_phases: HashMap<SymbolId, u8>,
+    returned_source_symbols: HashSet<SymbolId>,
+    summary_source_symbols: HashSet<SymbolId>,
+    source_owned_write: HashMap<SymbolId, bool>,
+    async_sources: HashSet<SymbolId>,
+    contracted_accessor_symbols: HashSet<SymbolId>,
 }
 
 impl SourceDiscoveryAggregate {
@@ -1462,7 +1679,7 @@ fn merge_source_discovery(
 }
 
 fn extend_source_discovery_symbols(
-    symbols: &mut HashSet<String>,
+    symbols: &mut HashSet<SymbolId>,
     contribution: &SourceDiscoveryContribution,
 ) {
     symbols.extend(
@@ -1529,25 +1746,25 @@ pub fn build_with_contracts_measured(
 /// Owned reactive-source facts produced by the source-discovery stage and
 /// consumed by the later interprocedural, static, and owner stages.
 struct SourceDiscovery {
-    accessors: HashMap<String, (String, Location)>,
-    accessor_origins: HashMap<String, (String, String, Location)>,
-    setters: HashMap<String, (String, Location, bool)>,
-    actions: HashMap<String, (String, Location)>,
-    source_kinds: HashMap<String, ReactiveSourceKind>,
-    source_primitives: HashMap<String, String>,
-    source_phases: HashMap<String, u8>,
-    returned_source_symbols: HashSet<String>,
-    summary_source_symbols: HashSet<String>,
-    source_owned_write: HashMap<String, bool>,
-    async_sources: HashSet<String>,
-    contract_reads: HashMap<String, Vec<(String, String, Location, String)>>,
-    contract_callbacks: HashMap<String, Vec<ContractCallback>>,
-    contract_returns: HashMap<String, (ContractReturn, Location)>,
-    contracted_accessor_symbols: HashSet<String>,
-    prop_sources: HashMap<String, (String, Location)>,
-    bundled_returns: HashMap<String, ContractReturn>,
+    accessors: HashMap<SymbolId, (SymbolId, Location)>,
+    accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
+    setters: HashMap<SymbolId, (SymbolId, Location, bool)>,
+    actions: HashMap<SymbolId, (SymbolId, Location)>,
+    source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
+    source_primitives: HashMap<SymbolId, SymbolId>,
+    source_phases: HashMap<SymbolId, u8>,
+    returned_source_symbols: HashSet<SymbolId>,
+    summary_source_symbols: HashSet<SymbolId>,
+    source_owned_write: HashMap<SymbolId, bool>,
+    async_sources: HashSet<SymbolId>,
+    contract_reads: HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    contract_callbacks: HashMap<SymbolId, Vec<ContractCallback>>,
+    contract_returns: HashMap<SymbolId, (ContractReturn, Location)>,
+    contracted_accessor_symbols: HashSet<SymbolId>,
+    prop_sources: HashMap<SymbolId, (SymbolId, Location)>,
+    bundled_returns: HashMap<SymbolId, ContractReturn>,
     retained_source_paths: HashSet<String>,
-    changed_source_symbols: HashSet<String>,
+    changed_source_symbols: HashSet<SymbolId>,
 }
 
 /// The stable, read-mostly environment threaded through every pipeline stage:
@@ -1558,8 +1775,8 @@ struct StageContext<'a> {
     project_indexes: &'a ProjectIndexes<'a>,
     typescript_indexes: &'a CachedTypeScriptIndexes,
     entities: &'a EntitySymbols,
-    source_declarations: &'a HashMap<String, Declaration>,
-    symbol_names: &'a HashMap<String, String>,
+    source_declarations: &'a HashMap<SymbolId, Declaration>,
+    symbol_names: &'a HashMap<SymbolId, SymbolId>,
     semantic_lookup: &'a SemanticLookup<'a>,
     resolved_contracts: &'a ResolvedContracts,
     contracts: &'a [PackageContract],
@@ -1570,7 +1787,7 @@ struct StageContext<'a> {
 #[allow(unused_assignments)]
 fn discover_sources(
     ctx: &StageContext<'_>,
-    source_discovery_cache: Option<&mut HashMap<String, CachedSourceDiscovery>>,
+    source_discovery_cache: Option<&mut HashMap<SourcePath, CachedSourceDiscovery>>,
     typescript_unchanged: bool,
     build_timings: &mut BuildTimings,
     emit_timings: bool,
@@ -1601,37 +1818,37 @@ fn discover_sources(
             stage_started = Instant::now();
         }};
     }
-    let mut accessors = HashMap::<String, (String, Location)>::new();
+    let mut accessors = HashMap::<SymbolId, (SymbolId, Location)>::new();
     let bundled_returns = contracts
         .iter()
         .find(|contract| contract.package.name == "solid-js")
         .map(|contract| {
             contract
-                .exports
+                .root_exports()
                 .iter()
                 .filter_map(|(name, summary)| {
                     summary
                         .returns
                         .clone()
-                        .map(|returned| (name.clone(), returned))
+                        .map(|returned| (symbol_id(name), returned))
                 })
                 .collect::<HashMap<_, _>>()
         })
         .unwrap_or_default();
-    let mut accessor_origins = HashMap::<String, (String, String, Location)>::new();
-    let mut setters = HashMap::<String, (String, Location, bool)>::new();
-    let mut actions = HashMap::<String, (String, Location)>::new();
-    let mut source_kinds = HashMap::<String, ReactiveSourceKind>::new();
-    let mut source_primitives = HashMap::<String, String>::new();
-    let mut source_phases = HashMap::<String, u8>::new();
-    let mut returned_source_symbols = HashSet::<String>::new();
-    let mut summary_source_symbols = HashSet::<String>::new();
-    let mut source_owned_write = HashMap::<String, bool>::new();
-    let mut async_sources = HashSet::<String>::new();
-    let mut contract_reads = HashMap::<String, Vec<(String, String, Location, String)>>::new();
-    let mut contract_callbacks = HashMap::<String, Vec<ContractCallback>>::new();
-    let mut contract_returns = HashMap::<String, (ContractReturn, Location)>::new();
-    let mut contracted_accessor_symbols = HashSet::<String>::new();
+    let mut accessor_origins = HashMap::<SymbolId, (SymbolId, SymbolId, Location)>::new();
+    let mut setters = HashMap::<SymbolId, (SymbolId, Location, bool)>::new();
+    let mut actions = HashMap::<SymbolId, (SymbolId, Location)>::new();
+    let mut source_kinds = HashMap::<SymbolId, ReactiveSourceKind>::new();
+    let mut source_primitives = HashMap::<SymbolId, SymbolId>::new();
+    let mut source_phases = HashMap::<SymbolId, u8>::new();
+    let mut returned_source_symbols = HashSet::<SymbolId>::new();
+    let mut summary_source_symbols = HashSet::<SymbolId>::new();
+    let mut source_owned_write = HashMap::<SymbolId, bool>::new();
+    let mut async_sources = HashSet::<SymbolId>::new();
+    let mut contract_reads = HashMap::<SymbolId, Vec<(String, String, Location, String)>>::new();
+    let mut contract_callbacks = HashMap::<SymbolId, Vec<ContractCallback>>::new();
+    let mut contract_returns = HashMap::<SymbolId, (ContractReturn, Location)>::new();
+    let mut contracted_accessor_symbols = HashSet::<SymbolId>::new();
 
     for contracted in &resolved_contracts.bindings {
         if !contracted.summary.reactive_reads.is_empty() {
@@ -1652,12 +1869,10 @@ fn discover_sources(
                     .collect(),
             );
         }
-        if !contracted.summary.callbacks.is_empty() {
-            contract_callbacks.insert(
-                contracted.symbol.clone(),
-                contracted.summary.callbacks.clone(),
-            );
-        }
+        contract_callbacks.insert(
+            contracted.symbol.clone(),
+            contracted.summary.callbacks.clone(),
+        );
         if let Some(returned) = &contracted.summary.returns {
             contract_returns.insert(
                 contracted.symbol.clone(),
@@ -1675,7 +1890,7 @@ fn discover_sources(
     }
 
     let mut retained_source_paths = HashSet::<String>::new();
-    let mut changed_source_symbols = HashSet::<String>::new();
+    let mut changed_source_symbols = HashSet::<SymbolId>::new();
     match source_discovery_cache {
         None => {
             for file in &facts.files {
@@ -1691,19 +1906,19 @@ fn discover_sources(
                         continue;
                     };
                     let contracted = entities
-                        .get(&location(file.path.as_str(), call.callee))
+                        .get(&location(file.path.shared(), call.callee))
                         .and_then(|symbol| resolved_contracts.by_symbol.get(symbol));
                     if let Some(contracted) = contracted
                         && let Some(contracted_return) = contracted.summary.returns.as_ref()
                     {
                         let source_name = binding.names.first();
                         if let Some(name) = source_name {
-                            let declaration = location(file.path.as_str(), name.span);
+                            let declaration = location(file.path.shared(), name.span);
                             if let Some(symbol) = entities.get(&declaration) {
                                 accessors.insert(
                                     symbol.clone(),
                                     (
-                                        file.source_text(name.span).unwrap_or_default().to_owned(),
+                                        symbol_id(file.source_text(name.span).unwrap_or_default()),
                                         contracted.contract_location.clone(),
                                     ),
                                 );
@@ -1711,8 +1926,8 @@ fn discover_sources(
                                 accessor_origins.insert(
                                     symbol.clone(),
                                     (
-                                        contracted_return.label.clone(),
-                                        contracted.local_name.clone(),
+                                        symbol_id(&contracted_return.label),
+                                        symbol_id(&contracted.local_name),
                                         contracted.contract_location.clone(),
                                     ),
                                 );
@@ -1737,12 +1952,12 @@ fn discover_sources(
                     );
                     if primitive.as_deref() == Some("action") {
                         if let Some(name) = binding.names.first() {
-                            let location = location(file.path.as_str(), name.span);
+                            let location = location(file.path.shared(), name.span);
                             if let Some(symbol) = entities.get(&location) {
                                 actions.insert(
                                     symbol.clone(),
                                     (
-                                        file.source_text(name.span).unwrap_or_default().to_owned(),
+                                        symbol_id(file.source_text(name.span).unwrap_or_default()),
                                         location,
                                     ),
                                 );
@@ -1752,7 +1967,7 @@ fn discover_sources(
                     }
                     if primitive.as_deref() == Some("dynamic") {
                         if let Some(name) = binding.names.first() {
-                            let declaration = location(file.path.as_str(), name.span);
+                            let declaration = location(file.path.shared(), name.span);
                             if let Some(symbol) = entities.get(&declaration) {
                                 source_primitives.insert(symbol.clone(), "dynamic".into());
                                 if call.arguments.first().is_some_and(|argument| {
@@ -1786,12 +2001,12 @@ fn discover_sources(
                         binding.names.first()
                     };
                     if let Some(name) = source_name {
-                        let declaration = location(file.path.as_str(), name.span);
+                        let declaration = location(file.path.shared(), name.span);
                         if let Some(symbol) = entities.get(&declaration) {
                             accessors.insert(
                                 symbol.clone(),
                                 (
-                                    file.source_text(name.span).unwrap_or_default().to_owned(),
+                                    symbol_id(file.source_text(name.span).unwrap_or_default()),
                                     declaration,
                                 ),
                             );
@@ -1802,7 +2017,7 @@ fn discover_sources(
                                     Some("createSignal" | "createStore")
                                 )
                                 && go_binding_pattern_accepts_call(
-                                    file.source.as_str(),
+                                    file.source.as_ref(),
                                     binding,
                                     call,
                                 );
@@ -1834,7 +2049,7 @@ fn discover_sources(
                                 accessor_origins.insert(
                                     symbol.clone(),
                                     (
-                                        returned.label.clone(),
+                                        symbol_id(&returned.label),
                                         primitive.into(),
                                         Location {
                                             path: format!("bundled://solid-js.json#{primitive}")
@@ -1884,12 +2099,12 @@ fn discover_sources(
                             binding.names.get(1)
                         }
                     {
-                        let declaration = location(file.path.as_str(), name.span);
+                        let declaration = location(file.path.shared(), name.span);
                         if let Some(symbol) = entities.get(&declaration) {
                             setters.insert(
                                 symbol.clone(),
                                 (
-                                    file.source_text(name.span).unwrap_or_default().to_owned(),
+                                    symbol_id(file.source_text(name.span).unwrap_or_default()),
                                     declaration,
                                     call.owned_write_option,
                                 ),
@@ -1906,20 +2121,56 @@ fn discover_sources(
                 .map(|file| file.path.as_str())
                 .collect::<HashSet<_>>();
             cache.retain(|path, _| current_paths.contains(path.as_str()));
-            for file in &facts.files {
-                if let Some(cached) = cache.get(file.path.as_str())
-                    && source_discovery_identity_matches(
-                        &cached.identity,
+            let reusable_paths = facts
+                .files
+                .iter()
+                .filter_map(|file| {
+                    cache
+                        .get(file.path.as_str())
+                        .is_some_and(|cached| {
+                            source_discovery_identity_matches(
+                                &cached.identity,
+                                file.path.as_str(),
+                                &file.source_hash,
+                                typescript_unchanged,
+                                typescript_indexes.source_discovery_delta.as_ref(),
+                            )
+                        })
+                        .then_some(file.path.as_str())
+                })
+                .collect::<HashSet<_>>();
+            let recomputed = facts
+                .files
+                .iter()
+                .filter(|file| !reusable_paths.contains(file.path.as_str()))
+                .collect::<Vec<_>>();
+            let discovered = parallel_slice_results(&recomputed, |file| {
+                (
+                    source_discovery_identity(file, project_indexes),
+                    discover_file_sources(
+                        semantic_lookup,
                         file,
-                        project_indexes,
-                        typescript_unchanged,
-                        typescript_indexes.source_discovery_delta.as_ref(),
-                    )
-                {
+                        project_indexes
+                            .ast_files_by_path
+                            .get(file.path.as_str())
+                            .expect("project index contains every source file"),
+                        entities,
+                        symbol_names,
+                        resolved_contracts,
+                        &bundled_returns,
+                    ),
+                )
+            });
+            let mut discovered = discovered.into_iter();
+            for file in &facts.files {
+                if reusable_paths.contains(file.path.as_str()) {
                     build_timings.source_discovery_reused_files += 1;
                     retained_source_paths.insert(file.path.to_string());
                     continue;
                 }
+                let (identity, contribution) = discovered
+                    .next()
+                    .expect("recomputed source path has a fresh contribution");
                 build_timings.source_discovery_recomputed_files += 1;
                 if let Some(cached) = cache.get(file.path.as_str()) {
                     extend_source_discovery_symbols(
@@ -1927,28 +2178,16 @@ fn discover_sources(
                         &cached.contribution,
                     );
                 }
-                let identity = source_discovery_identity(file, project_indexes);
-                let contribution = discover_file_sources(
-                    semantic_lookup,
-                    file,
-                    project_indexes
-                        .ast_files_by_path
-                        .get(file.path.as_str())
-                        .expect("project index contains every source file"),
-                    entities,
-                    symbol_names,
-                    resolved_contracts,
-                    &bundled_returns,
-                );
                 extend_source_discovery_symbols(&mut changed_source_symbols, &contribution);
                 cache.insert(
-                    file.path.to_string(),
+                    file.path.clone(),
                     CachedSourceDiscovery {
                         identity,
                         contribution,
                     },
                 );
             }
+            debug_assert!(discovered.next().is_none());
             let cache = &*cache;
             for aggregate in parallel_file_chunk_results(&facts.files, |files| {
                 let mut aggregate = SourceDiscoveryAggregate::default();
@@ -1977,20 +2216,11 @@ fn discover_sources(
         }
     }
     finish_stage!(source_discovery, "source-discovery");
-    for entity in facts.typescript.entities.iter() {
+    for entity in facts.typescript.entities() {
         let Some(descriptor) = &entity.type_descriptor else {
             continue;
         };
-        let solid_alias = descriptor.alias_declarations.iter().any(|declaration| {
-            declaration.name == "Accessor".into()
-                && declaration
-                    .location
-                    .path
-                    .replace('\\', "/")
-                    .to_ascii_lowercase()
-                    .contains("solid-js")
-        });
-        if descriptor.origin_module != "solid-js".into() && !solid_alias {
+        if descriptor.origin_module != "solid-js".into() {
             continue;
         }
         let Some(symbol) = entities.get(&entity.location) else {
@@ -2011,7 +2241,7 @@ fn discover_sources(
             .map_or(local_location, |declaration| declaration.location.clone());
         accessors
             .entry(symbol.clone())
-            .or_insert((name.to_string(), declaration_location));
+            .or_insert((symbol_id(name.as_ref()), declaration_location));
         source_phases.entry(symbol.clone()).or_insert(1);
     }
     for file in &facts.files {
@@ -2054,12 +2284,10 @@ fn discover_sources(
                     else {
                         continue;
                     };
-                    let declaration = location(file.path.as_str(), parameter.span);
+                    let declaration = location(file.path.shared(), parameter.span);
                     if let Some(symbol) = entities.get(&declaration) {
                         accessors.entry(symbol.clone()).or_insert((
-                            file.source_text(parameter.span)
-                                .unwrap_or_default()
-                                .to_owned(),
+                            symbol_id(file.source_text(parameter.span).unwrap_or_default()),
                             declaration,
                         ));
                     }
@@ -2100,7 +2328,7 @@ fn discover_sources(
             let Some(source_symbol) = returned
                 .and_then(|returned| {
                     entities
-                        .get(&location(file.path.as_str(), returned.span))
+                        .get(&location(file.path.shared(), returned.span))
                         .or_else(|| {
                             (returned.value == solid_ast_facts::ReturnValueKind::Identifier)
                                 .then_some(returned.span)
@@ -2120,7 +2348,7 @@ fn discover_sources(
                 .filter(|symbol| {
                     source_kinds.get(*symbol) == Some(&ReactiveSourceKind::Store)
                         || matches!(
-                            source_primitives.get(*symbol).map(String::as_str),
+                            source_primitives.get(*symbol).map(SymbolId::as_str),
                             Some("createStore" | "createOptimisticStore")
                         )
                 })
@@ -2143,17 +2371,15 @@ fn discover_sources(
             else {
                 continue;
             };
-            let parameter_location = location(file.path.as_str(), parameter.span);
+            let parameter_location = location(file.path.shared(), parameter.span);
             let Some(parameter_symbol) = entities.get(&parameter_location) else {
                 continue;
             };
             let (display, declaration) =
                 accessors.get(source_symbol).cloned().unwrap_or_else(|| {
                     (
-                        file.source_text(parameter.span)
-                            .unwrap_or_default()
-                            .to_owned(),
-                        location(file.path.as_str(), parameter.span),
+                        symbol_id(file.source_text(parameter.span).unwrap_or_default()),
+                        location(file.path.shared(), parameter.span),
                     )
                 });
             accessors.insert(parameter_symbol.clone(), (display, declaration));
@@ -2170,7 +2396,7 @@ fn discover_sources(
                         .initializer_identifier
                         .as_ref()
                         .and_then(|identifier| {
-                            entities.get(&location(file.path.as_str(), identifier.span))
+                            entities.get(&location(file.path.shared(), identifier.span))
                         })
                 else {
                     continue;
@@ -2181,7 +2407,7 @@ fn discover_sources(
                     continue;
                 }
                 for name in &binding.names {
-                    let declaration = location(file.path.as_str(), name.span);
+                    let declaration = location(file.path.shared(), name.span);
                     let Some(symbol) = entities.get(&declaration) else {
                         continue;
                     };
@@ -2191,7 +2417,7 @@ fn discover_sources(
                         setter_aliases.push((
                             symbol.clone(),
                             (
-                                file.source_text(name.span).unwrap_or_default().to_owned(),
+                                symbol_id(file.source_text(name.span).unwrap_or_default()),
                                 source.clone(),
                                 *owned_write,
                             ),
@@ -2203,7 +2429,7 @@ fn discover_sources(
                         action_aliases.push((
                             symbol.clone(),
                             (
-                                file.source_text(name.span).unwrap_or_default().to_owned(),
+                                symbol_id(file.source_text(name.span).unwrap_or_default()),
                                 source.clone(),
                             ),
                         ));
@@ -2217,7 +2443,7 @@ fn discover_sources(
         setters.extend(setter_aliases);
         actions.extend(action_aliases);
     }
-    let mut prop_sources = HashMap::<String, (String, Location)>::new();
+    let mut prop_sources = HashMap::<SymbolId, (SymbolId, Location)>::new();
     for file in &facts.files {
         for function in &file.ast.functions {
             if !function_binding_name(file, function)
@@ -2239,14 +2465,12 @@ fn discover_sources(
             else {
                 continue;
             };
-            let declaration = location(file.path.as_str(), parameter.span);
+            let declaration = location(file.path.shared(), parameter.span);
             if let Some(symbol) = entities.get(&declaration) {
                 prop_sources.insert(
                     symbol.clone(),
                     (
-                        file.source_text(parameter.span)
-                            .unwrap_or_default()
-                            .to_owned(),
+                        symbol_id(file.source_text(parameter.span).unwrap_or_default()),
                         declaration,
                     ),
                 );
@@ -2265,7 +2489,7 @@ fn discover_sources(
                     .initializer_identifier
                     .as_ref()
                     .and_then(|identifier| {
-                        entities.get(&location(file.path.as_str(), identifier.span))
+                        entities.get(&location(file.path.shared(), identifier.span))
                     })
                     .and_then(|symbol| prop_sources.get(symbol))
                     .cloned()
@@ -2284,7 +2508,7 @@ fn discover_sources(
                         }
                         call.arguments.iter().find_map(|argument| {
                             entities
-                                .get(&location(file.path.as_str(), argument.span))
+                                .get(&location(file.path.shared(), argument.span))
                                 .and_then(|symbol| prop_sources.get(symbol))
                                 .cloned()
                         })
@@ -2293,14 +2517,14 @@ fn discover_sources(
                     continue;
                 };
                 for name in &binding.names {
-                    let binding_location = location(file.path.as_str(), name.span);
+                    let binding_location = location(file.path.shared(), name.span);
                     if let Some(symbol) = entities.get(&binding_location)
                         && !prop_sources.contains_key(symbol)
                     {
                         prop_sources.insert(
                             symbol.clone(),
                             (
-                                file.source_text(name.span).unwrap_or_default().to_owned(),
+                                symbol_id(file.source_text(name.span).unwrap_or_default()),
                                 declaration.clone(),
                             ),
                         );
@@ -2389,14 +2613,14 @@ fn build_with_contracts_measured_incremental(
             {
                 continue;
             }
-            cache.insert(file.path.to_string(), CachedAstFileIndex::new(file));
+            cache.insert(file.path.clone(), CachedAstFileIndex::new(file));
         }
         &*cache
     } else {
         owned_ast_indexes = facts
             .files
             .iter()
-            .map(|file| (file.path.to_string(), CachedAstFileIndex::new(file)))
+            .map(|file| (file.path.clone(), CachedAstFileIndex::new(file)))
             .collect::<HashMap<_, _>>();
         &owned_ast_indexes
     };
@@ -2459,53 +2683,24 @@ fn build_with_contracts_measured_incremental(
         }
         if (!typescript_unchanged && !indexes_patched) || cache.is_none() {
             let substage_started = Instant::now();
-            let (aliases, source_declarations) =
-                alias_roots_and_source_declarations(&facts.typescript);
-            build_timings.alias_roots = substage_started.elapsed();
-            let entity_symbols_started = Instant::now();
-            let entities = entity_symbols(&facts.typescript, &aliases);
-            build_timings.entity_symbols = entity_symbols_started.elapsed();
+            let (indexes, alias_roots, entity_symbols) =
+                build_typescript_indexes(&facts.typescript, facts.files.len() >= 256);
+            build_timings.alias_roots = alias_roots;
+            build_timings.entity_symbols = entity_symbols;
             build_timings.alias_and_entity_indexes = substage_started.elapsed();
-            let symbol_names = symbol_names(&facts.typescript, &aliases);
-            let references_by_source = references_by_source(&facts.typescript, &aliases);
-            *cache = Some(CachedTypeScriptIndexes {
-                symbol_alias_targets: symbol_alias_targets(&facts.typescript),
-                symbols_by_root: symbols_by_root(&facts.typescript, &aliases),
-                aliases,
-                source_declarations,
-                entities,
-                symbol_names,
-                references_by_source,
-                source_discovery_symbol_semantics: source_discovery_symbol_semantics(
-                    &facts.typescript,
-                ),
-                source_discovery_delta: None,
-            });
+            *cache = Some(indexes);
         } else {
             build_timings.typescript_indexes_reused = true;
         }
         cache.as_ref().expect("TypeScript indexes initialized")
     } else {
         let substage_started = Instant::now();
-        let (aliases, source_declarations) = alias_roots_and_source_declarations(&facts.typescript);
-        build_timings.alias_roots = substage_started.elapsed();
-        let entity_symbols_started = Instant::now();
-        let entities = entity_symbols(&facts.typescript, &aliases);
-        build_timings.entity_symbols = entity_symbols_started.elapsed();
+        let (indexes, alias_roots, entity_symbols) =
+            build_typescript_indexes(&facts.typescript, facts.files.len() >= 256);
+        build_timings.alias_roots = alias_roots;
+        build_timings.entity_symbols = entity_symbols;
         build_timings.alias_and_entity_indexes = substage_started.elapsed();
-        let symbol_names = symbol_names(&facts.typescript, &aliases);
-        let references_by_source = references_by_source(&facts.typescript, &aliases);
-        owned_typescript_indexes = CachedTypeScriptIndexes {
-            symbol_alias_targets: symbol_alias_targets(&facts.typescript),
-            symbols_by_root: symbols_by_root(&facts.typescript, &aliases),
-            aliases,
-            source_declarations,
-            entities,
-            symbol_names,
-            references_by_source,
-            source_discovery_symbol_semantics: source_discovery_symbol_semantics(&facts.typescript),
-            source_discovery_delta: None,
-        };
+        owned_typescript_indexes = indexes;
         &owned_typescript_indexes
     };
     let aliases = &typescript_indexes.aliases;
@@ -2513,18 +2708,19 @@ fn build_with_contracts_measured_incremental(
     let entities = &typescript_indexes.entities;
     let substage_started = Instant::now();
     let mut symbol_names = typescript_indexes.symbol_names.clone();
-    add_solid_namespace_names(facts, entities, &mut symbol_names);
+    add_solid_import_names(facts, entities, &mut symbol_names);
     build_timings.symbol_name_indexes = substage_started.elapsed();
     let substage_started = Instant::now();
     let mut resolved_contracts = resolve_contract_imports(facts, contracts, entities);
     build_timings.contract_resolution = substage_started.elapsed();
-    let semantic_lookup = SemanticLookup::new(facts, entities, &symbol_names);
+    let semantic_lookup = SemanticLookup::new(facts, ast_indexes, entities, &symbol_names);
     let semantic_lookup = &semantic_lookup;
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut static_violations = std::mem::take(&mut resolved_contracts.missing_exports);
     let mut owned_reachable_calls = None;
     let source_discovery = std::thread::scope(|scope| {
+        let shared_worker_limit = analysis_worker_limit_for_lanes(2);
         let source_context = StageContext {
             facts,
             project_indexes: &project_indexes,
@@ -2537,6 +2733,7 @@ fn build_with_contracts_measured_incremental(
             contracts,
         };
         let source_discovery_handle = scope.spawn(move || {
+            let _worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
             let mut timings = BuildTimings::default();
             let sources = discover_sources(
                 &source_context,
@@ -2547,6 +2744,7 @@ fn build_with_contracts_measured_incremental(
             );
             (sources, timings)
         });
+        let reachability_worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
         if let Some(cache) = reachability_cache.as_deref_mut() {
             let can_reuse = typescript_unchanged
                 && cache.as_ref().is_some_and(|cached| {
@@ -2625,6 +2823,7 @@ fn build_with_contracts_measured_incremental(
             ));
             build_timings.reachability = substage_started.elapsed();
         }
+        drop(reachability_worker_limit);
         finish_stage!(indexes_and_reachability, "indexes-and-reachability");
         let (source_discovery, discovery_timings) = source_discovery_handle
             .join()
@@ -2687,7 +2886,7 @@ fn build_with_contracts_measured_incremental(
                     "the Solid compiler did not classify this JSX expression as tracked, untracked, or a callback; without an execution role, solid-checker cannot certify any reactive read inside it"
                         .into(),
                 hint: "Simplify the expression: hoist complex logic into a createMemo and interpolate the accessor. If this persists on plain JSX, re-run with fresh compiler facts and report the pattern as a solid-checker issue.".into(),
-                location: location(file.path.as_str(), span),
+                location: location(file.path.shared(), span),
                 analysis_context: String::new(),
                 fixes: vec![],
             });
@@ -2711,7 +2910,7 @@ fn build_with_contracts_measured_incremental(
                     .first()
                     .filter(|parameter| parameter.shape == solid_ast_facts::BindingShape::Object)
             {
-                let location = location(file.path.as_str(), parameter.pattern);
+                let location = location(file.path.shared(), parameter.pattern);
                 if seen_static.insert((
                     "component-props-destructure",
                     location.path.clone(),
@@ -2745,10 +2944,10 @@ fn build_with_contracts_measured_incremental(
             let props = binding
                 .initializer_identifier
                 .as_ref()
-                .and_then(|identifier| entities.get(&location(file.path.as_str(), identifier.span)))
+                .and_then(|identifier| entities.get(&location(file.path.shared(), identifier.span)))
                 .is_some_and(|symbol| prop_sources.contains_key(symbol));
             if props {
-                let location = location(file.path.as_str(), binding.pattern);
+                let location = location(file.path.shared(), binding.pattern);
                 if seen_static.insert((
                     "component-props-destructure",
                     location.path.clone(),
@@ -2767,7 +2966,7 @@ fn build_with_contracts_measured_incremental(
             }
         }
     }
-    for typescript_file in facts.typescript.files.iter() {
+    for typescript_file in facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
             for call in &function.calls_after_await {
                 let Some(symbol) = entities.get(call) else {
@@ -2801,7 +3000,7 @@ fn build_with_contracts_measured_incremental(
                 let function_symbol = async_symbol_root(
                     aliases
                         .get(function.symbol.as_ref())
-                        .map_or(function.symbol.as_ref(), String::as_str),
+                        .map_or(function.symbol.as_ref(), SymbolId::as_str),
                     &facts.typescript,
                 );
                 let Some(analysis_context) = facts.files.iter().find_map(|file| {
@@ -2813,7 +3012,7 @@ fn build_with_contracts_measured_incremental(
                                 u32::try_from(function.expression.end_byte).ok()?,
                             ));
                         let semantic = entities
-                            .get(&location(file.path.as_str(), argument.span))
+                            .get(&location(file.path.shared(), argument.span))
                             .is_some_and(|symbol| {
                                 async_symbol_root(symbol, &facts.typescript) == function_symbol
                             });
@@ -2890,6 +3089,15 @@ fn build_with_contracts_measured_incremental(
                 .cloned()
         })
         .flatten();
+    let references_by_source = if cached_interprocedural.is_some() {
+        HashMap::new()
+    } else {
+        references_for_sources(
+            &facts.typescript,
+            &typescript_indexes.symbols_by_root,
+            accessors.keys(),
+        )
+    };
     let local_access_cache = late_stage_cache
         .as_deref_mut()
         .and_then(Option::as_mut)
@@ -2910,7 +3118,7 @@ fn build_with_contracts_measured_incremental(
         bundled_returns: &bundled_returns,
         source_primitives: &source_primitives,
         entities,
-        references_by_source: &typescript_indexes.references_by_source,
+        references_by_source: &references_by_source,
         symbol_names: &symbol_names,
         changed_semantic_symbols: typescript_indexes
             .source_discovery_delta
@@ -2942,7 +3150,9 @@ fn build_with_contracts_measured_incremental(
                 return (local_access, cached, local_elapsed, Duration::ZERO, true);
             }
             if overlap_late_stages {
+                let shared_worker_limit = analysis_worker_limit_for_lanes(2);
                 let interprocedural = scope.spawn(move || {
+                    let _worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
                     let started = Instant::now();
                     let result = interprocedural_context.build(
                         typed_accessor_cache,
@@ -2951,9 +3161,11 @@ fn build_with_contracts_measured_incremental(
                     );
                     (result, started.elapsed())
                 });
+                let local_worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
                 let local_started = Instant::now();
                 let local_access = run_local_access();
                 let local_elapsed = local_started.elapsed();
+                drop(local_worker_limit);
                 let (interprocedural, interprocedural_elapsed) = interprocedural
                     .join()
                     .expect("parallel interprocedural analysis worker panicked");
@@ -3010,13 +3222,29 @@ fn build_with_contracts_measured_incremental(
     build_timings.local_access_reused_files = local_access.reused_files;
     build_timings.local_access_recomputed_files = local_access.recomputed_files;
     let LocalAccessResult {
-        mut reads,
-        mut writes,
-        mut action_invocations,
-        mut async_reads,
+        reads,
+        writes,
+        action_invocations,
+        async_reads,
         mut strict_read_obligations,
         mut write_action_obligations,
     } = local_access.result;
+    let mut reads = reads
+        .into_iter()
+        .map(|read| (*read).clone())
+        .collect::<Vec<_>>();
+    let mut writes = writes
+        .into_iter()
+        .map(|write| (*write).clone())
+        .collect::<Vec<_>>();
+    let mut action_invocations = action_invocations
+        .into_iter()
+        .map(|action| (*action).clone())
+        .collect::<Vec<_>>();
+    let mut async_reads = async_reads
+        .into_iter()
+        .map(|read| (*read).clone())
+        .collect::<Vec<_>>();
     build_timings.interprocedural_graph = interprocedural.timings.graph;
     build_timings.interprocedural_direct_summaries = interprocedural.timings.direct_summaries;
     build_timings.interprocedural_direct_index = interprocedural.timings.direct_index;
@@ -3040,7 +3268,7 @@ fn build_with_contracts_measured_incremental(
     build_timings.interprocedural_result_recomputed_files =
         interprocedural.timings.result_recomputed_files;
     strict_read_obligations += interprocedural.reads.len();
-    reads.extend(interprocedural.reads);
+    reads.extend(interprocedural.reads.iter().cloned());
     for file in &facts.files {
         for function in &file.ast.functions {
             let Some(name) = function_binding_name(file, function).or(function.name.as_ref())
@@ -3087,7 +3315,7 @@ fn build_with_contracts_measured_incremental(
                                 .is_some_and(|argument| argument.contains(*test)))
                 });
                 if reactive && conditional_return {
-                    let location = location(file.path.as_str(), *test);
+                    let location = location(file.path.shared(), *test);
                     if seen_static.insert((
                         "component-returns-conditionally",
                         location.path.clone(),
@@ -3108,6 +3336,8 @@ fn build_with_contracts_measured_incremental(
         }
     }
     let contract_exports = interprocedural.exports;
+    let mut contract_generation_obligations =
+        interprocedural.contract_generation_obligations.to_vec();
     leaf_operations.extend(
         parallel_file_results(&facts.files, |file| {
             leaf_owner_operations_for_file(file, entities, &symbol_names)
@@ -3115,14 +3345,13 @@ fn build_with_contracts_measured_incremental(
         .into_iter()
         .flatten(),
     );
-    finish_stage!(leaf_and_cleanup, "leaf-and-cleanup");
     for (invalid, unresolved) in parallel_file_results(&facts.files, |file| {
         cleanup_returns_for_file(semantic_lookup, file, &symbol_names)
     }) {
         invalid_cleanup_returns.extend(invalid);
         unresolved_cleanup_returns.extend(unresolved);
     }
-    finish_stage!(static_api, "static-api");
+    finish_stage!(leaf_and_cleanup, "leaf-and-cleanup");
     let static_api = StaticApiContext {
         lookup: semantic_lookup,
         entities,
@@ -3137,6 +3366,7 @@ fn build_with_contracts_measured_incremental(
         writes.extend(result.writes);
         write_action_obligations.extend(result.write_action_obligations);
     }
+    finish_stage!(static_api, "static-api");
     let mut seen_directive_creations = HashSet::new();
     for file in &facts.files {
         for call in &file.ast.calls {
@@ -3250,6 +3480,8 @@ fn build_with_contracts_measured_incremental(
     directive_creations.sort_by(|left, right| location_order(&left.location, &right.location));
     missing_owners.sort_by(|left, right| location_order(&left.location, &right.location));
     async_reads.sort_by(|left, right| location_order(&left.location, &right.location));
+    contract_generation_obligations
+        .sort_by(|left, right| location_order(&left.location, &right.location));
     finish_stage!(final_ordering, "final-ordering");
     let _ = stage_started;
     build_timings.total = total_started.elapsed();
@@ -3266,6 +3498,7 @@ fn build_with_contracts_measured_incremental(
             missing_owners,
             async_reads,
             contract_exports,
+            contract_generation_obligations,
             obligation_counts: ObligationCounts {
                 strict_reads: strict_read_obligations,
                 writes_and_actions: write_action_obligations.len(),
@@ -3284,15 +3517,45 @@ where
     parallel_slice_results(files, analyze)
 }
 
+thread_local! {
+    static ANALYSIS_WORKER_LIMIT: Cell<usize> = const { Cell::new(usize::MAX) };
+}
+
+struct AnalysisWorkerLimit {
+    previous: usize,
+}
+
+impl AnalysisWorkerLimit {
+    fn enter(limit: usize) -> Self {
+        let previous = ANALYSIS_WORKER_LIMIT.replace(limit.max(1));
+        Self { previous }
+    }
+}
+
+impl Drop for AnalysisWorkerLimit {
+    fn drop(&mut self) {
+        ANALYSIS_WORKER_LIMIT.set(self.previous);
+    }
+}
+
+fn available_analysis_workers() -> usize {
+    let available = std::thread::available_parallelism().map_or(1, usize::from);
+    ANALYSIS_WORKER_LIMIT.with(|limit| available.min(limit.get()))
+}
+
+fn analysis_worker_limit_for_lanes(lanes: usize) -> usize {
+    std::thread::available_parallelism()
+        .map_or(1, usize::from)
+        .div_ceil(lanes.max(1))
+}
+
 fn parallel_slice_results<T, R, F>(items: &[T], analyze: F) -> Vec<R>
 where
     T: Sync,
     R: Send,
     F: Fn(&T) -> R + Sync,
 {
-    let workers = std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .min(items.len());
+    let workers = available_analysis_workers().min(items.len());
     if workers <= 1 || items.len() < 256 {
         return items.iter().map(analyze).collect();
     }
@@ -3321,9 +3584,7 @@ where
     R: Send,
     F: Fn(&[FileFacts]) -> R + Sync,
 {
-    let workers = std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .min(files.len());
+    let workers = available_analysis_workers().min(files.len());
     if workers <= 1 || files.len() < 256 {
         return vec![analyze(files)];
     }
@@ -3399,19 +3660,18 @@ fn component_props_parameter_fix(
         })
         .find(|candidate| !used_names.contains(candidate.as_str()))?;
     let mut edits = vec![TextEdit {
-        location: location(file.path.as_str(), parameter.pattern),
+        location: location(file.path.shared(), parameter.pattern),
         new_text: parameter_name.clone(),
     }];
     let mut body_references = 0;
     for name in &parameter.names {
-        let declaration = location(file.path.as_str(), name.span);
+        let declaration = location(file.path.shared(), name.span);
         let symbol = entities.get(&declaration)?;
         let symbol = facts
             .typescript
-            .symbols
-            .iter()
-            .find(|candidate| candidate.id == symbol.clone().into())?;
-        for reference in symbol.references.iter() {
+            .symbols()
+            .find(|candidate| candidate.id() == symbol.as_str())?;
+        for reference in symbol.references() {
             if reference.path != file.path.as_str().into() {
                 return None;
             }
@@ -3485,7 +3745,7 @@ struct OwnerNode {
     span: Span,
     body: Span,
     name: Option<String>,
-    symbol: Option<String>,
+    symbol: Option<SymbolId>,
     exported: bool,
 }
 
@@ -3506,7 +3766,7 @@ struct OwnerFileIndex {
 
 #[derive(Clone)]
 enum OwnerTarget {
-    Symbol(String),
+    Symbol(SymbolId),
     LocalSpan(Span),
 }
 
@@ -3547,7 +3807,7 @@ fn find_missing_owners(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     indexes: &ProjectIndexes<'_>,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> Vec<OwnerRequirement> {
     let entities = lookup.entities();
     let owner_file_indexes = facts
@@ -3604,7 +3864,7 @@ fn find_missing_owners(
         for function in &file.ast.functions {
             let symbol = function.name.as_ref().and_then(|name| {
                 entities
-                    .get(&location(file.path.as_str(), name.span))
+                    .get(&location(file.path.shared(), name.span))
                     .cloned()
             });
             let exported =
@@ -3672,7 +3932,7 @@ fn find_missing_owners(
             let owner =
                 containing_function_indexed(&nodes, &nodes_by_path, file.path.as_str(), call.span);
             if let Some(target_index) = entities
-                .get(&location(file.path.as_str(), call.callee))
+                .get(&location(file.path.shared(), call.callee))
                 .and_then(|symbol| by_symbol.get(symbol))
                 .copied()
             {
@@ -3902,7 +4162,7 @@ fn discover_owner_file(
     file: &solid_facts::FileFacts,
     indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> CachedOwnerFile {
     let call_primitives = file
         .ast
@@ -3954,7 +4214,7 @@ fn discover_owner_file(
                 .or_else(|| function_binding_name(file, function))
                 .and_then(|name| {
                     entities
-                        .get(&location(file.path.as_str(), name.span))
+                        .get(&location(file.path.shared(), name.span))
                         .cloned()
                 });
             let exported =
@@ -4004,7 +4264,7 @@ fn discover_owner_file(
             .map(|index| OwnerTarget::LocalSpan(nodes[index].span))
             .or_else(|| {
                 entities
-                    .get(&location(file.path.as_str(), argument))
+                    .get(&location(file.path.shared(), argument))
                     .cloned()
                     .map(OwnerTarget::Symbol)
             })
@@ -4013,7 +4273,7 @@ fn discover_owner_file(
     let mut requirements = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = owner_at(call.span);
-        if let Some(symbol) = entities.get(&location(file.path.as_str(), call.callee)) {
+        if let Some(symbol) = entities.get(&location(file.path.shared(), call.callee)) {
             edges.push(SymbolicOwnerEdge {
                 source: owner,
                 target: OwnerTarget::Symbol(symbol.clone()),
@@ -4135,7 +4395,7 @@ fn resolve_owner_target(
     path: &str,
     target: &OwnerTarget,
     nodes_by_span: &HashMap<String, HashMap<Span, usize>>,
-    by_symbol: &HashMap<String, usize>,
+    by_symbol: &HashMap<SymbolId, usize>,
 ) -> Option<usize> {
     match target {
         OwnerTarget::Symbol(symbol) => by_symbol.get(symbol).copied(),
@@ -4150,9 +4410,9 @@ fn find_missing_owners_incremental(
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     indexes: &ProjectIndexes<'_>,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     retained_source_paths: &HashSet<String>,
-    cache: &mut HashMap<String, CachedOwnerFile>,
+    cache: &mut HashMap<SourcePath, CachedOwnerFile>,
     build_timings: &mut BuildTimings,
 ) -> (Vec<OwnerRequirement>, OwnerIncrementalTimings) {
     let entities = lookup.entities();
@@ -4163,6 +4423,7 @@ fn find_missing_owners_incremental(
         .map(|file| file.path.as_str())
         .collect::<HashSet<_>>();
     cache.retain(|path, _| current_paths.contains(path.as_str()));
+    let mut recomputed = Vec::new();
     for file in &facts.files {
         if retained_source_paths.contains(file.path.as_str())
             && let Some(cached) = cache.get(file.path.as_str())
@@ -4173,11 +4434,16 @@ fn find_missing_owners_incremental(
             build_timings.owner_reused_files += 1;
             continue;
         }
-        cache.insert(
-            file.path.to_string(),
-            discover_owner_file(file, indexes, entities, symbol_names),
-        );
+        recomputed.push(file);
         build_timings.owner_recomputed_files += 1;
+    }
+    for (path, discovered) in parallel_slice_results(&recomputed, |file| {
+        (
+            file.path.clone(),
+            discover_owner_file(file, indexes, entities, symbol_names),
+        )
+    }) {
+        cache.insert(path, discovered);
     }
     let fragment_build = total_started.elapsed();
 
@@ -4351,7 +4617,7 @@ fn inside_owner_providing_region(providing_regions: &[Span], span: Span) -> bool
 fn owner_callback_index(
     nodes: &[OwnerNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
-    by_symbol: &HashMap<String, usize>,
+    by_symbol: &HashMap<SymbolId, usize>,
     file: &solid_facts::FileFacts,
     argument: Span,
     entities: &EntitySymbols,
@@ -4369,7 +4635,7 @@ fn owner_callback_index(
         .max_by_key(|index| nodes[*index].span.end - nodes[*index].span.start)
         .or_else(|| {
             entities
-                .get(&location(file.path.as_str(), argument))
+                .get(&location(file.path.shared(), argument))
                 .and_then(|symbol| by_symbol.get(symbol))
                 .copied()
         })
@@ -4423,7 +4689,7 @@ fn containing_leaf_owner(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> Option<String> {
     file.ast
         .arguments_containing(span)
@@ -4446,7 +4712,7 @@ fn read_is_under_loading(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     span: Span,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> bool {
     let entities = lookup.entities();
     if file
@@ -4489,7 +4755,7 @@ fn jsx_element_is_loading(
     file: &solid_facts::FileFacts,
     element: &solid_ast_facts::JsxElementFact,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> bool {
     primitive_name(
         file.path.as_str(),
@@ -4533,29 +4799,7 @@ fn computation_is_async(
     file.ast
         .functions_within(argument)
         .max_by_key(|function| function.span.end - function.span.start)
-        .is_some_and(|function| {
-            function.r#async
-                || function
-                    .expression_return
-                    .iter()
-                    .chain(file.ast.returns_within(function.body).filter(|returned| {
-                        containing_ast_function(&file.ast, returned.span)
-                            .is_some_and(|owner| owner.span == function.span)
-                    }))
-                    .any(|returned| {
-                        returned.callee.is_some_and(|callee| {
-                            lookup
-                                .entity_at(file.path.as_str(), callee)
-                                .is_some_and(|entity| {
-                                    entity.resolved_call.as_ref().is_some_and(|call| {
-                                        ["Promise", "PromiseLike", "AsyncIterable"]
-                                            .iter()
-                                            .any(|kind| call.return_type_text.contains(kind))
-                                    })
-                                })
-                        })
-                    })
-        })
+        .is_some_and(|function| function.r#async)
 }
 
 fn inside_lowercase_named_function(file: &solid_facts::FileFacts, span: Span) -> bool {
@@ -4728,7 +4972,7 @@ fn inside_effect_apply(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> bool {
     file.ast.arguments_containing(span).any(|(call, index)| {
         index == 1
@@ -4759,15 +5003,6 @@ fn typed_accessor_descriptor_at<'a>(
 
 fn go_solid_accessor_descriptor(descriptor: &typefacts::TypeDescriptor) -> bool {
     descriptor.origin_module == "solid-js".into()
-        || descriptor.alias_declarations.iter().any(|declaration| {
-            declaration.name == "Accessor".into()
-                && declaration
-                    .location
-                    .path
-                    .replace('\\', "/")
-                    .to_ascii_lowercase()
-                    .contains("/node_modules/solid-js/")
-        })
 }
 
 fn source_function_exported(
@@ -4809,7 +5044,7 @@ fn function_is_solid_callback(
     file: &solid_facts::FileFacts,
     function: &solid_ast_facts::FunctionFact,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
     let primitives = lookup.primitives(file);
@@ -4872,7 +5107,7 @@ fn function_is_solid_callback(
                         && !file.ast.jsx_containing(identifier.span).any(|nested| {
                             nested.span != element.span && element.span.contains(nested.span)
                         })
-                        && (entities.get(&location(file.path.as_str(), identifier.span))
+                        && (entities.get(&location(file.path.shared(), identifier.span))
                             == Some(symbol)
                             || binding_name == file.source_text(identifier.span))
                 })
@@ -4907,7 +5142,7 @@ fn analysis_context(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> String {
     let enclosing = enclosing_function_label(file, span);
     if let Some(rendering) = file
@@ -5037,7 +5272,9 @@ fn contract_callback_execution(execution: ExecutionRole) -> &'static str {
 }
 
 fn push_contract_callback(callbacks: &mut Vec<ContractCallback>, callback: ContractCallback) {
-    callbacks.push(callback);
+    if !callbacks.contains(&callback) {
+        callbacks.push(callback);
+    }
 }
 
 fn function_indices_by_path<T>(functions: &[T]) -> HashMap<String, Vec<usize>>
@@ -5115,25 +5352,25 @@ struct LocalAccessContext<'a> {
     facts: &'a ProjectFacts,
     lookup: &'a SemanticLookup<'a>,
     entities: &'a EntitySymbols,
-    symbol_names: &'a HashMap<String, String>,
+    symbol_names: &'a HashMap<SymbolId, SymbolId>,
     reachable_calls: &'a HashMap<Location, usize>,
-    accessors: &'a HashMap<String, (String, Location)>,
-    accessor_origins: &'a HashMap<String, (String, String, Location)>,
-    setters: &'a HashMap<String, (String, Location, bool)>,
-    actions: &'a HashMap<String, (String, Location)>,
-    source_primitives: &'a HashMap<String, String>,
-    async_sources: &'a HashSet<String>,
-    source_declarations: &'a HashMap<String, Declaration>,
-    contract_reads: &'a HashMap<String, Vec<(String, String, Location, String)>>,
-    source_kinds: &'a HashMap<String, ReactiveSourceKind>,
-    prop_sources: &'a HashMap<String, (String, Location)>,
+    accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    accessor_origins: &'a HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
+    setters: &'a HashMap<SymbolId, (SymbolId, Location, bool)>,
+    actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    source_primitives: &'a HashMap<SymbolId, SymbolId>,
+    async_sources: &'a HashSet<SymbolId>,
+    source_declarations: &'a HashMap<SymbolId, Declaration>,
+    contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
 }
 
 struct LocalAccessReuse<'a> {
     aggregate_reusable: bool,
     typescript_unchanged: bool,
     source_discovery_delta: Option<&'a SourceDiscoveryTypeScriptDelta>,
-    changed_source_symbols: &'a HashSet<String>,
+    changed_source_symbols: &'a HashSet<SymbolId>,
     retained_source_paths: &'a HashSet<String>,
     global_async_context_unchanged: bool,
 }
@@ -5216,7 +5453,7 @@ impl LocalAccessContext<'_> {
                 }
                 let contribution = self.discover(file);
                 cache.files.insert(
-                    file.path.to_string(),
+                    file.path.clone(),
                     CachedLocalAccessFile {
                         source_hash: file.source_hash.clone(),
                         compiler: file.compiler.clone(),
@@ -5280,7 +5517,7 @@ impl LocalAccessContext<'_> {
         }
     }
 
-    fn dependencies(&self, file: &solid_facts::FileFacts) -> HashSet<String> {
+    fn dependencies(&self, file: &solid_facts::FileFacts) -> HashSet<SymbolId> {
         file.ast
             .calls
             .iter()
@@ -5295,7 +5532,7 @@ impl LocalAccessContext<'_> {
             )
             .filter_map(|span| {
                 self.entities
-                    .get(&location(file.path.as_str(), span))
+                    .get(&location(file.path.shared(), span))
                     .cloned()
             })
             .collect()
@@ -5322,7 +5559,7 @@ impl LocalAccessContext<'_> {
             .calls
             .iter()
             .map(|call| {
-                let callee = location(file.path.as_str(), call.callee);
+                let callee = location(file.path.shared(), call.callee);
                 let multiplicity = self.reachable_calls.get(&callee).copied();
                 (callee, multiplicity)
             })
@@ -5334,7 +5571,7 @@ impl LocalAccessContext<'_> {
         file: &solid_facts::FileFacts,
         cached: &CachedLocalAccessFile,
         retained_source_path: bool,
-        changed_dependencies: &HashSet<String>,
+        changed_dependencies: &HashSet<SymbolId>,
         global_async_context_unchanged: bool,
     ) -> bool {
         retained_source_path
@@ -5354,8 +5591,8 @@ impl LocalAccessContext<'_> {
         let mut seen = HashSet::new();
         let allowed = allowed_callback_spans(file, self.lookup);
         for call in &file.ast.calls {
-            let callee = location(file.path.as_str(), call.callee);
-            let Some(symbol) = self.lookup.callee_symbol(file.path.as_str(), call.callee) else {
+            let callee = location(file.path.shared(), call.callee);
+            let Some(symbol) = self.lookup.callee_symbol(file, call.callee) else {
                 continue;
             };
             let inside_function = file.ast.any_function_body_containing(call.span);
@@ -5426,21 +5663,24 @@ impl LocalAccessContext<'_> {
             {
                 let origin = self.accessor_origins.get(symbol);
                 let display_name = call.static_callee(&file.source).unwrap_or(name);
-                result.reads.push(ReactiveRead {
+                result.reads.push(Arc::new(ReactiveRead {
                     kind: "accessor".into(),
                     accessor: origin
-                        .map_or_else(|| display_name.to_owned(), |origin| origin.0.clone()),
-                    location: location(file.path.as_str(), call.span),
+                        .map_or_else(|| display_name.to_string(), |origin| origin.0.to_string())
+                        .into(),
+                    location: location(file.path.shared(), call.span),
                     declaration: origin
                         .map_or_else(|| declaration.clone(), |origin| origin.2.clone()),
                     execution,
-                    context: read_analysis_context(file, call.span, execution),
-                    via: origin.map_or_else(String::new, |_| name.clone()),
+                    context: read_analysis_context(file, call.span, execution).into(),
+                    via: origin.map_or_else(String::new, |_| name.to_string()).into(),
                     origin: origin.map(|origin| origin.2.clone()),
-                    origin_context: origin.map_or_else(String::new, |origin| origin.1.clone()),
-                });
+                    origin_context: origin
+                        .map_or_else(String::new, |origin| origin.1.to_string())
+                        .into(),
+                }));
                 if !matches!(
-                    self.source_primitives.get(symbol).map(String::as_str),
+                    self.source_primitives.get(symbol).map(SymbolId::as_str),
                     Some("createOptimistic" | "createOptimisticStore")
                 ) && counts_as_strict_read_root(file, call.span, execution)
                 {
@@ -5448,9 +5688,9 @@ impl LocalAccessContext<'_> {
                 }
                 if self.async_sources.contains(symbol) {
                     let async_execution = async_execution_role(file, call.callee, execution);
-                    result.async_reads.push(AsyncRead {
-                        accessor: format!("{name}()"),
-                        location: location(file.path.as_str(), call.span),
+                    result.async_reads.push(Arc::new(AsyncRead {
+                        accessor: format!("{name}()").into(),
+                        location: location(file.path.shared(), call.span),
                         declaration: declaration.clone(),
                         execution: async_execution,
                         leaf_owner: containing_leaf_owner(
@@ -5458,14 +5698,15 @@ impl LocalAccessContext<'_> {
                             call.callee,
                             self.entities,
                             self.symbol_names,
-                        ),
+                        )
+                        .map(Into::into),
                         under_loading: read_is_under_loading(
                             self.lookup,
                             file,
                             call.callee,
                             self.symbol_names,
                         ),
-                    });
+                    }));
                 }
             }
             if !self.accessors.contains_key(symbol)
@@ -5485,17 +5726,17 @@ impl LocalAccessContext<'_> {
                     || callee.clone(),
                     |declaration| declaration.location.clone(),
                 );
-                result.reads.push(ReactiveRead {
+                result.reads.push(Arc::new(ReactiveRead {
                     kind: "accessor".into(),
-                    accessor: display,
-                    location: location(file.path.as_str(), call.span),
+                    accessor: display.into(),
+                    location: location(file.path.shared(), call.span),
                     declaration,
                     execution,
-                    context: read_analysis_context(file, call.span, execution),
-                    via: String::new(),
+                    context: read_analysis_context(file, call.span, execution).into(),
+                    via: Arc::from(""),
                     origin: None,
-                    origin_context: String::new(),
-                });
+                    origin_context: Arc::from(""),
+                }));
                 result.strict_read_obligations += 1;
             }
             if let Some(contracted) = self.contract_reads.get(symbol)
@@ -5510,17 +5751,17 @@ impl LocalAccessContext<'_> {
                             .saturating_add(u64::try_from(index).unwrap_or(u64::MAX)),
                     );
                     if seen.insert(contract_key) {
-                        result.reads.push(ReactiveRead {
-                            kind: kind.clone(),
-                            accessor: name.clone(),
-                            location: location(file.path.as_str(), call.span),
+                        result.reads.push(Arc::new(ReactiveRead {
+                            kind: kind.clone().into(),
+                            accessor: name.clone().into(),
+                            location: location(file.path.shared(), call.span),
                             declaration: declaration.clone(),
                             execution,
-                            context: read_analysis_context(file, call.span, execution),
-                            via: via.clone(),
+                            context: read_analysis_context(file, call.span, execution).into(),
+                            via: via.clone().into(),
                             origin: Some(declaration.clone()),
-                            origin_context: via.clone(),
-                        });
+                            origin_context: via.clone().into(),
+                        }));
                         if counts_as_strict_read_root(file, call.span, execution) {
                             result.strict_read_obligations += 1;
                         }
@@ -5529,9 +5770,9 @@ impl LocalAccessContext<'_> {
             }
             if let Some((name, declaration, allowed_by_option)) = self.setters.get(symbol) {
                 for _ in 0..multiplicity {
-                    result.writes.push(ReactiveWrite {
-                        setter: name.clone(),
-                        location: location(file.path.as_str(), call.span),
+                    result.writes.push(Arc::new(ReactiveWrite {
+                        setter: name.to_string().into(),
+                        location: location(file.path.shared(), call.span),
                         declaration: declaration.clone(),
                         execution,
                         allowed_by_option: *allowed_by_option,
@@ -5540,15 +5781,16 @@ impl LocalAccessContext<'_> {
                             call.span,
                             self.entities,
                             self.symbol_names,
-                        ),
-                    });
+                        )
+                        .into(),
+                    }));
                 }
             }
             if let Some((name, declaration)) = self.actions.get(symbol) {
                 for _ in 0..multiplicity {
-                    result.action_invocations.push(ActionInvocation {
-                        action: name.clone(),
-                        location: location(file.path.as_str(), call.span),
+                    result.action_invocations.push(Arc::new(ActionInvocation {
+                        action: name.to_string().into(),
+                        location: location(file.path.shared(), call.span),
                         declaration: declaration.clone(),
                         execution,
                         context: analysis_context(
@@ -5556,8 +5798,9 @@ impl LocalAccessContext<'_> {
                             call.span,
                             self.entities,
                             self.symbol_names,
-                        ),
-                    });
+                        )
+                        .into(),
+                    }));
                 }
             }
         }
@@ -5570,7 +5813,7 @@ impl LocalAccessContext<'_> {
             {
                 continue;
             }
-            let object = location(file.path.as_str(), member.object);
+            let object = location(file.path.shared(), member.object);
             let Some(symbol) = self.entities.get(&object) else {
                 continue;
             };
@@ -5622,23 +5865,23 @@ impl LocalAccessContext<'_> {
                         file.source_text(member.property).unwrap_or_default()
                     )
                 });
-            result.reads.push(ReactiveRead {
+            result.reads.push(Arc::new(ReactiveRead {
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
                     "store-path".into()
                 } else {
                     "component-props".into()
                 },
-                accessor,
-                location: location(file.path.as_str(), member.span),
+                accessor: accessor.into(),
+                location: location(file.path.shared(), member.span),
                 declaration: declaration.clone(),
                 execution,
-                context: read_analysis_context(file, member.span, execution),
-                via: String::new(),
+                context: read_analysis_context(file, member.span, execution).into(),
+                via: Arc::from(""),
                 origin: None,
-                origin_context: String::new(),
-            });
+                origin_context: Arc::from(""),
+            }));
             if !matches!(
-                self.source_primitives.get(symbol).map(String::as_str),
+                self.source_primitives.get(symbol).map(SymbolId::as_str),
                 Some("createOptimistic" | "createOptimisticStore")
             ) && counts_as_strict_read_root(file, member.span, execution)
             {
@@ -5648,12 +5891,13 @@ impl LocalAccessContext<'_> {
                 && self.async_sources.contains(symbol)
             {
                 let async_execution = async_execution_role(file, member.span, execution);
-                result.async_reads.push(AsyncRead {
+                result.async_reads.push(Arc::new(AsyncRead {
                     accessor: format!(
                         "{name}.{}",
                         file.source_text(member.property).unwrap_or_default()
-                    ),
-                    location: location(file.path.as_str(), member.span),
+                    )
+                    .into(),
+                    location: location(file.path.shared(), member.span),
                     declaration: declaration.clone(),
                     execution: async_execution,
                     leaf_owner: containing_leaf_owner(
@@ -5661,18 +5905,19 @@ impl LocalAccessContext<'_> {
                         member.span,
                         self.entities,
                         self.symbol_names,
-                    ),
+                    )
+                    .map(Into::into),
                     under_loading: read_is_under_loading(
                         self.lookup,
                         file,
                         member.span,
                         self.symbol_names,
                     ),
-                });
+                }));
             }
         }
         for spread in &file.ast.spreads {
-            let argument = location(file.path.as_str(), spread.argument);
+            let argument = location(file.path.shared(), spread.argument);
             let Some(symbol) = self.entities.get(&argument) else {
                 continue;
             };
@@ -5706,23 +5951,23 @@ impl LocalAccessContext<'_> {
             let Some((name, declaration)) = source else {
                 continue;
             };
-            result.reads.push(ReactiveRead {
+            result.reads.push(Arc::new(ReactiveRead {
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
                     "store-path".into()
                 } else {
                     "component-props".into()
                 },
-                accessor: format!("{name} spread"),
-                location: location(file.path.as_str(), spread.span),
+                accessor: format!("{name} spread").into(),
+                location: location(file.path.shared(), spread.span),
                 declaration: declaration.clone(),
                 execution,
-                context: read_analysis_context(file, spread.span, execution),
-                via: String::new(),
+                context: read_analysis_context(file, spread.span, execution).into(),
+                via: Arc::from(""),
                 origin: None,
-                origin_context: String::new(),
-            });
+                origin_context: Arc::from(""),
+            }));
             if !matches!(
-                self.source_primitives.get(symbol).map(String::as_str),
+                self.source_primitives.get(symbol).map(SymbolId::as_str),
                 Some("createOptimistic" | "createOptimisticStore")
             ) && counts_as_strict_read_root(file, spread.span, execution)
             {
@@ -5730,22 +5975,23 @@ impl LocalAccessContext<'_> {
             }
         }
         for element in &file.ast.jsx_elements {
-            let name_location = location(file.path.as_str(), element.name.span);
+            let name_location = location(file.path.shared(), element.name.span);
             let Some(symbol) = self.entities.get(&name_location) else {
                 continue;
             };
             if !self.async_sources.contains(symbol)
-                || self.source_primitives.get(symbol).map(String::as_str) != Some("dynamic")
+                || self.source_primitives.get(symbol).map(SymbolId::as_str) != Some("dynamic")
             {
                 continue;
             }
             let execution = ExecutionRole::TrackedJsx;
-            result.async_reads.push(AsyncRead {
+            result.async_reads.push(Arc::new(AsyncRead {
                 accessor: format!(
                     "<{}>",
                     file.source_text(element.name.span).unwrap_or_default()
-                ),
-                location: location(file.path.as_str(), element.span),
+                )
+                .into(),
+                location: location(file.path.shared(), element.span),
                 declaration: self.source_declarations.get(symbol).map_or_else(
                     || name_location.clone(),
                     |declaration| declaration.location.clone(),
@@ -5756,14 +6002,15 @@ impl LocalAccessContext<'_> {
                     element.name.span,
                     self.entities,
                     self.symbol_names,
-                ),
+                )
+                .map(Into::into),
                 under_loading: read_is_under_loading(
                     self.lookup,
                     file,
                     element.name.span,
                     self.symbol_names,
                 ),
-            });
+            }));
         }
         result
     }
@@ -5917,7 +6164,7 @@ fn primitive_name(
     span: Span,
     static_callee: Option<&str>,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> Option<PrimitiveName> {
     let location = location(path, span);
     if let Some(symbol) = entities.get(&location) {
@@ -5927,13 +6174,11 @@ fn primitive_name(
             .or_else(|| {
                 let property = static_callee?.rsplit('.').next()?;
                 symbol_names
-                    .get(&format!("{symbol}::{property}"))
+                    .get(format!("{symbol}::{property}").as_str())
                     .map(|name| PrimitiveName::new(name))
             })
     } else {
-        static_callee
-            .and_then(|callee| callee.rsplit('.').next())
-            .map(PrimitiveName::new)
+        None
     }
 }
 
@@ -5941,7 +6186,7 @@ fn jsx_primitive_name(
     file: &solid_facts::FileFacts,
     element: &solid_ast_facts::JsxElementFact,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> Option<PrimitiveName> {
     primitive_name(
         file.path.as_str(),
@@ -5956,22 +6201,17 @@ fn jsx_primitive_name(
             .iter()
             .filter(|import| import.module == "solid-js")
             .flat_map(|import| &import.bindings)
-            .find(|binding| {
-                file.source_text(binding.local.span) == file.source_text(element.name.span)
+            .find_map(|binding| {
+                (binding.kind != solid_ast_facts::ImportKind::Namespace
+                    && file.source_text(binding.local.span) == file.source_text(element.name.span))
+                .then_some(binding.imported.as_deref())
+                .flatten()
             })
-            .map(|binding| {
-                binding
-                    .imported
-                    .as_deref()
-                    .map(PrimitiveName::new)
-                    .unwrap_or_else(|| {
-                        PrimitiveName::new(file.source_text(binding.local.span).unwrap_or_default())
-                    })
-            })
+            .map(PrimitiveName::new)
     })
 }
 
-fn location(path: &str, span: Span) -> Location {
+fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
     Location {
         path: path.into(),
         start_byte: u64::from(span.start),
@@ -5981,10 +6221,40 @@ fn location(path: &str, span: Span) -> Location {
 
 #[cfg(test)]
 mod tests {
-    use typefacts::{FactTable, SymbolFact};
+    use solid_facts::TypeScriptTable;
+    use typefacts::{EntityFact, FileFact, SourceDigest, SymbolFact};
 
     use super::interproc::InterproceduralResultView;
     use super::*;
+
+    #[test]
+    fn ordered_parallel_maps_respect_the_worker_budget() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        let items = (0..512).collect::<Vec<_>>();
+        let active = AtomicUsize::new(0);
+        let peak = AtomicUsize::new(0);
+        let parallel = {
+            let _worker_limit = AnalysisWorkerLimit::enter(2);
+            parallel_slice_results(&items, |item| {
+                let current = active.fetch_add(1, Ordering::SeqCst) + 1;
+                peak.fetch_max(current, Ordering::SeqCst);
+                for _ in 0..32 {
+                    std::thread::yield_now();
+                }
+                active.fetch_sub(1, Ordering::SeqCst);
+                item * 2
+            })
+        };
+        let sequential = {
+            let _worker_limit = AnalysisWorkerLimit::enter(1);
+            parallel_slice_results(&items, |item| item * 2)
+        };
+
+        assert_eq!(parallel, sequential);
+        assert!(peak.load(Ordering::SeqCst) <= 2);
+        assert_eq!(active.load(Ordering::SeqCst), 0);
+    }
 
     #[test]
     fn known_primitive_names_use_integer_variants() {
@@ -5996,6 +6266,55 @@ mod tests {
             PrimitiveName::new("projectSpecificHelper"),
             PrimitiveName::Other(_)
         ));
+    }
+
+    #[test]
+    fn package_contract_validation_enforces_release_identity_and_surface() {
+        let valid = PackageContract {
+            schema_version: 1,
+            package: ContractPackage {
+                name: "reactive-package".into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            compiler_facts_protocol: 1,
+            artifacts: ContractArtifacts::default(),
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: BTreeMap::from([(
+                        "createValue".into(),
+                        ContractExport {
+                            kind: "function".into(),
+                            ..ContractExport::default()
+                        },
+                    )]),
+                    conditions: Vec::new(),
+                },
+            )]),
+            evidence: ContractEvidence {
+                kind: "verified".into(),
+                generator: String::new(),
+            },
+            contract_hash: String::new(),
+            source_path: String::new(),
+        };
+        assert!(valid.validate().is_ok());
+
+        let mut no_version = valid.clone();
+        no_version.package.version.clear();
+        assert!(no_version.validate().is_err());
+
+        let mut no_entrypoints = valid.clone();
+        no_entrypoints.entrypoints.clear();
+        assert!(no_entrypoints.validate().is_err());
+
+        let mut malformed_hash = valid;
+        malformed_hash.artifacts.declaration = Some(ContractArtifact {
+            path: "index.d.ts".into(),
+            hash: "sha256:not-a-digest".into(),
+        });
+        assert!(malformed_hash.validate().is_err());
     }
 
     fn summary_node(path: &str, span: Span, body: Span) -> SummaryNode {
@@ -6042,36 +6361,147 @@ mod tests {
         }
     }
 
+    fn typescript_table(
+        generation: u64,
+        sources: Vec<SourceDigest>,
+        entities: Vec<EntityFact>,
+        symbols: Vec<SymbolFact>,
+        files: Vec<FileFact>,
+    ) -> TypeScriptTable {
+        TypeScriptTable::from_parts(3, generation, "fixture", sources, entities, symbols, files)
+    }
+
     fn empty_project(generation: u64) -> ProjectFacts {
         ProjectFacts {
             generation: solid_facts_core::Generation::new(generation).unwrap(),
             project_id: "fixture".into(),
             files: Vec::new(),
-            typescript: FactTable {
-                schema: 2,
+            typescript: typescript_table(
                 generation,
-                project_id: "fixture".into(),
-                sources: Vec::new().into(),
-                entities: Vec::new().into(),
-                symbols: Vec::new().into(),
-                files: Vec::new().into(),
-            },
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
             typescript_changes: None,
         }
     }
 
-    fn typescript_index_cache(table: &FactTable) -> CachedTypeScriptIndexes {
-        let (aliases, source_declarations) = alias_roots_and_source_declarations(table);
+    #[test]
+    fn projected_references_include_every_alias_member_without_retaining_unrelated_symbols() {
+        let reference = |start| Location {
+            path: "fixture.ts".into(),
+            start_byte: start,
+            end_byte: start + 1,
+        };
+        let table = typescript_table(
+            1,
+            Vec::new(),
+            Vec::new(),
+            vec![
+                SymbolFact {
+                    id: "root".into(),
+                    alias_target: "".into(),
+                    declarations: Vec::new().into(),
+                    references: vec![reference(30)].into(),
+                },
+                SymbolFact {
+                    id: "alias".into(),
+                    alias_target: "root".into(),
+                    declarations: Vec::new().into(),
+                    references: vec![reference(10)].into(),
+                },
+                SymbolFact {
+                    id: "unrelated".into(),
+                    alias_target: "".into(),
+                    declarations: Vec::new().into(),
+                    references: vec![reference(20)].into(),
+                },
+            ],
+            Vec::new(),
+        );
+        let interner = SymbolInterner::from_table(&table);
+        let (aliases, _) = alias_roots_and_source_declarations(&table, &interner);
+        let roots = symbols_by_root(&table, &aliases, &interner);
+        let source = SymbolId::from("root");
+        let projected = references_for_sources(&table, &roots, std::iter::once(&source));
+
+        assert_eq!(
+            projected[&source]
+                .iter()
+                .map(|location| location.start_byte)
+                .collect::<Vec<_>>(),
+            vec![10, 30]
+        );
+        assert_eq!(projected.len(), 1);
+    }
+
+    #[test]
+    fn compact_source_identity_reuses_only_exact_typefacts_manifests() {
+        let source_hash = SourceHash::of("source");
+        let cached = SourceDiscoveryIdentity {
+            source_hash: source_hash.clone(),
+            symbols: vec![SymbolId::from("source-symbol")],
+        };
+        let exact = SourceDiscoveryTypeScriptDelta {
+            entity_paths: HashSet::new(),
+            file_paths: HashSet::new(),
+            semantic_symbol_ids: HashSet::new(),
+        };
+        assert!(source_discovery_identity_matches(
+            &cached,
+            "fixture.ts",
+            &source_hash,
+            false,
+            Some(&exact),
+        ));
+        assert!(!source_discovery_identity_matches(
+            &cached,
+            "fixture.ts",
+            &source_hash,
+            false,
+            None,
+        ));
+
+        let affected = SourceDiscoveryTypeScriptDelta {
+            entity_paths: HashSet::from(["fixture.ts".into()]),
+            file_paths: HashSet::new(),
+            semantic_symbol_ids: HashSet::new(),
+        };
+        assert!(!source_discovery_identity_matches(
+            &cached,
+            "fixture.ts",
+            &source_hash,
+            false,
+            Some(&affected),
+        ));
+        let changed_symbol = SourceDiscoveryTypeScriptDelta {
+            entity_paths: HashSet::new(),
+            file_paths: HashSet::new(),
+            semantic_symbol_ids: HashSet::from([SymbolId::from("source-symbol")]),
+        };
+        assert!(!source_discovery_identity_matches(
+            &cached,
+            "fixture.ts",
+            &source_hash,
+            false,
+            Some(&changed_symbol),
+        ));
+    }
+
+    fn typescript_index_cache(table: &TypeScriptTable) -> CachedTypeScriptIndexes {
+        let interner = SymbolInterner::from_table(table);
+        let (aliases, source_declarations) = alias_roots_and_source_declarations(table, &interner);
         CachedTypeScriptIndexes {
-            symbol_alias_targets: symbol_alias_targets(table),
-            symbols_by_root: symbols_by_root(table, &aliases),
-            entities: entity_symbols(table, &aliases),
-            symbol_names: symbol_names(table, &aliases),
-            references_by_source: references_by_source(table, &aliases),
-            source_discovery_symbol_semantics: source_discovery_symbol_semantics(table),
+            symbol_alias_targets: symbol_alias_targets(table, &interner),
+            symbols_by_root: symbols_by_root(table, &aliases, &interner),
+            entities: entity_symbols(table, &aliases, &interner),
+            symbol_names: symbol_names(table, &aliases, &interner),
+            source_discovery_symbol_semantics: source_discovery_symbol_semantics(table, &interner),
             source_discovery_delta: None,
             aliases,
             source_declarations,
+            interner,
         }
     }
 
@@ -6100,14 +6530,51 @@ mod tests {
     }
 
     #[test]
+    fn idle_retention_preserves_results_and_rebuilds_released_indexes() {
+        let first = empty_project(1);
+        let fresh = build(&first).unwrap();
+        let mut incremental = IncrementalBuilder::default();
+
+        let (initial, _) = incremental.build(&first).unwrap();
+        incremental.retain_for_idle(CacheRetention::Balanced);
+        let (same_generation, same_timings) = incremental.build(&first).unwrap();
+        incremental.retain_for_idle(CacheRetention::Compact);
+
+        let mut next_facts = empty_project(2);
+        next_facts.typescript_changes = Some(solid_facts::TypeScriptChanges {
+            unchanged: true,
+            ..solid_facts::TypeScriptChanges::default()
+        });
+        let (next, next_timings) = incremental.build(&next_facts).unwrap();
+
+        assert_eq!(initial, fresh);
+        assert_eq!(same_generation, fresh);
+        assert_eq!(next, fresh);
+        assert!(same_timings.reused);
+        assert!(!next_timings.reused);
+        assert!(!next_timings.typescript_indexes_reused);
+    }
+
+    #[test]
+    fn shared_builder_reuses_the_program_allocation() {
+        let facts = empty_project(1);
+        let mut incremental = IncrementalBuilder::default();
+
+        let (initial, initial_timings) = incremental.build_shared(&facts).unwrap();
+        let (reused, reused_timings) = incremental.build_shared(&facts).unwrap();
+
+        assert!(Arc::ptr_eq(&initial, &reused));
+        assert!(!initial_timings.reused);
+        assert!(reused_timings.reused);
+    }
+
+    #[test]
     fn source_declaration_index_skips_earlier_dts_only_symbols() {
-        let table = FactTable {
-            schema: 2,
-            generation: 1,
-            project_id: "fixture".into(),
-            sources: Vec::new().into(),
-            entities: Vec::new().into(),
-            symbols: vec![
+        let table = typescript_table(
+            1,
+            Vec::new(),
+            Vec::new(),
+            vec![
                 typefacts::SymbolFact {
                     id: "early".into(),
                     alias_target: "root".into(),
@@ -6124,12 +6591,12 @@ mod tests {
                     .into(),
                     references: (Vec::new()).into(),
                 },
-            ]
-            .into(),
-            files: Vec::new().into(),
-        };
+            ],
+            Vec::new(),
+        );
 
-        let (_, declarations) = alias_roots_and_source_declarations(&table);
+        let interner = SymbolInterner::from_table(&table);
+        let (_, declarations) = alias_roots_and_source_declarations(&table, &interner);
 
         assert_eq!(declarations["root"].name, ("sourceAccessor").into());
         assert_eq!(declarations["root"].location.path, ("source.ts").into());
@@ -6152,57 +6619,69 @@ mod tests {
             symbol: symbol.into(),
             type_descriptor: None,
             resolved_call: None,
+            callability: None,
+            reference_space: None,
+            runtime_identity: "".into(),
         };
-        let mut old = empty_project(1).typescript;
-        old.symbols = vec![
-            symbol("root", "", vec![declaration("root", "fixture.ts", 1)]),
-            symbol(
-                "old-alias",
-                "root",
-                vec![declaration("root", "fixture.d.ts", 2)],
-            ),
-        ]
-        .into();
-        Arc::make_mut(&mut old.symbols)[1].references = (vec![Location {
-            path: "fixture.ts".into(),
-            start_byte: 10,
-            end_byte: 11,
-        }])
-        .into();
-        old.entities = vec![entity("old-alias", 10)].into();
-        let mut current = empty_project(2).typescript;
-        current.symbols = vec![
-            symbol("root", "", vec![declaration("root", "fixture.ts", 3)]),
-            symbol(
-                "new-alias",
-                "root",
-                vec![declaration("root", "fixture.d.ts", 4)],
-            ),
-        ]
-        .into();
-        Arc::make_mut(&mut current.symbols)[1].references = (vec![
-            Location {
-                path: "fixture.ts".into(),
-                start_byte: 13,
-                end_byte: 14,
-            },
-            Location {
-                path: "fixture.ts".into(),
-                start_byte: 12,
-                end_byte: 13,
-            },
-            Location {
-                path: "fixture.ts".into(),
-                start_byte: 12,
-                end_byte: 13,
-            },
-        ])
-        .into();
-        current.entities = vec![entity("new-alias", 12)].into();
+        let old = typescript_table(
+            1,
+            Vec::new(),
+            vec![entity("old-alias", 10)],
+            vec![
+                symbol("root", "", vec![declaration("root", "fixture.ts", 1)]),
+                SymbolFact {
+                    references: vec![Location {
+                        path: "fixture.ts".into(),
+                        start_byte: 10,
+                        end_byte: 11,
+                    }]
+                    .into(),
+                    ..symbol(
+                        "old-alias",
+                        "root",
+                        vec![declaration("root", "fixture.d.ts", 2)],
+                    )
+                },
+            ],
+            Vec::new(),
+        );
+        let current = typescript_table(
+            2,
+            Vec::new(),
+            vec![entity("new-alias", 12)],
+            vec![
+                symbol("root", "", vec![declaration("root", "fixture.ts", 3)]),
+                SymbolFact {
+                    references: vec![
+                        Location {
+                            path: "fixture.ts".into(),
+                            start_byte: 13,
+                            end_byte: 14,
+                        },
+                        Location {
+                            path: "fixture.ts".into(),
+                            start_byte: 12,
+                            end_byte: 13,
+                        },
+                        Location {
+                            path: "fixture.ts".into(),
+                            start_byte: 12,
+                            end_byte: 13,
+                        },
+                    ]
+                    .into(),
+                    ..symbol(
+                        "new-alias",
+                        "root",
+                        vec![declaration("root", "fixture.d.ts", 4)],
+                    )
+                },
+            ],
+            Vec::new(),
+        );
         let symbols_by_id = current
-            .symbols
-            .iter()
-            .map(|symbol| (symbol.id.as_ref(), symbol))
+            .symbols()
+            .map(|symbol| (symbol.id(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6221,7 +6700,6 @@ mod tests {
         assert_eq!(patched.source_declarations, fresh.source_declarations);
         assert_eq!(patched.entities, fresh.entities);
         assert_eq!(patched.symbol_names, fresh.symbol_names);
-        assert_eq!(patched.references_by_source, fresh.references_by_source);
         assert_eq!(
             patched.source_discovery_symbol_semantics,
             fresh.source_discovery_symbol_semantics
@@ -6234,39 +6712,37 @@ mod tests {
                 .semantic_symbol_ids,
             ["new-alias", "old-alias"]
                 .into_iter()
-                .map(str::to_owned)
+                .map(SymbolId::from)
                 .collect()
         );
     }
 
     #[test]
     fn exact_index_patch_does_not_treat_references_as_source_discovery_semantics() {
-        let table = |reference_start| FactTable {
-            schema: 2,
-            generation: 1,
-            project_id: "fixture".into(),
-            sources: Vec::new().into(),
-            entities: Vec::new().into(),
-            symbols: vec![SymbolFact {
-                id: "root".into(),
-                alias_target: (String::new()).into(),
-                declarations: (vec![declaration("root", "fixture.ts", 1)]).into(),
-                references: (vec![Location {
-                    path: "fixture.ts".into(),
-                    start_byte: reference_start,
-                    end_byte: reference_start + 1,
-                }])
-                .into(),
-            }]
-            .into(),
-            files: Vec::new().into(),
+        let table = |reference_start| {
+            typescript_table(
+                1,
+                Vec::new(),
+                Vec::new(),
+                vec![SymbolFact {
+                    id: "root".into(),
+                    alias_target: (String::new()).into(),
+                    declarations: (vec![declaration("root", "fixture.ts", 1)]).into(),
+                    references: (vec![Location {
+                        path: "fixture.ts".into(),
+                        start_byte: reference_start,
+                        end_byte: reference_start + 1,
+                    }])
+                    .into(),
+                }],
+                Vec::new(),
+            )
         };
         let old = table(10);
         let current = table(20);
         let symbols_by_id = current
-            .symbols
-            .iter()
-            .map(|symbol| (symbol.id.as_ref(), symbol))
+            .symbols()
+            .map(|symbol| (symbol.id(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6278,10 +6754,6 @@ mod tests {
 
         assert!(
             patch_typescript_indexes(&mut patched, &current, &symbols_by_id, &changes).is_some()
-        );
-        assert_eq!(
-            patched.references_by_source,
-            typescript_index_cache(&current).references_by_source
         );
         assert!(
             patched
@@ -6295,27 +6767,25 @@ mod tests {
 
     #[test]
     fn exact_index_patch_does_not_treat_declaration_offsets_as_source_semantics() {
-        let table = |start| FactTable {
-            schema: 2,
-            generation: 1,
-            project_id: "fixture".into(),
-            sources: Vec::new().into(),
-            entities: Vec::new().into(),
-            symbols: vec![SymbolFact {
-                id: "root".into(),
-                alias_target: (String::new()).into(),
-                declarations: (vec![declaration("root", "fixture.ts", start)]).into(),
-                references: (Vec::new()).into(),
-            }]
-            .into(),
-            files: Vec::new().into(),
+        let table = |start| {
+            typescript_table(
+                1,
+                Vec::new(),
+                Vec::new(),
+                vec![SymbolFact {
+                    id: "root".into(),
+                    alias_target: (String::new()).into(),
+                    declarations: (vec![declaration("root", "fixture.ts", start)]).into(),
+                    references: (Vec::new()).into(),
+                }],
+                Vec::new(),
+            )
         };
         let old = table(10);
         let current = table(30);
         let symbols_by_id = current
-            .symbols
-            .iter()
-            .map(|symbol| (symbol.id.as_ref(), symbol))
+            .symbols()
+            .map(|symbol| (symbol.id(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6345,27 +6815,25 @@ mod tests {
 
     #[test]
     fn exact_index_patch_does_not_invalidate_when_a_runtime_representative_moves_files() {
-        let table = |path| FactTable {
-            schema: 2,
-            generation: 1,
-            project_id: "fixture".into(),
-            sources: Vec::new().into(),
-            entities: Vec::new().into(),
-            symbols: vec![SymbolFact {
-                id: "root".into(),
-                alias_target: (String::new()).into(),
-                declarations: (vec![declaration("createSignal", path, 10)]).into(),
-                references: (Vec::new()).into(),
-            }]
-            .into(),
-            files: Vec::new().into(),
+        let table = |path| {
+            typescript_table(
+                1,
+                Vec::new(),
+                Vec::new(),
+                vec![SymbolFact {
+                    id: "root".into(),
+                    alias_target: (String::new()).into(),
+                    declarations: (vec![declaration("createSignal", path, 10)]).into(),
+                    references: (Vec::new()).into(),
+                }],
+                Vec::new(),
+            )
         };
         let old = table("a.ts");
         let current = table("b.ts");
         let symbols_by_id = current
-            .symbols
-            .iter()
-            .map(|symbol| (symbol.id.as_ref(), symbol))
+            .symbols()
+            .map(|symbol| (symbol.id(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6402,30 +6870,37 @@ mod tests {
             declarations,
             references: (Vec::new()).into(),
         };
-        let mut old = empty_project(1).typescript;
-        old.symbols = vec![
-            symbol("root", "", (Vec::new()).into()),
-            symbol(
-                "old-alias",
-                "root",
-                (vec![declaration("root", "fixture.d.ts", 1)]).into(),
-            ),
-        ]
-        .into();
-        let mut current = empty_project(2).typescript;
-        current.symbols = vec![
-            symbol("root", "", (Vec::new()).into()),
-            symbol(
-                "new-alias",
-                "root",
-                (vec![declaration("root", "fixture.ts", 1)]).into(),
-            ),
-        ]
-        .into();
+        let old = typescript_table(
+            1,
+            Vec::new(),
+            Vec::new(),
+            vec![
+                symbol("root", "", (Vec::new()).into()),
+                symbol(
+                    "old-alias",
+                    "root",
+                    (vec![declaration("root", "fixture.d.ts", 1)]).into(),
+                ),
+            ],
+            Vec::new(),
+        );
+        let current = typescript_table(
+            2,
+            Vec::new(),
+            Vec::new(),
+            vec![
+                symbol("root", "", (Vec::new()).into()),
+                symbol(
+                    "new-alias",
+                    "root",
+                    (vec![declaration("root", "fixture.ts", 1)]).into(),
+                ),
+            ],
+            Vec::new(),
+        );
         let symbols_by_id = current
-            .symbols
-            .iter()
-            .map(|symbol| (symbol.id.as_ref(), symbol))
+            .symbols()
+            .map(|symbol| (symbol.id(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {
@@ -6454,41 +6929,39 @@ mod tests {
 
     #[test]
     fn exact_index_patch_rejects_alias_retargeting() {
-        let table = |target: &str| FactTable {
-            schema: 2,
-            generation: 1,
-            project_id: "fixture".into(),
-            sources: Vec::new().into(),
-            entities: Vec::new().into(),
-            symbols: vec![
-                SymbolFact {
-                    id: "root-a".into(),
-                    alias_target: (String::new()).into(),
-                    declarations: (Vec::new()).into(),
-                    references: (Vec::new()).into(),
-                },
-                SymbolFact {
-                    id: "root-b".into(),
-                    alias_target: (String::new()).into(),
-                    declarations: (Vec::new()).into(),
-                    references: (Vec::new()).into(),
-                },
-                SymbolFact {
-                    id: "alias".into(),
-                    alias_target: target.into(),
-                    declarations: (Vec::new()).into(),
-                    references: (Vec::new()).into(),
-                },
-            ]
-            .into(),
-            files: Vec::new().into(),
+        let table = |target: &str| {
+            typescript_table(
+                1,
+                Vec::new(),
+                Vec::new(),
+                vec![
+                    SymbolFact {
+                        id: "root-a".into(),
+                        alias_target: (String::new()).into(),
+                        declarations: (Vec::new()).into(),
+                        references: (Vec::new()).into(),
+                    },
+                    SymbolFact {
+                        id: "root-b".into(),
+                        alias_target: (String::new()).into(),
+                        declarations: (Vec::new()).into(),
+                        references: (Vec::new()).into(),
+                    },
+                    SymbolFact {
+                        id: "alias".into(),
+                        alias_target: target.into(),
+                        declarations: (Vec::new()).into(),
+                        references: (Vec::new()).into(),
+                    },
+                ],
+                Vec::new(),
+            )
         };
         let old = table("root-a");
         let current = table("root-b");
         let symbols_by_id = current
-            .symbols
-            .iter()
-            .map(|symbol| (symbol.id.as_ref(), symbol))
+            .symbols()
+            .map(|symbol| (symbol.id(), symbol))
             .collect::<HashMap<_, _>>();
         let mut patched = typescript_index_cache(&old);
         let changes = solid_facts::TypeScriptChanges {

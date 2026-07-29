@@ -5,7 +5,7 @@ use super::*;
 
 pub(super) struct DirectiveCreationCollector<'a, 'c> {
     lookup: &'c SemanticLookup<'a>,
-    symbol_names: &'c HashMap<String, String>,
+    symbol_names: &'c HashMap<SymbolId, SymbolId>,
     visiting: HashSet<(String, Span)>,
     creations: &'c mut Vec<PrimitiveCreation>,
     seen: &'c mut HashSet<(String, u64, u64)>,
@@ -14,7 +14,7 @@ pub(super) struct DirectiveCreationCollector<'a, 'c> {
 impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
     pub(super) fn new(
         lookup: &'c SemanticLookup<'a>,
-        symbol_names: &'c HashMap<String, String>,
+        symbol_names: &'c HashMap<SymbolId, SymbolId>,
         creations: &'c mut Vec<PrimitiveCreation>,
         seen: &'c mut HashSet<(String, u64, u64)>,
     ) -> Self {

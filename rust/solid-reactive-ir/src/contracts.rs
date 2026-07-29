@@ -12,28 +12,27 @@ use std::{
 };
 
 use solid_facts::ProjectFacts;
-use typefacts::Location;
+use typefacts::{Callability, Location, ReferenceSpace};
 
 use super::{
     CachedContractExports, ContractCallback, ContractExport, ContractExportFragment,
     ContractNodeKey, ContractReactiveRead, ContractReturn, EntitySymbols, PackageContract,
-    ReactiveSourceKind, StaticViolation, SummaryNode, SummaryRead, SummaryReads, location,
-    location_order,
+    ReactiveSourceKind, StaticViolation, SummaryNode, SummaryRead, SummaryReads, SymbolId,
+    location, location_order, parallel_slice_results,
 };
-
 #[derive(Clone)]
 pub(super) struct ResolvedContractBinding {
     pub(super) local_name: String,
     pub(super) imported_name: String,
     pub(super) package_name: String,
-    pub(super) symbol: String,
+    pub(super) symbol: SymbolId,
     pub(super) contract_location: Location,
     pub(super) summary: ContractExport,
 }
 
 pub(super) struct ResolvedContracts {
     pub(super) bindings: Vec<ResolvedContractBinding>,
-    pub(super) by_symbol: HashMap<String, ResolvedContractBinding>,
+    pub(super) by_symbol: HashMap<SymbolId, ResolvedContractBinding>,
     pub(super) missing_exports: Vec<StaticViolation>,
 }
 
@@ -67,24 +66,101 @@ pub(super) fn resolve_contract_imports(
                 if binding.type_only {
                     continue;
                 }
+                if binding.kind == solid_ast_facts::ImportKind::Namespace {
+                    let namespace_location = location(file.path.shared(), binding.local.span);
+                    let Some(namespace_symbol) = entities.get(&namespace_location) else {
+                        continue;
+                    };
+                    for member in file.ast.members.iter().filter(|member| {
+                        file.ast
+                            .computed_members
+                            .binary_search(&member.span)
+                            .is_err()
+                            && entities.get(&location(file.path.shared(), member.object))
+                                == Some(namespace_symbol)
+                    }) {
+                        let imported = file
+                            .source_text(member.property)
+                            .unwrap_or_default()
+                            .to_owned();
+                        let Some(summary) = contract
+                            .exports_for_module(&import.module)
+                            .and_then(|exports| exports.get(imported.as_str()))
+                            .cloned()
+                        else {
+                            missing_exports.push(StaticViolation {
+                                id: "SC9001".into(),
+                                rule: "package-contract-export-missing".into(),
+                                message: format!(
+                                    "the reactivity contract for {} has no entrypoint/export summary for imported export {imported}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+                                    import.module
+                                ),
+                                hint: format!(
+                                    "Add an export summary for {imported} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+                                ),
+                                location: location(file.path.shared(), member.property),
+                                analysis_context: String::new(),
+                                fixes: vec![],
+                            });
+                            continue;
+                        };
+                        let member_location = location(file.path.shared(), member.property);
+                        let Some(symbol) = entities.get(&member_location).cloned() else {
+                            continue;
+                        };
+                        let resolved = ResolvedContractBinding {
+                            local_name: imported.clone(),
+                            imported_name: imported.clone(),
+                            package_name: contract.package.name.clone(),
+                            symbol: symbol.clone(),
+                            contract_location: Location {
+                                path: format!("{}#{imported}", contract.source_path).into(),
+                                start_byte: 0,
+                                end_byte: 0,
+                            },
+                            summary,
+                        };
+                        bindings.push(resolved.clone());
+                        by_symbol.insert(symbol, resolved);
+                    }
+                    continue;
+                }
                 let Some(imported) = binding.imported.as_deref().or_else(|| {
                     (binding.kind == solid_ast_facts::ImportKind::Default).then_some("default")
                 }) else {
                     continue;
                 };
-                let binding_location = location(file.path.as_str(), binding.local.span);
+                let binding_location = location(file.path.shared(), binding.local.span);
                 let Some(symbol) = entities.get(&binding_location).cloned() else {
                     continue;
                 };
-                let Some(summary) = contract.exports.get(imported).cloned() else {
-                    if contract.package.name == "solid-js" {
+                let Some(summary) = contract
+                    .exports_for_module(&import.module)
+                    .and_then(|exports| exports.get(imported))
+                    .cloned()
+                else {
+                    let import_entity = facts.typescript.entities().find(|entity| {
+                        entity.location.path == binding_location.path
+                            && entity.location.start_byte == binding_location.start_byte
+                            && entity.location.end_byte == binding_location.end_byte
+                    });
+                    let runtime_referenced = import_entity
+                        .and_then(|entity| entity.reference_space)
+                        .is_none_or(|space| {
+                            matches!(space, ReferenceSpace::Value | ReferenceSpace::Both)
+                        });
+                    if !runtime_referenced {
+                        // TypeScript reports no value-space reference for
+                        // mixed imports such as `import { JSX, Portal }`.
+                        // A type-only binding cannot consume runtime
+                        // reactivity and therefore needs no export summary.
                         continue;
                     }
                     missing_exports.push(StaticViolation {
                         id: "SC9001".into(),
                         rule: "package-contract-export-missing".into(),
                         message: format!(
-                            "the reactivity contract for {} has no entry for imported export {imported}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+                            "the reactivity contract for {} has no entrypoint/export summary for imported export {imported}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
                             import.module
                         ),
                         hint: format!(
@@ -131,15 +207,15 @@ pub(super) fn resolve_contract_imports(
 }
 
 pub(super) struct ContractSemantics<'a> {
-    pub(super) bundled_returns: &'a HashMap<String, ContractReturn>,
-    pub(super) source_kinds: &'a HashMap<String, ReactiveSourceKind>,
-    pub(super) source_primitives: &'a HashMap<String, String>,
+    pub(super) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
+    pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    pub(super) source_primitives: &'a HashMap<SymbolId, SymbolId>,
 }
 
 pub(super) struct ContractGraph<'a> {
     pub(super) nodes: &'a [SummaryNode],
     pub(super) nodes_by_path: &'a HashMap<String, Vec<usize>>,
-    pub(super) by_symbol: &'a HashMap<String, usize>,
+    pub(super) by_symbol: &'a HashMap<SymbolId, usize>,
     pub(super) entities: &'a EntitySymbols,
 }
 
@@ -160,18 +236,15 @@ fn contract_export_function(
     let reactive_reads = summary
         .iter()
         .map(|read| ContractReactiveRead {
-            kind: read.kind.clone().unwrap_or_else(|| {
-                if read.display.contains('.') {
-                    "store-path".into()
-                } else {
-                    "accessor".into()
-                }
-            }),
+            kind: read.kind.clone().unwrap_or_else(|| "accessor".into()),
             label: semantics
                 .source_primitives
                 .get(&read.symbol)
                 .and_then(|primitive| semantics.bundled_returns.get(primitive))
-                .map_or_else(|| read.display.clone(), |returned| returned.label.clone()),
+                .map_or_else(
+                    || read.display.to_string(),
+                    |returned| returned.label.clone(),
+                ),
         })
         .collect::<Vec<_>>();
     let first_returned =
@@ -194,7 +267,10 @@ fn contract_export_function(
             .source_primitives
             .get(&read.symbol)
             .and_then(|primitive| semantics.bundled_returns.get(primitive))
-            .map_or_else(|| read.display.clone(), |returned| returned.label.clone()),
+            .map_or_else(
+                || read.display.to_string(),
+                |returned| returned.label.clone(),
+            ),
     });
     let mut callback_summary = callbacks.to_vec();
     callback_summary.sort_by_key(|callback| callback.parameter);
@@ -211,16 +287,227 @@ fn contract_export_function(
     }
 }
 
+fn resolve_local_reexport(
+    facts: &ProjectFacts,
+    graph: &ContractGraph<'_>,
+    by_symbol: &HashMap<SymbolId, ContractExport>,
+    source_file: &solid_facts::FileFacts,
+    module: &str,
+    name: &str,
+) -> Option<(ContractExport, usize)> {
+    let mut visiting = HashSet::new();
+    resolve_local_reexport_with_visiting(
+        facts,
+        graph,
+        by_symbol,
+        source_file,
+        module,
+        name,
+        &mut visiting,
+    )
+}
+
+fn resolve_local_import(
+    facts: &ProjectFacts,
+    graph: &ContractGraph<'_>,
+    by_symbol: &HashMap<SymbolId, ContractExport>,
+    source_file: &solid_facts::FileFacts,
+    local_name: &str,
+) -> Option<(ContractExport, usize)> {
+    let mut visiting = HashSet::new();
+    resolve_local_import_with_visiting(
+        facts,
+        graph,
+        by_symbol,
+        source_file,
+        local_name,
+        &mut visiting,
+    )
+}
+
+fn resolve_local_binding_initializer(
+    facts: &ProjectFacts,
+    file: &solid_facts::FileFacts,
+    graph: &ContractGraph<'_>,
+    by_symbol: &HashMap<SymbolId, ContractExport>,
+    local: solid_facts_core::Span,
+) -> Option<(ContractExport, usize)> {
+    let local_symbol = graph.entities.get(&location(file.path.shared(), local));
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.names.iter().any(|name| {
+            name.span == local
+                || local_symbol.is_some_and(|symbol| {
+                    graph.entities.get(&location(file.path.shared(), name.span)) == Some(symbol)
+                })
+        })
+    })?;
+    let initializer = binding.initializer?;
+    graph
+        .entities
+        .get(&location(file.path.shared(), initializer))
+        .and_then(|symbol| {
+            graph.by_symbol.get(symbol).and_then(|index| {
+                by_symbol
+                    .get(symbol)
+                    .cloned()
+                    .map(|summary| (summary, *index))
+            })
+        })
+        .or_else(|| {
+            file.source_text(initializer)
+                .and_then(|name| resolve_local_import(facts, graph, by_symbol, file, name))
+        })
+}
+
+fn resolve_local_import_with_visiting(
+    facts: &ProjectFacts,
+    graph: &ContractGraph<'_>,
+    by_symbol: &HashMap<SymbolId, ContractExport>,
+    source_file: &solid_facts::FileFacts,
+    local_name: &str,
+    visiting: &mut HashSet<(String, String)>,
+) -> Option<(ContractExport, usize)> {
+    for import in source_file
+        .ast
+        .imports
+        .iter()
+        .filter(|import| !import.type_only)
+    {
+        for binding in import.bindings.iter().filter(|binding| !binding.type_only) {
+            if source_file.source_text(binding.local.span) != Some(local_name) {
+                continue;
+            }
+            let imported_name = binding.imported.as_deref().or_else(|| {
+                (binding.kind == solid_ast_facts::ImportKind::Default).then_some("default")
+            })?;
+            if import.module.starts_with('.') {
+                return resolve_local_reexport_with_visiting(
+                    facts,
+                    graph,
+                    by_symbol,
+                    source_file,
+                    import.module.as_str(),
+                    imported_name,
+                    visiting,
+                );
+            }
+        }
+    }
+    None
+}
+
+fn resolve_local_reexport_with_visiting(
+    facts: &ProjectFacts,
+    graph: &ContractGraph<'_>,
+    by_symbol: &HashMap<SymbolId, ContractExport>,
+    source_file: &solid_facts::FileFacts,
+    module: &str,
+    name: &str,
+    visiting: &mut HashSet<(String, String)>,
+) -> Option<(ContractExport, usize)> {
+    let source_path = Path::new(source_file.path.as_str());
+    let target_path = source_path.parent()?.join(module).canonicalize().ok()?;
+    let target = facts.files.iter().find(|file| {
+        Path::new(file.path.as_str()).canonicalize().ok().as_ref() == Some(&target_path)
+    })?;
+    resolve_named_export(facts, graph, by_symbol, target, name, visiting)
+}
+
+fn resolve_named_export(
+    facts: &ProjectFacts,
+    graph: &ContractGraph<'_>,
+    by_symbol: &HashMap<SymbolId, ContractExport>,
+    file: &solid_facts::FileFacts,
+    name: &str,
+    visiting: &mut HashSet<(String, String)>,
+) -> Option<(ContractExport, usize)> {
+    if !visiting.insert((file.path.to_string(), name.to_owned())) {
+        return None;
+    }
+    for index in graph
+        .nodes_by_path
+        .get(file.path.as_str())
+        .into_iter()
+        .flatten()
+        .copied()
+    {
+        let node = &graph.nodes[index];
+        if node.exported
+            && node.name.as_deref() == Some(name)
+            && let Some(symbol) = &node.symbol
+            && let Some(summary) = by_symbol.get(symbol)
+        {
+            return Some((summary.clone(), index));
+        }
+    }
+    for export in file.ast.exports.iter().filter(|export| !export.type_only) {
+        for specifier in export
+            .specifiers
+            .iter()
+            .chain(export.declarations.iter())
+            .filter(|specifier| !specifier.type_only && specifier.exported.as_str() == name)
+        {
+            let local_name = file.source_text(specifier.local.span).unwrap_or(name);
+            if let Some(module) = export.module.as_deref()
+                && let Some(summary) = resolve_local_reexport_with_visiting(
+                    facts, graph, by_symbol, file, module, local_name, visiting,
+                )
+            {
+                return Some(summary);
+            }
+            if let Some(summary) = resolve_local_import_with_visiting(
+                facts, graph, by_symbol, file, local_name, visiting,
+            ) {
+                return Some(summary);
+            }
+            if let Some(summary) = resolve_local_binding_initializer(
+                facts,
+                file,
+                graph,
+                by_symbol,
+                specifier.local.span,
+            ) {
+                return Some(summary);
+            }
+            if let Some(resolved) = graph
+                .entities
+                .get(&location(file.path.shared(), specifier.local.span))
+                .and_then(|symbol| {
+                    graph.by_symbol.get(symbol).and_then(|index| {
+                        by_symbol
+                            .get(symbol)
+                            .cloned()
+                            .map(|summary| (summary, *index))
+                    })
+                })
+            {
+                return Some(resolved);
+            }
+        }
+        if export.kind == solid_ast_facts::ExportKind::All
+            && let Some(module) = export.module.as_deref()
+            && let Some(summary) = resolve_local_reexport_with_visiting(
+                facts, graph, by_symbol, file, module, name, visiting,
+            )
+        {
+            return Some(summary);
+        }
+    }
+    None
+}
+
 fn contract_export_fragment(
+    facts: &ProjectFacts,
     file: &solid_facts::FileFacts,
     project_directory: Option<&Path>,
     graph: &ContractGraph<'_>,
     node_keys: &[ContractNodeKey],
     node_contracts: &HashMap<ContractNodeKey, ContractExport>,
+    by_symbol: &HashMap<SymbolId, ContractExport>,
 ) -> ContractExportFragment {
     let mut fragment = ContractExportFragment::default();
     if project_directory
-        .is_some_and(|directory| !Path::new(file.path.as_str()).starts_with(directory))
+        .is_some_and(|directory| !path_within_project(Path::new(file.path.as_str()), directory))
     {
         return fragment;
     }
@@ -250,15 +537,45 @@ fn contract_export_fragment(
         {
             let target = graph
                 .entities
-                .get(&location(file.path.as_str(), specifier.local.span))
+                .get(&location(file.path.shared(), specifier.local.span))
                 .and_then(|symbol| graph.by_symbol.get(symbol))
                 .copied();
-            let summary = target
-                .and_then(|index| {
+            let summary = export
+                .module
+                .as_deref()
+                .and_then(|module| {
+                    let local_name = file
+                        .source_text(specifier.local.span)
+                        .unwrap_or(specifier.exported.as_str());
+                    resolve_local_reexport(facts, graph, by_symbol, file, module, local_name)
+                })
+                .or_else(|| {
+                    let local_name = file
+                        .source_text(specifier.local.span)
+                        .unwrap_or(specifier.exported.as_str());
+                    resolve_local_import(facts, graph, by_symbol, file, local_name)
+                })
+                .or_else(|| {
+                    resolve_local_binding_initializer(
+                        facts,
+                        file,
+                        graph,
+                        by_symbol,
+                        specifier.local.span,
+                    )
+                })
+                .map(|(summary, index)| {
                     fragment.dependencies.insert(node_keys[index].clone());
-                    node_contracts.get(&node_keys[index]).cloned()
+                    summary
+                })
+                .or_else(|| {
+                    target.and_then(|index| {
+                        fragment.dependencies.insert(node_keys[index].clone());
+                        node_contracts.get(&node_keys[index]).cloned()
+                    })
                 })
                 .unwrap_or_else(value_contract_export);
+            let summary = promote_callable_export(facts, file, specifier.local.span, summary);
             fragment
                 .syntax
                 .push((specifier.exported.to_string(), summary, true));
@@ -274,7 +591,7 @@ fn contract_export_fragment(
             for name in &binding.names {
                 let target = graph
                     .entities
-                    .get(&location(file.path.as_str(), name.span))
+                    .get(&location(file.path.shared(), name.span))
                     .and_then(|symbol| graph.by_symbol.get(symbol))
                     .copied();
                 let summary = target
@@ -282,7 +599,15 @@ fn contract_export_fragment(
                         fragment.dependencies.insert(node_keys[index].clone());
                         node_contracts.get(&node_keys[index]).cloned()
                     })
+                    .or_else(|| {
+                        resolve_local_binding_initializer(facts, file, graph, by_symbol, name.span)
+                            .map(|(summary, index)| {
+                                fragment.dependencies.insert(node_keys[index].clone());
+                                summary
+                            })
+                    })
                     .unwrap_or_else(value_contract_export);
+                let summary = promote_callable_export(facts, file, name.span, summary);
                 fragment.syntax.push((
                     file.source_text(name.span).unwrap_or_default().to_owned(),
                     summary,
@@ -300,7 +625,7 @@ pub(super) fn contract_export_summaries_incremental(
     graph: &ContractGraph<'_>,
     reverse_edges: &[Vec<usize>],
     graph_node_reused_paths: &HashSet<&str>,
-    changed_semantic_symbols: Option<&HashSet<String>>,
+    changed_semantic_symbols: Option<&HashSet<SymbolId>>,
     analysis: &ContractAnalysis<'_>,
 ) -> Arc<BTreeMap<String, ContractExport>> {
     let mut ordinals = HashMap::<&str, usize>::new();
@@ -342,15 +667,19 @@ pub(super) fn contract_export_summaries_incremental(
             }
         }
     }
-    let mut changed_nodes = HashSet::<ContractNodeKey>::new();
-    for index in dirty_set {
-        let contract = contract_export_function(
-            &graph.nodes[index],
-            &analysis.summaries[index],
-            &analysis.returned[index],
-            &analysis.callbacks[index],
+    let mut dirty_indices = dirty_set.into_iter().collect::<Vec<_>>();
+    dirty_indices.sort_unstable();
+    let rebuilt_nodes = parallel_slice_results(&dirty_indices, |index| {
+        contract_export_function(
+            &graph.nodes[*index],
+            &analysis.summaries[*index],
+            &analysis.returned[*index],
+            &analysis.callbacks[*index],
             &analysis.semantics,
-        );
+        )
+    });
+    let mut changed_nodes = HashSet::<ContractNodeKey>::new();
+    for (index, contract) in dirty_indices.into_iter().zip(rebuilt_nodes) {
         let key = node_keys[index].clone();
         if cache.nodes.get(&key) != Some(&contract) {
             changed_nodes.insert(key.clone());
@@ -383,33 +712,134 @@ pub(super) fn contract_export_summaries_incremental(
         cache.files.remove(&path);
     }
     let project_directory = Path::new(&facts.project_id).parent();
-    for file in &facts.files {
-        let rebuild = !graph_node_reused_paths.contains(file.path.as_str())
-            || cache
-                .files
-                .get(file.path.as_str())
-                .is_none_or(|fragment| !fragment.dependencies.is_disjoint(&changed_nodes));
-        if !rebuild {
-            continue;
-        }
-        let fragment =
-            contract_export_fragment(file, project_directory, graph, &node_keys, &cache.nodes);
+    let by_symbol = graph
+        .by_symbol
+        .iter()
+        .filter_map(|(symbol, index)| {
+            cache
+                .nodes
+                .get(&node_keys[*index])
+                .cloned()
+                .map(|summary| (symbol.clone(), summary))
+        })
+        .collect::<HashMap<_, _>>();
+    let rebuild_files = facts
+        .files
+        .iter()
+        .filter(|file| {
+            !graph_node_reused_paths.contains(file.path.as_str())
+                || cache
+                    .files
+                    .get(file.path.as_str())
+                    .is_none_or(|fragment| !fragment.dependencies.is_disjoint(&changed_nodes))
+        })
+        .collect::<Vec<_>>();
+    let rebuilt_fragments = parallel_slice_results(&rebuild_files, |file| {
+        contract_export_fragment(
+            facts,
+            file,
+            project_directory,
+            graph,
+            &node_keys,
+            &cache.nodes,
+            &by_symbol,
+        )
+    });
+    for (file, fragment) in rebuild_files.into_iter().zip(rebuilt_fragments) {
         fragments_changed |= cache.files.get(file.path.as_str()) != Some(&fragment);
         cache.files.insert(file.path.to_string(), fragment);
     }
     if !fragments_changed && let Some(aggregate) = &cache.aggregate {
         return Arc::clone(aggregate);
     }
+    let aggregate = aggregate_contract_fragments(facts, &cache.files);
+    let aggregate = Arc::new(aggregate);
+    cache.aggregate = Some(Arc::clone(&aggregate));
+    aggregate
+}
+
+pub(super) fn contract_export_summaries(
+    facts: &ProjectFacts,
+    graph: &ContractGraph<'_>,
+    analysis: &ContractAnalysis<'_>,
+) -> BTreeMap<String, ContractExport> {
+    let mut ordinals = HashMap::<&str, usize>::new();
+    let node_keys = graph
+        .nodes
+        .iter()
+        .map(|node| {
+            let ordinal = ordinals.entry(node.path.as_str()).or_default();
+            let key = ContractNodeKey {
+                path: node.path.clone(),
+                ordinal: *ordinal,
+            };
+            *ordinal += 1;
+            key
+        })
+        .collect::<Vec<_>>();
+    let node_contracts = graph
+        .nodes
+        .iter()
+        .enumerate()
+        .map(|(index, node)| {
+            (
+                node_keys[index].clone(),
+                contract_export_function(
+                    node,
+                    &analysis.summaries[index],
+                    &analysis.returned[index],
+                    &analysis.callbacks[index],
+                    &analysis.semantics,
+                ),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let by_symbol = graph
+        .by_symbol
+        .iter()
+        .filter_map(|(symbol, index)| {
+            node_contracts
+                .get(&node_keys[*index])
+                .cloned()
+                .map(|summary| (symbol.clone(), summary))
+        })
+        .collect::<HashMap<_, _>>();
+    let project_directory = Path::new(&facts.project_id).parent();
+    let fragments = facts
+        .files
+        .iter()
+        .map(|file| {
+            (
+                file.path.to_string(),
+                contract_export_fragment(
+                    facts,
+                    file,
+                    project_directory,
+                    graph,
+                    &node_keys,
+                    &node_contracts,
+                    &by_symbol,
+                ),
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    aggregate_contract_fragments(facts, &fragments)
+}
+
+fn aggregate_contract_fragments(
+    facts: &ProjectFacts,
+    fragments: &HashMap<String, ContractExportFragment>,
+) -> BTreeMap<String, ContractExport> {
     let mut aggregate = BTreeMap::new();
     for file in &facts.files {
-        if let Some(fragment) = cache.files.get(file.path.as_str()) {
+        if let Some(fragment) = fragments.get(file.path.as_str()) {
             for (name, summary) in &fragment.direct {
                 aggregate.insert(name.clone(), summary.clone());
             }
         }
     }
     for file in &facts.files {
-        if let Some(fragment) = cache.files.get(file.path.as_str()) {
+        if let Some(fragment) = fragments.get(file.path.as_str()) {
             for (name, summary, replace) in &fragment.syntax {
                 if *replace {
                     aggregate.insert(name.clone(), summary.clone());
@@ -421,92 +851,16 @@ pub(super) fn contract_export_summaries_incremental(
             }
         }
     }
-    let aggregate = Arc::new(aggregate);
-    cache.aggregate = Some(Arc::clone(&aggregate));
     aggregate
 }
 
-pub(super) fn contract_export_summaries(
-    facts: &ProjectFacts,
-    graph: &ContractGraph<'_>,
-    analysis: &ContractAnalysis<'_>,
-) -> BTreeMap<String, ContractExport> {
-    let project_directory = Path::new(&facts.project_id).parent();
-    let mut by_symbol = HashMap::<String, ContractExport>::with_capacity(graph.nodes.len());
-    for (index, node) in graph.nodes.iter().enumerate() {
-        let Some(symbol) = &node.symbol else {
-            continue;
-        };
-        let contribution = contract_export_function(
-            node,
-            &analysis.summaries[index],
-            &analysis.returned[index],
-            &analysis.callbacks[index],
-            &analysis.semantics,
-        );
-        by_symbol.insert(symbol.clone(), contribution);
-    }
-
-    let mut exports = BTreeMap::new();
-    for node in graph.nodes.iter().filter(|node| {
-        node.exported
-            && project_directory
-                .is_none_or(|directory| Path::new(&node.path).starts_with(directory))
-    }) {
-        if let (Some(name), Some(symbol)) = (&node.name, &node.symbol)
-            && let Some(summary) = by_symbol.get(symbol)
-        {
-            exports.insert(name.clone(), summary.clone());
-        }
-    }
-    for file in facts.files.iter().filter(|file| {
-        project_directory
-            .is_none_or(|directory| Path::new(file.path.as_str()).starts_with(directory))
-    }) {
-        for export in file.ast.exports.iter().filter(|export| !export.type_only) {
-            for specifier in export
-                .specifiers
-                .iter()
-                .chain(export.declarations.iter())
-                .filter(|specifier| !specifier.type_only)
-            {
-                let summary = graph
-                    .entities
-                    .get(&location(file.path.as_str(), specifier.local.span))
-                    .and_then(|symbol| by_symbol.get(symbol))
-                    .cloned();
-                if let Some(summary) = summary {
-                    exports.insert(specifier.exported.to_string(), summary);
-                } else {
-                    exports
-                        .entry(specifier.exported.to_string())
-                        .or_insert_with(value_contract_export);
-                }
-            }
-            for binding in file.ast.bindings.iter().filter(|binding| {
-                binding.shape != solid_ast_facts::BindingShape::Array
-                    && export.span.contains(binding.declaration)
-                    && !file.ast.functions.iter().any(|function| {
-                        export.span.contains(function.span)
-                            && function.body.contains(binding.declaration)
-                    })
-            }) {
-                for name in &binding.names {
-                    let name_text = file.source_text(name.span).unwrap_or_default();
-                    if !exports.contains_key(name_text) {
-                        let summary = graph
-                            .entities
-                            .get(&location(file.path.as_str(), name.span))
-                            .and_then(|symbol| by_symbol.get(symbol))
-                            .cloned()
-                            .unwrap_or_else(value_contract_export);
-                        exports.insert(name_text.to_owned(), summary);
-                    }
-                }
-            }
-        }
-    }
-    exports
+fn path_within_project(path: &Path, directory: &Path) -> bool {
+    path.starts_with(directory)
+        || path.canonicalize().is_ok_and(|path| {
+            directory
+                .canonicalize()
+                .is_ok_and(|directory| path.starts_with(directory))
+        })
 }
 
 fn value_contract_export() -> ContractExport {
@@ -514,4 +868,28 @@ fn value_contract_export() -> ContractExport {
         kind: "value".into(),
         ..ContractExport::default()
     }
+}
+
+fn promote_callable_export(
+    facts: &ProjectFacts,
+    file: &solid_facts::FileFacts,
+    span: solid_facts_core::Span,
+    mut summary: ContractExport,
+) -> ContractExport {
+    if summary.kind != "value" {
+        return summary;
+    }
+    let target = location(file.path.shared(), span);
+    let entity = facts.typescript.entities().find(|entity| {
+        entity.location.path == target.path
+            && entity.location.start_byte == target.start_byte
+            && entity.location.end_byte == target.end_byte
+    });
+    let Some(entity) = entity else {
+        return summary;
+    };
+    if entity.callability == Some(Callability::Callable) {
+        summary.kind = "function".into();
+    }
+    summary
 }

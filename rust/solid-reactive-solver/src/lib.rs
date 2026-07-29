@@ -87,8 +87,8 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
             )
         })
         .map(|read| Finding {
-            analysis_context: read.context.clone(),
-            subject_kind: read.kind.clone(),
+            analysis_context: read.context.to_string(),
+            subject_kind: read.kind.to_string(),
             related_locations: strict_read_related_locations(read),
             evidence: strict_read_evidence(read),
             hint: "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev.".into(),

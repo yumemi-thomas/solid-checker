@@ -1,0 +1,12 @@
+{
+  "name": "conditional-targets-package",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "solid": "./unbuilt-solid.jsx",
+      "development": "./development.js",
+      "default": "./production.js"
+    }
+  }
+}

@@ -4,16 +4,24 @@
   "title": "Solid Reactivity Package Contract",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schemaVersion", "package", "exports", "evidence"],
+  "required": [
+    "schemaVersion",
+    "package",
+    "compilerFactsProtocol",
+    "summaries",
+    "entrypoints",
+    "evidence"
+  ],
   "properties": {
     "schemaVersion": { "const": 1 },
     "package": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["name"],
+      "required": ["name", "version"],
       "properties": {
         "name": { "type": "string", "minLength": 1 },
-        "version": { "type": "string" }
+        "version": { "type": "string", "minLength": 1 },
+        "integrity": { "type": "string", "pattern": "^sha512-[A-Za-z0-9+/]{86}==$" }
       }
     },
     "compilerFactsProtocol": { "const": 1 },
@@ -25,48 +33,39 @@
         "implementation": { "$ref": "#/$defs/artifact" }
       }
     },
-    "exports": {
+    "summaries": {
       "type": "object",
       "minProperties": 1,
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": { "$ref": "#/$defs/export" }
+    },
+    "entrypoints": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "pattern": "^(\\.|\\./.+)$" },
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind"],
+        "oneOf": [
+          {
+            "required": ["exports"],
+            "not": { "required": ["sameAs"] }
+          },
+          {
+            "required": ["sameAs"],
+            "not": { "required": ["exports"] }
+          }
+        ],
         "properties": {
-          "kind": { "enum": ["function", "value"] },
-          "returns": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["kind", "label"],
-            "properties": {
-              "kind": { "enum": ["accessor", "store-path"] },
-              "label": { "type": "string", "minLength": 1 }
-            }
+          "exports": { "$ref": "#/$defs/exportGroups" },
+          "sameAs": {
+            "type": "string",
+            "pattern": "^(\\.|\\./.+)$"
           },
-          "callbacks": {
+          "conditions": {
             "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["parameter", "execution"],
-              "properties": {
-                "parameter": { "type": "integer", "minimum": 0 },
-                "execution": { "enum": ["inline", "tracked", "deferred"] }
-              }
-            }
-          },
-          "asyncBehavior": { "enum": ["promise", "async-iterable"] },
-          "reactiveReads": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "additionalProperties": false,
-              "required": ["kind", "label"],
-              "properties": {
-                "kind": { "enum": ["accessor", "store-path"] },
-                "label": { "type": "string", "minLength": 1 }
-              }
-            }
+            "items": { "type": "string", "minLength": 1 },
+            "uniqueItems": true
           }
         }
       }
@@ -76,12 +75,68 @@
       "additionalProperties": false,
       "required": ["kind"],
       "properties": {
-        "kind": { "enum": ["generated", "reviewed", "trusted"] },
+        "kind": {
+          "enum": ["generated", "inferred", "verified", "reviewed", "trusted", "attested"]
+        },
         "generator": { "type": "string" }
       }
     }
   },
   "$defs": {
+    "exportGroups": {
+      "type": "object",
+      "minProperties": 1,
+      "propertyNames": { "minLength": 1 },
+      "additionalProperties": {
+        "type": "array",
+        "minItems": 1,
+        "uniqueItems": true,
+        "items": { "type": "string", "minLength": 1 }
+      }
+    },
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["function", "value"] },
+        "returns": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "label"],
+          "properties": {
+            "kind": { "enum": ["accessor", "store-path"] },
+            "label": { "type": "string", "minLength": 1 }
+          }
+        },
+        "callbacks": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["parameter", "execution"],
+            "properties": {
+              "parameter": { "type": "integer", "minimum": 0 },
+              "execution": { "enum": ["inline", "tracked", "deferred"] }
+            }
+          }
+        },
+        "asyncBehavior": { "enum": ["promise", "async-iterable"] },
+        "reactiveReads": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "label"],
+            "properties": {
+              "kind": { "enum": ["accessor", "store-path"] },
+              "label": { "type": "string", "minLength": 1 }
+            }
+          }
+        }
+      }
+    },
     "artifact": {
       "type": "object",
       "additionalProperties": false,

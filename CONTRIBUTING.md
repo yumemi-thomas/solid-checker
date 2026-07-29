@@ -25,6 +25,21 @@ make package     # native npm package layout
 Run `make verify` before proposing a change. Compiler execution semantics are
 conformance-tested in the `dom-expressions` repository, not here.
 
+## Performance regressions
+
+`make verify-performance` certifies repository-owned ceilings for scaling,
+Type Facts payload, fresh Reactive IR, cached reuse, and a one-file incremental
+analysis. The incremental ceiling is intentionally measured on a deterministic
+1,000-source corpus and can be overridden with
+`SOLID_CHECKER_MAX_INCREMENTAL_NS` when testing that the gate turns red.
+
+The `Performance` GitHub workflow also sends fresh, cached-throughput, and
+one-file incremental wall-time benchmarks to CodSpeed on `main` and every pull
+request. Runs on `main` establish the comparison baseline; pull requests receive
+a performance check and report against that baseline. These are wall-time
+benchmarks because the end-to-end analysis includes the Type Facts child
+process, which CPU simulation does not follow.
+
 ## Semantic changes
 
 Add positive and negative fixtures, expose only the required facts, represent

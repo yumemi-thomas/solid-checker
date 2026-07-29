@@ -1,0 +1,60 @@
+name: Performance
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  benchmarks:
+    name: Regression benchmarks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: dtolnay/rust-toolchain@1.97
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: performance
+
+      - name: Build the benchmark runtime
+        run: |
+          scripts/build-typefacts.sh
+          cargo build --release --manifest-path rust/Cargo.toml \
+            -p solid-facts-backend --bin solid-checker-session-bench
+
+      - name: Certify absolute performance invariants
+        env:
+          SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
+        run: node benchmarks/verify-performance.mjs
+
+      - name: Prepare the deterministic corpus
+        run: |
+          node benchmarks/generate-bench-corpus.mjs \
+            1000 /tmp/solid-checker-codspeed-corpus
+
+      # This analysis spans the Rust process and the Type Facts child process.
+      # CodSpeed CPU simulation does not follow child processes, so wall time is
+      # the correct end-to-end instrument here.
+      - name: Compare performance with the base commit
+        uses: CodSpeedHQ/action@v4
+        with:
+          mode: walltime
+          config: codspeed.yml
+        env:
+          SOLID_CHECKER_CODSPEED_CORPUS: /tmp/solid-checker-codspeed-corpus
+          SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts

@@ -2,17 +2,20 @@
 //! TypeScript-Go semantic facts.
 
 mod cache;
+mod contract_document;
 mod demand_plan;
 mod diagnostics;
 
 pub use cache::{CacheStats, FactsCache};
+pub use contract_document::encode as encode_package_contract;
 pub use diagnostics::{
-    DiagnosticAnalysis, DiagnosticTimings, Metrics, PackageContractStatus, PackageSummary,
-    Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit, SourceLocation,
-    analysis_metrics, analyze_project, analyze_project_measured, analyze_project_measured_with,
-    bundled_solid_js_contract, discovered_contract_paths, imported_package_roots,
-    load_package_contracts, load_package_contracts_with, package_contract_statuses,
-    package_contract_statuses_with, read_package_contract, snapshot, source_location,
+    DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
+    PackageSummary, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit,
+    SourceLocation, analysis_metrics, analyze_project, analyze_project_measured,
+    analyze_project_measured_with, bundled_solid_js_contract, discovered_contract_paths,
+    imported_package_roots, load_package_contracts, load_package_contracts_with,
+    package_contract_statuses, package_contract_statuses_with, read_package_contract, snapshot,
+    source_location,
 };
 
 #[must_use]
@@ -46,16 +49,16 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 use solid_compiler_facts::{AnalysisRequest, CompilerOptions, ExecutionMap};
-use solid_facts::{FileFacts, ProjectFacts, TypeScriptChanges};
+use solid_facts::{FileFacts, ProjectFacts, TypeScriptChanges, TypeScriptTable};
 use solid_facts_core::{Generation, Span};
 use thiserror::Error;
-use typefacts::{FactTable, v3::EntityDemand};
+use typefacts::v3::EntityDemand;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct SourceFile {
     pub path: String,
-    pub source: String,
+    pub source: Arc<str>,
     #[serde(default)]
     pub compiler_options: CompilerOptions,
 }
@@ -67,6 +70,7 @@ pub trait CompilerFactsProvider {
 pub struct SemanticDemandGroup<'a> {
     pub path: &'a str,
     pub demands: &'a [EntityDemand],
+    pub shared_demands: Option<&'a Arc<[EntityDemand]>>,
 }
 
 /// The checker's view of a TypeFacts producer.
@@ -83,11 +87,11 @@ pub trait TypeFactsProvider {
     fn semantic_grouped(
         &mut self,
         groups: &[SemanticDemandGroup<'_>],
-    ) -> Result<FactTable, BackendError>;
+    ) -> Result<TypeScriptTable, BackendError>;
 
     /// Analyses from a flat demand list, grouping it first. A convenience for
     /// callers that do not already keep demands grouped.
-    fn semantic(&mut self, demands: Vec<EntityDemand>) -> Result<FactTable, BackendError> {
+    fn semantic(&mut self, demands: Vec<EntityDemand>) -> Result<TypeScriptTable, BackendError> {
         let grouped = group_demands(&demands);
         let groups = grouped
             .iter()
@@ -95,6 +99,7 @@ pub trait TypeFactsProvider {
             .map(|run| SemanticDemandGroup {
                 path: run[0].location.path.as_ref(),
                 demands: run,
+                shared_demands: None,
             })
             .collect::<Vec<_>>();
         self.semantic_grouped(&groups)
@@ -195,7 +200,7 @@ impl CompilerFactsProvider for NativeCompilerFacts {
             ..CompileOptions::default()
         };
         let output = compile(&request.source, &options)
-            .map_err(|error| BackendError::NativeCompiler(error.to_string()))?;
+            .map_err(|error| BackendError::NativeCompiler(format!("{}: {error}", request.path)))?;
         let trace = output
             .semantic_trace
             .ok_or(BackendError::MissingExecutionMap)?;
@@ -382,7 +387,7 @@ impl TypeFactsSession {
             .into_iter()
             .map(|source| SourceFile {
                 path: source.path,
-                source: String::from_utf8_lossy(&source.source).into_owned(),
+                source: String::from_utf8_lossy(&source.source).into_owned().into(),
                 compiler_options: CompilerOptions::default(),
             })
             .collect())
@@ -442,14 +447,19 @@ impl TypeFactsProvider for TypeFactsSession {
     fn semantic_grouped(
         &mut self,
         groups: &[SemanticDemandGroup<'_>],
-    ) -> Result<FactTable, BackendError> {
+    ) -> Result<TypeScriptTable, BackendError> {
         let borrowed = groups
             .iter()
-            .filter_map(|group| typefacts::DemandGroup::new(group.demands))
+            .filter_map(|group| {
+                group.shared_demands.map_or_else(
+                    || typefacts::DemandGroup::new(group.demands),
+                    typefacts::DemandGroup::shared,
+                )
+            })
             .collect::<Vec<_>>();
         let table = self.session.analyze_groups(&borrowed)?;
         self.record();
-        Ok(table)
+        Ok(TypeScriptTable::retained(table))
     }
 
     fn take_last_exchange_timings(&mut self) -> Option<TypeFactsExchangeTimings> {
@@ -561,7 +571,7 @@ impl NativeIncrementalSession {
                     change.path.clone(),
                     SourceFile {
                         path: change.path,
-                        source,
+                        source: source.into(),
                         compiler_options: change.compiler_options,
                     },
                 );
@@ -891,14 +901,14 @@ pub fn build_project_native_measured(
                         let ast = solid_ast_facts::extract(&file.path, &file.source)?;
                         let request = AnalysisRequest::new(
                             &file.path,
-                            &file.source,
+                            Arc::clone(&file.source),
                             file.compiler_options.clone(),
                         );
                         let execution = compiler.analyze(&request)?;
                         execution.validate(&file.source)?;
                         Ok((
                             chunk_index * chunk_size + offset,
-                            FileFacts::new(generation, &file.source, ast, execution)?,
+                            FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?,
                         ))
                     })
                     .collect::<Result<Vec<_>, BackendError>>()
@@ -928,12 +938,12 @@ pub fn build_project_native_measured(
     let demands = semantic_demands(&files)?;
     let semantic_demand_assembly = semantic_demand_started.elapsed();
     let demand_assembly = demand_started.elapsed();
-    let mut table = typescript.semantic(demands)?;
+    let table = typescript.semantic(demands)?;
     let exchange = typescript.take_last_exchange_timings().unwrap_or_default();
     let table_changes = typescript.take_last_table_changes();
     let type_facts = type_facts_started.elapsed();
     let hydrate_started = Instant::now();
-    hydrate_structural_file_facts(&mut table, &files);
+    let table = hydrate_structural_file_facts(table, &files);
     let hydrate = hydrate_started.elapsed();
     let join_started = Instant::now();
     let mut facts =
@@ -1073,7 +1083,7 @@ fn build_project_native_cached_measured_inner(
     for (((file, ast), execution), index) in
         prepared.into_iter().zip(executions).zip(pending_indices)
     {
-        let facts = FileFacts::new(generation, &file.source, ast, execution)?;
+        let facts = FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
         files[index] = Some(facts);
     }
     let files = files
@@ -1091,15 +1101,15 @@ fn build_project_native_cached_measured_inner(
     let demand_groups = semantic_demand_groups_cached(&files, cache)?;
     let semantic_demand_assembly = semantic_demand_started.elapsed();
     let demand_assembly = demand_started.elapsed();
-    let mut table = typescript.semantic_grouped(&demand_groups)?;
+    let table = typescript.semantic_grouped(&demand_groups)?;
     let exchange = typescript.take_last_exchange_timings().unwrap_or_default();
     let table_changes = typescript.take_last_table_changes();
     check_cancelled(cancelled)?;
     let type_facts = type_facts_started.elapsed();
     let hydrate_started = Instant::now();
-    hydrate_structural_file_facts_cached(&mut table, &files, cache);
-    let hydrate = hydrate_started.elapsed();
     cache.semantic_table = Some((generation.get(), table.clone()));
+    let table = hydrate_structural_file_facts_cached(table, &files, cache);
+    let hydrate = hydrate_started.elapsed();
     let join_started = Instant::now();
     let mut facts = ProjectFacts::join(generation, project_id, files, table)?;
     facts.typescript_changes = table_changes;
@@ -1139,7 +1149,11 @@ fn prepare_native_compiler_parallel(
     let mut executions = vec![None; prepared.len()];
     let mut misses = Vec::new();
     for (index, (file, _)) in prepared.iter().enumerate() {
-        let request = AnalysisRequest::new(&file.path, &file.source, file.compiler_options.clone());
+        let request = AnalysisRequest::new(
+            &file.path,
+            Arc::clone(&file.source),
+            file.compiler_options.clone(),
+        );
         let key = compiler_cache_key(&request)?;
         if let Some(execution) = cache.compiler.get(&key) {
             executions[index] = Some(execution.clone());
@@ -1161,7 +1175,7 @@ fn prepare_native_compiler_parallel(
                     .map(|(index, key, file)| {
                         let request = AnalysisRequest::new(
                             &file.path,
-                            &file.source,
+                            Arc::clone(&file.source),
                             file.compiler_options.clone(),
                         );
                         let execution = compiler.analyze(&request)?;
@@ -1202,7 +1216,8 @@ pub fn build_project_cached(
     let mut seeds = Vec::new();
     let prepared = prepare_ast_parallel(sources, cache)?;
     for (file, ast) in prepared {
-        let request = AnalysisRequest::new(&file.path, &file.source, file.compiler_options);
+        let request =
+            AnalysisRequest::new(&file.path, Arc::clone(&file.source), file.compiler_options);
         let compiler_key = compiler_cache_key(&request)?;
         let execution = if let Some(cached) = cache.compiler.get(&compiler_key) {
             cached.clone()
@@ -1212,13 +1227,13 @@ pub fn build_project_cached(
             execution
         };
         execution.validate(&file.source)?;
-        let facts = FileFacts::new(generation, &file.source, ast, execution)?;
+        let facts = FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?;
         seeds.extend(facts.compiler_seed_locations()?);
         seeds.extend(facts.structural_seed_locations());
         files.push(facts);
     }
-    let mut table = typescript.semantic(semantic_demands_cached(&files, cache)?)?;
-    hydrate_structural_file_facts_cached(&mut table, &files, cache);
+    let table = typescript.semantic(semantic_demands_cached(&files, cache)?)?;
+    let table = hydrate_structural_file_facts_cached(table, &files, cache);
     ProjectFacts::join(generation, project_id, files, table).map_err(Into::into)
 }
 
@@ -1307,7 +1322,8 @@ fn semantic_demands_cached(
         let per_file = if let Some(cached) = cache.semantic_demands.get(&key) {
             cached
         } else {
-            let generated = semantic_demands(std::slice::from_ref(file))?;
+            let generated: Arc<[typefacts::v3::EntityDemand]> =
+                semantic_demands(std::slice::from_ref(file))?.into();
             cache.semantic_demands.insert(key.clone(), generated);
             cache
                 .semantic_demands
@@ -1331,9 +1347,10 @@ fn semantic_demand_groups_cached<'a>(
         .collect::<Vec<_>>();
     for (file, key) in ordered_files.iter().zip(&keys) {
         if !cache.semantic_demands.contains_key(key) {
-            cache
-                .semantic_demands
-                .insert(key.clone(), semantic_demands(std::slice::from_ref(*file))?);
+            cache.semantic_demands.insert(
+                key.clone(),
+                semantic_demands(std::slice::from_ref(*file))?.into(),
+            );
         }
     }
     Ok(ordered_files
@@ -1344,7 +1361,14 @@ fn semantic_demand_groups_cached<'a>(
             demands: cache
                 .semantic_demands
                 .get(&key)
-                .expect("cached semantic demand run"),
+                .expect("cached semantic demand run")
+                .as_ref(),
+            shared_demands: Some(
+                cache
+                    .semantic_demands
+                    .get(&key)
+                    .expect("cached semantic demand run"),
+            ),
         })
         .collect())
 }
@@ -1377,29 +1401,32 @@ fn callee_property_location(source: &str, callee: &typefacts::Location) -> typef
     }
 }
 
-fn hydrate_structural_file_facts(table: &mut typefacts::FactTable, files: &[FileFacts]) {
+fn hydrate_structural_file_facts(table: TypeScriptTable, files: &[FileFacts]) -> TypeScriptTable {
     let files_by_path = files
         .iter()
         .map(|file| (file.path.as_str(), file))
         .collect::<HashMap<_, _>>();
-    for target in Arc::make_mut(&mut table.files) {
+    let mut table_files = table.files().cloned().collect::<Vec<_>>();
+    for target in &mut table_files {
         let Some(file) = files_by_path.get(target.path.as_ref()).copied() else {
             continue;
         };
         target.functions = structural_functions(file).into();
     }
+    table.with_files(table_files)
 }
 
 fn hydrate_structural_file_facts_cached(
-    table: &mut typefacts::FactTable,
+    table: TypeScriptTable,
     files: &[FileFacts],
     cache: &mut FactsCache,
-) {
+) -> TypeScriptTable {
     let files_by_path = files
         .iter()
         .map(|file| (file.path.as_str(), file))
         .collect::<HashMap<_, _>>();
-    for target in Arc::make_mut(&mut table.files) {
+    let mut table_files = table.files().cloned().collect::<Vec<_>>();
+    for target in &mut table_files {
         let Some(file) = files_by_path.get(target.path.as_ref()).copied() else {
             continue;
         };
@@ -1419,38 +1446,50 @@ fn hydrate_structural_file_facts_cached(
             target.functions = functions.clone().into();
         }
     }
+    table.with_files(table_files)
 }
 
 fn structural_functions(file: &FileFacts) -> Vec<typefacts::SourceFunction> {
     let mut result = Vec::new();
     for function in &file.ast.functions {
-        let name = function.name.as_ref().or_else(|| {
-            if function.kind != solid_ast_facts::FunctionKind::Arrow || function.expression_body {
-                return None;
-            }
-            file.ast
-                .bindings
-                .iter()
-                .filter(|binding| {
-                    binding
-                        .initializer
-                        .is_some_and(|initializer| initializer.contains(function.span))
-                })
-                .min_by_key(|binding| {
-                    binding
-                        .initializer
-                        .map_or(u32::MAX, |span| span.end - span.start)
-                })
-                .and_then(|binding| binding.names.first())
+        let bound_name = function.name.as_ref().or_else(|| {
+            matches!(
+                function.kind,
+                solid_ast_facts::FunctionKind::Arrow | solid_ast_facts::FunctionKind::Expression
+            )
+            .then(|| {
+                file.ast
+                    .bindings
+                    .iter()
+                    .filter(|binding| {
+                        binding
+                            .initializer
+                            .is_some_and(|initializer| initializer.contains(function.span))
+                    })
+                    .min_by_key(|binding| {
+                        binding
+                            .initializer
+                            .map_or(u32::MAX, |span| span.end - span.start)
+                    })
+                    .and_then(|binding| binding.names.first())
+            })
+            .flatten()
         });
+        let name = bound_name
+            .map(|name| typefacts_location(file.path.as_str(), name.span))
+            .or_else(|| {
+                file.ast
+                    .returns
+                    .iter()
+                    .any(|returned| {
+                        returned.value == solid_ast_facts::ReturnValueKind::Function
+                            && returned.span == function.span
+                    })
+                    .then(|| typefacts_location(file.path.as_str(), function.span))
+            });
         let Some(name) = name else {
             continue;
         };
-        if function.kind == solid_ast_facts::FunctionKind::Expression
-            || (function.kind == solid_ast_facts::FunctionKind::Arrow && function.expression_body)
-        {
-            continue;
-        }
         let exported = file.ast.exports.iter().any(|export| {
             export.span.contains(function.span)
                 && !file.ast.functions.iter().any(|candidate| {
@@ -1460,13 +1499,17 @@ fn structural_functions(file: &FileFacts) -> Vec<typefacts::SourceFunction> {
                 })
         });
         result.push(typefacts::SourceFunction {
-            name: typefacts_location(file.path.as_str(), name.span),
+            name,
             body: typefacts::Location {
                 path: file.path.to_string().into(),
                 start_byte: u64::from(function.body.start),
-                // TS-Go reports a block body without the closing brace,
-                // while Oxc's span includes it.
-                end_byte: u64::from(function.body.end.saturating_sub(1)),
+                // TS-Go reports a block body without the closing brace, while
+                // expression bodies use their exact expression span.
+                end_byte: u64::from(if function.expression_body {
+                    function.body.end
+                } else {
+                    function.body.end.saturating_sub(1)
+                }),
             },
             parameters: function
                 .parameters
@@ -1492,7 +1535,7 @@ fn prepare_ast_parallel(
         if let Some(ast) = cache.ast.get(&key) {
             prepared[index] = Some(ast.clone());
         } else {
-            misses.push((index, key, file.path.as_str(), file.source.as_str()));
+            misses.push((index, key, file.path.as_str(), file.source.as_ref()));
         }
     }
     let workers = std::thread::available_parallelism()
@@ -1555,7 +1598,7 @@ mod tests {
     use super::*;
     use solid_compiler_facts::COMPILER_FACTS_PROTOCOL;
     use solid_facts_core::SourceHash;
-    use typefacts::{FactTable, SourceDigest};
+    use typefacts::SourceDigest;
 
     /// The wire schema the in-memory stub claims; the real value comes from
     /// the producer's handshake, which no stub performs.
@@ -1596,18 +1639,18 @@ mod tests {
         fn semantic_grouped(
             &mut self,
             _groups: &[SemanticDemandGroup<'_>],
-        ) -> Result<FactTable, BackendError> {
+        ) -> Result<TypeScriptTable, BackendError> {
             let generation = self.generation;
             self.generation += 1;
-            Ok(FactTable {
-                schema: STUB_SCHEMA,
-                project_id: self.project_id.clone(),
+            Ok(TypeScriptTable::from_parts(
+                STUB_SCHEMA,
                 generation,
-                sources: vec![self.source.clone()].into(),
-                entities: vec![].into(),
-                symbols: vec![].into(),
-                files: vec![].into(),
-            })
+                self.project_id.clone(),
+                vec![self.source.clone()],
+                vec![],
+                vec![],
+                vec![],
+            ))
         }
     }
 
@@ -1647,14 +1690,14 @@ mod tests {
         let retained_demands = semantic_demands_cached(&files, &mut cache).unwrap();
         assert_eq!(retained_demands, fresh_demands);
 
-        let mut fresh_table = FactTable {
-            schema: STUB_SCHEMA,
-            project_id: "project".into(),
-            generation: 1,
-            sources: vec![].into(),
-            entities: vec![].into(),
-            symbols: vec![].into(),
-            files: files
+        let fresh_table = TypeScriptTable::from_parts(
+            STUB_SCHEMA,
+            1,
+            "project",
+            vec![],
+            vec![],
+            vec![],
+            files
                 .iter()
                 .rev()
                 .map(|file| typefacts::FileFact {
@@ -1664,13 +1707,16 @@ mod tests {
                     functions: vec![].into(),
                     async_functions: vec![].into(),
                 })
-                .collect::<Vec<_>>()
-                .into(),
-        };
-        let mut retained_table = fresh_table.clone();
-        hydrate_structural_file_facts(&mut fresh_table, &files);
-        hydrate_structural_file_facts_cached(&mut retained_table, &files, &mut cache);
-        assert_eq!(retained_table, fresh_table);
+                .collect(),
+        );
+        let retained_table = fresh_table.clone();
+        let fresh_table = hydrate_structural_file_facts(fresh_table, &files);
+        let retained_table =
+            hydrate_structural_file_facts_cached(retained_table, &files, &mut cache);
+        assert_eq!(
+            retained_table.files().collect::<Vec<_>>(),
+            fresh_table.files().collect::<Vec<_>>()
+        );
     }
 
     #[test]
@@ -1707,6 +1753,44 @@ mod tests {
                 .expect("every call callee needs a symbol/type query");
             assert!(demand.symbol);
             assert_eq!(demand.type_descriptor, call.arguments.is_empty());
+            let property = callee_property_location(&file.source, &location);
+            if property != location {
+                assert!(demands.iter().any(|demand| {
+                    demand.location == property && demand.symbol && demand.query_location.is_none()
+                }));
+            }
+            for argument in call
+                .arguments
+                .iter()
+                .filter(|argument| argument.value == solid_ast_facts::ArgumentValueKind::Identifier)
+            {
+                let argument_location = typefacts_location(file.path.as_str(), argument.span);
+                assert!(
+                    demands.iter().any(|demand| {
+                        demand.location == argument_location
+                            && demand.symbol
+                            && demand.type_descriptor
+                            && demand.callability
+                    }),
+                    "identifier call arguments need compiler callability for runtime semantics"
+                );
+            }
+        }
+        for import in &file.ast.imports {
+            for binding in &import.bindings {
+                let location = typefacts_location(file.path.as_str(), binding.local.span);
+                assert!(demands.iter().any(|demand| {
+                    demand.location == location && demand.reference_space && demand.runtime_identity
+                }));
+            }
+        }
+        for export in &file.ast.exports {
+            for item in export.specifiers.iter().chain(&export.declarations) {
+                let location = typefacts_location(file.path.as_str(), item.local.span);
+                assert!(demands.iter().any(|demand| {
+                    demand.location == location && demand.callability && demand.runtime_identity
+                }));
+            }
         }
         assert!(demands.iter().any(|demand| {
             demand.r#async && demand.location.path.as_ref() == file.path.as_str()
@@ -1714,6 +1798,12 @@ mod tests {
         assert!(
             demands.windows(2).all(|pair| pair[0] != pair[1]),
             "the transport plan must not contain duplicate queries"
+        );
+        assert!(
+            demands
+                .windows(2)
+                .all(|pair| pair[0].location != pair[1].location),
+            "each syntax location must combine all requested compiler facts"
         );
         let mut reversed = vec![
             file.clone(),
@@ -1726,6 +1816,30 @@ mod tests {
             semantic_demands(&reversed).unwrap(),
             "query order must not depend on source traversal order"
         );
+    }
+
+    #[test]
+    fn returned_member_calls_combine_symbol_and_resolved_call_demands() {
+        let file = test_file_facts(
+            "src/cleanup.ts",
+            "export function subscribe(source: { on(): () => void }) { return source.on(); }",
+        );
+        let returned = file
+            .ast
+            .returns
+            .iter()
+            .find_map(|returned| returned.callee)
+            .expect("returned call");
+        let location = typefacts_location(file.path.as_str(), returned);
+        let demands = semantic_demands(std::slice::from_ref(&file)).unwrap();
+        let matching = demands
+            .iter()
+            .filter(|demand| demand.location == location)
+            .collect::<Vec<_>>();
+        assert_eq!(matching.len(), 1);
+        assert!(matching[0].symbol);
+        assert!(matching[0].resolved_call);
+        assert!(matching[0].query_location.is_some());
     }
 
     #[test]
@@ -1753,7 +1867,10 @@ mod tests {
         )
         .unwrap();
         assert_eq!(project.files.len(), 1);
-        assert_eq!(project.typescript.sources.as_slice(), &[types.source]);
+        assert_eq!(
+            project.typescript.sources().collect::<Vec<_>>(),
+            vec![&types.source]
+        );
     }
 
     #[test]

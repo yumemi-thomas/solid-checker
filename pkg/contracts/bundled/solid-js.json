@@ -2,117 +2,231 @@
   "schemaVersion": 1,
   "package": {
     "name": "solid-js",
-    "version": "2.0.0-beta.19"
+    "version": "2.0.0-beta.26",
+    "integrity": "sha512-ffP6D49w3uL7xoh6Pj3GReRjuAIayw9q2lOeeqnRXDuFPMrhdcMlHQ2P0whmXaXTrMTsI2yngRR1nszJIJHwyA=="
   },
   "compilerFactsProtocol": 1,
-  "exports": {
-    "$PROXY": { "kind": "value" },
-    "$RAW": { "kind": "value" },
-    "$REFRESH": { "kind": "value" },
-    "$TRACK": { "kind": "value" },
-    "DEV": { "kind": "value" },
-    "NotReadyError": { "kind": "value" },
-    "sharedConfig": { "kind": "value" },
-    "createSignal": { "kind": "function" },
-    "createResource": { "kind": "function" },
-    "createStore": { "kind": "function" },
-    "createMemo": {
-      "kind": "function",
-      "returns": { "kind": "accessor", "label": "memo result" },
-      "callbacks": [{ "parameter": 0, "execution": "tracked" }]
-    },
-    "createEffect": {
+  "summaries": {
+    "function-1": {
       "kind": "function",
       "callbacks": [
-        { "parameter": 0, "execution": "tracked" },
-        { "parameter": 1, "execution": "deferred" }
+        {
+          "parameter": 0,
+          "execution": "deferred"
+        }
       ]
     },
-    "createRenderEffect": {
+    "function-2": {
       "kind": "function",
       "callbacks": [
-        { "parameter": 0, "execution": "tracked" },
-        { "parameter": 1, "execution": "deferred" }
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
       ]
     },
-    "createTrackedEffect": {
+    "function-3": {
       "kind": "function",
-      "callbacks": [{ "parameter": 0, "execution": "tracked" }]
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
+        }
+      ]
     },
-    "children": {
+    "function-4": {
       "kind": "function",
-      "returns": { "kind": "accessor", "label": "resolved children" }
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
     },
-    "createComponent": { "kind": "function" },
-    "createErrorBoundary": { "kind": "function" },
-    "createLoadingBoundary": { "kind": "function" },
-    "createRevealOrder": { "kind": "function" },
-    "createContext": { "kind": "function" },
-    "useContext": { "kind": "function" },
-    "createOwner": { "kind": "function" },
-    "createReaction": { "kind": "function" },
-    "createUniqueId": { "kind": "function" },
-    "For": { "kind": "function" },
-    "Loading": { "kind": "function" },
-    "Errored": { "kind": "function" },
-    "Reveal": { "kind": "function" },
-    "Show": { "kind": "function" },
-    "Switch": { "kind": "function" },
-    "Match": { "kind": "function" },
-    "Repeat": { "kind": "function" },
-    "getOwner": { "kind": "function" },
-    "getObserver": { "kind": "function" },
-    "getListener": { "kind": "function" },
-    "mapArray": {
+    "function-5": {
       "kind": "function",
-      "returns": { "kind": "accessor", "label": "mapped array" }
+      "callbacks": [
+        {
+          "parameter": 1,
+          "execution": "inline"
+        }
+      ]
     },
-    "createProjection": {
+    "function-6": {
       "kind": "function",
-      "returns": { "kind": "store-path", "label": "projection result" },
-      "callbacks": [{ "parameter": 0, "execution": "tracked" }]
+      "returns": {
+        "kind": "accessor",
+        "label": "mapped array"
+      }
     },
-    "onSettled": {
+    "function-7": {
       "kind": "function",
-      "callbacks": [{ "parameter": 0, "execution": "tracked" }]
+      "returns": {
+        "kind": "accessor",
+        "label": "memo result"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
     },
-    "on": { "kind": "function" },
-    "onCleanup": { "kind": "function" },
-    "untrack": { "kind": "function" },
-    "createRoot": {
+    "function-8": {
       "kind": "function",
-      "callbacks": [{ "parameter": 0, "execution": "inline" }]
+      "returns": {
+        "kind": "accessor",
+        "label": "resolved children"
+      }
     },
-    "runWithOwner": {
+    "function-9": {
       "kind": "function",
-      "callbacks": [{ "parameter": 1, "execution": "inline" }]
+      "returns": {
+        "kind": "store-path",
+        "label": "projection result"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
     },
-    "flush": { "kind": "function" },
-    "resolve": { "kind": "function" },
-    "refresh": { "kind": "function" },
-    "affects": { "kind": "function" },
-    "latest": { "kind": "function" },
-    "isPending": { "kind": "function" },
-    "isRefreshing": { "kind": "function" },
-    "isServer": { "kind": "value" },
-    "action": { "kind": "function" },
-    "createOptimistic": { "kind": "function" },
-    "createOptimisticStore": { "kind": "function" },
-    "deep": { "kind": "function" },
-    "snapshot": { "kind": "function" },
-    "flatten": { "kind": "function" },
-    "isDisposed": { "kind": "function" },
-    "isEqual": { "kind": "function" },
-    "isWrappable": { "kind": "function" },
-    "repeat": { "kind": "function" },
-    "merge": { "kind": "function" },
-    "omit": { "kind": "function" },
-    "reconcile": { "kind": "function" },
-    "storePath": { "kind": "function" },
-    "unwrap": { "kind": "function" }
+    "function": {
+      "kind": "function"
+    },
+    "value": {
+      "kind": "value"
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "value": [
+          "$DEVCOMP",
+          "$PROXY",
+          "$REFRESH",
+          "$TRACK",
+          "DEV",
+          "NoHydrateContext",
+          "sharedConfig"
+        ],
+        "function": [
+          "action",
+          "affects",
+          "createComponent",
+          "createContext",
+          "createDeepProxy",
+          "createErrorBoundary",
+          "createLoadingBoundary",
+          "createOptimistic",
+          "createOptimisticStore",
+          "createOwner",
+          "createReaction",
+          "createRevealOrder",
+          "createSignal",
+          "createStore",
+          "createUniqueId",
+          "deep",
+          "enableExternalSource",
+          "enableHydration",
+          "enforceLoadingBoundary",
+          "Errored",
+          "flatten",
+          "flush",
+          "For",
+          "getNextChildId",
+          "getObserver",
+          "getOwner",
+          "Hydration",
+          "isDisposed",
+          "isEqual",
+          "isPending",
+          "isWrappable",
+          "latest",
+          "lazy",
+          "Loading",
+          "Match",
+          "merge",
+          "NoHydration",
+          "NotReadyError",
+          "omit",
+          "onCleanup",
+          "reconcile",
+          "refresh",
+          "repeat",
+          "Repeat",
+          "resolve",
+          "Reveal",
+          "Show",
+          "snapshot",
+          "ssrHandleError",
+          "ssrScope",
+          "storePath",
+          "Switch",
+          "untrack",
+          "useContext"
+        ],
+        "function-8": [
+          "children"
+        ],
+        "function-3": [
+          "createEffect",
+          "createRenderEffect"
+        ],
+        "function-7": [
+          "createMemo"
+        ],
+        "function-9": [
+          "createProjection"
+        ],
+        "function-2": [
+          "createRoot"
+        ],
+        "function-4": [
+          "createTrackedEffect"
+        ],
+        "function-6": [
+          "mapArray"
+        ],
+        "function-1": [
+          "onSettled"
+        ],
+        "function-5": [
+          "runWithOwner"
+        ]
+      },
+      "conditions": [
+        "browser",
+        "deno",
+        "development",
+        "import",
+        "node",
+        "worker"
+      ]
+    },
+    "./refresh": {
+      "exports": {
+        "function": [
+          "$$component",
+          "$$decline",
+          "$$refresh",
+          "$$registry",
+          "configureRefresh"
+        ]
+      },
+      "conditions": [
+        "development",
+        "import"
+      ]
+    }
   },
   "evidence": {
-    "kind": "reviewed",
+    "kind": "verified",
     "generator": "solid-checker bundled Solid 2 model"
   }
 }

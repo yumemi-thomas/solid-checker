@@ -74,6 +74,26 @@ npx solid-checker --project tsconfig.json --certify
 Linux (x64, arm64), macOS (x64, arm64), and Windows (x64) are supported; npm
 downloads only the binary matching your platform.
 
+On macOS and Linux, optimized release checks retain one project actor for up
+to two idle minutes. It owns the TypeScript program and analysis caches,
+resynchronizes source and contract inputs before every answer, and makes
+repeated CLI and editor checks incremental. Set `SOLID_CHECKER_DAEMON=0` for a
+strict one-shot process, or `SOLID_CHECKER_DAEMON_IDLE_SECS=<seconds>` to tune
+the idle lifetime. The actor and its Type Facts child are evicted when their
+combined resident memory exceeds 2048 MiB; tune that with
+`SOLID_CHECKER_DAEMON_MAX_RSS_MB=<MiB>`, or set it to `0` to disable the memory
+ceiling. `SOLID_CHECKER_TIMINGS=1` emits retained cache-hit, generation,
+analysis, round-trip, and payload measurements as JSON on stderr. Debug builds
+remain one-shot unless `SOLID_CHECKER_DAEMON=1` is set explicitly.
+
+For projects with at least 1,000 source files, the retained actor releases its
+largest derived Reactive IR indexes after each materialized answer while
+keeping the current coherent result. Set
+`SOLID_CHECKER_CACHE_RETENTION=performance`, `balanced`, or `compact` to
+override that automatic policy. `performance` keeps every edit cache;
+`balanced` is the large-project default; `compact` keeps only the current
+result and rebuilds all derived indexes after an edit.
+
 ## Use it with ESLint or Oxlint
 
 The same plugin, `solid-checker/eslint`, works in both linters. It runs the
@@ -124,9 +144,9 @@ Authoring a package contract (see [Publishing a Solid library?](#publishing-a-so
 
 | Option | Description |
 | --- | --- |
-| `--emit-contract <PATH>` | Write a generated `solid-reactivity.json` contract. |
+| `--emit-contract <PATH>` | Write an inferred `solid-reactivity.json` contract candidate. |
 | `--package-name <NAME>` | Package name recorded in the emitted contract. |
-| `--package-version <VERSION>` | Optional package version for the contract. |
+| `--package-version <VERSION>` | Exact package version recorded in the contract. |
 | `--declaration-artifact <PATH>` | Hash a declaration artifact into the contract. |
 | `--implementation-artifact <PATH>` | Hash an implementation artifact into the contract. |
 | `--contract <PATH>` | Override or discover a package contract (repeatable). |
@@ -163,8 +183,22 @@ full workflow and trust boundary.
 
 ## Publishing a Solid library?
 
-Ship a `solid-reactivity.json` contract describing the reactive behavior of your
-exports so downstream projects stay certifiable without analyzing your source:
+Generate every runtime entrypoint directly from the package export map:
+
+```sh
+solid-checker contract generate --package-root .
+```
+
+This derives the package name and exact version from `package.json`, expands
+exact and wildcard export subpaths, analyzes each ESM target independently, and
+writes `solid-reactivity.json`. Use `--conditions browser,import` to select one
+conditional export environment; without it, all supported ESM variants must
+produce compatible summaries. The generated document deduplicates effect
+summaries and identical subpath surfaces, so large packages do not repeat the
+same export metadata hundreds of times.
+
+Build a `solid-reactivity.json` contract candidate describing the reactive
+behavior of your exports:
 
 ```sh
 solid-checker --project tsconfig.json \
@@ -173,10 +207,25 @@ solid-checker --project tsconfig.json \
   --package-version 1.0.0
 ```
 
+Emission is fail-closed when a parameter escapes into an uncontracted external
+call (including unresolved callback execution), and records
+`inferred` evidence. Inferred contracts are deliberately not sufficient for
+consumer certification: verify them against the exact package artifacts and
+behavior, then record `verified`, `reviewed`, or `attested` evidence. Contracts
+are entrypoint- and exact-version-aware, so include every published subpath.
+
 Published at your package root as `solid-reactivity.json`, it's discovered
 automatically from `node_modules`. See
 [package contracts](docs/package-contracts.md) for hashing artifacts and the
 trust boundary.
+
+Consumers can run the same generator without modifying the installed package:
+
+```sh
+solid-checker contract generate \
+  --package-root node_modules/solid-dnd \
+  --output .solid-checker/contracts/solid-dnd/solid-reactivity.json
+```
 
 ## WASM
 

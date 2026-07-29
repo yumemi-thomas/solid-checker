@@ -8,9 +8,9 @@ use solid_compiler_facts::ExecutionMap;
 pub struct FactsCache {
     pub(crate) ast: HashMap<String, Arc<solid_ast_facts::AstFacts>>,
     pub(crate) compiler: HashMap<String, Arc<ExecutionMap>>,
-    pub(crate) semantic_demands: HashMap<String, Vec<typefacts::v3::EntityDemand>>,
+    pub(crate) semantic_demands: HashMap<String, Arc<[typefacts::v3::EntityDemand]>>,
     pub(crate) structural_functions: HashMap<String, Vec<typefacts::SourceFunction>>,
-    pub(crate) semantic_table: Option<(u64, typefacts::FactTable)>,
+    pub(crate) semantic_table: Option<(u64, solid_facts::TypeScriptTable)>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

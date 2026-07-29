@@ -9,21 +9,21 @@ use typefacts::Location;
 
 use super::{
     CachedReachabilityFile, EntitySymbols, FunctionNode, ProjectIndexes, ReachabilityEdge,
-    ReachabilityTarget, SemanticLookup, SourceDiscoveryTypeScriptDelta,
+    ReachabilityTarget, SemanticLookup, SourceDiscoveryTypeScriptDelta, SymbolId,
     containing_function_indexed, function_indices_by_path, function_is_solid_callback, location,
-    primitive_name, same_compiler_semantics, source_discovery_identity,
+    parallel_slice_results, primitive_name, same_compiler_semantics, source_discovery_identity,
     source_discovery_identity_matches,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ReachabilityTopologyTarget {
-    Symbol(String),
+    Symbol(SymbolId),
     Local(usize),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct ReachabilityTopology {
-    function_symbols: Vec<Option<String>>,
+    function_symbols: Vec<Option<SymbolId>>,
     roots: Vec<ReachabilityTopologyTarget>,
     edges: Vec<(Option<usize>, ReachabilityTopologyTarget)>,
     callback_edges: Vec<(Option<usize>, Vec<ReachabilityTopologyTarget>)>,
@@ -66,7 +66,7 @@ fn reachability_topology(
 
 fn effective_reachability_topology(
     topology: &ReachabilityTopology,
-    function_symbols: &HashSet<String>,
+    function_symbols: &HashSet<SymbolId>,
 ) -> ReachabilityTopology {
     let retained_target = |target: &ReachabilityTopologyTarget| match target {
         ReachabilityTopologyTarget::Local(_) => true,
@@ -105,7 +105,7 @@ fn discover_reachability_file(
     file: &solid_facts::FileFacts,
     indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> CachedReachabilityFile {
     let functions = file
@@ -115,7 +115,7 @@ fn discover_reachability_file(
         .map(|function| {
             let symbol = function.name.as_ref().and_then(|name| {
                 entities
-                    .get(&location(file.path.as_str(), name.span))
+                    .get(&location(file.path.shared(), name.span))
                     .cloned()
             });
             FunctionNode {
@@ -202,7 +202,7 @@ fn discover_reachability_file(
     let mut edges = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let owner = call_owners[call_index];
-        let callee = location(file.path.as_str(), call.callee);
+        let callee = location(file.path.shared(), call.callee);
         if let Some(symbol) = entities.get(&callee) {
             edges.push(ReachabilityEdge {
                 owner,
@@ -252,7 +252,7 @@ fn discover_reachability_file(
                 .iter()
                 .flat_map(|argument| &argument.identifier_properties)
             {
-                if let Some(symbol) = entities.get(&location(file.path.as_str(), property.span)) {
+                if let Some(symbol) = entities.get(&location(file.path.shared(), property.span)) {
                     edges.push(ReachabilityEdge {
                         owner,
                         target: ReachabilityTarget::Symbol(symbol.clone()),
@@ -283,7 +283,7 @@ fn discover_reachability_file(
             .filter(|function| callback.span.contains(function.span))
             .map(|function| ReachabilityTarget::LocalSpan(function.span))
             .collect::<Vec<_>>();
-        if let Some(symbol) = entities.get(&location(file.path.as_str(), callback.span)) {
+        if let Some(symbol) = entities.get(&location(file.path.shared(), callback.span)) {
             targets.push(ReachabilityTarget::Symbol(symbol.clone()));
         }
         callback_edges.push((owner, targets));
@@ -312,17 +312,17 @@ pub(super) struct ReachabilityInputs<'a> {
     pub(super) facts: &'a ProjectFacts,
     pub(super) indexes: &'a ProjectIndexes<'a>,
     pub(super) entities: &'a EntitySymbols,
-    pub(super) symbol_names: &'a HashMap<String, String>,
+    pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(super) typescript_unchanged: bool,
     pub(super) typescript_delta: Option<&'a SourceDiscoveryTypeScriptDelta>,
     pub(super) lookup: &'a SemanticLookup<'a>,
 }
 
 pub(super) struct ReachabilityState<'a> {
-    pub(super) files: &'a mut HashMap<String, CachedReachabilityFile>,
+    pub(super) files: &'a mut HashMap<solid_facts_core::SourcePath, CachedReachabilityFile>,
     pub(super) multiplicity_by_path: &'a mut HashMap<String, Vec<usize>>,
     pub(super) calls: &'a mut HashMap<Location, usize>,
-    pub(super) function_symbols: &'a mut HashSet<String>,
+    pub(super) function_symbols: &'a mut HashSet<SymbolId>,
 }
 
 pub(super) fn reachable_call_multiplicity_incremental(
@@ -360,13 +360,14 @@ pub(super) fn reachable_call_multiplicity_incremental(
     let mut recomputed_files = 0;
     let mut recomputed_paths = HashSet::<String>::new();
     let mut topology_unchanged = !multiplicity_by_path.is_empty() && removed_paths.is_empty();
+    let mut recomputed = Vec::new();
     for file in &facts.files {
         let reusable = (typescript_unchanged || typescript_delta.is_some())
             && cache.get(file.path.as_str()).is_some_and(|cached| {
                 source_discovery_identity_matches(
                     &cached.identity,
-                    file,
-                    indexes,
+                    file.path.as_str(),
+                    &file.source_hash,
                     typescript_unchanged,
                     typescript_delta,
                 ) && (Arc::ptr_eq(&cached.compiler, &file.compiler)
@@ -378,12 +379,19 @@ pub(super) fn reachable_call_multiplicity_incremental(
         }
         recomputed_files += 1;
         recomputed_paths.insert(file.path.to_string());
-        let discovered = discover_reachability_file(file, indexes, entities, symbol_names, lookup);
-        topology_unchanged &= cache.get(file.path.as_str()).is_some_and(|previous| {
+        recomputed.push(file);
+    }
+    for (path, discovered) in parallel_slice_results(&recomputed, |file| {
+        (
+            file.path.clone(),
+            discover_reachability_file(file, indexes, entities, symbol_names, lookup),
+        )
+    }) {
+        topology_unchanged &= cache.get(path.as_str()).is_some_and(|previous| {
             effective_reachability_topology(&previous.topology, function_symbols)
                 == effective_reachability_topology(&discovered.topology, function_symbols)
         });
-        cache.insert(file.path.to_string(), discovered);
+        cache.insert(path, discovered);
     }
 
     if topology_unchanged {
@@ -415,7 +423,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
                 };
                 if multiplicity.get(*owner_index).copied().unwrap_or(0) != 0 {
                     calls.insert(
-                        location(file.path.as_str(), call.callee),
+                        location(file.path.shared(), call.callee),
                         multiplicity[*owner_index],
                     );
                 }
@@ -530,7 +538,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
                 && multiplicity[function] != 0
             {
                 calls.insert(
-                    location(file.path.as_str(), call.callee),
+                    location(file.path.shared(), call.callee),
                     multiplicity[function],
                 );
             }
@@ -543,7 +551,7 @@ pub(super) fn reachable_call_multiplicity(
     facts: &ProjectFacts,
     indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> HashMap<Location, usize> {
     let mut functions = Vec::new();
@@ -551,7 +559,7 @@ pub(super) fn reachable_call_multiplicity(
         for function in &file.ast.functions {
             let symbol = function.name.as_ref().and_then(|name| {
                 entities
-                    .get(&location(file.path.as_str(), name.span))
+                    .get(&location(file.path.shared(), name.span))
                     .cloned()
             });
             functions.push(FunctionNode {
@@ -591,7 +599,7 @@ pub(super) fn reachable_call_multiplicity(
         .filter_map(|(index, function)| function.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
     let mut exported_bodies = HashMap::<&str, HashSet<(u64, u64)>>::new();
-    for file in facts.typescript.files.iter() {
+    for file in facts.typescript.files() {
         for function in file.functions.iter() {
             if function.exported {
                 exported_bodies
@@ -665,7 +673,7 @@ pub(super) fn reachable_call_multiplicity(
     for (file_index, file) in facts.files.iter().enumerate() {
         for (call_index, call) in file.ast.calls.iter().enumerate() {
             let owner = call_owners[file_index][call_index];
-            let callee = location(file.path.as_str(), call.callee);
+            let callee = location(file.path.shared(), call.callee);
             if let Some(target) = entities
                 .get(&callee)
                 .and_then(|symbol| by_symbol.get(symbol))
@@ -738,7 +746,7 @@ pub(super) fn reachable_call_multiplicity(
                 .copied()
                 .filter(|index| callback.span.contains(functions[*index].span))
                 .collect::<Vec<_>>();
-            if let Some(symbol) = entities.get(&location(file.path.as_str(), callback.span))
+            if let Some(symbol) = entities.get(&location(file.path.shared(), callback.span))
                 && let Some(target) = by_symbol.get(symbol)
             {
                 targets.push(*target);
@@ -768,7 +776,7 @@ pub(super) fn reachable_call_multiplicity(
                 && multiplicity[function] != 0
             {
                 result.insert(
-                    location(file.path.as_str(), call.callee),
+                    location(file.path.shared(), call.callee),
                     multiplicity[function],
                 );
             }

@@ -1,0 +1,21 @@
+{
+  "name": "multi-entrypoint-package",
+  "version": "1.2.3",
+  "type": "module",
+  "exports": {
+    ".": {
+      "browser": {
+        "import": "./index.ts"
+      },
+      "node": {
+        "import": "./node.ts"
+      },
+      "default": "./index.ts"
+    },
+    "./empty": "./empty.ts",
+    "./state": "./state.ts",
+    "./features/*": {
+      "import": "./features/*.ts"
+    }
+  }
+}

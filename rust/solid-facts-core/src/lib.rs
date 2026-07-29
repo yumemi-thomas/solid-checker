@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::{fmt, path::Path};
+use std::{borrow::Borrow, fmt, path::Path, sync::Arc};
 use thiserror::Error;
 
 pub const SHA256_PREFIX: &str = "sha256:";
@@ -43,7 +43,7 @@ impl Span {
 
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct SourcePath(String);
+pub struct SourcePath(Arc<str>);
 
 impl SourcePath {
     pub fn new(path: impl Into<String>) -> Result<Self, FactIdentityError> {
@@ -51,12 +51,29 @@ impl SourcePath {
         if path.trim().is_empty() || path.contains('\0') {
             return Err(FactIdentityError::InvalidPath(path));
         }
-        Ok(Self(normalize_path(&path)))
+        Ok(Self(normalize_path(&path).into()))
     }
 
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.0
+    }
+
+    #[must_use]
+    pub fn shared(&self) -> Arc<str> {
+        Arc::clone(&self.0)
+    }
+}
+
+impl AsRef<str> for SourcePath {
+    fn as_ref(&self) -> &str {
+        self.as_str()
+    }
+}
+
+impl Borrow<str> for SourcePath {
+    fn borrow(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -171,6 +188,13 @@ mod tests {
             SourceHash::parse(identity.hash.to_string()).unwrap(),
             identity.hash
         );
+    }
+
+    #[test]
+    fn cloned_source_paths_share_their_text_allocation() {
+        let path = SourcePath::new("src/App.tsx").unwrap();
+        let cloned = path.clone();
+        assert!(std::ptr::eq(path.as_str(), cloned.as_str()));
     }
 
     #[test]

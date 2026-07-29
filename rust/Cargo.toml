@@ -21,8 +21,8 @@ rust-version = "1.97"
 # The JSX compiler lives in its own repository now and is pinned by revision:
 # `dom-expressions` is tracked on a feature branch, and reproducible builds
 # matter more here than picking up upstream automatically.
-dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "209e1bf78f5616885d473dd04a68913cd6bb2ce0", default-features = false }
-typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "4adeb2063b94dad141a571e20762dd9c451aa34b" }
+dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "f8cbb73b16ec8599cd428b01d3a5ca85337b8320", default-features = false }
+typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "d708b506bebaa0ea81e061a0d4dd27100c42a433" }
 ciborium = "0.2"
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"

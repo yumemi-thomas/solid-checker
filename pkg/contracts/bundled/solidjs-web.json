@@ -2,18 +2,467 @@
   "schemaVersion": 1,
   "package": {
     "name": "@solidjs/web",
-    "version": "2.0.0-beta.19"
+    "version": "2.0.0-beta.26",
+    "integrity": "sha512-t0GkzS7wZCuPej8OIQN0+6/uBOHRRhottvAIqnXK4QwiVhCiXr51Bx+sR194INQvvURiP50eprt9TusgKh/Taw=="
   },
   "compilerFactsProtocol": 1,
-  "exports": {
-    "isServer": { "kind": "value" },
-    "assign": { "kind": "function" },
-    "getRequestEvent": { "kind": "function" },
-    "render": { "kind": "function" },
-    "Repeat": { "kind": "function" }
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "function-2": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "memo result"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "function": {
+      "kind": "function"
+    },
+    "value": {
+      "kind": "value"
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function": [
+          "acquireAsset",
+          "addEvent",
+          "applyRef",
+          "Assets",
+          "assign",
+          "claimElement",
+          "claimElementTree",
+          "className",
+          "createComponent",
+          "delegateEvents",
+          "dynamic",
+          "Dynamic",
+          "dynamicProperty",
+          "Errored",
+          "escape",
+          "For",
+          "generateHydrationScript",
+          "getAssets",
+          "getDelegatedRoot",
+          "getFirstChild",
+          "getHydrationKey",
+          "getNextElement",
+          "getNextMarker",
+          "getNextMatch",
+          "getNextSibling",
+          "getOwner",
+          "getRequestEvent",
+          "hydrate",
+          "Hydration",
+          "HydrationScript",
+          "insert",
+          "installHydrationRuntime",
+          "isHref",
+          "isResponseEnvelope",
+          "Loading",
+          "Match",
+          "mergeProps",
+          "NoHydration",
+          "Portal",
+          "redirect",
+          "ref",
+          "registerDelegatedContainer",
+          "registerDelegatedRoot",
+          "registerElementClaim",
+          "reload",
+          "render",
+          "renderToStream",
+          "renderToString",
+          "renderToStringAsync",
+          "Repeat",
+          "resolveSSRNode",
+          "respond",
+          "ResponseEnvelope",
+          "Reveal",
+          "runHydrationEvents",
+          "scope",
+          "setAttribute",
+          "setAttributeNS",
+          "setProperty",
+          "setStyleProperty",
+          "Show",
+          "spread",
+          "ssr",
+          "ssrAttribute",
+          "ssrClassList",
+          "ssrClassName",
+          "ssrElement",
+          "ssrGroup",
+          "ssrHydrationKey",
+          "ssrStyle",
+          "ssrStyleProperty",
+          "style",
+          "Switch",
+          "template",
+          "unregisterDelegatedContainer",
+          "unregisterDelegatedRoot",
+          "untrack",
+          "useAssets"
+        ],
+        "value": [
+          "ChildProperties",
+          "DelegatedEvents",
+          "DOMElements",
+          "DOMWithState",
+          "HREF",
+          "isDev",
+          "isServer",
+          "MathMLElements",
+          "Namespaces",
+          "RawTextElements",
+          "RequestContext",
+          "SVGElements",
+          "VoidElements"
+        ],
+        "function-1": [
+          "effect"
+        ],
+        "function-2": [
+          "memo"
+        ]
+      },
+      "conditions": [
+        "browser",
+        "deno",
+        "development",
+        "import",
+        "node",
+        "worker"
+      ]
+    },
+    "./frames": {
+      "exports": {
+        "function": [
+          "applyFrameResponse",
+          "createFrame",
+          "createFrameElement",
+          "createFrameHost",
+          "createFrameSink",
+          "createJSONDataTable",
+          "createServerComponentHandler",
+          "frameTransformDirectResult",
+          "frameTransformResult",
+          "getFrameHost",
+          "installServerComponents",
+          "isFrameStreamResponse",
+          "renderServerComponent",
+          "renderToFrameStream",
+          "serverComponentResponse"
+        ],
+        "value": [
+          "FRAME_APPLIED_EVENT",
+          "FRAME_STREAM_HEADER",
+          "SERVER_COMPONENT_BOOTSTRAP",
+          "ServerComponentPlugin"
+        ]
+      },
+      "conditions": [
+        "browser",
+        "deno",
+        "development",
+        "import",
+        "node",
+        "worker"
+      ]
+    },
+    "./frames/client": {
+      "exports": {
+        "function": [
+          "applyFrameResponse",
+          "createFrame",
+          "createFrameElement",
+          "createFrameHost",
+          "createJSONDataTable",
+          "createServerComponentHandler",
+          "getFrameHost",
+          "installServerComponents",
+          "isFrameStreamResponse"
+        ],
+        "value": [
+          "FRAME_APPLIED_EVENT",
+          "FRAME_STREAM_HEADER"
+        ]
+      },
+      "conditions": [
+        "import"
+      ]
+    },
+    "./frames/server": {
+      "exports": {
+        "function": [
+          "createFrameSink",
+          "frameTransformDirectResult",
+          "frameTransformResult",
+          "isFrameStreamResponse",
+          "renderServerComponent",
+          "renderToFrameStream",
+          "serverComponentResponse"
+        ],
+        "value": [
+          "FRAME_STREAM_HEADER",
+          "SERVER_COMPONENT_BOOTSTRAP",
+          "ServerComponentPlugin"
+        ]
+      },
+      "conditions": [
+        "import"
+      ]
+    },
+    "./jsx-dev-runtime": {
+      "exports": {
+        "function": [
+          "acquireAsset",
+          "addEvent",
+          "applyRef",
+          "Assets",
+          "assign",
+          "claimElement",
+          "claimElementTree",
+          "className",
+          "createComponent",
+          "delegateEvents",
+          "dynamic",
+          "Dynamic",
+          "dynamicProperty",
+          "effect",
+          "Errored",
+          "escape",
+          "For",
+          "generateHydrationScript",
+          "getAssets",
+          "getDelegatedRoot",
+          "getFirstChild",
+          "getHydrationKey",
+          "getNextElement",
+          "getNextMarker",
+          "getNextMatch",
+          "getNextSibling",
+          "getOwner",
+          "getRequestEvent",
+          "hydrate",
+          "Hydration",
+          "HydrationScript",
+          "insert",
+          "installHydrationRuntime",
+          "isHref",
+          "isResponseEnvelope",
+          "Loading",
+          "Match",
+          "memo",
+          "mergeProps",
+          "NoHydration",
+          "Portal",
+          "redirect",
+          "ref",
+          "registerDelegatedContainer",
+          "registerDelegatedRoot",
+          "registerElementClaim",
+          "reload",
+          "render",
+          "renderToStream",
+          "renderToString",
+          "renderToStringAsync",
+          "Repeat",
+          "resolveSSRNode",
+          "respond",
+          "ResponseEnvelope",
+          "Reveal",
+          "runHydrationEvents",
+          "scope",
+          "setAttribute",
+          "setAttributeNS",
+          "setProperty",
+          "setStyleProperty",
+          "Show",
+          "spread",
+          "ssr",
+          "ssrAttribute",
+          "ssrClassList",
+          "ssrElement",
+          "ssrHydrationKey",
+          "ssrStyle",
+          "style",
+          "Switch",
+          "template",
+          "unregisterDelegatedContainer",
+          "unregisterDelegatedRoot",
+          "untrack",
+          "useAssets"
+        ],
+        "value": [
+          "ChildProperties",
+          "DelegatedEvents",
+          "DOMElements",
+          "DOMWithState",
+          "HREF",
+          "isDev",
+          "isServer",
+          "MathMLElements",
+          "Namespaces",
+          "RawTextElements",
+          "RequestContext",
+          "SVGElements",
+          "VoidElements"
+        ]
+      },
+      "conditions": [
+        "import"
+      ]
+    },
+    "./jsx-runtime": {
+      "sameAs": "./jsx-dev-runtime",
+      "conditions": [
+        "import"
+      ]
+    },
+    "./serialization": {
+      "exports": {
+        "function": [
+          "createHydrationSerializer",
+          "createJSONDataTable",
+          "createJSONDeserializer",
+          "createJSONSerializer",
+          "createSerializer",
+          "getLocalHeaderScript",
+          "resolveSerializerPlugins",
+          "serializeJSON"
+        ],
+        "value": [
+          "DEFAULT_WEB_PLUGINS"
+        ]
+      },
+      "conditions": [
+        "import"
+      ]
+    },
+    "./server-functions": {
+      "exports": {
+        "function": [
+          "configureServerFunctionsClient",
+          "configureServerFunctionsServer",
+          "createServerReference",
+          "decodeErrorHeaderValue",
+          "decodeResponse",
+          "encodeErrorHeaderValue",
+          "GET",
+          "getServerFunction",
+          "getServerFunctionMeta",
+          "getServerFunctionMetadata",
+          "handleServerFunctionRequest",
+          "isServerFunction",
+          "registerServerFunction",
+          "registerServerReference",
+          "subscribeFlightData",
+          "withMeta"
+        ],
+        "value": [
+          "ERROR_HEADER",
+          "FUNCTION_HEADER",
+          "INSTANCE_HEADER",
+          "SINGLE_FLIGHT_HEADER"
+        ]
+      },
+      "conditions": [
+        "browser",
+        "deno",
+        "import",
+        "node",
+        "worker"
+      ]
+    },
+    "./server-functions/client": {
+      "exports": {
+        "function": [
+          "configureServerFunctionsClient",
+          "createServerReference",
+          "decodeErrorHeaderValue",
+          "decodeResponse",
+          "encodeErrorHeaderValue",
+          "GET",
+          "getServerFunctionMetadata",
+          "isServerFunction",
+          "registerServerReference",
+          "subscribeFlightData",
+          "withMeta"
+        ],
+        "value": [
+          "ERROR_HEADER",
+          "FUNCTION_HEADER",
+          "INSTANCE_HEADER",
+          "SINGLE_FLIGHT_HEADER"
+        ]
+      },
+      "conditions": [
+        "import"
+      ]
+    },
+    "./server-functions/server": {
+      "exports": {
+        "function": [
+          "configureServerFunctionsServer",
+          "createServerReference",
+          "decodeErrorHeaderValue",
+          "decodeResponse",
+          "encodeErrorHeaderValue",
+          "GET",
+          "getServerFunction",
+          "getServerFunctionMeta",
+          "getServerFunctionMetadata",
+          "handleServerFunctionRequest",
+          "isServerFunction",
+          "registerServerFunction",
+          "registerServerReference",
+          "subscribeFlightData",
+          "withMeta"
+        ],
+        "value": [
+          "ERROR_HEADER",
+          "FUNCTION_HEADER",
+          "INSTANCE_HEADER",
+          "SINGLE_FLIGHT_HEADER"
+        ]
+      },
+      "conditions": [
+        "import"
+      ]
+    },
+    "./storage": {
+      "exports": {
+        "function": [
+          "provideRequestEvent"
+        ]
+      },
+      "conditions": [
+        "import"
+      ]
+    }
   },
   "evidence": {
-    "kind": "reviewed",
+    "kind": "verified",
     "generator": "solid-checker bundled Solid 2 DOM model"
   }
 }

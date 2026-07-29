@@ -1,0 +1,11 @@
+{
+  "name": "conditional-callback-conflict-package",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "development": "./development.js",
+      "default": "./production.js"
+    }
+  }
+}

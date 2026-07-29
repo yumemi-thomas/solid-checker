@@ -16,27 +16,32 @@ use solid_facts::ProjectFacts;
 use solid_facts_core::Span;
 use typefacts::Location;
 
+use super::runtime_semantics::{
+    RuntimeArgumentBehavior, argument_behavior, potentially_callable,
+    proven_array_method_argument_behavior, resolved_parameter, retains_argument_value,
+};
 use super::{
     CachedInterproceduralGraph, CachedInterproceduralResultFile, CachedInterproceduralResults,
     CachedReactiveSource, CachedTypedAccessors, ContractAnalysis, ContractCallback, ContractExport,
-    ContractGraph, ContractReturn, ContractSemantics, EntitySymbols, ExecutionRole,
-    FunctionBoundary, InterproceduralGraphContribution, InterproceduralGraphTarget,
+    ContractGenerationObligation, ContractGraph, ContractReturn, ContractSemantics, EntitySymbols,
+    ExecutionRole, FunctionBoundary, InterproceduralGraphContribution, InterproceduralGraphTarget,
     InterproceduralResultDependency, InterproceduralResultDependencyState, ProjectIndexes,
-    ReactiveRead, ReactiveSourceKind, SemanticLookup, TypedAccessorContribution,
-    allowed_callback_spans, containing_ast_function, containing_summary_function_indexed,
-    contract_callback_execution, contract_export_summaries, contract_export_summaries_incremental,
-    enclosing_function_label, enclosing_render_function, execution_role, function_binding_name,
-    function_indices_by_path, functions_for_path, go_returned_arrow_pattern_accepts,
-    go_solid_accessor_descriptor, inside_effect_apply, location, location_order,
-    parallel_slice_results, primitive_name, propagate_returned_summary_deltas,
-    propagate_summary_deltas, push_contract_callback, push_unique_summary_read,
-    same_compiler_semantics, semantic_execution_role, source_function_exported,
+    ReactiveRead, ReactiveSourceKind, SemanticLookup, SymbolId, TypedAccessorContribution,
+    allowed_callback_spans, assigned_member_function_contains, containing_ast_function,
+    containing_summary_function_indexed, contract_callback_execution, contract_export_summaries,
+    contract_export_summaries_incremental, enclosing_function_label, enclosing_render_function,
+    execution_role, function_binding_name, function_indices_by_path, functions_for_path,
+    go_returned_arrow_pattern_accepts, go_solid_accessor_descriptor, inside_effect_apply, location,
+    location_order, parallel_file_results, parallel_slice_results, primitive_name,
+    propagate_returned_summary_deltas, propagate_summary_deltas, push_contract_callback,
+    push_unique_summary_read, same_compiler_semantics, semantic_execution_role,
+    source_function_exported,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct SummaryRead {
-    pub(super) symbol: String,
-    pub(super) display: String,
+    pub(super) symbol: SymbolId,
+    pub(super) display: SymbolId,
     pub(super) kind: Option<String>,
     pub(super) declaration: Location,
     pub(super) origin: Location,
@@ -52,11 +57,11 @@ struct DirectReferenceContribution {
 #[derive(Clone, Default)]
 pub(super) struct SummaryReads {
     pub(super) ordered: Vec<SummaryRead>,
-    seen: HashSet<(String, Location, Location)>,
+    seen: HashSet<(SymbolId, Location, Location)>,
 }
 
 impl SummaryReads {
-    fn key(read: &SummaryRead) -> (String, Location, Location) {
+    fn key(read: &SummaryRead) -> (SymbolId, Location, Location) {
         (
             read.display.clone(),
             read.origin.clone(),
@@ -111,8 +116,8 @@ pub(super) struct SummaryNode {
     pub(super) span: Span,
     pub(super) body: Span,
     pub(super) name: Option<String>,
-    pub(super) symbol: Option<String>,
-    pub(super) parameters: Vec<String>,
+    pub(super) symbol: Option<SymbolId>,
+    pub(super) parameters: Vec<SymbolId>,
     pub(super) exported: bool,
     pub(super) r#async: bool,
 }
@@ -129,8 +134,9 @@ impl FunctionBoundary for SummaryNode {
 
 #[derive(Clone)]
 pub(super) struct InterproceduralResult {
-    pub(super) reads: Vec<ReactiveRead>,
+    pub(super) reads: Arc<[ReactiveRead]>,
     pub(super) exports: Arc<BTreeMap<String, ContractExport>>,
+    pub(super) contract_generation_obligations: Arc<[ContractGenerationObligation]>,
     pub(super) factory_instances: usize,
     pub(super) timings: InterproceduralTimings,
 }
@@ -164,12 +170,12 @@ fn discover_typed_accessors(
     nodes_by_path: &HashMap<String, Vec<usize>>,
     project_indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> Vec<TypedAccessorContribution> {
     let path_entities = project_indexes.entities_for_path(file.path.as_str());
     let mut contributions = Vec::new();
     for call in &file.ast.calls {
-        let callee_location = location(file.path.as_str(), call.callee);
+        let callee_location = location(file.path.shared(), call.callee);
         let descriptor = path_entities
             .iter()
             .find(|entity| {
@@ -195,13 +201,13 @@ fn discover_typed_accessors(
         {
             continue;
         }
-        let call_location = location(file.path.as_str(), call.span);
+        let call_location = location(file.path.shared(), call.span);
         let display = usize::try_from(call.callee.start)
             .ok()
             .zip(usize::try_from(call.callee.end).ok())
             .and_then(|(start, end)| file.source.get(start..end))
-            .unwrap_or("accessor")
-            .to_string();
+            .map(SymbolId::from)
+            .unwrap_or_else(|| "accessor".into());
         let declaration = descriptor.alias_declarations.first().map_or_else(
             || callee_location.clone(),
             |declaration| declaration.location.clone(),
@@ -209,10 +215,10 @@ fn discover_typed_accessors(
         contributions.push(TypedAccessorContribution {
             owner: nodes[owner].span,
             read: SummaryRead {
-                symbol: format!(
+                symbol: SymbolId::from(format!(
                     "typed:{}\0{}\0{}",
                     call_location.path, call_location.start_byte, call_location.end_byte
-                ),
+                )),
                 display,
                 kind: Some("accessor".into()),
                 declaration,
@@ -260,15 +266,21 @@ fn discover_summary_nodes(
     let typescript_file = project_indexes.typescript_file(file.path.as_str());
     for arrow in [false, true] {
         for function in &file.ast.functions {
+            let binding_name = function_binding_name(file, function);
             let source_function = typescript_file.and_then(|typescript_file| {
                 typescript_file.functions.iter().find(|candidate| {
                     candidate.body.start_byte == u64::from(function.body.start)
-                        && candidate.body.end_byte.saturating_add(1) == u64::from(function.body.end)
+                        && (candidate.body.end_byte.saturating_add(1)
+                            == u64::from(function.body.end)
+                            || (function.expression_body
+                                && candidate.body.end_byte == u64::from(function.body.end)))
                 })
             });
             // Preserve the checker's finite function universe and ordering:
-            // declarations first, then block-bodied arrows,
-            // each in source order.
+            // declarations first, then arrows, each in source order. Structural
+            // function facts cover named/assigned expressions and
+            // expression-bodied arrows, so a missing fact is genuinely outside
+            // the project function universe.
             if typescript_file.is_some() && source_function.is_none() {
                 continue;
             }
@@ -279,10 +291,9 @@ fn discover_summary_nodes(
             if is_arrow != arrow {
                 continue;
             }
-            let binding_name = function_binding_name(file, function);
             let symbol = binding_name.as_ref().and_then(|name| {
                 entities
-                    .get(&location(file.path.as_str(), name.span))
+                    .get(&location(file.path.shared(), name.span))
                     .cloned()
             });
             let parameters = function
@@ -292,7 +303,7 @@ fn discover_summary_nodes(
                 .filter_map(|parameter| parameter.names.first())
                 .filter_map(|name| {
                     entities
-                        .get(&location(file.path.as_str(), name.span))
+                        .get(&location(file.path.shared(), name.span))
                         .cloned()
                 })
                 .collect();
@@ -321,11 +332,13 @@ fn discover_interprocedural_graph(
     nodes: &[SummaryNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
     entities: &EntitySymbols,
-    contract_reads: &HashMap<String, Vec<(String, String, Location, String)>>,
-    contract_callbacks: &HashMap<String, Vec<ContractCallback>>,
+    contract_reads: &HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    contract_callbacks: &HashMap<SymbolId, Vec<ContractCallback>>,
+    lookup: &SemanticLookup<'_>,
 ) -> InterproceduralGraphContribution {
     let mut contribution = InterproceduralGraphContribution::default();
-    for call in &file.ast.calls {
+    let primitives = lookup.primitives(file);
+    for (call_index, call) in file.ast.calls.iter().enumerate() {
         let Some(owner) = containing_summary_function_indexed(
             nodes,
             nodes_by_path,
@@ -335,14 +348,13 @@ fn discover_interprocedural_graph(
             continue;
         };
         let owner_span = nodes[owner].span;
-        let callee = location(file.path.as_str(), call.callee);
-        let Some(symbol) = entities.get(&callee) else {
+        let Some(symbol) = lookup.callee_symbol(file, call.callee) else {
             continue;
         };
         if call.direct_callee {
             contribution
                 .factory_calls
-                .push((owner_span, symbol.clone()));
+                .push((owner_span, SymbolId::from(symbol)));
         }
         if !call.type_arguments
             && let Some(contracted) = contract_reads.get(symbol)
@@ -351,11 +363,11 @@ fn discover_interprocedural_graph(
                 contribution.direct_reads.push((
                     owner_span,
                     SummaryRead {
-                        symbol: symbol.clone(),
-                        display: display.clone(),
+                        symbol: SymbolId::from(symbol),
+                        display: SymbolId::from(display.as_str()),
                         kind: Some(kind.clone()),
                         declaration: declaration.clone(),
-                        origin: location(file.path.as_str(), call.span),
+                        origin: location(file.path.shared(), call.span),
                         origin_context: nodes[owner].name.clone().unwrap_or_default(),
                     },
                 ));
@@ -364,7 +376,7 @@ fn discover_interprocedural_graph(
         if !contract_reads.contains_key(symbol) && call.direct_callee && !call.type_arguments {
             contribution.edges.push((
                 owner_span,
-                InterproceduralGraphTarget::Symbol(symbol.clone()),
+                InterproceduralGraphTarget::Symbol(SymbolId::from(symbol)),
             ));
         }
         if call.direct_callee
@@ -399,7 +411,7 @@ fn discover_interprocedural_graph(
                 let Some(argument) = call.arguments.get(callback.parameter) else {
                     continue;
                 };
-                let argument_location = location(file.path.as_str(), argument.span);
+                let argument_location = location(file.path.shared(), argument.span);
                 if let Some(argument_symbol) = entities.get(&argument_location) {
                     if callback.execution == "inline" {
                         contribution.edges.push((
@@ -443,6 +455,151 @@ fn discover_interprocedural_graph(
                 }
             }
         }
+        for (argument_index, argument) in call.arguments.iter().enumerate() {
+            if argument.value != solid_ast_facts::ArgumentValueKind::Identifier {
+                continue;
+            }
+            let Some(argument_symbol) = entities.get(&location(file.path.shared(), argument.span))
+            else {
+                continue;
+            };
+            let Some((callback_owner, parameter)) =
+                functions_for_path(nodes, nodes_by_path, file.path.as_str())
+                    .filter_map(|(index, node)| {
+                        node.parameters
+                            .iter()
+                            .position(|candidate| candidate == argument_symbol)
+                            .map(|parameter| (index, parameter))
+                    })
+                    .next()
+            else {
+                continue;
+            };
+            if let Some(target) = nodes
+                .iter()
+                .position(|node| node.symbol.as_deref() == Some(symbol))
+                .or_else(|| returned_function_target(file, nodes, nodes_by_path, entities, symbol))
+            {
+                // Local calls are summarized transitively. If the parameter
+                // later reaches an unknown external call, that call creates
+                // the obligation at the actual escape point.
+                contribution.callback_forwardings.push((
+                    nodes[callback_owner].span,
+                    nodes[target].symbol.clone().map_or(
+                        InterproceduralGraphTarget::LocalSpan(nodes[target].span),
+                        InterproceduralGraphTarget::Symbol,
+                    ),
+                    argument_index,
+                    parameter,
+                ));
+                continue;
+            }
+            if let Some(execution) = primitives.calls[call_index]
+                .as_deref()
+                .and_then(|primitive| primitive_callback_execution(primitive, argument_index))
+            {
+                contribution.callbacks.push((
+                    nodes[callback_owner].span,
+                    ContractCallback {
+                        parameter,
+                        execution: execution.into(),
+                    },
+                ));
+                continue;
+            }
+            let resolved_call = lookup.resolved_callee_call(file, call.callee);
+            let runtime_argument_callability =
+                lookup.smallest_contained_callability(file.path.as_str(), argument.span);
+            let runtime_behavior = resolved_call
+                .and_then(|resolved_call| {
+                    argument_behavior(resolved_call, runtime_argument_callability, argument_index)
+                })
+                .or_else(|| {
+                    proven_array_method(file, call, entities).and_then(|method| {
+                        proven_array_method_argument_behavior(method, runtime_argument_callability)
+                    })
+                })
+                .or_else(|| {
+                    resolved_call
+                        .is_some_and(|resolved_call| {
+                            stored_constructor_argument_escapes(
+                                file,
+                                call,
+                                resolved_call,
+                                argument_index,
+                                lookup,
+                            )
+                        })
+                        .then_some(RuntimeArgumentBehavior::DeferredCallback)
+                })
+                .or_else(|| {
+                    // Even when a structurally typed method has no inspectable
+                    // implementation, invoking it from a callback that itself
+                    // escapes the exported call proves that any invocation of the
+                    // forwarded callable cannot happen inline with that export.
+                    assigned_member_function_contains(file, call.callee, entities)
+                        .then_some(RuntimeArgumentBehavior::DeferredCallback)
+                });
+            if let Some(runtime_behavior) = runtime_behavior {
+                match runtime_behavior {
+                    RuntimeArgumentBehavior::InlineCallback
+                    | RuntimeArgumentBehavior::DeferredCallback => {
+                        contribution.callbacks.push((
+                            nodes[callback_owner].span,
+                            ContractCallback {
+                                parameter,
+                                execution: match runtime_behavior {
+                                    RuntimeArgumentBehavior::InlineCallback => "inline",
+                                    RuntimeArgumentBehavior::DeferredCallback => "deferred",
+                                    RuntimeArgumentBehavior::ValueOnly => unreachable!(),
+                                }
+                                .into(),
+                            },
+                        ));
+                    }
+                    RuntimeArgumentBehavior::ValueOnly => {}
+                }
+                continue;
+            }
+            if contract_callbacks.contains_key(symbol) {
+                continue;
+            }
+            if !potentially_callable(runtime_argument_callability) {
+                continue;
+            }
+            if functions_for_path(nodes, nodes_by_path, file.path.as_str())
+                .any(|(_, node)| node.parameters.iter().any(|parameter| parameter == symbol))
+                || file.ast.functions.iter().any(|function| {
+                    function.parameters.iter().any(|parameter| {
+                        parameter.names.iter().any(|name| {
+                            entities
+                                .at(file.path.as_str(), name.span)
+                                .is_some_and(|candidate| candidate == symbol)
+                        })
+                    })
+                })
+            {
+                // Calling a function-valued parameter with another parameter
+                // invokes the callee parameter, not the value argument. Any
+                // nested use belongs to the caller-provided callback.
+                continue;
+            }
+            contribution.contract_generation_obligations.push((
+                nodes[callback_owner].span,
+                ContractGenerationObligation {
+                    function: nodes[callback_owner]
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| "<anonymous>".into()),
+                    parameter,
+                    location: location(file.path.shared(), argument.span),
+                    message: format!(
+                        "parameter {parameter} escapes through call to {}; its execution semantics are unknown",
+                        file.source_text(call.callee).unwrap_or("<unknown>")
+                    ),
+                },
+            ));
+        }
     }
     for binding in &file.ast.bindings {
         let Some(initializer) = binding.call_initializer else {
@@ -451,11 +608,11 @@ fn discover_interprocedural_graph(
         let Some(call) = file.ast.call_at(initializer) else {
             continue;
         };
-        let Some(target_symbol) = entities.get(&location(file.path.as_str(), call.callee)) else {
+        let Some(target_symbol) = entities.get(&location(file.path.shared(), call.callee)) else {
             continue;
         };
         for name in &binding.names {
-            if let Some(binding_symbol) = entities.get(&location(file.path.as_str(), name.span)) {
+            if let Some(binding_symbol) = entities.get(&location(file.path.shared(), name.span)) {
                 contribution
                     .returned_bindings
                     .push((binding_symbol.clone(), target_symbol.clone()));
@@ -465,16 +622,174 @@ fn discover_interprocedural_graph(
     contribution
 }
 
+fn returned_function_target(
+    file: &solid_facts::FileFacts,
+    nodes: &[SummaryNode],
+    nodes_by_path: &HashMap<String, Vec<usize>>,
+    entities: &EntitySymbols,
+    binding_symbol: &str,
+) -> Option<usize> {
+    let initializer = file.ast.bindings.iter().find_map(|binding| {
+        binding
+            .names
+            .iter()
+            .any(|name| {
+                entities
+                    .at(file.path.as_str(), name.span)
+                    .is_some_and(|symbol| symbol == binding_symbol)
+            })
+            .then_some(binding.call_initializer)
+            .flatten()
+    })?;
+    let factory_call = file.ast.call_at(initializer)?;
+    let factory_symbol = entities.at(file.path.as_str(), factory_call.callee)?;
+    let (_, factory) = functions_for_path(nodes, nodes_by_path, file.path.as_str())
+        .find(|(_, node)| node.symbol.as_deref() == Some(factory_symbol))?;
+    let function = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == factory.span)?;
+    function
+        .expression_return
+        .iter()
+        .chain(file.ast.returns.iter().filter(|returned| {
+            containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|owner| owner.span == function.span)
+        }))
+        .filter(|returned| returned.value == solid_ast_facts::ReturnValueKind::Function)
+        .find_map(|returned| {
+            functions_for_path(nodes, nodes_by_path, file.path.as_str())
+                .find(|(_, node)| node.span == returned.span)
+                .map(|(index, _)| index)
+        })
+}
+
+fn proven_array_method<'a>(
+    file: &'a solid_facts::FileFacts,
+    call: &solid_ast_facts::CallFact,
+    entities: &EntitySymbols,
+) -> Option<&'a str> {
+    let member = file
+        .ast
+        .members
+        .iter()
+        .find(|member| member.span == call.callee)?;
+    let method = file.source_text(member.property)?;
+    if !matches!(method, "push" | "unshift") {
+        return None;
+    }
+
+    let receiver_is_assigned_array = file.ast.assignments.iter().any(|assignment| {
+        assignment.value == solid_ast_facts::AssignmentValueKind::Array
+            && same_runtime_value(file, assignment.target, member.object, entities)
+    });
+    let receiver_is_array_guarded = file.ast.if_regions.iter().any(|region| {
+        region.consequent.contains(call.span)
+            && file.ast.calls.iter().any(|guard| {
+                region.test.contains(guard.span)
+                    && guard.static_callee(&file.source) == Some("Array.isArray")
+                    && guard.arguments.first().is_some_and(|argument| {
+                        same_runtime_value(file, argument.span, member.object, entities)
+                    })
+            })
+    });
+    (receiver_is_assigned_array || receiver_is_array_guarded).then_some(method)
+}
+
+fn stored_constructor_argument_escapes(
+    file: &solid_facts::FileFacts,
+    call: &solid_ast_facts::CallFact,
+    resolved_call: &typefacts::ResolvedCall,
+    argument: usize,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if resolved_call.kind != typefacts::CallKind::Construct
+        || resolved_call
+            .declaration
+            .as_ref()
+            .is_none_or(|declaration| declaration.standard_library)
+    {
+        return false;
+    }
+    let Some(parameter) = resolved_parameter(resolved_call, argument) else {
+        return false;
+    };
+    let Some(declaration) = parameter.declaration.as_ref() else {
+        return false;
+    };
+    if declaration.location.path.as_ref() != file.path.as_str()
+        || file
+            .ast
+            .parameter_properties
+            .binary_search_by_key(
+                &(
+                    declaration.location.start_byte,
+                    declaration.location.end_byte,
+                ),
+                |span| (u64::from(span.start), u64::from(span.end)),
+            )
+            .is_err()
+    {
+        return false;
+    }
+    file.ast
+        .arguments_containing(call.span)
+        .any(|(outer, outer_argument)| {
+            lookup
+                .resolved_callee_call(file, outer.callee)
+                .is_some_and(|outer_call| retains_argument_value(outer_call, outer_argument))
+        })
+}
+
+fn same_runtime_value(
+    file: &solid_facts::FileFacts,
+    left: Span,
+    right: Span,
+    entities: &EntitySymbols,
+) -> bool {
+    let left_symbol = entities.at(file.path.as_str(), left);
+    let right_symbol = entities.at(file.path.as_str(), right);
+    left_symbol
+        .zip(right_symbol)
+        .is_some_and(|(left, right)| left == right)
+}
+
+fn primitive_callback_execution(primitive: &str, parameter: usize) -> Option<&'static str> {
+    match (primitive, parameter) {
+        (
+            "createMemo"
+            | "createTrackedEffect"
+            | "createSignal"
+            | "createStore"
+            | "createProjection"
+            | "createOptimistic"
+            | "createOptimisticStore"
+            | "dynamic",
+            0,
+        ) => Some("tracked"),
+        ("createEffect" | "createRenderEffect", 0) => Some("tracked"),
+        ("createEffect" | "createRenderEffect", 1) => Some("deferred"),
+        ("onSettled" | "action" | "createReaction" | "untrack" | "flush" | "onCleanup", 0) => {
+            Some("deferred")
+        }
+        ("createRoot", 0) | ("runWithOwner", 1) => Some("inline"),
+        _ => None,
+    }
+}
+
 struct InterproceduralGraphAssembly<'a> {
     nodes: &'a [SummaryNode],
     nodes_by_path: &'a HashMap<String, Vec<usize>>,
-    by_symbol: &'a HashMap<String, usize>,
+    by_symbol: &'a HashMap<SymbolId, usize>,
     summaries: &'a mut [SummaryReads],
     callback_summaries: &'a mut [Vec<ContractCallback>],
+    callback_forwardings: &'a mut Vec<(usize, usize, usize, usize)>,
+    contract_generation_obligations: &'a mut [Vec<ContractGenerationObligation>],
     edges: &'a mut [Vec<usize>],
     invoked_parameters: &'a mut [Vec<usize>],
-    returned_bindings: &'a mut Vec<(String, String)>,
-    factory_calls: &'a mut Vec<(usize, String)>,
+    returned_bindings: &'a mut Vec<(SymbolId, SymbolId)>,
+    factory_calls: &'a mut Vec<(usize, SymbolId)>,
 }
 
 impl InterproceduralGraphAssembly<'_> {
@@ -515,6 +830,28 @@ impl InterproceduralGraphAssembly<'_> {
                 push_contract_callback(&mut self.callback_summaries[owner], callback.clone());
             }
         }
+        for (owner, target, target_parameter, owner_parameter) in &contribution.callback_forwardings
+        {
+            let target = match target {
+                InterproceduralGraphTarget::Symbol(symbol) => self.by_symbol.get(symbol).copied(),
+                InterproceduralGraphTarget::LocalSpan(span) => node_index(*span),
+            };
+            if let (Some(owner), Some(target)) = (node_index(*owner), target) {
+                self.callback_forwardings.push((
+                    owner,
+                    target,
+                    *target_parameter,
+                    *owner_parameter,
+                ));
+            }
+        }
+        for (owner, obligation) in &contribution.contract_generation_obligations {
+            if let Some(owner) = node_index(*owner)
+                && !self.contract_generation_obligations[owner].contains(obligation)
+            {
+                self.contract_generation_obligations[owner].push(obligation.clone());
+            }
+        }
         self.returned_bindings
             .extend(contribution.returned_bindings.iter().cloned());
         for (owner, symbol) in &contribution.factory_calls {
@@ -529,10 +866,10 @@ impl InterproceduralGraphAssembly<'_> {
 pub(super) struct InterproceduralResultView<'a> {
     pub(super) nodes: &'a [SummaryNode],
     pub(super) indexes: &'a HashMap<(String, Span), usize>,
-    pub(super) by_symbol: &'a HashMap<String, usize>,
+    pub(super) by_symbol: &'a HashMap<SymbolId, usize>,
     pub(super) summaries: &'a [SummaryReads],
     pub(super) invoked_parameters: &'a [Vec<usize>],
-    pub(super) returned_bindings: &'a HashMap<String, Vec<SummaryRead>>,
+    pub(super) returned_bindings: &'a HashMap<SymbolId, Vec<SummaryRead>>,
 }
 
 impl InterproceduralResultView<'_> {
@@ -631,9 +968,9 @@ fn remove_interprocedural_dependency_user(
 
 pub(super) struct InterproceduralResultReadContext<'a, 'b> {
     pub(super) result: InterproceduralResultView<'a>,
-    pub(super) contract_callbacks: &'a HashMap<String, Vec<ContractCallback>>,
+    pub(super) contract_callbacks: &'a HashMap<SymbolId, Vec<ContractCallback>>,
     pub(super) entities: &'a EntitySymbols,
-    pub(super) symbol_names: &'a HashMap<String, String>,
+    pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(super) lookup: &'a SemanticLookup<'b>,
 }
 
@@ -664,11 +1001,13 @@ fn interprocedural_result_reads_for_file(
         if !enclosing_render_function(file, call.span) {
             continue;
         }
-        let callee = location(file.path.as_str(), call.callee);
-        let Some(symbol) = entities.get(&callee) else {
+        let callee = location(file.path.shared(), call.callee);
+        let Some(symbol) = lookup.callee_symbol(file, call.callee) else {
             continue;
         };
-        dependencies.insert(InterproceduralResultDependency::Symbol(symbol.clone()));
+        dependencies.insert(InterproceduralResultDependency::Symbol(SymbolId::from(
+            symbol,
+        )));
         let (label, mut effective, target) = if let Some(target) = by_symbol.get(symbol).copied() {
             (
                 nodes[target]
@@ -704,7 +1043,7 @@ fn interprocedural_result_reads_for_file(
                     continue;
                 };
                 let Some(argument_symbol) =
-                    entities.get(&location(file.path.as_str(), argument.span))
+                    entities.get(&location(file.path.shared(), argument.span))
                 else {
                     continue;
                 };
@@ -730,7 +1069,7 @@ fn interprocedural_result_reads_for_file(
                 let Some(argument) = call.arguments.get(callback.parameter) else {
                     continue;
                 };
-                let argument_symbol = entities.get(&location(file.path.as_str(), argument.span));
+                let argument_symbol = entities.get(&location(file.path.shared(), argument.span));
                 let argument_summary = argument_symbol
                     .and_then(|argument_symbol| {
                         dependencies.insert(InterproceduralResultDependency::Symbol(
@@ -771,44 +1110,53 @@ fn interprocedural_result_reads_for_file(
                     if seen.insert((
                         callee.path.clone(),
                         callee.start_byte,
-                        format!("{}#callback-{}", read.symbol, callback.parameter),
+                        format!(
+                            "{}#callback-{}-{callback_execution:?}",
+                            read.symbol, callback.parameter
+                        ),
                     )) {
                         result.push(ReactiveRead {
                             kind: "accessor".into(),
-                            accessor: read.display.clone(),
-                            location: location(file.path.as_str(), call.span),
+                            accessor: read.display.to_string().into(),
+                            location: location(file.path.shared(), call.span),
                             declaration: read.declaration.clone(),
                             execution: callback_execution,
                             context: context
                                 .get_or_insert_with(|| enclosing_function_label(file, call.span))
-                                .clone(),
-                            via: label.clone(),
+                                .clone()
+                                .into(),
+                            via: label.clone().into(),
                             origin: Some(read.origin.clone()),
-                            origin_context: read.origin_context.clone(),
+                            origin_context: read.origin_context.clone().into(),
                         });
                     }
                 }
             }
         }
         for read in effective {
-            let accessor = read.display.clone();
-            if seen.insert((callee.path.clone(), callee.start_byte, read.symbol.clone())) {
+            let accessor = read.display.to_string();
+            if seen.insert((
+                callee.path.clone(),
+                callee.start_byte,
+                read.symbol.to_string(),
+            )) {
                 result.push(ReactiveRead {
-                    kind: if read.display.contains('.') {
-                        "store-path".into()
-                    } else {
-                        "accessor".into()
-                    },
-                    accessor,
-                    location: location(file.path.as_str(), call.span),
+                    kind: read
+                        .kind
+                        .clone()
+                        .unwrap_or_else(|| "accessor".into())
+                        .into(),
+                    accessor: accessor.into(),
+                    location: location(file.path.shared(), call.span),
                     declaration: read.declaration,
                     execution,
                     context: context
                         .get_or_insert_with(|| enclosing_function_label(file, call.span))
-                        .clone(),
-                    via: label.clone(),
+                        .clone()
+                        .into(),
+                    via: label.clone().into(),
                     origin: Some(read.origin),
-                    origin_context: read.origin_context,
+                    origin_context: read.origin_context.into(),
                 });
             }
         }
@@ -820,11 +1168,11 @@ fn cached_reactive_source(
     symbol: &str,
     display: &str,
     declaration: &Location,
-    source_phases: &HashMap<String, u8>,
+    source_phases: &HashMap<SymbolId, u8>,
 ) -> CachedReactiveSource {
     CachedReactiveSource {
-        symbol: symbol.to_owned(),
-        display: display.to_owned(),
+        symbol: SymbolId::from(symbol),
+        display: SymbolId::from(display),
         declaration: declaration.clone(),
         phase: source_phases.get(symbol).copied().unwrap_or(1),
     }
@@ -841,10 +1189,10 @@ fn reactive_source_order(
 
 fn retained_reactive_sources(
     cache: &mut Option<Arc<Vec<CachedReactiveSource>>>,
-    accessors: &HashMap<String, (String, Location)>,
-    contracted_accessor_symbols: &HashSet<String>,
-    summary_source_symbols: &HashSet<String>,
-    source_phases: &HashMap<String, u8>,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    contracted_accessor_symbols: &HashSet<SymbolId>,
+    summary_source_symbols: &HashSet<SymbolId>,
+    source_phases: &HashMap<SymbolId, u8>,
 ) -> Arc<Vec<CachedReactiveSource>> {
     let eligible = |symbol: &str| {
         !contracted_accessor_symbols.contains(symbol) && summary_source_symbols.contains(symbol)
@@ -959,9 +1307,15 @@ fn direct_reference_contributions(
             let mut read = SummaryRead {
                 symbol: source.symbol.clone(),
                 display: source.display.clone(),
-                kind: None,
+                kind: Some(
+                    match source_kinds.get(source.symbol.as_str()) {
+                        Some(ReactiveSourceKind::Store) => "store-path",
+                        Some(ReactiveSourceKind::Accessor) | None => "accessor",
+                    }
+                    .into(),
+                ),
                 declaration: source.declaration.clone(),
-                origin: location(file.path.as_str(), call.span),
+                origin: location(file.path.shared(), call.span),
                 origin_context: nodes[owner].name.clone().unwrap_or_default(),
             };
             let factory_return =
@@ -978,7 +1332,7 @@ fn direct_reference_contributions(
                     start_byte: 0,
                     end_byte: 0,
                 };
-                read.display.clone_from(&returned.label);
+                read.display = SymbolId::from(returned.label.as_str());
                 read.kind = Some(returned.kind.clone());
                 read.declaration.clone_from(&contract_location);
                 if semantic_execution_role(
@@ -1017,14 +1371,14 @@ fn direct_reference_contributions(
                         owner,
                         read: SummaryRead {
                             symbol: source.symbol.clone(),
-                            display: format!(
+                            display: SymbolId::from(format!(
                                 "{}.{}",
                                 source.display,
                                 file.source_text(member.property).unwrap_or_default()
-                            ),
-                            kind: None,
+                            )),
+                            kind: Some("store-path".into()),
                             declaration: source.declaration.clone(),
-                            origin: location(file.path.as_str(), member.span),
+                            origin: location(file.path.shared(), member.span),
                             origin_context: nodes[owner].name.clone().unwrap_or_default(),
                         },
                         unique: false,
@@ -1038,21 +1392,21 @@ fn direct_reference_contributions(
 pub(super) struct InterproceduralContext<'a> {
     pub(super) facts: &'a ProjectFacts,
     pub(super) project_indexes: &'a ProjectIndexes<'a>,
-    pub(super) accessors: &'a HashMap<String, (String, Location)>,
-    pub(super) contracted_accessor_symbols: &'a HashSet<String>,
-    pub(super) returned_source_symbols: &'a HashSet<String>,
-    pub(super) summary_source_symbols: &'a HashSet<String>,
-    pub(super) source_phases: &'a HashMap<String, u8>,
-    pub(super) source_kinds: &'a HashMap<String, ReactiveSourceKind>,
-    pub(super) contract_reads: &'a HashMap<String, Vec<(String, String, Location, String)>>,
-    pub(super) contract_callbacks: &'a HashMap<String, Vec<ContractCallback>>,
-    pub(super) contract_returns: &'a HashMap<String, (ContractReturn, Location)>,
-    pub(super) bundled_returns: &'a HashMap<String, ContractReturn>,
-    pub(super) source_primitives: &'a HashMap<String, String>,
+    pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(super) contracted_accessor_symbols: &'a HashSet<SymbolId>,
+    pub(super) returned_source_symbols: &'a HashSet<SymbolId>,
+    pub(super) summary_source_symbols: &'a HashSet<SymbolId>,
+    pub(super) source_phases: &'a HashMap<SymbolId, u8>,
+    pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    pub(super) contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    pub(super) contract_callbacks: &'a HashMap<SymbolId, Vec<ContractCallback>>,
+    pub(super) contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
+    pub(super) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
+    pub(super) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(super) entities: &'a EntitySymbols,
-    pub(super) references_by_source: &'a HashMap<String, Vec<Location>>,
-    pub(super) symbol_names: &'a HashMap<String, String>,
-    pub(super) changed_semantic_symbols: Option<&'a HashSet<String>>,
+    pub(super) references_by_source: &'a HashMap<SymbolId, Vec<Location>>,
+    pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
+    pub(super) changed_semantic_symbols: Option<&'a HashSet<SymbolId>>,
     pub(super) retained_source_paths: &'a HashSet<String>,
     pub(super) lookup: &'a SemanticLookup<'a>,
 }
@@ -1060,8 +1414,12 @@ pub(super) struct InterproceduralContext<'a> {
 impl InterproceduralContext<'_> {
     pub(super) fn build(
         &self,
-        typed_accessor_cache: Option<&mut HashMap<String, CachedTypedAccessors>>,
-        interprocedural_graph_cache: Option<&mut HashMap<String, CachedInterproceduralGraph>>,
+        typed_accessor_cache: Option<
+            &mut HashMap<solid_facts_core::SourcePath, CachedTypedAccessors>,
+        >,
+        interprocedural_graph_cache: Option<
+            &mut HashMap<solid_facts_core::SourcePath, CachedInterproceduralGraph>,
+        >,
         interprocedural_result_cache: Option<&mut CachedInterproceduralResults>,
     ) -> InterproceduralResult {
         interprocedural_reads(
@@ -1076,8 +1434,8 @@ impl InterproceduralContext<'_> {
 }
 
 struct InterproceduralCaches<'a> {
-    typed_accessors: Option<&'a mut HashMap<String, CachedTypedAccessors>>,
-    graph: Option<&'a mut HashMap<String, CachedInterproceduralGraph>>,
+    typed_accessors: Option<&'a mut HashMap<solid_facts_core::SourcePath, CachedTypedAccessors>>,
+    graph: Option<&'a mut HashMap<solid_facts_core::SourcePath, CachedInterproceduralGraph>>,
     results: Option<&'a mut CachedInterproceduralResults>,
 }
 
@@ -1104,7 +1462,7 @@ fn interprocedural_reads(
         symbol_names,
         changed_semantic_symbols,
         retained_source_paths,
-        lookup: _,
+        lookup,
     } = context;
     let InterproceduralCaches {
         typed_accessors: typed_accessor_cache,
@@ -1121,30 +1479,46 @@ fn interprocedural_reads(
             .map(|file| file.path.as_str())
             .collect::<HashSet<_>>();
         cache.retain(|path, _| current_paths.contains(path.as_str()));
-        for file in &facts.files {
-            if retained_source_paths.contains(file.path.as_str())
-                && let Some(cached) = cache.get(file.path.as_str())
-                && (Arc::ptr_eq(&cached.compiler, &file.compiler)
-                    || same_compiler_semantics(&cached.compiler, &file.compiler))
-            {
+        let reusable_paths = facts
+            .files
+            .iter()
+            .filter_map(|file| {
+                (retained_source_paths.contains(file.path.as_str())
+                    && cache.get(file.path.as_str()).is_some_and(|cached| {
+                        Arc::ptr_eq(&cached.compiler, &file.compiler)
+                            || same_compiler_semantics(&cached.compiler, &file.compiler)
+                    }))
+                .then_some(file.path.as_str())
+            })
+            .collect::<HashSet<_>>();
+        let discovered = parallel_file_results(&facts.files, |file| {
+            (!reusable_paths.contains(file.path.as_str()))
+                .then(|| discover_summary_nodes(file, project_indexes, entities))
+        });
+        for (file, discovered) in facts.files.iter().zip(discovered) {
+            if let Some(file_nodes) = discovered {
+                nodes.extend(file_nodes.iter().cloned());
+                cache.insert(
+                    file.path.clone(),
+                    CachedInterproceduralGraph {
+                        nodes: file_nodes,
+                        contribution: InterproceduralGraphContribution::default(),
+                        compiler: file.compiler.clone(),
+                    },
+                );
+            } else {
+                let cached = cache
+                    .get(file.path.as_str())
+                    .expect("reusable graph path has a cached contribution");
                 nodes.extend(cached.nodes.iter().cloned());
                 graph_node_reused_paths.insert(file.path.as_str());
-                continue;
             }
-            let file_nodes = discover_summary_nodes(file, project_indexes, entities);
-            nodes.extend(file_nodes.iter().cloned());
-            cache.insert(
-                file.path.to_string(),
-                CachedInterproceduralGraph {
-                    nodes: file_nodes,
-                    contribution: InterproceduralGraphContribution::default(),
-                    compiler: file.compiler.clone(),
-                },
-            );
         }
     } else {
-        for file in &facts.files {
-            nodes.extend(discover_summary_nodes(file, project_indexes, entities));
+        for file_nodes in parallel_file_results(&facts.files, |file| {
+            discover_summary_nodes(file, project_indexes, entities)
+        }) {
+            nodes.extend(file_nodes);
         }
     }
     let nodes_by_path = function_indices_by_path(&nodes);
@@ -1160,6 +1534,9 @@ fn interprocedural_reads(
         .collect::<HashMap<_, _>>();
     let mut summaries = vec![SummaryReads::default(); nodes.len()];
     let mut callback_summaries = vec![Vec::<ContractCallback>::new(); nodes.len()];
+    let mut callback_forwardings = Vec::new();
+    let mut contract_generation_obligations =
+        vec![Vec::<ContractGenerationObligation>::new(); nodes.len()];
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
     let mut returned_binding_candidates = Vec::new();
@@ -1173,6 +1550,8 @@ fn interprocedural_reads(
             by_symbol: &by_symbol,
             summaries: &mut summaries,
             callback_summaries: &mut callback_summaries,
+            callback_forwardings: &mut callback_forwardings,
+            contract_generation_obligations: &mut contract_generation_obligations,
             edges: &mut edges,
             invoked_parameters: &mut invoked_parameters,
             returned_bindings: &mut returned_binding_candidates,
@@ -1180,21 +1559,37 @@ fn interprocedural_reads(
         };
         match interprocedural_graph_cache {
             None => {
-                for file in &facts.files {
-                    graph_recomputed_files += 1;
-                    let contribution = discover_interprocedural_graph(
+                let contributions = parallel_file_results(&facts.files, |file| {
+                    discover_interprocedural_graph(
                         file,
                         &nodes,
                         &nodes_by_path,
                         entities,
                         contract_reads,
                         contract_callbacks,
-                    );
+                        lookup,
+                    )
+                });
+                for (file, contribution) in facts.files.iter().zip(contributions) {
+                    graph_recomputed_files += 1;
                     graph.merge(file.path.as_str(), &contribution);
                 }
             }
             Some(cache) => {
-                for file in &facts.files {
+                let contributions = parallel_file_results(&facts.files, |file| {
+                    (!graph_node_reused_paths.contains(file.path.as_str())).then(|| {
+                        discover_interprocedural_graph(
+                            file,
+                            &nodes,
+                            &nodes_by_path,
+                            entities,
+                            contract_reads,
+                            contract_callbacks,
+                            lookup,
+                        )
+                    })
+                });
+                for (file, contribution) in facts.files.iter().zip(contributions) {
                     if graph_node_reused_paths.contains(file.path.as_str())
                         && let Some(cached) = cache.get(file.path.as_str())
                     {
@@ -1203,17 +1598,11 @@ fn interprocedural_reads(
                         continue;
                     }
                     graph_recomputed_files += 1;
-                    let contribution = discover_interprocedural_graph(
-                        file,
-                        &nodes,
-                        &nodes_by_path,
-                        entities,
-                        contract_reads,
-                        contract_callbacks,
-                    );
+                    let contribution =
+                        contribution.expect("recomputed graph path has a fresh contribution");
                     graph.merge(file.path.as_str(), &contribution);
                     cache.insert(
-                        file.path.to_string(),
+                        file.path.clone(),
                         CachedInterproceduralGraph {
                             nodes: nodes_by_path
                                 .get(file.path.as_str())
@@ -1229,6 +1618,69 @@ fn interprocedural_reads(
             }
         }
     }
+    let mut contract_generation_obligation_keys = contract_generation_obligations
+        .iter()
+        .map(|obligations| {
+            obligations
+                .iter()
+                .map(|obligation| (obligation.parameter, obligation.location.clone()))
+                .collect::<HashSet<_>>()
+        })
+        .collect::<Vec<_>>();
+    loop {
+        let mut changed = false;
+        for &(owner, target, target_parameter, owner_parameter) in &callback_forwardings {
+            for callback in callback_summaries[target]
+                .iter()
+                .filter(|callback| callback.parameter == target_parameter)
+                .cloned()
+                .collect::<Vec<_>>()
+            {
+                let forwarded = ContractCallback {
+                    parameter: owner_parameter,
+                    execution: callback.execution,
+                };
+                if !callback_summaries[owner].contains(&forwarded) {
+                    callback_summaries[owner].push(forwarded);
+                    changed = true;
+                }
+            }
+            for obligation in contract_generation_obligations[target]
+                .iter()
+                .filter(|obligation| obligation.parameter == target_parameter)
+                .cloned()
+                .collect::<Vec<_>>()
+            {
+                let forwarded = ContractGenerationObligation {
+                    function: nodes[owner]
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| "<anonymous>".into()),
+                    parameter: owner_parameter,
+                    location: obligation.location,
+                    message: format!(
+                        "parameter {owner_parameter} reaches unresolved behavior through {}; {}",
+                        nodes[target].name.as_deref().unwrap_or("<anonymous>"),
+                        obligation.message
+                    ),
+                };
+                let key = (forwarded.parameter, forwarded.location.clone());
+                if contract_generation_obligation_keys[owner].insert(key) {
+                    contract_generation_obligations[owner].push(forwarded);
+                    changed = true;
+                }
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    let contract_generation_obligations = contract_generation_obligations
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| nodes[*index].exported)
+        .flat_map(|(_, obligations)| obligations)
+        .collect::<Vec<_>>();
     let graph = phase_started.elapsed();
     phase_started = Instant::now();
     let owned_reactive_sources;
@@ -1311,7 +1763,7 @@ fn interprocedural_reads(
                         symbol_names,
                     );
                     cache.insert(
-                        file.path.to_string(),
+                        file.path.clone(),
                         CachedTypedAccessors {
                             contributions: contributions.clone(),
                         },
@@ -1338,7 +1790,7 @@ fn interprocedural_reads(
             .filter(|returned| {
                 returned.value == solid_ast_facts::ReturnValueKind::Function
                     && returned.argument.is_some_and(|argument| {
-                        go_returned_arrow_pattern_accepts(file.source.as_str(), argument)
+                        go_returned_arrow_pattern_accepts(file.source.as_ref(), argument)
                     })
                     && containing_summary_function_indexed(
                         &nodes,
@@ -1359,7 +1811,7 @@ fn interprocedural_reads(
         }) {
             match returned_value.value {
                 solid_ast_facts::ReturnValueKind::Identifier => {
-                    let returned_location = location(file.path.as_str(), returned_value.span);
+                    let returned_location = location(file.path.shared(), returned_value.span);
                     if let Some(symbol) = entities.get(&returned_location)
                         && returned_source_symbols.contains(symbol)
                         && let Some((display, declaration)) = accessors.get(symbol)
@@ -1367,7 +1819,13 @@ fn interprocedural_reads(
                         returned[index].push_unique(SummaryRead {
                             symbol: symbol.clone(),
                             display: display.clone(),
-                            kind: None,
+                            kind: Some(
+                                match source_kinds.get(symbol.as_str()) {
+                                    Some(ReactiveSourceKind::Store) => "store-path",
+                                    Some(ReactiveSourceKind::Accessor) | None => "accessor",
+                                }
+                                .into(),
+                            ),
                             declaration: declaration.clone(),
                             origin: returned_location,
                             origin_context: node.name.clone().unwrap_or_default(),
@@ -1389,7 +1847,7 @@ fn interprocedural_reads(
                     else {
                         continue;
                     };
-                    let callee_location = location(file.path.as_str(), call.callee);
+                    let callee_location = location(file.path.shared(), call.callee);
                     if let Some(symbol) = entities.get(&callee_location) {
                         if let Some(target) = by_symbol.get(symbol).copied() {
                             returned_edges.push((index, target));
@@ -1423,10 +1881,10 @@ fn interprocedural_reads(
                             if let Some((returned_contract, declaration)) = contracted {
                                 returned[index].push_unique(SummaryRead {
                                     symbol: symbol.clone(),
-                                    display: returned_contract.label,
+                                    display: SymbolId::from(returned_contract.label),
                                     kind: Some(returned_contract.kind),
                                     declaration,
-                                    origin: location(file.path.as_str(), call.span),
+                                    origin: location(file.path.shared(), call.span),
                                     origin_context: node.name.clone().unwrap_or_default(),
                                 });
                             }
@@ -1504,7 +1962,7 @@ fn interprocedural_reads(
     }
     let call_summary_delta = call_summary_delta_started.elapsed();
     let factory_propagation_started = Instant::now();
-    let mut returned_bindings = HashMap::<String, Vec<SummaryRead>>::new();
+    let mut returned_bindings = HashMap::<SymbolId, Vec<SummaryRead>>::new();
     if returned.iter().any(|summary| !summary.is_empty()) {
         for (binding_symbol, target_symbol) in &returned_binding_candidates {
             let Some(target) = by_symbol.get(target_symbol).copied() else {
@@ -1564,79 +2022,118 @@ fn interprocedural_reads(
         lookup: context.lookup,
     };
     if let Some(cache) = interprocedural_result_cache.as_deref_mut() {
-        let current_paths = facts
-            .files
-            .iter()
-            .map(|file| file.path.as_str())
-            .collect::<HashSet<_>>();
-        let removed_paths = cache
-            .files
-            .keys()
-            .filter(|path| !current_paths.contains(path.as_str()))
-            .cloned()
-            .collect::<Vec<_>>();
-        for path in removed_paths {
-            let Some(removed) = cache.files.remove(path.as_str()) else {
-                continue;
-            };
-            for dependency in &removed.dependencies {
-                remove_interprocedural_dependency_user(
-                    &mut cache.dependency_users,
-                    &mut cache.dependency_states,
-                    dependency,
+        if cache.files.is_empty()
+            && cache.dependency_states.is_empty()
+            && cache.dependency_users.is_empty()
+        {
+            let per_file = parallel_file_results(&facts.files, |file| {
+                interprocedural_result_reads_for_file(file, &result_read_context)
+            });
+            for (file, (reads, dependencies)) in facts.files.iter().zip(per_file) {
+                result_recomputed_files += 1;
+                result.extend(reads.iter().cloned());
+                for dependency in &dependencies {
+                    add_interprocedural_dependency_user(&mut cache.dependency_users, dependency);
+                }
+                cache.files.insert(
+                    file.path.clone(),
+                    CachedInterproceduralResultFile {
+                        dependencies,
+                        reads,
+                        compiler: file.compiler.clone(),
+                    },
                 );
             }
-        }
-        let changed_dependencies = cache
-            .dependency_states
-            .iter()
-            .filter(|(dependency, retained)| !result_view.dependency_matches(retained, dependency))
-            .map(|(dependency, _)| dependency.clone())
-            .collect::<HashSet<_>>();
-        for file in &facts.files {
-            if retained_source_paths.contains(file.path.as_str())
-                && let Some(cached) = cache.files.get(file.path.as_str())
-                && (Arc::ptr_eq(&cached.compiler, &file.compiler)
-                    || same_compiler_semantics(&cached.compiler, &file.compiler))
-                && cached.dependencies.is_disjoint(&changed_dependencies)
-            {
-                result_reused_files += 1;
-                result.extend(cached.reads.iter().cloned());
-                continue;
-            }
-            result_recomputed_files += 1;
-            let (reads, dependencies) =
-                interprocedural_result_reads_for_file(file, &result_read_context);
-            result.extend(reads.iter().cloned());
-            if let Some(previous) = cache.files.remove(file.path.as_str()) {
-                for dependency in previous.dependencies.difference(&dependencies) {
+        } else {
+            let current_paths = facts
+                .files
+                .iter()
+                .map(|file| file.path.as_str())
+                .collect::<HashSet<_>>();
+            let removed_paths = cache
+                .files
+                .keys()
+                .filter(|path| !current_paths.contains(path.as_str()))
+                .cloned()
+                .collect::<Vec<_>>();
+            for path in removed_paths {
+                let Some(removed) = cache.files.remove(path.as_str()) else {
+                    continue;
+                };
+                for dependency in &removed.dependencies {
                     remove_interprocedural_dependency_user(
                         &mut cache.dependency_users,
                         &mut cache.dependency_states,
                         dependency,
                     );
                 }
-                for dependency in dependencies.difference(&previous.dependencies) {
-                    add_interprocedural_dependency_user(&mut cache.dependency_users, dependency);
+            }
+            let changed_dependencies = cache
+                .dependency_states
+                .iter()
+                .filter(|(dependency, retained)| {
+                    !result_view.dependency_matches(retained, dependency)
+                })
+                .map(|(dependency, _)| dependency.clone())
+                .collect::<HashSet<_>>();
+            for file in &facts.files {
+                if retained_source_paths.contains(file.path.as_str())
+                    && let Some(cached) = cache.files.get(file.path.as_str())
+                    && (Arc::ptr_eq(&cached.compiler, &file.compiler)
+                        || same_compiler_semantics(&cached.compiler, &file.compiler))
+                    && cached.dependencies.is_disjoint(&changed_dependencies)
+                {
+                    result_reused_files += 1;
+                    result.extend(cached.reads.iter().cloned());
+                    continue;
                 }
-            } else {
-                for dependency in &dependencies {
-                    add_interprocedural_dependency_user(&mut cache.dependency_users, dependency);
+                result_recomputed_files += 1;
+                let (reads, dependencies) =
+                    interprocedural_result_reads_for_file(file, &result_read_context);
+                result.extend(reads.iter().cloned());
+                if let Some(previous) = cache.files.remove(file.path.as_str()) {
+                    for dependency in previous.dependencies.difference(&dependencies) {
+                        remove_interprocedural_dependency_user(
+                            &mut cache.dependency_users,
+                            &mut cache.dependency_states,
+                            dependency,
+                        );
+                    }
+                    for dependency in dependencies.difference(&previous.dependencies) {
+                        add_interprocedural_dependency_user(
+                            &mut cache.dependency_users,
+                            dependency,
+                        );
+                    }
+                } else {
+                    for dependency in &dependencies {
+                        add_interprocedural_dependency_user(
+                            &mut cache.dependency_users,
+                            dependency,
+                        );
+                    }
+                }
+                cache.files.insert(
+                    file.path.clone(),
+                    CachedInterproceduralResultFile {
+                        dependencies,
+                        reads,
+                        compiler: file.compiler.clone(),
+                    },
+                );
+            }
+            for dependency in cache.dependency_users.keys() {
+                if changed_dependencies.contains(dependency)
+                    || !cache.dependency_states.contains_key(dependency)
+                {
+                    cache
+                        .dependency_states
+                        .insert(dependency.clone(), result_view.dependency_state(dependency));
                 }
             }
-            cache.files.insert(
-                file.path.to_string(),
-                CachedInterproceduralResultFile {
-                    dependencies,
-                    reads,
-                    compiler: file.compiler.clone(),
-                },
-            );
         }
-        for dependency in cache.dependency_users.keys() {
-            if changed_dependencies.contains(dependency)
-                || !cache.dependency_states.contains_key(dependency)
-            {
+        if cache.dependency_states.is_empty() {
+            for dependency in cache.dependency_users.keys() {
                 cache
                     .dependency_states
                     .insert(dependency.clone(), result_view.dependency_state(dependency));
@@ -1690,8 +2187,9 @@ fn interprocedural_reads(
     let export_summaries = export_started.elapsed();
     let results_and_exports = phase_started.elapsed();
     InterproceduralResult {
-        reads: result,
+        reads: result.into(),
         exports,
+        contract_generation_obligations: contract_generation_obligations.into(),
         factory_instances,
         timings: InterproceduralTimings {
             graph,

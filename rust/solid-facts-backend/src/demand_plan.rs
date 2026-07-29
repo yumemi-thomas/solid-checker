@@ -24,8 +24,15 @@ fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), Ba
     let path = file.path.to_string();
     let structural_accessors = structural_accessor_spans(file);
     let mut symbol_spans = HashMap::new();
+    let mut type_descriptor_spans = HashSet::new();
     let mut async_symbol_spans = HashSet::new();
     let mut async_value_spans = Vec::new();
+    let returned_callees = file
+        .ast
+        .returns
+        .iter()
+        .filter_map(|returned| returned.callee)
+        .collect::<HashSet<_>>();
     let mut add_symbol = |span, references| {
         symbol_spans
             .entry(span)
@@ -65,14 +72,19 @@ fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), Ba
     for export in &file.ast.exports {
         for item in export.specifiers.iter().chain(&export.declarations) {
             add_symbol(item.local.span, true);
+            type_descriptor_spans.insert(item.local.span);
         }
     }
     for element in &file.ast.jsx_elements {
         add_symbol(element.name.span, false);
     }
     for returned in &file.ast.returns {
-        if let Some(callee) = returned.callee {
-            demands.push(demand(typefacts_location(&path, callee)).resolved_call());
+        if let Some(callee) = returned.callee
+            && let Some(call) = file.ast.calls.iter().find(|call| call.callee == callee)
+        {
+            let mut planned = demand(typefacts_location(&path, call.span));
+            planned.callability = true;
+            demands.push(planned);
         }
         if returned.value == solid_ast_facts::ReturnValueKind::Identifier {
             add_symbol(returned.span, false);
@@ -83,6 +95,10 @@ fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), Ba
             match argument.value {
                 solid_ast_facts::ArgumentValueKind::Identifier => {
                     add_symbol(argument.span, false);
+                    // A non-callable descriptor discharges unknown callback
+                    // escape obligations; callability alone is not enough for
+                    // structurally typed object and primitive arguments.
+                    type_descriptor_spans.insert(argument.span);
                     async_symbol_spans.insert(argument.span);
                 }
                 solid_ast_facts::ArgumentValueKind::Function
@@ -103,10 +119,29 @@ fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), Ba
     for spread in &file.ast.spreads {
         add_symbol(spread.argument, false);
     }
+    for assignment in &file.ast.assignments {
+        add_symbol(assignment.target, false);
+    }
     for (span, references) in symbol_spans {
         let mut planned = demand(typefacts_location(&path, span)).symbol(references);
         planned.structural_accessor = structural_accessors.contains(&span);
         planned.r#async = async_symbol_spans.contains(&span);
+        planned.type_descriptor = type_descriptor_spans.contains(&span);
+        planned.callability = type_descriptor_spans.contains(&span);
+        planned.reference_space = file.ast.imports.iter().any(|import| {
+            import
+                .bindings
+                .iter()
+                .any(|binding| binding.local.span == span)
+        });
+        planned.runtime_identity = planned.reference_space
+            || file.ast.exports.iter().any(|export| {
+                export
+                    .specifiers
+                    .iter()
+                    .chain(&export.declarations)
+                    .any(|item| item.local.span == span)
+            });
         demands.push(planned);
     }
 
@@ -125,11 +160,20 @@ fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), Ba
     }
     for call in &file.ast.calls {
         let callee = typefacts_location(&path, call.callee);
-        let query = callee_property_location(&file.source, &callee);
-        let mut planned = demand(callee).symbol(false);
-        planned.query_location = Some(query);
+        let property = callee_property_location(&file.source, &callee);
+        let mut planned = demand(callee.clone()).symbol(false);
+        // Signature-to-argument mapping is consumed only when a call has an
+        // argument to classify, or when cleanup analysis must prove the
+        // callability of a returned call. Accessor reads and other ordinary
+        // zero-argument calls need only their type descriptor.
+        planned.resolved_call =
+            !call.arguments.is_empty() || returned_callees.contains(&call.callee);
+        planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
         demands.push(planned);
+        if property != callee {
+            demands.push(demand(property).symbol(false));
+        }
     }
     Ok(())
 }
@@ -144,12 +188,14 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         references: false,
         r#async: false,
         structural_accessor: false,
+        callability: false,
+        reference_space: false,
+        runtime_identity: false,
     }
 }
 
 trait DemandFlags {
     fn symbol(self, references: bool) -> Self;
-    fn resolved_call(self) -> Self;
     fn async_context(self) -> Self;
 }
 
@@ -157,11 +203,6 @@ impl DemandFlags for EntityDemand {
     fn symbol(mut self, references: bool) -> Self {
         self.symbol = true;
         self.references = references;
-        self
-    }
-
-    fn resolved_call(mut self) -> Self {
-        self.resolved_call = true;
         self
     }
 
@@ -188,5 +229,27 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
                 right.query_location.as_ref().map(|value| value.end_byte),
             ))
     });
-    demands.dedup();
+    let mut merged = Vec::<EntityDemand>::with_capacity(demands.len());
+    for demand in demands.drain(..) {
+        if let Some(current) = merged
+            .last_mut()
+            .filter(|current| current.location == demand.location)
+        {
+            if current.query_location.is_none() {
+                current.query_location = demand.query_location;
+            }
+            current.symbol |= demand.symbol;
+            current.type_descriptor |= demand.type_descriptor;
+            current.resolved_call |= demand.resolved_call;
+            current.references |= demand.references;
+            current.r#async |= demand.r#async;
+            current.structural_accessor |= demand.structural_accessor;
+            current.callability |= demand.callability;
+            current.reference_space |= demand.reference_space;
+            current.runtime_identity |= demand.runtime_identity;
+        } else {
+            merged.push(demand);
+        }
+    }
+    *demands = merged;
 }

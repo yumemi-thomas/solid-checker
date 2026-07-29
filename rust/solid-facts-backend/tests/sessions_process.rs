@@ -26,7 +26,7 @@ fn native_incremental_session_reuses_oxc_and_solid_facts() {
         .iter()
         .map(|path| SourceFile {
             path: path.canonicalize().unwrap().to_string_lossy().into_owned(),
-            source: fs::read_to_string(path).unwrap(),
+            source: fs::read_to_string(path).unwrap().into(),
             compiler_options: CompilerOptions::default(),
         })
         .collect();
@@ -417,7 +417,7 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
                 .expect("canonical source")
                 .to_string_lossy()
                 .into_owned(),
-            source: std::fs::read_to_string(path).expect("read source"),
+            source: std::fs::read_to_string(path).expect("read source").into(),
             compiler_options: CompilerOptions::default(),
         })
         .collect();
@@ -433,7 +433,30 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
     )
     .expect("join real facts");
     assert_eq!(facts.files.len(), 2);
-    assert!(!facts.typescript.entities.is_empty());
+    assert!(facts.typescript.entities().next().is_some());
+    assert!(
+        facts
+            .typescript
+            .entities()
+            .any(|entity| entity.callability == Some(typefacts::Callability::Callable)),
+        "exported functions should carry compiler-derived callability"
+    );
+    assert!(
+        facts.typescript.entities().any(|entity| {
+            matches!(
+                entity.reference_space,
+                Some(typefacts::ReferenceSpace::Value | typefacts::ReferenceSpace::Both)
+            )
+        }),
+        "runtime imports should carry value-space reference facts"
+    );
+    assert!(
+        facts
+            .typescript
+            .entities()
+            .any(|entity| !entity.runtime_identity.is_empty()),
+        "runtime imports and exports should carry canonical runtime identities"
+    );
     let program = solid_reactive_ir::build(&facts).expect("build Rust Reactive IR");
     let (incremental_program, incremental_timings) =
         solid_reactive_ir::IncrementalBuilder::default()
@@ -463,7 +486,7 @@ fn tracer_fixture_session(typefacts_executable: &str) -> (NativeIncrementalSessi
         .iter()
         .map(|path| SourceFile {
             path: path.to_string_lossy().into_owned(),
-            source: fs::read_to_string(path).unwrap(),
+            source: fs::read_to_string(path).unwrap().into(),
             compiler_options: CompilerOptions::default(),
         })
         .collect();
@@ -616,6 +639,77 @@ fn incremental_contract_exports_refresh_changed_summaries() {
 }
 
 #[test]
+fn incremental_contract_exports_refresh_cross_file_reexports() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("contract-reexport-invalidation");
+    let project = directory.join("tsconfig.json");
+    let source = directory.join("source.ts");
+    let entrypoint = directory.join("index.ts");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"allowImportingTsExtensions":true,"noEmit":true},"files":["source.ts","index.ts"]}"#,
+    )
+    .unwrap();
+    let original = "export function source() { return 1; }\n";
+    fs::write(&source, original).unwrap();
+    fs::write(
+        &entrypoint,
+        "export { source as publicSource } from \"./source.ts\";\n",
+    )
+    .unwrap();
+    let project_id = project.to_string_lossy().into_owned();
+    let sources = [&source, &entrypoint]
+        .into_iter()
+        .map(|path| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: fs::read_to_string(path).unwrap().into(),
+            compiler_options: CompilerOptions::default(),
+        })
+        .collect();
+    let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();
+    let mut session = NativeIncrementalSession::open(project_id, sources, typescript).unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental.build(&first).unwrap();
+    assert_eq!(
+        initial
+            .contract_exports
+            .get("publicSource")
+            .map(|summary| summary.async_behavior.as_str()),
+        Some("")
+    );
+
+    let changed = "export async function source() { return 1; }\n";
+    fs::write(&source, changed).unwrap();
+    let edited = session
+        .edit(
+            vec![SourceChange {
+                path: source.to_string_lossy().into_owned(),
+                version: 1,
+                source: Some(changed.into()),
+                compiler_options: CompilerOptions::default(),
+            }],
+            None,
+        )
+        .unwrap();
+    let fresh = solid_reactive_ir::build(&edited).unwrap();
+    let (retained, _) = incremental.build(&edited).unwrap();
+
+    assert_eq!(retained, fresh);
+    assert_eq!(
+        retained
+            .contract_exports
+            .get("publicSource")
+            .map(|summary| summary.async_behavior.as_str()),
+        Some("promise"),
+        "an unchanged re-export fragment must follow its changed source contract"
+    );
+}
+
+#[test]
 fn incremental_reactive_ir_reuses_semantic_indexes_for_same_shape_body_edit() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
@@ -675,7 +769,7 @@ fn incremental_owner_fragments_match_fresh_owner_fixtures() {
         let app = fixture.join("App.tsx").canonicalize().unwrap();
         let sources = vec![SourceFile {
             path: app.to_string_lossy().into_owned(),
-            source: fs::read_to_string(&app).unwrap(),
+            source: fs::read_to_string(&app).unwrap().into(),
             compiler_options: CompilerOptions::default(),
         }];
         let typescript = TypeFactsSession::open(&typefacts, &project_id, &[]).unwrap();

@@ -1,0 +1,18 @@
+$schema: https://raw.githubusercontent.com/CodSpeedHQ/codspeed/refs/heads/main/schemas/codspeed.schema.json
+
+options:
+  warmup-time: 0s
+  min-rounds: 3
+  max-rounds: 3
+  max-time: 15s
+
+benchmarks:
+  - id: fresh-analysis-1000
+    name: Fresh analysis — 1,000 sources
+    exec: node benchmarks/run-codspeed-case.mjs fresh
+  - id: cached-analysis-1000
+    name: Cached analysis throughput — 1,000 sources
+    exec: node benchmarks/run-codspeed-case.mjs cached
+  - id: incremental-analysis-1000
+    name: Same-span one-file edit — 1,000 sources
+    exec: node benchmarks/run-codspeed-case.mjs incremental

@@ -2,33 +2,39 @@
 //! a Unix socket, so repeat CLI checks reuse the warm session instead of
 //! rebuilding the TypeScript program and demand closure from scratch.
 //!
-//! Opt-in: clients use it only when `SOLID_CHECKER_DAEMON=1`. The socket path is
-//! derived from the canonical project id. Before every answer the daemon
-//! resynchronizes with the filesystem: a changed tsconfig, a changed source
-//! directory (file created, deleted, or renamed), or an unreadable known file
-//! rebuilds the whole session; changed file contents become incremental
-//! overlay updates. The response body is byte-identical to one-shot output.
+//! Optimized release binaries use it by default; `SOLID_CHECKER_DAEMON=0`
+//! selects a one-shot check. Debug binaries remain one-shot by default so test
+//! processes do not leak retained actors. The socket path is derived from the
+//! canonical project id. Before every answer the daemon resynchronizes with
+//! the filesystem: a changed tsconfig, a changed source directory (file
+//! created, deleted, or renamed), or an unreadable known file rebuilds the
+//! whole session; changed file contents become incremental overlay updates.
+//! The response body is byte-identical to one-shot output.
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     error::Error,
+    ffi::OsStr,
     fs,
     io::{self, BufRead, BufReader, Read, Write},
     os::unix::fs::MetadataExt,
     os::unix::net::{UnixListener, UnixStream},
     path::{Path, PathBuf},
     process::{Command, Stdio},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
-    NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession, analyze_project,
+    DiagnosticSession, NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession,
     discovered_contract_paths, imported_package_roots,
 };
+use solid_reactive_ir::CacheRetention;
 
 use super::{Request, snapshot_emission};
 use crate::daemon_cache::{CachedAnswer, CachedSnapshot, ContractFile};
+use crate::idle_memory;
 
 #[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,21 +52,61 @@ struct CheckHeader {
     status: String,
     #[serde(default)]
     error: String,
+    #[serde(default)]
+    cache_hit: bool,
+    #[serde(default)]
+    generation: u64,
+    #[serde(default)]
+    analysis_ns: u64,
+    #[serde(default)]
+    response_bytes: u64,
+}
+
+struct Answer {
+    status: Arc<str>,
+    body: Arc<[u8]>,
+    cache_hit: bool,
+    generation: u64,
+    analysis_ns: u64,
 }
 
 pub fn enabled() -> bool {
-    std::env::var("SOLID_CHECKER_DAEMON").is_ok_and(|value| value == "1" || value == "true")
+    enabled_from(
+        std::env::var_os("SOLID_CHECKER_DAEMON").as_deref(),
+        !cfg!(debug_assertions),
+    )
+}
+
+fn enabled_from(setting: Option<&OsStr>, production_default: bool) -> bool {
+    let Some(setting) = setting else {
+        return production_default;
+    };
+    matches!(setting.to_str(), Some("1" | "true"))
 }
 
 pub fn eligible(request: &Request) -> bool {
     request.sources.is_empty()
         && request.emit_contract.is_empty()
         && !request.check_contracts
-        && matches!(request.format.as_str(), "json" | "text")
+        && retained_format(&request.format)
 }
 
-fn socket_path(project_id: &str) -> PathBuf {
-    let digest = Sha256::digest(project_id.as_bytes());
+fn retained_format(format: &str) -> bool {
+    matches!(format, "default" | "json" | "text")
+}
+
+fn socket_path(project_id: &str, typefacts_executable: &str) -> PathBuf {
+    let mut identity = Sha256::new();
+    identity.update(project_id.as_bytes());
+    identity.update([0]);
+    identity.update(typefacts_executable.as_bytes());
+    identity.update([0]);
+    identity.update(option_env!("SOLID_CHECKER_BUILD_ID").unwrap_or("dev"));
+    if let Ok(executable) = std::env::current_exe() {
+        identity.update([0]);
+        identity.update(executable.as_os_str().as_encoded_bytes());
+    }
+    let digest = identity.finalize();
     let mut name = String::from("solid-checker-");
     for byte in &digest[..8] {
         name.push_str(&format!("{byte:02x}"));
@@ -72,18 +118,107 @@ fn idle_limit() -> Duration {
     let seconds = std::env::var("SOLID_CHECKER_DAEMON_IDLE_SECS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
-        .unwrap_or(600);
+        .unwrap_or(120);
     Duration::from_secs(seconds.max(1))
+}
+
+fn memory_limit_bytes() -> Option<u64> {
+    let mebibytes = std::env::var("SOLID_CHECKER_DAEMON_MAX_RSS_MB")
+        .ok()
+        .and_then(|value| value.parse::<u64>().ok())
+        .unwrap_or(2048);
+    (mebibytes != 0).then(|| mebibytes.saturating_mul(1024 * 1024))
+}
+
+const LARGE_PROJECT_SOURCE_THRESHOLD: usize = 1_000;
+
+fn cache_retention_from(setting: Option<&OsStr>, source_count: usize) -> CacheRetention {
+    match setting.and_then(OsStr::to_str) {
+        Some("performance" | "full") => CacheRetention::Performance,
+        Some("balanced") => CacheRetention::Balanced,
+        Some("compact") => CacheRetention::Compact,
+        _ if source_count >= LARGE_PROJECT_SOURCE_THRESHOLD => CacheRetention::Balanced,
+        _ => CacheRetention::Performance,
+    }
+}
+
+fn cache_retention(source_count: usize) -> CacheRetention {
+    cache_retention_from(
+        std::env::var_os("SOLID_CHECKER_CACHE_RETENTION").as_deref(),
+        source_count,
+    )
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct ProcessMemory {
+    pid: u32,
+    parent: u32,
+    resident_kib: u64,
+}
+
+fn parse_process_memory(output: &str) -> Vec<ProcessMemory> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            Some(ProcessMemory {
+                pid: fields.next()?.parse().ok()?,
+                parent: fields.next()?.parse().ok()?,
+                resident_kib: fields.next()?.parse().ok()?,
+            })
+        })
+        .collect()
+}
+
+fn process_tree_resident_bytes_from(samples: &[ProcessMemory], root: u32) -> u64 {
+    let mut included = HashSet::from([root]);
+    let mut resident_kib = 0_u64;
+    loop {
+        let mut changed = false;
+        for sample in samples {
+            if included.contains(&sample.pid) {
+                continue;
+            }
+            if included.contains(&sample.parent) {
+                included.insert(sample.pid);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    for sample in samples {
+        if included.contains(&sample.pid) {
+            resident_kib = resident_kib.saturating_add(sample.resident_kib);
+        }
+    }
+    resident_kib.saturating_mul(1024)
+}
+
+fn process_tree_resident_bytes(root: u32) -> Option<u64> {
+    let output = Command::new("ps")
+        .args(["-axo", "pid=,ppid=,rss="])
+        .output()
+        .ok()?;
+    output.status.success().then(|| {
+        process_tree_resident_bytes_from(
+            &parse_process_memory(&String::from_utf8_lossy(&output.stdout)),
+            root,
+        )
+    })
 }
 
 struct State {
     project: PathBuf,
     session: NativeIncrementalSession,
+    diagnostics: DiagnosticSession,
     sources: Vec<SourceFile>,
     fingerprints: BTreeMap<String, FileFingerprint>,
     dirs: BTreeMap<PathBuf, Option<FileStamp>>,
     tsconfig: FileFingerprint,
     last: Option<CachedAnswer>,
+    cache_retention: CacheRetention,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -156,14 +291,17 @@ impl State {
                     .or_insert_with(|| directory_stamp(parent));
             }
         }
+        let cache_retention = cache_retention(sources.len());
         Ok(Self {
             project,
             session,
+            diagnostics: DiagnosticSession::default(),
             sources,
             fingerprints,
             dirs,
             tsconfig,
             last: None,
+            cache_retention,
         })
     }
 
@@ -210,7 +348,7 @@ impl State {
                         .map_err(|_| format!("configured source disappeared from state: {path}"))?;
                     self.sources[index] = SourceFile {
                         path,
-                        source: text,
+                        source: text.into(),
                         compiler_options: Default::default(),
                     };
                 }
@@ -270,7 +408,7 @@ fn directory_stamp(path: &Path) -> Option<FileStamp> {
 }
 
 pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
-    let socket = socket_path(&request.project_id);
+    let socket = socket_path(&request.project_id, &request.typefacts_executable);
     if UnixStream::connect(&socket).is_ok() {
         return Ok(0); // a live daemon already serves this project
     }
@@ -280,6 +418,8 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
     // Blocking accept keeps request latency free of poll sleeps; a
     // watchdog thread ends the whole process after the idle limit.
     let idle = idle_limit();
+    let memory_limit = memory_limit_bytes();
+    let process_id = std::process::id();
     let last_activity = std::sync::Arc::new(std::sync::Mutex::new(Instant::now()));
     let watchdog_activity = std::sync::Arc::clone(&last_activity);
     let watchdog_socket = socket.clone();
@@ -291,6 +431,12 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
                 .map(|instant| instant.elapsed())
                 .unwrap_or(idle);
             if idle_for >= idle {
+                let _ = fs::remove_file(&watchdog_socket);
+                std::process::exit(0);
+            }
+            if memory_limit.is_some_and(|limit| {
+                process_tree_resident_bytes(process_id).is_some_and(|resident| resident > limit)
+            }) {
                 let _ = fs::remove_file(&watchdog_socket);
                 std::process::exit(0);
             }
@@ -329,16 +475,24 @@ fn handle(state: &mut State, request: &Request, stream: UnixStream) -> Result<()
     }
     let outcome = answer(state, request, &check);
     match outcome {
-        Ok((status, body)) => {
+        Ok(answer) => {
+            let materialized = !answer.cache_hit;
             let header = serde_json::to_vec(&CheckHeader {
                 ok: true,
-                status,
+                status: answer.status.to_string(),
                 error: String::new(),
+                cache_hit: answer.cache_hit,
+                generation: answer.generation,
+                analysis_ns: answer.analysis_ns,
+                response_bytes: u64::try_from(answer.body.len()).unwrap_or(u64::MAX),
             })?;
             stream.write_all(&header)?;
             stream.write_all(b"\n")?;
-            stream.write_all(&body)?;
+            stream.write_all(&answer.body)?;
             stream.flush()?;
+            if materialized {
+                idle_memory::reclaim_idle_pages();
+            }
             Ok(())
         }
         Err(error) => {
@@ -354,6 +508,10 @@ fn respond_error(stream: &mut UnixStream, message: &str) -> Result<(), Box<dyn E
         ok: false,
         status: String::new(),
         error: message.into(),
+        cache_hit: false,
+        generation: 0,
+        analysis_ns: 0,
+        response_bytes: 0,
     })?;
     stream.write_all(&header)?;
     stream.write_all(b"\n")?;
@@ -365,7 +523,8 @@ fn answer(
     state: &mut State,
     request: &Request,
     check: &CheckRequest,
-) -> Result<(String, Vec<u8>), Box<dyn Error>> {
+) -> Result<Answer, Box<dyn Error>> {
+    let started = Instant::now();
     let changes = match state.resync()? {
         Sync::Rebuild => {
             *state = State::open(request)?;
@@ -376,38 +535,52 @@ fn answer(
     if changes.is_empty()
         && let Some(cached) = cached_answer(state, check)?
     {
-        return Ok(cached);
+        return Ok(Answer {
+            status: cached.0,
+            body: cached.1,
+            cache_hit: true,
+            generation: state.session.generation(),
+            analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+        });
     }
     let facts = if changes.is_empty() {
         state.session.analyze()?
     } else {
         state.session.edit(changes, None)?
     };
-    let analysis = analyze_project(
+    let analysis = state.diagnostics.analyze(
         &state.project,
         &state.sources,
         &facts,
         &check.contract_paths,
     )?;
-    let body = snapshot_emission::emit(
+    let body: Arc<[u8]> = snapshot_emission::emit(
         "json",
         &request.project_id,
         &analysis.snapshot,
         false,
         Duration::ZERO,
     )?
-    .output;
-    let status = analysis.snapshot.status.to_string();
+    .output
+    .into();
+    let status: Arc<str> = analysis.snapshot.status.as_str().into();
     let modules = imported_package_roots(&facts);
     state.last = Some(CachedAnswer {
         generation: state.session.generation(),
         explicit: check.contract_paths.clone(),
         contract_files: contract_files(state, &modules, &check.contract_paths)?,
         modules,
-        status: status.clone(),
-        body: body.clone(),
+        status: Arc::clone(&status),
+        body: Arc::clone(&body),
     });
-    Ok((status, body))
+    state.diagnostics.retain_for_idle(state.cache_retention);
+    Ok(Answer {
+        status,
+        body,
+        cache_hit: false,
+        generation: state.session.generation(),
+        analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
+    })
 }
 
 /// Return the cached snapshot only when its inputs still hold: same
@@ -449,7 +622,7 @@ fn contract_files(
 
 pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     let started = Instant::now();
-    let socket = socket_path(&request.project_id);
+    let socket = socket_path(&request.project_id, &request.typefacts_executable);
     let stream = match UnixStream::connect(&socket) {
         Ok(stream) => stream,
         Err(_) => spawn_and_connect(request, &socket)?,
@@ -469,6 +642,14 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     if !header.ok {
         return Err(header.error.into());
     }
+    if request.format == "json" {
+        // The daemon caches the canonical JSON emission. Stream it directly:
+        // parsing and serializing the multi-megabyte snapshot again made the
+        // payload itself dominate otherwise constant-time cache hits.
+        let response_bytes = io::copy(&mut reader, &mut io::stdout())?;
+        report_timings(&header, started.elapsed(), response_bytes);
+        return Ok(i32::from(request.certify && header.status != "certified"));
+    }
     let mut body = Vec::new();
     reader.read_to_end(&mut body)?;
     let snapshot: solid_facts_backend::Snapshot = serde_json::from_slice(&body)?;
@@ -483,7 +664,31 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         started.elapsed(),
     )?;
     io::stdout().write_all(&emission.output)?;
+    report_timings(
+        &header,
+        started.elapsed(),
+        u64::try_from(body.len()).unwrap_or(u64::MAX),
+    );
     Ok(emission.exit_code)
+}
+
+fn report_timings(header: &CheckHeader, elapsed: Duration, received_bytes: u64) {
+    if std::env::var_os("SOLID_CHECKER_TIMINGS").is_none() {
+        return;
+    }
+    eprintln!("{}", timing_value(header, elapsed, received_bytes));
+}
+
+fn timing_value(header: &CheckHeader, elapsed: Duration, received_bytes: u64) -> serde_json::Value {
+    serde_json::json!({
+        "mode": "retained-daemon",
+        "cacheHit": header.cache_hit,
+        "generation": header.generation,
+        "analysisNs": header.analysis_ns,
+        "roundtripNs": u64::try_from(elapsed.as_nanos()).unwrap_or(u64::MAX),
+        "responseBytes": header.response_bytes,
+        "receivedBytes": received_bytes,
+    })
 }
 
 fn spawn_and_connect(
@@ -519,11 +724,119 @@ fn spawn_and_connect(
 mod tests {
     use std::{
         cell::Cell,
+        ffi::OsStr,
         fs,
+        time::Duration,
         time::{SystemTime, UNIX_EPOCH},
     };
 
-    use super::{FileRefresh, fingerprint_file, refresh_file_with};
+    use super::{
+        CheckHeader, FileRefresh, ProcessMemory, cache_retention_from, enabled_from,
+        fingerprint_file, parse_process_memory, process_tree_resident_bytes_from,
+        refresh_file_with, retained_format, socket_path, timing_value,
+    };
+    use solid_reactive_ir::CacheRetention;
+
+    #[test]
+    fn release_default_and_explicit_daemon_policy_are_unambiguous() {
+        assert!(enabled_from(None, true));
+        assert!(!enabled_from(None, false));
+        assert!(enabled_from(Some(OsStr::new("1")), false));
+        assert!(enabled_from(Some(OsStr::new("true")), false));
+        assert!(!enabled_from(Some(OsStr::new("0")), true));
+        assert!(!enabled_from(Some(OsStr::new("false")), true));
+        assert!(!enabled_from(Some(OsStr::new("unexpected")), true));
+    }
+
+    #[test]
+    fn large_projects_release_expensive_idle_indexes_by_default() {
+        assert_eq!(cache_retention_from(None, 999), CacheRetention::Performance);
+        assert_eq!(cache_retention_from(None, 1_000), CacheRetention::Balanced);
+        assert_eq!(
+            cache_retention_from(Some(OsStr::new("performance")), 5_000),
+            CacheRetention::Performance
+        );
+        assert_eq!(
+            cache_retention_from(Some(OsStr::new("compact")), 1),
+            CacheRetention::Compact
+        );
+    }
+
+    #[test]
+    fn retained_actor_supports_every_diagnostic_format() {
+        assert!(retained_format("default"));
+        assert!(retained_format("json"));
+        assert!(retained_format("text"));
+        assert!(!retained_format("sarif"));
+    }
+
+    #[test]
+    fn retained_actor_identity_includes_project_and_typefacts_build() {
+        let baseline = socket_path("/project/a/tsconfig.json", "/bin/typefacts-a");
+        assert_ne!(
+            baseline,
+            socket_path("/project/b/tsconfig.json", "/bin/typefacts-a")
+        );
+        assert_ne!(
+            baseline,
+            socket_path("/project/a/tsconfig.json", "/bin/typefacts-b")
+        );
+    }
+
+    #[test]
+    fn process_tree_memory_includes_descendants_and_excludes_neighbors() {
+        let parsed = parse_process_memory("10 1 100\n11 10 200\n12 11 300\n13 1 400\nmalformed\n");
+        assert_eq!(
+            parsed,
+            vec![
+                ProcessMemory {
+                    pid: 10,
+                    parent: 1,
+                    resident_kib: 100,
+                },
+                ProcessMemory {
+                    pid: 11,
+                    parent: 10,
+                    resident_kib: 200,
+                },
+                ProcessMemory {
+                    pid: 12,
+                    parent: 11,
+                    resident_kib: 300,
+                },
+                ProcessMemory {
+                    pid: 13,
+                    parent: 1,
+                    resident_kib: 400,
+                },
+            ]
+        );
+        assert_eq!(process_tree_resident_bytes_from(&parsed, 10), 600 * 1024);
+    }
+
+    #[test]
+    fn retained_timing_reports_cache_generation_and_payload() {
+        let value = timing_value(
+            &CheckHeader {
+                ok: true,
+                status: "certified".into(),
+                error: String::new(),
+                cache_hit: true,
+                generation: 7,
+                analysis_ns: 11,
+                response_bytes: 13,
+            },
+            Duration::from_nanos(17),
+            13,
+        );
+        assert_eq!(value["mode"], "retained-daemon");
+        assert_eq!(value["cacheHit"], true);
+        assert_eq!(value["generation"], 7);
+        assert_eq!(value["analysisNs"], 11);
+        assert_eq!(value["roundtripNs"], 17);
+        assert_eq!(value["responseBytes"], 13);
+        assert_eq!(value["receivedBytes"], 13);
+    }
 
     #[test]
     fn unchanged_fingerprint_does_not_read_or_hash_source_content() {

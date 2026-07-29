@@ -10,79 +10,111 @@ use std::{
     time::{Duration, Instant},
 };
 
-use solid_facts::ProjectFacts;
-use typefacts::{Declaration, FactTable, Location, SymbolFact};
+use solid_facts::{ProjectFacts, TypeScriptSymbol, TypeScriptTable};
+use typefacts::{Declaration, Location};
 
 use super::{
-    CachedTypeScriptIndexes, EntitySymbols, SourceDiscoverySymbolSemantics,
-    SourceDiscoveryTypeScriptDelta, location, location_order,
-    source_discovery_declaration_semantic, source_discovery_declaration_semantics,
+    CachedTypeScriptIndexes, EntitySymbols, SourceDiscoverySymbolFingerprint,
+    SourceDiscoveryTypeScriptDelta, SymbolId, SymbolInterner, SymbolName, location, location_order,
+    source_discovery_declaration_semantic, source_discovery_symbol_fingerprint, symbol_id,
+    symbol_name,
 };
 
-pub(super) fn add_solid_namespace_names(
+pub(super) fn add_solid_import_names(
     facts: &ProjectFacts,
     entities: &EntitySymbols,
-    names: &mut HashMap<String, String>,
+    names: &mut HashMap<SymbolId, SymbolName>,
 ) {
     for file in &facts.files {
         for import in &file.ast.imports {
-            let primitives: &[&str] = if import.module == "solid-js" {
-                &[
-                    "createSignal",
-                    "createMemo",
-                    "mapArray",
-                    "createStore",
-                    "createProjection",
-                    "createOptimistic",
-                    "createOptimisticStore",
-                    "createEffect",
-                    "createRenderEffect",
-                    "createTrackedEffect",
-                    "createReaction",
-                    "createRoot",
-                    "createOwner",
-                    "untrack",
-                    "onSettled",
-                    "onCleanup",
-                    "flush",
-                    "Loading",
-                    "Show",
-                    "Match",
-                    "Switch",
-                    "merge",
-                    "refresh",
-                    "affects",
-                    "action",
-                ]
-            } else if import.module.starts_with("@solidjs/") {
-                &["dynamic"]
-            } else {
+            let Some(primitives) = solid_module_primitives(import.module.as_str()) else {
                 continue;
             };
             for binding in &import.bindings {
-                if binding.kind != solid_ast_facts::ImportKind::Namespace {
-                    continue;
-                }
-                let location = location(file.path.as_str(), binding.local.span);
+                let location = location(file.path.shared(), binding.local.span);
                 let Some(symbol) = entities.get(&location) else {
                     continue;
                 };
-                for primitive in primitives {
-                    names.insert(format!("{symbol}::{primitive}"), (*primitive).into());
+                if binding.kind == solid_ast_facts::ImportKind::Namespace {
+                    for primitive in primitives {
+                        names.insert(
+                            symbol_id(&format!("{symbol}::{primitive}")),
+                            (*primitive).into(),
+                        );
+                    }
+                } else if let Some(imported) = binding.imported.as_deref()
+                    && primitives.contains(&imported)
+                {
+                    names.insert(symbol.clone(), imported.into());
+                }
+            }
+        }
+        for export in &file.ast.exports {
+            let Some(module) = export.module.as_deref() else {
+                continue;
+            };
+            let Some(primitives) = solid_module_primitives(module) else {
+                continue;
+            };
+            for specifier in &export.specifiers {
+                let Some(primitive) = file.source_text(specifier.local.span) else {
+                    continue;
+                };
+                if !primitives.contains(&primitive) {
+                    continue;
+                }
+                let location = location(file.path.shared(), specifier.local.span);
+                if let Some(symbol) = entities.get(&location) {
+                    names.insert(symbol.clone(), primitive.into());
                 }
             }
         }
     }
 }
 
+fn solid_module_primitives(module: &str) -> Option<&'static [&'static str]> {
+    match module {
+        "solid-js" => Some(&[
+            "createSignal",
+            "createMemo",
+            "mapArray",
+            "createStore",
+            "createProjection",
+            "createOptimistic",
+            "createOptimisticStore",
+            "createEffect",
+            "createRenderEffect",
+            "createTrackedEffect",
+            "createReaction",
+            "createRoot",
+            "createOwner",
+            "untrack",
+            "onSettled",
+            "onCleanup",
+            "flush",
+            "Loading",
+            "Show",
+            "Match",
+            "Switch",
+            "merge",
+            "refresh",
+            "affects",
+            "action",
+        ]),
+        "@solidjs/web" => Some(&["dynamic"]),
+        _ => None,
+    }
+}
+
 pub(super) fn alias_roots_and_source_declarations(
-    table: &FactTable,
-) -> (HashMap<String, String>, HashMap<String, Declaration>) {
-    let targets = symbol_alias_targets(table);
-    let mut roots = HashMap::with_capacity(table.symbols.len());
+    table: &TypeScriptTable,
+    interner: &SymbolInterner,
+) -> (HashMap<SymbolId, SymbolId>, HashMap<SymbolId, Declaration>) {
+    let targets = symbol_alias_targets(table, interner);
+    let mut roots = HashMap::new();
     let mut declarations = HashMap::new();
-    for symbol in table.symbols.iter() {
-        let mut root = symbol.id.to_string();
+    for symbol in table.symbols() {
+        let mut root = interner.intern(symbol.id());
         for _ in 0..=targets.len() {
             let Some(next) = targets.get(root.as_str()) else {
                 break;
@@ -91,61 +123,73 @@ pub(super) fn alias_roots_and_source_declarations(
         }
         if !declarations.contains_key(root.as_str())
             && let Some(declaration) = symbol
-                .declarations
+                .declarations()
                 .iter()
                 .find(|declaration| !declaration.location.path.ends_with(".d.ts"))
         {
             declarations.insert(root.clone(), declaration.clone());
         }
-        roots.insert(symbol.id.to_string(), root);
+        roots.insert(interner.intern(symbol.id()), root);
     }
     (roots, declarations)
 }
 
-pub(super) fn symbol_alias_targets(table: &FactTable) -> HashMap<String, String> {
+pub(super) fn symbol_alias_targets(
+    table: &TypeScriptTable,
+    interner: &SymbolInterner,
+) -> HashMap<SymbolId, SymbolId> {
     table
-        .symbols
-        .iter()
-        .filter(|symbol| !symbol.alias_target.is_empty())
-        .map(|symbol| (symbol.id.to_string(), symbol.alias_target.to_string()))
+        .symbols()
+        .filter(|symbol| !symbol.alias_target().is_empty())
+        .map(|symbol| {
+            (
+                interner.intern(symbol.id()),
+                interner.intern(symbol.alias_target()),
+            )
+        })
         .collect()
 }
 
 pub(super) fn source_discovery_symbol_semantics(
-    table: &FactTable,
-) -> HashMap<String, SourceDiscoverySymbolSemantics> {
+    table: &TypeScriptTable,
+    interner: &SymbolInterner,
+) -> HashMap<SymbolId, SourceDiscoverySymbolFingerprint> {
     table
-        .symbols
-        .iter()
+        .symbols()
         .map(|symbol| {
             (
-                symbol.id.to_string(),
-                SourceDiscoverySymbolSemantics {
-                    alias_target: symbol.alias_target.to_string(),
-                    declarations: source_discovery_declaration_semantics(&symbol.declarations),
-                },
+                interner.intern(symbol.id()),
+                source_discovery_symbol_fingerprint(symbol.alias_target(), symbol.declarations()),
             )
         })
         .collect()
 }
 
 pub(super) fn symbols_by_root(
-    table: &FactTable,
-    aliases: &HashMap<String, String>,
-) -> HashMap<String, Vec<String>> {
-    let mut by_root = HashMap::<String, Vec<String>>::new();
-    for symbol in table.symbols.iter() {
+    table: &TypeScriptTable,
+    aliases: &HashMap<SymbolId, SymbolId>,
+    interner: &SymbolInterner,
+) -> HashMap<SymbolId, Vec<SymbolId>> {
+    let mut by_root = HashMap::<SymbolId, Vec<SymbolId>>::new();
+    for symbol in table.symbols() {
         let root = aliases
-            .get(symbol.id.as_ref())
+            .get(symbol.id())
             .cloned()
-            .unwrap_or_else(|| symbol.id.to_string());
-        by_root.entry(root).or_default().push(symbol.id.to_string());
+            .unwrap_or_else(|| interner.intern(symbol.id()));
+        by_root
+            .entry(root)
+            .or_default()
+            .push(interner.intern(symbol.id()));
     }
     by_root
 }
 
-fn alias_root(symbol: &str, targets: &HashMap<String, String>) -> String {
-    let mut root = symbol.to_owned();
+fn alias_root(
+    symbol: &str,
+    targets: &HashMap<SymbolId, SymbolId>,
+    interner: &SymbolInterner,
+) -> SymbolId {
+    let mut root = interner.intern(symbol);
     for _ in 0..=targets.len() {
         let Some(next) = targets.get(&root) else {
             break;
@@ -157,8 +201,8 @@ fn alias_root(symbol: &str, targets: &HashMap<String, String>) -> String {
 
 pub(super) fn patch_typescript_indexes(
     cache: &mut CachedTypeScriptIndexes,
-    table: &FactTable,
-    symbols_by_id: &HashMap<&str, &SymbolFact>,
+    table: &TypeScriptTable,
+    symbols_by_id: &HashMap<&str, TypeScriptSymbol<'_>>,
     changes: &solid_facts::TypeScriptChanges,
 ) -> Option<(Duration, Duration)> {
     // An empty non-reuse change set is the sidecar's fail-closed description
@@ -185,7 +229,7 @@ pub(super) fn patch_typescript_indexes(
                 id,
                 symbols_by_id
                     .get(id.as_str())
-                    .map(|symbol| symbol.alias_target.as_ref())
+                    .map(|symbol| symbol.alias_target())
                     .filter(|target| !target.is_empty()),
             )
         })
@@ -210,7 +254,7 @@ pub(super) fn patch_typescript_indexes(
             let old_target = cache
                 .symbol_alias_targets
                 .get(id.as_str())
-                .map(String::as_str);
+                .map(SymbolId::as_str);
             (existed != exists || old_target != *current_target).then_some(id.as_str())
         })
         .collect::<HashSet<_>>();
@@ -234,29 +278,25 @@ pub(super) fn patch_typescript_indexes(
         .symbol_ids
         .iter()
         .filter(|id| {
-            let current =
-                symbols_by_id
-                    .get(id.as_str())
-                    .map(|symbol| SourceDiscoverySymbolSemantics {
-                        alias_target: symbol.alias_target.to_string(),
-                        declarations: source_discovery_declaration_semantics(&symbol.declarations),
-                    });
+            let current = symbols_by_id.get(id.as_str()).map(|symbol| {
+                source_discovery_symbol_fingerprint(symbol.alias_target(), symbol.declarations())
+            });
             cache.source_discovery_symbol_semantics.get(id.as_str()) != current.as_ref()
         })
-        .cloned()
+        .map(|id| cache.interner.intern(id))
         .collect::<HashSet<_>>();
 
     let mut affected_roots = changes
         .symbol_ids
         .iter()
-        .filter_map(|id| cache.aliases.get(id))
+        .filter_map(|id| cache.aliases.get(id.as_str()))
         .cloned()
         .collect::<HashSet<_>>();
     for (id, target) in current_targets {
         if let Some(target) = target {
             cache
                 .symbol_alias_targets
-                .insert(id.clone(), target.to_owned());
+                .insert(cache.interner.intern(id), cache.interner.intern(target));
         } else {
             cache.symbol_alias_targets.remove(id.as_str());
         }
@@ -264,7 +304,7 @@ pub(super) fn patch_typescript_indexes(
     affected_roots.extend(changes.symbol_ids.iter().filter_map(|id| {
         symbols_by_id
             .get(id.as_str())
-            .map(|_| alias_root(id, &cache.symbol_alias_targets))
+            .map(|_| alias_root(id, &cache.symbol_alias_targets, &cache.interner))
     }));
     let retained_root_semantics = affected_roots
         .iter()
@@ -282,44 +322,41 @@ pub(super) fn patch_typescript_indexes(
         })
         .collect::<HashMap<_, _>>();
     for id in &changes.symbol_ids {
-        if let Some(old_root) = cache.aliases.get(id)
+        if let Some(old_root) = cache.aliases.get(id.as_str())
             && let Some(members) = cache.symbols_by_root.get_mut(old_root)
-            && let Ok(index) = members.binary_search(id)
+            && let Ok(index) = members.binary_search_by(|member| member.as_str().cmp(id))
         {
             members.remove(index);
         }
     }
     for id in &changes.symbol_ids {
         if let Some(symbol) = symbols_by_id.get(id.as_str()) {
-            let root = alias_root(id, &cache.symbol_alias_targets);
-            cache.aliases.insert(id.clone(), root.clone());
+            let compact_id = cache.interner.intern(id);
+            let root = alias_root(id, &cache.symbol_alias_targets, &cache.interner);
+            cache.aliases.insert(compact_id.clone(), root.clone());
             let members = cache.symbols_by_root.entry(root).or_default();
-            if let Err(index) = members.binary_search(id) {
-                members.insert(index, id.clone());
+            if let Err(index) = members.binary_search(&compact_id) {
+                members.insert(index, compact_id.clone());
             }
             cache.source_discovery_symbol_semantics.insert(
-                id.clone(),
-                SourceDiscoverySymbolSemantics {
-                    alias_target: symbol.alias_target.to_string(),
-                    declarations: source_discovery_declaration_semantics(&symbol.declarations),
-                },
+                compact_id,
+                source_discovery_symbol_fingerprint(symbol.alias_target(), symbol.declarations()),
             );
         } else {
-            cache.aliases.remove(id);
-            cache.source_discovery_symbol_semantics.remove(id);
+            cache.aliases.remove(id.as_str());
+            cache.source_discovery_symbol_semantics.remove(id.as_str());
         }
     }
     for root in &affected_roots {
         cache.source_declarations.remove(root);
         cache.symbol_names.remove(root);
-        cache.references_by_source.remove(root);
         for id in cache.symbols_by_root.get(root).into_iter().flatten() {
             let Some(symbol) = symbols_by_id.get(id.as_str()) else {
                 continue;
             };
             if !cache.source_declarations.contains_key(root)
                 && let Some(declaration) = symbol
-                    .declarations
+                    .declarations()
                     .iter()
                     .find(|declaration| !declaration.location.path.ends_with(".d.ts"))
             {
@@ -327,26 +364,13 @@ pub(super) fn patch_typescript_indexes(
                     .source_declarations
                     .insert(root.clone(), declaration.clone());
             }
-            for declaration in symbol.declarations.iter() {
+            for declaration in symbol.declarations() {
                 if solid_primitive_declaration(declaration) {
                     cache
                         .symbol_names
-                        .insert(root.clone(), declaration.name.to_string());
+                        .insert(root.clone(), symbol_name(declaration.name.as_ref()));
                 }
             }
-            if !symbol.references.is_empty() {
-                cache
-                    .references_by_source
-                    .entry(root.clone())
-                    .or_default()
-                    .extend(symbol.references.iter().cloned());
-            }
-        }
-    }
-    for root in &affected_roots {
-        if let Some(locations) = cache.references_by_source.get_mut(root) {
-            locations.sort_by(location_order);
-            locations.dedup();
         }
     }
     semantic_symbol_ids.extend(
@@ -371,13 +395,7 @@ pub(super) fn patch_typescript_indexes(
     let entities_started = Instant::now();
     for path in &changes.entity_paths {
         cache.entities.by_path.remove(path);
-        let start = table
-            .entities
-            .partition_point(|entity| entity.location.path.as_ref() < path.as_str());
-        let end = table
-            .entities
-            .partition_point(|entity| entity.location.path.as_ref() <= path.as_str());
-        for entity in &table.entities[start..end] {
+        for entity in table.entities_for_path(path) {
             if entity.symbol.is_empty() {
                 continue;
             }
@@ -392,7 +410,7 @@ pub(super) fn patch_typescript_indexes(
                         .aliases
                         .get(entity.symbol.as_ref())
                         .cloned()
-                        .unwrap_or_else(|| entity.symbol.to_string()),
+                        .unwrap_or_else(|| cache.interner.intern(entity.symbol.as_ref())),
                 );
         }
     }
@@ -406,10 +424,9 @@ pub(super) fn patch_typescript_indexes(
     Some((alias_elapsed, entities_elapsed))
 }
 
-pub(super) fn async_symbol_root(symbol: &str, table: &FactTable) -> String {
+pub(super) fn async_symbol_root(symbol: &str, table: &TypeScriptTable) -> String {
     let aliases = table
-        .files
-        .iter()
+        .files()
         .flat_map(|file| file.async_functions.iter())
         .filter(|function| !function.symbol.is_empty() && !function.target.is_empty())
         .map(|function| (function.symbol.as_ref(), function.target.as_ref()))
@@ -425,13 +442,13 @@ pub(super) fn async_symbol_root(symbol: &str, table: &FactTable) -> String {
     current.into()
 }
 
-pub(super) fn entity_symbols(table: &FactTable, roots: &HashMap<String, String>) -> EntitySymbols {
-    let mut by_path = HashMap::<String, HashMap<(u64, u64), String>>::new();
-    for entity in table
-        .entities
-        .iter()
-        .filter(|entity| !entity.symbol.is_empty())
-    {
+pub(super) fn entity_symbols(
+    table: &TypeScriptTable,
+    roots: &HashMap<SymbolId, SymbolId>,
+    interner: &SymbolInterner,
+) -> EntitySymbols {
+    let mut by_path = HashMap::<String, HashMap<(u64, u64), SymbolId>>::new();
+    for entity in table.entities().filter(|entity| !entity.symbol.is_empty()) {
         by_path
             .entry(entity.location.path.to_string())
             .or_default()
@@ -440,59 +457,63 @@ pub(super) fn entity_symbols(table: &FactTable, roots: &HashMap<String, String>)
                 roots
                     .get(entity.symbol.as_ref())
                     .cloned()
-                    .unwrap_or_else(|| entity.symbol.to_string()),
+                    .unwrap_or_else(|| interner.intern(entity.symbol.as_ref())),
             );
     }
     EntitySymbols { by_path }
 }
 
 pub(super) fn symbol_names(
-    table: &FactTable,
-    roots: &HashMap<String, String>,
-) -> HashMap<String, String> {
+    table: &TypeScriptTable,
+    roots: &HashMap<SymbolId, SymbolId>,
+    interner: &SymbolInterner,
+) -> HashMap<SymbolId, SymbolName> {
     let mut names = HashMap::new();
-    for symbol in table.symbols.iter() {
+    for symbol in table.symbols() {
         let root = roots
-            .get(symbol.id.as_ref())
+            .get(symbol.id())
             .cloned()
-            .unwrap_or_else(|| symbol.id.to_string());
-        for declaration in symbol.declarations.iter() {
+            .unwrap_or_else(|| interner.intern(symbol.id()));
+        for declaration in symbol.declarations() {
             if solid_primitive_declaration(declaration) {
-                names.insert(root.clone(), declaration.name.to_string());
+                names.insert(root.clone(), symbol_name(declaration.name.as_ref()));
             }
         }
     }
     names
 }
 
-pub(super) fn references_by_source(
-    table: &FactTable,
-    roots: &HashMap<String, String>,
-) -> HashMap<String, Vec<Location>> {
-    let mut references = HashMap::<String, Vec<Location>>::new();
-    for symbol in table.symbols.iter() {
-        if symbol.references.is_empty() {
-            continue;
+pub(super) fn references_for_sources<'a>(
+    table: &TypeScriptTable,
+    symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
+    sources: impl Iterator<Item = &'a SymbolId>,
+) -> HashMap<SymbolId, Vec<Location>> {
+    let mut references = HashMap::<SymbolId, Vec<Location>>::new();
+    for root in sources {
+        let locations = references.entry(root.clone()).or_default();
+        if let Some(members) = symbols_by_root.get(root.as_str()) {
+            for member in members {
+                if let Some(symbol) = table.symbol(member.as_str()) {
+                    locations.extend(symbol.references().cloned());
+                }
+            }
+        } else if let Some(symbol) = table.symbol(root.as_str()) {
+            locations.extend(symbol.references().cloned());
         }
-        let root = roots
-            .get(symbol.id.as_ref())
-            .cloned()
-            .unwrap_or_else(|| symbol.id.to_string());
-        references
-            .entry(root)
-            .or_default()
-            .extend(symbol.references.iter().cloned());
     }
     for locations in references.values_mut() {
         locations.sort_by(location_order);
         locations.dedup();
     }
+    references.retain(|_, locations| !locations.is_empty());
     references
 }
 
 fn solid_primitive_declaration(declaration: &Declaration) -> bool {
-    (declaration.location.path.contains("solid-js")
-        || declaration.location.path.contains("@solidjs"))
+    // Bootstrap analysis of Solid's own implementation, where there is no
+    // package import to establish provenance. Require an exact package path
+    // component; substring matches would misclassify similarly named projects.
+    declaration_path_is_solid_package(declaration.location.path.as_ref())
         && matches!(
             declaration.name.as_ref(),
             "createSignal"
@@ -522,4 +543,31 @@ fn solid_primitive_declaration(declaration: &Declaration) -> bool {
                 | "affects"
                 | "action"
         )
+}
+
+fn declaration_path_is_solid_package(path: &str) -> bool {
+    path.replace('\\', "/")
+        .split('/')
+        .any(|component| matches!(component, "solid-js" | "@solidjs"))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::declaration_path_is_solid_package;
+
+    #[test]
+    fn solid_declaration_paths_require_an_exact_package_component() {
+        assert!(declaration_path_is_solid_package(
+            "/project/node_modules/solid-js/dist/solid.js"
+        ));
+        assert!(declaration_path_is_solid_package(
+            r"C:\project\node_modules\@solidjs\web\dist\web.js"
+        ));
+        assert!(!declaration_path_is_solid_package(
+            "/project/my-solid-js-tools/createSignal.ts"
+        ));
+        assert!(!declaration_path_is_solid_package(
+            "/project/node_modules/not-@solidjs/runtime.ts"
+        ));
+    }
 }

@@ -11,10 +11,10 @@ pub(super) struct StaticDirectiveFileResult {
 pub(super) struct StaticApiContext<'a> {
     pub(super) lookup: &'a SemanticLookup<'a>,
     pub(super) entities: &'a EntitySymbols,
-    pub(super) symbol_names: &'a HashMap<String, String>,
-    pub(super) source_kinds: &'a HashMap<String, ReactiveSourceKind>,
-    pub(super) source_owned_write: &'a HashMap<String, bool>,
-    pub(super) accessors: &'a HashMap<String, (String, Location)>,
+    pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
+    pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    pub(super) source_owned_write: &'a HashMap<SymbolId, bool>,
+    pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) reachable_calls: &'a HashMap<Location, usize>,
 }
 
@@ -46,7 +46,7 @@ impl StaticApiContext<'_> {
                     message: "createEffect is called without an effect function; the Solid 2.0 signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect"
                         .into(),
                     hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.".into(),
-                    location: location(file.path.as_str(), call.callee),
+                    location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
                 });
@@ -79,7 +79,7 @@ impl StaticApiContext<'_> {
                         "{primitive} is marked sync: true but its computation can return a Promise or AsyncIterable; a sync node must settle in the same flush and cannot suspend, so an async result throws at runtime"
                     ),
                     hint: "Drop sync: true and let the read suspend to a <Loading> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here.".into(),
-                    location: location(file.path.as_str(), call.callee),
+                    location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
                 });
@@ -104,7 +104,7 @@ impl StaticApiContext<'_> {
                     } else {
                         "Call affects(source) for signals, or affects(store, [\"key\"]) to scope invalidation to specific store paths.".into()
                     },
-                    location: location(file.path.as_str(), call.callee),
+                    location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
                 });
@@ -123,13 +123,13 @@ impl StaticApiContext<'_> {
                     } else {
                         "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: affects(user), not affects(user()).".into()
                     },
-                    location: location(file.path.as_str(), target.span),
+                    location: location(file.path.shared(), target.span),
                     analysis_context: String::new(),
                     fixes: vec![],
                 });
                 continue;
             }
-            let target_location = location(file.path.as_str(), target.span);
+            let target_location = location(file.path.shared(), target.span);
             let Some(symbol) = self.entities.get(&target_location) else {
                 result.violations.push(StaticViolation {
                     id: "SC9003".into(),
@@ -165,7 +165,7 @@ impl StaticApiContext<'_> {
                         rule: "affects-keys-on-accessor".into(),
                         message: "affects() received keys but its target is a signal accessor; keys narrow invalidation to paths inside a store, and an accessor has no paths".into(),
                         hint: "Drop the key array for signal targets (affects(source)), or pass the store binding if you meant to scope invalidation to specific store keys (affects(store, [\"todos\"])).".into(),
-                        location: location(file.path.as_str(), call.callee),
+                        location: location(file.path.shared(), call.callee),
                         analysis_context: String::new(),
                         fixes: vec![],
                     });
@@ -180,7 +180,7 @@ impl StaticApiContext<'_> {
                     u64::from(call.callee.end),
                 ));
             }
-            let callee = location(file.path.as_str(), call.callee);
+            let callee = location(file.path.shared(), call.callee);
             let Some(multiplicity) = self.reachable_calls.get(&callee).copied() else {
                 continue;
             };
@@ -189,7 +189,7 @@ impl StaticApiContext<'_> {
             };
             for _ in 0..multiplicity {
                 result.writes.push(ReactiveWrite {
-                    setter: format!("refresh({name})"),
+                    setter: format!("refresh({name})").into(),
                     location: location(
                         file.path.as_str(),
                         Span::new(
@@ -213,7 +213,8 @@ impl StaticApiContext<'_> {
                         .get(symbol)
                         .copied()
                         .unwrap_or(false),
-                    context: analysis_context(file, call.span, self.entities, self.symbol_names),
+                    context: analysis_context(file, call.span, self.entities, self.symbol_names)
+                        .into(),
                 });
             }
         }

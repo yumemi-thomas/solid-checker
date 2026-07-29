@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js";
-import { runDeferred, runInline, runTracked } from "reactive-package";
+import { runDeferred, runMixed, runTracked } from "reactive-package";
 
 const [count] = createSignal(0);
 
@@ -14,6 +14,6 @@ export function Good() {
 }
 
 export function Bad() {
-  runInline(readCount);
+  runMixed(readCount);
   return <div>bad</div>;
 }

@@ -7,6 +7,7 @@ import process from "node:process";
 const packageRoot = resolve(import.meta.dirname, "..");
 const suffix = process.platform === "win32" ? ".exe" : "";
 const require = createRequire(import.meta.url);
+const nativeInvocations = new Map();
 
 function nativePackageRoot() {
   const target = {
@@ -49,7 +50,9 @@ function packagedBinary(name) {
   return join(packageRoot, relative);
 }
 
-export function launch(command) {
+function nativeInvocation(command) {
+  const cached = nativeInvocations.get(command);
+  if (cached) return cached;
   const repository = findRepository(packageRoot) ?? findRepository(process.cwd());
   const override = process.env.SOLID_CHECKER_NATIVE_BIN;
   let executable = override || packagedBinary(command);
@@ -89,14 +92,25 @@ export function launch(command) {
       env.SOLID_TYPEFACTS_BIN = developmentTypeFacts;
     }
   }
+  const invocation = { executable, env };
+  nativeInvocations.set(command, invocation);
+  return invocation;
+}
 
-  const child = spawnSync(executable, process.argv.slice(2), {
-    cwd: process.cwd(),
-    env,
-    stdio: "inherit"
+export function runNative(command, args, options = {}) {
+  const { executable, env } = nativeInvocation(command);
+  return spawnSync(executable, args, {
+    cwd: options.cwd ?? process.cwd(),
+    env: { ...env, ...options.env },
+    stdio: options.stdio ?? "inherit",
+    encoding: options.encoding
   });
+}
+
+export function launch(command) {
+  const child = runNative(command, process.argv.slice(2));
   if (child.error) {
-    console.error(`solid-checker: could not start ${executable}: ${child.error.message}`);
+    console.error(`solid-checker: could not start native ${command}: ${child.error.message}`);
     process.exit(2);
   }
   if (child.signal) {

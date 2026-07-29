@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust package test test-rust test-cli verify corpus clean
+.PHONY: build build-typefacts build-rust package test test-rust test-cli verify verify-performance corpus contract-conformance clean
 
 build: build-rust
 
@@ -33,8 +33,15 @@ test-cli:
 verify:
 	scripts/verify.sh
 
+verify-performance: build-typefacts
+	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-checker-session-bench
+	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node benchmarks/verify-performance.mjs
+
 corpus: build-rust
 	scripts/run-solid-primitives-corpus.sh
+
+contract-conformance:
+	node scripts/check-bundled-contracts.mjs
 
 clean:
 	rm -rf bin dist rust/target .typefacts

@@ -102,8 +102,8 @@ fn retained_session_serves_sources_and_facts_for_the_project() {
     let table = session
         .semantic_grouped(&[] as &[SemanticDemandGroup<'_>])
         .expect("analyze the opened generation");
-    assert_eq!(table.project_id, project_id);
-    assert!(!table.sources.is_empty());
+    assert_eq!(table.project_id(), project_id);
+    assert!(table.sources().next().is_some());
 
     let app = fixture.join("App.tsx").canonicalize().unwrap();
     session
@@ -119,5 +119,5 @@ fn retained_session_serves_sources_and_facts_for_the_project() {
     let updated = session
         .semantic_grouped(&[] as &[SemanticDemandGroup<'_>])
         .expect("analyze the new generation");
-    assert_eq!(updated.generation, 2);
+    assert_eq!(updated.generation(), 2);
 }

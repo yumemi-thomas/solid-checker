@@ -1,0 +1,8 @@
+{
+  "name": "external-reexport-package",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts"
+  }
+}

@@ -6,6 +6,7 @@
 
 use serde::{Deserialize, Serialize};
 use solid_facts_core::{SourceHash, Span};
+use std::sync::Arc;
 use thiserror::Error;
 
 pub const COMPILER_FACTS_PROTOCOL: u32 = 1;
@@ -49,7 +50,7 @@ impl Default for CompilerOptions {
 pub struct AnalysisRequest {
     pub compiler_facts_protocol: u32,
     pub path: String,
-    pub source: String,
+    pub source: Arc<str>,
     pub source_hash: SourceHash,
     pub compiler_options: CompilerOptions,
 }
@@ -58,7 +59,7 @@ impl AnalysisRequest {
     #[must_use]
     pub fn new(
         path: impl Into<String>,
-        source: impl Into<String>,
+        source: impl Into<Arc<str>>,
         mut options: CompilerOptions,
     ) -> Self {
         let source = source.into();
@@ -67,7 +68,7 @@ impl AnalysisRequest {
         Self {
             compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
             path: path.into(),
-            source_hash: SourceHash::of(&source),
+            source_hash: SourceHash::of(source.as_ref()),
             source,
             compiler_options: options,
         }

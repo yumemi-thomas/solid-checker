@@ -12,6 +12,7 @@ if [ -z "$checker" ]; then
   echo "SOLID_CHECKER_BIN must point to a built solid-checker binary" >&2
   exit 2
 fi
+repository_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 failures=$(mktemp)
 trap 'rm -f "$failures"' EXIT
 
@@ -28,18 +29,12 @@ while [ "$pass" -le 12 ]; do
   for package_json in "$root"/packages/*/package.json; do
     package_dir=${package_json%/package.json}
     name=$(node -e 'process.stdout.write(require(process.argv[1]).name)' "$package_json")
-    version=$(node -e 'process.stdout.write(require(process.argv[1]).version)' "$package_json")
     output="$package_dir/solid-reactivity.json"
-    declaration="$package_dir/dist/index.d.ts"
-    implementation="$package_dir/dist/index.js"
-
-    if "$checker" \
-      --project "$package_dir/tsconfig.json" \
-      --emit-contract "$output" \
-      --package-name "$name" \
-      --package-version "$version" \
-      --declaration-artifact "$declaration" \
-      --implementation-artifact "$implementation"; then
+    if SOLID_CHECKER_NATIVE_BIN="$checker" node \
+      "$repository_root/packages/cli/bin/solid-checker.mjs" \
+      contract generate \
+      --package-root "$package_dir" \
+      --output "$output"; then
       generated=$((generated + 1))
     else
       printf '%s\n' "$name" >> "$failures"

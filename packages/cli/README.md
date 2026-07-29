@@ -12,6 +12,29 @@ npm install --save-dev solid-checker
 
 Then run `solid-checker --certify`.
 
+Library maintainers can generate an inferred contract for every exact and
+wildcard package export without writing JSON:
+
+```sh
+solid-checker contract generate --package-root .
+```
+
+Application developers can generate the same contract into their local
+override directory:
+
+```sh
+solid-checker contract generate \
+  --package-root node_modules/solid-dnd \
+  --output .solid-checker/contracts/solid-dnd/solid-reactivity.json
+```
+
+Use `--conditions browser,import` for a specific conditional export
+environment. Generation uses implementation facts plus published declaration
+call signatures, merges compatible conditional targets conservatively, and
+does not execute package code. Generated contracts deduplicate effect summaries
+and identical subpath surfaces while the checker expands them internally for
+analysis.
+
 The CLI uses the Oxc graphical reporter for framed terminal diagnostics:
 
 ```sh
@@ -21,6 +44,20 @@ solid-checker --project tsconfig.json
 The `default` format prints the same style of source frames, severity markers,
 evidence labels, and error summary used by Oxlint. Use `--format json` for
 machine-readable findings or `--format text` for compact output.
+
+Optimized macOS and Linux checks retain a per-project TypeScript and analysis
+session for up to two idle minutes, so repeated invocations reuse coherent
+facts instead of rebuilding the project. Set `SOLID_CHECKER_DAEMON=0` to force
+a one-shot check or `SOLID_CHECKER_DAEMON_IDLE_SECS=<seconds>` to change the
+idle lifetime. The default process-tree resident-memory ceiling is 2048 MiB;
+change it with `SOLID_CHECKER_DAEMON_MAX_RSS_MB=<MiB>` (`0` disables it).
+`SOLID_CHECKER_TIMINGS=1` writes cache-hit, generation, latency, and payload
+telemetry as JSON on stderr.
+
+Projects with at least 1,000 source files automatically use balanced cache
+retention: the current result stays hot, while the largest derived indexes are
+released between changed generations. Override it with
+`SOLID_CHECKER_CACHE_RETENTION=performance`, `balanced`, or `compact`.
 
 To report project findings through Oxlint, load the bundled JavaScript adapter:
 

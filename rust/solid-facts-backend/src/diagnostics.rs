@@ -1,14 +1,15 @@
 use std::{
     collections::{HashMap, HashSet},
-    fs,
+    fs, io,
     path::{Path, PathBuf},
+    sync::Arc,
     time::{Duration, Instant},
 };
 
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
-use solid_reactive_ir::{PackageContract, Program};
+use solid_reactive_ir::{CacheRetention, IncrementalBuilder, PackageContract, Program};
 use solid_reactive_solver::{Finding, Rule};
 
 use crate::{BackendError, SourceFile};
@@ -101,14 +102,123 @@ pub struct Metrics {
 }
 
 pub struct DiagnosticAnalysis {
-    pub program: Program,
+    pub program: Arc<Program>,
     pub contracts: Vec<PackageContract>,
     pub snapshot: Snapshot,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
 pub struct DiagnosticTimings {
     pub reactive_ir: Duration,
     pub solve_and_snapshot: Duration,
+    pub reused: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct DiagnosticIdentity {
+    project_id: String,
+    generation: u64,
+    contracts: Vec<String>,
+    explicit_contract_paths: Vec<String>,
+}
+
+struct RetainedDiagnostic {
+    identity: DiagnosticIdentity,
+    analysis: Arc<DiagnosticAnalysis>,
+}
+
+/// Retains the complete diagnostic result for one coherent project
+/// generation. The session owns IR cache policy, solving, and snapshot
+/// construction so callers cannot accidentally select a slower fresh path.
+#[derive(Default)]
+pub struct DiagnosticSession {
+    builder: IncrementalBuilder,
+    retained: Option<RetainedDiagnostic>,
+}
+
+impl DiagnosticSession {
+    pub fn analyze(
+        &mut self,
+        project: &Path,
+        sources: &[SourceFile],
+        facts: &ProjectFacts,
+        explicit_contract_paths: &[String],
+    ) -> Result<Arc<DiagnosticAnalysis>, BackendError> {
+        self.analyze_measured(project, sources, facts, explicit_contract_paths, None)
+            .map(|(analysis, _)| analysis)
+    }
+
+    pub fn analyze_measured(
+        &mut self,
+        project: &Path,
+        sources: &[SourceFile],
+        facts: &ProjectFacts,
+        explicit_contract_paths: &[String],
+        bundled_solid_js: Option<PackageContract>,
+    ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        let ir_started = Instant::now();
+        let contracts =
+            load_package_contracts_with(project, facts, explicit_contract_paths, bundled_solid_js)?;
+        let identity = DiagnosticIdentity {
+            project_id: facts.project_id.clone(),
+            generation: facts.generation.get(),
+            contracts: contracts
+                .iter()
+                .map(|contract| format!("{contract:?}"))
+                .collect(),
+            explicit_contract_paths: explicit_contract_paths.to_vec(),
+        };
+        if let Some(retained) = &self.retained
+            && retained.identity == identity
+        {
+            return Ok((
+                Arc::clone(&retained.analysis),
+                DiagnosticTimings {
+                    reactive_ir: ir_started.elapsed(),
+                    reused: true,
+                    ..DiagnosticTimings::default()
+                },
+            ));
+        }
+
+        let (program, _) = self
+            .builder
+            .build_with_contracts_shared(facts, &contracts)?;
+        let reactive_ir = ir_started.elapsed();
+        let solve_started = Instant::now();
+        let analysis = Arc::new(finish_analysis(
+            project,
+            sources,
+            facts,
+            explicit_contract_paths,
+            contracts,
+            program,
+        )?);
+        let solve_and_snapshot = solve_started.elapsed();
+        self.retained = Some(RetainedDiagnostic {
+            identity,
+            analysis: Arc::clone(&analysis),
+        });
+        Ok((
+            analysis,
+            DiagnosticTimings {
+                reactive_ir,
+                solve_and_snapshot,
+                reused: false,
+            },
+        ))
+    }
+
+    pub fn clear(&mut self) {
+        self.builder.clear();
+        self.retained = None;
+    }
+
+    /// Releases derived IR indexes according to the daemon's idle policy while
+    /// preserving the current diagnostic and coherent program.
+    pub fn retain_for_idle(&mut self, retention: CacheRetention) {
+        self.builder.retain_for_idle(retention);
+    }
 }
 
 pub fn analyze_project(
@@ -116,7 +226,7 @@ pub fn analyze_project(
     sources: &[SourceFile],
     facts: &ProjectFacts,
     explicit_contract_paths: &[String],
-) -> Result<DiagnosticAnalysis, BackendError> {
+) -> Result<Arc<DiagnosticAnalysis>, BackendError> {
     analyze_project_measured(project, sources, facts, explicit_contract_paths)
         .map(|(analysis, _)| analysis)
 }
@@ -126,7 +236,7 @@ pub fn analyze_project_measured(
     sources: &[SourceFile],
     facts: &ProjectFacts,
     explicit_contract_paths: &[String],
-) -> Result<(DiagnosticAnalysis, DiagnosticTimings), BackendError> {
+) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
     analyze_project_measured_with(project, sources, facts, explicit_contract_paths, None)
 }
 
@@ -141,18 +251,29 @@ pub fn analyze_project_measured_with(
     facts: &ProjectFacts,
     explicit_contract_paths: &[String],
     bundled_solid_js: Option<PackageContract>,
-) -> Result<(DiagnosticAnalysis, DiagnosticTimings), BackendError> {
-    let ir_started = Instant::now();
-    let contracts =
-        load_package_contracts_with(project, facts, explicit_contract_paths, bundled_solid_js)?;
-    let program = solid_reactive_ir::build_with_contracts(facts, &contracts)?;
-    let reactive_ir = ir_started.elapsed();
-    let solve_started = Instant::now();
+) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+    DiagnosticSession::default().analyze_measured(
+        project,
+        sources,
+        facts,
+        explicit_contract_paths,
+        bundled_solid_js,
+    )
+}
+
+fn finish_analysis(
+    project: &Path,
+    sources: &[SourceFile],
+    facts: &ProjectFacts,
+    explicit_contract_paths: &[String],
+    contracts: Vec<PackageContract>,
+    program: Arc<Program>,
+) -> Result<DiagnosticAnalysis, BackendError> {
     let statuses =
         package_contract_statuses_with(project, facts, explicit_contract_paths, &contracts)?;
     let missing_contracts = statuses
         .iter()
-        .filter(|status| status.status == "missing")
+        .filter(|status| matches!(status.status.as_str(), "missing" | "unverified"))
         .collect::<Vec<_>>();
     let mut metrics = analysis_metrics(facts, &program, &contracts);
     metrics.proof_obligations += missing_contracts.len();
@@ -181,33 +302,35 @@ pub fn analyze_project_measured_with(
         Finding {
             analysis_context: "package contract completeness".into(),
             subject_kind: "package".into(),
-            hint: format!(
-                "Create a local contract at {}, or pass one explicitly with --contract <PATH>. If you maintain {}, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format.",
-                status.contract_path, status.name
-            ),
+            hint: if status.status == "unverified" {
+                "Verify the generated contract against the exact package artifacts and behavioral probes, then record verified, reviewed, or attested evidence.".into()
+            } else {
+                format!(
+                    "Create a local contract at {}, or pass one explicitly with --contract <PATH>. If you maintain {}, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format.",
+                    status.contract_path, status.name
+                )
+            },
             ..Finding::new(
                 Rule::PackageContractMissing,
                 format!(
-                    "imported Solid package {:?} has no reactivity contract; solid-checker cannot see through its exports, so every use of them is uncertifiable",
-                    status.name
+                    "imported Solid package {:?} {}; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
+                    status.name,
+                    if status.status == "unverified" {
+                        "has only an unverified generated reactivity contract"
+                    } else {
+                        "has no reactivity contract"
+                    }
                 ),
                 location,
             )
         }
     }));
     let snapshot = snapshot(sources, &contracts, metrics, findings);
-    let solve_and_snapshot = solve_started.elapsed();
-    Ok((
-        DiagnosticAnalysis {
-            program,
-            contracts,
-            snapshot,
-        },
-        DiagnosticTimings {
-            reactive_ir,
-            solve_and_snapshot,
-        },
-    ))
+    Ok(DiagnosticAnalysis {
+        program,
+        contracts,
+        snapshot,
+    })
 }
 
 pub fn snapshot(
@@ -283,7 +406,7 @@ pub fn snapshot(
                 version: contract.package.version.clone(),
                 contract_hash: contract.contract_hash.clone(),
                 evidence: contract.evidence.kind.clone(),
-                exports_analyzed: contract.exports.len(),
+                exports_analyzed: contract.export_count(),
             })
             .collect(),
         metrics,
@@ -297,11 +420,10 @@ pub fn analysis_metrics(
 ) -> Metrics {
     let mut aliases = facts
         .typescript
-        .symbols
-        .iter()
-        .filter(|symbol| !symbol.alias_target.is_empty())
-        .map(|symbol| (symbol.id.clone(), symbol.alias_target.clone()))
-        .collect::<HashMap<_, _>>();
+        .symbols()
+        .filter(|symbol| !symbol.alias_target().is_empty())
+        .map(|symbol| (symbol.id().into(), symbol.alias_target().into()))
+        .collect::<HashMap<String, String>>();
     for _ in 0..aliases.len() {
         let previous = aliases.clone();
         let mut changed = false;
@@ -320,12 +442,11 @@ pub fn analysis_metrics(
     let canonical = |symbol: &str| {
         aliases
             .get(symbol)
-            .map_or_else(|| symbol.to_owned().into(), Clone::clone)
+            .map_or_else(|| symbol.to_owned(), Clone::clone)
     };
     let entities = facts
         .typescript
-        .entities
-        .iter()
+        .entities()
         .filter(|entity| !entity.symbol.is_empty())
         .map(|entity| {
             (
@@ -359,7 +480,10 @@ pub fn analysis_metrics(
                     continue;
                 }
                 let exported = binding.imported.as_deref().unwrap_or("default");
-                let Some(summary) = contract.exports.get(exported) else {
+                let Some(summary) = contract
+                    .exports_for_module(&import.module)
+                    .and_then(|exports| exports.get(exported))
+                else {
                     continue;
                 };
                 if summary.reactive_reads.is_empty()
@@ -387,21 +511,19 @@ pub fn analysis_metrics(
     }
     let factory_instances = facts
         .typescript
-        .files
-        .iter()
+        .files()
         .flat_map(|file| file.bindings.iter())
         .filter(|binding| {
             !binding.array
                 && !binding.names.is_empty()
                 && contracted_functions
-                    .get(canonical(&binding.initializer.target).as_ref())
+                    .get(&canonical(&binding.initializer.target))
                     .is_some_and(|returned| returned.as_deref() == Some("accessor"))
         })
         .count();
     let functions_analyzed = facts
         .typescript
-        .files
-        .iter()
+        .files()
         .map(|file| file.functions.len())
         .sum::<usize>()
         + contracted_functions.len()
@@ -509,36 +631,47 @@ pub fn load_package_contracts_with(
     let mut contracts = HashMap::<String, PackageContract>::new();
     let modules = imported_package_roots(facts);
     let modules = modules.iter().map(String::as_str).collect::<HashSet<_>>();
+    let project_directory = project
+        .parent()
+        .ok_or_else(|| BackendError::Contract("tsconfig has no parent".into()))?;
     if modules.contains("solid-js") {
         let bundled = match bundled_solid_js {
             Some(bundled) => bundled,
             None => bundled_solid_js_contract()?,
         };
-        contracts.insert(bundled.package.name.clone(), bundled);
+        if contract_matches_installed_package(project_directory, "solid-js", &bundled)? {
+            contracts.insert(bundled.package.name.clone(), bundled);
+        }
     }
     if modules.contains("@solidjs/web") {
         let bundled = bundled_solidjs_web_contract()?;
-        contracts.insert(bundled.package.name.clone(), bundled);
+        if contract_matches_installed_package(project_directory, "@solidjs/web", &bundled)? {
+            contracts.insert(bundled.package.name.clone(), bundled);
+        }
     }
-    let project_directory = project
-        .parent()
-        .ok_or_else(|| BackendError::Contract("tsconfig has no parent".into()))?;
     for module in &modules {
         if let Some(path) = discover_contract(project_directory, module)? {
             let contract = read_package_contract(&path)?;
-            validate_discovered_contract_name(module, &contract)?;
+            validate_contract_identity(project_directory, module, &contract)?;
             contracts.insert(contract.package.name.clone(), contract);
         }
     }
     for module in &modules {
         if let Some(path) = discover_local_contract(project_directory, module)? {
             let contract = read_package_contract(&path)?;
-            validate_discovered_contract_name(module, &contract)?;
+            validate_contract_identity(project_directory, module, &contract)?;
             contracts.insert(contract.package.name.clone(), contract);
         }
     }
     for path in explicit_paths {
         let contract = read_package_contract(Path::new(path))?;
+        if modules.contains(contract.package.name.as_str()) {
+            validate_contract_identity(
+                project_directory,
+                contract.package.name.as_str(),
+                &contract,
+            )?;
+        }
         contracts.insert(contract.package.name.clone(), contract);
     }
     let mut contracts = contracts.into_values().collect::<Vec<_>>();
@@ -609,15 +742,60 @@ pub struct PackageContractStatus {
     pub contract_path: String,
 }
 
+fn contract_evidence_is_certifiable(contract: &PackageContract) -> bool {
+    matches!(
+        contract.evidence.kind.as_str(),
+        "verified" | "reviewed" | "trusted" | "attested"
+    )
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct PackageManifest {
+    #[serde(default)]
+    version: String,
     #[serde(default)]
     dependencies: HashMap<String, serde_json::Value>,
     #[serde(default)]
     peer_dependencies: HashMap<String, serde_json::Value>,
     #[serde(default)]
     optional_dependencies: HashMap<String, serde_json::Value>,
+}
+
+fn contract_matches_installed_package(
+    project_directory: &Path,
+    module: &str,
+    contract: &PackageContract,
+) -> Result<bool, BackendError> {
+    let Some(directory) = discover_package_directory(project_directory, module)? else {
+        // Ambient-module and virtual test projects have no package manifest.
+        return Ok(true);
+    };
+    let manifest = match fs::read(directory.join("package.json")) {
+        Ok(data) => serde_json::from_slice::<PackageManifest>(&data)?,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(true),
+        Err(error) => return Err(error.into()),
+    };
+    Ok(manifest.version == contract.package.version)
+}
+
+fn validate_contract_identity(
+    project_directory: &Path,
+    module: &str,
+    contract: &PackageContract,
+) -> Result<(), BackendError> {
+    validate_discovered_contract_name(module, contract)?;
+    if !contract_matches_installed_package(project_directory, module, contract)? {
+        let directory = discover_package_directory(project_directory, module)?
+            .expect("version mismatch requires an installed package");
+        let manifest: PackageManifest =
+            serde_json::from_slice(&fs::read(directory.join("package.json"))?)?;
+        return Err(BackendError::Contract(format!(
+            "contract for {module:?} declares version {:?}, but the installed package is version {:?}",
+            contract.package.version, manifest.version
+        )));
+    }
+    Ok(())
 }
 
 /// Reports imported packages whose own manifest indicates that they integrate
@@ -636,14 +814,22 @@ pub fn package_contract_statuses(
         .map(|path| read_package_contract(Path::new(path)))
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
-        .map(|contract| (contract.package.name, contract.source_path))
+        .map(|contract| (contract.package.name.clone(), contract))
         .collect::<HashMap<_, _>>();
     let mut statuses = Vec::new();
     for module in imported_package_roots(facts) {
-        let bundled_path = match module.as_str() {
-            "solid-js" => Some("bundled://solid-js.json"),
-            "@solidjs/web" => Some("bundled://solidjs-web.json"),
+        let bundled = match module.as_str() {
+            "solid-js" => Some(bundled_solid_js_contract()?),
+            "@solidjs/web" => Some(bundled_solidjs_web_contract()?),
             _ => None,
+        };
+        let is_bundled_package = bundled.is_some();
+        let bundled_path = if let Some(contract) = bundled.as_ref()
+            && contract_matches_installed_package(project_directory, &module, contract)?
+        {
+            Some(contract.source_path.as_str())
+        } else {
+            None
         };
         let package_directory = discover_package_directory(project_directory, &module)?;
         let uses_solid = package_directory
@@ -651,21 +837,43 @@ pub fn package_contract_statuses(
             .map(package_uses_solid)
             .transpose()?
             .unwrap_or(false);
-        if bundled_path.is_none() && !uses_solid {
+        if !is_bundled_package && !uses_solid {
             continue;
         }
         let local = discover_local_contract(project_directory, &module)?;
         let published = discover_contract(project_directory, &module)?;
-        let (status, contract_path) = if let Some(path) = explicit.get(&module) {
-            ("explicit", path.clone())
+        let (status, contract_path) = if let Some(contract) = explicit.get(&module) {
+            validate_contract_identity(project_directory, &module, contract)?;
+            (
+                if contract_evidence_is_certifiable(contract) {
+                    "explicit"
+                } else {
+                    "unverified"
+                },
+                contract.source_path.clone(),
+            )
         } else if let Some(path) = local {
             let contract = read_package_contract(&path)?;
-            validate_discovered_contract_name(&module, &contract)?;
-            ("local", contract.source_path)
+            validate_contract_identity(project_directory, &module, &contract)?;
+            (
+                if contract_evidence_is_certifiable(&contract) {
+                    "local"
+                } else {
+                    "unverified"
+                },
+                contract.source_path,
+            )
         } else if let Some(path) = published {
             let contract = read_package_contract(&path)?;
-            validate_discovered_contract_name(&module, &contract)?;
-            ("published", contract.source_path)
+            validate_contract_identity(project_directory, &module, &contract)?;
+            (
+                if contract_evidence_is_certifiable(&contract) {
+                    "published"
+                } else {
+                    "unverified"
+                },
+                contract.source_path,
+            )
         } else if let Some(path) = bundled_path {
             ("bundled", path.into())
         } else {
@@ -721,6 +929,9 @@ pub fn package_contract_statuses_with(
             continue;
         }
         let (status, contract_path) = match by_name.get(module.as_str()) {
+            Some(contract) if !contract_evidence_is_certifiable(contract) => {
+                ("unverified", contract.source_path.clone())
+            }
             Some(contract) if explicit_sources.contains(contract.source_path.as_str()) => {
                 ("explicit", contract.source_path.clone())
             }
@@ -842,10 +1053,7 @@ pub fn read_package_contract(path: &Path) -> Result<PackageContract, BackendErro
 }
 
 fn decode_package_contract(data: &[u8]) -> Result<PackageContract, BackendError> {
-    let mut contract: PackageContract = serde_json::from_slice(data)?;
-    contract
-        .validate()
-        .map_err(|error| BackendError::Contract(format!("invalid package contract: {error}")))?;
+    let mut contract = crate::contract_document::decode(data)?;
     contract.contract_hash = format!("sha256:{:x}", Sha256::digest(data));
     Ok(contract)
 }
@@ -887,4 +1095,45 @@ fn validate_contract_artifacts(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{path::Path, sync::Arc};
+
+    use solid_facts::{ProjectFacts, TypeScriptTable};
+    use solid_facts_core::Generation;
+
+    use super::DiagnosticSession;
+
+    #[test]
+    fn diagnostic_session_reuses_the_complete_result() {
+        let facts = ProjectFacts {
+            generation: Generation::new(1).unwrap(),
+            project_id: "/virtual/tsconfig.json".into(),
+            files: Vec::new(),
+            typescript: TypeScriptTable::from_parts(
+                3,
+                1,
+                "/virtual/tsconfig.json",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            typescript_changes: None,
+        };
+        let mut session = DiagnosticSession::default();
+
+        let (initial, initial_timings) = session
+            .analyze_measured(Path::new(&facts.project_id), &[], &facts, &[], None)
+            .unwrap();
+        let (reused, reused_timings) = session
+            .analyze_measured(Path::new(&facts.project_id), &[], &facts, &[], None)
+            .unwrap();
+
+        assert!(Arc::ptr_eq(&initial, &reused));
+        assert!(!initial_timings.reused);
+        assert!(reused_timings.reused);
+    }
 }

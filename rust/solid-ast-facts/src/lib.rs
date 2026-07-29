@@ -7,9 +7,10 @@
 use compact_str::CompactString;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, ArrowFunctionExpression, AwaitExpression, BindingPattern, CallExpression,
-    ComputedMemberExpression, ConditionalExpression, Declaration, ExportAllDeclaration,
-    ExportDefaultDeclaration, ExportNamedDeclaration, Expression, Function, FunctionType,
+    Argument, ArrowFunctionExpression, AssignmentExpression, AwaitExpression, BindingPattern,
+    CallExpression, ComputedMemberExpression, ConditionalExpression, Declaration,
+    ExportAllDeclaration, ExportDefaultDeclaration, ExportDefaultDeclarationKind,
+    ExportNamedDeclaration, Expression, FormalParameter, Function, FunctionType,
     IdentifierReference, IfStatement, ImportDeclaration, ImportDeclarationSpecifier,
     JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement, JSXExpression,
     ModuleExportName, NewExpression, ObjectPropertyKind, PropertyKey, ReturnStatement,
@@ -18,12 +19,12 @@ use oxc_ast::ast::{
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
 use oxc_span::{GetSpan, SourceType, Span as OxcSpan};
-use oxc_syntax::scope::ScopeFlags;
+use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use solid_facts_core::{SourceIdentity, Span};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 16;
+pub const AST_FACTS_SCHEMA: u32 = 18;
 
 mod span_index;
 
@@ -44,8 +45,16 @@ pub struct AstFacts {
     pub returns: Vec<ReturnFact>,
     pub jsx_elements: Vec<JsxElementFact>,
     pub members: Vec<MemberFact>,
+    #[serde(default)]
+    pub computed_members: Vec<Span>,
+    #[serde(default)]
+    pub parameter_properties: Vec<Span>,
     pub spreads: Vec<SpreadFact>,
     pub conditional_tests: Vec<Span>,
+    #[serde(default)]
+    pub assignments: Vec<AssignmentFact>,
+    #[serde(default)]
+    pub if_regions: Vec<IfRegionFact>,
     #[serde(skip, default)]
     pub span_index: LazySpanIndex,
 }
@@ -263,6 +272,29 @@ pub struct SpreadFact {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AssignmentFact {
+    pub target: Span,
+    pub value_span: Span,
+    pub value: AssignmentValueKind,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum AssignmentValueKind {
+    Array,
+    Function,
+    Other,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct IfRegionFact {
+    pub test: Span,
+    pub consequent: Span,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ReturnValueKind {
     Undefined,
@@ -346,8 +378,12 @@ struct Collector<'s> {
     returns: Vec<ReturnFact>,
     jsx_elements: Vec<JsxElementFact>,
     members: Vec<MemberFact>,
+    computed_members: Vec<Span>,
+    parameter_properties: Vec<Span>,
     spreads: Vec<SpreadFact>,
     conditional_tests: Vec<Span>,
+    assignments: Vec<AssignmentFact>,
+    if_regions: Vec<IfRegionFact>,
     conditional_control_stack: Vec<Span>,
 }
 
@@ -365,8 +401,12 @@ impl<'s> Collector<'s> {
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             members: Vec::new(),
+            computed_members: Vec::new(),
+            parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
+            assignments: Vec::new(),
+            if_regions: Vec::new(),
             conditional_control_stack: Vec::new(),
         }
     }
@@ -382,8 +422,12 @@ impl<'s> Collector<'s> {
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
         self.members.sort_by_key(|fact| fact.span);
+        self.computed_members.sort_unstable();
+        self.parameter_properties.sort_unstable();
         self.spreads.sort_by_key(|fact| fact.span);
         self.conditional_tests.sort_unstable();
+        self.assignments.sort_by_key(|fact| fact.target);
+        self.if_regions.sort_by_key(|fact| fact.consequent);
         AstFacts {
             schema: AST_FACTS_SCHEMA,
             source,
@@ -398,8 +442,12 @@ impl<'s> Collector<'s> {
             returns: self.returns,
             jsx_elements: self.jsx_elements,
             members: self.members,
+            computed_members: self.computed_members,
+            parameter_properties: self.parameter_properties,
             spreads: self.spreads,
             conditional_tests: self.conditional_tests,
+            assignments: self.assignments,
+            if_regions: self.if_regions,
         }
     }
 
@@ -817,13 +865,26 @@ impl<'a> Visit<'a> for Collector<'_> {
     }
 
     fn visit_export_default_declaration(&mut self, declaration: &ExportDefaultDeclaration<'a>) {
+        let local = match &declaration.declaration {
+            ExportDefaultDeclarationKind::FunctionDeclaration(function) => {
+                function.id.as_ref().map_or(function.span, |id| id.span)
+            }
+            ExportDefaultDeclarationKind::ClassDeclaration(class) => {
+                class.id.as_ref().map_or(class.span, |id| id.span)
+            }
+            declaration => declaration.span(),
+        };
         self.exports.push(ExportFact {
             span: span(declaration.span),
             kind: ExportKind::Default,
             module: None,
             type_only: false,
             specifiers: vec![],
-            declarations: vec![],
+            declarations: vec![ExportSpecifierFact {
+                local: NamedSpan { span: span(local) },
+                exported: "default".into(),
+                type_only: false,
+            }],
         });
         walk::walk_export_default_declaration(self, declaration);
     }
@@ -870,6 +931,10 @@ impl<'a> Visit<'a> for Collector<'_> {
     fn visit_if_statement(&mut self, statement: &IfStatement<'a>) {
         let test = span(statement.test.span());
         self.conditional_tests.push(test);
+        self.if_regions.push(IfRegionFact {
+            test,
+            consequent: span(statement.consequent.span()),
+        });
         self.visit_expression(&statement.test);
         self.conditional_control_stack.push(test);
         self.visit_statement(&statement.consequent);
@@ -877,6 +942,36 @@ impl<'a> Visit<'a> for Collector<'_> {
             self.visit_statement(alternate);
         }
         self.conditional_control_stack.pop();
+    }
+
+    fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
+        if expression.operator == AssignmentOperator::Assign {
+            self.assignments.push(AssignmentFact {
+                target: span(expression.left.span()),
+                value_span: span(expression.right.span()),
+                value: match expression.right {
+                    Expression::ArrayExpression(_) => AssignmentValueKind::Array,
+                    Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
+                        AssignmentValueKind::Function
+                    }
+                    _ => AssignmentValueKind::Other,
+                },
+            });
+        }
+        walk::walk_assignment_expression(self, expression);
+    }
+
+    fn visit_formal_parameter(&mut self, parameter: &FormalParameter<'a>) {
+        if parameter.accessibility.is_some() || parameter.readonly {
+            self.parameter_properties.extend(
+                parameter
+                    .pattern
+                    .get_binding_identifiers()
+                    .into_iter()
+                    .map(|identifier| span(identifier.span)),
+            );
+        }
+        walk::walk_formal_parameter(self, parameter);
     }
 
     fn visit_conditional_expression(&mut self, expression: &ConditionalExpression<'a>) {
@@ -947,11 +1042,13 @@ impl<'a> Visit<'a> for Collector<'_> {
 
     fn visit_computed_member_expression(&mut self, member: &ComputedMemberExpression<'a>) {
         let property = member.expression.span();
+        let member_span = span(member.span);
         self.members.push(MemberFact {
-            span: span(member.span),
+            span: member_span,
             object: span(member.object.span()),
             property: span(property),
         });
+        self.computed_members.push(member_span);
         walk::walk_computed_member_expression(self, member);
     }
 
@@ -1305,7 +1402,7 @@ const mixed = () => {
     fn retains_runtime_and_type_only_export_declarations() {
         let facts = extract(
             "exports.ts",
-            "export class RuntimeClass {} export interface Shape {} export const value = 1;",
+            "export class RuntimeClass {} export interface Shape {} export const value = 1; export default function Main() {}",
         )
         .unwrap();
         let declarations = facts
@@ -1317,7 +1414,12 @@ const mixed = () => {
 
         assert_eq!(
             declarations,
-            [("RuntimeClass", false), ("Shape", true), ("value", false)]
+            [
+                ("RuntimeClass", false),
+                ("Shape", true),
+                ("value", false),
+                ("default", false)
+            ]
         );
     }
 
@@ -1352,5 +1454,27 @@ const mixed = () => {
                 ..usize::try_from(facts.spreads[0].argument.end).unwrap()],
             "props"
         );
+    }
+
+    #[test]
+    fn retains_array_assignments_and_if_regions_for_runtime_proofs() {
+        let source = r#"
+let callbacks = null;
+if (!callbacks) callbacks = [];
+if (Array.isArray(callbacks)) callbacks.push(fn);
+"#;
+        let facts = extract("/project/runtime.js", source).unwrap();
+        assert!(facts.assignments.iter().any(|assignment| {
+            assignment.value == AssignmentValueKind::Array
+                && source.get(assignment.target.start as usize..assignment.target.end as usize)
+                    == Some("callbacks")
+        }));
+        assert!(facts.if_regions.iter().any(|region| {
+            source.get(region.test.start as usize..region.test.end as usize)
+                == Some("Array.isArray(callbacks)")
+                && source
+                    .get(region.consequent.start as usize..region.consequent.end as usize)
+                    .is_some_and(|consequent| consequent.contains("callbacks.push(fn)"))
+        }));
     }
 }

@@ -297,7 +297,7 @@ fn solve_facts(
     ),
     Box<dyn std::error::Error>,
 > {
-    let (program, reactive_ir) = reactive_ir.build(facts)?;
+    let (program, reactive_ir) = reactive_ir.build_shared(facts)?;
     let (_findings, solver) = solid_reactive_solver::solve_measured(&program);
     Ok((reactive_ir, solver))
 }

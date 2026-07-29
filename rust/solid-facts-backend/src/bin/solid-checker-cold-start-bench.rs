@@ -115,8 +115,10 @@ fn measure_once(
         .arg(project)
         .arg("--typefacts")
         .arg(typefacts)
-        .env("SOLID_CHECK_TIMINGS", "1")
-        .env_remove("SOLID_CHECK_DAEMON")
+        .env("SOLID_CHECKER_TIMINGS", "1")
+        // This benchmark defines cold start as a new checker and Type Facts
+        // process for every sample, independent of the release default.
+        .env("SOLID_CHECKER_DAEMON", "0")
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::piped())

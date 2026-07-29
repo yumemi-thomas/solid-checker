@@ -9,17 +9,17 @@ use std::collections::HashMap;
 
 use solid_facts::FileFacts;
 use solid_facts_core::Span;
-use typefacts::Location;
+use typefacts::{Callability, Location, ResolvedCallValidity};
 
 use super::{
-    EntitySymbols, Fix, InvalidCleanupReturn, LeafOwnerOperation, SemanticLookup, TextEdit,
-    UnresolvedCleanupReturn, containing_ast_function, location, primitive_name,
+    EntitySymbols, Fix, InvalidCleanupReturn, LeafOwnerOperation, SemanticLookup, SymbolId,
+    TextEdit, UnresolvedCleanupReturn, containing_ast_function, location, primitive_name,
 };
 
 pub(super) fn leaf_owner_operations_for_file(
     file: &FileFacts,
     entities: &EntitySymbols,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> Vec<LeafOwnerOperation> {
     let mut operations = Vec::new();
     let function_spans = file
@@ -84,7 +84,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 operations.push(LeafOwnerOperation {
                     primitive: primitive.to_string(),
                     owner: owner.into(),
-                    location: location(file.path.as_str(), call.callee),
+                    location: location(file.path.shared(), call.callee),
                     fix,
                 });
             }
@@ -96,7 +96,7 @@ pub(super) fn leaf_owner_operations_for_file(
 pub(super) fn cleanup_returns_for_file<'a, 'f>(
     lookup: &SemanticLookup<'a>,
     file: &'f FileFacts,
-    symbol_names: &HashMap<String, String>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> (Vec<InvalidCleanupReturn>, Vec<UnresolvedCleanupReturn>)
 where
     'a: 'f,
@@ -121,18 +121,11 @@ where
             continue;
         };
         let Some((callback_file, callback)) = callback_function(lookup, file, argument.span) else {
-            let callback_type = lookup
-                .entity_at(file.path.as_str(), argument.span)
-                .and_then(|entity| entity.type_descriptor.as_ref())
-                .map(|descriptor| descriptor.text.as_ref());
-            if callback_type.is_some_and(callable_returns_cleanup_compatible) {
-                continue;
-            }
             unresolved.push(UnresolvedCleanupReturn {
                 primitive: primitive
                     .expect("matched cleanup-return primitive")
                     .to_string(),
-                location: location(file.path.as_str(), argument.span),
+                location: location(file.path.shared(), argument.span),
             });
             continue;
         };
@@ -140,7 +133,7 @@ where
         if callback.r#async {
             invalid.push(InvalidCleanupReturn {
                 primitive: primitive.to_string(),
-                location: location(callback_file.path.as_str(), callback.span),
+                location: location(callback_file.path.shared(), callback.span),
             });
             continue;
         }
@@ -209,14 +202,6 @@ enum CleanupReturnStatus {
     Unresolved,
 }
 
-fn callable_returns_cleanup_compatible(type_text: &str) -> bool {
-    let return_type = type_text
-        .rsplit_once("=>")
-        .map(|(_, returned)| returned.trim());
-    matches!(return_type, Some("void" | "undefined" | "never"))
-        || type_text.trim() == "VoidFunction"
-}
-
 fn expand_parenthesized_location(file: &solid_facts::FileFacts, span: Span) -> Location {
     let mut start = usize::try_from(span.start).unwrap_or(0);
     let mut end = usize::try_from(span.end).unwrap_or(file.source.len());
@@ -272,7 +257,7 @@ fn terminal_cleanup_fix(
         message: "Return the cleanup function instead of calling onCleanup".into(),
         applicability: "safe".into(),
         edits: vec![TextEdit {
-            location: location(file.path.as_str(), call.span),
+            location: location(file.path.shared(), call.span),
             new_text: format!("return {argument}"),
         }],
     })
@@ -293,43 +278,34 @@ fn cleanup_return_status(
             let Some(callee) = returned.callee else {
                 return CleanupReturnStatus::Unresolved;
             };
-            let return_type = lookup
+            let resolved = lookup
                 .entity_at(file.path.as_str(), callee)
                 .and_then(|entity| entity.resolved_call.as_ref())
-                .map(|call| call.return_type_text.trim());
-            match return_type {
-                Some("void" | "undefined" | "never" | "VoidFunction") => CleanupReturnStatus::Valid,
-                Some(value)
-                    if value.contains("=>")
-                        && ![
-                            "Promise",
-                            "AsyncIterable",
-                            "number",
-                            "string",
-                            "boolean",
-                            "null",
-                            "{",
-                        ]
-                        .iter()
-                        .any(|invalid| value.contains(invalid)) =>
-                {
-                    CleanupReturnStatus::Valid
-                }
-                _ => CleanupReturnStatus::Unresolved,
+                .is_some_and(|call| call.validity == ResolvedCallValidity::Valid);
+            if !resolved {
+                return CleanupReturnStatus::Unresolved;
+            }
+            match returned_call_callability(lookup, file, callee) {
+                Some(Callability::Callable) => CleanupReturnStatus::Valid,
+                // TypeFacts does not yet distinguish voidish from other
+                // non-callable return types. Refuse to infer that distinction
+                // from rendered type text.
+                Some(Callability::NonCallable | Callability::Mixed | Callability::Unknown)
+                | None => CleanupReturnStatus::Unresolved,
             }
         }
         solid_ast_facts::ReturnValueKind::Identifier => {
-            let Some(symbol) = entities.get(&location(file.path.as_str(), returned.span)) else {
+            let Some(symbol) = entities.get(&location(file.path.shared(), returned.span)) else {
                 return CleanupReturnStatus::Unresolved;
             };
             let function = file.ast.functions.iter().any(|function| {
                 function.name.as_ref().is_some_and(|name| {
-                    entities.get(&location(file.path.as_str(), name.span)) == Some(symbol)
+                    entities.get(&location(file.path.shared(), name.span)) == Some(symbol)
                 })
             }) || file.ast.bindings.iter().any(|binding| {
                 binding.initializer_function
                     && binding.names.iter().any(|name| {
-                        entities.get(&location(file.path.as_str(), name.span)) == Some(symbol)
+                        entities.get(&location(file.path.shared(), name.span)) == Some(symbol)
                     })
             });
             if function {
@@ -373,28 +349,26 @@ fn cleanup_return_is_function(
             let Some(callee) = returned.callee else {
                 return false;
             };
-            lookup
+            let valid_call = lookup
                 .entity_at(file.path.as_str(), callee)
                 .and_then(|entity| entity.resolved_call.as_ref())
-                .map(|call| call.return_type_text.trim())
-                .is_some_and(|return_type| {
-                    return_type == "VoidFunction"
-                        || return_type.contains("=>")
-                            && ![
-                                "Promise",
-                                "AsyncIterable",
-                                "number",
-                                "string",
-                                "boolean",
-                                "null",
-                                "{",
-                            ]
-                            .iter()
-                            .any(|invalid| return_type.contains(invalid))
-                })
+                .is_some_and(|call| call.validity == ResolvedCallValidity::Valid);
+            valid_call
+                && returned_call_callability(lookup, file, callee) == Some(Callability::Callable)
         }
         solid_ast_facts::ReturnValueKind::Undefined
         | solid_ast_facts::ReturnValueKind::Member
         | solid_ast_facts::ReturnValueKind::Other => false,
     }
+}
+
+fn returned_call_callability(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    callee: Span,
+) -> Option<Callability> {
+    let call = lookup.call_by_callee(file, callee)?;
+    lookup
+        .entity_at(file.path.as_str(), call.span)
+        .and_then(|entity| entity.callability)
 }

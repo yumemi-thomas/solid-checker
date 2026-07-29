@@ -155,7 +155,7 @@ dependencies = [
 [[package]]
 name = "dom-expressions-compiler"
 version = "0.0.0"
-source = "git+https://github.com/yumemi-thomas/dom-expressions?rev=209e1bf78f5616885d473dd04a68913cd6bb2ce0#209e1bf78f5616885d473dd04a68913cd6bb2ce0"
+source = "git+https://github.com/yumemi-thomas/dom-expressions?rev=f8cbb73b16ec8599cd428b01d3a5ca85337b8320#f8cbb73b16ec8599cd428b01d3a5ca85337b8320"
 dependencies = [
  "html5ever",
  "htmlize",
@@ -1082,6 +1082,7 @@ dependencies = [
  "napi-derive",
  "serde",
  "serde_json",
+ "solid-facts",
  "solid-facts-backend",
  "typefacts",
 ]
@@ -1142,6 +1143,7 @@ name = "solid-reactive-ir"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "sha2",
  "solid-ast-facts",
  "solid-facts",
  "solid-facts-core",
@@ -1242,8 +1244,8 @@ dependencies = [
 
 [[package]]
 name = "typefacts"
-version = "0.3.0"
-source = "git+https://github.com/yumemi-thomas/solid-ts-facts?rev=4adeb2063b94dad141a571e20762dd9c451aa34b#4adeb2063b94dad141a571e20762dd9c451aa34b"
+version = "0.6.0"
+source = "git+https://github.com/yumemi-thomas/solid-ts-facts?rev=d708b506bebaa0ea81e061a0d4dd27100c42a433#d708b506bebaa0ea81e061a0d4dd27100c42a433"
 dependencies = [
  "ciborium",
  "serde",
