@@ -75,7 +75,8 @@ function loadSnapshot(context) {
     ? [...(config.commandArgs ?? [])]
     : [join(__dirname, "bin", "solid-checker.mjs")];
   const contracts = Array.isArray(config.contracts) ? config.contracts : [];
-  const key = JSON.stringify({ command, commandArgs, project, contracts });
+  const dialect = config.dialect ?? null;
+  const key = JSON.stringify({ command, commandArgs, project, contracts, dialect });
   if (snapshotCache.has(key)) return snapshotCache.get(key);
 
   const args = [
@@ -85,6 +86,7 @@ function loadSnapshot(context) {
     "--format",
     "json"
   ];
+  if (dialect) args.push("--dialect", dialect);
   for (const contract of contracts) args.push("--contract", contract);
   const result = spawnSync(command, args, {
     cwd: dirname(project),
@@ -162,6 +164,7 @@ const adapterSchema = [{
     project: { type: "string" },
     cwd: { type: "string" },
     contracts: { type: "array", items: { type: "string" } },
+    dialect: { type: "string" },
     snapshotPath: { type: "string" }
   }
 }];
@@ -207,15 +210,115 @@ const certification = {
   }
 };
 
+/**
+ * Hand the certification rule a snapshot narrowed to one diagnostic identity.
+ *
+ * `loadSnapshot` short-circuits on `settings.solidChecker.snapshot`, so a
+ * context carrying a pre-filtered snapshot re-runs the projection (byte-range
+ * conversion, same-file filtering, safe fixes) without re-running the
+ * analysis. Options are cleared except the dialect: every other option the
+ * adapter accepts concerns snapshot acquisition, which has already happened.
+ */
+function narrowedContext(context, snapshot) {
+  const solidChecker = { ...(context.settings?.solidChecker ?? {}), snapshot };
+  return Object.create(context, {
+    settings: { value: { ...context.settings, solidChecker }, enumerable: true },
+    options: { value: [], enumerable: true }
+  });
+}
+
+/**
+ * One ESLint rule per diagnostic identity, so a project can disable
+ * `solid-checker/strict-read-untracked` without losing every other finding.
+ *
+ * The rule owns no analysis: it narrows the shared snapshot to its own rule
+ * name and re-enters `certification`, whose projection is reused rather than
+ * copied. Every rule of one dialect shares one analysis run — the module-level
+ * snapshot cache keys on the dialect, so 38 v1 rules over a project still
+ * spawn the binary once.
+ */
+function reportingRule(entry, dialect) {
+  return {
+    meta: {
+      type: "problem",
+      docs: {
+        description: `solid-checker ${entry.code} ${entry.name}`,
+        recommended: !entry.uncertifiable,
+        url: `${manifest(dialect).docsBaseUrl}/${entry.name}.md`
+      },
+      fixable: "code",
+      schema: adapterSchema,
+      messages: { finding: "{{message}}" }
+    },
+    create(context) {
+      return {
+        Program(program) {
+          // A v1/-namespaced rule analyzes with the v1 dialect unless the
+          // config already chose one; unprefixed rules leave selection to the
+          // config or the binary's own project detection.
+          const forced =
+            dialect === "v1" && !configuration(context).dialect
+              ? contextWithDialect(context, "solid-v1")
+              : context;
+          const snapshot = loadSnapshot(forced);
+          const findings = (snapshot.findings ?? []).filter(
+            finding => finding.rule === entry.name
+          );
+          if (findings.length === 0) return;
+          certification
+            .create(narrowedContext(context, { ...snapshot, findings }))
+            .Program(program);
+        }
+      };
+    }
+  };
+}
+
+function contextWithDialect(context, dialect) {
+  const solidChecker = { ...(context.settings?.solidChecker ?? {}), dialect };
+  return Object.create(context, {
+    settings: { value: { ...context.settings, solidChecker }, enumerable: true }
+  });
+}
+
+const manifests = {
+  v1: require("./lib/rules-v1.json"),
+  v2: require("./lib/rules-v2.json")
+};
+
+function manifest(dialect) {
+  return manifests[dialect];
+}
+
 const plugin = {
   meta: { name: "solid-checker", version: packageVersion },
   rules: { certification },
   configs: {}
 };
+
+for (const [dialect, catalog] of Object.entries(manifests)) {
+  for (const entry of catalog.rules) {
+    // v1 identities already carry their namespace ("v1/no-destructure");
+    // v2 stays unprefixed — the checker's own names are the default surface.
+    plugin.rules[entry.name] = reportingRule(entry, dialect);
+  }
+}
+
 plugin.configs.recommended = {
   plugins: { "solid-checker": plugin },
   rules: { "solid-checker/certification": "error" }
 };
+for (const [dialect, catalog] of Object.entries(manifests)) {
+  plugin.configs[dialect] = {
+    plugins: { "solid-checker": plugin },
+    rules: Object.fromEntries(
+      catalog.rules.map(entry => [
+        `solid-checker/${entry.name}`,
+        entry.severity === "error" ? "error" : "warn"
+      ])
+    )
+  };
+}
 
 module.exports = plugin;
 module.exports._testing = {

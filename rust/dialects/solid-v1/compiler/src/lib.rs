@@ -6,13 +6,13 @@
 //! compiler behind the same trait, so the pipeline selects a compiler by
 //! selecting a dialect and never names either.
 
-use solid1_dom_expressions_compiler as dom_expressions_compiler;
 use solid_facts::compiler::{
     AnalysisRequest, COMPILER_FACTS_PROTOCOL, CallbackRole, CallbackRoleKind,
     CompilerFactsProvider, CompilerProviderError, ExecutionMap, ExecutionRegion, JsxOperation,
     RegionReason,
 };
 use solid_facts::core::{SourceHash, Span};
+use solid1_dom_expressions_compiler as dom_expressions_compiler;
 
 /// The in-process Solid 1.x compiler-facts provider.
 #[derive(Default)]

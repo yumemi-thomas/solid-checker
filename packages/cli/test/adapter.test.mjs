@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -178,3 +179,68 @@ test("reuses an ESLint parser project before filesystem discovery", () => {
     project
   );
 });
+
+test("per-rule surface: every catalog identity is an ESLint rule", () => {
+  const v1 = JSON.parse(readFileSync(new URL("../lib/rules-v1.json", import.meta.url)));
+  const v2 = JSON.parse(readFileSync(new URL("../lib/rules-v2.json", import.meta.url)));
+  for (const entry of [...v1.rules, ...v2.rules]) {
+    assert.ok(plugin.rules[entry.name], `missing rule ${entry.name}`);
+  }
+  for (const entry of v1.rules) {
+    assert.ok(entry.name.startsWith("v1/"), `v1 catalog entry ${entry.name} must be namespaced`);
+  }
+  for (const entry of v2.rules) {
+    assert.ok(!entry.name.includes("/"), `v2 stays unprefixed: ${entry.name}`);
+  }
+  // The two dialect configs enable exactly their own catalog.
+  assert.equal(Object.keys(plugin.configs.v1.rules).length, v1.rules.length);
+  assert.equal(Object.keys(plugin.configs.v2.rules).length, v2.rules.length);
+});
+
+test("per-rule surface: a rule reports only the findings it owns", () => {
+  const findings = [
+    finding("SC1003", "v1/no-destructure", 0, 2),
+    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+  ];
+  const reported = [];
+  const context = syntheticContext({ findings }, reported);
+  plugin.rules["v1/no-destructure"].create(context).Program({});
+  assert.equal(reported.length, 1);
+  assert.match(reported[0].data.message, /SC1003/);
+});
+
+test("per-rule surface: one snapshot load serves every rule of a dialect", () => {
+  plugin._testing.snapshotCache.clear();
+  const findings = [finding("SC1003", "v1/no-destructure", 0, 2)];
+  const snapshotPath = join(tmpdir(), `solid-checker-adapter-shared-${process.pid}.json`);
+  writeFileSync(snapshotPath, JSON.stringify({ findings }));
+  const reported = [];
+  const base = syntheticContext(undefined, reported);
+  base.settings = { solidChecker: { snapshotPath } };
+  const before = plugin._testing.snapshotCache.size;
+  plugin.rules["v1/no-destructure"].create(base).Program({});
+  plugin.rules["v1/strict-read-untracked"].create(base).Program({});
+  assert.equal(plugin._testing.snapshotCache.size, before + 1);
+  rmSync(snapshotPath);
+});
+
+function finding(id, rule, start, end) {
+  return {
+    id,
+    rule,
+    kind: "violation",
+    severity: "error",
+    message: "m",
+    primaryLocation: { path: "/tmp/adapter-per-rule.tsx", startByte: start, endByte: end }
+  };
+}
+
+function syntheticContext(snapshot, reported) {
+  return {
+    settings: snapshot === undefined ? {} : { solidChecker: { snapshot } },
+    options: [],
+    physicalFilename: "/tmp/adapter-per-rule.tsx",
+    sourceCode: { text: "abcdefgh", getLocFromIndex: index => ({ line: 1, column: index }) },
+    report: entry => reported.push(entry)
+  };
+}

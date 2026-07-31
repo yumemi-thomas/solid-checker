@@ -155,9 +155,12 @@ impl Rule {
             Self::UntrackedDerivedFunction => {
                 ("SC1006", "v1/untracked-derived-function", "warning", false)
             }
-            Self::ExpectedFunctionGotExpression => {
-                ("SC1007", "v1/expected-function-got-expression", "warning", false)
-            }
+            Self::ExpectedFunctionGotExpression => (
+                "SC1007",
+                "v1/expected-function-got-expression",
+                "warning",
+                false,
+            ),
             Self::NoDirectMutation => ("SC2003", "v1/no-direct-mutation", "warning", false),
             Self::NoAsyncTrackedScope => ("SC5004", "v1/no-async-tracked-scope", "warning", false),
             Self::ReactiveSourceUncaptured => {
@@ -182,9 +185,12 @@ impl Rule {
             Self::PreferShow => ("SC8015", "v1/prefer-show", "warning", false),
             Self::SelfClosingComp => ("SC8016", "v1/self-closing-comp", "warning", false),
             Self::StyleProp => ("SC8017", "v1/style-prop", "warning", false),
-            Self::PackageContractExportMissing => {
-                ("SC9001", "v1/package-contract-export-missing", "error", true)
-            }
+            Self::PackageContractExportMissing => (
+                "SC9001",
+                "v1/package-contract-export-missing",
+                "error",
+                true,
+            ),
             Self::PackageContractMissing => {
                 ("SC9005", "v1/package-contract-missing", "error", true)
             }
@@ -245,8 +251,52 @@ impl Rule {
     }
 }
 
+/// The catalog as the npm plugin consumes it: one JSON entry per rule, in
+/// catalog order. Generated into `packages/cli/lib/rules-v1.json` by the test
+/// below; `SOLID_RULES_UPDATE=1 cargo test -p solid-v1-rules` rewrites it, a plain
+/// test run fails on drift. The JS surface must never hand-maintain rule
+/// facts the catalog already owns.
+#[must_use]
+pub fn manifest_json() -> String {
+    let mut out = String::from(
+        "{\n  \"docsBaseUrl\": \"https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules\",\n  \"rules\": [\n",
+    );
+    for (index, rule) in Rule::ALL.into_iter().enumerate() {
+        let metadata = rule.metadata();
+        out.push_str(&format!(
+            "    {{ \"code\": \"{}\", \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {} }}{}\n",
+            metadata.code,
+            metadata.name,
+            metadata.severity,
+            metadata.uncertifiable,
+            if index + 1 == Rule::ALL.len() { "" } else { "," }
+        ));
+    }
+    out.push_str("  ]\n}\n");
+    out
+}
+
 #[cfg(test)]
 mod tests {
+    /// The npm plugin reads the catalog from a checked-in JSON file; this is
+    /// what keeps that file the catalog. `SOLID_RULES_UPDATE=1` rewrites it.
+    #[test]
+    fn the_shipped_manifest_is_the_catalog() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../../packages/cli/lib/rules-v1.json");
+        let expected = super::manifest_json();
+        if std::env::var_os("SOLID_RULES_UPDATE").is_some() {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, &expected).unwrap();
+            return;
+        }
+        let shipped = std::fs::read_to_string(&path).unwrap_or_default();
+        assert_eq!(
+            shipped, expected,
+            "packages/cli/lib/rules-v1.json has drifted from the catalog; run SOLID_RULES_UPDATE=1 cargo test -p solid-v1-rules to rewrite it"
+        );
+    }
+
     use std::collections::HashSet;
 
     use super::Rule;

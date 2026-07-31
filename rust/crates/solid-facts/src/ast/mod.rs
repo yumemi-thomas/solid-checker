@@ -14,8 +14,9 @@ use oxc_ast::ast::{
     ExportNamedDeclaration, Expression, FormalParameter, Function, FunctionType,
     IdentifierReference, IfStatement, ImportDeclaration, ImportDeclarationSpecifier,
     JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement, JSXExpression,
-    ModuleExportName, NewExpression, ObjectPropertyKind, PropertyKey, ReturnStatement,
-    SpreadElement, StaticMemberExpression, TSModuleDeclarationName, VariableDeclarator,
+    LogicalExpression, LogicalOperator, ModuleExportName, NewExpression, ObjectProperty,
+    ObjectPropertyKind, PropertyKey, ReturnStatement, SpreadElement, StaticMemberExpression,
+    TSModuleDeclarationName, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
@@ -51,6 +52,14 @@ pub struct AstFacts {
     pub parameter_properties: Vec<Span>,
     pub spreads: Vec<SpreadFact>,
     pub conditional_tests: Vec<Span>,
+    #[serde(default)]
+    pub conditional_expressions: Vec<ConditionalExpressionFact>,
+    #[serde(default)]
+    pub logical_expressions: Vec<LogicalExpressionFact>,
+    #[serde(default)]
+    pub object_properties: Vec<ObjectPropertyFact>,
+    #[serde(default)]
+    pub tagged_templates: Vec<TaggedTemplateFact>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
     #[serde(default)]
@@ -251,9 +260,101 @@ pub struct ReturnFact {
 #[serde(rename_all = "camelCase")]
 pub struct JsxElementFact {
     pub span: Span,
+    #[serde(default)]
+    pub opening: Span,
     pub name: NamedSpan,
     pub properties: Vec<Span>,
     pub boolean_properties: Vec<BooleanPropertyFact>,
+    #[serde(default)]
+    pub attributes: Vec<JsxAttributeFact>,
+    #[serde(default)]
+    pub spreads: Vec<JsxSpreadAttributeFact>,
+    #[serde(default)]
+    pub self_closing: bool,
+    #[serde(default)]
+    pub children: Vec<Span>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum JsxAttributeValueKind {
+    Boolean,
+    String,
+    Expression,
+    Element,
+    Fragment,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsxAttributeFact {
+    pub span: Span,
+    pub name: Span,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<Span>,
+    pub local_name: Span,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<Span>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expression: Option<Span>,
+    pub value_kind: JsxAttributeValueKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsxSpreadAttributeFact {
+    pub span: Span,
+    pub argument: Span,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConditionalExpressionFact {
+    pub span: Span,
+    pub test: Span,
+    pub consequent: Span,
+    pub alternate: Span,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogicalOperatorKind {
+    And,
+    Or,
+    Coalesce,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogicalExpressionFact {
+    pub span: Span,
+    pub left: Span,
+    pub right: Span,
+    pub operator: LogicalOperatorKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectPropertyFact {
+    pub span: Span,
+    pub key: Span,
+    pub value: Span,
+    pub computed: bool,
+    pub shorthand: bool,
+}
+
+/// A tagged template expression and the expressions interpolated into it.
+///
+/// CSS-in-JS and HTML tag functions receive their substitutions as callbacks
+/// that the tag invokes later, which makes them a distinct execution scope from
+/// the code around them. Rules need the structure to tell those apart from an
+/// ordinary expression, and the tag's own identity to resolve what it is.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaggedTemplateFact {
+    pub span: Span,
+    pub tag: Span,
+    pub expressions: Vec<Span>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -382,6 +483,10 @@ struct Collector<'s> {
     parameter_properties: Vec<Span>,
     spreads: Vec<SpreadFact>,
     conditional_tests: Vec<Span>,
+    conditional_expressions: Vec<ConditionalExpressionFact>,
+    logical_expressions: Vec<LogicalExpressionFact>,
+    object_properties: Vec<ObjectPropertyFact>,
+    tagged_templates: Vec<TaggedTemplateFact>,
     assignments: Vec<AssignmentFact>,
     if_regions: Vec<IfRegionFact>,
     conditional_control_stack: Vec<Span>,
@@ -405,6 +510,10 @@ impl<'s> Collector<'s> {
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
+            conditional_expressions: Vec::new(),
+            logical_expressions: Vec::new(),
+            object_properties: Vec::new(),
+            tagged_templates: Vec::new(),
             assignments: Vec::new(),
             if_regions: Vec::new(),
             conditional_control_stack: Vec::new(),
@@ -426,6 +535,10 @@ impl<'s> Collector<'s> {
         self.parameter_properties.sort_unstable();
         self.spreads.sort_by_key(|fact| fact.span);
         self.conditional_tests.sort_unstable();
+        self.conditional_expressions.sort_by_key(|fact| fact.span);
+        self.logical_expressions.sort_by_key(|fact| fact.span);
+        self.object_properties.sort_by_key(|fact| fact.span);
+        self.tagged_templates.sort_by_key(|fact| fact.span);
         self.assignments.sort_by_key(|fact| fact.target);
         self.if_regions.sort_by_key(|fact| fact.consequent);
         AstFacts {
@@ -446,6 +559,10 @@ impl<'s> Collector<'s> {
             parameter_properties: self.parameter_properties,
             spreads: self.spreads,
             conditional_tests: self.conditional_tests,
+            conditional_expressions: self.conditional_expressions,
+            logical_expressions: self.logical_expressions,
+            object_properties: self.object_properties,
+            tagged_templates: self.tagged_templates,
             assignments: self.assignments,
             if_regions: self.if_regions,
         }
@@ -976,13 +1093,63 @@ impl<'a> Visit<'a> for Collector<'_> {
 
     fn visit_conditional_expression(&mut self, expression: &ConditionalExpression<'a>) {
         self.conditional_tests.push(span(expression.test.span()));
+        self.conditional_expressions
+            .push(ConditionalExpressionFact {
+                span: span(expression.span),
+                test: span(expression.test.span()),
+                consequent: span(expression.consequent.span()),
+                alternate: span(expression.alternate.span()),
+            });
         walk::walk_conditional_expression(self, expression);
+    }
+
+    fn visit_logical_expression(&mut self, expression: &LogicalExpression<'a>) {
+        self.logical_expressions.push(LogicalExpressionFact {
+            span: span(expression.span),
+            left: span(expression.left.span()),
+            right: span(expression.right.span()),
+            operator: match expression.operator {
+                LogicalOperator::And => LogicalOperatorKind::And,
+                LogicalOperator::Or => LogicalOperatorKind::Or,
+                LogicalOperator::Coalesce => LogicalOperatorKind::Coalesce,
+            },
+        });
+        walk::walk_logical_expression(self, expression);
+    }
+
+    fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {
+        self.object_properties.push(ObjectPropertyFact {
+            span: span(property.span),
+            key: span(property.key.span()),
+            value: span(property.value.span()),
+            computed: property.computed,
+            shorthand: property.shorthand,
+        });
+        walk::walk_object_property(self, property);
+    }
+
+    fn visit_tagged_template_expression(
+        &mut self,
+        expression: &oxc_ast::ast::TaggedTemplateExpression<'a>,
+    ) {
+        self.tagged_templates.push(TaggedTemplateFact {
+            span: span(expression.span),
+            tag: span(expression.tag.span()),
+            expressions: expression
+                .quasi
+                .expressions
+                .iter()
+                .map(|interpolated| span(interpolated.span()))
+                .collect(),
+        });
+        walk::walk_tagged_template_expression(self, expression);
     }
 
     fn visit_jsx_element(&mut self, element: &JSXElement<'a>) {
         let name_span = element.opening_element.name.span();
         self.jsx_elements.push(JsxElementFact {
             span: span(element.span),
+            opening: span(element.opening_element.span),
             name: NamedSpan {
                 span: span(name_span),
             },
@@ -1026,6 +1193,70 @@ impl<'a> Visit<'a> for Collector<'_> {
                         value,
                     })
                 })
+                .collect(),
+            attributes: element
+                .opening_element
+                .attributes
+                .iter()
+                .filter_map(|item| {
+                    let JSXAttributeItem::Attribute(attribute) = item else {
+                        return None;
+                    };
+                    let (name, namespace, local_name) = match &attribute.name {
+                        JSXAttributeName::Identifier(name) => (name.span, None, name.span),
+                        JSXAttributeName::NamespacedName(name) => {
+                            (name.span, Some(name.namespace.span), name.name.span)
+                        }
+                    };
+                    let (value, expression, value_kind) = match attribute.value.as_ref() {
+                        None => (None, None, JsxAttributeValueKind::Boolean),
+                        Some(JSXAttributeValue::StringLiteral(value)) => {
+                            (Some(span(value.span)), None, JsxAttributeValueKind::String)
+                        }
+                        Some(JSXAttributeValue::ExpressionContainer(container)) => (
+                            Some(span(container.span)),
+                            Some(span(container.expression.span())),
+                            JsxAttributeValueKind::Expression,
+                        ),
+                        Some(JSXAttributeValue::Element(value)) => {
+                            (Some(span(value.span)), None, JsxAttributeValueKind::Element)
+                        }
+                        Some(JSXAttributeValue::Fragment(value)) => (
+                            Some(span(value.span)),
+                            None,
+                            JsxAttributeValueKind::Fragment,
+                        ),
+                    };
+                    Some(JsxAttributeFact {
+                        span: span(attribute.span),
+                        name: span(name),
+                        namespace: namespace.map(span),
+                        local_name: span(local_name),
+                        value,
+                        expression,
+                        value_kind,
+                    })
+                })
+                .collect(),
+            spreads: element
+                .opening_element
+                .attributes
+                .iter()
+                .filter_map(|item| {
+                    let JSXAttributeItem::SpreadAttribute(attribute) = item else {
+                        return None;
+                    };
+                    Some(JsxSpreadAttributeFact {
+                        span: span(attribute.span),
+                        argument: span(attribute.argument.span()),
+                    })
+                })
+                .collect(),
+            self_closing: element.closing_element.is_none(),
+            children: element
+                .children
+                .iter()
+                .map(|child| span(child.span()))
                 .collect(),
         });
         walk::walk_jsx_element(self, element);
@@ -1476,5 +1707,55 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
                     .get(region.consequent.start as usize..region.consequent.end as usize)
                     .is_some_and(|consequent| consequent.contains("callbacks.push(fn)"))
         }));
+    }
+
+    #[test]
+    fn retains_complete_jsx_rule_structure() {
+        let source = r#"<Button use:focus style={{ fontSize: 12 }} {...props}>
+  {ready && <Content />}
+  {ready ? <Yes /> : <No />}
+</Button>"#;
+        let facts = extract("rules.tsx", source).unwrap();
+        let button = &facts.jsx_elements[0];
+
+        assert!(!button.self_closing);
+        assert_eq!(button.attributes.len(), 2);
+        assert_eq!(button.spreads.len(), 1);
+        assert_eq!(button.children.len(), 5);
+        let directive = &button.attributes[0];
+        assert_eq!(
+            directive
+                .namespace
+                .and_then(|span| source.get(span.start as usize..span.end as usize)),
+            Some("use")
+        );
+        assert_eq!(
+            source.get(directive.local_name.start as usize..directive.local_name.end as usize),
+            Some("focus")
+        );
+        assert_eq!(facts.object_properties.len(), 1);
+        assert_eq!(facts.logical_expressions.len(), 1);
+        assert_eq!(facts.conditional_expressions.len(), 1);
+    }
+
+    #[test]
+    fn retains_tagged_templates_with_their_interpolations() {
+        let source = "const styled = css`color: ${primary}; font-size: ${size()}px;`;";
+        let facts = extract("styles.ts", source).unwrap();
+
+        assert_eq!(facts.tagged_templates.len(), 1);
+        let template = &facts.tagged_templates[0];
+        assert_eq!(
+            source.get(template.tag.start as usize..template.tag.end as usize),
+            Some("css")
+        );
+        assert_eq!(
+            template
+                .expressions
+                .iter()
+                .map(|expression| source.get(expression.start as usize..expression.end as usize))
+                .collect::<Vec<_>>(),
+            [Some("primary"), Some("size()")]
+        );
     }
 }

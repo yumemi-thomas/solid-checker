@@ -17,6 +17,7 @@
   "files": [
     "bin",
     "eslint.cjs",
+    "lib",
     "wasm.d.ts",
     "wasm.mjs",
     "native",
