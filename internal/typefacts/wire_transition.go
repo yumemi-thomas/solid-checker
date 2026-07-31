@@ -61,7 +61,8 @@ type TransitionArena interface {
 // dictionary are reusable, but Encode returns a detached byte slice that the
 // next call cannot overwrite.
 type wireTransitionEncoder struct {
-	dict *stringTableV3
+	tableSchema uint64
+	dict        *stringTableV3
 
 	rows  []byte
 	frame []byte
@@ -217,7 +218,11 @@ func (e *wireTransitionEncoder) encode(
 	frame := packedWriter{bytes: e.frame[:0]}
 	frame.u64(wireTransitionVersion)
 	frame.u64(uint64(mode))
-	frame.u64(TypeFactsTableSchemaVersion)
+	tableSchema := e.tableSchema
+	if tableSchema == 0 {
+		tableSchema = TypeFactsTableSchemaVersion
+	}
+	frame.u64(tableSchema)
 	frame.u64(baseGeneration)
 	frame.u64(input.Target.Generation)
 	appendPackedDictionary(&frame, e.dict)

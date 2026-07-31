@@ -175,6 +175,64 @@ func TestV6TransfersExpandedRowsAndKeepsSparseIncrementalProof(t *testing.T) {
 	}
 }
 
+func TestRuntimeValueDomainIsAvailableOnlyInV7(t *testing.T) {
+	projectID := "/project/tsconfig.json"
+	demand := EntityDemand{
+		Location:           Location{Path: "/project/source.ts", StartByte: 7, EndByte: 12},
+		RuntimeValueDomain: true,
+	}
+	for _, open := range []struct {
+		name   string
+		schema uint64
+		new    func(Project, string, Trace) (*Session, error)
+	}{
+		{"v5", TypeFactsSchemaVersionV5, NewSession},
+		{"v6", TypeFactsSchemaVersionV6, NewSessionV6},
+	} {
+		t.Run(open.name, func(t *testing.T) {
+			session, err := open.new(newSessionTestBackend(), projectID, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer session.Close()
+			response := session.Lifecycle(context.Background(), LifecycleRequest{
+				Schema: open.schema, RequestID: 1, Operation: LifecycleAnalyze,
+				ProjectID: projectID, Generation: 1, ResetState: true,
+				Demands: []EntityDemand{demand},
+			})
+			if response.OK || response.Error == nil || response.Error.Code != "invalid-demands" {
+				t.Fatalf("frozen schema accepted runtime value domain: %+v", response)
+			}
+			compact := CompactDemandsV3From([]EntityDemand{demand})
+			response = session.Lifecycle(context.Background(), LifecycleRequest{
+				Schema: open.schema, RequestID: 2, Operation: LifecycleAnalyze,
+				ProjectID: projectID, Generation: 1, ResetState: true,
+				CompactDemands: &compact,
+			})
+			if response.OK || response.Error == nil || response.Error.Code != "invalid-demands" {
+				t.Fatalf("frozen schema accepted compact runtime value domain: %+v", response)
+			}
+		})
+	}
+
+	v7, err := NewSessionV7(newSessionTestBackend(), projectID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v7.Close()
+	response := v7.Lifecycle(context.Background(), LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV7, RequestID: 1, Operation: LifecycleAnalyze,
+		ProjectID: projectID, Generation: 1, ResetState: true,
+		Demands: []EntityDemand{demand},
+	})
+	if !response.OK {
+		t.Fatalf("v7 rejected runtime value domain: %+v", response.Error)
+	}
+	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersion {
+		t.Fatalf("v7 Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersion)
+	}
+}
+
 func TestSessionReturnsSourcesThroughOneSharedArena(t *testing.T) {
 	t.Parallel()
 	session, err := NewSession(newSessionTestBackend(), "/project/tsconfig.json", nil)

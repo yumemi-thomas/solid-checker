@@ -45,6 +45,21 @@ const (
 	CallabilityUnknown     Callability = "unknown"
 )
 
+// RuntimeValueDomain summarizes the possible runtime values of a demanded
+// expression without exposing a compiler type or relying on rendered type
+// text. Unknown means the checker could not provide a closed value domain; in
+// that case the three MayBe fields are conservative possibilities rather than
+// an exhaustive classification.
+//
+// The zero value is meaningful: it is the known empty domain produced by
+// never. EntityFact uses a pointer so an undemanded fact remains distinct.
+type RuntimeValueDomain struct {
+	MayBeCallable  bool `cbor:"mayBeCallable,omitempty" json:"mayBeCallable,omitempty"`
+	MayBeUndefined bool `cbor:"mayBeUndefined,omitempty" json:"mayBeUndefined,omitempty"`
+	MayBeOther     bool `cbor:"mayBeOther,omitempty" json:"mayBeOther,omitempty"`
+	Unknown        bool `cbor:"unknown,omitempty" json:"unknown,omitempty"`
+}
+
 // ReferenceSpace summarizes the semantic meaning of all compiler-resolved
 // references to an imported or aliased symbol.
 type ReferenceSpace string

@@ -98,6 +98,26 @@ pub enum Callability {
     Unknown,
 }
 
+/// Checker-derived runtime value classes for one demanded expression.
+///
+/// `unknown` means the checker could not provide a closed domain. In that
+/// case the three `may_be_*` fields conservatively describe all categories
+/// that remain possible. The all-false value is the known empty `never`
+/// domain, so absence is represented by `Option<RuntimeValueDomain>` on an
+/// entity rather than by this struct's zero value.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimeValueDomain {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub may_be_callable: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub may_be_undefined: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub may_be_other: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub unknown: bool,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ReferenceSpace {
@@ -238,6 +258,8 @@ pub struct EntityFact {
     pub resolved_call: Option<Arc<ResolvedCall>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub callability: Option<Callability>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime_value_domain: Option<RuntimeValueDomain>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
@@ -660,6 +682,7 @@ mod tests {
                 r#async: false,
                 structural_accessor: false,
                 callability: false,
+                runtime_value_domain: false,
                 reference_space: false,
                 runtime_identity: false,
             }],
@@ -700,6 +723,7 @@ mod tests {
                 r#async: false,
                 structural_accessor: false,
                 callability: false,
+                runtime_value_domain: false,
                 reference_space: false,
                 runtime_identity: false,
             },
@@ -713,6 +737,7 @@ mod tests {
                 r#async: true,
                 structural_accessor: true,
                 callability: true,
+                runtime_value_domain: true,
                 reference_space: true,
                 runtime_identity: true,
             },
@@ -726,6 +751,7 @@ mod tests {
                 r#async: true,
                 structural_accessor: false,
                 callability: false,
+                runtime_value_domain: false,
                 reference_space: false,
                 runtime_identity: false,
             },

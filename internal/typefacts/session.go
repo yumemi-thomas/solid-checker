@@ -53,22 +53,33 @@ func NewSessionV6(backend Project, projectID string, trace Trace) (*Session, err
 	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV6)
 }
 
+// NewSessionV7 enables RuntimeValueDomain and emits Wire table schema v4.
+// Frozen v5 and v6 sessions remain available for compatibility.
+func NewSessionV7(backend Project, projectID string, trace Trace) (*Session, error) {
+	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV7)
+}
+
 func newSession(backend Project, projectID string, trace Trace, schema uint64) (*Session, error) {
 	projectID = filepath.Clean(projectID)
 	if projectID == "" || projectID == "." {
 		_ = backend.Close()
 		return nil, errors.New("Type Facts session requires a project identity")
 	}
-	closure, err := newDemandClosure(backend, trace, schema == TypeFactsSchemaVersionV6)
+	closure, err := newDemandClosure(backend, trace, schema >= TypeFactsSchemaVersionV6)
 	if err != nil {
 		_ = backend.Close()
 		return nil, err
 	}
+	tableSchema := TypeFactsTableSchemaVersion
+	if schema < TypeFactsSchemaVersionV7 {
+		tableSchema = TypeFactsTableSchemaVersionV3
+	}
 	return &Session{
-		closure:   closure,
-		trace:     trace,
-		projectID: projectID,
-		schema:    schema,
+		closure:    closure,
+		trace:      trace,
+		projectID:  projectID,
+		schema:     schema,
+		transition: wireTransitionEncoder{tableSchema: tableSchema},
 	}, nil
 }
 
@@ -105,6 +116,24 @@ func (s *Session) lifecycle(
 	}
 	if request.Schema != s.schema {
 		return fail("invalid-request", fmt.Errorf("unsupported TypeFacts schema %d", request.Schema))
+	}
+	if s.schema < TypeFactsSchemaVersionV7 {
+		for _, demand := range request.Demands {
+			if demand.RuntimeValueDomain {
+				return fail("invalid-demands", errors.New("runtime value domain requires TypeFacts schema v7"))
+			}
+		}
+		if request.CompactDemands != nil {
+			for _, group := range request.CompactDemands.Groups {
+				selected, err := appendCompactDemandsWithFlag(nil, group, request.CompactDemands.Strings, demandFlagRuntimeValueDomain)
+				if err != nil {
+					return fail("invalid-demands", err)
+				}
+				if len(selected) != 0 {
+					return fail("invalid-demands", errors.New("runtime value domain requires TypeFacts schema v7"))
+				}
+			}
+		}
 	}
 	if filepath.Clean(request.ProjectID) != s.projectID {
 		return fail("project-mismatch", ErrGenerationMismatch)
@@ -235,7 +264,7 @@ func (s *Session) lifecycle(
 		transitionInput := wireTransitionInput{
 			ProjectID: s.projectID,
 			Target:    analyzedTable,
-			Sparse:    s.schema == TypeFactsSchemaVersionV6,
+			Sparse:    s.schema >= TypeFactsSchemaVersionV6,
 		}
 		if !request.ResetState && s.retained.table != nil {
 			transitionInput.Base = s.retained.table
@@ -297,7 +326,7 @@ func (s *Session) lifecycle(
 		demandsPublished = true
 		table := *analyzedTable
 		s.retained.table = &table
-		if s.schema == TypeFactsSchemaVersionV6 {
+		if s.schema >= TypeFactsSchemaVersionV6 {
 			if err := s.populateSymbolEvidence(ctx, request, &response, nil); err != nil {
 				return fail("analysis-failed", err)
 			}
@@ -314,8 +343,8 @@ func (s *Session) lifecycle(
 		}
 		analysisPublished = true
 	case LifecycleSymbols:
-		if s.schema != TypeFactsSchemaVersionV6 {
-			return fail("invalid-request", errors.New("symbol evidence requires TypeFacts schema v6"))
+		if s.schema < TypeFactsSchemaVersionV6 {
+			return fail("invalid-request", errors.New("symbol evidence requires TypeFacts schema v6 or newer"))
 		}
 		if request.Generation != generation {
 			return fail("generation-mismatch", ErrGenerationMismatch)

@@ -10,12 +10,14 @@ import (
 
 func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	location := Location{Path: "/project/source.ts", StartByte: 1, EndByte: 2}
+	domain := &RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true}
 	entities := []EntityFact{
 		{Location: location, Symbol: "symbol"},
 		{
-			Location:       location,
-			TypeDescriptor: &TypeDescriptor{Text: "Value"},
-			Callability:    CallabilityCallable,
+			Location:           location,
+			TypeDescriptor:     &TypeDescriptor{Text: "Value"},
+			Callability:        CallabilityCallable,
+			RuntimeValueDomain: domain,
 		},
 	}
 	structural := []SymbolID{"", "accessor"}
@@ -24,7 +26,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 		1,
 		[]EntityDemand{
 			{Location: location, Symbol: true},
-			{Location: location, TypeDescriptor: true, Callability: true},
+			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true},
 		},
 		SemanticDemandRunResult{
 			Entities:   entities,
@@ -47,7 +49,8 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 		t.Fatalf("prepared structural evidence did not take its arena: %v", contribution.structural)
 	}
 	if contribution.entities[0].Symbol != "symbol" ||
-		contribution.entities[0].Callability != CallabilityCallable {
+		contribution.entities[0].Callability != CallabilityCallable ||
+		contribution.entities[0].RuntimeValueDomain != domain {
 		t.Fatalf("compacted entity lost demand fields: %+v", contribution.entities[0])
 	}
 	if !slices.Equal(contribution.descriptorSymbols, []SymbolID{"symbol"}) {

@@ -81,6 +81,117 @@ export const neverValue = null as never;
 	}
 }
 
+func TestDemandedRuntimeValueDomainUsesCheckerSemantics(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+interface CallableInterface { (): void }
+type CleanupAlias = (() => void) | undefined;
+declare const functionValue: () => void;
+declare const undefinedValue: undefined;
+declare const cleanupUnion: (() => void) | undefined;
+declare const callableInterfaceValue: CallableInterface;
+declare const overloadedFunction: { (): void; (value: string): number };
+declare const aliasedCleanup: CleanupAlias;
+declare const callableIntersection: CallableInterface & { tag: string };
+declare const optionalHolder: { optionalCleanup?: () => void };
+optionalHolder.optionalCleanup;
+function constrained<T extends (() => void) | undefined>(boundedCleanup: T) { return boundedCleanup; }
+declare const numberValue: number;
+declare const nullValue: null;
+declare const objectValue: object;
+declare const promiseValue: Promise<void>;
+declare const callableNumber: (() => void) | number;
+declare const undefinedString: undefined | string;
+declare const cleanupNull: (() => void) | undefined | null;
+declare const objectIntersection: { left: true } & { right: true };
+declare const anyValue: any;
+declare const unknownValue: unknown;
+declare const neverValue: never;
+function unconstrained<T>(genericValue: T) { return genericValue; }
+declare const recoveryValue: MissingType;
+`
+	sourcePath := filepath.Join(dir, "domains.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	callable := typefacts.RuntimeValueDomain{MayBeCallable: true}
+	undefined := typefacts.RuntimeValueDomain{MayBeUndefined: true}
+	cleanup := typefacts.RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true}
+	other := typefacts.RuntimeValueDomain{MayBeOther: true}
+	callableOther := typefacts.RuntimeValueDomain{MayBeCallable: true, MayBeOther: true}
+	undefinedOther := typefacts.RuntimeValueDomain{MayBeUndefined: true, MayBeOther: true}
+	cleanupOther := typefacts.RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true, MayBeOther: true}
+	unknown := typefacts.RuntimeValueDomain{
+		MayBeCallable: true, MayBeUndefined: true, MayBeOther: true, Unknown: true,
+	}
+	cases := []struct {
+		name string
+		want typefacts.RuntimeValueDomain
+	}{
+		{"functionValue", callable},
+		{"undefinedValue", undefined},
+		{"cleanupUnion", cleanup},
+		{"callableInterfaceValue", callable},
+		{"overloadedFunction", callable},
+		{"aliasedCleanup", cleanup},
+		{"callableIntersection", callable},
+		{"optionalCleanup", cleanup},
+		{"boundedCleanup", cleanup},
+		{"numberValue", other},
+		{"nullValue", other},
+		{"objectValue", other},
+		{"promiseValue", other},
+		{"callableNumber", callableOther},
+		{"undefinedString", undefinedOther},
+		{"cleanupNull", cleanupOther},
+		{"objectIntersection", other},
+		{"anyValue", unknown},
+		{"unknownValue", unknown},
+		{"neverValue", typefacts.RuntimeValueDomain{}},
+		{"genericValue", unknown},
+		{"recoveryValue", unknown},
+	}
+	demands := make([]typefacts.EntityDemand, len(cases))
+	for index, testCase := range cases {
+		start := strings.LastIndex(source, testCase.name)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.name)
+		}
+		demands[index] = typefacts.EntityDemand{
+			Location: typefacts.Location{
+				Path: sourcePath, StartByte: start, EndByte: start + len(testCase.name),
+			},
+			RuntimeValueDomain: true,
+		}
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entities) != len(cases) {
+		t.Fatalf("entities = %d, want %d", len(entities), len(cases))
+	}
+	for index, testCase := range cases {
+		if entities[index].RuntimeValueDomain == nil {
+			t.Errorf("%s runtime value domain is absent", testCase.name)
+			continue
+		}
+		if got := *entities[index].RuntimeValueDomain; got != testCase.want {
+			t.Errorf("%s runtime value domain = %+v, want %+v", testCase.name, got, testCase.want)
+		}
+	}
+}
+
 func TestResolvedCallDistinguishesValidRecoveryAndUnresolved(t *testing.T) {
 	dir := t.TempDir()
 	source := `function takesNumber(value: number): string { return String(value); }

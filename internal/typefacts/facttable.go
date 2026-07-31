@@ -11,4 +11,5 @@ var ErrGenerationMismatch = errors.New("type facts generation mismatch")
 
 // TypeFactsTableSchemaVersion identifies the fact-table model carried in the
 // wire transition and echoed as FactTable.schema by the Rust client.
-const TypeFactsTableSchemaVersion uint64 = 3
+const TypeFactsTableSchemaVersionV3 uint64 = 3
+const TypeFactsTableSchemaVersion uint64 = 4

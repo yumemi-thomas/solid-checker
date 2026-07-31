@@ -124,3 +124,84 @@ func callabilityOfType(typeChecker *checker.Checker, value *checker.Type) typefa
 		return typefacts.CallabilityNonCallable
 	}
 }
+
+func unknownRuntimeValueDomain() typefacts.RuntimeValueDomain {
+	return typefacts.RuntimeValueDomain{
+		MayBeCallable: true, MayBeUndefined: true, MayBeOther: true, Unknown: true,
+	}
+}
+
+// runtimeValueDomainOfType classifies checker types by runtime value kind.
+// Union members are combined, constrained generics are classified through the
+// checker's resolved base constraint, callable structured types are detected
+// from real call signatures, and undefined is recognized from checker flags or
+// assignability. Rendered type text never participates.
+func runtimeValueDomainOfType(typeChecker *checker.Checker, value *checker.Type) typefacts.RuntimeValueDomain {
+	return runtimeValueDomainOfTypeSeen(typeChecker, value, make(map[*checker.Type]struct{}))
+}
+
+func runtimeValueDomainOfTypeSeen(
+	typeChecker *checker.Checker,
+	value *checker.Type,
+	seen map[*checker.Type]struct{},
+) typefacts.RuntimeValueDomain {
+	if value == nil {
+		return unknownRuntimeValueDomain()
+	}
+	flags := value.Flags()
+	if flags&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsIncludesError) != 0 {
+		return unknownRuntimeValueDomain()
+	}
+	if flags&checker.TypeFlagsNever != 0 {
+		return typefacts.RuntimeValueDomain{}
+	}
+	if _, cycling := seen[value]; cycling {
+		return unknownRuntimeValueDomain()
+	}
+	seen[value] = struct{}{}
+	defer delete(seen, value)
+
+	// TypeScript-Go resolves nested type-parameter constraints and the base
+	// constraints of other instantiable forms. A nil constraint is the
+	// conservative signal for an unconstrained or circular generic.
+	if flags&checker.TypeFlagsInstantiable != 0 {
+		var constraint *checker.Type
+		if flags&checker.TypeFlagsTypeParameter != 0 {
+			constraint = typeChecker.GetConstraintOfTypeParameter(value)
+		} else {
+			constraint = checker.Checker_getBaseConstraintOfType(typeChecker, value)
+		}
+		if constraint == nil {
+			return unknownRuntimeValueDomain()
+		}
+		if constraint != value {
+			return runtimeValueDomainOfTypeSeen(typeChecker, constraint, seen)
+		}
+	}
+
+	if flags&checker.TypeFlagsUnion != 0 {
+		var domain typefacts.RuntimeValueDomain
+		for _, constituent := range value.Types() {
+			part := runtimeValueDomainOfTypeSeen(typeChecker, constituent, seen)
+			domain.MayBeCallable = domain.MayBeCallable || part.MayBeCallable
+			domain.MayBeUndefined = domain.MayBeUndefined || part.MayBeUndefined
+			domain.MayBeOther = domain.MayBeOther || part.MayBeOther
+			domain.Unknown = domain.Unknown || part.Unknown
+		}
+		return domain
+	}
+	if flags&checker.TypeFlagsUndefined != 0 {
+		return typefacts.RuntimeValueDomain{MayBeUndefined: true}
+	}
+	if len(typeChecker.GetSignaturesOfType(value, checker.SignatureKindCall)) != 0 {
+		return typefacts.RuntimeValueDomain{MayBeCallable: true}
+	}
+	// This matters for intersections such as T & undefined. The checker has
+	// already reduced impossible intersections to never where it can; when the
+	// remaining source type is assignable to undefined, every inhabitant is an
+	// undefined value.
+	if typeChecker.IsTypeAssignableTo(value, typeChecker.GetUndefinedType()) {
+		return typefacts.RuntimeValueDomain{MayBeUndefined: true}
+	}
+	return typefacts.RuntimeValueDomain{MayBeOther: true}
+}

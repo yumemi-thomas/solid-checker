@@ -14,6 +14,7 @@ type EntityDemand struct {
 	TypeDescriptor     bool      `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
 	ResolvedCall       bool      `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
 	Callability        bool      `cbor:"callability,omitempty" json:"callability,omitempty"`
+	RuntimeValueDomain bool      `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
 	ReferenceSpace     bool      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
 	RuntimeIdentity    bool      `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 	References         bool      `cbor:"references,omitempty" json:"references,omitempty"`
@@ -48,13 +49,14 @@ type SemanticDemandRunResult struct {
 // EntityFact is one legal location-keyed entity in the finite fact universe.
 // Location ranges are ordered from outermost to innermost during encoding.
 type EntityFact struct {
-	Location        Location        `cbor:"location" json:"location"`
-	Symbol          SymbolID        `cbor:"symbol,omitempty" json:"symbol,omitempty"`
-	TypeDescriptor  *TypeDescriptor `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
-	ResolvedCall    *Call           `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
-	Callability     Callability     `cbor:"callability,omitempty" json:"callability,omitempty"`
-	ReferenceSpace  ReferenceSpace  `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
-	RuntimeIdentity RuntimeSymbolID `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
+	Location           Location            `cbor:"location" json:"location"`
+	Symbol             SymbolID            `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	TypeDescriptor     *TypeDescriptor     `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
+	ResolvedCall       *Call               `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
+	Callability        Callability         `cbor:"callability,omitempty" json:"callability,omitempty"`
+	RuntimeValueDomain *RuntimeValueDomain `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
+	ReferenceSpace     ReferenceSpace      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
+	RuntimeIdentity    RuntimeSymbolID     `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 }
 
 // SymbolFact contains every legal symbol-keyed response for a generation.

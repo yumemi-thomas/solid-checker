@@ -17,6 +17,7 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 	}{
 		{"typefacts-v5.schema.json", typefacts.TypeFactsSchemaSHA256},
 		{"typefacts-v6.schema.json", typefacts.TypeFactsSchemaV6SHA256},
+		{"typefacts-v7.schema.json", typefacts.TypeFactsSchemaV7SHA256},
 	} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "schema", schema.name))
 		if err != nil {

@@ -7,6 +7,10 @@ new facts:
   `callability`.
 - `TypeDescriptor.text` and `typeToString` interpretation for callability:
   use the callability enum.
+- Cleanup return validation that treats both `(() => void) | undefined` and
+  `(() => void) | number` as mixed callability: demand `runtimeValueDomain`,
+  require a present fact, and accept exactly when
+  `!domain.may_be_other && !domain.unknown`.
 - Synthetic probe calls and diagnostic filtering: demand `resolvedCall` and
   accept only `valid`.
 - Source-text searches that decide whether an import is type-only or runtime:

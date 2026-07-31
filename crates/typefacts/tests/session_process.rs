@@ -2,9 +2,85 @@ use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
     AnalysisDemand, CallKind, Callability, DemandGroup, Location, Producer, ReferenceSpace,
-    ResolvedCallValidity, Session,
+    ResolvedCallValidity, RuntimeValueDomain, Session,
     v3::{EntityDemand, FileChange},
 };
+
+#[test]
+fn runtime_value_domain_survives_full_delta_and_reuse_responses() {
+    let project = repository_root()
+        .join("internal/typefacts/testdata/runtime-value-domain/tsconfig.json")
+        .canonicalize()
+        .unwrap();
+    let path = project.parent().unwrap().join("domains.ts");
+    let source = fs::read_to_string(&path).unwrap();
+    let start = source.find("cleanupValue").unwrap();
+    let demand = EntityDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + "cleanupValue".len()) as u64,
+        },
+        runtime_value_domain: true,
+        ..EntityDemand::default()
+    };
+    let analysis = || AnalysisDemand {
+        entities: vec![demand.clone()],
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let full = session.analyze(&analysis()).unwrap();
+    assert_eq!(
+        full.entities().next().unwrap().runtime_value_domain,
+        Some(RuntimeValueDomain {
+            may_be_callable: true,
+            may_be_undefined: true,
+            may_be_other: false,
+            unknown: false,
+        })
+    );
+
+    let reused = session.analyze(&analysis()).unwrap();
+    assert_eq!(reused.entities().next(), full.entities().next());
+    assert!(session.take_last_table_changes().unwrap().unchanged);
+
+    session
+        .update([FileChange {
+            path: path.to_string_lossy().into_owned(),
+            source: b"export const cleanupValue = null as (() => void) | number;\n".to_vec(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let delta = session.analyze(&analysis()).unwrap();
+    assert_eq!(
+        delta.entities().next().unwrap().runtime_value_domain,
+        Some(RuntimeValueDomain {
+            may_be_callable: true,
+            may_be_undefined: false,
+            may_be_other: true,
+            unknown: false,
+        })
+    );
+    assert!(
+        session
+            .take_last_table_changes()
+            .unwrap()
+            .entity_paths
+            .iter()
+            .any(|changed| changed == path.to_string_lossy().as_ref())
+    );
+
+    let delta_reused = session.analyze(&analysis()).unwrap();
+    assert_eq!(delta_reused.entities().next(), delta.entities().next());
+    assert!(session.take_last_table_changes().unwrap().unchanged);
+    session.close().unwrap();
+}
 
 #[test]
 fn shared_transition_arena_matches_the_inline_process_adapter() {

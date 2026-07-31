@@ -148,6 +148,9 @@ func prepareRetainedContribution(
 		if entity.Callability != "" {
 			target.Callability = entity.Callability
 		}
+		if entity.RuntimeValueDomain != nil {
+			target.RuntimeValueDomain = entity.RuntimeValueDomain
+		}
 		if entity.ReferenceSpace != "" {
 			target.ReferenceSpace = entity.ReferenceSpace
 		}

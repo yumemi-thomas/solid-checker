@@ -82,7 +82,7 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	if *project == "" {
 		return errors.New("-project is required")
 	}
-	if *schema != typefacts.TypeFactsSchemaVersionV5 && *schema != typefacts.TypeFactsSchemaVersionV6 {
+	if *schema != typefacts.TypeFactsSchemaVersionV5 && *schema != typefacts.TypeFactsSchemaVersionV6 && *schema != typefacts.TypeFactsSchemaVersionV7 {
 		return fmt.Errorf("unsupported TypeFacts schema %d", *schema)
 	}
 	if *cpuProfile != "" {
@@ -120,6 +120,8 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 	schemaHash := typefacts.TypeFactsSchemaSHA256
 	if *schema == typefacts.TypeFactsSchemaVersionV6 {
 		schemaHash = typefacts.TypeFactsSchemaV6SHA256
+	} else if *schema == typefacts.TypeFactsSchemaVersionV7 {
+		schemaHash = typefacts.TypeFactsSchemaV7SHA256
 	}
 	handshake, err := wirecbor.Marshal(typefacts.ServiceHandshake{
 		Protocol:   typefacts.TypeFactsHandshakeProtocol,
@@ -147,7 +149,9 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer) 
 		trace.Stage("open", time.Since(started))
 	}
 	var session *typefacts.Session
-	if *schema == typefacts.TypeFactsSchemaVersionV6 {
+	if *schema == typefacts.TypeFactsSchemaVersionV7 {
+		session, err = typefacts.NewSessionV7(backend, projectID, trace)
+	} else if *schema == typefacts.TypeFactsSchemaVersionV6 {
 		session, err = typefacts.NewSessionV6(backend, projectID, trace)
 	} else {
 		session, err = typefacts.NewSession(backend, projectID, trace)

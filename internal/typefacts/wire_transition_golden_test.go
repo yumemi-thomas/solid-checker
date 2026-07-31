@@ -32,7 +32,7 @@ const deltaGoldenProjectID = "/p/tsconfig.json"
 // the same decoder and row writers.
 func transitionGoldenSteps(t *testing.T) []transitionGoldenStep {
 	t.Helper()
-	encoder := &wireTransitionEncoder{}
+	encoder := &wireTransitionEncoder{tableSchema: TypeFactsTableSchemaVersionV3}
 	packFull := func(table *FactTable) []byte {
 		t.Helper()
 		encoded, err := encoder.Encode(wireTransitionInput{

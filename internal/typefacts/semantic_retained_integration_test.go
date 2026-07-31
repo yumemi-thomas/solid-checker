@@ -59,11 +59,12 @@ func realisticDemands(t testing.TB, backend demandSource, ctx context.Context) [
 		}
 		for index, call := range calls {
 			demands = append(demands, typefacts.EntityDemand{
-				Location:       call.Callee,
-				Symbol:         true,
-				TypeDescriptor: index%2 == 0,
-				ResolvedCall:   true,
-				Async:          index%5 == 0,
+				Location:           call.Callee,
+				Symbol:             true,
+				TypeDescriptor:     index%2 == 0,
+				ResolvedCall:       true,
+				RuntimeValueDomain: index%3 == 0,
+				Async:              index%5 == 0,
 			})
 		}
 	}

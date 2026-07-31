@@ -118,7 +118,7 @@ func TestCancelledMaterializationCannotAuthenticateExactDeltaByGenerationAlone(t
 		symbolIDs:      map[SymbolID]struct{}{},
 		exact:          true,
 	}
-	manifestPlan, err := (&wireTransitionEncoder{}).Encode(wireTransitionInput{
+	manifestPlan, err := (&wireTransitionEncoder{tableSchema: TypeFactsTableSchemaVersionV3}).Encode(wireTransitionInput{
 		ProjectID:      session.projectID,
 		BaseStateToken: initialResponse.StateToken,
 		Base:           &base,
@@ -132,7 +132,7 @@ func TestCancelledMaterializationCannotAuthenticateExactDeltaByGenerationAlone(t
 	}
 	fallbackTarget := *target
 	fallbackTarget.transport = nil
-	fallbackPlan, err := (&wireTransitionEncoder{}).Encode(wireTransitionInput{
+	fallbackPlan, err := (&wireTransitionEncoder{tableSchema: TypeFactsTableSchemaVersionV3}).Encode(wireTransitionInput{
 		ProjectID:      session.projectID,
 		BaseStateToken: initialResponse.StateToken,
 		Base:           &base,

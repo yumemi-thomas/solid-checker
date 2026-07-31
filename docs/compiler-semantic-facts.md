@@ -1,6 +1,6 @@
 # Compiler semantic facts
 
-The package-contract generator can demand four facts without reconstructing
+The package-contract generator can demand five facts without reconstructing
 TypeScript semantics from text.
 
 ## Callability
@@ -14,6 +14,45 @@ The TypeScript-Go adapter obtains the expression type with
 `SignatureKindCall`. Construct signatures do not count. `any`, `unknown`,
 `never`, compiler error types, and missing types report `unknown`. No
 `TypeToString` result participates in this decision.
+
+## Runtime value domain
+
+`EntityDemand.runtimeValueDomain` produces
+`EntityFact.runtimeValueDomain: *RuntimeValueDomain` in Go and
+`Option<RuntimeValueDomain>` in Rust. The fact has four booleans:
+
+- `mayBeCallable`: at least one possible value has a TypeScript call signature.
+- `mayBeUndefined`: at least one possible value is `undefined`.
+- `mayBeOther`: at least one possible value is neither callable nor undefined.
+- `unknown`: TypeScript-Go exposed a dynamic, unresolved, circular, or recovery
+  domain that cannot be exhaustively classified.
+
+The checker adapter recursively ORs the classifications of actual union
+constituents. Non-union structured types are callable when
+`Checker.GetSignaturesOfType(type, SignatureKindCall)` returns a signature;
+this covers functions, overloads, callable interfaces, aliases, and callable
+intersections. `TypeFlagsUndefined` is undefined, and a remaining intersection
+that the checker proves assignable to its canonical undefined type is also
+undefined. Every other known, inhabited type is `other`.
+
+For an instantiable type, the adapter follows TypeScript-Go's resolved generic
+constraint before classifying it. Thus `T extends (() => void) | undefined`
+has the same closed domain as its constraint, while an unconstrained `T` is
+unknown. `never` is the known empty domain: all four fields are false. `any`,
+`unknown`, unconstrained or circular generics, missing types, and types carrying
+`TypeFlagsIncludesError` conservatively set all three `mayBe` fields and
+`unknown` to true. No rendered type text participates.
+
+For Solid 2 cleanup validation, a present fact is exclusively in the accepted
+runtime domain exactly when:
+
+```text
+mayBeOther == false && unknown == false
+```
+
+This accepts callable values, `undefined`, their unions, and the vacuous
+`never` domain. Consumers should not infer that a missing fact is valid; absence
+means it was not demanded.
 
 ## Resolved-call validity
 
@@ -130,6 +169,8 @@ they do not duplicate symbol rows. Retained per-file contributions track
 declaration and parameter source dependencies, so an edit rematerializes only
 facts that could otherwise carry stale locations.
 
-The lifecycle protocol/schema version is 4. The compact packed-table version is
-3 and the packed-delta version is 2. Go and Rust pin the same v4 schema digest,
-so mismatched producer/client versions fail during the startup handshake.
+The active lifecycle schema is v7 and the active Wire table model is v4. The
+packed transition framing remains version 1. Frozen lifecycle v5/v6 adapters
+continue to emit Wire table v3 and reject the new demand. Go and Rust pin the
+same per-schema digest, so mismatched producer/client versions fail during the
+startup handshake.

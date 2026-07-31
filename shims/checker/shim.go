@@ -50,7 +50,10 @@ const TypeFlagsUnknown = checker.TypeFlagsUnknown
 const TypeFlagsNever = checker.TypeFlagsNever
 const TypeFlagsUndefined = checker.TypeFlagsUndefined
 const TypeFlagsNull = checker.TypeFlagsNull
+const TypeFlagsTypeParameter = checker.TypeFlagsTypeParameter
+const TypeFlagsInstantiable = checker.TypeFlagsInstantiable
 const TypeFlagsUnion = checker.TypeFlagsUnion
+const TypeFlagsIntersection = checker.TypeFlagsIntersection
 const TypeFlagsIncludesError = checker.TypeFlagsIncludesError
 
 type Type = checker.Type

@@ -143,7 +143,7 @@ func demandListHash(demands []EntityDemand, seed maphash.Seed) uint64 {
 		}
 		buffer = append(buffer,
 			flag(demand.Symbol), flag(demand.TypeDescriptor), flag(demand.ResolvedCall),
-			flag(demand.Callability), flag(demand.References), flag(demand.Async), flag(demand.StructuralAccessor),
+			flag(demand.Callability), flag(demand.RuntimeValueDomain), flag(demand.References), flag(demand.Async), flag(demand.StructuralAccessor),
 			flag(demand.ReferenceSpace), flag(demand.RuntimeIdentity),
 		)
 		_, _ = digest.Write(buffer)

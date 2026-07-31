@@ -4,11 +4,13 @@ import "fmt"
 
 const TypeFactsSchemaVersionV5 uint64 = 5
 const TypeFactsSchemaVersionV6 uint64 = 6
+const TypeFactsSchemaVersionV7 uint64 = 7
 
 const (
 	TypeFactsHandshakeProtocol uint64 = 1
 	TypeFactsSchemaSHA256             = "sha256:a4dfff25783d9dd99cf0d44e315a7c01e6c7d132965431ab5624a0975fd549a8"
 	TypeFactsSchemaV6SHA256           = "sha256:adffdee1486dd009bb2599593e09edd4c48804678b4f23002f72e5693ffc606d"
+	TypeFactsSchemaV7SHA256           = "sha256:6939a166249694edf3cf4fe1f81bd687f9b572d331988f2faaa6f2277047d352"
 )
 
 type ServiceHandshake struct {
@@ -110,7 +112,7 @@ type LifecycleResponse struct {
 }
 
 func ValidateLifecycleRequest(request LifecycleRequest) error {
-	if request.Schema != TypeFactsSchemaVersionV5 && request.Schema != TypeFactsSchemaVersionV6 {
+	if request.Schema != TypeFactsSchemaVersionV5 && request.Schema != TypeFactsSchemaVersionV6 && request.Schema != TypeFactsSchemaVersionV7 {
 		return fmt.Errorf("unsupported TypeFacts schema %d", request.Schema)
 	}
 	if request.RequestID == 0 || request.ProjectID == "" || request.Generation == 0 {

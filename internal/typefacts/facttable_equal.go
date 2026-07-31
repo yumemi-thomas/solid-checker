@@ -88,12 +88,20 @@ func argumentMappingEqual(left, right ArgumentMapping) bool {
 		parameterFactEqual(left.Parameter, right.Parameter)
 }
 
+func runtimeValueDomainEqual(left, right *RuntimeValueDomain) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
+}
+
 func entityFactEqual(left, right EntityFact) bool {
 	return left.Location == right.Location &&
 		left.Symbol == right.Symbol &&
 		left.Callability == right.Callability &&
 		left.ReferenceSpace == right.ReferenceSpace &&
 		left.RuntimeIdentity == right.RuntimeIdentity &&
+		runtimeValueDomainEqual(left.RuntimeValueDomain, right.RuntimeValueDomain) &&
 		typeDescriptorEqual(left.TypeDescriptor, right.TypeDescriptor) &&
 		resolvedCallEqual(left.ResolvedCall, right.ResolvedCall)
 }

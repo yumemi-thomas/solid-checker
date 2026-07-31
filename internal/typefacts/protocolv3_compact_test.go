@@ -24,15 +24,16 @@ func TestCompactDemandsRoundTrip(t *testing.T) {
 		},
 		{
 			// A cross-file query location with every honoured flag set.
-			Location:        Location{Path: "/p/b.tsx", StartByte: 9, EndByte: 12},
-			QueryLocation:   &Location{Path: "/p/other.tsx", StartByte: 0, EndByte: 2},
-			Symbol:          true,
-			References:      true,
-			TypeDescriptor:  true,
-			ResolvedCall:    true,
-			Callability:     true,
-			ReferenceSpace:  true,
-			RuntimeIdentity: true,
+			Location:           Location{Path: "/p/b.tsx", StartByte: 9, EndByte: 12},
+			QueryLocation:      &Location{Path: "/p/other.tsx", StartByte: 0, EndByte: 2},
+			Symbol:             true,
+			References:         true,
+			TypeDescriptor:     true,
+			ResolvedCall:       true,
+			Callability:        true,
+			RuntimeValueDomain: true,
+			ReferenceSpace:     true,
+			RuntimeIdentity:    true,
 		},
 	}
 	compact := CompactDemandsV3From(demands)

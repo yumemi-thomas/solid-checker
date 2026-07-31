@@ -16,6 +16,7 @@ const (
 	wireTransitionEntityHasCallability
 	wireTransitionEntityHasReferenceSpace
 	wireTransitionEntityHasRuntimeIdentity
+	wireTransitionEntityHasRuntimeValueDomain
 )
 
 const (
@@ -145,6 +146,9 @@ func writeWireTransitionEntityRun(
 		if entity.RuntimeIdentity != "" {
 			flags |= wireTransitionEntityHasRuntimeIdentity
 		}
+		if entity.RuntimeValueDomain != nil {
+			flags |= wireTransitionEntityHasRuntimeValueDomain
+		}
 		w.u64(flags)
 		if entity.TypeDescriptor != nil {
 			w.internalTypeDescriptor(entity.TypeDescriptor)
@@ -162,6 +166,9 @@ func writeWireTransitionEntityRun(
 		}
 		if entity.RuntimeIdentity != "" {
 			w.text(string(entity.RuntimeIdentity))
+		}
+		if entity.RuntimeValueDomain != nil {
+			w.u64(wireTransitionRuntimeValueDomainBits(*entity.RuntimeValueDomain))
 		}
 		previousStart = start
 	}
@@ -468,6 +475,23 @@ func wireTransitionCallabilityCode(value Callability) (uint64, error) {
 	default:
 		return 0, fmt.Errorf("unknown callability %q", value)
 	}
+}
+
+func wireTransitionRuntimeValueDomainBits(value RuntimeValueDomain) uint64 {
+	var bits uint64
+	if value.MayBeCallable {
+		bits |= 1 << 0
+	}
+	if value.MayBeUndefined {
+		bits |= 1 << 1
+	}
+	if value.MayBeOther {
+		bits |= 1 << 2
+	}
+	if value.Unknown {
+		bits |= 1 << 3
+	}
+	return bits
 }
 
 func wireTransitionReferenceSpaceCode(value ReferenceSpace) (uint64, error) {
