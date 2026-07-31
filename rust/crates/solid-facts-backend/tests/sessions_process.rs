@@ -523,11 +523,15 @@ fn incremental_reactive_ir_matches_fresh_after_an_edit() {
     let (mut session, paths) = tracer_fixture_session(&typefacts);
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    incremental.build(&first, dialect::default_dialect().vocabulary).unwrap();
+    incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
 
     let edited = session.edit(vec![app_edit(&paths)], None).unwrap();
     let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, timings) = incremental.build(&edited, dialect::default_dialect().vocabulary).unwrap();
+    let (retained, timings) = incremental
+        .build(&edited, dialect::default_dialect().vocabulary)
+        .unwrap();
 
     assert_eq!(retained, fresh);
     assert!(!timings.reused);
@@ -580,7 +584,9 @@ fn incremental_contract_exports_drop_removed_names() {
     let (mut session, paths) = tracer_fixture_session(&typefacts);
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (initial, _) = incremental.build(&first, dialect::default_dialect().vocabulary).unwrap();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
     assert!(initial.contract_exports.contains_key("Bad"));
 
     let original = fs::read_to_string(&paths[0]).unwrap();
@@ -598,7 +604,9 @@ fn incremental_contract_exports_drop_removed_names() {
         )
         .unwrap();
     let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, _) = incremental.build(&edited, dialect::default_dialect().vocabulary).unwrap();
+    let (retained, _) = incremental
+        .build(&edited, dialect::default_dialect().vocabulary)
+        .unwrap();
 
     assert_eq!(retained, fresh);
     assert!(!retained.contract_exports.contains_key("Bad"));
@@ -613,7 +621,9 @@ fn incremental_contract_exports_refresh_changed_summaries() {
     let (mut session, paths) = tracer_fixture_session(&typefacts);
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (initial, _) = incremental.build(&first, dialect::default_dialect().vocabulary).unwrap();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
     let initial_good = initial.contract_exports.get("Good").cloned().unwrap();
 
     let original = fs::read_to_string(&paths[0]).unwrap();
@@ -635,7 +645,9 @@ fn incremental_contract_exports_refresh_changed_summaries() {
         )
         .unwrap();
     let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, _) = incremental.build(&edited, dialect::default_dialect().vocabulary).unwrap();
+    let (retained, _) = incremental
+        .build(&edited, dialect::default_dialect().vocabulary)
+        .unwrap();
 
     assert_eq!(retained, fresh);
     assert_ne!(
@@ -682,7 +694,9 @@ fn incremental_contract_exports_refresh_cross_file_reexports() {
             .unwrap();
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    let (initial, _) = incremental.build(&first, dialect::default_dialect().vocabulary).unwrap();
+    let (initial, _) = incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
     assert_eq!(
         initial
             .contract_exports
@@ -705,7 +719,9 @@ fn incremental_contract_exports_refresh_cross_file_reexports() {
         )
         .unwrap();
     let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, _) = incremental.build(&edited, dialect::default_dialect().vocabulary).unwrap();
+    let (retained, _) = incremental
+        .build(&edited, dialect::default_dialect().vocabulary)
+        .unwrap();
 
     assert_eq!(retained, fresh);
     assert_eq!(
@@ -727,7 +743,9 @@ fn incremental_reactive_ir_reuses_semantic_indexes_for_same_shape_body_edit() {
     let (mut session, paths) = tracer_fixture_session(&typefacts);
     let first = session.analyze().unwrap();
     let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-    incremental.build(&first, dialect::default_dialect().vocabulary).unwrap();
+    incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
 
     let original = fs::read_to_string(&paths[1]).unwrap();
     let changed = original.replacen("createSignal(0)", "createSignal(1)", 1);
@@ -744,7 +762,9 @@ fn incremental_reactive_ir_reuses_semantic_indexes_for_same_shape_body_edit() {
         )
         .unwrap();
     let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-    let (retained, timings) = incremental.build(&edited, dialect::default_dialect().vocabulary).unwrap();
+    let (retained, timings) = incremental
+        .build(&edited, dialect::default_dialect().vocabulary)
+        .unwrap();
 
     assert_eq!(retained, fresh);
     assert!(timings.typescript_indexes_reused);
@@ -791,7 +811,9 @@ fn incremental_owner_fragments_match_fresh_owner_fixtures() {
         .unwrap();
         let first = session.analyze().unwrap();
         let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
-        incremental.build(&first, dialect::default_dialect().vocabulary).unwrap();
+        incremental
+            .build(&first, dialect::default_dialect().vocabulary)
+            .unwrap();
         let edited = session
             .edit(
                 vec![SourceChange {
@@ -806,8 +828,11 @@ fn incremental_owner_fragments_match_fresh_owner_fixtures() {
                 None,
             )
             .unwrap();
-        let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
-        let (retained, timings) = incremental.build(&edited, dialect::default_dialect().vocabulary).unwrap();
+        let fresh =
+            solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
+        let (retained, timings) = incremental
+            .build(&edited, dialect::default_dialect().vocabulary)
+            .unwrap();
         assert_eq!(retained, fresh, "fixture {fixture_name}");
         assert_eq!(
             timings.owner_reused_files + timings.owner_recomputed_files,

@@ -193,6 +193,9 @@ pub(super) struct CallSiteLoading {
 /// never pay for an index.
 pub(super) struct SemanticLookup<'a> {
     facts: &'a ProjectFacts,
+    /// The Solid-version vocabulary this build analyzes with. Every consumer
+    /// of the lookup shares one dialect; a build never mixes two.
+    pub(super) dialect: &'a dyn solid_dialect::Dialect,
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
@@ -221,6 +224,7 @@ impl<'a> SemanticLookup<'a> {
         ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
         entities: &'a EntitySymbols,
         symbol_names: &'a HashMap<SymbolId, SymbolName>,
+        dialect: &'a dyn solid_dialect::Dialect,
     ) -> Self {
         debug_assert!(
             facts
@@ -232,6 +236,7 @@ impl<'a> SemanticLookup<'a> {
         );
         Self {
             facts,
+            dialect,
             ast_indexes,
             entities,
             symbol_names,
@@ -276,6 +281,7 @@ impl<'a> SemanticLookup<'a> {
                             call.static_callee(&file.source),
                             self.entities,
                             self.symbol_names,
+                            self.dialect,
                         )
                     })
                     .collect(),
@@ -284,7 +290,13 @@ impl<'a> SemanticLookup<'a> {
                     .jsx_elements
                     .iter()
                     .map(|element| {
-                        super::jsx_primitive_name(file, element, self.entities, self.symbol_names)
+                        super::jsx_primitive_name(
+                            file,
+                            element,
+                            self.entities,
+                            self.symbol_names,
+                            self.dialect,
+                        )
                     })
                     .collect(),
             }
@@ -567,6 +579,7 @@ impl<'a> SemanticLookup<'a> {
                                         boundary,
                                         self.entities,
                                         self.symbol_names,
+                                        self.dialect,
                                     )
                             });
                     }

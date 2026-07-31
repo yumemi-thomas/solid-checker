@@ -171,6 +171,7 @@ fn discover_typed_accessors(
     project_indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn solid_dialect::Dialect,
 ) -> Vec<TypedAccessorContribution> {
     let path_entities = project_indexes.entities_for_path(file.path.as_str());
     let mut contributions = Vec::new();
@@ -196,7 +197,7 @@ fn discover_typed_accessors(
         ) else {
             continue;
         };
-        if inside_effect_apply(file, call.callee, entities, symbol_names)
+        if inside_effect_apply(file, call.callee, entities, symbol_names, dialect)
             || enclosing_render_function(file, call.callee)
         {
             continue;
@@ -1270,6 +1271,7 @@ fn direct_reference_contributions(
         source_primitives,
         bundled_returns,
         source_kinds,
+        lookup,
         ..
     } = context;
     let mut contributions = Vec::new();
@@ -1296,7 +1298,7 @@ fn direct_reference_contributions(
         ) else {
             continue;
         };
-        if inside_effect_apply(file, reference_span, entities, symbol_names) {
+        if inside_effect_apply(file, reference_span, entities, symbol_names, lookup.dialect) {
             continue;
         }
         if let Some(call) = project_indexes
@@ -1735,6 +1737,7 @@ fn interprocedural_reads(
                     project_indexes,
                     entities,
                     symbol_names,
+                    lookup.dialect,
                 );
                 merge_typed_accessors(file.path.as_str(), &contributions, &indexes, &mut summaries);
             }
@@ -1761,6 +1764,7 @@ fn interprocedural_reads(
                         project_indexes,
                         entities,
                         symbol_names,
+                        lookup.dialect,
                     );
                     cache.insert(
                         file.path.clone(),
@@ -1859,6 +1863,7 @@ fn interprocedural_reads(
                                     call.static_callee(&file.source),
                                     entities,
                                     symbol_names,
+                                    lookup.dialect,
                                 )
                                 .and_then(|primitive| {
                                     bundled_returns.get(primitive.as_str()).cloned().map(

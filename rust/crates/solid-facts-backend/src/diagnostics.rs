@@ -205,9 +205,9 @@ impl DiagnosticSession {
             ));
         }
 
-        let (program, _) = self
-            .builder
-            .build_with_contracts_shared(facts, self.dialect.vocabulary, &contracts)?;
+        let (program, _) =
+            self.builder
+                .build_with_contracts_shared(facts, self.dialect.vocabulary, &contracts)?;
         let reactive_ir = ir_started.elapsed();
         let solve_started = Instant::now();
         let analysis = Arc::new(finish_analysis(

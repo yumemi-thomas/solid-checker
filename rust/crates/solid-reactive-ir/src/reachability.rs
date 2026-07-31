@@ -209,32 +209,18 @@ fn discover_reachability_file(
                 target: ReachabilityTarget::Symbol(symbol.clone()),
             });
         }
-        if matches!(
-            primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-            )
-            .as_deref(),
-            Some(
-                "createMemo"
-                    | "createEffect"
-                    | "createRenderEffect"
-                    | "createTrackedEffect"
-                    | "createSignal"
-                    | "createStore"
-                    | "createProjection"
-                    | "createOptimistic"
-                    | "createOptimisticStore"
-                    | "dynamic"
-                    | "createReaction"
-                    | "untrack"
-                    | "onSettled"
-                    | "action"
-            )
-        ) {
+        if primitive_name(
+            file.path.as_str(),
+            call.callee,
+            call.static_callee(&file.source),
+            entities,
+            symbol_names,
+            lookup.dialect,
+        )
+        .as_ref()
+        .and_then(super::PrimitiveName::primitive)
+        .is_some_and(|primitive| lookup.dialect.invokes_its_callbacks(primitive))
+        {
             for function in &functions {
                 if call
                     .arguments
@@ -685,32 +671,18 @@ pub(super) fn reachable_call_multiplicity(
                     roots.push(target);
                 }
             }
-            if matches!(
-                primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    entities,
-                    symbol_names,
-                )
-                .as_deref(),
-                Some(
-                    "createMemo"
-                        | "createEffect"
-                        | "createRenderEffect"
-                        | "createSignal"
-                        | "createStore"
-                        | "createProjection"
-                        | "createOptimistic"
-                        | "createOptimisticStore"
-                        | "dynamic"
-                        | "createTrackedEffect"
-                        | "createReaction"
-                        | "untrack"
-                        | "onSettled"
-                        | "action"
-                )
-            ) {
+            if primitive_name(
+                file.path.as_str(),
+                call.callee,
+                call.static_callee(&file.source),
+                entities,
+                symbol_names,
+                lookup.dialect,
+            )
+            .as_ref()
+            .and_then(super::PrimitiveName::primitive)
+            .is_some_and(|primitive| lookup.dialect.invokes_its_callbacks(primitive))
+            {
                 for index in functions_by_path
                     .get(file.path.as_str())
                     .into_iter()

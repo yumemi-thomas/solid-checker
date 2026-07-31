@@ -1,5 +1,7 @@
 //! Static validation for Solid 2 API shapes and explicit refresh writes.
 
+use solid_dialect::Primitive;
+
 use super::*;
 
 pub(super) struct StaticDirectiveFileResult {
@@ -26,6 +28,7 @@ impl StaticApiContext<'_> {
             write_action_obligations: Vec::new(),
         };
         let allowed = allowed_callback_spans(file, self.lookup);
+        let dialect = self.lookup.dialect;
         for call in &file.ast.calls {
             let Some(primitive) = primitive_name(
                 file.path.as_str(),
@@ -33,34 +36,43 @@ impl StaticApiContext<'_> {
                 call.static_callee(&file.source),
                 self.entities,
                 self.symbol_names,
+                dialect,
             ) else {
                 continue;
             };
-            if primitive == "createEffect"
-                && (call.arguments.len() < 2
-                    || call.arguments[1].value == solid_facts::ast::ArgumentValueKind::Undefined)
+            // `primitive` stays as the spelling to report; `kind` is what the
+            // rules below branch on. A name this dialect does not export
+            // resolves to `None` and matches nothing.
+            let kind = primitive.primitive();
+            // Where the effect function has to be is a dialect question, and
+            // the same one `callback_positions` already answers: 2.0 puts it
+            // at index 1 of `createEffect(compute, apply)`, 1.x at index 0 of
+            // `createEffect(fn, value?)`. Hardcoding index 1 would fire this
+            // rule on every correct 1.x effect.
+            if kind == Some(Primitive::CreateEffect)
+                && let Some(&index) = dialect.callback_positions(Primitive::CreateEffect).last()
+                && call.arguments.get(index).is_none_or(|argument| {
+                    argument.value == solid_facts::ast::ArgumentValueKind::Undefined
+                })
             {
+                let signature = dialect.effect_signature();
                 result.violations.push(StaticViolation {
                     id: "SC7001".into(),
                     rule: "missing-effect-function".into(),
-                    message: "createEffect is called without an effect function; the Solid 2.0 signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect"
-                        .into(),
-                    hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.".into(),
+                    message: format!(
+                        "createEffect is called without an effect function; the signature is {}, where {}",
+                        signature.signature, signature.roles
+                    ),
+                    hint: signature.remedy.into(),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
                 });
             }
-            let options_index = match primitive.as_str() {
-                "createMemo" | "createSignal" | "createOptimistic" => Some(1),
-                "createStore"
-                | "createProjection"
-                | "createOptimisticStore"
-                | "createEffect"
-                | "createRenderEffect" => Some(2),
-                "createTrackedEffect" => Some(1),
-                _ => None,
-            };
+            // Where each primitive takes its options object -- a second index
+            // vocabulary, and the dialect's to answer: 2.0's numbers read
+            // 1.x's `createMemo(fn, seed)` seed as an options object.
+            let options_index = kind.and_then(|kind| dialect.options_argument(kind));
             if let Some(options_index) = options_index
                 && call.arguments.get(options_index).is_some_and(|argument| {
                     argument.boolean_properties.iter().any(|property| {
@@ -78,28 +90,32 @@ impl StaticApiContext<'_> {
                     message: format!(
                         "{primitive} is marked sync: true but its computation can return a Promise or AsyncIterable; a sync node must settle in the same flush and cannot suspend, so an async result throws at runtime"
                     ),
-                    hint: "Drop sync: true and let the read suspend to a <Loading> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here.".into(),
+                    hint: format!(
+                        "Drop sync: true and let the read suspend to a <{}> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here.",
+                        dialect.boundary_name(solid_dialect::Boundary::Async)
+                    ),
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
                 });
             }
-            if !matches!(primitive.as_str(), "refresh" | "affects") {
+            let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {
                 continue;
-            }
+            };
+            let is_refresh = kind == Primitive::Refresh;
             let invalid_arity = call.arguments.is_empty()
-                || primitive == "refresh" && call.arguments.len() != 1
-                || primitive == "affects" && call.arguments.len() > 2;
+                || is_refresh && call.arguments.len() != 1
+                || !is_refresh && call.arguments.len() > 2;
             if invalid_arity {
                 result.violations.push(StaticViolation {
                     id: "SC7003".into(),
                     rule: format!("invalid-{primitive}-target"),
-                    message: if primitive == "refresh" {
+                    message: if is_refresh {
                         "refresh() takes exactly one argument: the derived signal, store, or projection to recompute, or a thunk to re-run".into()
                     } else {
                         "affects() takes a source target and optionally an array of store keys".into()
                     },
-                    hint: if primitive == "refresh" {
+                    hint: if is_refresh {
                         "Pass one target: refresh(source) to recompute a derived source, or refresh(() => expr) to re-run an expression and return its value.".into()
                     } else {
                         "Call affects(source) for signals, or affects(store, [\"key\"]) to scope invalidation to specific store paths.".into()
@@ -118,7 +134,7 @@ impl StaticApiContext<'_> {
                     message: format!(
                         "{primitive}() received a wrapper, read value, or literal instead of the original Solid source binding; the brand on the binding created by createSignal, createMemo, or createStore is how Solid identifies what to recompute"
                     ),
-                    hint: if primitive == "refresh" {
+                    hint: if is_refresh {
                         "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: refresh(user), not refresh(user()). To refresh an ad-hoc expression, use the thunk form refresh(() => expr).".into()
                     } else {
                         "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: affects(user), not affects(user()).".into()
@@ -158,7 +174,7 @@ impl StaticApiContext<'_> {
                 });
                 continue;
             };
-            if primitive == "affects" {
+            if !is_refresh {
                 if kind == ReactiveSourceKind::Accessor && call.arguments.len() == 2 {
                     result.violations.push(StaticViolation {
                         id: "SC7004".into(),
@@ -213,8 +229,14 @@ impl StaticApiContext<'_> {
                         .get(symbol)
                         .copied()
                         .unwrap_or(false),
-                    context: analysis_context(file, call.span, self.entities, self.symbol_names)
-                        .into(),
+                    context: analysis_context(
+                        file,
+                        call.span,
+                        self.entities,
+                        self.symbol_names,
+                        dialect,
+                    )
+                    .into(),
                 });
             }
         }

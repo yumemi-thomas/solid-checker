@@ -7,19 +7,21 @@
 
 use std::collections::HashMap;
 
+use solid_dialect::{CleanupRule, Dialect, Primitive};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use typefacts::{Callability, Location, ResolvedCallValidity};
 
 use super::{
-    EntitySymbols, Fix, InvalidCleanupReturn, LeafOwnerOperation, SemanticLookup, SymbolId,
-    TextEdit, UnresolvedCleanupReturn, containing_ast_function, location, primitive_name,
+    EntitySymbols, Fix, InvalidCleanupReturn, LeafOwnerOperation, PrimitiveName, SemanticLookup,
+    SymbolId, TextEdit, UnresolvedCleanupReturn, containing_ast_function, location, primitive_name,
 };
 
 pub(super) fn leaf_owner_operations_for_file(
     file: &FileFacts,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
 ) -> Vec<LeafOwnerOperation> {
     let mut operations = Vec::new();
     let function_spans = file
@@ -35,11 +37,27 @@ pub(super) fn leaf_owner_operations_for_file(
             owner_call.static_callee(&file.source),
             entities,
             symbol_names,
+            dialect,
         );
-        let Some(owner @ ("onSettled" | "createTrackedEffect")) = owner.as_deref() else {
+        let Some(owner) = owner.as_ref() else {
             continue;
         };
-        let Some(region) = owner_call.arguments.first().map(|argument| argument.span) else {
+        // The leaf owners: an owner whose callback is the end of the ownership
+        // chain, so anything created inside it never gets disposed.
+        //
+        // Asked of the dialect rather than matched here. The pair this used to
+        // hardcode -- `onSettled` and `createTrackedEffect` -- is 2.0-only, so
+        // under 1.x these rules could not fire at all. Taking the argument
+        // index from the same answer also drops the assumption that the
+        // callback is always first.
+        let Some(region) = owner
+            .primitive()
+            .into_iter()
+            .flat_map(|primitive| dialect.callback_owners(primitive))
+            .find(|(_, kind)| *kind == solid_dialect::CallbackOwner::Leaf)
+            .and_then(|(index, _)| owner_call.arguments.get(*index))
+            .map(|argument| argument.span)
+        else {
             continue;
         };
         for call in &file.ast.calls {
@@ -52,38 +70,39 @@ pub(super) fn leaf_owner_operations_for_file(
                 call.static_callee(&file.source),
                 entities,
                 symbol_names,
+                dialect,
             );
             let Some(primitive) = primitive else {
                 continue;
             };
-            let forbidden = matches!(
-                primitive.as_str(),
-                "onCleanup"
-                    | "flush"
-                    | "createMemo"
-                    | "createEffect"
-                    | "createRenderEffect"
-                    | "createTrackedEffect"
-                    | "createProjection"
-                    | "createRoot"
-                    | "createOwner"
-                    | "mapArray"
-                    | "children"
-            ) || matches!(
-                primitive.as_str(),
-                "createSignal" | "createStore" | "createOptimistic" | "createOptimisticStore"
-            ) && call.arguments.first().is_some_and(|argument| {
-                function_spans
-                    .iter()
-                    .any(|function| argument.span.contains(*function))
-            });
+            let rule = primitive
+                .primitive()
+                .map(|primitive| dialect.cleanup_rule(primitive));
+            let forbidden = match rule {
+                Some(CleanupRule::Always) => true,
+                // `createSignal(fn)` registers work; `createSignal(0)` does
+                // not. Flattening this arm into the unconditional one would
+                // turn every plainly seeded signal under a leaf owner into a
+                // false positive.
+                Some(CleanupRule::WhenFirstArgumentIsFunction) => {
+                    call.arguments.first().is_some_and(|argument| {
+                        function_spans
+                            .iter()
+                            .any(|function| argument.span.contains(*function))
+                    })
+                }
+                Some(CleanupRule::Never) | None => false,
+            };
             if forbidden {
-                let fix = (primitive == "onCleanup")
+                // Only `onCleanup` has a rewrite: return the cleanup instead
+                // of registering it. The other forbidden primitives have no
+                // mechanical equivalent.
+                let fix = (primitive.primitive() == Some(Primitive::OnCleanup))
                     .then(|| terminal_cleanup_fix(file, region, call))
                     .flatten();
                 operations.push(LeafOwnerOperation {
                     primitive: primitive.to_string(),
-                    owner: owner.into(),
+                    owner: owner.to_string(),
                     location: location(file.path.shared(), call.callee),
                     fix,
                 });
@@ -105,19 +124,28 @@ where
     let mut invalid = Vec::new();
     let mut unresolved = Vec::new();
     for call in &file.ast.calls {
+        let dialect = lookup.dialect;
         let primitive = primitive_name(
             file.path.as_str(),
             call.callee,
             call.static_callee(&file.source),
             entities,
             symbol_names,
+            dialect,
         );
-        let callback_index = match primitive.as_deref() {
-            Some("onSettled" | "createTrackedEffect" | "createReaction") => 0,
-            Some("createEffect" | "createRenderEffect") => 1,
-            _ => continue,
+        // Returning a cleanup is a per-dialect idea: 1.x threads an effect's
+        // return value to the next run as `prev`, so nothing there reads a
+        // returned function as cleanup and this loop never starts.
+        let Some(kind) = primitive.as_ref().and_then(PrimitiveName::primitive) else {
+            continue;
         };
-        let Some(argument) = call.arguments.get(callback_index) else {
+        if !dialect.accepts_cleanup_return(kind) {
+            continue;
+        }
+        let [callback_index] = dialect.callback_positions(kind) else {
+            continue;
+        };
+        let Some(argument) = call.arguments.get(*callback_index) else {
             continue;
         };
         let Some((callback_file, callback)) = callback_function(lookup, file, argument.span) else {

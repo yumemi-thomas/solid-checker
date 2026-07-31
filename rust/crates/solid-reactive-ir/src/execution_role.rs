@@ -7,12 +7,84 @@
 
 use std::collections::HashMap;
 
+use solid_dialect::{Dialect, Execution, Primitive};
 use solid_facts::core::Span;
 
 use super::{
-    EntitySymbols, ExecutionRole, SemanticLookup, SymbolId, containing_ast_function,
-    enclosing_function_label, function_binding_name, jsx_primitive_name, location, primitive_name,
+    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, containing_ast_function,
+    enclosing_function_label, function_binding_name, jsx_primitive_name, known_primitive, location,
+    primitive_name,
 };
+
+/// The effect primitives: the ones 2.0 spells `(compute, apply)`.
+fn is_effect(primitive: Primitive) -> bool {
+    matches!(
+        primitive,
+        Primitive::CreateEffect | Primitive::CreateRenderEffect
+    )
+}
+
+/// The argument an effect runs *after* its compute, if this dialect has one.
+///
+/// 2.0's `createEffect(compute, apply)` has it at index 1. 1.x's second
+/// argument is a seed value threaded to the next run as `prev`, so 1.x has
+/// none — and this used to be the literal `1` for both. A read in a 1.x seed
+/// would be classified `EffectApply`, reporting it as running in a phase that
+/// version does not have.
+fn effect_apply_argument(dialect: &dyn Dialect, primitive: Primitive) -> Option<usize> {
+    if !is_effect(primitive) {
+        return None;
+    }
+    dialect
+        .callback_executions(primitive)
+        .iter()
+        .find(|(_, execution)| *execution == Execution::Deferred)
+        .map(|(index, _)| *index)
+}
+
+/// Whether this primitive's *first* argument is a tracked compute.
+///
+/// Every callback-taking primitive except the deferred executors.
+/// `createEffect(compute, apply)` qualifies even though its callback position
+/// is 1: argument 0 is the compute, and it is tracked.
+fn tracks_first_argument(dialect: &dyn Dialect, primitive: Primitive) -> bool {
+    !dialect.callback_positions(primitive).is_empty() && !dialect.runs_callback_deferred(primitive)
+}
+
+/// The argument positions holding a callback that runs outside the
+/// surrounding tracking scope — an effect's apply argument, or a deferred
+/// executor's whole callback.
+///
+/// A strict subset of [`Dialect::callback_positions`], which also answers for
+/// `createMemo`, `createSignal` and the rest of the tracked index-0 set. The
+/// two questions are independent: position says *where* a callback sits,
+/// [`Dialect::runs_callback_deferred`] says *how it executes*.
+fn deferred_callback_positions(dialect: &dyn Dialect, primitive: Primitive) -> &'static [usize] {
+    if is_effect(primitive) || dialect.runs_callback_deferred(primitive) {
+        dialect.callback_positions(primitive)
+    } else {
+        &[]
+    }
+}
+
+/// Whether *any* callback position of `primitive` satisfies `matches`.
+///
+/// [`Dialect::callback_positions`] returns a slice, and a caller that reaches
+/// for `.first()` silently drops the rest of it. Every 2.0 primitive answers a
+/// single position, so the mistake is invisible today; 1.x's
+/// `createResource(source, fetcher)` answers two positions, and reading only
+/// the first would stop recognising the fetcher as a callback.
+fn any_callback_position(
+    dialect: &dyn Dialect,
+    primitive: Primitive,
+    matches: impl FnMut(usize) -> bool,
+) -> bool {
+    dialect
+        .callback_positions(primitive)
+        .iter()
+        .copied()
+        .any(matches)
+}
 
 pub(super) fn execution_role(
     facts: &solid_facts::compiler::ExecutionMap,
@@ -64,26 +136,28 @@ pub(super) fn semantic_execution_role(
     if let Some(role) = named_callback_execution_role(file, span, entities, symbol_names, lookup) {
         return role;
     }
+    let dialect = lookup.dialect;
     if file.ast.arguments_containing(span).any(|(call, index)| {
-        index == 1
+        primitive_name(
+            file.path.as_str(),
+            call.callee,
+            call.static_callee(&file.source),
+            entities,
+            symbol_names,
+            dialect,
+        )
+        .as_ref()
+        .and_then(PrimitiveName::primitive)
+        .and_then(|primitive| effect_apply_argument(dialect, primitive))
+            == Some(index)
             && direct_callback_contains(file, call.arguments[index].span, span)
-            && primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-            )
-            .is_some_and(|primitive| {
-                matches!(primitive.as_str(), "createEffect" | "createRenderEffect")
-            })
     }) {
         return ExecutionRole::EffectApply;
     }
     if allowed.iter().any(|region| region.contains(span)) {
         return ExecutionRole::DeferredCallback;
     }
-    if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names) {
+    if let Some(role) = control_flow_execution_role(file, span, entities, symbol_names, dialect) {
         return role;
     }
     if file
@@ -108,22 +182,11 @@ pub(super) fn semantic_execution_role(
                 call.static_callee(&file.source),
                 entities,
                 symbol_names,
+                dialect,
             )
-            .is_some_and(|primitive| {
-                matches!(
-                    primitive.as_str(),
-                    "createMemo"
-                        | "createEffect"
-                        | "createRenderEffect"
-                        | "createTrackedEffect"
-                        | "createSignal"
-                        | "createStore"
-                        | "createProjection"
-                        | "createOptimistic"
-                        | "createOptimisticStore"
-                        | "dynamic"
-                )
-            })
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
+            .is_some_and(|primitive| tracks_first_argument(dialect, primitive))
     }) {
         return ExecutionRole::TrackedJsx;
     }
@@ -178,17 +241,16 @@ pub(super) fn control_flow_execution_role(
     span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
 ) -> Option<ExecutionRole> {
     let element = file
         .ast
         .jsx_containing(span)
         .filter(|element| {
-            jsx_primitive_name(file, element, entities, symbol_names).is_some_and(|primitive| {
-                matches!(
-                    primitive.as_str(),
-                    "For" | "Repeat" | "Show" | "Match" | "Switch"
-                )
-            })
+            jsx_primitive_name(file, element, entities, symbol_names, dialect)
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
         })
         .min_by_key(|element| element.span.end - element.span.start)?;
     let callback = file
@@ -218,6 +280,7 @@ pub(super) fn named_callback_execution_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
+    let dialect = lookup.dialect;
     let primitives = lookup.primitives(file);
     let callback = file.ast.functions_body_containing(span).find(|function| {
         let Some(symbol) = function_symbol(file, function, entities) else {
@@ -229,32 +292,22 @@ pub(super) fn named_callback_execution_role(
             .or_else(|| function_binding_name(file, function))
             .map(|name| file.source_text(name.span).unwrap_or_default());
         file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-            let primitive = &primitives.calls[call_index];
-            let argument_index = match primitive.as_deref() {
-                Some("createEffect" | "createRenderEffect") => 1,
-                Some(
-                    "createMemo"
-                    | "createTrackedEffect"
-                    | "createSignal"
-                    | "createStore"
-                    | "createProjection"
-                    | "createOptimistic"
-                    | "createOptimisticStore"
-                    | "dynamic"
-                    | "flush"
-                    | "untrack"
-                    | "onSettled"
-                    | "createReaction"
-                    | "action",
-                ) => 0,
-                _ => return false,
+            let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
+                return false;
             };
-            call.arguments.get(argument_index).is_some_and(|argument| {
-                argument_references_callback_symbol(file, argument, symbol, entities, symbol_names)
-                    || argument
+            any_callback_position(dialect, primitive, |argument_index| {
+                call.arguments.get(argument_index).is_some_and(|argument| {
+                    argument_references_callback_symbol(
+                        file,
+                        argument,
+                        symbol,
+                        entities,
+                        symbol_names,
+                    ) || argument
                         .identifier_properties
                         .iter()
                         .any(|property| binding_name == file.source_text(property.span))
+                })
             })
         }) || file
             .ast
@@ -262,11 +315,8 @@ pub(super) fn named_callback_execution_role(
             .iter()
             .enumerate()
             .any(|(element_index, element)| {
-                primitives.jsx[element_index]
-                    .as_deref()
-                    .is_some_and(|primitive| {
-                        matches!(primitive, "For" | "Repeat" | "Show" | "Match" | "Switch")
-                    })
+                known_primitive(&primitives.jsx[element_index])
+                    .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
                     && file.ast.identifiers_within(element.span).any(|identifier| {
                         identifier.role == solid_facts::ast::IdentifierRole::Reference
                             && !file.ast.jsx_containing(identifier.span).any(|nested| {
@@ -284,10 +334,10 @@ pub(super) fn named_callback_execution_role(
         return Some(ExecutionRole::DeferredCallback);
     }
     if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        primitives.calls[call_index]
-            .as_deref()
-            .is_some_and(|primitive| matches!(primitive, "createEffect" | "createRenderEffect"))
-            && call.arguments.get(1).is_some_and(|argument| {
+        known_primitive(&primitives.calls[call_index])
+            .and_then(|primitive| effect_apply_argument(dialect, primitive))
+            .and_then(|index| call.arguments.get(index))
+            .is_some_and(|argument| {
                 function_symbol(file, callback, entities).is_some_and(|symbol| {
                     argument_references_callback_symbol(
                         file,
@@ -308,19 +358,9 @@ pub(super) fn named_callback_execution_role(
         return Some(ExecutionRole::EffectApply);
     }
     if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        matches!(
-            primitives.calls[call_index].as_deref(),
-            Some(
-                "createMemo"
-                    | "createTrackedEffect"
-                    | "createSignal"
-                    | "createStore"
-                    | "createProjection"
-                    | "createOptimistic"
-                    | "createOptimisticStore"
-                    | "dynamic"
-            )
-        ) && call.arguments.first().is_some_and(|argument| {
+        known_primitive(&primitives.calls[call_index]).is_some_and(|primitive| {
+            tracks_first_argument(dialect, primitive) && !is_effect(primitive)
+        }) && call.arguments.first().is_some_and(|argument| {
             function_symbol(file, callback, entities).is_some_and(|symbol| {
                 entities.get(&location(file.path.shared(), argument.span)) == Some(symbol)
             })
@@ -329,14 +369,13 @@ pub(super) fn named_callback_execution_role(
         return Some(ExecutionRole::TrackedJsx);
     }
     if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        matches!(
-            primitives.calls[call_index].as_deref(),
-            Some("flush" | "untrack" | "onSettled" | "createReaction" | "action")
-        ) && call.arguments.first().is_some_and(|argument| {
-            function_symbol(file, callback, entities).is_some_and(|symbol| {
-                entities.get(&location(file.path.shared(), argument.span)) == Some(symbol)
+        known_primitive(&primitives.calls[call_index])
+            .is_some_and(|primitive| dialect.runs_callback_deferred(primitive))
+            && call.arguments.first().is_some_and(|argument| {
+                function_symbol(file, callback, entities).is_some_and(|symbol| {
+                    entities.get(&location(file.path.shared(), argument.span)) == Some(symbol)
+                })
             })
-        })
     }) {
         return Some(ExecutionRole::DeferredCallback);
     }
@@ -440,15 +479,14 @@ pub(super) fn allowed_callback_spans(
     file: &solid_facts::FileFacts,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<Span> {
+    let dialect = lookup.dialect;
     let primitives = lookup.primitives(file);
     let mut spans = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
-        let primitive = &primitives.calls[call_index];
-        let indices: &[usize] = match primitive.as_deref() {
-            Some("createEffect" | "createRenderEffect") => &[1],
-            Some("flush" | "untrack" | "onSettled" | "createReaction" | "action") => &[0],
-            _ => &[],
-        };
+        let indices: &[usize] = known_primitive(&primitives.calls[call_index])
+            .map_or(&[], |primitive| {
+                deferred_callback_positions(dialect, primitive)
+            });
         for index in indices {
             if let Some(argument) = call.arguments.get(*index) {
                 spans.push(argument.span);

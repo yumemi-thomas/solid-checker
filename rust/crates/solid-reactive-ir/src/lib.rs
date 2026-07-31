@@ -43,7 +43,7 @@ use reachability::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use solid_dialect::Dialect;
+use solid_dialect::{Dialect, Primitive};
 use solid_facts::core::{SourceHash, SourcePath, Span};
 use solid_facts::{FileFacts, ProjectFacts};
 use static_api::StaticApiContext;
@@ -1423,8 +1423,10 @@ fn discover_file_sources(
             call.static_callee(&file.source),
             entities,
             symbol_names,
+            lookup.dialect,
         );
-        if primitive.as_deref() == Some("action") {
+        let resolved = known_primitive(&primitive);
+        if resolved == Some(Primitive::Action) {
             if let Some(name) = binding.names.first() {
                 let location = location(file.path.shared(), name.span);
                 if let Some(symbol) = entities.get(&location) {
@@ -1439,7 +1441,7 @@ fn discover_file_sources(
             }
             continue;
         }
-        if primitive.as_deref() == Some("dynamic") {
+        if resolved == Some(Primitive::Dynamic) {
             if let Some(name) = binding.names.first() {
                 let declaration = location(file.path.shared(), name.span);
                 if let Some(symbol) = entities.get(&declaration) {
@@ -1458,15 +1460,8 @@ fn discover_file_sources(
             continue;
         }
         if !matches!(
-            primitive.as_deref(),
-            Some(
-                "createSignal"
-                    | "createMemo"
-                    | "createStore"
-                    | "createProjection"
-                    | "createOptimistic"
-                    | "createOptimisticStore"
-            )
+            resolved,
+            Some(primitive) if lookup.dialect.creates_reactive_source(primitive)
         ) && !primitive
             .as_deref()
             .is_some_and(|primitive| bundled_returns.contains_key(primitive))
@@ -1489,11 +1484,14 @@ fn discover_file_sources(
                     ),
                 ));
                 let go_returned_source = binding.shape == solid_facts::ast::BindingShape::Array
-                    && matches!(primitive.as_deref(), Some("createSignal" | "createStore"))
+                    && matches!(
+                        resolved,
+                        Some(Primitive::CreateSignal | Primitive::CreateStore)
+                    )
                     && go_binding_pattern_accepts_call(file.source.as_ref(), binding, call);
                 result.source_phases.push((
                     symbol.clone(),
-                    if go_returned_source && primitive.as_deref() == Some("createStore") {
+                    if go_returned_source && resolved == Some(Primitive::CreateStore) {
                         2
                     } else if go_returned_source {
                         0
@@ -1535,8 +1533,8 @@ fn discover_file_sources(
                         .and_then(|primitive| bundled_returns.get(primitive))
                         .is_some_and(|returned| returned.kind == "store-path")
                         || matches!(
-                            primitive.as_deref(),
-                            Some("createStore" | "createOptimisticStore" | "createProjection")
+                            resolved,
+                            Some(primitive) if lookup.dialect.returns_store(primitive)
                         )
                     {
                         ReactiveSourceKind::Store
@@ -1561,7 +1559,7 @@ fn discover_file_sources(
                 }
             }
         }
-        if primitive.as_deref() != Some("createMemo")
+        if resolved != Some(Primitive::CreateMemo)
             && let Some(name) = if binding.shape == solid_facts::ast::BindingShape::Array {
                 binding.array_slots.get(1).and_then(Option::as_ref)
             } else {
@@ -1972,8 +1970,10 @@ fn discover_sources(
                         call.static_callee(&file.source),
                         entities,
                         symbol_names,
+                        semantic_lookup.dialect,
                     );
-                    if primitive.as_deref() == Some("action") {
+                    let resolved = known_primitive(&primitive);
+                    if resolved == Some(Primitive::Action) {
                         if let Some(name) = binding.names.first() {
                             let location = location(file.path.shared(), name.span);
                             if let Some(symbol) = entities.get(&location) {
@@ -1988,7 +1988,7 @@ fn discover_sources(
                         }
                         continue;
                     }
-                    if primitive.as_deref() == Some("dynamic") {
+                    if resolved == Some(Primitive::Dynamic) {
                         if let Some(name) = binding.names.first() {
                             let declaration = location(file.path.shared(), name.span);
                             if let Some(symbol) = entities.get(&declaration) {
@@ -2003,15 +2003,9 @@ fn discover_sources(
                         continue;
                     }
                     if !matches!(
-                        primitive.as_deref(),
-                        Some(
-                            "createSignal"
-                                | "createMemo"
-                                | "createStore"
-                                | "createProjection"
-                                | "createOptimistic"
-                                | "createOptimisticStore"
-                        )
+                        resolved,
+                        Some(primitive)
+                            if semantic_lookup.dialect.creates_reactive_source(primitive)
                     ) && !primitive
                         .as_deref()
                         .is_some_and(|primitive| bundled_returns.contains_key(primitive))
@@ -2036,8 +2030,8 @@ fn discover_sources(
                             let go_returned_source = binding.shape
                                 == solid_facts::ast::BindingShape::Array
                                 && matches!(
-                                    primitive.as_deref(),
-                                    Some("createSignal" | "createStore")
+                                    resolved,
+                                    Some(Primitive::CreateSignal | Primitive::CreateStore)
                                 )
                                 && go_binding_pattern_accepts_call(
                                     file.source.as_ref(),
@@ -2046,8 +2040,7 @@ fn discover_sources(
                                 );
                             source_phases.insert(
                                 symbol.clone(),
-                                if go_returned_source && primitive.as_deref() == Some("createStore")
-                                {
+                                if go_returned_source && resolved == Some(Primitive::CreateStore) {
                                     2
                                 } else if go_returned_source {
                                     0
@@ -2090,12 +2083,9 @@ fn discover_sources(
                                     .and_then(|primitive| bundled_returns.get(primitive))
                                     .is_some_and(|returned| returned.kind == "store-path")
                                     || matches!(
-                                        primitive.as_deref(),
-                                        Some(
-                                            "createStore"
-                                                | "createOptimisticStore"
-                                                | "createProjection"
-                                        )
+                                        resolved,
+                                        Some(primitive)
+                                            if semantic_lookup.dialect.returns_store(primitive)
                                     )
                                 {
                                     ReactiveSourceKind::Store
@@ -2114,7 +2104,7 @@ fn discover_sources(
                             }
                         }
                     }
-                    if primitive.as_deref() != Some("createMemo")
+                    if resolved != Some(Primitive::CreateMemo)
                         && let Some(name) =
                             if binding.shape == solid_facts::ast::BindingShape::Array {
                                 binding.array_slots.get(1).and_then(Option::as_ref)
@@ -2269,25 +2259,32 @@ fn discover_sources(
     }
     for file in &facts.files {
         for element in &file.ast.jsx_elements {
-            let primitive = jsx_primitive_name(file, element, entities, symbol_names);
+            let dialect = semantic_lookup.dialect;
+            let primitive = jsx_primitive_name(file, element, entities, symbol_names, dialect);
             let keyed = element
                 .boolean_properties
                 .iter()
                 .find(|property| file.source_text(property.name) == Some("keyed"))
                 .map(|property| property.value);
-            let custom_key = keyed.is_none()
-                && element
+            let key = match keyed {
+                Some(true) => solid_dialect::KeyForm::Keyed,
+                Some(false) => solid_dialect::KeyForm::Unkeyed,
+                None if element
                     .properties
                     .iter()
-                    .any(|property| file.source_text(*property) == Some("keyed"));
-            let parameter_indices: &[usize] = match (primitive.as_deref(), keyed) {
-                (Some("Show" | "Match"), Some(true)) => &[],
-                (Some("Show" | "Match"), _) => &[0],
-                (Some("For"), _) if custom_key => &[0, 1],
-                (Some("For"), Some(false)) => &[0],
-                (Some("For"), _) => &[1],
-                _ => &[],
+                    .any(|property| file.source_text(*property) == Some("keyed")) =>
+                {
+                    solid_dialect::KeyForm::CustomKey
+                }
+                None => solid_dialect::KeyForm::Absent,
             };
+            // Which children parameters are accessors is the dialect's
+            // question. The match this replaced knew `<For>` and not
+            // `<Index>`, which are exact mirrors in 1.x, so every 1.x
+            // `<Index>` item accessor would be invisible to source discovery.
+            let parameter_indices = known_primitive(&primitive).map_or(&[][..], |primitive| {
+                dialect.children_accessor_parameters(primitive, key)
+            });
             if parameter_indices.is_empty() {
                 continue;
             }
@@ -2326,9 +2323,15 @@ fn discover_sources(
                 call.static_callee(&file.source),
                 entities,
                 symbol_names,
+                semantic_lookup.dialect,
             )
+            .as_ref()
+            .and_then(PrimitiveName::primitive)
             .is_some_and(|primitive| {
-                matches!(primitive.as_str(), "createEffect" | "createRenderEffect")
+                matches!(
+                    primitive,
+                    Primitive::CreateEffect | Primitive::CreateRenderEffect
+                )
             }) {
                 continue;
             }
@@ -2525,8 +2528,9 @@ fn discover_sources(
                             call.static_callee(&file.source),
                             entities,
                             symbol_names,
+                            semantic_lookup.dialect,
                         );
-                        if primitive.as_deref() != Some("merge") {
+                        if known_primitive(&primitive) != Some(Primitive::Merge) {
                             return None;
                         }
                         call.arguments.iter().find_map(|argument| {
@@ -2738,7 +2742,7 @@ fn build_with_contracts_measured_incremental(
     let substage_started = Instant::now();
     let mut resolved_contracts = resolve_contract_imports(facts, contracts, entities);
     build_timings.contract_resolution = substage_started.elapsed();
-    let semantic_lookup = SemanticLookup::new(facts, ast_indexes, entities, &symbol_names);
+    let semantic_lookup = SemanticLookup::new(facts, ast_indexes, entities, &symbol_names, dialect);
     let semantic_lookup = &semantic_lookup;
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
@@ -3050,19 +3054,22 @@ fn build_with_contracts_measured_incremental(
                             candidate.static_callee(&file.source),
                             entities,
                             &symbol_names,
+                            dialect,
                         )?;
-                        matches!(
-                            primitive.as_str(),
-                            "createMemo"
-                                | "createEffect"
-                                | "createRenderEffect"
-                                | "createProjection"
-                                | "createSignal"
-                                | "createStore"
-                                | "createOptimistic"
-                                | "createOptimisticStore"
-                        )
-                        .then(|| format!("{primitive} async computation"))
+                        // A tracked callback is what makes this a computation
+                        // whose reads matter after an await. The list this
+                        // replaced was 2.0's eight; under 1.x three of them
+                        // resolve to nothing and `createComputed` was absent.
+                        primitive
+                            .primitive()
+                            .is_some_and(|resolved| {
+                                dialect.callback_executions(resolved).iter().any(
+                                    |(_, execution)| {
+                                        *execution == solid_dialect::Execution::Tracked
+                                    },
+                                )
+                            })
+                            .then(|| format!("{primitive} async computation"))
                     })
                 }) else {
                     continue;
@@ -3365,7 +3372,7 @@ fn build_with_contracts_measured_incremental(
         interprocedural.contract_generation_obligations.to_vec();
     leaf_operations.extend(
         parallel_file_results(&facts.files, |file| {
-            leaf_owner_operations_for_file(file, entities, &symbol_names)
+            leaf_owner_operations_for_file(file, entities, &symbol_names, semantic_lookup.dialect)
         })
         .into_iter()
         .flatten(),
@@ -3403,8 +3410,9 @@ fn build_with_contracts_measured_incremental(
                     call.static_callee(&file.source),
                     entities,
                     &symbol_names,
+                    dialect,
                 )
-                .filter(|primitive| is_created_primitive(primitive))
+                .filter(|primitive| is_created_primitive(dialect, primitive))
             {
                 push_directive_creation(
                     &mut directive_creations,
@@ -3849,6 +3857,7 @@ fn find_missing_owners(
                         call.static_callee(&file.source),
                         entities,
                         symbol_names,
+                        lookup.dialect,
                     )
                 })
                 .collect::<Vec<_>>();
@@ -3858,14 +3867,8 @@ fn find_missing_owners(
                 .iter()
                 .zip(&call_primitives)
                 .filter_map(|(call, primitive)| {
-                    let argument = match primitive.as_deref() {
-                        Some(
-                            "createRoot" | "createMemo" | "createEffect" | "createRenderEffect"
-                            | "createProjection" | "createSignal" | "createStore",
-                        ) => 0,
-                        Some("runWithOwner") => 1,
-                        _ => return None,
-                    };
+                    let argument =
+                        owner_providing_argument(known_primitive(primitive), lookup.dialect)?;
                     call.arguments.get(argument).and_then(|argument| {
                         matches!(
                             argument.value,
@@ -4151,8 +4154,12 @@ fn find_missing_owners(
                 Some(file.source_text(element.name.span).unwrap_or_default()),
                 entities,
                 symbol_names,
+                lookup.dialect,
             );
-            if boundary.as_deref() != Some("Loading") {
+            if !boundary
+                .as_deref()
+                .is_some_and(|tag| lookup.dialect.is_async_boundary(tag))
+            {
                 continue;
             }
             let context = owner_context_at(
@@ -4187,6 +4194,7 @@ fn discover_owner_file(
     indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
 ) -> CachedOwnerFile {
     let call_primitives = file
         .ast
@@ -4199,6 +4207,7 @@ fn discover_owner_file(
                 call.static_callee(&file.source),
                 entities,
                 symbol_names,
+                dialect,
             )
         })
         .collect::<Vec<_>>();
@@ -4208,14 +4217,7 @@ fn discover_owner_file(
         .iter()
         .zip(&call_primitives)
         .filter_map(|(call, primitive)| {
-            let argument = match primitive.as_deref() {
-                Some(
-                    "createRoot" | "createMemo" | "createEffect" | "createRenderEffect"
-                    | "createProjection" | "createSignal" | "createStore",
-                ) => 0,
-                Some("runWithOwner") => 1,
-                _ => return None,
-            };
+            let argument = owner_providing_argument(known_primitive(primitive), dialect)?;
             call.arguments.get(argument).and_then(|argument| {
                 matches!(
                     argument.value,
@@ -4392,8 +4394,11 @@ fn discover_owner_file(
             Some(file.source_text(element.name.span).unwrap_or_default()),
             entities,
             symbol_names,
+            dialect,
         );
-        if boundary.as_deref() == Some("Loading")
+        if boundary
+            .as_deref()
+            .is_some_and(|tag| dialect.is_async_boundary(tag))
             && !inside_owner_providing_region(&providing_regions, element.span)
         {
             requirements.push(OwnerRequirementCandidate {
@@ -4464,7 +4469,7 @@ fn find_missing_owners_incremental(
     for (path, discovered) in parallel_slice_results(&recomputed, |file| {
         (
             file.path.clone(),
-            discover_owner_file(file, indexes, entities, symbol_names),
+            discover_owner_file(file, indexes, entities, symbol_names, lookup.dialect),
         )
     }) {
         cache.insert(path, discovered);
@@ -4709,26 +4714,45 @@ fn push_owner_requirement(
         });
     }
 }
+/// The argument whose callback runs under an owner this call creates (or, for
+/// `runWithOwner`, supplies). The two owner passes share this answer; each
+/// used to keep its own literal list, and the lists disagreed with every
+/// primitive outside seven names.
+fn owner_providing_argument(primitive: Option<Primitive>, dialect: &dyn Dialect) -> Option<usize> {
+    dialect
+        .callback_owners(primitive?)
+        .iter()
+        .find(|(_, owner)| *owner == solid_dialect::CallbackOwner::Creates)
+        .map(|(index, _)| *index)
+}
+
 fn containing_leaf_owner(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
 ) -> Option<String> {
     file.ast
         .arguments_containing(span)
         .find_map(|(call, index)| {
-            if index != 0 {
-                return None;
-            }
             let owner = primitive_name(
                 file.path.as_str(),
                 call.callee,
                 call.static_callee(&file.source),
                 entities,
                 symbol_names,
+                dialect,
             )?;
-            matches!(owner.as_str(), "onSettled" | "createTrackedEffect").then(|| owner.to_string())
+            owner
+                .primitive()
+                .map(|primitive| dialect.callback_owners(primitive))
+                .unwrap_or(&[])
+                .iter()
+                .any(|(argument, kind)| {
+                    *argument == index && *kind == solid_dialect::CallbackOwner::Leaf
+                })
+                .then(|| owner.to_string())
         })
 }
 
@@ -4739,17 +4763,21 @@ fn read_is_under_loading(
     symbol_names: &HashMap<SymbolId, SymbolId>,
 ) -> bool {
     let entities = lookup.entities();
-    if file
-        .ast
-        .jsx_containing(span)
-        .any(|element| jsx_element_is_loading(file, element, entities, symbol_names))
-    {
+    if file.ast.jsx_containing(span).any(|element| {
+        jsx_element_is_loading(file, element, entities, symbol_names, lookup.dialect)
+    }) {
         return true;
     }
     if file.ast.jsx_containing(span).any(|element| {
         jsx_target_function(lookup, file, element).is_some_and(|(target_file, target)| {
             target_file.ast.jsx_within(target.body).any(|candidate| {
-                jsx_element_is_loading(target_file, candidate, entities, symbol_names)
+                jsx_element_is_loading(
+                    target_file,
+                    candidate,
+                    entities,
+                    symbol_names,
+                    lookup.dialect,
+                )
             })
         })
     }) {
@@ -4769,10 +4797,9 @@ fn read_is_under_loading(
     let call_sites = lookup.jsx_call_site_loading(file.path.as_str(), owner.span);
     call_sites.loading_wrapped
         || (call_sites.any
-            && file
-                .ast
-                .jsx_within(owner.body)
-                .any(|candidate| jsx_element_is_loading(file, candidate, entities, symbol_names)))
+            && file.ast.jsx_within(owner.body).any(|candidate| {
+                jsx_element_is_loading(file, candidate, entities, symbol_names, lookup.dialect)
+            }))
 }
 
 fn jsx_element_is_loading(
@@ -4780,6 +4807,7 @@ fn jsx_element_is_loading(
     element: &solid_facts::ast::JsxElementFact,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
 ) -> bool {
     primitive_name(
         file.path.as_str(),
@@ -4787,6 +4815,7 @@ fn jsx_element_is_loading(
         Some(file.source_text(element.name.span).unwrap_or_default()),
         entities,
         symbol_names,
+        dialect,
     )
     .as_deref()
         == Some("Loading")
@@ -4997,20 +5026,30 @@ fn inside_effect_apply(
     span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
 ) -> bool {
     file.ast.arguments_containing(span).any(|(call, index)| {
-        index == 1
-            && matches!(
-                primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    entities,
-                    symbol_names,
-                )
-                .as_deref(),
-                Some("createEffect" | "createRenderEffect")
-            )
+        primitive_name(
+            file.path.as_str(),
+            call.callee,
+            call.static_callee(&file.source),
+            entities,
+            symbol_names,
+            dialect,
+        )
+        .as_ref()
+        .and_then(PrimitiveName::primitive)
+        .is_some_and(|primitive| {
+            matches!(
+                primitive,
+                Primitive::CreateEffect | Primitive::CreateRenderEffect
+            ) && dialect
+                .callback_executions(primitive)
+                .iter()
+                .any(|(argument, execution)| {
+                    *argument == index && *execution == solid_dialect::Execution::Deferred
+                })
+        })
     })
 }
 
@@ -5077,12 +5116,12 @@ fn function_is_solid_callback(
             .ast
             .functions_within(element.span)
             .any(|outer| outer.span != function.span && outer.span.contains(function.span))
-            && jsx_primitive_name(file, element, entities, symbol_names).is_some_and(|primitive| {
-                matches!(
-                    primitive.as_str(),
-                    "For" | "Repeat" | "Show" | "Match" | "Switch"
-                )
-            })
+            && jsx_primitive_name(file, element, entities, symbol_names, lookup.dialect)
+                .as_ref()
+                .and_then(PrimitiveName::primitive)
+                .is_some_and(|primitive| {
+                    lookup.dialect.renders_children_through_callback(primitive)
+                })
     }) {
         return true;
     }
@@ -5167,6 +5206,7 @@ fn analysis_context(
     span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
 ) -> String {
     let enclosing = enclosing_function_label(file, span);
     if let Some(rendering) = file
@@ -5199,23 +5239,34 @@ fn analysis_context(
             call.static_callee(&file.source),
             entities,
             symbol_names,
+            dialect,
         )
     {
-        let phase = match (primitive.as_str(), argument) {
-            ("createEffect" | "createRenderEffect", 0) => Some("compute"),
-            ("createEffect" | "createRenderEffect", 1) => Some("apply callback"),
-            (
-                "createMemo"
-                | "createSignal"
-                | "createStore"
-                | "createProjection"
-                | "createOptimistic"
-                | "createOptimisticStore"
-                | "dynamic",
-                0,
-            ) => Some("compute"),
-            _ => None,
-        };
+        // Which phase of a primitive an argument is, asked of the dialect
+        // rather than matched here. The pair this had hardcoded is 2.0's:
+        // `createEffect(compute, apply)`. 1.x's second argument is a seed
+        // value threaded to the next run as `prev`, so a read in it would be
+        // described as living in an "apply callback" that 1.x does not have.
+        let phase = primitive.primitive().and_then(|resolved| {
+            dialect
+                .callback_executions(resolved)
+                .iter()
+                .find(|(index, _)| *index == argument)
+                .and_then(|(_, execution)| match execution {
+                    solid_dialect::Execution::Tracked => Some("compute"),
+                    // Only an effect's deferred argument is an apply phase; a
+                    // deferred executor's callback keeps its enclosing label.
+                    solid_dialect::Execution::Deferred
+                        if matches!(
+                            resolved,
+                            Primitive::CreateEffect | Primitive::CreateRenderEffect
+                        ) =>
+                    {
+                        Some("apply callback")
+                    }
+                    _ => None,
+                })
+        });
         if let Some(phase) = phase {
             return format!("{primitive} {phase}");
         }
@@ -5657,6 +5708,7 @@ impl LocalAccessContext<'_> {
                                 call.callee,
                                 self.entities,
                                 self.symbol_names,
+                                self.lookup.dialect,
                             )
                             .is_some()
                             || named_callback_execution_role(
@@ -5722,6 +5774,7 @@ impl LocalAccessContext<'_> {
                             call.callee,
                             self.entities,
                             self.symbol_names,
+                            self.lookup.dialect,
                         )
                         .map(Into::into),
                         under_loading: read_is_under_loading(
@@ -5805,6 +5858,7 @@ impl LocalAccessContext<'_> {
                             call.span,
                             self.entities,
                             self.symbol_names,
+                            self.lookup.dialect,
                         )
                         .into(),
                     }));
@@ -5822,6 +5876,7 @@ impl LocalAccessContext<'_> {
                             call.span,
                             self.entities,
                             self.symbol_names,
+                            self.lookup.dialect,
                         )
                         .into(),
                     }));
@@ -5929,6 +5984,7 @@ impl LocalAccessContext<'_> {
                         member.span,
                         self.entities,
                         self.symbol_names,
+                        self.lookup.dialect,
                     )
                     .map(Into::into),
                     under_loading: read_is_under_loading(
@@ -6026,6 +6082,7 @@ impl LocalAccessContext<'_> {
                     element.name.span,
                     self.entities,
                     self.symbol_names,
+                    self.lookup.dialect,
                 )
                 .map(Into::into),
                 under_loading: read_is_under_loading(
@@ -6066,101 +6123,67 @@ fn append_local_access_result_owned(target: &mut LocalAccessResult, source: Loca
         .extend(source.write_action_obligations);
 }
 
+/// A callee or JSX tag, resolved against the dialect's vocabulary.
+///
+/// Two things the engine needs and [`solid_dialect::Primitive`] alone cannot
+/// give it, which is why this type exists:
+///
+/// 1. A name the dialect does not export is not an error. `useUser()` is a
+///    call like any other, and the bundled contracts are keyed by *spelling*,
+///    so an unrecognised callee has to keep the one it was written with.
+/// 2. Even a recognised primitive is spelled into diagnostics and hints, and
+///    the spelling is dialect-specific.
+///
+/// So the resolved primitive and the source spelling travel together. Ask
+/// [`PrimitiveName::primitive`] the vocabulary questions and
+/// [`PrimitiveName::as_str`] only the ones a human will read.
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum PrimitiveName {
-    Action,
-    Children,
-    CreateEffect,
-    CreateMemo,
-    CreateOptimistic,
-    CreateOptimisticStore,
-    CreateOwner,
-    CreateProjection,
-    CreateReaction,
-    CreateRenderEffect,
-    CreateRoot,
-    CreateSignal,
-    CreateStore,
-    CreateTrackedEffect,
-    Dynamic,
-    Flush,
-    For,
-    Loading,
-    MapArray,
-    Match,
-    OnCleanup,
-    OnSettled,
-    Repeat,
-    Show,
-    Switch,
-    Untrack,
+    /// A primitive this dialect exports, with the dialect's spelling for it.
+    Known(Primitive, &'static str),
+    /// A name this dialect does not export, carrying the spelling it was
+    /// written with.
     Other(String),
 }
 
 impl PrimitiveName {
-    fn new(name: &str) -> Self {
-        match name {
-            "action" => Self::Action,
-            "children" => Self::Children,
-            "createEffect" => Self::CreateEffect,
-            "createMemo" => Self::CreateMemo,
-            "createOptimistic" => Self::CreateOptimistic,
-            "createOptimisticStore" => Self::CreateOptimisticStore,
-            "createOwner" => Self::CreateOwner,
-            "createProjection" => Self::CreateProjection,
-            "createReaction" => Self::CreateReaction,
-            "createRenderEffect" => Self::CreateRenderEffect,
-            "createRoot" => Self::CreateRoot,
-            "createSignal" => Self::CreateSignal,
-            "createStore" => Self::CreateStore,
-            "createTrackedEffect" => Self::CreateTrackedEffect,
-            "dynamic" => Self::Dynamic,
-            "flush" => Self::Flush,
-            "For" => Self::For,
-            "Loading" => Self::Loading,
-            "mapArray" => Self::MapArray,
-            "Match" => Self::Match,
-            "onCleanup" => Self::OnCleanup,
-            "onSettled" => Self::OnSettled,
-            "Repeat" => Self::Repeat,
-            "Show" => Self::Show,
-            "Switch" => Self::Switch,
-            "untrack" => Self::Untrack,
-            _ => Self::Other(name.to_owned()),
+    /// Resolves a source-level name against the dialect's vocabulary.
+    fn new(name: &str, dialect: &dyn Dialect) -> Self {
+        match dialect
+            .primitive(name)
+            .and_then(|primitive| Some((primitive, dialect.name_of(primitive)?)))
+        {
+            Some((primitive, spelling)) => Self::Known(primitive, spelling),
+            None => Self::Other(name.to_owned()),
         }
     }
 
+    /// The dialect primitive this name denotes, or `None` when the dialect
+    /// does not export it.
+    fn primitive(&self) -> Option<Primitive> {
+        match self {
+            Self::Known(primitive, _) => Some(*primitive),
+            Self::Other(_) => None,
+        }
+    }
+
+    /// The source spelling. For messages and for the spelling-keyed bundled
+    /// contract table -- never for asking what a callee *is*.
     fn as_str(&self) -> &str {
         match self {
-            Self::Action => "action",
-            Self::Children => "children",
-            Self::CreateEffect => "createEffect",
-            Self::CreateMemo => "createMemo",
-            Self::CreateOptimistic => "createOptimistic",
-            Self::CreateOptimisticStore => "createOptimisticStore",
-            Self::CreateOwner => "createOwner",
-            Self::CreateProjection => "createProjection",
-            Self::CreateReaction => "createReaction",
-            Self::CreateRenderEffect => "createRenderEffect",
-            Self::CreateRoot => "createRoot",
-            Self::CreateSignal => "createSignal",
-            Self::CreateStore => "createStore",
-            Self::CreateTrackedEffect => "createTrackedEffect",
-            Self::Dynamic => "dynamic",
-            Self::Flush => "flush",
-            Self::For => "For",
-            Self::Loading => "Loading",
-            Self::MapArray => "mapArray",
-            Self::Match => "Match",
-            Self::OnCleanup => "onCleanup",
-            Self::OnSettled => "onSettled",
-            Self::Repeat => "Repeat",
-            Self::Show => "Show",
-            Self::Switch => "Switch",
-            Self::Untrack => "untrack",
+            Self::Known(_, spelling) => spelling,
             Self::Other(name) => name,
         }
     }
+}
+
+/// The dialect primitive a resolved callee denotes.
+///
+/// The `Option<PrimitiveName>` the resolvers return already means "did this
+/// callee resolve at all"; this flattens it with "and is it vocabulary the
+/// dialect knows", which is the question nearly every classifier asks.
+fn known_primitive(name: &Option<PrimitiveName>) -> Option<Primitive> {
+    name.as_ref().and_then(PrimitiveName::primitive)
 }
 
 impl std::ops::Deref for PrimitiveName {
@@ -6189,17 +6212,18 @@ fn primitive_name(
     static_callee: Option<&str>,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
 ) -> Option<PrimitiveName> {
     let location = location(path, span);
     if let Some(symbol) = entities.get(&location) {
         symbol_names
             .get(symbol)
-            .map(|name| PrimitiveName::new(name))
+            .map(|name| PrimitiveName::new(name, dialect))
             .or_else(|| {
                 let property = static_callee?.rsplit('.').next()?;
                 symbol_names
                     .get(format!("{symbol}::{property}").as_str())
-                    .map(|name| PrimitiveName::new(name))
+                    .map(|name| PrimitiveName::new(name, dialect))
             })
     } else {
         None
@@ -6211,6 +6235,7 @@ fn jsx_primitive_name(
     element: &solid_facts::ast::JsxElementFact,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    dialect: &dyn Dialect,
 ) -> Option<PrimitiveName> {
     primitive_name(
         file.path.as_str(),
@@ -6218,12 +6243,13 @@ fn jsx_primitive_name(
         Some(file.source_text(element.name.span).unwrap_or_default()),
         entities,
         symbol_names,
+        dialect,
     )
     .or_else(|| {
         file.ast
             .imports
             .iter()
-            .filter(|import| import.module == "solid-js")
+            .filter(|import| dialect.owns_module(&import.module))
             .flat_map(|import| &import.bindings)
             .find_map(|binding| {
                 (binding.kind != solid_facts::ast::ImportKind::Namespace
@@ -6231,7 +6257,7 @@ fn jsx_primitive_name(
                 .then_some(binding.imported.as_deref())
                 .flatten()
             })
-            .map(PrimitiveName::new)
+            .map(|name| PrimitiveName::new(name, dialect))
     })
 }
 
@@ -6281,14 +6307,26 @@ mod tests {
     }
 
     #[test]
-    fn known_primitive_names_use_integer_variants() {
+    fn primitive_names_resolve_through_the_dialect() {
         assert!(matches!(
-            PrimitiveName::new("createEffect"),
-            PrimitiveName::CreateEffect
+            PrimitiveName::new("createEffect", &solid_dialect::Solid2),
+            PrimitiveName::Known(Primitive::CreateEffect, "createEffect")
+        ));
+        // A name outside the dialect's vocabulary keeps its own spelling and
+        // answers no vocabulary question.
+        assert!(matches!(
+            PrimitiveName::new("projectSpecificHelper", &solid_dialect::Solid2),
+            PrimitiveName::Other(_)
+        ));
+        // The same spelling can be vocabulary in one dialect and not the
+        // other: `flush` is 2.0-only, `batch` is 1.x-only.
+        assert!(matches!(
+            PrimitiveName::new("flush", &solid_dialect::Solid1x),
+            PrimitiveName::Other(_)
         ));
         assert!(matches!(
-            PrimitiveName::new("projectSpecificHelper"),
-            PrimitiveName::Other(_)
+            PrimitiveName::new("batch", &solid_dialect::Solid1x),
+            PrimitiveName::Known(Primitive::Batch, "batch")
         ));
     }
 
@@ -6542,7 +6580,9 @@ mod tests {
             unchanged: true,
             ..solid_facts::TypeScriptChanges::default()
         });
-        let (next, next_timings) = incremental.build(&next_facts, &solid_dialect::Solid2).unwrap();
+        let (next, next_timings) = incremental
+            .build(&next_facts, &solid_dialect::Solid2)
+            .unwrap();
 
         assert_eq!(initial, fresh);
         assert_eq!(reused, fresh);
@@ -6561,7 +6601,8 @@ mod tests {
 
         let (initial, _) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
         incremental.retain_for_idle(CacheRetention::Balanced);
-        let (same_generation, same_timings) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
+        let (same_generation, same_timings) =
+            incremental.build(&first, &solid_dialect::Solid2).unwrap();
         incremental.retain_for_idle(CacheRetention::Compact);
 
         let mut next_facts = empty_project(2);
@@ -6569,7 +6610,9 @@ mod tests {
             unchanged: true,
             ..solid_facts::TypeScriptChanges::default()
         });
-        let (next, next_timings) = incremental.build(&next_facts, &solid_dialect::Solid2).unwrap();
+        let (next, next_timings) = incremental
+            .build(&next_facts, &solid_dialect::Solid2)
+            .unwrap();
 
         assert_eq!(initial, fresh);
         assert_eq!(same_generation, fresh);
@@ -6584,8 +6627,12 @@ mod tests {
         let facts = empty_project(1);
         let mut incremental = IncrementalBuilder::default();
 
-        let (initial, initial_timings) = incremental.build_shared(&facts, &solid_dialect::Solid2).unwrap();
-        let (reused, reused_timings) = incremental.build_shared(&facts, &solid_dialect::Solid2).unwrap();
+        let (initial, initial_timings) = incremental
+            .build_shared(&facts, &solid_dialect::Solid2)
+            .unwrap();
+        let (reused, reused_timings) = incremental
+            .build_shared(&facts, &solid_dialect::Solid2)
+            .unwrap();
 
         assert!(Arc::ptr_eq(&initial, &reused));
         assert!(!initial_timings.reused);
@@ -6722,7 +6769,8 @@ mod tests {
                 &symbols_by_id,
                 &solid_dialect::Solid2,
                 &changes
-            ).is_some()
+            )
+            .is_some()
         );
         let fresh = typescript_index_cache(&current);
         assert_eq!(patched.symbol_alias_targets, fresh.symbol_alias_targets);
@@ -6789,7 +6837,8 @@ mod tests {
                 &symbols_by_id,
                 &solid_dialect::Solid2,
                 &changes
-            ).is_some()
+            )
+            .is_some()
         );
         assert!(
             patched
@@ -6838,7 +6887,8 @@ mod tests {
                 &symbols_by_id,
                 &solid_dialect::Solid2,
                 &changes
-            ).is_some()
+            )
+            .is_some()
         );
         assert_eq!(
             patched.source_declarations,
@@ -6892,7 +6942,8 @@ mod tests {
                 &symbols_by_id,
                 &solid_dialect::Solid2,
                 &changes
-            ).is_some()
+            )
+            .is_some()
         );
         assert_eq!(
             patched.source_declarations["root"].location.path,
@@ -6965,7 +7016,8 @@ mod tests {
                 &symbols_by_id,
                 &solid_dialect::Solid2,
                 &changes
-            ).is_some()
+            )
+            .is_some()
         );
         assert!(
             patched
@@ -7032,7 +7084,8 @@ mod tests {
                 &symbols_by_id,
                 &solid_dialect::Solid2,
                 &changes
-            ).is_none()
+            )
+            .is_none()
         );
         assert_eq!(patched.aliases, typescript_index_cache(&old).aliases);
     }

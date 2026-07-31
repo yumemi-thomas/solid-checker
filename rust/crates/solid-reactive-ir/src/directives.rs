@@ -1,6 +1,8 @@
 //! Interprocedural discovery of reactive primitives created during directive
 //! application.
 
+use solid_dialect::Dialect;
+
 use super::*;
 
 pub(super) struct DirectiveCreationCollector<'a, 'c> {
@@ -88,8 +90,9 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
                 call.static_callee(&file.source),
                 self.lookup.entities(),
                 self.symbol_names,
+                self.lookup.dialect,
             )
-            .filter(|primitive| is_created_primitive(primitive))
+            .filter(|primitive| is_created_primitive(self.lookup.dialect, primitive))
             {
                 push_directive_creation(
                     self.creations,
@@ -110,22 +113,12 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
     }
 }
 
-pub(super) fn is_created_primitive(primitive: &str) -> bool {
-    matches!(
-        primitive,
-        "createSignal"
-            | "createMemo"
-            | "createStore"
-            | "createProjection"
-            | "createOptimistic"
-            | "createOptimisticStore"
-            | "createEffect"
-            | "createRenderEffect"
-            | "createTrackedEffect"
-            | "createReaction"
-            | "createRoot"
-            | "createOwner"
-    )
+/// A name this dialect does not export is not one of its primitives, so it
+/// cannot create anything a directive application would leak.
+pub(super) fn is_created_primitive(dialect: &dyn Dialect, primitive: &PrimitiveName) -> bool {
+    primitive
+        .primitive()
+        .is_some_and(|primitive| dialect.creates_directive_owner(primitive))
 }
 
 pub(super) fn push_directive_creation(
