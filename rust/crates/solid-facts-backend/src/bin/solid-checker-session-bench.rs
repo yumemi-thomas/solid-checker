@@ -237,6 +237,10 @@ fn enforce_transfer_limits(
     Ok(())
 }
 
+// One more parameter than clippy's default: the iteration needs the session,
+// the edit it alternates, the counters, the IR builder and the dialect, and
+// bundling them into a struct would only move the same list behind a name.
+#[allow(clippy::too_many_arguments)]
 fn analyze_iteration(
     session: &mut NativeIncrementalSession,
     edit_path: Option<&Path>,

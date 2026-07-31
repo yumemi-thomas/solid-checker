@@ -38,13 +38,10 @@ use typefacts::Location;
 pub(super) struct UpstreamCompatContext<'a> {
     pub(super) lookup: &'a SemanticLookup<'a>,
     pub(super) entities: &'a EntitySymbols,
-    pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     /// Proven reactive accessors, by symbol: display name and declaration.
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     /// Whether each proven source is an accessor or a store path.
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
-    /// Proven setters, by symbol.
-    pub(super) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool)>,
 }
 
 /// Runs every upstream-compat rule over one file.
