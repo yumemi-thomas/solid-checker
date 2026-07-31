@@ -7,20 +7,28 @@ use std::collections::{HashMap, HashSet};
 use solid_facts::FileFacts;
 use typefacts::v3::EntityDemand;
 
+use crate::dialect::Dialect;
 use crate::{
     BackendError, callee_property_location, structural_accessor_spans, typefacts_location,
 };
 
-pub(crate) fn plan(files: &[FileFacts]) -> Result<Vec<EntityDemand>, BackendError> {
+pub(crate) fn plan(
+    dialect: &'static Dialect,
+    files: &[FileFacts],
+) -> Result<Vec<EntityDemand>, BackendError> {
     let mut demands = Vec::new();
     for file in files {
-        plan_file(file, &mut demands)?;
+        plan_file(dialect, file, &mut demands)?;
     }
     stable_deduplicate(&mut demands);
     Ok(demands)
 }
 
-fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), BackendError> {
+fn plan_file(
+    dialect: &'static Dialect,
+    file: &FileFacts,
+    demands: &mut Vec<EntityDemand>,
+) -> Result<(), BackendError> {
     let path = file.path.to_string();
     let structural_accessors = structural_accessor_spans(file);
     let mut symbol_spans = HashMap::new();
@@ -83,14 +91,21 @@ fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), Ba
     // property name. Both are positions where handing over an accessor
     // *function* is provably not what the author meant, and the rule that
     // reports it needs the interpolated identifier to resolve to a symbol.
-    for template in &file.ast.template_literals {
-        for interpolated in &template.expressions {
-            add_symbol(*interpolated, false);
+    //
+    // Only the dialect whose catalog has that rule asks for them. These are
+    // the cheapest demands in the plan individually and the most numerous in
+    // template-heavy code, and a v2 project must not pay for a v1 rule: the
+    // demand cache keys on the dialect, so each gets its own plan.
+    if dialect.vocabulary.version() == solid_dialect::Version::V1 {
+        for template in &file.ast.template_literals {
+            for interpolated in &template.expressions {
+                add_symbol(*interpolated, false);
+            }
         }
-    }
-    for member in &file.ast.members {
-        if file.ast.computed_members.contains(&member.span) {
-            add_symbol(member.property, false);
+        for member in &file.ast.members {
+            if file.ast.computed_members.contains(&member.span) {
+                add_symbol(member.property, false);
+            }
         }
     }
     for returned in &file.ast.returns {

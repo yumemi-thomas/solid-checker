@@ -800,7 +800,7 @@ pub fn build_project_native_measured(
     let request_started = Instant::now();
     let request_assembly = request_started.elapsed();
     let semantic_demand_started = Instant::now();
-    let demands = semantic_demands(&files)?;
+    let demands = semantic_demands(dialect, &files)?;
     let semantic_demand_assembly = semantic_demand_started.elapsed();
     let demand_assembly = demand_started.elapsed();
     let table = typescript.semantic(demands)?;
@@ -973,7 +973,7 @@ fn build_project_native_cached_measured_inner(
     let request_started = Instant::now();
     let request_assembly = request_started.elapsed();
     let semantic_demand_started = Instant::now();
-    let demand_groups = semantic_demand_groups_cached(&files, cache)?;
+    let demand_groups = semantic_demand_groups_cached(dialect, &files, cache)?;
     let semantic_demand_assembly = semantic_demand_started.elapsed();
     let demand_assembly = demand_started.elapsed();
     let table = typescript.semantic_grouped(&demand_groups)?;
@@ -1109,13 +1109,16 @@ pub fn build_project_cached(
         seeds.extend(facts.structural_seed_locations());
         files.push(facts);
     }
-    let table = typescript.semantic(semantic_demands_cached(&files, cache)?)?;
+    let table = typescript.semantic(semantic_demands_cached(dialect, &files, cache)?)?;
     let table = hydrate_structural_file_facts_cached(table, &files, cache);
     ProjectFacts::join(generation, project_id, files, table).map_err(Into::into)
 }
 
-fn semantic_demands(files: &[FileFacts]) -> Result<Vec<typefacts::v3::EntityDemand>, BackendError> {
-    demand_plan::plan(files)
+fn semantic_demands(
+    dialect: &'static Dialect,
+    files: &[FileFacts],
+) -> Result<Vec<typefacts::v3::EntityDemand>, BackendError> {
+    demand_plan::plan(dialect, files)
 }
 
 fn structural_accessor_spans(file: &FileFacts) -> HashSet<Span> {
@@ -1188,6 +1191,7 @@ fn structural_accessor_spans(file: &FileFacts) -> HashSet<Span> {
 }
 
 fn semantic_demands_cached(
+    dialect: &'static Dialect,
     files: &[FileFacts],
     cache: &mut FactsCache,
 ) -> Result<Vec<typefacts::v3::EntityDemand>, BackendError> {
@@ -1195,12 +1199,13 @@ fn semantic_demands_cached(
     let mut ordered_files = files.iter().collect::<Vec<_>>();
     ordered_files.sort_by(|left, right| left.path.cmp(&right.path));
     for file in ordered_files {
-        let key = format!("{}\0{}", file.path, file.source_hash);
+        // The plan is dialect-specific, so the dialect is part of the key.
+        let key = format!("{}\0{}\0{}", dialect.id, file.path, file.source_hash);
         let per_file = if let Some(cached) = cache.semantic_demands.get(&key) {
             cached
         } else {
             let generated: Arc<[typefacts::v3::EntityDemand]> =
-                semantic_demands(std::slice::from_ref(file))?.into();
+                semantic_demands(dialect, std::slice::from_ref(file))?.into();
             cache.semantic_demands.insert(key.clone(), generated);
             cache
                 .semantic_demands
@@ -1213,6 +1218,7 @@ fn semantic_demands_cached(
 }
 
 fn semantic_demand_groups_cached<'a>(
+    dialect: &'static Dialect,
     files: &'a [FileFacts],
     cache: &'a mut FactsCache,
 ) -> Result<Vec<SemanticDemandGroup<'a>>, BackendError> {
@@ -1220,13 +1226,13 @@ fn semantic_demand_groups_cached<'a>(
     ordered_files.sort_by(|left, right| left.path.cmp(&right.path));
     let keys = ordered_files
         .iter()
-        .map(|file| format!("{}\0{}", file.path, file.source_hash))
+        .map(|file| format!("{}\0{}\0{}", dialect.id, file.path, file.source_hash))
         .collect::<Vec<_>>();
     for (file, key) in ordered_files.iter().zip(&keys) {
         if !cache.semantic_demands.contains_key(key) {
             cache.semantic_demands.insert(
                 key.clone(),
-                semantic_demands(std::slice::from_ref(*file))?.into(),
+                semantic_demands(dialect, std::slice::from_ref(*file))?.into(),
             );
         }
     }
@@ -1576,9 +1582,10 @@ mod tests {
                 "export function A(value: number) { return value; }",
             ),
         ];
-        let fresh_demands = semantic_demands(&files).unwrap();
+        let dialect = dialect::default_dialect();
+        let fresh_demands = semantic_demands(dialect, &files).unwrap();
         let mut cache = FactsCache::default();
-        let retained_demands = semantic_demands_cached(&files, &mut cache).unwrap();
+        let retained_demands = semantic_demands_cached(dialect, &files, &mut cache).unwrap();
         assert_eq!(retained_demands, fresh_demands);
 
         let fresh_table = TypeScriptTable::from_parts(
@@ -1616,7 +1623,8 @@ mod tests {
             "src/component.tsx",
             "const value = createMemo(async () => 1); export function Card(props: { title: string }) { const key = 'title'; const copy = { ...props }; return <div>{props[key]}{copy.title}{value()}</div>; }",
         );
-        let demands = semantic_demands(std::slice::from_ref(&file)).unwrap();
+        let demands =
+            semantic_demands(dialect::default_dialect(), std::slice::from_ref(&file)).unwrap();
 
         for member in &file.ast.members {
             let location = typefacts_location(file.path.as_str(), member.object);
@@ -1698,11 +1706,11 @@ mod tests {
             file.clone(),
             test_file_facts("src/a.ts", "export const a = 1;"),
         ];
-        let planned = semantic_demands(&reversed).unwrap();
+        let planned = semantic_demands(dialect::default_dialect(), &reversed).unwrap();
         reversed.reverse();
         assert_eq!(
             planned,
-            semantic_demands(&reversed).unwrap(),
+            semantic_demands(dialect::default_dialect(), &reversed).unwrap(),
             "query order must not depend on source traversal order"
         );
     }
@@ -1720,7 +1728,8 @@ mod tests {
             .find_map(|returned| returned.callee)
             .expect("returned call");
         let location = typefacts_location(file.path.as_str(), returned);
-        let demands = semantic_demands(std::slice::from_ref(&file)).unwrap();
+        let demands =
+            semantic_demands(dialect::default_dialect(), std::slice::from_ref(&file)).unwrap();
         let matching = demands
             .iter()
             .filter(|demand| demand.location == location)

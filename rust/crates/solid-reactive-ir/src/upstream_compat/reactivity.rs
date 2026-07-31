@@ -192,9 +192,12 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
             .iter()
             .any(|template| template.span.contains(slot))
     };
-    if file.ast.template_literals.iter().any(|template| {
-        !tagged(template.span) && template.expressions.contains(&span)
-    }) {
+    if file
+        .ast
+        .template_literals
+        .iter()
+        .any(|template| !tagged(template.span) && template.expressions.contains(&span))
+    {
         return Some("a template literal");
     }
     if file
