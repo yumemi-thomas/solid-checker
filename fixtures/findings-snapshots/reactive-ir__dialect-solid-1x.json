@@ -1,0 +1,77 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/imports",
+      "code": "SC8002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
+      "start": 577,
+      "end": 588,
+      "fixes": 1,
+      "message": "\"createStore\" is imported from \"solid-js\", which does not export it; solid-js exports it from \"solid-js/store\"",
+      "hint": "Import \"createStore\" from \"solid-js/store\". The export lists are extracted from the installed package, so this is where that version actually exports the name."
+    },
+    {
+      "rule": "v1/no-proxy-apis",
+      "code": "SC8009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
+      "start": 608,
+      "end": 679,
+      "fixes": 0,
+      "message": "The store package relies on JavaScript Proxies.",
+      "hint": "Proxies are unavailable on engines without ES2015 Proxy support."
+    },
+    {
+      "rule": "v1/missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
+      "start": 1541,
+      "end": 1553,
+      "fixes": 0,
+      "message": "createEffect is called without an effect function; the signature is createEffect(fn, value?), where fn tracks dependencies and runs the side effect, and the optional value seeds the previous value passed to fn on its first run",
+      "hint": "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned."
+    },
+    {
+      "rule": "v1/cleanup-in-forbidden-scope",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
+      "start": 2150,
+      "end": 2159,
+      "fixes": 0,
+      "message": "onCleanup is called inside createReaction, whose callback runs as a leaf with no owner to register cleanup on; the cleanup function will never run",
+      "hint": "Register the cleanup in the computation that owns the createReaction instead, or create the surrounding scope with createRoot so disposal exists."
+    },
+    {
+      "rule": "v1/no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
+      "start": 2150,
+      "end": 2159,
+      "fixes": 0,
+      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
+      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists."
+    },
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
+      "start": 3409,
+      "end": 3415,
+      "fixes": 0,
+      "message": "reactive accessor \"seed\" is read directly in rendering function, which does not track; the read sees the current value once and never updates when \"seed\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
+    }
+  ]
+}

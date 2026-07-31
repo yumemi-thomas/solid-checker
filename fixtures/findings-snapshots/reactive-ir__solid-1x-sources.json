@@ -1,0 +1,135 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 9,
+      "end": 23,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 25,
+      "end": 39,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 67,
+      "end": 81,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 83,
+      "end": 97,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 118,
+      "end": 123,
+      "fixes": 0
+    },
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 152,
+      "end": 165,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 1007,
+      "end": 1014,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 1117,
+      "end": 1124,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 1126,
+      "end": 1132,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 1740,
+      "end": 1747,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 2339,
+      "end": 2340,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 2945,
+      "end": 2952,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 3676,
+      "end": 3683,
+      "fixes": 0
+    }
+  ]
+}

@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/no-proxy-apis",
+      "code": "SC8009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 53,
+      "end": 98,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/uncalled-accessor",
+      "code": "SC1005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 316,
+      "end": 321,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 969,
+      "end": 979,
+      "fixes": 0
+    }
+  ]
+}
