@@ -6,6 +6,8 @@ members = [
   "crates/solid-reactive-ir",
   "crates/solid-facts-backend",
   "crates/solid-checker-wasm",
+  "dialects/solid-v1/compiler",
+  "dialects/solid-v1/rules",
   "dialects/solid-v2/compiler",
   "dialects/solid-v2/rules",
 ]
@@ -21,6 +23,11 @@ rust-version = "1.97"
 # `dom-expressions` is tracked on a feature branch, and reproducible builds
 # matter more here than picking up upstream automatically.
 dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "f8cbb73b16ec8599cd428b01d3a5ca85337b8320", default-features = false }
+# The Solid 1.x compiler: the same crate name from its own repository, kept at
+# differential parity with the Babel compiler Solid 1.x ships. The renamed key
+# is how one workspace holds both; each dialect's compiler crate depends on
+# exactly one of them.
+solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "95e9277fa7641d8d4dec6b2f8692ad29bff256d1", default-features = false }
 typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "d708b506bebaa0ea81e061a0d4dd27100c42a433" }
 ciborium = "0.2"
 compact_str = { version = "0.9.1", features = ["serde"] }

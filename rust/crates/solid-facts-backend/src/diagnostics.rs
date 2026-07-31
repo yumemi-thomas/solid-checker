@@ -660,6 +660,22 @@ pub(crate) fn bundled_contract_v2(package: &str) -> Result<Option<PackageContrac
     })
 }
 
+/// The Solid 1.x dialect's bundled contract for `solid-js@1.x`, covering the
+/// `.`, `./store` and `./web` entrypoints of the package that version
+/// actually ships.
+pub(crate) fn bundled_contract_v1(package: &str) -> Result<Option<PackageContract>, BackendError> {
+    Ok(match package {
+        "solid-js" => {
+            let mut bundled = decode_package_contract(include_bytes!(
+                "../../../../pkg/contracts/bundled/solid-js-v1.json"
+            ))?;
+            bundled.source_path = "bundled://solid-js-v1.json".into();
+            Some(bundled)
+        }
+        _ => None,
+    })
+}
+
 pub fn load_package_contracts(
     dialect: &'static Dialect,
     project: &Path,

@@ -174,6 +174,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "dom-expressions-compiler"
+version = "0.1.0"
+source = "git+https://github.com/yumemi-thomas/solid-1x-compiler?rev=95e9277fa7641d8d4dec6b2f8692ad29bff256d1#95e9277fa7641d8d4dec6b2f8692ad29bff256d1"
+dependencies = [
+ "html5ever",
+ "htmlize",
+ "markup5ever_rcdom",
+ "napi-build",
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
+ "oxc_codegen",
+ "oxc_parser",
+ "oxc_semantic",
+ "oxc_span",
+ "oxc_syntax",
+ "serde",
+]
+
+[[package]]
 name = "dragonbox_ecma"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1060,7 +1080,7 @@ checksum = "e8e2fb0f499abb4d162f2bedad68f5ef91a1682b5a03596ddb67efd37768d100"
 name = "solid-checker-wasm"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-compiler",
+ "dom-expressions-compiler 0.0.0",
  "napi",
  "napi-build",
  "napi-derive",
@@ -1109,6 +1129,8 @@ dependencies = [
  "solid-dialect",
  "solid-facts",
  "solid-reactive-ir",
+ "solid-v1-compiler",
+ "solid-v1-rules",
  "solid-v2-compiler",
  "solid-v2-rules",
  "thiserror",
@@ -1128,10 +1150,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "solid-v1-compiler"
+version = "0.1.0"
+dependencies = [
+ "dom-expressions-compiler 0.0.0",
+ "dom-expressions-compiler 0.1.0",
+ "solid-facts",
+]
+
+[[package]]
+name = "solid-v1-rules"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "solid-dialect",
+ "solid-reactive-ir",
+ "typefacts",
+]
+
+[[package]]
 name = "solid-v2-compiler"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-compiler",
+ "dom-expressions-compiler 0.0.0",
  "solid-facts",
 ]
 

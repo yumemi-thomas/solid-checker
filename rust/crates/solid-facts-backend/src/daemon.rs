@@ -98,8 +98,13 @@ fn retained_format(format: &str) -> bool {
 fn resolve_dialect(
     request: &Request,
 ) -> Result<&'static solid_facts_backend::dialect::Dialect, Box<dyn Error>> {
-    solid_facts_backend::dialect::by_id(&request.dialect)
-        .ok_or_else(|| format!("unknown dialect {:?}", request.dialect).into())
+    match request.dialect.as_deref() {
+        Some(id) => solid_facts_backend::dialect::by_id(id)
+            .ok_or_else(|| format!("unknown dialect {id:?}").into()),
+        None => Ok(solid_facts_backend::dialect::detect(Path::new(
+            &request.project_id,
+        ))),
+    }
 }
 
 fn socket_path(project_id: &str, typefacts_executable: &str, dialect_id: &str) -> PathBuf {
@@ -426,7 +431,7 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
     let socket = socket_path(
         &request.project_id,
         &request.typefacts_executable,
-        &request.dialect,
+        resolve_dialect(request)?.id,
     );
     if UnixStream::connect(&socket).is_ok() {
         return Ok(0); // a live daemon already serves this project
@@ -645,7 +650,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     let socket = socket_path(
         &request.project_id,
         &request.typefacts_executable,
-        &request.dialect,
+        resolve_dialect(request)?.id,
     );
     let stream = match UnixStream::connect(&socket) {
         Ok(stream) => stream,
@@ -721,12 +726,20 @@ fn spawn_and_connect(
     socket: &std::path::Path,
 ) -> Result<UnixStream, Box<dyn Error>> {
     let executable = std::env::current_exe()?;
-    Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .arg("--serve")
         .arg("--project")
         .arg(&request.project_id)
         .arg("--typefacts")
-        .arg(&request.typefacts_executable)
+        .arg(&request.typefacts_executable);
+    // The client hashed the resolved dialect into the socket path; the spawned
+    // daemon must resolve identically, so an explicit request id is forwarded
+    // rather than re-detected.
+    if let Some(dialect) = &request.dialect {
+        command.arg("--dialect").arg(dialect);
+    }
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

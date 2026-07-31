@@ -2949,7 +2949,13 @@ fn build_with_contracts_measured_incremental(
                         id: "SC1003".into(),
                         rule: "component-props-destructure".into(),
                         message: "destructuring props unwraps each property once at component setup; the bindings are frozen values, and the component never updates when the parent passes new props".into(),
-                        hint: "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use omit(props, ...keys) and merge(defaults, props) instead of destructuring.".into(),
+                        hint: {
+                            let helpers = dialect.props_helpers();
+                            format!(
+                                "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use {}(props, ...keys) and {}(defaults, props) instead of destructuring.",
+                                helpers.omit, helpers.merge
+                            )
+                        },
                         location,
                         analysis_context: function_binding_name(file, function)
                             .map_or_else(String::new, |name| file.source_text(name.span).unwrap_or_default().to_owned()),
@@ -2986,7 +2992,13 @@ fn build_with_contracts_measured_incremental(
                         id: "SC1003".into(),
                         rule: "component-props-destructure".into(),
                         message: "destructuring props unwraps each property once at component setup; the bindings are frozen values, and the component never updates when the parent passes new props".into(),
-                        hint: "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use omit(props, ...keys) and merge(defaults, props) instead of destructuring.".into(),
+                        hint: {
+                            let helpers = dialect.props_helpers();
+                            format!(
+                                "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use {}(props, ...keys) and {}(defaults, props) instead of destructuring.",
+                                helpers.omit, helpers.merge
+                            )
+                        },
                         location,
                         analysis_context: enclosing_function_label(file, binding.pattern),
                         fixes: vec![],

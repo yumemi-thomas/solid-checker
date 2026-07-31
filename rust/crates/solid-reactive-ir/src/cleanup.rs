@@ -94,12 +94,17 @@ pub(super) fn leaf_owner_operations_for_file(
                 Some(CleanupRule::Never) | None => false,
             };
             if forbidden {
-                // Only `onCleanup` has a rewrite: return the cleanup instead
-                // of registering it. The other forbidden primitives have no
-                // mechanical equivalent.
-                let fix = (primitive.primitive() == Some(Primitive::OnCleanup))
-                    .then(|| terminal_cleanup_fix(file, region, call))
-                    .flatten();
+                // Only `onCleanup` has a rewrite -- return the cleanup
+                // instead of registering it -- and only where the owner reads
+                // a returned function as cleanup. That is a 2.0 idea: 1.x's
+                // leaf owner threads return values elsewhere, so offering the
+                // rewrite there would introduce a bug, not fix one.
+                let fix = (primitive.primitive() == Some(Primitive::OnCleanup)
+                    && owner
+                        .primitive()
+                        .is_some_and(|owner| dialect.accepts_cleanup_return(owner)))
+                .then(|| terminal_cleanup_fix(file, region, call))
+                .flatten();
                 operations.push(LeafOwnerOperation {
                     primitive: primitive.to_string(),
                     owner: owner.to_string(),
