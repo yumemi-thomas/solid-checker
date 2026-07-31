@@ -1,0 +1,145 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 129,
+      "end": 141,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 162,
+      "end": 171,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-boundary",
+      "code": "SC4003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 205,
+      "end": 213,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-boundary",
+      "code": "SC4003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 279,
+      "end": 285,
+      "fixes": 0
+    },
+    {
+      "rule": "settled-cleanup-unowned",
+      "code": "SC3005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 332,
+      "end": 346,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 766,
+      "end": 778,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 913,
+      "end": 925,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 948,
+      "end": 957,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-boundary",
+      "code": "SC4003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 978,
+      "end": 986,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 1238,
+      "end": 1250,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 1448,
+      "end": 1460,
+      "fixes": 0
+    },
+    {
+      "rule": "settled-cleanup-unowned",
+      "code": "SC3005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 1617,
+      "end": 1631,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 1676,
+      "end": 1688,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/owner-presence/App.tsx",
+      "start": 1775,
+      "end": 1787,
+      "fixes": 0
+    }
+  ]
+}

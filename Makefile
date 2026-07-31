@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust package test test-rust test-cli verify verify-performance corpus contract-conformance clean
+.PHONY: build build-typefacts build-rust package test test-rust test-cli verify verify-performance corpus contract-conformance coverage coverage-update clean
 
 build: build-rust
 
@@ -32,6 +32,13 @@ test-cli:
 
 verify:
 	scripts/verify.sh
+
+# Fixture-findings snapshots: "no finding moved" as a checkable claim.
+coverage: build-rust
+	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/coverage.mjs
+
+coverage-update: build-rust
+	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/coverage.mjs --update
 
 verify-performance: build-typefacts
 	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-checker-session-bench

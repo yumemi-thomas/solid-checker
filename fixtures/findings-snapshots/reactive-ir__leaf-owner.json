@@ -1,0 +1,175 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "cleanup-in-forbidden-scope",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 243,
+      "end": 252,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 243,
+      "end": 252,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-leaf-owner",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 289,
+      "end": 301,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-forbidden-scope",
+      "code": "SC3003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 322,
+      "end": 327,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-in-forbidden-scope",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 372,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 372,
+      "end": 381,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-leaf-owner",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 397,
+      "end": 407,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-leaf-owner",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 428,
+      "end": 438,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-forbidden-scope",
+      "code": "SC3003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 454,
+      "end": 459,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-in-forbidden-scope",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 522,
+      "end": 531,
+      "fixes": 1
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 522,
+      "end": 531,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-cleanup-return",
+      "code": "SC3004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 589,
+      "end": 591,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-cleanup-return",
+      "code": "SC3004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 622,
+      "end": 631,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-cleanup-return",
+      "code": "SC3004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 670,
+      "end": 689,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-cleanup-return",
+      "code": "SC3004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 704,
+      "end": 718,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-cleanup-return",
+      "code": "SC3004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 751,
+      "end": 765,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-cleanup-return",
+      "code": "SC3004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 900,
+      "end": 902,
+      "fixes": 0
+    }
+  ]
+}

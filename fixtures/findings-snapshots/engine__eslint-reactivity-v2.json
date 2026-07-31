@@ -1,0 +1,425 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-aliased-callback.tsx",
+      "start": 150,
+      "end": 156,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-both-branches.tsx",
+      "start": 227,
+      "end": 233,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-callback-before-read.tsx",
+      "start": 206,
+      "end": 212,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-member.tsx",
+      "start": 183,
+      "end": 194,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-named-callback.tsx",
+      "start": 150,
+      "end": 156,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-namespace.tsx",
+      "start": 162,
+      "end": 167,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-parameter.tsx",
+      "start": 198,
+      "end": 203,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-same-expression.tsx",
+      "start": 156,
+      "end": 162,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/after-await-try-finally.tsx",
+      "start": 212,
+      "end": 218,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-alias.tsx",
+      "start": 81,
+      "end": 92,
+      "fixes": 0
+    },
+    {
+      "rule": "component-props-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-body-destructure.tsx",
+      "start": 50,
+      "end": 59,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-merge-alias.tsx",
+      "start": 148,
+      "end": 160,
+      "fixes": 0
+    },
+    {
+      "rule": "component-props-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
+      "start": 17,
+      "end": 35,
+      "fixes": 0
+    },
+    {
+      "rule": "component-props-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
+      "start": 109,
+      "end": 131,
+      "fixes": 0
+    },
+    {
+      "rule": "component-props-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
+      "start": 203,
+      "end": 221,
+      "fixes": 0
+    },
+    {
+      "rule": "component-props-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-destructure.tsx",
+      "start": 14,
+      "end": 23,
+      "fixes": 1
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-props-read.tsx",
+      "start": 58,
+      "end": 69,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-conditional-return.tsx",
+      "start": 53,
+      "end": 65,
+      "fixes": 0
+    },
+    {
+      "rule": "component-returns-conditionally",
+      "code": "SC1004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-conditional-return.tsx",
+      "start": 53,
+      "end": 65,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-early-return.tsx",
+      "start": 50,
+      "end": 62,
+      "fixes": 0
+    },
+    {
+      "rule": "component-returns-conditionally",
+      "code": "SC1004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-early-return.tsx",
+      "start": 50,
+      "end": 62,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/derived-signal-in-effect.tsx",
+      "start": 96,
+      "end": 108,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/derived-signal-in-effect.tsx",
+      "start": 115,
+      "end": 128,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-member.tsx",
+      "start": 140,
+      "end": 152,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-member.tsx",
+      "start": 140,
+      "end": 152,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-parameter.tsx",
+      "start": 129,
+      "end": 135,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-parameter.tsx",
+      "start": 129,
+      "end": 135,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-plain-function.tsx",
+      "start": 110,
+      "end": 116,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-structural-store.tsx",
+      "start": 134,
+      "end": 146,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/imported-after-await-definition.ts",
+      "start": 144,
+      "end": 150,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-cleanup.tsx",
+      "start": 64,
+      "end": 79,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-in-forbidden-scope",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-cleanup.tsx",
+      "start": 86,
+      "end": 95,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-cleanup.tsx",
+      "start": 86,
+      "end": 95,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-cleanup.tsx",
+      "start": 86,
+      "end": 105,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-flush.tsx",
+      "start": 62,
+      "end": 77,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-forbidden-scope",
+      "code": "SC3003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-flush.tsx",
+      "start": 84,
+      "end": 91,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-flush.tsx",
+      "start": 84,
+      "end": 93,
+      "fixes": 0
+    },
+    {
+      "rule": "action-called-in-owned-scope",
+      "code": "SC2002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/owned-reexport-action.tsx",
+      "start": 107,
+      "end": 113,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/owned-reexport-memo.tsx",
+      "start": 101,
+      "end": 112,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/owned-reexport-refresh.tsx",
+      "start": 99,
+      "end": 114,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/signal-write-in-effect-apply.tsx",
+      "start": 94,
+      "end": 106,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/signal-write-in-effect-apply.tsx",
+      "start": 122,
+      "end": 133,
+      "fixes": 0
+    }
+  ]
+}
