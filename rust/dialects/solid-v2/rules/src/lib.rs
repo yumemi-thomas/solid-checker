@@ -3,7 +3,7 @@ mod rules;
 use solid_reactive_ir::{ExecutionRole, Program};
 use std::time::Instant;
 
-pub use rules::{DOCS_BASE_URL, Rule, docs_url};
+pub use rules::{DOCS_BASE_URL, Rule, docs_url, manifest_json};
 pub use solid_reactive_ir::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
 
 #[must_use]
