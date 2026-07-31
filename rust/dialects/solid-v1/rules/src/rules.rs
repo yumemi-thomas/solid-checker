@@ -34,6 +34,37 @@ pub enum Rule {
     NoOwnerBoundary,
     PrimitiveInDirectiveApplication,
     MissingEffectFunction,
+    // The fine-grained decomposition of eslint-plugin-solid's monolithic
+    // `reactivity` rule. Untracked reads and after-await reads land on the
+    // engine's own SC1001/SC1002 above; these are the remaining distinct
+    // defects that rule bundled. See docs/rules/README.md for the mapping.
+    UncalledAccessor,
+    UntrackedDerivedFunction,
+    ExpectedFunctionGotExpression,
+    NoDirectMutation,
+    NoAsyncTrackedScope,
+    ReactiveSourceUncaptured,
+    // The eslint-plugin-solid 0.14.5 rule surface, one identity per upstream
+    // rule. `jsx-uses-vars` is catalog-only: upstream exists to mark JSX
+    // identifiers used for no-unused-vars, and TypeScript reference facts
+    // already model those uses, so nothing here ever emits it.
+    EventHandlers,
+    Imports,
+    JsxNoDuplicateProps,
+    JsxNoScriptUrl,
+    JsxNoUndef,
+    JsxUsesVars,
+    NoArrayHandlers,
+    NoInnerhtml,
+    NoProxyApis,
+    NoReactDeps,
+    NoReactSpecificProps,
+    NoUnknownNamespaces,
+    PreferClasslist,
+    PreferFor,
+    PreferShow,
+    SelfClosingComp,
+    StyleProp,
     PackageContractExportMissing,
     PackageContractMissing,
     ExecutionMapIncomplete,
@@ -53,7 +84,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 15] = [
+    pub const ALL: [Self; 38] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -66,6 +97,29 @@ impl Rule {
         Self::NoOwnerBoundary,
         Self::PrimitiveInDirectiveApplication,
         Self::MissingEffectFunction,
+        Self::UncalledAccessor,
+        Self::UntrackedDerivedFunction,
+        Self::ExpectedFunctionGotExpression,
+        Self::NoDirectMutation,
+        Self::NoAsyncTrackedScope,
+        Self::ReactiveSourceUncaptured,
+        Self::EventHandlers,
+        Self::Imports,
+        Self::JsxNoDuplicateProps,
+        Self::JsxNoScriptUrl,
+        Self::JsxNoUndef,
+        Self::JsxUsesVars,
+        Self::NoArrayHandlers,
+        Self::NoInnerhtml,
+        Self::NoProxyApis,
+        Self::NoReactDeps,
+        Self::NoReactSpecificProps,
+        Self::NoUnknownNamespaces,
+        Self::PreferClasslist,
+        Self::PreferFor,
+        Self::PreferShow,
+        Self::SelfClosingComp,
+        Self::StyleProp,
         Self::PackageContractExportMissing,
         Self::PackageContractMissing,
         Self::ExecutionMapIncomplete,
@@ -97,6 +151,37 @@ impl Rule {
                 false,
             ),
             Self::MissingEffectFunction => ("SC7001", "v1/missing-effect-function", "error", false),
+            Self::UncalledAccessor => ("SC1005", "v1/uncalled-accessor", "warning", false),
+            Self::UntrackedDerivedFunction => {
+                ("SC1006", "v1/untracked-derived-function", "warning", false)
+            }
+            Self::ExpectedFunctionGotExpression => {
+                ("SC1007", "v1/expected-function-got-expression", "warning", false)
+            }
+            Self::NoDirectMutation => ("SC2003", "v1/no-direct-mutation", "warning", false),
+            Self::NoAsyncTrackedScope => ("SC5004", "v1/no-async-tracked-scope", "warning", false),
+            Self::ReactiveSourceUncaptured => {
+                ("SC9011", "v1/reactive-source-uncaptured", "warning", true)
+            }
+            Self::EventHandlers => ("SC8001", "v1/event-handlers", "warning", false),
+            Self::Imports => ("SC8002", "v1/imports", "warning", false),
+            Self::JsxNoDuplicateProps => ("SC8003", "v1/jsx-no-duplicate-props", "error", false),
+            Self::JsxNoScriptUrl => ("SC8004", "v1/jsx-no-script-url", "error", false),
+            Self::JsxNoUndef => ("SC8005", "v1/jsx-no-undef", "error", false),
+            Self::JsxUsesVars => ("SC8006", "v1/jsx-uses-vars", "error", false),
+            Self::NoArrayHandlers => ("SC8007", "v1/no-array-handlers", "error", false),
+            Self::NoInnerhtml => ("SC8008", "v1/no-innerhtml", "error", false),
+            Self::NoProxyApis => ("SC8009", "v1/no-proxy-apis", "error", false),
+            Self::NoReactDeps => ("SC8010", "v1/no-react-deps", "warning", false),
+            Self::NoReactSpecificProps => {
+                ("SC8011", "v1/no-react-specific-props", "warning", false)
+            }
+            Self::NoUnknownNamespaces => ("SC8012", "v1/no-unknown-namespaces", "error", false),
+            Self::PreferClasslist => ("SC8013", "v1/prefer-classlist", "warning", false),
+            Self::PreferFor => ("SC8014", "v1/prefer-for", "error", false),
+            Self::PreferShow => ("SC8015", "v1/prefer-show", "warning", false),
+            Self::SelfClosingComp => ("SC8016", "v1/self-closing-comp", "warning", false),
+            Self::StyleProp => ("SC8017", "v1/style-prop", "warning", false),
             Self::PackageContractExportMissing => {
                 ("SC9001", "v1/package-contract-export-missing", "error", true)
             }
@@ -130,6 +215,28 @@ impl Rule {
             ("SC1003", "component-props-destructure") => Self::NoDestructure,
             ("SC1004", "component-returns-conditionally") => Self::ComponentsReturnOnce,
             ("SC7001", "missing-effect-function") => Self::MissingEffectFunction,
+            ("SC1005", "uncalled-accessor") => Self::UncalledAccessor,
+            ("SC1006", "untracked-derived-function") => Self::UntrackedDerivedFunction,
+            ("SC1007", "expected-function-got-expression") => Self::ExpectedFunctionGotExpression,
+            ("SC2003", "no-direct-mutation") => Self::NoDirectMutation,
+            ("SC5004", "no-async-tracked-scope") => Self::NoAsyncTrackedScope,
+            ("SC9011", "reactive-source-uncaptured") => Self::ReactiveSourceUncaptured,
+            ("SC8001", "event-handlers") => Self::EventHandlers,
+            ("SC8002", "imports") => Self::Imports,
+            ("SC8003", "jsx-no-duplicate-props") => Self::JsxNoDuplicateProps,
+            ("SC8004", "jsx-no-script-url") => Self::JsxNoScriptUrl,
+            ("SC8005", "jsx-no-undef") => Self::JsxNoUndef,
+            ("SC8007", "no-array-handlers") => Self::NoArrayHandlers,
+            ("SC8008", "no-innerhtml") => Self::NoInnerhtml,
+            ("SC8009", "no-proxy-apis") => Self::NoProxyApis,
+            ("SC8010", "no-react-deps") => Self::NoReactDeps,
+            ("SC8011", "no-react-specific-props") => Self::NoReactSpecificProps,
+            ("SC8012", "no-unknown-namespaces") => Self::NoUnknownNamespaces,
+            ("SC8013", "prefer-classlist") => Self::PreferClasslist,
+            ("SC8014", "prefer-for") => Self::PreferFor,
+            ("SC8015", "prefer-show") => Self::PreferShow,
+            ("SC8016", "self-closing-comp") => Self::SelfClosingComp,
+            ("SC8017", "style-prop") => Self::StyleProp,
             ("SC9001", "package-contract-export-missing") => Self::PackageContractExportMissing,
             ("SC9004", "execution-map-incomplete") => Self::ExecutionMapIncomplete,
             _ => return None,

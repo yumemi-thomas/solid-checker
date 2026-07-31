@@ -10,6 +10,7 @@ mod reachability;
 mod runtime_semantics;
 mod static_api;
 mod symbols;
+mod upstream_compat;
 
 pub use findings::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
 
@@ -3382,6 +3383,23 @@ fn build_with_contracts_measured_incremental(
     let contract_exports = interprocedural.exports;
     let mut contract_generation_obligations =
         interprocedural.contract_generation_obligations.to_vec();
+    // The upstream-compat surface: file-local rules only the dialects that
+    // catalog them expose. Gated per dialect so a v2 project never pays for
+    // (or sees) a rule its catalog does not declare.
+    if dialect.version() == solid_dialect::Version::V1 {
+        let compat_context = upstream_compat::UpstreamCompatContext {
+            lookup: semantic_lookup,
+            entities,
+            symbol_names: &symbol_names,
+        };
+        static_violations.extend(
+            parallel_file_results(&facts.files, |file| {
+                upstream_compat::check_file(file, &compat_context)
+            })
+            .into_iter()
+            .flatten(),
+        );
+    }
     leaf_operations.extend(
         parallel_file_results(&facts.files, |file| {
             leaf_owner_operations_for_file(file, entities, &symbol_names, semantic_lookup.dialect)
