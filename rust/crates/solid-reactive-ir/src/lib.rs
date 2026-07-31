@@ -43,6 +43,7 @@ use reachability::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use solid_dialect::Dialect;
 use solid_facts::core::{SourceHash, SourcePath, Span};
 use solid_facts::{FileFacts, ProjectFacts};
 use static_api::StaticApiContext;
@@ -561,6 +562,7 @@ pub struct BuildTimings {
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct BuildIdentity {
+    dialect: solid_dialect::Version,
     project_id: String,
     generation: u64,
     contracts: Vec<String>,
@@ -1119,8 +1121,12 @@ struct BuildCaches<'a> {
 }
 
 impl IncrementalBuilder {
-    pub fn build(&mut self, facts: &ProjectFacts) -> Result<(Program, BuildTimings), BuildError> {
-        self.build_with_contracts(facts, &[])
+    pub fn build(
+        &mut self,
+        facts: &ProjectFacts,
+        dialect: &dyn Dialect,
+    ) -> Result<(Program, BuildTimings), BuildError> {
+        self.build_with_contracts(facts, dialect, &[])
     }
 
     /// Build a program behind shared ownership. This is the preferred service
@@ -1129,16 +1135,18 @@ impl IncrementalBuilder {
     pub fn build_shared(
         &mut self,
         facts: &ProjectFacts,
+        dialect: &dyn Dialect,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, &[])
+        self.build_with_contracts_shared(facts, dialect, &[])
     }
 
     pub fn build_with_contracts(
         &mut self,
         facts: &ProjectFacts,
+        dialect: &dyn Dialect,
         contracts: &[PackageContract],
     ) -> Result<(Program, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, contracts)
+        self.build_with_contracts_shared(facts, dialect, contracts)
             .map(|(program, timings)| ((*program).clone(), timings))
     }
 
@@ -1146,11 +1154,13 @@ impl IncrementalBuilder {
     pub fn build_with_contracts_shared(
         &mut self,
         facts: &ProjectFacts,
+        dialect: &dyn Dialect,
         contracts: &[PackageContract],
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
         let total_started = Instant::now();
         let lookup_started = Instant::now();
         let identity = BuildIdentity {
+            dialect: dialect.version(),
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
             contracts: contracts
@@ -1158,7 +1168,10 @@ impl IncrementalBuilder {
                 .map(|contract| format!("{contract:?}"))
                 .collect(),
         };
-        let source_discovery_domain = (identity.project_id.clone(), identity.contracts.clone());
+        let source_discovery_domain = (
+            format!("{:?}::{}", identity.dialect, identity.project_id),
+            identity.contracts.clone(),
+        );
         if self.source_discovery_domain.as_ref() != Some(&source_discovery_domain) {
             self.ast_indexes.clear();
             self.source_discovery.clear();
@@ -1187,6 +1200,7 @@ impl IncrementalBuilder {
         }
         let (program, mut timings) = build_with_contracts_measured_incremental(
             facts,
+            dialect,
             contracts,
             BuildCaches {
                 ast_indexes: Some(&mut self.ast_indexes),
@@ -1724,26 +1738,31 @@ fn extend_source_discovery_symbols(
     symbols.extend(contribution.async_sources.iter().cloned());
 }
 
-pub fn build(facts: &ProjectFacts) -> Result<Program, BuildError> {
-    build_with_contracts(facts, &[])
+pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
+    build_with_contracts(facts, dialect, &[])
 }
 
-pub fn build_measured(facts: &ProjectFacts) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_contracts_measured(facts, &[])
+pub fn build_measured(
+    facts: &ProjectFacts,
+    dialect: &dyn Dialect,
+) -> Result<(Program, BuildTimings), BuildError> {
+    build_with_contracts_measured(facts, dialect, &[])
 }
 
 pub fn build_with_contracts(
     facts: &ProjectFacts,
+    dialect: &dyn Dialect,
     contracts: &[PackageContract],
 ) -> Result<Program, BuildError> {
-    build_with_contracts_measured(facts, contracts).map(|(program, _)| program)
+    build_with_contracts_measured(facts, dialect, contracts).map(|(program, _)| program)
 }
 
 pub fn build_with_contracts_measured(
     facts: &ProjectFacts,
+    dialect: &dyn Dialect,
     contracts: &[PackageContract],
 ) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_contracts_measured_incremental(facts, contracts, BuildCaches::default())
+    build_with_contracts_measured_incremental(facts, dialect, contracts, BuildCaches::default())
 }
 
 /// Owned reactive-source facts produced by the source-discovery stage and
@@ -2569,6 +2588,7 @@ fn discover_sources(
 
 fn build_with_contracts_measured_incremental(
     facts: &ProjectFacts,
+    dialect: &dyn Dialect,
     contracts: &[PackageContract],
     caches: BuildCaches<'_>,
 ) -> Result<(Program, BuildTimings), BuildError> {
@@ -6510,17 +6530,17 @@ mod tests {
     #[test]
     fn incremental_builder_reuses_only_the_same_coherent_generation() {
         let first = empty_project(1);
-        let fresh = build(&first).unwrap();
+        let fresh = build(&first, &solid_dialect::Solid2).unwrap();
         let mut incremental = IncrementalBuilder::default();
 
-        let (initial, initial_timings) = incremental.build(&first).unwrap();
-        let (reused, reused_timings) = incremental.build(&first).unwrap();
+        let (initial, initial_timings) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
+        let (reused, reused_timings) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
         let mut next_facts = empty_project(2);
         next_facts.typescript_changes = Some(solid_facts::TypeScriptChanges {
             unchanged: true,
             ..solid_facts::TypeScriptChanges::default()
         });
-        let (next, next_timings) = incremental.build(&next_facts).unwrap();
+        let (next, next_timings) = incremental.build(&next_facts, &solid_dialect::Solid2).unwrap();
 
         assert_eq!(initial, fresh);
         assert_eq!(reused, fresh);
@@ -6534,12 +6554,12 @@ mod tests {
     #[test]
     fn idle_retention_preserves_results_and_rebuilds_released_indexes() {
         let first = empty_project(1);
-        let fresh = build(&first).unwrap();
+        let fresh = build(&first, &solid_dialect::Solid2).unwrap();
         let mut incremental = IncrementalBuilder::default();
 
-        let (initial, _) = incremental.build(&first).unwrap();
+        let (initial, _) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
         incremental.retain_for_idle(CacheRetention::Balanced);
-        let (same_generation, same_timings) = incremental.build(&first).unwrap();
+        let (same_generation, same_timings) = incremental.build(&first, &solid_dialect::Solid2).unwrap();
         incremental.retain_for_idle(CacheRetention::Compact);
 
         let mut next_facts = empty_project(2);
@@ -6547,7 +6567,7 @@ mod tests {
             unchanged: true,
             ..solid_facts::TypeScriptChanges::default()
         });
-        let (next, next_timings) = incremental.build(&next_facts).unwrap();
+        let (next, next_timings) = incremental.build(&next_facts, &solid_dialect::Solid2).unwrap();
 
         assert_eq!(initial, fresh);
         assert_eq!(same_generation, fresh);
@@ -6562,8 +6582,8 @@ mod tests {
         let facts = empty_project(1);
         let mut incremental = IncrementalBuilder::default();
 
-        let (initial, initial_timings) = incremental.build_shared(&facts).unwrap();
-        let (reused, reused_timings) = incremental.build_shared(&facts).unwrap();
+        let (initial, initial_timings) = incremental.build_shared(&facts, &solid_dialect::Solid2).unwrap();
+        let (reused, reused_timings) = incremental.build_shared(&facts, &solid_dialect::Solid2).unwrap();
 
         assert!(Arc::ptr_eq(&initial, &reused));
         assert!(!initial_timings.reused);

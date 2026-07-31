@@ -301,9 +301,9 @@ fn solve_facts(
     ),
     Box<dyn std::error::Error>,
 > {
-    let (program, reactive_ir) = reactive_ir.build_shared(facts)?;
-    let (_findings, solver) =
-        (solid_facts_backend::dialect::default_dialect().solve_measured)(&program);
+    let dialect = solid_facts_backend::dialect::default_dialect();
+    let (program, reactive_ir) = reactive_ir.build_shared(facts, dialect.vocabulary)?;
+    let (_findings, solver) = (dialect.solve_measured)(&program);
     Ok((reactive_ir, solver))
 }
 

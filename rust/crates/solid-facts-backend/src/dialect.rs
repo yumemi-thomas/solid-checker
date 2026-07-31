@@ -19,6 +19,10 @@ pub struct Dialect {
     /// Stable identity, folded into every cache key and retained session
     /// identity so artifacts from different dialects can never collide.
     pub id: &'static str,
+    /// The Solid-version vocabulary the reactive IR analyzes with: which
+    /// names are primitives, where their callbacks sit, which JSX tags open
+    /// boundaries. The engine asks this table; it never names a version.
+    pub vocabulary: &'static dyn solid_dialect::Dialect,
     /// Size of the rule catalog; reporting only.
     pub rule_count: usize,
     /// Constructs the dialect's in-process compiler-facts provider.
@@ -62,6 +66,7 @@ pub fn default_dialect() -> &'static Dialect {
 
 static SOLID_V2: Dialect = Dialect {
     id: "solid-v2",
+    vocabulary: &solid_dialect::Solid2,
     rule_count: solid_v2_rules::Rule::ALL.len(),
     compiler: || Box::new(solid_v2_compiler::NativeCompilerFacts),
     solve_measured: solid_v2_rules::solve_measured,

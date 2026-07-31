@@ -9,6 +9,7 @@ rust-version.workspace = true
 [dependencies]
 serde.workspace = true
 sha2.workspace = true
+solid-dialect = { path = "../solid-dialect" }
 solid-facts = { path = "../solid-facts" }
 typefacts.workspace = true
 thiserror.workspace = true

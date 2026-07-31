@@ -1809,6 +1809,7 @@ mod tests {
 
     static STUB_DIALECT: dialect::Dialect = dialect::Dialect {
         id: "stub-dialect",
+        vocabulary: &solid_dialect::Solid2,
         rule_count: 1,
         compiler: || Box::new(RecordingStubCompiler),
         solve_measured: stub_solve,

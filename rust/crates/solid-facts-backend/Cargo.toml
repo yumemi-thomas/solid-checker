@@ -13,6 +13,7 @@ serde_json.workspace = true
 sha2.workspace = true
 oxc_diagnostics.workspace = true
 oxc_miette.workspace = true
+solid-dialect = { path = "../solid-dialect" }
 solid-facts = { path = "../solid-facts" }
 solid-v2-compiler = { path = "../../dialects/solid-v2/compiler" }
 typefacts.workspace = true
