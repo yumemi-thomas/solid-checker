@@ -3969,25 +3969,11 @@ fn find_missing_owners(
                     contexts[target_index] |= OWNER_CONTEXT_UNOWNED;
                 }
             }
-            let callback_roles: &[(usize, OwnerEdgeKind)] =
-                match owner_file_indexes[file_index].call_primitives[call_index].as_deref() {
-                    Some(
-                        "createRoot"
-                        | "createMemo"
-                        | "createSignal"
-                        | "createStore"
-                        | "createProjection"
-                        | "createOptimistic"
-                        | "createOptimisticStore",
-                    ) => &[(0, OwnerEdgeKind::Owned)],
-                    Some("createEffect" | "createRenderEffect") => {
-                        &[(0, OwnerEdgeKind::Owned), (1, OwnerEdgeKind::Unowned)]
-                    }
-                    Some("createTrackedEffect" | "onSettled") => &[(0, OwnerEdgeKind::Leaf)],
-                    _ => &[],
-                };
-            for (argument_index, edge_kind) in callback_roles {
-                let Some(argument) = call.arguments.get(*argument_index) else {
+            for (argument_index, edge_kind) in owner_callback_edges(
+                &owner_file_indexes[file_index].call_primitives[call_index],
+                lookup.dialect,
+            ) {
+                let Some(argument) = call.arguments.get(argument_index) else {
                     continue;
                 };
                 let Some(target_index) = owner_callback_index(
@@ -4001,9 +3987,9 @@ fn find_missing_owners(
                     continue;
                 };
                 if let Some(owner) = owner {
-                    edges.push((owner, target_index, *edge_kind));
+                    edges.push((owner, target_index, edge_kind));
                 } else {
-                    contexts[target_index] |= owner_edge_context(*edge_kind, OWNER_CONTEXT_UNOWNED);
+                    contexts[target_index] |= owner_edge_context(edge_kind, OWNER_CONTEXT_UNOWNED);
                 }
             }
         }
@@ -4059,7 +4045,8 @@ fn find_missing_owners(
     let mut seen = HashSet::new();
     for (file_index, file) in facts.files.iter().enumerate() {
         for (call_index, call) in file.ast.calls.iter().enumerate() {
-            let primitive = owner_file_indexes[file_index].call_primitives[call_index].as_deref();
+            let primitive =
+                known_primitive(&owner_file_indexes[file_index].call_primitives[call_index]);
             let context = owner_context_at(
                 &nodes,
                 &nodes_by_path,
@@ -4072,14 +4059,14 @@ fn find_missing_owners(
                 call.span,
             );
             let operation = match primitive {
-                Some("createEffect" | "createTrackedEffect") if !root_owned => {
+                Some(Primitive::CreateEffect | Primitive::CreateTrackedEffect) if !root_owned => {
                     Some(("effect", context & OWNER_CONTEXT_UNOWNED != 0))
                 }
-                Some("onCleanup") if !root_owned => Some((
+                Some(Primitive::OnCleanup) if !root_owned => Some((
                     "cleanup",
                     context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
                 )),
-                Some("onSettled")
+                Some(Primitive::OnSettled)
                     if !root_owned
                         && call.arguments.first().is_some_and(|argument| {
                             owner_callback_index(
@@ -4306,51 +4293,33 @@ fn discover_owner_file(
                 kind: OwnerEdgeKind::Preserve,
             });
         }
-        let callback_roles: &[(usize, OwnerEdgeKind)] = match call_primitives[call_index].as_deref()
-        {
-            Some(
-                "createRoot"
-                | "createMemo"
-                | "createSignal"
-                | "createStore"
-                | "createProjection"
-                | "createOptimistic"
-                | "createOptimisticStore"
-                | "dynamic",
-            ) => &[(0, OwnerEdgeKind::Owned)],
-            Some("createEffect" | "createRenderEffect") => {
-                &[(0, OwnerEdgeKind::Owned), (1, OwnerEdgeKind::Unowned)]
-            }
-            Some("createTrackedEffect" | "onSettled") => &[(0, OwnerEdgeKind::Leaf)],
-            _ => &[],
-        };
-        for (argument_index, kind) in callback_roles {
+        for (argument_index, kind) in owner_callback_edges(&call_primitives[call_index], dialect) {
             if let Some(target) = call
                 .arguments
-                .get(*argument_index)
+                .get(argument_index)
                 .and_then(|argument| callback_target(argument.span))
             {
                 edges.push(SymbolicOwnerEdge {
                     source: owner,
                     target,
-                    kind: *kind,
+                    kind,
                 });
             }
         }
         if inside_owner_providing_region(&providing_regions, call.span) {
             continue;
         }
-        let operation = match call_primitives[call_index].as_deref() {
-            Some("createEffect" | "createTrackedEffect") => {
+        let operation = match known_primitive(&call_primitives[call_index]) {
+            Some(Primitive::CreateEffect | Primitive::CreateTrackedEffect) => {
                 Some(("effect", OWNER_CONTEXT_UNOWNED, None, call.callee))
             }
-            Some("onCleanup") => Some((
+            Some(Primitive::OnCleanup) => Some((
                 "cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 None,
                 call.callee,
             )),
-            Some("onSettled") => Some((
+            Some(Primitive::OnSettled) => Some((
                 "settled-cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 call.arguments
@@ -4714,6 +4683,28 @@ fn push_owner_requirement(
         });
     }
 }
+/// Which callback arguments of a call get an owner edge, and of what kind.
+///
+/// Shared by both owner passes on purpose: each used to keep its own literal
+/// list, and lists kept separately drift.
+fn owner_callback_edges<'a>(
+    primitive: &Option<PrimitiveName>,
+    dialect: &'a dyn Dialect,
+) -> impl Iterator<Item = (usize, OwnerEdgeKind)> + 'a {
+    known_primitive(primitive)
+        .map_or(&[][..], |primitive| dialect.callback_owners(primitive))
+        .iter()
+        .map(|(argument, owner)| {
+            let kind = match owner {
+                solid_dialect::CallbackOwner::Creates => OwnerEdgeKind::Owned,
+                solid_dialect::CallbackOwner::Inherits => OwnerEdgeKind::Preserve,
+                solid_dialect::CallbackOwner::None => OwnerEdgeKind::Unowned,
+                solid_dialect::CallbackOwner::Leaf => OwnerEdgeKind::Leaf,
+            };
+            (*argument, kind)
+        })
+}
+
 /// The argument whose callback runs under an owner this call creates (or, for
 /// `runWithOwner`, supplies). The two owner passes share this answer; each
 /// used to keep its own literal list, and the lists disagreed with every
@@ -4818,7 +4809,7 @@ fn jsx_element_is_loading(
         dialect,
     )
     .as_deref()
-        == Some("Loading")
+    .is_some_and(|tag| dialect.is_async_boundary(tag))
 }
 
 fn jsx_target_function<'a>(
@@ -4855,7 +4846,11 @@ fn computation_is_async(
         .is_some_and(|function| function.r#async)
 }
 
-fn inside_lowercase_named_function(file: &solid_facts::FileFacts, span: Span) -> bool {
+fn inside_lowercase_named_function(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    dialect: &dyn Dialect,
+) -> bool {
     if file
         .compiler
         .callback_roles
@@ -4864,20 +4859,18 @@ fn inside_lowercase_named_function(file: &solid_facts::FileFacts, span: Span) ->
     {
         return false;
     }
+    // An argument to a primitive that takes a callback is not "some helper
+    // function's body", whatever the helper is called. Asked of the dialect
+    // rather than listed: the seven names this had were 2.0's, three of which
+    // 1.x does not have, and it was missing every 1.x callback-taker outside
+    // the four it shares.
     if file.ast.arguments_containing(span).any(|(call, _)| {
         call.static_callee(&file.source).is_some_and(|callee| {
-            matches!(
-                callee.rsplit('.').next(),
-                Some(
-                    "createMemo"
-                        | "createEffect"
-                        | "createRenderEffect"
-                        | "createTrackedEffect"
-                        | "onSettled"
-                        | "untrack"
-                        | "action"
-                )
-            )
+            callee
+                .rsplit('.')
+                .next()
+                .and_then(|name| dialect.primitive(name))
+                .is_some_and(|primitive| !dialect.callback_positions(primitive).is_empty())
         })
     }) {
         return false;
@@ -5134,46 +5127,29 @@ fn function_is_solid_callback(
         .or_else(|| function_binding_name(file, function))
         .map(|name| file.source_text(name.span).unwrap_or_default());
     file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        primitives.calls[call_index]
-            .as_deref()
-            .is_some_and(|primitive| {
-                matches!(
-                    primitive,
-                    "createMemo"
-                        | "createEffect"
-                        | "createRenderEffect"
-                        | "createTrackedEffect"
-                        | "createSignal"
-                        | "createStore"
-                        | "createProjection"
-                        | "createOptimistic"
-                        | "createOptimisticStore"
-                        | "dynamic"
-                )
-            })
-            && call.arguments.iter().any(|argument| {
-                argument_references_callback_symbol(file, argument, symbol, entities, symbol_names)
-            })
+        known_primitive(&primitives.calls[call_index]).is_some_and(|primitive| {
+            !lookup.dialect.callback_positions(primitive).is_empty()
+                && !lookup.dialect.runs_callback_deferred(primitive)
+        }) && call.arguments.iter().any(|argument| {
+            argument_references_callback_symbol(file, argument, symbol, entities, symbol_names)
+        })
     }) || file
         .ast
         .jsx_elements
         .iter()
         .enumerate()
         .any(|(element_index, element)| {
-            primitives.jsx[element_index]
-                .as_deref()
-                .is_some_and(|primitive| {
-                    matches!(primitive, "For" | "Repeat" | "Show" | "Match" | "Switch")
-                })
-                && file.ast.identifiers_within(element.span).any(|identifier| {
-                    identifier.role == solid_facts::ast::IdentifierRole::Reference
-                        && !file.ast.jsx_containing(identifier.span).any(|nested| {
-                            nested.span != element.span && element.span.contains(nested.span)
-                        })
-                        && (entities.get(&location(file.path.shared(), identifier.span))
-                            == Some(symbol)
-                            || binding_name == file.source_text(identifier.span))
-                })
+            known_primitive(&primitives.jsx[element_index]).is_some_and(|primitive| {
+                lookup.dialect.renders_children_through_callback(primitive)
+            }) && file.ast.identifiers_within(element.span).any(|identifier| {
+                identifier.role == solid_facts::ast::IdentifierRole::Reference
+                    && !file.ast.jsx_containing(identifier.span).any(|nested| {
+                        nested.span != element.span && element.span.contains(nested.span)
+                    })
+                    && (entities.get(&location(file.path.shared(), identifier.span))
+                        == Some(symbol)
+                        || binding_name == file.source_text(identifier.span))
+            })
         })
 }
 
@@ -5726,7 +5702,7 @@ impl LocalAccessContext<'_> {
             };
             let key = (callee.path.clone(), callee.start_byte, callee.end_byte);
             if let Some((name, declaration)) = self.accessors.get(symbol)
-                && (!inside_lowercase_named_function(file, call.callee)
+                && (!inside_lowercase_named_function(file, call.callee, self.lookup.dialect)
                     || named_callback_execution_role(
                         file,
                         call.callee,
@@ -5817,7 +5793,7 @@ impl LocalAccessContext<'_> {
                 result.strict_read_obligations += 1;
             }
             if let Some(contracted) = self.contract_reads.get(symbol)
-                && !inside_lowercase_named_function(file, call.callee)
+                && !inside_lowercase_named_function(file, call.callee, self.lookup.dialect)
             {
                 for (index, (name, via, declaration, kind)) in contracted.iter().enumerate() {
                     let contract_key = (
@@ -5904,7 +5880,7 @@ impl LocalAccessContext<'_> {
                 self.symbol_names,
                 self.lookup,
             );
-            if (inside_lowercase_named_function(file, member.span)
+            if (inside_lowercase_named_function(file, member.span, self.lookup.dialect)
                 || inside_unclassified_callback(file, member.span))
                 && named_callback_execution_role(
                     file,
@@ -6009,7 +5985,7 @@ impl LocalAccessContext<'_> {
                 self.symbol_names,
                 self.lookup,
             );
-            if (inside_lowercase_named_function(file, spread.span)
+            if (inside_lowercase_named_function(file, spread.span, self.lookup.dialect)
                 || inside_unclassified_callback(file, spread.span))
                 && named_callback_execution_role(
                     file,

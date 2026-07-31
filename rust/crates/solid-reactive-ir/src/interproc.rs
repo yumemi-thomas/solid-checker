@@ -12,6 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use solid_dialect::Primitive;
 use solid_facts::ProjectFacts;
 use solid_facts::core::Span;
 use typefacts::Location;
@@ -495,10 +496,11 @@ fn discover_interprocedural_graph(
                 ));
                 continue;
             }
-            if let Some(execution) = primitives.calls[call_index]
-                .as_deref()
-                .and_then(|primitive| primitive_callback_execution(primitive, argument_index))
-            {
+            if let Some(execution) = primitive_callback_execution(
+                super::known_primitive(&primitives.calls[call_index]),
+                argument_index,
+                lookup.dialect,
+            ) {
                 contribution.callbacks.push((
                     nodes[callback_owner].span,
                     ContractCallback {
@@ -756,25 +758,52 @@ fn same_runtime_value(
         .is_some_and(|(left, right)| left == right)
 }
 
-fn primitive_callback_execution(primitive: &str, parameter: usize) -> Option<&'static str> {
+/// The execution recorded for a callback forwarded into a primitive, in the
+/// package contracts' vocabulary.
+///
+/// The effect pair derives from the dialect, because its phases are the
+/// headline dialect difference: 2.0 has a deferred apply argument, 1.x has a
+/// tracked callback and a seed value. The other arms keep this module's own
+/// classification -- it deliberately labels `untrack`/`flush` callbacks
+/// "deferred" where the vocabulary calls them inline, because a contract
+/// consumer treats "deferred" as "not tracked here", which is the meaning
+/// these summaries need. Reconciling the two vocabularies is a contract-
+/// emission change with its own fixtures.
+fn primitive_callback_execution(
+    primitive: Option<Primitive>,
+    parameter: usize,
+    dialect: &dyn solid_dialect::Dialect,
+) -> Option<&'static str> {
+    use Primitive as P;
+    let primitive = primitive?;
+    if matches!(primitive, P::CreateEffect | P::CreateRenderEffect) {
+        return dialect
+            .callback_executions(primitive)
+            .iter()
+            .find(|(index, _)| *index == parameter)
+            .map(|(_, execution)| match execution {
+                solid_dialect::Execution::Tracked => "tracked",
+                solid_dialect::Execution::Deferred => "deferred",
+                solid_dialect::Execution::Inline => "inline",
+            });
+    }
     match (primitive, parameter) {
         (
-            "createMemo"
-            | "createTrackedEffect"
-            | "createSignal"
-            | "createStore"
-            | "createProjection"
-            | "createOptimistic"
-            | "createOptimisticStore"
-            | "dynamic",
+            P::CreateMemo
+            | P::CreateTrackedEffect
+            | P::CreateSignal
+            | P::CreateStore
+            | P::CreateProjection
+            | P::CreateOptimistic
+            | P::CreateOptimisticStore
+            | P::Dynamic,
             0,
         ) => Some("tracked"),
-        ("createEffect" | "createRenderEffect", 0) => Some("tracked"),
-        ("createEffect" | "createRenderEffect", 1) => Some("deferred"),
-        ("onSettled" | "action" | "createReaction" | "untrack" | "flush" | "onCleanup", 0) => {
-            Some("deferred")
-        }
-        ("createRoot", 0) | ("runWithOwner", 1) => Some("inline"),
+        (
+            P::OnSettled | P::Action | P::CreateReaction | P::Untrack | P::Flush | P::OnCleanup,
+            0,
+        ) => Some("deferred"),
+        (P::CreateRoot, 0) | (P::RunWithOwner, 1) => Some("inline"),
         _ => None,
     }
 }
