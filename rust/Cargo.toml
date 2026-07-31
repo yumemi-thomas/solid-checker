@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = [
+  "crates/solid-dialect",
   "crates/solid-facts",
   "crates/solid-reactive-ir",
   "crates/solid-facts-backend",

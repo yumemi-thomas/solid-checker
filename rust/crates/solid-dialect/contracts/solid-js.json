@@ -1,0 +1,376 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "solid-js",
+    "version": "2.0.0-beta.19"
+  },
+  "compilerFactsProtocol": 1,
+  "exports": {
+    "action": {
+      "kind": "function"
+    },
+    "affects": {
+      "kind": "function"
+    },
+    "children": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "resolved children"
+      }
+    },
+    "createComponent": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "createContext": {
+      "kind": "function"
+    },
+    "createEffect": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "createErrorBoundary": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "guarded value or error fallback"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "createLoadingBoundary": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "guarded value or loading fallback"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "createMemo": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "memo result"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "createOptimistic": {
+      "kind": "function"
+    },
+    "createOptimisticStore": {
+      "kind": "function"
+    },
+    "createOwner": {
+      "kind": "function"
+    },
+    "createProjection": {
+      "kind": "function",
+      "returns": {
+        "kind": "store-path",
+        "label": "projection result"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "createReaction": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "createRenderEffect": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "createRevealOrder": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "createRoot": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "createSignal": {
+      "kind": "function"
+    },
+    "createStore": {
+      "kind": "function"
+    },
+    "createTrackedEffect": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "createUniqueId": {
+      "kind": "function"
+    },
+    "deep": {
+      "kind": "function"
+    },
+    "DEV": {
+      "kind": "value"
+    },
+    "$DEVCOMP": {
+      "kind": "value"
+    },
+    "devComponent": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "enableExternalSource": {
+      "kind": "function"
+    },
+    "enableHydration": {
+      "kind": "function"
+    },
+    "enforceLoadingBoundary": {
+      "kind": "function"
+    },
+    "Errored": {
+      "kind": "function"
+    },
+    "flatten": {
+      "kind": "function"
+    },
+    "flush": {
+      "kind": "function"
+    },
+    "For": {
+      "kind": "function"
+    },
+    "getNextChildId": {
+      "kind": "function"
+    },
+    "getObserver": {
+      "kind": "function"
+    },
+    "getOwner": {
+      "kind": "function"
+    },
+    "Hydration": {
+      "kind": "function"
+    },
+    "IS_DEV": {
+      "kind": "value"
+    },
+    "isDisposed": {
+      "kind": "function"
+    },
+    "isEqual": {
+      "kind": "function"
+    },
+    "isPending": {
+      "kind": "function"
+    },
+    "isWrappable": {
+      "kind": "function"
+    },
+    "latest": {
+      "kind": "function"
+    },
+    "lazy": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "Loading": {
+      "kind": "function"
+    },
+    "mapArray": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "mapped array"
+      },
+      "callbacks": [
+        {
+          "parameter": 1,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "Match": {
+      "kind": "function"
+    },
+    "merge": {
+      "kind": "function"
+    },
+    "NoHydrateContext": {
+      "kind": "value"
+    },
+    "NoHydration": {
+      "kind": "function"
+    },
+    "NotReadyError": {
+      "kind": "value"
+    },
+    "omit": {
+      "kind": "function"
+    },
+    "onCleanup": {
+      "kind": "function"
+    },
+    "onSettled": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "$PROXY": {
+      "kind": "value"
+    },
+    "reconcile": {
+      "kind": "function"
+    },
+    "$REFRESH": {
+      "kind": "value"
+    },
+    "refresh": {
+      "kind": "function"
+    },
+    "Repeat": {
+      "kind": "function"
+    },
+    "repeat": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 1,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "resolve": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "Reveal": {
+      "kind": "function"
+    },
+    "runWithOwner": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 1,
+          "execution": "inline"
+        }
+      ]
+    },
+    "sharedConfig": {
+      "kind": "value"
+    },
+    "Show": {
+      "kind": "function"
+    },
+    "snapshot": {
+      "kind": "function"
+    },
+    "ssrHandleError": {
+      "kind": "function"
+    },
+    "ssrScope": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "storePath": {
+      "kind": "value"
+    },
+    "Switch": {
+      "kind": "function"
+    },
+    "$TRACK": {
+      "kind": "value"
+    },
+    "untrack": {
+      "kind": "function"
+    },
+    "useContext": {
+      "kind": "function"
+    }
+  },
+  "evidence": {
+    "kind": "reviewed",
+    "generator": "solid-contract-gen"
+  }
+}

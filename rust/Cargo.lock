@@ -1072,6 +1072,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "solid-dialect"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "solid-facts"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,335 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@solidjs/web",
+    "version": "2.0.0-beta.19"
+  },
+  "compilerFactsProtocol": 1,
+  "exports": {
+    "acquireAsset": {
+      "kind": "function"
+    },
+    "addEvent": {
+      "kind": "function"
+    },
+    "applyRef": {
+      "kind": "function"
+    },
+    "Assets": {
+      "kind": "function"
+    },
+    "assign": {
+      "kind": "function"
+    },
+    "ChildProperties": {
+      "kind": "function"
+    },
+    "className": {
+      "kind": "function"
+    },
+    "configureServerFunctionsClient": {
+      "kind": "function"
+    },
+    "configureServerFunctionsServer": {
+      "kind": "function"
+    },
+    "createComponent": {
+      "kind": "function"
+    },
+    "createHydrationSerializer": {
+      "kind": "function"
+    },
+    "createJSONDeserializer": {
+      "kind": "function"
+    },
+    "createSerializer": {
+      "kind": "function"
+    },
+    "createServerReference": {
+      "kind": "function"
+    },
+    "decodeResponse": {
+      "kind": "function"
+    },
+    "DEFAULT_WEB_PLUGINS": {
+      "kind": "function"
+    },
+    "DelegatedEvents": {
+      "kind": "function"
+    },
+    "delegateEvents": {
+      "kind": "function"
+    },
+    "DOMElements": {
+      "kind": "function"
+    },
+    "DOMWithState": {
+      "kind": "function"
+    },
+    "Dynamic": {
+      "kind": "function"
+    },
+    "dynamic": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "dynamicProperty": {
+      "kind": "function"
+    },
+    "effect": {
+      "kind": "function"
+    },
+    "Errored": {
+      "kind": "function"
+    },
+    "escape": {
+      "kind": "function"
+    },
+    "For": {
+      "kind": "function"
+    },
+    "FUNCTION_HEADER": {
+      "kind": "function"
+    },
+    "generateHydrationScript": {
+      "kind": "function"
+    },
+    "getAssets": {
+      "kind": "function"
+    },
+    "getDelegatedRoot": {
+      "kind": "function"
+    },
+    "getHydrationKey": {
+      "kind": "function"
+    },
+    "getLocalHeaderScript": {
+      "kind": "function"
+    },
+    "getNextElement": {
+      "kind": "function"
+    },
+    "getNextMarker": {
+      "kind": "function"
+    },
+    "getNextMatch": {
+      "kind": "function"
+    },
+    "getOwner": {
+      "kind": "function"
+    },
+    "getRequestEvent": {
+      "kind": "function"
+    },
+    "getServerFunction": {
+      "kind": "function"
+    },
+    "getServerFunctionMeta": {
+      "kind": "function"
+    },
+    "handleServerFunctionRequest": {
+      "kind": "function"
+    },
+    "hydrate": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "Hydration": {
+      "kind": "function"
+    },
+    "HydrationScript": {
+      "kind": "function"
+    },
+    "insert": {
+      "kind": "function"
+    },
+    "INSTANCE_HEADER": {
+      "kind": "function"
+    },
+    "isDev": {
+      "kind": "function"
+    },
+    "isResponseEnvelope": {
+      "kind": "function"
+    },
+    "isServer": {
+      "kind": "function"
+    },
+    "Loading": {
+      "kind": "function"
+    },
+    "Match": {
+      "kind": "function"
+    },
+    "MathMLElements": {
+      "kind": "function"
+    },
+    "memo": {
+      "kind": "function"
+    },
+    "mergeProps": {
+      "kind": "function"
+    },
+    "Namespaces": {
+      "kind": "function"
+    },
+    "NoHydration": {
+      "kind": "function"
+    },
+    "Portal": {
+      "kind": "function"
+    },
+    "provideRequestEvent": {
+      "kind": "function"
+    },
+    "RawTextElements": {
+      "kind": "function"
+    },
+    "redirect": {
+      "kind": "function"
+    },
+    "ref": {
+      "kind": "function"
+    },
+    "registerDelegatedContainer": {
+      "kind": "function"
+    },
+    "registerDelegatedRoot": {
+      "kind": "function"
+    },
+    "registerServerFunction": {
+      "kind": "function"
+    },
+    "registerServerReference": {
+      "kind": "function"
+    },
+    "reload": {
+      "kind": "function"
+    },
+    "render": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "renderToStream": {
+      "kind": "function"
+    },
+    "renderToString": {
+      "kind": "function"
+    },
+    "renderToStringAsync": {
+      "kind": "function"
+    },
+    "Repeat": {
+      "kind": "function"
+    },
+    "RequestContext": {
+      "kind": "function"
+    },
+    "resolveSerializerPlugins": {
+      "kind": "function"
+    },
+    "resolveSSRNode": {
+      "kind": "function"
+    },
+    "respond": {
+      "kind": "function"
+    },
+    "ResponseEnvelope": {
+      "kind": "function"
+    },
+    "Reveal": {
+      "kind": "function"
+    },
+    "runHydrationEvents": {
+      "kind": "function"
+    },
+    "scope": {
+      "kind": "function"
+    },
+    "serializeJSON": {
+      "kind": "function"
+    },
+    "setAttribute": {
+      "kind": "function"
+    },
+    "setAttributeNS": {
+      "kind": "function"
+    },
+    "setProperty": {
+      "kind": "function"
+    },
+    "setStyleProperty": {
+      "kind": "function"
+    },
+    "Show": {
+      "kind": "function"
+    },
+    "spread": {
+      "kind": "function"
+    },
+    "ssr": {
+      "kind": "function"
+    },
+    "ssrAttribute": {
+      "kind": "function"
+    },
+    "ssrClassList": {
+      "kind": "function"
+    },
+    "ssrElement": {
+      "kind": "function"
+    },
+    "ssrHydrationKey": {
+      "kind": "function"
+    },
+    "ssrStyle": {
+      "kind": "function"
+    },
+    "style": {
+      "kind": "function"
+    },
+    "SVGElements": {
+      "kind": "function"
+    },
+    "Switch": {
+      "kind": "function"
+    },
+    "template": {
+      "kind": "function"
+    },
+    "unregisterDelegatedContainer": {
+      "kind": "function"
+    },
+    "unregisterDelegatedRoot": {
+      "kind": "function"
+    },
+    "untrack": {
+      "kind": "function"
+    },
+    "useAssets": {
+      "kind": "function"
+    },
+    "VoidElements": {
+      "kind": "function"
+    }
+  },
+  "evidence": {
+    "kind": "reviewed",
+    "generator": "solid-contract-gen"
+  }
+}
