@@ -3,7 +3,7 @@ import process from "node:process";
 
 const args = [
   "build",
-  "--manifest-path", "../../rust/solid-checker-wasm/Cargo.toml",
+  "--manifest-path", "../../rust/crates/solid-checker-wasm/Cargo.toml",
   "--package-json-path", "package.json",
   "--output-dir", ".",
   "--package", "solid-checker-wasm",

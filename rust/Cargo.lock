@@ -1057,22 +1057,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8e2fb0f499abb4d162f2bedad68f5ef91a1682b5a03596ddb67efd37768d100"
 
 [[package]]
-name = "solid-ast-facts"
-version = "0.1.0"
-dependencies = [
- "compact_str",
- "oxc_allocator",
- "oxc_ast",
- "oxc_ast_visit",
- "oxc_parser",
- "oxc_span",
- "oxc_syntax",
- "serde",
- "solid-facts-core",
- "thiserror",
-]
-
-[[package]]
 name = "solid-checker-wasm"
 version = "0.1.0"
 dependencies = [
@@ -1088,23 +1072,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "solid-compiler-facts"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "solid-facts-core",
- "thiserror",
-]
-
-[[package]]
 name = "solid-facts"
 version = "0.1.0"
 dependencies = [
+ "compact_str",
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
+ "oxc_parser",
+ "oxc_span",
+ "oxc_syntax",
  "serde",
- "solid-ast-facts",
- "solid-compiler-facts",
- "solid-facts-core",
+ "serde_json",
+ "sha2",
  "thiserror",
  "typefacts",
 ]
@@ -1113,29 +1093,17 @@ dependencies = [
 name = "solid-facts-backend"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-compiler",
  "oxc-miette",
  "oxc_diagnostics",
  "serde",
  "serde_json",
  "sha2",
- "solid-ast-facts",
- "solid-compiler-facts",
  "solid-facts",
- "solid-facts-core",
  "solid-reactive-ir",
- "solid-reactive-solver",
+ "solid-v2-compiler",
+ "solid-v2-rules",
  "thiserror",
  "typefacts",
-]
-
-[[package]]
-name = "solid-facts-core"
-version = "0.1.0"
-dependencies = [
- "serde",
- "sha2",
- "thiserror",
 ]
 
 [[package]]
@@ -1144,15 +1112,21 @@ version = "0.1.0"
 dependencies = [
  "serde",
  "sha2",
- "solid-ast-facts",
  "solid-facts",
- "solid-facts-core",
  "thiserror",
  "typefacts",
 ]
 
 [[package]]
-name = "solid-reactive-solver"
+name = "solid-v2-compiler"
+version = "0.1.0"
+dependencies = [
+ "dom-expressions-compiler",
+ "solid-facts",
+]
+
+[[package]]
+name = "solid-v2-rules"
 version = "0.1.0"
 dependencies = [
  "serde",

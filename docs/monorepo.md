@@ -9,12 +9,15 @@ own repositories.
 
 Physical colocation does not merge the module interfaces:
 
-- `rust/solid-facts-backend` orchestrates certification.
-- `rust/solid-compiler-facts` owns compiler-fact integration.
+- `rust/crates/solid-facts-backend` orchestrates certification.
+- `rust/crates/solid-facts` owns the fact model, including compiler-fact
+  integration behind the `CompilerFactsProvider` seam.
+- `rust/dialects/solid-v2` owns Solid 2.0 specifics: the rule catalog and the
+  dom-expressions compiler adapter.
 - The `typefacts` crate and its `solid-typefacts` producer own TypeScript-Go
   facts, in their own repository.
 - The `dom-expressions-compiler` crate owns JSX execution semantics.
-- `rust/solid-facts-backend` owns package contracts.
+- `rust/crates/solid-facts-backend` owns package contracts.
 
 Oxc and compiler facts stay in-process.
 

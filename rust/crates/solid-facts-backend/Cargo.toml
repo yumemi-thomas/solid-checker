@@ -1,0 +1,37 @@
+[package]
+name = "solid-facts-backend"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+autobins = false
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+oxc_diagnostics.workspace = true
+oxc_miette.workspace = true
+solid-facts = { path = "../solid-facts" }
+solid-v2-compiler = { path = "../../dialects/solid-v2/compiler" }
+typefacts.workspace = true
+solid-reactive-ir = { path = "../solid-reactive-ir" }
+solid-v2-rules = { path = "../../dialects/solid-v2/rules" }
+thiserror.workspace = true
+
+[lib]
+name = "solid_facts_backend"
+path = "src/lib.rs"
+
+[[bin]]
+name = "solid-checker-rust"
+path = "src/main.rs"
+
+[[bin]]
+name = "solid-checker-session-bench"
+path = "src/bin/solid-checker-session-bench.rs"
+
+[[bin]]
+name = "solid-checker-cold-start-bench"
+path = "src/bin/solid-checker-cold-start-bench.rs"

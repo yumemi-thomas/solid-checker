@@ -1,14 +1,12 @@
 [workspace]
 resolver = "2"
 members = [
-  "solid-facts-core",
-  "solid-ast-facts",
-  "solid-compiler-facts",
-  "solid-facts",
-  "solid-facts-backend",
-  "solid-reactive-ir",
-  "solid-reactive-solver",
-  "solid-checker-wasm",
+  "crates/solid-facts",
+  "crates/solid-reactive-ir",
+  "crates/solid-facts-backend",
+  "crates/solid-checker-wasm",
+  "dialects/solid-v2/compiler",
+  "dialects/solid-v2/rules",
 ]
 
 [workspace.package]

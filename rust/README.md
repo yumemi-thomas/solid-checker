@@ -1,20 +1,28 @@
 # Rust analysis foundations
 
 This workspace is the production analysis backend. It includes the checker and
-the CLI.
+the CLI. `ARCHITECTURE.md` describes the crate layout: dialect-independent
+infrastructure under `crates/`, Solid-version-specific rules and compiler
+adapters under `dialects/`.
 
 Fact ownership is deliberately split:
 
-- `solid-ast-facts`: parser-derived source structure from one Oxc AST walk;
-- `solid-compiler-facts`: Solid compiler execution roles (`ExecutionMap`);
+- `crates/solid-facts`: the fact model. Its `core` module owns source
+  identity, generations, hashes, and byte spans; `ast` owns parser-derived
+  source structure from one Oxc AST walk; `compiler` owns Solid compiler
+  execution roles (`ExecutionMap`) and the `CompilerFactsProvider` seam; the
+  crate root validates and joins the domains without exposing either Oxc or
+  TypeScript-Go nodes;
 - `typefacts`: checker-derived facts and the retained producer session, from
   [solid-ts-facts](https://github.com/yumemi-thomas/solid-ts-facts);
-- `solid-facts-core`: source identity, generations, hashes, and byte spans;
-- `solid-facts`: validates and joins the three domains without exposing either
-  Oxc or TypeScript-Go nodes.
-- `solid-facts-backend`: orchestration, retained caches, certification
+- `crates/solid-facts-backend`: orchestration, retained caches, certification
   snapshots, contracts, and the CLI;
-- `solid-reactive-ir` and `solid-reactive-solver`: native analysis and rules.
+- `crates/solid-reactive-ir`: native analysis, producing the reactive program
+  IR and the dialect-neutral `Finding` model;
+- `dialects/solid-v2/rules`: the Solid 2.0 rule catalog and finding
+  construction;
+- `dialects/solid-v2/compiler`: the dom-expressions compiler adapted to the
+  `CompilerFactsProvider` seam.
 
 The AST package contains no regular expressions. TypeScript facts contain no
 syntax-discovery fallback. Both choices are architectural constraints: Oxc owns
