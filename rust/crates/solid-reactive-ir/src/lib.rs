@@ -759,6 +759,7 @@ struct CachedTypeScriptIndexes {
 
 fn build_typescript_indexes(
     table: &solid_facts::TypeScriptTable,
+    dialect: &dyn Dialect,
     parallel: bool,
 ) -> (CachedTypeScriptIndexes, Duration, Duration) {
     let interner = SymbolInterner::from_table(table);
@@ -778,7 +779,7 @@ fn build_typescript_indexes(
                 let entities = entity_symbols(table, &aliases, &interner);
                 (entities, started.elapsed())
             });
-            let names = scope.spawn(|| symbol_names(table, &aliases, &interner));
+            let names = scope.spawn(|| symbol_names(table, &aliases, &interner, dialect));
             let targets = scope.spawn(|| symbol_alias_targets(table, &interner));
             let roots = scope.spawn(|| symbols_by_root(table, &aliases, &interner));
             let semantics = scope.spawn(|| source_discovery_symbol_semantics(table, &interner));
@@ -798,7 +799,7 @@ fn build_typescript_indexes(
         let entities_elapsed = entities_started.elapsed();
         (
             (entities, entities_elapsed),
-            symbol_names(table, &aliases, &interner),
+            symbol_names(table, &aliases, &interner, dialect),
             symbol_alias_targets(table, &interner),
             symbols_by_root(table, &aliases, &interner),
             source_discovery_symbol_semantics(table, &interner),
@@ -2692,6 +2693,7 @@ fn build_with_contracts_measured_incremental(
                             cached,
                             &facts.typescript,
                             &project_indexes.symbols_by_id,
+                            dialect,
                             changes,
                         )
                     })
@@ -2707,7 +2709,7 @@ fn build_with_contracts_measured_incremental(
         if (!typescript_unchanged && !indexes_patched) || cache.is_none() {
             let substage_started = Instant::now();
             let (indexes, alias_roots, entity_symbols) =
-                build_typescript_indexes(&facts.typescript, facts.files.len() >= 256);
+                build_typescript_indexes(&facts.typescript, dialect, facts.files.len() >= 256);
             build_timings.alias_roots = alias_roots;
             build_timings.entity_symbols = entity_symbols;
             build_timings.alias_and_entity_indexes = substage_started.elapsed();
@@ -2719,7 +2721,7 @@ fn build_with_contracts_measured_incremental(
     } else {
         let substage_started = Instant::now();
         let (indexes, alias_roots, entity_symbols) =
-            build_typescript_indexes(&facts.typescript, facts.files.len() >= 256);
+            build_typescript_indexes(&facts.typescript, dialect, facts.files.len() >= 256);
         build_timings.alias_roots = alias_roots;
         build_timings.entity_symbols = entity_symbols;
         build_timings.alias_and_entity_indexes = substage_started.elapsed();
@@ -2731,7 +2733,7 @@ fn build_with_contracts_measured_incremental(
     let entities = &typescript_indexes.entities;
     let substage_started = Instant::now();
     let mut symbol_names = typescript_indexes.symbol_names.clone();
-    add_solid_import_names(facts, entities, &mut symbol_names);
+    add_solid_import_names(facts, entities, dialect, &mut symbol_names);
     build_timings.symbol_name_indexes = substage_started.elapsed();
     let substage_started = Instant::now();
     let mut resolved_contracts = resolve_contract_imports(facts, contracts, entities);
@@ -6518,7 +6520,7 @@ mod tests {
             symbol_alias_targets: symbol_alias_targets(table, &interner),
             symbols_by_root: symbols_by_root(table, &aliases, &interner),
             entities: entity_symbols(table, &aliases, &interner),
-            symbol_names: symbol_names(table, &aliases, &interner),
+            symbol_names: symbol_names(table, &aliases, &interner, &solid_dialect::Solid2),
             source_discovery_symbol_semantics: source_discovery_symbol_semantics(table, &interner),
             source_discovery_delta: None,
             aliases,
@@ -6714,7 +6716,13 @@ mod tests {
         };
 
         assert!(
-            patch_typescript_indexes(&mut patched, &current, &symbols_by_id, &changes).is_some()
+            patch_typescript_indexes(
+                &mut patched,
+                &current,
+                &symbols_by_id,
+                &solid_dialect::Solid2,
+                &changes
+            ).is_some()
         );
         let fresh = typescript_index_cache(&current);
         assert_eq!(patched.symbol_alias_targets, fresh.symbol_alias_targets);
@@ -6775,7 +6783,13 @@ mod tests {
         };
 
         assert!(
-            patch_typescript_indexes(&mut patched, &current, &symbols_by_id, &changes).is_some()
+            patch_typescript_indexes(
+                &mut patched,
+                &current,
+                &symbols_by_id,
+                &solid_dialect::Solid2,
+                &changes
+            ).is_some()
         );
         assert!(
             patched
@@ -6818,7 +6832,13 @@ mod tests {
         };
 
         assert!(
-            patch_typescript_indexes(&mut patched, &current, &symbols_by_id, &changes).is_some()
+            patch_typescript_indexes(
+                &mut patched,
+                &current,
+                &symbols_by_id,
+                &solid_dialect::Solid2,
+                &changes
+            ).is_some()
         );
         assert_eq!(
             patched.source_declarations,
@@ -6866,7 +6886,13 @@ mod tests {
         };
 
         assert!(
-            patch_typescript_indexes(&mut patched, &current, &symbols_by_id, &changes).is_some()
+            patch_typescript_indexes(
+                &mut patched,
+                &current,
+                &symbols_by_id,
+                &solid_dialect::Solid2,
+                &changes
+            ).is_some()
         );
         assert_eq!(
             patched.source_declarations["root"].location.path,
@@ -6933,7 +6959,13 @@ mod tests {
         };
 
         assert!(
-            patch_typescript_indexes(&mut patched, &current, &symbols_by_id, &changes).is_some()
+            patch_typescript_indexes(
+                &mut patched,
+                &current,
+                &symbols_by_id,
+                &solid_dialect::Solid2,
+                &changes
+            ).is_some()
         );
         assert!(
             patched
@@ -6994,7 +7026,13 @@ mod tests {
         };
 
         assert!(
-            patch_typescript_indexes(&mut patched, &current, &symbols_by_id, &changes).is_none()
+            patch_typescript_indexes(
+                &mut patched,
+                &current,
+                &symbols_by_id,
+                &solid_dialect::Solid2,
+                &changes
+            ).is_none()
         );
         assert_eq!(patched.aliases, typescript_index_cache(&old).aliases);
     }
