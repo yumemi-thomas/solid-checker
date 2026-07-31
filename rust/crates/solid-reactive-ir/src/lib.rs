@@ -3391,6 +3391,9 @@ fn build_with_contracts_measured_incremental(
             lookup: semantic_lookup,
             entities,
             symbol_names: &symbol_names,
+            accessors: &accessors,
+            source_kinds: &source_kinds,
+            setters: &setters,
         };
         static_violations.extend(
             parallel_file_results(&facts.files, |file| {

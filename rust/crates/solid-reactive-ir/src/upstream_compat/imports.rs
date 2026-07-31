@@ -131,10 +131,7 @@ fn module_rewrite_fix(
         message: format!("import from {canonical:?}"),
         applicability: "safe".into(),
         edits: vec![TextEdit {
-            location: location(
-                file.path.shared(),
-                solid_facts::core::Span::new(start, end),
-            ),
+            location: location(file.path.shared(), solid_facts::core::Span::new(start, end)),
             new_text: format!("{quote}{canonical}{quote}"),
         }],
     })

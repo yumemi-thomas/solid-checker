@@ -24,14 +24,27 @@ mod undef;
 use std::collections::HashMap;
 
 use crate::indexes::SemanticLookup;
-use crate::{EntitySymbols, StaticViolation, SymbolId};
+use crate::{EntitySymbols, ReactiveSourceKind, StaticViolation, SymbolId};
 use solid_facts::FileFacts;
+use typefacts::Location;
 
 /// Everything one file's upstream-compat checks may consult.
+///
+/// The reactive maps are the reason the decomposed `reactivity` rules can be
+/// semantic rather than syntactic: upstream decides what is reactive from
+/// naming conventions and call shapes, while these are the sources the engine
+/// *proved*, through TypeScript symbol resolution, package contracts, and
+/// cross-file propagation.
 pub(super) struct UpstreamCompatContext<'a> {
     pub(super) lookup: &'a SemanticLookup<'a>,
     pub(super) entities: &'a EntitySymbols,
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
+    /// Proven reactive accessors, by symbol: display name and declaration.
+    pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// Whether each proven source is an accessor or a store path.
+    pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    /// Proven setters, by symbol.
+    pub(super) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool)>,
 }
 
 /// Runs every upstream-compat rule over one file.

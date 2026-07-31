@@ -78,6 +78,21 @@ fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), Ba
     for element in &file.ast.jsx_elements {
         add_symbol(element.name.span, false);
     }
+    // Value positions that coerce whatever they receive: an untagged template
+    // interpolation stringifies it, a computed member key stringifies it as a
+    // property name. Both are positions where handing over an accessor
+    // *function* is provably not what the author meant, and the rule that
+    // reports it needs the interpolated identifier to resolve to a symbol.
+    for template in &file.ast.template_literals {
+        for interpolated in &template.expressions {
+            add_symbol(*interpolated, false);
+        }
+    }
+    for member in &file.ast.members {
+        if file.ast.computed_members.contains(&member.span) {
+            add_symbol(member.property, false);
+        }
+    }
     for returned in &file.ast.returns {
         if let Some(callee) = returned.callee
             && let Some(call) = file.ast.calls.iter().find(|call| call.callee == callee)

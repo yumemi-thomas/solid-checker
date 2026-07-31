@@ -61,6 +61,8 @@ pub struct AstFacts {
     #[serde(default)]
     pub tagged_templates: Vec<TaggedTemplateFact>,
     #[serde(default)]
+    pub template_literals: Vec<TemplateLiteralFact>,
+    #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
     #[serde(default)]
     pub if_regions: Vec<IfRegionFact>,
@@ -349,6 +351,19 @@ pub struct ObjectPropertyFact {
 /// that the tag invokes later, which makes them a distinct execution scope from
 /// the code around them. Rules need the structure to tell those apart from an
 /// ordinary expression, and the tag's own identity to resolve what it is.
+/// An untagged template literal and the expressions interpolated into it.
+///
+/// Separate from [`TaggedTemplateFact`] because the two coerce differently:
+/// a tag receives the interpolations as values and may do anything with them,
+/// while an untagged literal stringifies each one. That makes this the fact
+/// that proves an interpolated accessor renders its own source text.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateLiteralFact {
+    pub span: Span,
+    pub expressions: Vec<Span>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaggedTemplateFact {
@@ -487,6 +502,7 @@ struct Collector<'s> {
     logical_expressions: Vec<LogicalExpressionFact>,
     object_properties: Vec<ObjectPropertyFact>,
     tagged_templates: Vec<TaggedTemplateFact>,
+    template_literals: Vec<TemplateLiteralFact>,
     assignments: Vec<AssignmentFact>,
     if_regions: Vec<IfRegionFact>,
     conditional_control_stack: Vec<Span>,
@@ -514,6 +530,7 @@ impl<'s> Collector<'s> {
             logical_expressions: Vec::new(),
             object_properties: Vec::new(),
             tagged_templates: Vec::new(),
+            template_literals: Vec::new(),
             assignments: Vec::new(),
             if_regions: Vec::new(),
             conditional_control_stack: Vec::new(),
@@ -539,6 +556,7 @@ impl<'s> Collector<'s> {
         self.logical_expressions.sort_by_key(|fact| fact.span);
         self.object_properties.sort_by_key(|fact| fact.span);
         self.tagged_templates.sort_by_key(|fact| fact.span);
+        self.template_literals.sort_by_key(|fact| fact.span);
         self.assignments.sort_by_key(|fact| fact.target);
         self.if_regions.sort_by_key(|fact| fact.consequent);
         AstFacts {
@@ -563,6 +581,7 @@ impl<'s> Collector<'s> {
             logical_expressions: self.logical_expressions,
             object_properties: self.object_properties,
             tagged_templates: self.tagged_templates,
+            template_literals: self.template_literals,
             assignments: self.assignments,
             if_regions: self.if_regions,
         }
@@ -1143,6 +1162,18 @@ impl<'a> Visit<'a> for Collector<'_> {
                 .collect(),
         });
         walk::walk_tagged_template_expression(self, expression);
+    }
+
+    fn visit_template_literal(&mut self, literal: &oxc_ast::ast::TemplateLiteral<'a>) {
+        self.template_literals.push(TemplateLiteralFact {
+            span: span(literal.span),
+            expressions: literal
+                .expressions
+                .iter()
+                .map(|interpolated| span(interpolated.span()))
+                .collect(),
+        });
+        walk::walk_template_literal(self, literal);
     }
 
     fn visit_jsx_element(&mut self, element: &JSXElement<'a>) {
@@ -1736,6 +1767,42 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
         assert_eq!(facts.object_properties.len(), 1);
         assert_eq!(facts.logical_expressions.len(), 1);
         assert_eq!(facts.conditional_expressions.len(), 1);
+    }
+
+    #[test]
+    fn retains_untagged_template_interpolations() {
+        let facts = extract(
+            "App.tsx",
+            "const label = `count is ${count} of ${total()}`;\n",
+        )
+        .unwrap();
+        assert_eq!(facts.template_literals.len(), 1);
+        let literal = &facts.template_literals[0];
+        assert_eq!(literal.expressions.len(), 2);
+        assert_eq!(
+            literal
+                .expressions
+                .iter()
+                .map(|slot| &"const label = `count is ${count} of ${total()}`;\n"
+                    [slot.start as usize..slot.end as usize])
+                .collect::<Vec<_>>(),
+            ["count", "total()"]
+        );
+    }
+
+    /// A tagged template owns a template literal, and the walker visits both.
+    /// The two tables are separate questions -- a tag receives the values, an
+    /// untagged literal stringifies them -- so a consumer asking "is this
+    /// interpolated into a string" must not be answered by a tagged one.
+    #[test]
+    fn a_tagged_template_is_not_also_an_untagged_one() {
+        let facts = extract("App.tsx", "const styled = css`color: ${theme}`;\n").unwrap();
+        assert_eq!(facts.tagged_templates.len(), 1);
+        assert_eq!(
+            facts.template_literals.len(),
+            1,
+            "the quasi is still a template literal; consumers filter by containment"
+        );
     }
 
     #[test]
