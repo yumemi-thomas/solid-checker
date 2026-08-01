@@ -25,7 +25,7 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, LogicalOperatorKind};
 use solid_facts::core::Span;
 
-use super::UpstreamCompatContext;
+use super::{UpstreamCompatContext, text};
 use crate::{Fix, StaticViolation, TextEdit, known_primitive, location};
 
 pub(super) fn check_file(
@@ -37,13 +37,6 @@ pub(super) fn check_file(
     no_proxy_apis(file, context, violations);
     prefer_for(file, violations);
     prefer_show(file, violations);
-}
-
-/// The UTF-8 source text a span covers, or `""` for a span outside the file.
-/// Never expected in practice, but a rule that panics explaining its own
-/// finding is worse than one that quietly declines to.
-fn text(file: &FileFacts, span: Span) -> &str {
-    file.source_text(span).unwrap_or_default()
 }
 
 // ---------------------------------------------------------------------

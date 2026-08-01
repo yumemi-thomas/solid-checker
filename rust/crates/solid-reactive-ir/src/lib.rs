@@ -3388,6 +3388,7 @@ fn build_with_contracts_measured_incremental(
     // (or sees) a rule its catalog does not declare.
     if dialect.version() == solid_dialect::Version::V1 {
         let compat_context = upstream_compat::UpstreamCompatContext {
+            dialect,
             lookup: semantic_lookup,
             entities,
             accessors: &accessors,

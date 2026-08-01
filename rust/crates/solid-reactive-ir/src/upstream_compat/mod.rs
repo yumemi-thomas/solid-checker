@@ -26,7 +26,26 @@ use std::collections::HashMap;
 use crate::indexes::SemanticLookup;
 use crate::{EntitySymbols, ReactiveSourceKind, StaticViolation, SymbolId};
 use solid_facts::FileFacts;
+use solid_facts::core::Span;
 use typefacts::Location;
+
+/// The source text a span covers, or `""` when the span is not readable.
+///
+/// Every rule here locates its report by span and phrases it with the
+/// author's own spelling, so this is the one shared way to get from one to
+/// the other.
+pub(super) fn text(file: &FileFacts, span: Span) -> &str {
+    file.source_text(span).unwrap_or_default()
+}
+
+/// Whether a JSX tag names a DOM element rather than a component.
+///
+/// JSX's own rule: a lowercase-led tag is an intrinsic element, anything else
+/// is a value reference. Rules about DOM attributes and listeners apply only
+/// to the former.
+pub(super) fn is_lowercase_led(name: &str) -> bool {
+    name.starts_with(|character: char| character.is_ascii_lowercase())
+}
 
 /// Everything one file's upstream-compat checks may consult.
 ///
@@ -36,6 +55,10 @@ use typefacts::Location;
 /// *proved*, through TypeScript symbol resolution, package contracts, and
 /// cross-file propagation.
 pub(super) struct UpstreamCompatContext<'a> {
+    /// The vocabulary these rules are checking against. Consulted rather than
+    /// assumed: which argument slot of a primitive is a tracked scope is a
+    /// per-dialect fact, and the one place the two versions differ most.
+    pub(super) dialect: &'a dyn solid_dialect::Dialect,
     pub(super) lookup: &'a SemanticLookup<'a>,
     pub(super) entities: &'a EntitySymbols,
     /// Proven reactive accessors, by symbol: display name and declaration.

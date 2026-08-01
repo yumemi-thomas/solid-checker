@@ -27,7 +27,7 @@ use solid_facts::FileFacts;
 use solid_facts::ast::JsxElementFact;
 use solid_facts::core::Span;
 
-use super::UpstreamCompatContext;
+use super::{UpstreamCompatContext, is_lowercase_led, text};
 use crate::{Fix, StaticViolation, TextEdit, location};
 
 pub(super) fn check_file(
@@ -330,14 +330,6 @@ fn children_are_insignificant(file: &FileFacts, element: &JsxElementFact) -> boo
 /// scope-walking has for a spread of a computed expression.
 fn contains(outer: Span, inner: Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
-}
-
-fn text(file: &FileFacts, span: Span) -> &str {
-    file.source_text(span).unwrap_or_default()
-}
-
-fn is_lowercase_led(name: &str) -> bool {
-    name.starts_with(|character: char| character.is_ascii_lowercase())
 }
 
 /// The static string an attribute value or expression resolves to, following

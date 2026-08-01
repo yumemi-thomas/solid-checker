@@ -38,6 +38,18 @@
       "hint": "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned."
     },
     {
+      "rule": "v1/no-async-tracked-scope",
+      "code": "SC5004",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
+      "start": 1758,
+      "end": 1771,
+      "fixes": 0,
+      "message": "this createMemo scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing",
+      "hint": "Keep the createMemo scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
+    },
+    {
       "rule": "v1/cleanup-in-forbidden-scope",
       "code": "SC3001",
       "kind": "violation",

@@ -24,12 +24,13 @@
 //! `createSignal` that is not Solid's is not a source here, and a signal that
 //! arrives through three wrappers still is.
 
+use solid_dialect::Execution;
 use solid_facts::FileFacts;
-use solid_facts::ast::IdentifierRole;
+use solid_facts::ast::{FunctionFact, IdentifierRole};
 use solid_facts::core::Span;
 
-use super::UpstreamCompatContext;
-use crate::{ReactiveSourceKind, StaticViolation, location};
+use super::{UpstreamCompatContext, is_lowercase_led, text};
+use crate::{ReactiveSourceKind, StaticViolation, known_primitive, location};
 
 pub(super) fn check_file(
     file: &FileFacts,
@@ -38,6 +39,176 @@ pub(super) fn check_file(
 ) {
     uncalled_accessor(file, context, violations);
     no_direct_mutation(file, context, violations);
+    no_async_tracked_scope(file, context, violations);
+    expected_function_got_expression(file, context, violations);
+}
+
+/// `v1/no-async-tracked-scope` — upstream's `noAsyncTrackedScope`.
+///
+/// An `async` function handed to a position the dialect tracks. A computation
+/// collects dependencies only until its first suspension point, so every read
+/// after an `await` subscribes to nothing and the scope silently stops
+/// responding.
+///
+/// Which slot tracks is asked of the dialect rather than assumed, and that is
+/// the whole reason this is a per-dialect rule: `createEffect`'s callback is
+/// argument 0 in 1.x and argument 1 in 2.0, so a table baked for one version
+/// reports the other's seed value as a tracked scope.
+///
+/// Scoped to functions written at the call. An identifier naming an `async`
+/// function declared elsewhere is the same defect, but proving the binding
+/// reaches this slot is interprocedural work the engine already does for
+/// reads — [`crate::StaticViolation`]s for those surface as
+/// `v1/reactive-read-after-await` instead, per-read and with the offending
+/// read located.
+fn no_async_tracked_scope(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    violations: &mut Vec<StaticViolation>,
+) {
+    let primitives = context.lookup.primitives(file);
+    for (index, call) in file.ast.calls.iter().enumerate() {
+        let Some(primitive) = known_primitive(&primitives.calls[index]) else {
+            continue;
+        };
+        let name = primitives.calls[index]
+            .as_ref()
+            .map_or("", crate::PrimitiveName::as_str);
+        for (slot, execution) in context.dialect.callback_executions(primitive) {
+            if *execution != Execution::Tracked {
+                continue;
+            }
+            let Some(argument) = call.arguments.get(*slot) else {
+                continue;
+            };
+            let Some(function) = function_at(file, argument.span) else {
+                continue;
+            };
+            if !function.r#async {
+                continue;
+            }
+            violations.push(StaticViolation {
+                id: "SC5004".into(),
+                rule: "no-async-tracked-scope".into(),
+                message: format!(
+                    "this {name} scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing"
+                ),
+                hint: format!(
+                    "Keep the {name} scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
+                ),
+                location: location(file.path.shared(), argument.span),
+                analysis_context: String::new(),
+                fixes: vec![],
+            });
+        }
+    }
+}
+
+/// `v1/expected-function-got-expression` — upstream's
+/// `expectedFunctionGotExpression`.
+///
+/// A native element's event-handler binding receiving an already-evaluated
+/// expression: `onClick={count()}` binds whatever `count()` returned during
+/// setup as the listener.
+///
+/// Narrower than upstream, deliberately. `onClick={makeHandler()}` is a
+/// factory call and correct, and upstream cannot tell the two apart because it
+/// works from syntax. Two things are proof here, and nothing else is reported:
+/// the callee is a *proven* reactive accessor, so the call yields that
+/// accessor's value; or TypeScript resolved the whole expression to a type
+/// that is not callable. A factory whose return type is a function satisfies
+/// neither and stays silent.
+fn expected_function_got_expression(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    violations: &mut Vec<StaticViolation>,
+) {
+    for element in &file.ast.jsx_elements {
+        let element_name = text(file, element.name.span);
+        // Components receive props, not listeners: `onFoo` on a component is
+        // an ordinary prop and its value may legitimately be anything.
+        if element_name.contains('.') || !is_lowercase_led(element_name) {
+            continue;
+        }
+        for attribute in element
+            .attributes
+            .iter()
+            .filter(|attribute| attribute.namespace.is_none())
+        {
+            let name = text(file, attribute.name);
+            if !name.starts_with("on")
+                || !name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic)
+            {
+                continue;
+            }
+            let Some(expression) = attribute.expression else {
+                continue;
+            };
+            // The binding must be a call spanning the whole expression. A bare
+            // reference is the correct form, and a call merely *inside* the
+            // expression — `onClick={() => save(id())}` — is the fix, not the
+            // defect, so equality with the trimmed text is what matters.
+            let trimmed = text(file, expression).trim();
+            let Some(call) =
+                file.ast.calls.iter().find(|call| {
+                    expression.contains(call.span) && text(file, call.span) == trimmed
+                })
+            else {
+                continue;
+            };
+            let proven_accessor = context
+                .entities
+                .at(file.path.as_str(), call.callee)
+                .is_some_and(|symbol| {
+                    context.accessors.contains_key(symbol)
+                        && context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+                });
+            let proven_not_callable = context
+                .lookup
+                .smallest_contained_descriptor(file.path.as_str(), expression)
+                .is_some_and(|descriptor| is_not_callable(descriptor.text.as_ref()));
+            if !proven_accessor && !proven_not_callable {
+                continue;
+            }
+            violations.push(StaticViolation {
+                id: "SC1007".into(),
+                rule: "expected-function-got-expression".into(),
+                message: format!(
+                    "{name} is given the result of calling {}, not a function; the call runs once during setup and its value is bound as the listener",
+                    text(file, call.callee)
+                ),
+                hint: format!(
+                    "Wrap it: {name}={{() => {}}}, or pass the function itself uncalled.",
+                    text(file, call.span)
+                ),
+                location: location(file.path.shared(), expression),
+                analysis_context: String::new(),
+                fixes: vec![],
+            });
+        }
+    }
+}
+
+/// Whether a resolved type is provably not callable.
+///
+/// Conservative by construction: only the primitive types that can never hold
+/// a function count. Anything structural, generic, aliased, or unresolved is
+/// left alone, because a type this cannot read is not proof of anything.
+fn is_not_callable(descriptor: &str) -> bool {
+    matches!(
+        descriptor,
+        "string" | "number" | "boolean" | "bigint" | "symbol" | "void" | "null" | "undefined"
+    ) || descriptor.starts_with('"')
+        || descriptor.parse::<f64>().is_ok()
+}
+
+/// The function written at exactly this span, if the argument is a literal
+/// function rather than a reference to one.
+fn function_at(file: &FileFacts, span: Span) -> Option<&FunctionFact> {
+    file.ast
+        .functions
+        .iter()
+        .find(|function| function.span == span)
 }
 
 /// `v1/uncalled-accessor` — upstream's `badSignal`.

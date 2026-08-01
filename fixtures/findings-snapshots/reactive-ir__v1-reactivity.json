@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 53,
-      "end": 98,
+      "start": 67,
+      "end": 112,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 316,
-      "end": 321,
+      "start": 330,
+      "end": 335,
       "fixes": 0
     },
     {
@@ -27,8 +27,38 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 969,
-      "end": 979,
+      "start": 983,
+      "end": 993,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-async-tracked-scope",
+      "code": "SC5004",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 1302,
+      "end": 1357,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 1344,
+      "end": 1350,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/expected-function-got-expression",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 1968,
+      "end": 1975,
       "fixes": 0
     }
   ]
