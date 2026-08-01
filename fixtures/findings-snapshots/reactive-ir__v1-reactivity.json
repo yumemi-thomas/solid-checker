@@ -80,6 +80,16 @@
       "start": 2701,
       "end": 2706,
       "fixes": 0
+    },
+    {
+      "rule": "v1/untracked-derived-function",
+      "code": "SC1006",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 2947,
+      "end": 2954,
+      "fixes": 0
     }
   ]
 }

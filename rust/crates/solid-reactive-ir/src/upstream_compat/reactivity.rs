@@ -42,6 +42,133 @@ pub(super) fn check_file(
     no_async_tracked_scope(file, context, violations);
     expected_function_got_expression(file, context, violations);
     reactive_source_uncaptured(file, context, violations);
+    untracked_derived_function(file, context, violations);
+}
+
+/// `v1/untracked-derived-function` — upstream's `untrackedReactive`.
+///
+/// A function that derives from reactive state and is only ever called where
+/// nothing tracks. Wrapping reads in a function defers them, but deferral only
+/// pays off if something eventually calls it in a tracking scope; otherwise
+/// the derivation reads its inputs once per call and subscribes to nothing.
+///
+/// # Why this one is narrow
+///
+/// Every other rule here proves something local and positive. This one has to
+/// prove a *negative* — that no tracking scope anywhere ever calls the
+/// function — and a wrong negative reports the single most common shape in
+/// Solid code. So it fires only when every use is enumerable and every one of
+/// them is untracked:
+///
+/// - the function is bound inside another function, so no reference to it can
+///   exist outside this file;
+/// - every reference is the callee of a direct call, never an argument, never
+///   a return value, never a JSX child — anything else could hand it to a
+///   tracking scope this cannot see;
+/// - every call sits directly in the declaring function's own body, not in a
+///   nested one, since a nested function may itself be a callback somewhere
+///   tracked;
+/// - and none is inside JSX, which tracks.
+///
+/// A single reference that fails any of those abandons the function rather
+/// than guessing. That leaves the textbook case and little else, which is the
+/// right trade for a rule whose false positives would land on correct code.
+fn untracked_derived_function(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    violations: &mut Vec<StaticViolation>,
+) {
+    for binding in &file.ast.bindings {
+        if !binding.initializer_function {
+            continue;
+        }
+        let (Some(initializer), [declared]) = (binding.initializer, binding.names.as_slice())
+        else {
+            continue;
+        };
+        let Some(function) = function_at(file, initializer) else {
+            continue;
+        };
+        // Bound inside another function: references cannot escape the file
+        // except by being passed or returned, both of which are refused below.
+        let Some(enclosing) = crate::containing_ast_function(&file.ast, binding.declaration) else {
+            continue;
+        };
+        let Some(symbol) = context.entities.at(file.path.as_str(), declared.span) else {
+            continue;
+        };
+        if !derives_from_reactive_source(file, context, function.body, symbol) {
+            continue;
+        }
+        let mut calls = 0usize;
+        let enumerable = file
+            .ast
+            .identifiers
+            .iter()
+            .filter(|identifier| {
+                identifier.role == IdentifierRole::Reference
+                    && context.entities.at(file.path.as_str(), identifier.span) == Some(symbol)
+            })
+            .all(|identifier| {
+                let Some(call) = file
+                    .ast
+                    .calls
+                    .iter()
+                    .find(|call| call.callee == identifier.span)
+                else {
+                    return false; // referenced without being called
+                };
+                let directly_enclosed = crate::containing_ast_function(&file.ast, call.span)
+                    .is_some_and(|owner| owner.span == enclosing.span);
+                if !directly_enclosed || within_jsx(file, call.span) {
+                    return false;
+                }
+                calls += 1;
+                true
+            });
+        if !enumerable || calls == 0 {
+            continue;
+        }
+        let name = text(file, declared.span);
+        violations.push(StaticViolation {
+            id: "SC1006".into(),
+            rule: "untracked-derived-function".into(),
+            message: format!(
+                "{name} derives from reactive state but every call to it is untracked, so its reads subscribe to nothing and the derivation never updates"
+            ),
+            hint: format!(
+                "Call {name} from a tracking scope — JSX, a createMemo, or a createEffect callback — or inline the value if a one-off read at setup is what was meant."
+            ),
+            location: location(file.path.shared(), declared.span),
+            analysis_context: String::new(),
+            fixes: vec![],
+        });
+    }
+}
+
+/// Whether a function body reads a proven reactive source other than itself.
+fn derives_from_reactive_source(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    body: Span,
+    own_symbol: &crate::SymbolId,
+) -> bool {
+    file.ast
+        .identifiers
+        .iter()
+        .filter(|identifier| {
+            identifier.role == IdentifierRole::Reference && body.contains(identifier.span)
+        })
+        .filter_map(|identifier| context.entities.at(file.path.as_str(), identifier.span))
+        .any(|symbol| symbol != own_symbol && context.accessors.contains_key(symbol))
+}
+
+/// Whether a span sits anywhere inside JSX, which is a tracking scope.
+fn within_jsx(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .jsx_elements
+        .iter()
+        .any(|element| element.span.contains(span))
 }
 
 /// `v1/reactive-source-uncaptured` — the uncertifiable half of upstream's

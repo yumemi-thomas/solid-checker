@@ -75,6 +75,50 @@ export function Uncaptured() {
   observe(count);
 }
 
+// v1/untracked-derived-function: doubled derives from count, and the only
+// call to it is a plain statement, so the derivation subscribes to nothing.
+export function DerivedButDiscarded() {
+  const [count] = createSignal(0);
+  const doubled = () => count() * 2;
+  console.log(doubled());
+  return <div>static</div>;
+}
+
+// Called from JSX, which tracks. The same shape, and not a defect — reporting
+// this is what a rule that guesses at the negative would do.
+export function DerivedAndRendered() {
+  const [count] = createSignal(0);
+  const doubled = () => count() * 2;
+  return <div>{doubled()}</div>;
+}
+
+// Passed rather than called: the receiver may call it anywhere, so the set of
+// call sites is not enumerable and the rule declines to guess.
+export function DerivedAndPassed() {
+  const [count] = createSignal(0);
+  const doubled = () => count() * 2;
+  described(doubled);
+  return <div>static</div>;
+}
+
+// Called inside a tracked callback. The call is in a nested function, so it is
+// unreachable from a lexical scan of the component body alone.
+export function DerivedInEffect() {
+  const [count] = createSignal(0);
+  const doubled = () => count() * 2;
+  createEffect(() => {
+    apply(String(doubled()));
+  });
+  return <div>static</div>;
+}
+
+// Derives from nothing reactive, so there is no reactivity to lose.
+export function PlainHelper() {
+  const twice = () => 2 * 2;
+  console.log(twice());
+  return <div>static</div>;
+}
+
 declare function load(): Promise<void>;
 declare function apply(theme: string): void;
 declare function makeHandler(): () => void;
