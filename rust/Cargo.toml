@@ -22,12 +22,15 @@ rust-version = "1.97"
 # The JSX compiler lives in its own repository now and is pinned by revision:
 # `dom-expressions` is tracked on a feature branch, and reproducible builds
 # matter more here than picking up upstream automatically.
-dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "f8cbb73b16ec8599cd428b01d3a5ca85337b8320", default-features = false }
+# Pinned to `fix-elided-event-handler-census`, which stops a constant-folded
+# `on*` attribute leaving an undecided census site and failing the whole file.
+dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "bc8e23e7097877dac664ff38538b69e0ba5c4c53", default-features = false }
 # The Solid 1.x compiler: the same crate name from its own repository, kept at
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on
 # exactly one of them.
-solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "95e9277fa7641d8d4dec6b2f8692ad29bff256d1", default-features = false }
+# Pinned to `fix-elided-event-handler-census`, the same fix as above.
+solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "7fd5684e17ad1319cf5498524c3547f6b0e0e8a4", default-features = false }
 typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "d708b506bebaa0ea81e061a0d4dd27100c42a433" }
 ciborium = "0.2"
 compact_str = { version = "0.9.1", features = ["serde"] }
