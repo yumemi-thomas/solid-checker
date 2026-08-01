@@ -25,7 +25,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 18;
+pub const AST_FACTS_SCHEMA: u32 = 19;
 
 mod span_index;
 
@@ -45,6 +45,12 @@ pub struct AstFacts {
     pub awaits: Vec<Span>,
     pub returns: Vec<ReturnFact>,
     pub jsx_elements: Vec<JsxElementFact>,
+    /// JSX fragment spans (`<>…</>`). A fragment's children are as tracked
+    /// as an element's, but it has no name and no attributes, so it gets a
+    /// bare span rather than a [`JsxElementFact`]; consumers asking "is this
+    /// span inside JSX" must consult both tables.
+    #[serde(default)]
+    pub jsx_fragments: Vec<Span>,
     pub members: Vec<MemberFact>,
     #[serde(default)]
     pub computed_members: Vec<Span>,
@@ -493,6 +499,7 @@ struct Collector<'s> {
     awaits: Vec<Span>,
     returns: Vec<ReturnFact>,
     jsx_elements: Vec<JsxElementFact>,
+    jsx_fragments: Vec<Span>,
     members: Vec<MemberFact>,
     computed_members: Vec<Span>,
     parameter_properties: Vec<Span>,
@@ -521,6 +528,7 @@ impl<'s> Collector<'s> {
             awaits: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
+            jsx_fragments: Vec::new(),
             members: Vec::new(),
             computed_members: Vec::new(),
             parameter_properties: Vec::new(),
@@ -547,6 +555,7 @@ impl<'s> Collector<'s> {
         self.awaits.sort_unstable();
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
+        self.jsx_fragments.sort();
         self.members.sort_by_key(|fact| fact.span);
         self.computed_members.sort_unstable();
         self.parameter_properties.sort_unstable();
@@ -572,6 +581,7 @@ impl<'s> Collector<'s> {
             awaits: self.awaits,
             returns: self.returns,
             jsx_elements: self.jsx_elements,
+            jsx_fragments: self.jsx_fragments,
             members: self.members,
             computed_members: self.computed_members,
             parameter_properties: self.parameter_properties,
@@ -1174,6 +1184,11 @@ impl<'a> Visit<'a> for Collector<'_> {
                 .collect(),
         });
         walk::walk_template_literal(self, literal);
+    }
+
+    fn visit_jsx_fragment(&mut self, fragment: &oxc_ast::ast::JSXFragment<'a>) {
+        self.jsx_fragments.push(span(fragment.span));
+        walk::walk_jsx_fragment(self, fragment);
     }
 
     fn visit_jsx_element(&mut self, element: &JSXElement<'a>) {
@@ -1802,6 +1817,27 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
             facts.template_literals.len(),
             1,
             "the quasi is still a template literal; consumers filter by containment"
+        );
+    }
+
+    /// A fragment has no element fact — no name, no attributes — so it gets
+    /// its own span table, and a consumer asking "is this span inside JSX"
+    /// must consult both. Only the element table answered that question
+    /// before, which made fragment children invisible.
+    #[test]
+    fn fragments_are_recorded_beside_elements() {
+        let facts = extract(
+            "App.tsx",
+            "const view = <>{outer()}<div>{inner()}</div></>;\n",
+        )
+        .unwrap();
+        assert_eq!(facts.jsx_fragments.len(), 1);
+        assert_eq!(facts.jsx_elements.len(), 1);
+        let fragment = facts.jsx_fragments[0];
+        let element = facts.jsx_elements[0].span;
+        assert!(
+            fragment.contains(element),
+            "the fragment wraps the element: {fragment:?} vs {element:?}"
         );
     }
 

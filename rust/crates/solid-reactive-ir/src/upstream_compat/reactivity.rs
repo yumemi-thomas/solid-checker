@@ -164,11 +164,20 @@ fn derives_from_reactive_source(
 }
 
 /// Whether a span sits anywhere inside JSX, which is a tracking scope.
+///
+/// Fragments track their children exactly as elements do and live in their
+/// own table, so both are consulted; checking only elements reported a
+/// derived function rendered through `<>{…}</>` as never tracked.
 fn within_jsx(file: &FileFacts, span: Span) -> bool {
     file.ast
         .jsx_elements
         .iter()
         .any(|element| element.span.contains(span))
+        || file
+            .ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| fragment.contains(span))
 }
 
 /// `v1/reactive-source-uncaptured` — the uncertifiable half of upstream's
@@ -189,11 +198,33 @@ fn within_jsx(file: &FileFacts, span: Span) -> bool {
 /// Passing a source on is idiomatic — it is how accessors travel — so the
 /// unknown callee is the entire premise. A helper defined in the project is
 /// read directly and never reported here.
+///
+/// Scoped to callees imported from a package, because those are the callees
+/// the fix applies to: the hint says "describe this export in the package's
+/// contract", which is only actionable for a package export. An ambient
+/// global (`setTimeout`, `console.log`, an array method) comes from no
+/// package, so reporting it demanded a contract nobody can write — the rule
+/// stays silent there and the reads flowing through remain uncertified
+/// rather than reported.
 fn reactive_source_uncaptured(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
+    // Symbols bound by value imports from bare specifiers — the only callees
+    // whose reactive behaviour a package contract could ever describe.
+    let package_imported: std::collections::HashSet<&crate::SymbolId> = file
+        .ast
+        .imports
+        .iter()
+        .filter(|import| !import.module.starts_with('.') && !import.module.starts_with('/'))
+        .flat_map(|import| &import.bindings)
+        .filter(|binding| !binding.type_only)
+        .filter_map(|binding| context.entities.at(file.path.as_str(), binding.local.span))
+        .collect();
+    if package_imported.is_empty() {
+        return;
+    }
     let primitives = context.lookup.primitives(file);
     for (index, call) in file.ast.calls.iter().enumerate() {
         // A dialect primitive is described by definition, and a call the
@@ -207,7 +238,12 @@ fn reactive_source_uncaptured(
             continue;
         }
         let callee_symbol = context.entities.at(file.path.as_str(), call.callee);
-        if callee_symbol.is_some_and(|symbol| context.contracted.contains_key(symbol)) {
+        let Some(callee_symbol) = callee_symbol else {
+            continue;
+        };
+        if !package_imported.contains(callee_symbol)
+            || context.contracted.contains_key(callee_symbol)
+        {
             continue;
         }
         let callee_text = text(file, call.callee);

@@ -119,6 +119,25 @@ export function PlainHelper() {
   return <div>static</div>;
 }
 
+// Rendered through a fragment, which tracks its children exactly as an
+// element does. Only the element table answered "is this call inside JSX"
+// at first, so this correct pattern was reported as never tracked.
+export function DerivedInFragment() {
+  const [count] = createSignal(0);
+  const doubled = () => count() * 2;
+  return <>{doubled()}</>;
+}
+
+// Ambient callees come from no package, so no contract could ever describe
+// them; reporting these demanded a fix nobody can apply, and the rule now
+// reports only callees imported from a package (like `observe` above).
+export function AmbientCallees() {
+  const [count] = createSignal(0);
+  setTimeout(count, 100);
+  console.log(count);
+  return <div>{count()}</div>;
+}
+
 declare function load(): Promise<void>;
 declare function apply(theme: string): void;
 declare function makeHandler(): () => void;

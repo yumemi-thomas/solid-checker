@@ -8,9 +8,15 @@ positions, so the reactivity it contains is ignored.
 ## What it does
 
 Flags derived functions — functions whose body reads signals, store paths, or
-props — that are never passed to a tracked scope (JSX, a computation) or an event
-handler. Part of the fine-grained decomposition of eslint-plugin-solid's
-monolithic `reactivity` rule.
+props — whose every use is provably untracked. Part of the fine-grained
+decomposition of eslint-plugin-solid's monolithic `reactivity` rule.
+
+Deliberately narrow, because it proves a negative: the rule fires only when
+the function is bound inside another function and every reference to it is a
+direct call in that function's own body, outside JSX. A function that is
+passed as an argument, returned, called from a nested callback, or rendered
+anywhere is left alone rather than guessed about — any of those may hand it
+to a tracking scope the analysis cannot enumerate.
 
 ## Why is this bad?
 

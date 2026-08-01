@@ -160,7 +160,8 @@ with without silencing the seven it wants. It is split.
 | `expectedFunctionGotExpression` | a reactive expression in a position whose contract is a function, so it is evaluated once instead of per read | [v1/expected-function-got-expression](v1/expected-function-got-expression.md) |
 | `noWrite` | a signal reassigned, or a props/store member written through | [v1/no-direct-mutation](v1/no-direct-mutation.md) |
 | `noAsyncTrackedScope` | an `async` function passed where a tracked computation is expected | [v1/no-async-tracked-scope](v1/no-async-tracked-scope.md) |
-| `shouldDestructure`, `shouldAssign` | the result of `createSignal`/`createStore`/`createMemo` not captured in the shape the analyzer can follow — upstream's own analysis-integrity warnings | [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) |
+| `shouldDestructure`, `shouldAssign` | the result of `createSignal`/`createStore`/`createMemo` not captured in the shape the analyzer can follow — upstream's own analysis-integrity warnings | not ported: these warn about upstream's *analyzer* losing track, and this checker follows the value regardless; the three upstream cases are declared as gaps in `fixtures/upstream-parity/deviations.json` |
+| — (no upstream id) | a reactive source passed to a package-imported function nothing describes — the checker's own uncertifiable surface | [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) |
 
 Two consequences worth knowing before switching a project over:
 

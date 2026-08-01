@@ -38,8 +38,12 @@ const REACTIVITY = {
   expectedFunctionGotExpression: ["v1/expected-function-got-expression"],
   noWrite: ["v1/no-direct-mutation"],
   noAsyncTrackedScope: ["v1/no-async-tracked-scope"],
-  shouldDestructure: ["v1/reactive-source-uncaptured"],
-  shouldAssign: ["v1/reactive-source-uncaptured"],
+  // Upstream's analysis-integrity warnings (a createSignal/createMemo result
+  // not captured in a shape its analyzer can follow) have no v1 rule: the
+  // checker resolves sources through TypeScript symbols and is not blinded by
+  // capture shape. Their invalid cases are declared gaps in deviations.json.
+  shouldDestructure: [],
+  shouldAssign: [],
 };
 const ALL_REACTIVITY = [...new Set(Object.values(REACTIVITY).flat())];
 

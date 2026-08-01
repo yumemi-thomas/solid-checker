@@ -239,10 +239,6 @@
     "status": "gap",
     "reason": "Possible false positive: a props member read into an unused local is reported."
   },
-  "reactivity__valid__76": {
-    "status": "deliberate",
-    "reason": "Passing an accessor to an undescribed callee is exactly what reactive-source-uncaptured exists to report; upstream has no equivalent surface."
-  },
   "self-closing-comp__invalid__02": {
     "status": "deliberate",
     "reason": "Upstream configures the rule for this case ([{\"html\":\"void\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."

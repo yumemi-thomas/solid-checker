@@ -7,11 +7,17 @@ it is ever read in a tracking scope cannot be certified.
 
 ## What it does
 
-Flags reactive sources — signal accessors, stores, derived functions — that are
-passed to functions whose reactive behavior the analysis does not know: no
-source in the project, no package contract entry, no primitive semantics. Part
-of the fine-grained decomposition of eslint-plugin-solid's monolithic
-`reactivity` rule.
+Flags reactive sources — signal accessors, stores, derived functions — that
+are passed to a *package-imported* function whose reactive behavior the
+analysis does not know: no source in the project, no package contract entry,
+no primitive semantics. Part of the fine-grained decomposition of
+eslint-plugin-solid's monolithic `reactivity` rule.
+
+Only callees imported from a package are reported, because those are the
+callees the fix applies to. An ambient global (`setTimeout`, `console.log`,
+an array method) comes from no package, so no contract could ever describe
+it; reads flowing through one stay uncertified without a finding demanding a
+fix nobody can write.
 
 ## Why is this analysis-limiting?
 
