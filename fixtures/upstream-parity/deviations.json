@@ -1,0 +1,306 @@
+{
+  "components-return-once__invalid__00": {
+    "status": "gap",
+    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+  },
+  "components-return-once__invalid__01": {
+    "status": "gap",
+    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+  },
+  "components-return-once__invalid__02": {
+    "status": "gap",
+    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+  },
+  "components-return-once__invalid__03": {
+    "status": "gap",
+    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+  },
+  "components-return-once__invalid__04": {
+    "status": "gap",
+    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+  },
+  "components-return-once__invalid__05": {
+    "status": "gap",
+    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+  },
+  "components-return-once__invalid__07": {
+    "status": "gap",
+    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+  },
+  "components-return-once__invalid__08": {
+    "status": "gap",
+    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+  },
+  "components-return-once__invalid__09": {
+    "status": "gap",
+    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+  },
+  "event-handlers__invalid__13": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"warnOnSpread\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "event-handlers__invalid__14": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"warnOnSpread\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "event-handlers__invalid__15": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"warnOnSpread\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "event-handlers__valid__10": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"ignoreCase\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "event-handlers__valid__11": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"ignoreCase\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "jsx-no-undef__invalid__01": {
+    "status": "deliberate",
+    "reason": "use: directive names are never sent to TypeScript, so checking them would mean a same-file name scan; jsx-no-undef stays silent by decision (see docs/rules/v1/jsx-no-undef.md)."
+  },
+  "jsx-no-undef__invalid__02": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"typescriptEnabled\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "jsx-no-undef__invalid__03": {
+    "status": "deliberate",
+    "reason": "use: directive names are never sent to TypeScript, so checking them would mean a same-file name scan; jsx-no-undef stays silent by decision (see docs/rules/v1/jsx-no-undef.md)."
+  },
+  "jsx-no-undef__invalid__04": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"allowGlobals\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "jsx-no-undef__valid__05": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"typescriptEnabled\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "no-destructure__valid__08": {
+    "status": "gap",
+    "reason": "Possible false positive: a three-parameter arrow is not a component, and no-destructure should not report its destructured first parameter."
+  },
+  "no-destructure__valid__10": {
+    "status": "deliberate",
+    "reason": "Upstream's own comment says this is caught by solid/reactivity rather than by no-destructure; the checker reports it from the destructure rule instead of a second one."
+  },
+  "no-innerhtml__invalid__00": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"allowStatic\":false}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "no-innerhtml__invalid__01": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"allowStatic\":false}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "no-innerhtml__invalid__02": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"allowStatic\":false}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "no-proxy-apis__invalid__04": {
+    "status": "gap",
+    "reason": "A spread nested inside a spread's object literal is not walked."
+  },
+  "no-proxy-apis__invalid__06": {
+    "status": "gap",
+    "reason": "As no-proxy-apis__invalid__04, for a member spread."
+  },
+  "no-unknown-namespaces__valid__10": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"allowedNamespaces\":[\"foo\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "prefer-classlist__invalid__03": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"classnames\":[\"x\",\"y\",\"z\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "prefer-classlist__valid__10": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"classnames\":[\"x\",\"y\",\"z\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "reactivity__invalid__06": {
+    "status": "gap",
+    "reason": "A derived function called once at setup and rendered: strict-read-untracked does not follow the read through the local it was stored in."
+  },
+  "reactivity__invalid__12": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__06, through two levels of derived function."
+  },
+  "reactivity__invalid__13": {
+    "status": "gap",
+    "reason": "createSignal() with the result discarded is upstream's own analysis-integrity warning; the checker has no equivalent."
+  },
+  "reactivity__invalid__14": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__13, for a partially destructured signal."
+  },
+  "reactivity__invalid__15": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__13, for a discarded createMemo."
+  },
+  "reactivity__invalid__16": {
+    "status": "deliberate",
+    "reason": "Solid lowers a function child to insert(el, fn), which calls it reactively, so <div>{signal}</div> works and upstream's report is a false positive."
+  },
+  "reactivity__invalid__17": {
+    "status": "deliberate",
+    "reason": "Same as reactivity__invalid__16: a memo passed as a JSX child is called by insert()."
+  },
+  "reactivity__invalid__18": {
+    "status": "gap",
+    "reason": "Real false negative, proven: Solid lowers a native attribute to setAttribute(el, \"type\", signal) with no effect wrapper, so the function is stringified. uncalled-accessor should cover JSX attribute positions."
+  },
+  "reactivity__invalid__19": {
+    "status": "gap",
+    "reason": "An accessor used as a concatenation operand is a real defect; uncalled-accessor's value positions do not yet include arithmetic or string operands."
+  },
+  "reactivity__invalid__21": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__19, for a unary operand."
+  },
+  "reactivity__invalid__23": {
+    "status": "gap",
+    "reason": "A props member bound straight to a native listener is read once at setup; expected-function-got-expression only reports a call in that position, not a reactive member read."
+  },
+  "reactivity__invalid__24": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__23, for a props member passed as a tracked scope."
+  },
+  "reactivity__invalid__25": {
+    "status": "gap",
+    "reason": "A context provider's value is not yet treated as a tracked position."
+  },
+  "reactivity__invalid__26": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__25, for a plain provider component."
+  },
+  "reactivity__invalid__27": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__25."
+  },
+  "reactivity__invalid__28": {
+    "status": "gap",
+    "reason": "A derived function created inside runWithOwner is not yet attributed to the owner it runs under."
+  },
+  "reactivity__invalid__29": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__28, inside a component."
+  },
+  "reactivity__invalid__32": {
+    "status": "deliberate",
+    "reason": "A tagged template hands its interpolations to the tag, which may legitimately call them, so uncalled-accessor deliberately excludes them; see its value_position doc."
+  },
+  "reactivity__invalid__33": {
+    "status": "deliberate",
+    "reason": "As reactivity__invalid__32."
+  },
+  "reactivity__invalid__34": {
+    "status": "gap",
+    "reason": "mapArray's callback is not yet modelled as a tracked scope, so a store read inside it is not reported."
+  },
+  "reactivity__invalid__35": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__34, for the index accessor."
+  },
+  "reactivity__invalid__36": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__34, for indexArray's item accessor."
+  },
+  "reactivity__invalid__37": {
+    "status": "gap",
+    "reason": "A signal read in a component's prop position: whether Solid's lazy prop getters make this tracked has not been settled against the compiler facts."
+  },
+  "reactivity__invalid__38": {
+    "status": "gap",
+    "reason": "A signal read passed to an unknown helper: upstream reports it from its customReactiveFunctions convention, the checker has no contract for the callee."
+  },
+  "reactivity__invalid__39": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__38, inside an array literal."
+  },
+  "reactivity__invalid__40": {
+    "status": "gap",
+    "reason": "As reactivity__invalid__38, inside an object literal."
+  },
+  "reactivity__invalid__41": {
+    "status": "gap",
+    "reason": "An immediately-invoked derived function in an argument position is not reported."
+  },
+  "reactivity__valid__15": {
+    "status": "gap",
+    "reason": "Possible false positive: a nested function that is never called still reports."
+  },
+  "reactivity__valid__51": {
+    "status": "gap",
+    "reason": "Possible false positive: a props read handed to a custom hook is reported as untracked; upstream treats useSignal as reactive by convention."
+  },
+  "reactivity__valid__52": {
+    "status": "gap",
+    "reason": "As reactivity__valid__51."
+  },
+  "reactivity__valid__73": {
+    "status": "gap",
+    "reason": "Possible false positive: a props member read into an unused local is reported."
+  },
+  "reactivity__valid__76": {
+    "status": "deliberate",
+    "reason": "Passing an accessor to an undescribed callee is exactly what reactive-source-uncaptured exists to report; upstream has no equivalent surface."
+  },
+  "self-closing-comp__invalid__02": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"html\":\"void\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "self-closing-comp__invalid__03": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"html\":\"void\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "self-closing-comp__invalid__04": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "self-closing-comp__invalid__05": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "self-closing-comp__invalid__08": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"component\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "self-closing-comp__valid__11": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "self-closing-comp__valid__12": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "self-closing-comp__valid__13": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"html\":\"void\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "self-closing-comp__valid__14": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "self-closing-comp__valid__15": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"component\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "style-prop__invalid__05": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"styleProps\":[\"style\",\"css\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "style-prop__invalid__06": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"styleProps\":[\"css\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "style-prop__valid__10": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"allowString\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "style-prop__valid__11": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"allowString\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  },
+  "style-prop__valid__13": {
+    "status": "deliberate",
+    "reason": "Upstream configures the rule for this case ([{\"styleProps\":[\"css\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  }
+}
