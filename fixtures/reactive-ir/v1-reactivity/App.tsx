@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal } from "solid-js";
 import { createStore } from "solid-js/store";
+import { described, observe } from "uncharted-helpers";
 
 // v1/uncalled-accessor: the accessor is interpolated, so the template renders
 // the function source instead of the value.
@@ -62,6 +63,16 @@ export function CalledHandler() {
 // and is the false positive a syntax-only rule cannot avoid reporting.
 export function FactoryHandler() {
   return <button onClick={makeHandler()}>ok</button>;
+}
+
+// v1/reactive-source-uncaptured: the contract describes `described` and says
+// its first argument is tracked, so that call is certified. It says nothing
+// about `observe`, which has no body here either — so whether the accessor
+// stays reactive through it is unknowable, and the call site says so.
+export function Uncaptured() {
+  const [count] = createSignal(0);
+  described(count);
+  observe(count);
 }
 
 declare function load(): Promise<void>;

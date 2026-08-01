@@ -12,13 +12,23 @@
       "fixes": 0
     },
     {
+      "rule": "v1/package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 133,
+      "end": 140,
+      "fixes": 0
+    },
+    {
       "rule": "v1/uncalled-accessor",
       "code": "SC1005",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 330,
-      "end": 335,
+      "start": 386,
+      "end": 391,
       "fixes": 0
     },
     {
@@ -27,8 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 983,
-      "end": 993,
+      "start": 1039,
+      "end": 1049,
       "fixes": 0
     },
     {
@@ -37,8 +47,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 1302,
-      "end": 1357,
+      "start": 1358,
+      "end": 1413,
       "fixes": 0
     },
     {
@@ -47,8 +57,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 1344,
-      "end": 1350,
+      "start": 1400,
+      "end": 1406,
       "fixes": 0
     },
     {
@@ -57,8 +67,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 1968,
-      "end": 1975,
+      "start": 2024,
+      "end": 2031,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-source-uncaptured",
+      "code": "SC9011",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 2701,
+      "end": 2706,
       "fixes": 0
     }
   ]

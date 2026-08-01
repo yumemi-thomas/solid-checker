@@ -65,6 +65,12 @@ pub(super) struct UpstreamCompatContext<'a> {
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     /// Whether each proven source is an accessor or a store path.
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    /// The imported symbols a package contract describes.
+    ///
+    /// Read as the negative: a callee absent from here, absent from the
+    /// dialect's primitives, and with no body in the project is one whose
+    /// reactive behaviour nothing in the analysis knows.
+    pub(super) contracted: &'a HashMap<SymbolId, crate::contracts::ResolvedContractBinding>,
 }
 
 /// Runs every upstream-compat rule over one file.

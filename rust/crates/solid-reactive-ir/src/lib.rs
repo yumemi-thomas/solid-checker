@@ -3393,6 +3393,7 @@ fn build_with_contracts_measured_incremental(
             entities,
             accessors: &accessors,
             source_kinds: &source_kinds,
+            contracted: &resolved_contracts.by_symbol,
         };
         static_violations.extend(
             parallel_file_results(&facts.files, |file| {

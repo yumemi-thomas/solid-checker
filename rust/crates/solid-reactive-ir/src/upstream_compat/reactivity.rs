@@ -41,6 +41,78 @@ pub(super) fn check_file(
     no_direct_mutation(file, context, violations);
     no_async_tracked_scope(file, context, violations);
     expected_function_got_expression(file, context, violations);
+    reactive_source_uncaptured(file, context, violations);
+}
+
+/// `v1/reactive-source-uncaptured` — the uncertifiable half of upstream's
+/// `reactivity`.
+///
+/// A proven reactive source handed, uncalled, to a callee nothing in the
+/// analysis can describe: not one of the dialect's primitives, no body in the
+/// project, no package-contract summary. The callee may call it in a tracking
+/// scope, read it once and sever the reactivity, or store it for later — and
+/// which of those it does decides whether the surrounding code is correct.
+///
+/// This reports the *gap*, not a defect, which is why it is uncertifiable
+/// rather than a violation. It is the call-site companion to
+/// `v1/package-contract-export-missing`: that rule fires once at an
+/// undescribed import, this one fires where the missing description actually
+/// costs certification.
+///
+/// Passing a source on is idiomatic — it is how accessors travel — so the
+/// unknown callee is the entire premise. A helper defined in the project is
+/// read directly and never reported here.
+fn reactive_source_uncaptured(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    violations: &mut Vec<StaticViolation>,
+) {
+    let primitives = context.lookup.primitives(file);
+    for (index, call) in file.ast.calls.iter().enumerate() {
+        // A dialect primitive is described by definition, and a call the
+        // engine resolved into the project has a body it already walked.
+        if known_primitive(&primitives.calls[index]).is_some()
+            || context
+                .lookup
+                .function_called_at(file.path.as_str(), call.callee)
+                .is_some()
+        {
+            continue;
+        }
+        let callee_symbol = context.entities.at(file.path.as_str(), call.callee);
+        if callee_symbol.is_some_and(|symbol| context.contracted.contains_key(symbol)) {
+            continue;
+        }
+        let callee_text = text(file, call.callee);
+        for argument in &call.arguments {
+            // Only a bare reference to the source itself. A call, a member
+            // read, or an expression built from one passes a *value*, whose
+            // reactivity was already resolved before the callee saw it.
+            let Some(symbol) = context.entities.at(file.path.as_str(), argument.span) else {
+                continue;
+            };
+            let Some((name, _)) = context.accessors.get(symbol) else {
+                continue;
+            };
+            if context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+                continue;
+            }
+            let name = name.as_str();
+            violations.push(StaticViolation {
+                id: "SC9011".into(),
+                rule: "reactive-source-uncaptured".into(),
+                message: format!(
+                    "the reactive source {name:?} is passed to {callee_text}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
+                ),
+                hint: format!(
+                    "Describe {callee_text} in its package's solid-reactivity.json — which arguments it tracks and what it returns — or keep the function in the project so its body is analysed. See docs/package-contracts.md."
+                ),
+                location: location(file.path.shared(), argument.span),
+                analysis_context: String::new(),
+                fixes: vec![],
+            });
+        }
+    }
 }
 
 /// `v1/no-async-tracked-scope` — upstream's `noAsyncTrackedScope`.
