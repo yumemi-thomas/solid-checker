@@ -87,3 +87,19 @@ export function SeedOrApply() {
   );
   return null;
 }
+
+// A constant-foldable value on a specially-spelled attribute. The compiler
+// folds these while its census names the sites from the spelling alone, a
+// disagreement that once made this whole file unanalysable ("semantic trace
+// has unresolved execution sites"). Nothing here is reactive and nothing
+// should be reported; the fixture exists so a compiler regression fails
+// analysis loudly under both dialects.
+export function FoldedSpecialAttributes() {
+  const folded = "static";
+  return (
+    <section>
+      <div ref={folded} />
+      <div children={folded} />
+    </section>
+  );
+}

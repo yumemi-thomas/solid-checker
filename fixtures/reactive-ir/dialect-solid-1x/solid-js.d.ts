@@ -1,5 +1,5 @@
 declare namespace JSX {
-  interface IntrinsicElements { div: {} }
+  interface IntrinsicElements { div: { ref?: unknown; children?: unknown }; section: {} }
   interface Element {}
 }
 
