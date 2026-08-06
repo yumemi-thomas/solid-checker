@@ -11,8 +11,8 @@
 //! spans the fact-extraction demand plan requested — there is no separate
 //! scope walk here to turn off.
 //!
-//! Two things upstream reports sit outside what today's demand plan
-//! resolves, and this rule stays silent on both rather than guess:
+//! One thing upstream reports sits outside what today's demand plan resolves,
+//! and this rule stays silent on it rather than guess:
 //!
 //! - A dotted JSX tag name (`<Foo.Bar />`) is queried as a single span
 //!   covering the whole expression, so an unresolved entity there could
@@ -20,14 +20,14 @@
 //!   `Bar` member — two different defects with two different fixes. We
 //!   only ever asked the compiler the combined question, so we do not
 //!   report either answer from it.
-//! - A `use:directive` name is never asked at all. The demand plan seeds
-//!   symbol lookups from ordinary identifiers, import bindings,
-//!   declaration names, and JSX tag names, but a JSX namespaced attribute
-//!   name (`use:x`) is none of those — `context.entities` holds no answer
-//!   for it, resolved or not. Reporting the custom-directive diagnostic
-//!   without a fact to check it against would mean falling back to the
-//!   same kind of same-file name scan this rule exists to avoid, so it is
-//!   left unimplemented here rather than approximated.
+//!
+//! TypeScript deliberately does not bind the local-name node in a namespaced
+//! JSX attribute, so `GetSymbolAtLocation` cannot answer for
+//! `use:directive`. The structural fact extractor therefore runs Oxc's
+//! semantic binder over the same AST and records the exact lexical
+//! declaration selected for each directive name. That handles imports,
+//! hoisting, nested scopes, and shadowing without a text-based declaration
+//! scan.
 //!
 //! What remains — a plain (non-dotted) JSX tag name — is exactly what the
 //! demand plan always asks about, for every JSX element, dotted or not, so
@@ -54,6 +54,30 @@ pub(super) fn check_file(
     violations: &mut Vec<StaticViolation>,
 ) {
     let path = file.path.as_str();
+    for element in &file.ast.jsx_elements {
+        for attribute in &element.attributes {
+            if attribute
+                .namespace
+                .and_then(|namespace| file.source_text(namespace))
+                != Some("use")
+            {
+                continue;
+            }
+            if attribute.directive_binding.is_some() {
+                continue;
+            }
+            let name = file.source_text(attribute.local_name).unwrap_or_default();
+            violations.push(StaticViolation {
+                id: "SC8005".into(),
+                rule: "jsx-no-undef".into(),
+                message: format!("'{name}' is not defined."),
+                hint: "Import or declare this custom directive — lexical scope contains no binding for the use: name.".into(),
+                location: location(file.path.shared(), attribute.local_name),
+                analysis_context: String::new(),
+                fixes: vec![],
+            });
+        }
+    }
     let mut missing_auto_imports = BTreeSet::new();
     for element in &file.ast.jsx_elements {
         let name = file.source_text(element.name.span).unwrap_or_default();

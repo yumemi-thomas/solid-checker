@@ -55,8 +55,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
-      "start": 3409,
-      "end": 3415,
+      "start": 3569,
+      "end": 3575,
       "fixes": 0,
       "message": "reactive accessor \"seed\" is read directly in createEffect apply callback, which does not track; the read sees the current value once and never updates when \"seed\" changes",
       "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
@@ -67,8 +67,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
-      "start": 3430,
-      "end": 3435,
+      "start": 3590,
+      "end": 3595,
       "fixes": 0,
       "message": "cannot prove that the createEffect callback returns only a cleanup function or undefined; an unresolved return value may throw at runtime",
       "hint": "Make the return shape explicit at each return site: return a function literal, a named local function, or nothing. Returns of member expressions, call results, or values that cross files defeat this analysis."

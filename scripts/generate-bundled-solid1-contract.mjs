@@ -203,6 +203,16 @@ if (
 ) {
   fail("createEffect must run callback parameter 0 tracked");
 }
+const createSelector = summaryOf(".", "createSelector");
+if (
+  JSON.stringify(createSelector.callbacks) !==
+  JSON.stringify([
+    { parameter: 0, execution: "tracked" },
+    { parameter: 1, execution: "inline" },
+  ])
+) {
+  fail("createSelector must distinguish its tracked source from its inline comparator");
+}
 if (summaryOf(".", "children").returns?.kind !== "accessor") {
   fail("children must return an accessor");
 }

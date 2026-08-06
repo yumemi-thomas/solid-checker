@@ -222,6 +222,43 @@ fn no_proxy_calls(
                     spread.span,
                 ));
             }
+
+            // `<div {...{ ...source() }} />` has an object literal as the JSX
+            // spread argument, but evaluating that object still performs the
+            // nested dynamic spread. Oxc exports every ordinary spread as a
+            // fact, so walk all descendants instead of judging only the
+            // outer JSX argument's node kind.
+            for nested in file
+                .ast
+                .spreads
+                .iter()
+                .filter(|nested| spread.argument.contains(nested.span))
+            {
+                let nested_call = file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|call| call.span == nested.argument);
+                let nested_member = file
+                    .ast
+                    .members
+                    .iter()
+                    .any(|member| member.span == nested.argument);
+                let (message, hint) = if nested_call {
+                    (
+                        "Spreading a call expression may require a Proxy.",
+                        "Using a function call in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
+                    )
+                } else if nested_member {
+                    (
+                        "Spreading a member expression may require a Proxy.",
+                        "Using a property access in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
+                    )
+                } else {
+                    continue;
+                };
+                violations.push(proxy_violation(file, message, hint, nested.span));
+            }
         }
     }
 }
@@ -339,6 +376,18 @@ fn as_jsx_child(source: &str) -> String {
     }
 }
 
+fn as_jsx_attribute_expression(source: &str) -> String {
+    format!("{{{source}}}")
+}
+
+fn show_conditional_replacement(test: &str, consequent: &str, alternate: &str) -> String {
+    format!(
+        "<Show when={{{test}}} fallback={}>{}</Show>",
+        as_jsx_attribute_expression(alternate),
+        as_jsx_child(consequent)
+    )
+}
+
 fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
     for logical in &file.ast.logical_expressions {
         if logical.operator != LogicalOperatorKind::And {
@@ -388,11 +437,10 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
                 applicability: "safe".into(),
                 edits: vec![TextEdit {
                     location: location(file.path.shared(), conditional.span),
-                    new_text: format!(
-                        "<Show when={{{}}} fallback={{{}}}>{}</Show>",
+                    new_text: show_conditional_replacement(
                         text(file, conditional.test),
-                        as_jsx_child(alternate),
-                        as_jsx_child(consequent)
+                        consequent,
+                        alternate,
                     ),
                 }],
             }],
@@ -402,7 +450,9 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
 
 #[cfg(test)]
 mod tests {
-    use super::{as_jsx_child, expensive_branch};
+    use super::{
+        as_jsx_attribute_expression, as_jsx_child, expensive_branch, show_conditional_replacement,
+    };
 
     #[test]
     fn expensive_branch_matches_jsx_and_identifiers_only() {
@@ -421,5 +471,26 @@ mod tests {
         assert_eq!(as_jsx_child("<Content />"), "<Content />");
         assert_eq!(as_jsx_child("content"), "{content}");
         assert_eq!(as_jsx_child("a && b"), "{a && b}");
+    }
+
+    #[test]
+    fn jsx_attribute_expressions_have_exactly_one_brace_pair() {
+        assert_eq!(as_jsx_attribute_expression("fallback"), "{fallback}");
+        assert_eq!(
+            as_jsx_attribute_expression("<Fallback />"),
+            "{<Fallback />}"
+        );
+    }
+
+    #[test]
+    fn show_conditional_fixes_preserve_identifier_and_jsx_fallback_values() {
+        assert_eq!(
+            show_conditional_replacement("ready", "<strong />", "fallback"),
+            "<Show when={ready} fallback={fallback}><strong /></Show>"
+        );
+        assert_eq!(
+            show_conditional_replacement("ready", "content", "<Fallback />"),
+            "<Show when={ready} fallback={<Fallback />}>{content}</Show>"
+        );
     }
 }

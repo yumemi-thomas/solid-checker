@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-extended-invalid.tsx",
+      "start": 205,
+      "end": 223,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -609,6 +619,16 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-invalid.tsx",
       "start": 207,
       "end": 219,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-invalid.tsx",
+      "start": 270,
+      "end": 288,
       "fixes": 0
     },
     {

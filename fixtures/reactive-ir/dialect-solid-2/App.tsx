@@ -48,9 +48,12 @@ function reader() {
 // ownership chain, so onCleanup inside it is dropped. 2.0 does not treat it as
 // one. Before the leaf set came from the dialect, the engine used 2.0's pair
 // for both dialects and 1.x's leaf rules could not fire at all.
-createReaction(() => {
+const [reactionDependency, setReactionDependency] = createSignal(0);
+const trackReaction = createReaction(() => {
   onCleanup(() => {});
 });
+trackReaction(() => reactionDependency());
+setReactionDependency(1);
 
 // Names Solid 1.x exports and 2.0 removed. Each dialect gets its own bundled
 // model of what solid-js exports, so these are ordinary imports under 1.x and
@@ -68,14 +71,14 @@ export function OneXOnly() {
 // The second argument of createEffect, which is a different thing in each
 // dialect and the same characters in both.
 //
-// 1.x: createEffect(fn, value?) -- argument 1 seeds `prev` and is evaluated
-//      eagerly, here in SeedOrApply's body, which does not track. SC1001.
+// 1.x: createEffect(fn, value?) -- argument 1 is a function-valued seed. Its
+//      body is never invoked by createEffect, so the read is dormant. Silent.
 // 2.0: createEffect(compute, apply) -- argument 1 is the apply callback, a
 //      legitimate place to read. Silent.
 //
-// The engine classified index 1 as an effect apply in both dialects until the
-// apply position came from the dialect, so this read was reported under 1.x
-// as living "in createEffect apply callback" -- a phase 1.x does not have.
+// The engine classified index 1 as an invoked effect apply in both dialects
+// until callback execution came from the concrete dialect call contract.
+// A dormant seed contributes neither reachability nor reactive-read facts.
 export function SeedOrApply() {
   const [seed] = createSignal(1);
   createEffect(
@@ -102,4 +105,22 @@ export function FoldedSpecialAttributes() {
       <div children={folded} />
     </section>
   );
+}
+
+// Solid 1.x stores a function passed to createSignal as the signal's value;
+// it does not execute it as a derived computation. Solid 2.0 deliberately
+// differs, but both versions must stay silent here: in 1.x the function is
+// dormant, and in 2.0 the derived computation tracks the read.
+export function StoredFunctionValue() {
+  const [storedFunctionSource] = createSignal(1);
+  createSignal(() => storedFunctionSource());
+  return null;
+}
+
+// `sync` is a 2.0 runtime option. A 1.x analysis must not emit a diagnostic
+// owned only by the 2.0 rule catalog, even when invalid declarations expose
+// the same object shape to the AST.
+export function TwoOnlySyncOption() {
+  createMemo(async () => 1, undefined, { sync: true });
+  return null;
 }

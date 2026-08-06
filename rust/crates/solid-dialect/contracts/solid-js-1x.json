@@ -172,7 +172,17 @@
       "returns": {
         "kind": "accessor",
         "label": "selector result"
-      }
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "inline"
+        }
+      ]
     },
     "createSignal": {
       "kind": "function"

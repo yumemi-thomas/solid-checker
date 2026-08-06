@@ -5,15 +5,16 @@
 //! the compiler-fact classifier plus the semantic (AST-driven) classifier and
 //! the two role-keyed read helpers that consume its result.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use solid_dialect::{Dialect, Execution, Primitive};
 use solid_facts::core::Span;
 
 use super::{
-    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, containing_ast_function,
-    enclosing_function_label, function_binding_name, jsx_primitive_name, known_primitive, location,
-    primitive_name,
+    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId,
+    callback_execution_at_call, containing_ast_function, enclosing_function_label,
+    function_binding_name, jsx_primitive_name, known_primitive, location, primitive_name,
+    returned_callback_invocation_sites, returned_primitive_invocation,
 };
 
 /// The effect primitives: the ones 2.0 spells `(compute, apply)`.
@@ -31,24 +32,40 @@ fn is_effect(primitive: Primitive) -> bool {
 /// none — and this used to be the literal `1` for both. A read in a 1.x seed
 /// would be classified `EffectApply`, reporting it as running in a phase that
 /// version does not have.
-fn effect_apply_argument(dialect: &dyn Dialect, primitive: Primitive) -> Option<usize> {
+fn effect_apply_argument(
+    dialect: &dyn Dialect,
+    primitive: Primitive,
+    argument_count: usize,
+) -> Option<usize> {
     if !is_effect(primitive) {
         return None;
     }
-    dialect
-        .callback_executions(primitive)
-        .iter()
-        .find(|(_, execution)| *execution == Execution::Deferred)
-        .map(|(index, _)| *index)
+    (0..argument_count).find(|index| {
+        dialect.callback_execution_at(primitive, *index, argument_count)
+            == Some(Execution::Deferred)
+    })
 }
 
-/// Whether this primitive's *first* argument is a tracked compute.
-///
-/// Every callback-taking primitive except the deferred executors.
-/// `createEffect(compute, apply)` qualifies even though its callback position
-/// is 1: argument 0 is the compute, and it is tracked.
-fn tracks_first_argument(dialect: &dyn Dialect, primitive: Primitive) -> bool {
-    !dialect.callback_positions(primitive).is_empty() && !dialect.runs_callback_deferred(primitive)
+fn callback_runs_outside_tracking(
+    dialect: &dyn Dialect,
+    primitive: Primitive,
+    argument: usize,
+    argument_count: usize,
+) -> bool {
+    match dialect.callback_execution_at(primitive, argument, argument_count) {
+        None => false,
+        // A tracked callback creates its own observer unless the primitive's
+        // exact runtime contract explicitly overrides that classification.
+        Some(Execution::Tracked) => {
+            !dialect.callback_tracks_reads_at(primitive, argument, argument_count)
+        }
+        // Deferred callbacks execute after/outside the current tracking pass.
+        Some(Execution::Deferred) => true,
+        // Inline means the callback inherits the caller's Listener. Only
+        // primitives such as untrack/createRoot/runWithOwner that explicitly
+        // clear Listener belong to the outside-tracking set.
+        Some(Execution::Inline) => dialect.runs_callback_deferred(primitive),
+    }
 }
 
 /// The argument positions holding a callback that runs outside the
@@ -59,31 +76,15 @@ fn tracks_first_argument(dialect: &dyn Dialect, primitive: Primitive) -> bool {
 /// `createMemo`, `createSignal` and the rest of the tracked index-0 set. The
 /// two questions are independent: position says *where* a callback sits,
 /// [`Dialect::runs_callback_deferred`] says *how it executes*.
-fn deferred_callback_positions(dialect: &dyn Dialect, primitive: Primitive) -> &'static [usize] {
-    if is_effect(primitive) || dialect.runs_callback_deferred(primitive) {
-        dialect.callback_positions(primitive)
-    } else {
-        &[]
-    }
-}
-
-/// Whether *any* callback position of `primitive` satisfies `matches`.
-///
-/// [`Dialect::callback_positions`] returns a slice, and a caller that reaches
-/// for `.first()` silently drops the rest of it. Every 2.0 primitive answers a
-/// single position, so the mistake is invisible today; 1.x's
-/// `createResource(source, fetcher)` answers two positions, and reading only
-/// the first would stop recognising the fetcher as a callback.
-fn any_callback_position(
+fn deferred_callback_positions(
     dialect: &dyn Dialect,
     primitive: Primitive,
-    matches: impl FnMut(usize) -> bool,
-) -> bool {
-    dialect
-        .callback_positions(primitive)
-        .iter()
-        .copied()
-        .any(matches)
+    argument_count: usize,
+) -> Vec<usize> {
+    (0..argument_count)
+        .filter(|index| callback_runs_outside_tracking(dialect, primitive, *index, argument_count))
+        .filter(|index| !dialect.reports_untracked_reads_at(primitive, *index, argument_count))
+        .collect()
 }
 
 pub(super) fn execution_role(
@@ -130,10 +131,45 @@ pub(super) fn semantic_execution_role(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> ExecutionRole {
+    semantic_execution_role_within(
+        file,
+        span,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        &mut HashSet::new(),
+    )
+}
+
+/// `classifying` is the stack of spans whose role is currently being derived
+/// from their own invocation sites. A returned adapter invoked inside its own
+/// factory callback — `const a = on(() => a(), fn)`, or two adapters invoked
+/// in each other's callbacks — makes that derivation cyclic; a site already on
+/// the stack supplies no independent execution context and is skipped instead
+/// of re-entered.
+fn semantic_execution_role_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    if let Some(role) = context_provider_value_role(file, span, lookup) {
+        return role;
+    }
     if assigned_member_function_contains(file, span, entities) {
         return ExecutionRole::DeferredCallback;
     }
     if let Some(role) = named_callback_execution_role(file, span, entities, symbol_names, lookup) {
+        return role;
+    }
+    if let Some(role) = returned_callback_execution_role(file, span, lookup, classifying) {
+        return role;
+    }
+    if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
         return role;
     }
     let dialect = lookup.dialect;
@@ -148,11 +184,30 @@ pub(super) fn semantic_execution_role(
         )
         .as_ref()
         .and_then(PrimitiveName::primitive)
-        .and_then(|primitive| effect_apply_argument(dialect, primitive))
+        .and_then(|primitive| effect_apply_argument(dialect, primitive, call.arguments.len()))
             == Some(index)
             && direct_callback_contains(file, call.arguments[index].span, span)
     }) {
         return ExecutionRole::EffectApply;
+    }
+    if file.ast.arguments_containing(span).any(|(call, index)| {
+        primitive_name(
+            file.path.as_str(),
+            call.callee,
+            call.static_callee(&file.source),
+            entities,
+            symbol_names,
+            dialect,
+        )
+        .as_ref()
+        .and_then(PrimitiveName::primitive)
+        .is_some_and(|primitive| {
+            callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
+                && direct_callback_contains(file, call.arguments[index].span, span)
+        })
+    }) {
+        return ExecutionRole::UntrackedCallback;
     }
     if allowed.iter().any(|region| region.contains(span)) {
         return ExecutionRole::DeferredCallback;
@@ -169,28 +224,213 @@ pub(super) fn semantic_execution_role(
         return ExecutionRole::TrackedJsx;
     }
     if file.ast.arguments_containing(span).any(|(call, index)| {
-        index == 0
-            && matches!(
-                call.arguments[index].value,
-                solid_facts::ast::ArgumentValueKind::Identifier
-                    | solid_facts::ast::ArgumentValueKind::Function
-                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
-            )
-            && primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-                dialect,
-            )
-            .as_ref()
-            .and_then(PrimitiveName::primitive)
-            .is_some_and(|primitive| tracks_first_argument(dialect, primitive))
+        matches!(
+            call.arguments[index].value,
+            solid_facts::ast::ArgumentValueKind::Identifier
+                | solid_facts::ast::ArgumentValueKind::Function
+                | solid_facts::ast::ArgumentValueKind::AsyncFunction
+        ) && primitive_name(
+            file.path.as_str(),
+            call.callee,
+            call.static_callee(&file.source),
+            entities,
+            symbol_names,
+            dialect,
+        )
+        .as_ref()
+        .and_then(PrimitiveName::primitive)
+        .is_some_and(|primitive| {
+            callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                && dialect.callback_tracks_reads_at(primitive, index, call.arguments.len())
+        })
     }) {
         return ExecutionRole::TrackedJsx;
     }
     execution_role(&file.compiler, span, allowed)
+}
+
+/// Compose an inline callback of a higher-order factory with the proven use of
+/// the returned function. For example, `on` reads its dependency inline when
+/// the returned adapter runs: `createEffect(on(...))` therefore tracks that
+/// read, while a direct top-level adapter call does not.
+fn returned_factory_callback_execution_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    file.ast
+        .arguments_containing(span)
+        .find_map(|(factory_call, index)| {
+            if !direct_callback_contains(file, factory_call.arguments[index].span, span) {
+                return None;
+            }
+            let call_index = file
+                .ast
+                .calls
+                .iter()
+                .position(|candidate| candidate.span == factory_call.span)?;
+            let primitive = known_primitive(&lookup.primitives(file).calls[call_index])?;
+            if !lookup
+                .dialect
+                .callback_requires_return_invocation(primitive, index)
+                || lookup.dialect.callback_execution_at(
+                    primitive,
+                    index,
+                    factory_call.arguments.len(),
+                ) != Some(Execution::Inline)
+            {
+                return None;
+            }
+
+            let mut roles = Vec::new();
+            for site in returned_callback_invocation_sites(file, factory_call, lookup) {
+                let role = match site.inherited_execution {
+                    Some(Execution::Tracked) => Some(ExecutionRole::TrackedJsx),
+                    Some(Execution::Deferred) => Some(ExecutionRole::DeferredCallback),
+                    Some(Execution::Inline) | None => {
+                        let key = (site.path.clone(), site.span);
+                        if classifying.contains(&key) {
+                            // A cyclic invocation site — the adapter calling
+                            // itself through its own callback — has no context
+                            // of its own to contribute.
+                            None
+                        } else {
+                            lookup
+                                .files()
+                                .iter()
+                                .find(|candidate| candidate.path.as_str() == site.path)
+                                .map(|use_file| {
+                                    classifying.insert(key.clone());
+                                    let role = semantic_execution_role_within(
+                                        use_file,
+                                        site.span,
+                                        &[],
+                                        lookup.entities(),
+                                        lookup.symbol_names(),
+                                        lookup,
+                                        classifying,
+                                    );
+                                    classifying.remove(&key);
+                                    role
+                                })
+                        }
+                    }
+                };
+                roles.extend(role);
+            }
+            roles.sort_by_key(|role| *role as u8);
+            roles.dedup();
+            match roles.as_slice() {
+                [] => None,
+                [role] => Some(*role),
+                // The same returned adapter is used in incompatible execution
+                // contexts. A single diagnostic site cannot truthfully claim one
+                // dominates, so preserve uncertainty instead of manufacturing a
+                // false positive in either direction.
+                _ => Some(ExecutionRole::DeferredCallback),
+            }
+        })
+}
+
+fn returned_callback_execution_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    file.ast
+        .arguments_containing(span)
+        .find_map(|(call, index)| {
+            if !direct_callback_contains(file, call.arguments[index].span, span) {
+                return None;
+            }
+            let (primitive, result_slot) = returned_primitive_invocation(file, call, lookup)?;
+            match lookup.dialect.returned_callback_execution_at(
+                primitive,
+                result_slot,
+                index,
+                call.arguments.len(),
+            )? {
+                Execution::Tracked => Some(ExecutionRole::TrackedJsx),
+                Execution::Deferred => Some(ExecutionRole::DeferredCallback),
+                // The returned function restores/inherits its caller's execution
+                // context. Classify the proven invocation span, outside the
+                // callback body itself, so a top-level transition remains
+                // untracked while one started from an effect remains tracked.
+                Execution::Inline => {
+                    let key = (file.path.to_string(), call.span);
+                    if !classifying.insert(key.clone()) {
+                        return None;
+                    }
+                    let role = semantic_execution_role_within(
+                        file,
+                        call.span,
+                        &[],
+                        lookup.entities(),
+                        lookup.symbol_names(),
+                        lookup,
+                        classifying,
+                    );
+                    classifying.remove(&key);
+                    Some(role)
+                }
+            }
+        })
+}
+
+/// Whether `span` is evaluated as the `value` getter of a resolved Solid 1.x
+/// `createContext().Provider`.
+///
+/// Both halves are semantic proof: the JSX member object resolves to the
+/// binding initialized by the exact Solid `createContext` primitive, and the
+/// final member is `Provider`. An arbitrary component named `SomeProvider` or
+/// object with a same-spelled property satisfies neither condition.
+fn context_provider_value_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    if lookup.dialect.version() != solid_dialect::Version::V1 {
+        return None;
+    }
+    let element = file
+        .ast
+        .jsx_elements
+        .iter()
+        .filter(|element| {
+            element.attributes.iter().any(|attribute| {
+                file.source_text(attribute.local_name) == Some("value")
+                    && attribute
+                        .expression
+                        .is_some_and(|expression| expression.contains(span))
+            })
+        })
+        .min_by_key(|element| element.span.end - element.span.start)?;
+    let (Some(object), Some(property)) = (element.member_object, element.member_property) else {
+        return None;
+    };
+    if file.source_text(property) != Some("Provider") {
+        return None;
+    }
+    if !lookup.is_context_reference(file.path.as_str(), object) {
+        return None;
+    }
+    // Solid 1.x's createProvider implementation eagerly reads props.value
+    // inside untrack. A function expression is the one exception: reading
+    // the getter only creates/stores the function; its body is not run.
+    let stores_function = file.ast.functions_body_containing(span).any(|function| {
+        element.attributes.iter().any(|attribute| {
+            attribute
+                .expression
+                .is_some_and(|expression| expression.contains(function.span))
+        })
+    });
+    Some(if stores_function {
+        ExecutionRole::DeferredCallback
+    } else {
+        ExecutionRole::UntrackedRendering
+    })
 }
 
 pub(super) fn assigned_member_function_contains(
@@ -295,7 +535,12 @@ pub(super) fn named_callback_execution_role(
             let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
                 return false;
             };
-            any_callback_position(dialect, primitive, |argument_index| {
+            (0..call.arguments.len()).any(|argument_index| {
+                if callback_execution_at_call(file, call, primitive, argument_index, lookup)
+                    .is_none()
+                {
+                    return false;
+                }
                 call.arguments.get(argument_index).is_some_and(|argument| {
                     argument_references_callback_symbol(
                         file,
@@ -334,8 +579,27 @@ pub(super) fn named_callback_execution_role(
         return Some(ExecutionRole::DeferredCallback);
     }
     if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
+        known_primitive(&primitives.calls[call_index]).is_some_and(|primitive| {
+            call.arguments.iter().enumerate().any(|(index, argument)| {
+                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                    && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
+                    && function_symbol(file, callback, entities).is_some_and(|symbol| {
+                        argument_references_callback_symbol(
+                            file,
+                            argument,
+                            symbol,
+                            entities,
+                            symbol_names,
+                        )
+                    })
+            })
+        })
+    }) {
+        return Some(ExecutionRole::UntrackedCallback);
+    }
+    if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
         known_primitive(&primitives.calls[call_index])
-            .and_then(|primitive| effect_apply_argument(dialect, primitive))
+            .and_then(|primitive| effect_apply_argument(dialect, primitive, call.arguments.len()))
             .and_then(|index| call.arguments.get(index))
             .is_some_and(|argument| {
                 function_symbol(file, callback, entities).is_some_and(|symbol| {
@@ -359,23 +623,34 @@ pub(super) fn named_callback_execution_role(
     }
     if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
         known_primitive(&primitives.calls[call_index]).is_some_and(|primitive| {
-            tracks_first_argument(dialect, primitive) && !is_effect(primitive)
-        }) && call.arguments.first().is_some_and(|argument| {
-            function_symbol(file, callback, entities).is_some_and(|symbol| {
-                entities.get(&location(file.path.shared(), argument.span)) == Some(symbol)
-            })
+            !is_effect(primitive)
+                && call.arguments.iter().enumerate().any(|(index, argument)| {
+                    callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                        && dialect.callback_tracks_reads_at(primitive, index, call.arguments.len())
+                        && function_symbol(file, callback, entities).is_some_and(|symbol| {
+                            entities.get(&location(file.path.shared(), argument.span))
+                                == Some(symbol)
+                        })
+                })
         })
     }) {
         return Some(ExecutionRole::TrackedJsx);
     }
     if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        known_primitive(&primitives.calls[call_index])
-            .is_some_and(|primitive| dialect.runs_callback_deferred(primitive))
-            && call.arguments.first().is_some_and(|argument| {
-                function_symbol(file, callback, entities).is_some_and(|symbol| {
-                    entities.get(&location(file.path.shared(), argument.span)) == Some(symbol)
-                })
+        known_primitive(&primitives.calls[call_index]).is_some_and(|primitive| {
+            call.arguments.iter().enumerate().any(|(index, argument)| {
+                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+                    && callback_runs_outside_tracking(
+                        dialect,
+                        primitive,
+                        index,
+                        call.arguments.len(),
+                    )
+                    && function_symbol(file, callback, entities).is_some_and(|symbol| {
+                        entities.get(&location(file.path.shared(), argument.span)) == Some(symbol)
+                    })
             })
+        })
     }) {
         return Some(ExecutionRole::DeferredCallback);
     }
@@ -483,12 +758,17 @@ pub(super) fn allowed_callback_spans(
     let primitives = lookup.primitives(file);
     let mut spans = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
-        let indices: &[usize] = known_primitive(&primitives.calls[call_index])
-            .map_or(&[], |primitive| {
-                deferred_callback_positions(dialect, primitive)
+        let indices =
+            known_primitive(&primitives.calls[call_index]).map_or_else(Vec::new, |primitive| {
+                deferred_callback_positions(dialect, primitive, call.arguments.len())
+                    .into_iter()
+                    .filter(|index| {
+                        callback_execution_at_call(file, call, primitive, *index, lookup).is_some()
+                    })
+                    .collect()
             });
         for index in indices {
-            if let Some(argument) = call.arguments.get(*index) {
+            if let Some(argument) = call.arguments.get(index) {
                 spans.push(argument.span);
             }
         }

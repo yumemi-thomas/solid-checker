@@ -13,6 +13,15 @@ position, or through a chain of calls that ends in one of those places. The
 finding's evidence trail shows where the value was declared and how the read
 reached the untracked scope.
 
+Solid 1 context providers are an important runtime-defined case:
+`createContext(...).Provider` reads its `value` getter inside `untrack`, so a
+reactive read in that prop is untracked even though ordinary component props
+are lazy. The checker proves this from the resolved `createContext` symbol
+across direct imports, re-exports, and namespace imports; a component merely
+named `Provider` does not receive context semantics. Function-valued context
+values are stored, not invoked, so reads inside those function bodies are not
+reported at the provider site.
+
 ## Why is this bad?
 
 Solid's reactivity is dependency tracking: a read only subscribes when it happens

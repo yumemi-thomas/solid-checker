@@ -24,7 +24,6 @@
 //! `createSignal` that is not Solid's is not a source here, and a signal that
 //! arrives through three wrappers still is.
 
-use solid_dialect::Execution;
 use solid_facts::FileFacts;
 use solid_facts::ast::{FunctionFact, IdentifierRole};
 use solid_facts::core::Span;
@@ -78,26 +77,74 @@ fn untracked_derived_function(
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
-    for binding in &file.ast.bindings {
-        if !binding.initializer_function {
-            continue;
+    let candidates = file
+        .ast
+        .bindings
+        .iter()
+        .filter_map(|binding| {
+            if !binding.initializer_function {
+                return None;
+            }
+            let (Some(initializer), [declared]) = (binding.initializer, binding.names.as_slice())
+            else {
+                return None;
+            };
+            let function = function_at(file, initializer)?;
+            // Bound inside another function: references cannot escape the
+            // file except by being passed or returned, both refused below.
+            let enclosing = crate::containing_ast_function(&file.ast, binding.declaration)?;
+            let symbol = context
+                .entities
+                .at(file.path.as_str(), declared.span)?
+                .clone();
+            Some((binding, declared, function, enclosing, symbol))
+        })
+        .collect::<Vec<_>>();
+
+    // Derivation is transitive: `bar = () => foo()` derives whenever `foo`
+    // does. Only reads/calls directly owned by the candidate function count;
+    // a dormant nested function is code the outer function never executes.
+    let mut derived = std::collections::HashSet::new();
+    loop {
+        let mut changed = false;
+        for (_, _, function, _, symbol) in &candidates {
+            if derived.contains(symbol) {
+                continue;
+            }
+            let direct_source = file.ast.identifiers.iter().any(|identifier| {
+                identifier.role == IdentifierRole::Reference
+                    && function.body.contains(identifier.span)
+                    && crate::containing_ast_function(&file.ast, identifier.span)
+                        .is_some_and(|owner| owner.span == function.span)
+                    && context
+                        .entities
+                        .at(file.path.as_str(), identifier.span)
+                        .is_some_and(|read| {
+                            read != symbol
+                                && (context.accessors.contains_key(read)
+                                    || context.prop_sources.contains_key(read))
+                        })
+            });
+            let derived_call = file.ast.calls.iter().any(|call| {
+                function.body.contains(call.span)
+                    && crate::containing_ast_function(&file.ast, call.span)
+                        .is_some_and(|owner| owner.span == function.span)
+                    && context
+                        .entities
+                        .at(file.path.as_str(), call.callee)
+                        .is_some_and(|callee| derived.contains(callee))
+            });
+            if direct_source || derived_call {
+                changed |= derived.insert(symbol.clone());
+            }
         }
-        let (Some(initializer), [declared]) = (binding.initializer, binding.names.as_slice())
-        else {
-            continue;
-        };
-        let Some(function) = function_at(file, initializer) else {
-            continue;
-        };
-        // Bound inside another function: references cannot escape the file
-        // except by being passed or returned, both of which are refused below.
-        let Some(enclosing) = crate::containing_ast_function(&file.ast, binding.declaration) else {
-            continue;
-        };
-        let Some(symbol) = context.entities.at(file.path.as_str(), declared.span) else {
-            continue;
-        };
-        if !derives_from_reactive_source(file, context, function.body, symbol) {
+        if !changed {
+            break;
+        }
+    }
+
+    for (_, declared, _, enclosing, symbol) in candidates {
+        if !derived.contains(&symbol) {
             continue;
         }
         let mut calls = 0usize;
@@ -107,7 +154,7 @@ fn untracked_derived_function(
             .iter()
             .filter(|identifier| {
                 identifier.role == IdentifierRole::Reference
-                    && context.entities.at(file.path.as_str(), identifier.span) == Some(symbol)
+                    && context.entities.at(file.path.as_str(), identifier.span) == Some(&symbol)
             })
             .all(|identifier| {
                 let Some(call) = file
@@ -144,23 +191,6 @@ fn untracked_derived_function(
             fixes: vec![],
         });
     }
-}
-
-/// Whether a function body reads a proven reactive source other than itself.
-fn derives_from_reactive_source(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    body: Span,
-    own_symbol: &crate::SymbolId,
-) -> bool {
-    file.ast
-        .identifiers
-        .iter()
-        .filter(|identifier| {
-            identifier.role == IdentifierRole::Reference && body.contains(identifier.span)
-        })
-        .filter_map(|identifier| context.entities.at(file.path.as_str(), identifier.span))
-        .any(|symbol| symbol != own_symbol && context.accessors.contains_key(symbol))
 }
 
 /// Whether a span sits anywhere inside JSX, which is a tracking scope.
@@ -309,13 +339,14 @@ fn no_async_tracked_scope(
         let name = primitives.calls[index]
             .as_ref()
             .map_or("", crate::PrimitiveName::as_str);
-        for (slot, execution) in context.dialect.callback_executions(primitive) {
-            if *execution != Execution::Tracked {
+        for slot in 0..call.arguments.len() {
+            if !context
+                .dialect
+                .callback_tracks_reads_at(primitive, slot, call.arguments.len())
+            {
                 continue;
             }
-            let Some(argument) = call.arguments.get(*slot) else {
-                continue;
-            };
+            let argument = &call.arguments[slot];
             let Some(function) = function_at(file, argument.span) else {
                 continue;
             };
@@ -379,6 +410,39 @@ fn expected_function_got_expression(
             let Some(expression) = attribute.expression else {
                 continue;
             };
+            // A native listener receives its function value once during DOM
+            // setup. Reading that function through reactive props/store state
+            // here freezes the initial handler. The member root is a proven
+            // source; a plain object member is left alone.
+            let reactive_member = file
+                .ast
+                .members
+                .iter()
+                .find(|member| member.span == expression)
+                .and_then(|_| member_root(file, expression))
+                .and_then(|root| context.entities.at(file.path.as_str(), root))
+                .is_some_and(|symbol| {
+                    context.accessors.contains_key(symbol)
+                        || context.prop_sources.contains_key(symbol)
+                });
+            if reactive_member {
+                violations.push(StaticViolation {
+                    id: "SC1007".into(),
+                    rule: "expected-function-got-expression".into(),
+                    message: format!(
+                        "{name} reads {} once during DOM setup; later reactive updates cannot replace the installed listener",
+                        text(file, expression)
+                    ),
+                    hint: format!(
+                        "Wrap the read so it happens when the event fires: {name}={{event => {}(event)}}.",
+                        text(file, expression)
+                    ),
+                    location: location(file.path.shared(), expression),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                });
+                continue;
+            }
             // The binding must be a call spanning the whole expression. A bare
             // reference is the correct form, and a call merely *inside* the
             // expression — `onClick={() => save(id())}` — is the fix, not the
@@ -449,9 +513,10 @@ fn function_at(file: &FileFacts, span: Span) -> Option<&FunctionFact> {
 /// `v1/uncalled-accessor` — upstream's `badSignal`.
 ///
 /// An accessor referenced where a *value* was meant: interpolated into a
-/// template literal, used as an operand, used as a computed member key. The
-/// accessor is a function, so the expression sees `function count() {...}`
-/// rather than the number, and it never updates.
+/// template literal, used as a coercive operand, used as a computed member
+/// key, or assigned to a native JSX value attribute. The accessor is a
+/// function, so the expression sees `function count() {...}` rather than the
+/// current value, and it never updates.
 ///
 /// The positions are the ones upstream enumerates; what differs is the
 /// premise. A reference only counts when the engine proved the symbol is an
@@ -466,7 +531,7 @@ fn uncalled_accessor(
         if identifier.role != IdentifierRole::Reference {
             continue;
         }
-        let Some(symbol) = context.entities.at(file.path.as_str(), identifier.span) else {
+        let Some(symbol) = source_symbol_at(context, file, identifier.span) else {
             continue;
         };
         // Proven accessor, and specifically an accessor: a store is read by
@@ -500,6 +565,19 @@ fn uncalled_accessor(
         });
         let _ = declaration;
     }
+}
+
+fn source_symbol_at<'a>(
+    context: &'a UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<&'a crate::SymbolId> {
+    context.entities.at(file.path.as_str(), span).or_else(|| {
+        context
+            .source_reference_index
+            .get(file.path.as_str())
+            .and_then(|by_range| by_range.get(&(u64::from(span.start), u64::from(span.end))))
+    })
 }
 
 /// `v1/no-direct-mutation` — upstream's `noWrite`.
@@ -587,6 +665,38 @@ fn is_argument(file: &FileFacts, span: Span) -> bool {
 /// property value — passing the accessor on is idiomatic, and reporting it
 /// would be the false positive upstream's issue #193 describes.
 fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
+    if let Some(operand) = file
+        .ast
+        .coercive_operands
+        .iter()
+        .find(|operand| operand.span == span)
+    {
+        return Some(match operand.kind {
+            solid_facts::ast::CoerciveOperandKind::Binary => "a binary operator",
+            solid_facts::ast::CoerciveOperandKind::Unary => "a unary operator",
+        });
+    }
+
+    // Component props are lazy getters and may intentionally receive an
+    // accessor. Native attributes are different: the compiler hands the
+    // expression's value to the DOM operation, so a bare accessor is
+    // stringified/assigned as the function object. Callback-like attributes
+    // remain excluded because their contract expects a function.
+    if file.ast.jsx_elements.iter().any(|element| {
+        let element_name = text(file, element.name.span);
+        is_lowercase_led(element_name)
+            && element.attributes.iter().any(|attribute| {
+                let name = text(file, attribute.name);
+                attribute.namespace.is_none()
+                    && attribute.expression == Some(span)
+                    && name != "ref"
+                    && !(name.starts_with("on")
+                        && name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic))
+            })
+    }) {
+        return Some("a native JSX attribute");
+    }
+
     // An untagged template literal stringifies each interpolation, so an
     // accessor there renders its own source text. A *tagged* one hands the
     // interpolations to the tag as values, which may legitimately call them —

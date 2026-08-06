@@ -21,7 +21,9 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
         .filter(|read| {
             matches!(
                 read.execution,
-                ExecutionRole::UntrackedRendering | ExecutionRole::EffectApply
+                ExecutionRole::UntrackedRendering
+                    | ExecutionRole::UntrackedCallback
+                    | ExecutionRole::EffectApply
             )
         })
         .map(|read| Finding {
@@ -401,6 +403,7 @@ const fn allowed_write_role(role: ExecutionRole) -> bool {
         role,
         ExecutionRole::EventCallback
             | ExecutionRole::DeferredCallback
+            | ExecutionRole::UntrackedCallback
             | ExecutionRole::EffectApply
             | ExecutionRole::DirectiveApply
     )

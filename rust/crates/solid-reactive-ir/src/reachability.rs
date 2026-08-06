@@ -10,8 +10,9 @@ use typefacts::Location;
 use super::{
     CachedReachabilityFile, EntitySymbols, FunctionNode, ProjectIndexes, ReachabilityEdge,
     ReachabilityTarget, SemanticLookup, SourceDiscoveryTypeScriptDelta, SymbolId,
-    containing_function_indexed, function_indices_by_path, function_is_solid_callback, location,
-    parallel_slice_results, primitive_name, same_compiler_semantics, source_discovery_identity,
+    callback_execution_at_call, containing_function_indexed, function_indices_by_path,
+    function_is_solid_callback, location, parallel_slice_results, primitive_name,
+    returned_callback_execution_at_call, same_compiler_semantics, source_discovery_identity,
     source_discovery_identity_matches,
 };
 
@@ -209,7 +210,7 @@ fn discover_reachability_file(
                 target: ReachabilityTarget::Symbol(symbol.clone()),
             });
         }
-        if primitive_name(
+        let primitive = primitive_name(
             file.path.as_str(),
             call.callee,
             call.static_callee(&file.source),
@@ -218,12 +219,28 @@ fn discover_reachability_file(
             lookup.dialect,
         )
         .as_ref()
-        .and_then(super::PrimitiveName::primitive)
-        .is_some_and(|primitive| lookup.dialect.invokes_its_callbacks(primitive))
+        .and_then(super::PrimitiveName::primitive);
+        if primitive.is_some()
+            || (0..call.arguments.len()).any(|index| {
+                returned_callback_execution_at_call(file, call, index, lookup).is_some()
+            })
         {
+            let invoked_arguments = call
+                .arguments
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| {
+                    primitive
+                        .and_then(|primitive| {
+                            callback_execution_at_call(file, call, primitive, *index, lookup)
+                        })
+                        .or_else(|| returned_callback_execution_at_call(file, call, *index, lookup))
+                        .is_some()
+                })
+                .map(|(_, argument)| argument)
+                .collect::<Vec<_>>();
             for function in &functions {
-                if call
-                    .arguments
+                if invoked_arguments
                     .iter()
                     .any(|argument| argument.span.contains(function.span))
                 {
@@ -233,8 +250,7 @@ fn discover_reachability_file(
                     });
                 }
             }
-            for property in call
-                .arguments
+            for property in invoked_arguments
                 .iter()
                 .flat_map(|argument| &argument.identifier_properties)
             {
@@ -671,7 +687,7 @@ pub(super) fn reachable_call_multiplicity(
                     roots.push(target);
                 }
             }
-            if primitive_name(
+            let primitive = primitive_name(
                 file.path.as_str(),
                 call.callee,
                 call.static_callee(&file.source),
@@ -680,8 +696,11 @@ pub(super) fn reachable_call_multiplicity(
                 lookup.dialect,
             )
             .as_ref()
-            .and_then(super::PrimitiveName::primitive)
-            .is_some_and(|primitive| lookup.dialect.invokes_its_callbacks(primitive))
+            .and_then(super::PrimitiveName::primitive);
+            if primitive.is_some()
+                || (0..call.arguments.len()).any(|index| {
+                    returned_callback_execution_at_call(file, call, index, lookup).is_some()
+                })
             {
                 for index in functions_by_path
                     .get(file.path.as_str())
@@ -693,7 +712,29 @@ pub(super) fn reachable_call_multiplicity(
                     if call
                         .arguments
                         .iter()
-                        .any(|argument| argument.span.contains(function.span))
+                        .enumerate()
+                        .any(|(argument_index, argument)| {
+                            primitive
+                                .and_then(|primitive| {
+                                    callback_execution_at_call(
+                                        file,
+                                        call,
+                                        primitive,
+                                        argument_index,
+                                        lookup,
+                                    )
+                                })
+                                .or_else(|| {
+                                    returned_callback_execution_at_call(
+                                        file,
+                                        call,
+                                        argument_index,
+                                        lookup,
+                                    )
+                                })
+                                .is_some()
+                                && argument.span.contains(function.span)
+                        })
                     {
                         if let Some(owner) = owner {
                             edges[owner].push(index);

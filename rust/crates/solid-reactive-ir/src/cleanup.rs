@@ -7,22 +7,24 @@
 
 use std::collections::HashMap;
 
-use solid_dialect::{CleanupRule, Dialect, Primitive};
+use solid_dialect::{CleanupRule, Primitive};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use typefacts::{Callability, Location, ResolvedCallValidity};
 
 use super::{
-    EntitySymbols, Fix, InvalidCleanupReturn, LeafOwnerOperation, PrimitiveName, SemanticLookup,
-    SymbolId, TextEdit, UnresolvedCleanupReturn, containing_ast_function, location, primitive_name,
+    Fix, InvalidCleanupReturn, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId,
+    TextEdit, UnresolvedCleanupReturn, callback_owner_at_call, containing_ast_function, location,
+    primitive_name,
 };
 
 pub(super) fn leaf_owner_operations_for_file(
     file: &FileFacts,
-    entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    dialect: &dyn Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> Vec<LeafOwnerOperation> {
+    let entities = lookup.entities();
+    let dialect = lookup.dialect;
     let mut operations = Vec::new();
     let function_spans = file
         .ast
@@ -53,9 +55,14 @@ pub(super) fn leaf_owner_operations_for_file(
         let Some(region) = owner
             .primitive()
             .into_iter()
-            .flat_map(|primitive| dialect.callback_owners(primitive))
-            .find(|(_, kind)| *kind == solid_dialect::CallbackOwner::Leaf)
-            .and_then(|(index, _)| owner_call.arguments.get(*index))
+            .flat_map(|primitive| {
+                (0..owner_call.arguments.len()).filter(move |index| {
+                    callback_owner_at_call(file, owner_call, primitive, *index, lookup)
+                        == Some(solid_dialect::CallbackOwner::Leaf)
+                })
+            })
+            .next()
+            .and_then(|index| owner_call.arguments.get(index))
             .map(|argument| argument.span)
         else {
             continue;

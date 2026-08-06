@@ -155,12 +155,12 @@ with without silencing the seven it wants. It is split.
 | `untrackedReactive` | a reactive value read where nothing tracks | [v1/strict-read-untracked](v1/strict-read-untracked.md) |
 | `untrackedReactive`, after an `await` | a read in the continuation of an async computation, where tracking has already ended | [v1/reactive-read-after-await](v1/reactive-read-after-await.md) |
 | `untrackedReactive`, on a props destructure | props unwrapped into frozen locals | [v1/no-destructure](v1/no-destructure.md) |
-| `badSignal` | an accessor used as a value where a call was meant — in a template literal, in arithmetic, as a computed key, bare in JSX | [v1/uncalled-accessor](v1/uncalled-accessor.md) |
+| `badSignal` | a proven accessor used uncalled in a value-only position: an untagged template interpolation, coercive operator, computed key, or native JSX value attribute | [v1/uncalled-accessor](v1/uncalled-accessor.md) |
 | `badUnnamedDerivedSignal` | an anonymous function that closes over a reactive value and is neither tracked nor deferred by the position it sits in | [v1/untracked-derived-function](v1/untracked-derived-function.md) |
 | `expectedFunctionGotExpression` | a reactive expression in a position whose contract is a function, so it is evaluated once instead of per read | [v1/expected-function-got-expression](v1/expected-function-got-expression.md) |
 | `noWrite` | a signal reassigned, or a props/store member written through | [v1/no-direct-mutation](v1/no-direct-mutation.md) |
 | `noAsyncTrackedScope` | an `async` function passed where a tracked computation is expected | [v1/no-async-tracked-scope](v1/no-async-tracked-scope.md) |
-| `shouldDestructure`, `shouldAssign` | the result of `createSignal`/`createStore`/`createMemo` not captured in the shape the analyzer can follow — upstream's own analysis-integrity warnings | not ported: these warn about upstream's *analyzer* losing track, and this checker follows the value regardless; the three upstream cases are declared as gaps in `fixtures/upstream-parity/deviations.json` |
+| `shouldDestructure`, `shouldAssign` | the result of `createSignal`/`createStore`/`createMemo` not captured in the shape the analyzer can follow — upstream's own analysis-integrity warnings | not ported: these warn about upstream's *analyzer* losing track, and this checker follows the value regardless; the three upstream cases are recorded as `evidence-backed` deviations in `fixtures/upstream-parity/deviations.json` |
 | — (no upstream id) | a reactive source passed to a package-imported function nothing describes — the checker's own uncertifiable surface | [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) |
 
 Two consequences worth knowing before switching a project over:

@@ -61,6 +61,7 @@ use typefacts::{Declaration, Location, ResolvedCallValidity};
 pub enum ExecutionRole {
     TrackedJsx,
     DeferredCallback,
+    UntrackedCallback,
     EffectApply,
     EventCallback,
     DirectiveApply,
@@ -2315,6 +2316,58 @@ fn discover_sources(
                 }
             }
         }
+
+        // Callback parameters can themselves be runtime-created accessors.
+        // This is not derivable from the callback's TypeScript declaration:
+        // mapArray/indexArray create the index/item signals internally and
+        // hand them to the mapper. Keep that contract in the dialect beside
+        // the JSX-children equivalent above.
+        for call in &file.ast.calls {
+            let Some(primitive) = primitive_name(
+                file.path.as_str(),
+                call.callee,
+                call.static_callee(&file.source),
+                entities,
+                symbol_names,
+                semantic_lookup.dialect,
+            )
+            .as_ref()
+            .and_then(PrimitiveName::primitive) else {
+                continue;
+            };
+            for (argument_index, argument) in call.arguments.iter().enumerate() {
+                let parameter_indices = semantic_lookup
+                    .dialect
+                    .callback_accessor_parameters(primitive, argument_index);
+                if parameter_indices.is_empty() {
+                    continue;
+                }
+                let Some(function) = file
+                    .ast
+                    .functions
+                    .iter()
+                    .find(|function| function.span == argument.span)
+                else {
+                    continue;
+                };
+                for parameter_index in parameter_indices {
+                    let Some(parameter) = function
+                        .parameters
+                        .get(*parameter_index)
+                        .and_then(|parameter| parameter.names.first())
+                    else {
+                        continue;
+                    };
+                    let declaration = location(file.path.shared(), parameter.span);
+                    if let Some(symbol) = entities.get(&declaration) {
+                        accessors.entry(symbol.clone()).or_insert((
+                            symbol_id(file.source_text(parameter.span).unwrap_or_default()),
+                            declaration,
+                        ));
+                    }
+                }
+            }
+        }
     }
     for file in &facts.files {
         for call in &file.ast.calls {
@@ -2741,7 +2794,7 @@ fn build_with_contracts_measured_incremental(
     add_solid_import_names(facts, entities, dialect, &mut symbol_names);
     build_timings.symbol_name_indexes = substage_started.elapsed();
     let substage_started = Instant::now();
-    let mut resolved_contracts = resolve_contract_imports(facts, contracts, entities);
+    let mut resolved_contracts = resolve_contract_imports(facts, contracts, entities, dialect);
     build_timings.contract_resolution = substage_started.elapsed();
     let semantic_lookup = SemanticLookup::new(facts, ast_indexes, entities, &symbol_names, dialect);
     let semantic_lookup = &semantic_lookup;
@@ -2935,6 +2988,10 @@ fn build_with_contracts_measured_incremental(
                         .next()
                 })
                 .is_some_and(char::is_uppercase)
+                // Solid invokes components with one props object. A function
+                // requiring additional positional parameters is not a Solid
+                // component merely because its local name is capitalized.
+                && function.parameters.len() <= 1
                 && let Some(parameter) = function
                     .parameters
                     .first()
@@ -3076,10 +3133,10 @@ fn build_with_contracts_measured_incremental(
                         primitive
                             .primitive()
                             .is_some_and(|resolved| {
-                                dialect.callback_executions(resolved).iter().any(
-                                    |(_, execution)| {
-                                        *execution == solid_dialect::Execution::Tracked
-                                    },
+                                dialect.callback_tracks_reads_at(
+                                    resolved,
+                                    0,
+                                    candidate.arguments.len(),
                                 )
                             })
                             .then(|| format!("{primitive} async computation"))
@@ -3122,6 +3179,8 @@ fn build_with_contracts_measured_incremental(
         async_sources: &async_sources,
         source_declarations,
         contract_reads: &contract_reads,
+        contract_returns: &contract_returns,
+        bundled_returns: &bundled_returns,
         source_kinds: &source_kinds,
         prop_sources: &prop_sources,
     };
@@ -3134,15 +3193,16 @@ fn build_with_contracts_measured_incremental(
                 .cloned()
         })
         .flatten();
-    let references_by_source = if cached_interprocedural.is_some() {
-        HashMap::new()
-    } else {
-        references_for_sources(
-            &facts.typescript,
-            &typescript_indexes.symbols_by_root,
-            accessors.keys(),
-        )
-    };
+    // Upstream-compat value-position checks also consume this exact
+    // TypeScript reference map. Entity facts are intentionally sparse and do
+    // not include every plain identifier operand, so retain the complete
+    // source-reference projection even when interprocedural results are
+    // reusable.
+    let references_by_source = references_for_sources(
+        &facts.typescript,
+        &typescript_indexes.symbols_by_root,
+        accessors.keys(),
+    );
     let local_access_cache = late_stage_cache
         .as_deref_mut()
         .and_then(Option::as_mut)
@@ -3387,12 +3447,24 @@ fn build_with_contracts_measured_incremental(
     // catalog them expose. Gated per dialect so a v2 project never pays for
     // (or sees) a rule its catalog does not declare.
     if dialect.version() == solid_dialect::Version::V1 {
+        let mut source_reference_index: HashMap<String, HashMap<(u64, u64), SymbolId>> =
+            HashMap::new();
+        for (symbol, references) in &references_by_source {
+            for reference in references {
+                source_reference_index
+                    .entry(reference.path.to_string())
+                    .or_default()
+                    .insert((reference.start_byte, reference.end_byte), symbol.clone());
+            }
+        }
         let compat_context = upstream_compat::UpstreamCompatContext {
             dialect,
             lookup: semantic_lookup,
             entities,
             accessors: &accessors,
             source_kinds: &source_kinds,
+            prop_sources: &prop_sources,
+            source_reference_index,
             contracted: &resolved_contracts.by_symbol,
         };
         static_violations.extend(
@@ -3405,7 +3477,7 @@ fn build_with_contracts_measured_incremental(
     }
     leaf_operations.extend(
         parallel_file_results(&facts.files, |file| {
-            leaf_owner_operations_for_file(file, entities, &symbol_names, semantic_lookup.dialect)
+            leaf_owner_operations_for_file(file, &symbol_names, semantic_lookup)
         })
         .into_iter()
         .flatten(),
@@ -3796,12 +3868,42 @@ const OWNER_CONTEXT_OWNED: u8 = 1;
 const OWNER_CONTEXT_UNOWNED: u8 = 2;
 const OWNER_CONTEXT_LEAF: u8 = 4;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum OwnerEdgeKind {
     Preserve,
     Owned,
     Unowned,
     Leaf,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct ReturnedCallbackInvocationSite {
+    path: String,
+    span: Span,
+    inherited_execution: Option<solid_dialect::Execution>,
+    inherited_owner: OwnerEdgeKind,
+}
+
+impl ReturnedCallbackInvocationSite {
+    /// Total order over every field, for sort-then-dedup. A key that omitted
+    /// a field could leave equal sites non-adjacent, and `dedup` only removes
+    /// adjacent duplicates.
+    fn order_key(&self) -> (String, Span, u8, Option<u8>) {
+        (
+            self.path.clone(),
+            self.span,
+            self.inherited_owner as u8,
+            self.inherited_execution.map(|execution| execution as u8),
+        )
+    }
+}
+
+#[derive(Clone)]
+struct OwnerCallbackEdge {
+    argument: usize,
+    kind: OwnerEdgeKind,
+    source_path: String,
+    source: Span,
 }
 
 #[derive(Clone)]
@@ -3837,9 +3939,15 @@ enum OwnerTarget {
 
 #[derive(Clone)]
 struct SymbolicOwnerEdge {
-    source: Option<Span>,
+    source: Option<OwnerSource>,
     target: OwnerTarget,
     kind: OwnerEdgeKind,
+}
+
+#[derive(Clone)]
+struct OwnerSource {
+    path: String,
+    span: Span,
 }
 
 #[derive(Clone)]
@@ -3901,7 +4009,7 @@ fn find_missing_owners(
                 .zip(&call_primitives)
                 .filter_map(|(call, primitive)| {
                     let argument =
-                        owner_providing_argument(known_primitive(primitive), lookup.dialect)?;
+                        owner_providing_argument(file, call, known_primitive(primitive), lookup)?;
                     call.arguments.get(argument).and_then(|argument| {
                         matches!(
                             argument.value,
@@ -4002,11 +4110,13 @@ fn find_missing_owners(
                     contexts[target_index] |= OWNER_CONTEXT_UNOWNED;
                 }
             }
-            for (argument_index, edge_kind) in owner_callback_edges(
+            for edge in owner_callback_edges(
+                file,
+                call,
                 &owner_file_indexes[file_index].call_primitives[call_index],
-                lookup.dialect,
+                lookup,
             ) {
-                let Some(argument) = call.arguments.get(argument_index) else {
+                let Some(argument) = call.arguments.get(edge.argument) else {
                     continue;
                 };
                 let Some(target_index) = owner_callback_index(
@@ -4019,10 +4129,16 @@ fn find_missing_owners(
                 ) else {
                     continue;
                 };
-                if let Some(owner) = owner {
-                    edges.push((owner, target_index, edge_kind));
+                let invocation_owner = containing_function_indexed(
+                    &nodes,
+                    &nodes_by_path,
+                    &edge.source_path,
+                    edge.source,
+                );
+                if let Some(owner) = invocation_owner {
+                    edges.push((owner, target_index, edge.kind));
                 } else {
-                    contexts[target_index] |= owner_edge_context(edge_kind, OWNER_CONTEXT_UNOWNED);
+                    contexts[target_index] |= owner_edge_context(edge.kind, OWNER_CONTEXT_UNOWNED);
                 }
             }
         }
@@ -4092,9 +4208,11 @@ fn find_missing_owners(
                 call.span,
             );
             let operation = match primitive {
-                Some(Primitive::CreateEffect | Primitive::CreateTrackedEffect) if !root_owned => {
-                    Some(("effect", context & OWNER_CONTEXT_UNOWNED != 0))
-                }
+                Some(
+                    Primitive::CreateEffect
+                    | Primitive::CreateRenderEffect
+                    | Primitive::CreateTrackedEffect,
+                ) if !root_owned => Some(("effect", context & OWNER_CONTEXT_UNOWNED != 0)),
                 Some(Primitive::OnCleanup) if !root_owned => Some((
                     "cleanup",
                     context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
@@ -4214,8 +4332,9 @@ fn discover_owner_file(
     indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    dialect: &dyn Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> CachedOwnerFile {
+    let dialect = lookup.dialect;
     let call_primitives = file
         .ast
         .calls
@@ -4237,7 +4356,8 @@ fn discover_owner_file(
         .iter()
         .zip(&call_primitives)
         .filter_map(|(call, primitive)| {
-            let argument = owner_providing_argument(known_primitive(primitive), dialect)?;
+            let argument =
+                owner_providing_argument(file, call, known_primitive(primitive), lookup)?;
             call.arguments.get(argument).and_then(|argument| {
                 matches!(
                     argument.value,
@@ -4321,21 +4441,36 @@ fn discover_owner_file(
         let owner = owner_at(call.span);
         if let Some(symbol) = entities.get(&location(file.path.shared(), call.callee)) {
             edges.push(SymbolicOwnerEdge {
-                source: owner,
+                source: owner.map(|span| OwnerSource {
+                    path: file.path.to_string(),
+                    span,
+                }),
                 target: OwnerTarget::Symbol(symbol.clone()),
                 kind: OwnerEdgeKind::Preserve,
             });
         }
-        for (argument_index, kind) in owner_callback_edges(&call_primitives[call_index], dialect) {
+        for edge in owner_callback_edges(file, call, &call_primitives[call_index], lookup) {
             if let Some(target) = call
                 .arguments
-                .get(argument_index)
+                .get(edge.argument)
                 .and_then(|argument| callback_target(argument.span))
             {
+                let source = lookup
+                    .files()
+                    .iter()
+                    .find(|candidate| candidate.path.as_str() == edge.source_path)
+                    .and_then(|source_file| {
+                        containing_ast_function(&source_file.ast, edge.source).map(|function| {
+                            OwnerSource {
+                                path: edge.source_path.clone(),
+                                span: function.span,
+                            }
+                        })
+                    });
                 edges.push(SymbolicOwnerEdge {
-                    source: owner,
+                    source,
                     target,
-                    kind,
+                    kind: edge.kind,
                 });
             }
         }
@@ -4343,9 +4478,11 @@ fn discover_owner_file(
             continue;
         }
         let operation = match known_primitive(&call_primitives[call_index]) {
-            Some(Primitive::CreateEffect | Primitive::CreateTrackedEffect) => {
-                Some(("effect", OWNER_CONTEXT_UNOWNED, None, call.callee))
-            }
+            Some(
+                Primitive::CreateEffect
+                | Primitive::CreateRenderEffect
+                | Primitive::CreateTrackedEffect,
+            ) => Some(("effect", OWNER_CONTEXT_UNOWNED, None, call.callee)),
             Some(Primitive::OnCleanup) => Some((
                 "cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
@@ -4471,7 +4608,7 @@ fn find_missing_owners_incremental(
     for (path, discovered) in parallel_slice_results(&recomputed, |file| {
         (
             file.path.clone(),
-            discover_owner_file(file, indexes, entities, symbol_names, lookup.dialect),
+            discover_owner_file(file, indexes, entities, symbol_names, lookup),
         )
     }) {
         cache.insert(path, discovered);
@@ -4529,10 +4666,10 @@ fn find_missing_owners_incremental(
             else {
                 continue;
             };
-            if let Some(source) = edge.source.and_then(|span| {
+            if let Some(source) = edge.source.as_ref().and_then(|source| {
                 nodes_by_span
-                    .get(file.path.as_str())
-                    .and_then(|nodes| nodes.get(&span))
+                    .get(&source.path)
+                    .and_then(|nodes| nodes.get(&source.span))
                     .copied()
             }) {
                 outgoing[source].push((target, edge.kind));
@@ -4720,34 +4857,107 @@ fn push_owner_requirement(
 ///
 /// Shared by both owner passes on purpose: each used to keep its own literal
 /// list, and lists kept separately drift.
-fn owner_callback_edges<'a>(
+fn owner_callback_edges(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
     primitive: &Option<PrimitiveName>,
-    dialect: &'a dyn Dialect,
-) -> impl Iterator<Item = (usize, OwnerEdgeKind)> + 'a {
-    known_primitive(primitive)
-        .map_or(&[][..], |primitive| dialect.callback_owners(primitive))
-        .iter()
-        .map(|(argument, owner)| {
-            let kind = match owner {
-                solid_dialect::CallbackOwner::Creates => OwnerEdgeKind::Owned,
-                solid_dialect::CallbackOwner::Inherits => OwnerEdgeKind::Preserve,
-                solid_dialect::CallbackOwner::None => OwnerEdgeKind::Unowned,
-                solid_dialect::CallbackOwner::Leaf => OwnerEdgeKind::Leaf,
-            };
-            (*argument, kind)
-        })
+    lookup: &SemanticLookup<'_>,
+) -> Vec<OwnerCallbackEdge> {
+    let Some(primitive) = known_primitive(primitive) else {
+        let Some((returned, result_slot)) = returned_primitive_invocation(file, call, lookup)
+        else {
+            return Vec::new();
+        };
+        return (0..call.arguments.len())
+            .filter_map(|argument| {
+                lookup
+                    .dialect
+                    .returned_callback_owner_at(
+                        returned,
+                        result_slot,
+                        argument,
+                        call.arguments.len(),
+                    )
+                    .map(|owner| OwnerCallbackEdge {
+                        argument,
+                        kind: callback_owner_edge_kind(owner),
+                        source_path: file.path.to_string(),
+                        source: call.span,
+                    })
+            })
+            .collect();
+    };
+    let mut edges = Vec::new();
+    for argument in 0..call.arguments.len() {
+        let Some(owner) =
+            lookup
+                .dialect
+                .callback_owner_at(primitive, argument, call.arguments.len())
+        else {
+            continue;
+        };
+        let kind = callback_owner_edge_kind(owner);
+        if lookup
+            .dialect
+            .callback_requires_return_invocation(primitive, argument)
+        {
+            edges.extend(
+                returned_callback_invocation_sites(file, call, lookup)
+                    .into_iter()
+                    .map(|site| OwnerCallbackEdge {
+                        argument,
+                        kind: compose_owner_edge(site.inherited_owner, kind),
+                        source_path: site.path,
+                        source: site.span,
+                    }),
+            );
+        } else {
+            edges.push(OwnerCallbackEdge {
+                argument,
+                kind,
+                source_path: file.path.to_string(),
+                source: call.span,
+            });
+        }
+    }
+    edges
+}
+
+const fn callback_owner_edge_kind(owner: solid_dialect::CallbackOwner) -> OwnerEdgeKind {
+    match owner {
+        solid_dialect::CallbackOwner::Creates => OwnerEdgeKind::Owned,
+        solid_dialect::CallbackOwner::Inherits => OwnerEdgeKind::Preserve,
+        solid_dialect::CallbackOwner::None => OwnerEdgeKind::Unowned,
+        solid_dialect::CallbackOwner::Leaf => OwnerEdgeKind::Leaf,
+    }
+}
+
+/// Compose the owner supplied by a returned function's invocation with the
+/// owner behavior of the factory callback itself. An explicit owner result on
+/// the inner callback dominates; an inheriting callback keeps the invocation
+/// site's context.
+const fn compose_owner_edge(invocation: OwnerEdgeKind, callback: OwnerEdgeKind) -> OwnerEdgeKind {
+    match callback {
+        OwnerEdgeKind::Preserve => invocation,
+        _ => callback,
+    }
 }
 
 /// The argument whose callback runs under an owner this call creates (or, for
 /// `runWithOwner`, supplies). The two owner passes share this answer; each
 /// used to keep its own literal list, and the lists disagreed with every
 /// primitive outside seven names.
-fn owner_providing_argument(primitive: Option<Primitive>, dialect: &dyn Dialect) -> Option<usize> {
-    dialect
-        .callback_owners(primitive?)
-        .iter()
-        .find(|(_, owner)| *owner == solid_dialect::CallbackOwner::Creates)
-        .map(|(index, _)| *index)
+fn owner_providing_argument(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: Option<Primitive>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<usize> {
+    let primitive = primitive?;
+    (0..call.arguments.len()).find(|index| {
+        callback_owner_at_call(file, call, primitive, *index, lookup)
+            == Some(solid_dialect::CallbackOwner::Creates)
+    })
 }
 
 fn containing_leaf_owner(
@@ -4755,7 +4965,7 @@ fn containing_leaf_owner(
     span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    dialect: &dyn Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> Option<String> {
     file.ast
         .arguments_containing(span)
@@ -4766,15 +4976,13 @@ fn containing_leaf_owner(
                 call.static_callee(&file.source),
                 entities,
                 symbol_names,
-                dialect,
+                lookup.dialect,
             )?;
             owner
                 .primitive()
-                .map(|primitive| dialect.callback_owners(primitive))
-                .unwrap_or(&[])
-                .iter()
-                .any(|(argument, kind)| {
-                    *argument == index && *kind == solid_dialect::CallbackOwner::Leaf
+                .is_some_and(|primitive| {
+                    callback_owner_at_call(file, call, primitive, index, lookup)
+                        == Some(solid_dialect::CallbackOwner::Leaf)
                 })
                 .then(|| owner.to_string())
         })
@@ -4897,13 +5105,17 @@ fn inside_lowercase_named_function(
     // rather than listed: the seven names this had were 2.0's, three of which
     // 1.x does not have, and it was missing every 1.x callback-taker outside
     // the four it shares.
-    if file.ast.arguments_containing(span).any(|(call, _)| {
+    if file.ast.arguments_containing(span).any(|(call, index)| {
         call.static_callee(&file.source).is_some_and(|callee| {
             callee
                 .rsplit('.')
                 .next()
                 .and_then(|name| dialect.primitive(name))
-                .is_some_and(|primitive| !dialect.callback_positions(primitive).is_empty())
+                .is_some_and(|primitive| {
+                    dialect
+                        .callback_execution_at(primitive, index, call.arguments.len())
+                        .is_some()
+                })
         })
     }) {
         return false;
@@ -4933,6 +5145,452 @@ fn inside_unclassified_callback(file: &solid_facts::FileFacts, span: Span) -> bo
         .functions_body_containing(span)
         .min_by_key(|function| function.body.end - function.body.start)
         .is_some_and(|function| function_binding_name(file, function).is_none())
+}
+
+/// Whether `span` is inside a syntactically direct function argument that a
+/// known primitive treats as a value rather than a callback.
+///
+/// Function values are ordinary data in APIs such as Solid 1.x
+/// `createSignal(() => value)`. Reachability is deliberately conservative and
+/// may retain anonymous functions nested in a component, so the primitive
+/// resolution, argument shape, and AST position are the stronger fact domains
+/// here: together they prove the primitive never invokes the outer function.
+/// Requiring the argument itself to be a function keeps an IIFE passed as a
+/// value from being mistaken for dormant code.
+fn inside_known_value_function_argument(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let primitives = lookup.primitives(file);
+    file.ast.calls.iter().enumerate().any(|(call_index, call)| {
+        let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
+            return false;
+        };
+        call.arguments
+            .iter()
+            .enumerate()
+            .any(|(argument_index, argument)| {
+                argument.span.contains(span)
+                    && matches!(
+                        argument.value,
+                        solid_facts::ast::ArgumentValueKind::Function
+                            | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                    )
+                    && callback_execution_at_call(file, call, primitive, argument_index, lookup)
+                        .is_none()
+            })
+    })
+}
+
+/// The callback execution fact for one concrete primitive call, after proving
+/// any lazy returned adapter is actually consumed.
+///
+/// Solid 1.x `mapArray` and `indexArray` merely allocate and return a function;
+/// their list and mapper arguments run only when that returned function runs.
+/// The dialect owns that runtime distinction, while this helper proves the
+/// use from canonical TypeScript symbols and the enclosing AST call shape.
+pub(crate) fn callback_execution_at_call(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: Primitive,
+    argument: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<solid_dialect::Execution> {
+    if lookup
+        .dialect
+        .callback_requires_return_invocation(primitive, argument)
+        && !returned_callback_result_is_invoked(file, call, lookup)
+    {
+        return None;
+    }
+    lookup
+        .dialect
+        .callback_execution_at(primitive, argument, call.arguments.len())
+}
+
+/// The callback-owner fact for one concrete primitive call, after proving
+/// that callbacks implemented by a returned lazy adapter can run.
+///
+/// Execution, reachability, cleanup, and both owner-graph passes must ask the
+/// same call-site question. Otherwise a discarded adapter can disappear from
+/// read analysis while still manufacturing an impossible owner diagnostic.
+pub(crate) fn callback_owner_at_call(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: Primitive,
+    argument: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<solid_dialect::CallbackOwner> {
+    if lookup
+        .dialect
+        .callback_requires_return_invocation(primitive, argument)
+        && !returned_callback_result_is_invoked(file, call, lookup)
+    {
+        return None;
+    }
+    lookup
+        .dialect
+        .callback_owner_at(primitive, argument, call.arguments.len())
+}
+
+/// Resolve the primitive whose returned function is the callee of `call`.
+///
+/// Canonical TypeScript symbols prove identity, AST binding facts prove the
+/// initializer/alias chain, and the dialect's resolved primitive index proves
+/// that the initializer is the actual Solid export rather than a same-spelled
+/// local function.
+pub(crate) fn returned_primitive_invocation(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<(Primitive, Option<usize>)> {
+    let mut reference_path = file.path.as_str();
+    let mut reference_span = call.callee;
+    let mut seen = HashSet::new();
+    loop {
+        // Callee result values do not always receive an entity fact of their
+        // own (tuple slots are the motivating case). Resolve them from the
+        // canonical reference set of each demanded binding declaration, then
+        // follow local or cross-file aliases one binding at a time.
+        let (binding_file, binding, symbol) =
+            lookup.binding_at_reference(reference_path, reference_span)?;
+        if !seen.insert(symbol.clone()) {
+            return None;
+        }
+        if let Some(initializer) = binding.call_initializer {
+            let call_index = binding_file
+                .ast
+                .calls
+                .iter()
+                .position(|candidate| candidate.span == initializer)?;
+            let result_slot = match binding.shape {
+                solid_facts::ast::BindingShape::Array => {
+                    Some(binding.array_slots.iter().position(|slot| {
+                        slot.as_ref().and_then(|name| {
+                            lookup.entities().at(binding_file.path.as_str(), name.span)
+                        }) == Some(&symbol)
+                    })?)
+                }
+                _ => None,
+            };
+            return known_primitive(&lookup.primitives(binding_file).calls[call_index])
+                .map(|primitive| (primitive, result_slot));
+        }
+        let initializer = binding.initializer_identifier.as_ref()?;
+        reference_path = binding_file.path.as_str();
+        reference_span = initializer.span;
+    }
+}
+
+/// The execution contract of one callback argument accepted by a proven
+/// returned function (including a specific destructured tuple slot).
+pub(crate) fn returned_callback_execution_at_call(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+    lookup: &SemanticLookup<'_>,
+) -> Option<solid_dialect::Execution> {
+    let (primitive, result_slot) = returned_primitive_invocation(file, call, lookup)?;
+    lookup.dialect.returned_callback_execution_at(
+        primitive,
+        result_slot,
+        argument,
+        call.arguments.len(),
+    )
+}
+
+fn returned_callback_result_is_invoked(
+    file: &solid_facts::FileFacts,
+    factory_call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    !returned_callback_invocation_sites(file, factory_call, lookup).is_empty()
+}
+
+/// Proven project invocations of the function returned by `factory_call`.
+///
+/// TypeScript symbols establish that calls, JSX tags, and `.preload()` uses
+/// refer to the exact factory result. AST facts establish how the value is
+/// consumed. For values passed to another known callback-taking primitive,
+/// the invocation inherits that callback's owner contract; direct calls and
+/// JSX uses inherit their containing function's owner.
+fn returned_callback_invocation_sites(
+    file: &solid_facts::FileFacts,
+    factory_call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Vec<ReturnedCallbackInvocationSite> {
+    let direct_factory_value = |argument: Span| {
+        file.ast
+            .calls
+            .iter()
+            .filter(|nested| argument.contains(nested.span))
+            .max_by_key(|nested| nested.span.end - nested.span.start)
+            .is_some_and(|nested| nested.span == factory_call.span)
+    };
+    let mut sites = Vec::new();
+    for outer in file.ast.calls.iter().filter(|outer| {
+        outer.span != factory_call.span
+            && outer.callee.contains(factory_call.span)
+            && file
+                .ast
+                .calls
+                .iter()
+                .filter(|nested| nested.span != outer.span && outer.callee.contains(nested.span))
+                .max_by_key(|nested| nested.span.end - nested.span.start)
+                .is_some_and(|nested| nested.span == factory_call.span)
+            // `factory(...).member()` invokes the member, not the returned
+            // function, so it proves nothing about the factory's callbacks.
+            // `preload` is the one member the runtime routes to the loader,
+            // matching the binding-based preload proof below.
+            && file.ast.members.iter().all(|member| {
+                member.span != outer.callee
+                    || file.source_text(member.property) == Some("preload")
+            })
+    }) {
+        sites.push(ReturnedCallbackInvocationSite {
+            path: file.path.to_string(),
+            span: outer.span,
+            inherited_execution: None,
+            inherited_owner: OwnerEdgeKind::Preserve,
+        });
+    }
+
+    for (outer, index) in file.ast.arguments_containing(factory_call.span) {
+        let primitive = file
+            .ast
+            .calls
+            .iter()
+            .position(|candidate| candidate.span == outer.span)
+            .and_then(|call_index| known_primitive(&lookup.primitives(file).calls[call_index]));
+        if direct_factory_value(outer.arguments[index].span)
+            && primitive.is_some_and(|primitive| {
+                lookup
+                    .dialect
+                    .callback_execution_at(primitive, index, outer.arguments.len())
+                    .is_some()
+            })
+        {
+            let inherited_owner = file
+                .ast
+                .calls
+                .iter()
+                .position(|candidate| candidate.span == outer.span)
+                .and_then(|call_index| known_primitive(&lookup.primitives(file).calls[call_index]))
+                .and_then(|primitive| {
+                    lookup
+                        .dialect
+                        .callback_owner_at(primitive, index, outer.arguments.len())
+                })
+                .map_or(OwnerEdgeKind::Preserve, callback_owner_edge_kind);
+            sites.push(ReturnedCallbackInvocationSite {
+                path: file.path.to_string(),
+                span: outer.span,
+                inherited_execution: primitive.and_then(|primitive| {
+                    lookup
+                        .dialect
+                        .callback_execution_at(primitive, index, outer.arguments.len())
+                }),
+                inherited_owner,
+            });
+        }
+    }
+
+    let mut factory_bindings = file
+        .ast
+        .bindings
+        .iter()
+        .filter(|binding| binding.call_initializer == Some(factory_call.span))
+        .flat_map(|binding| &binding.names)
+        .filter_map(|name| lookup.entities().at(file.path.as_str(), name.span).cloned())
+        .collect::<HashSet<_>>();
+    if factory_bindings.is_empty() {
+        sites.sort_by_key(ReturnedCallbackInvocationSite::order_key);
+        sites.dedup();
+        return sites;
+    }
+
+    // Follow identifier aliases in every project file. The compiler's symbol
+    // reference table bridges imports/re-exports; local AST bindings bridge a
+    // fresh `const Alias = Imported` symbol introduced after that boundary.
+    loop {
+        let references = returned_binding_references(lookup, &factory_bindings);
+        let aliases = lookup
+            .files()
+            .iter()
+            .flat_map(|candidate| {
+                candidate
+                    .ast
+                    .bindings
+                    .iter()
+                    .filter_map(|binding| {
+                        let initializer = binding.initializer_identifier.as_ref()?;
+                        returned_binding_reference(
+                            candidate,
+                            initializer.span,
+                            lookup,
+                            &factory_bindings,
+                            &references,
+                        )
+                        .then_some(binding)
+                    })
+                    .flat_map(move |binding| {
+                        binding.names.iter().filter_map(|name| {
+                            lookup
+                                .entities()
+                                .at(candidate.path.as_str(), name.span)
+                                .cloned()
+                        })
+                    })
+            })
+            .collect::<Vec<_>>();
+        let before = factory_bindings.len();
+        factory_bindings.extend(aliases);
+        if factory_bindings.len() == before {
+            break;
+        }
+    }
+
+    let references = returned_binding_references(lookup, &factory_bindings);
+    for use_file in lookup.files() {
+        for outer in &use_file.ast.calls {
+            if returned_binding_reference(
+                use_file,
+                outer.callee,
+                lookup,
+                &factory_bindings,
+                &references,
+            ) {
+                sites.push(ReturnedCallbackInvocationSite {
+                    path: use_file.path.to_string(),
+                    span: outer.span,
+                    inherited_execution: None,
+                    inherited_owner: OwnerEdgeKind::Preserve,
+                });
+            }
+            for (index, argument) in outer.arguments.iter().enumerate() {
+                let primitive = use_file
+                    .ast
+                    .calls
+                    .iter()
+                    .position(|candidate| candidate.span == outer.span)
+                    .and_then(|call_index| {
+                        known_primitive(&lookup.primitives(use_file).calls[call_index])
+                    });
+                if returned_binding_reference(
+                    use_file,
+                    argument.span,
+                    lookup,
+                    &factory_bindings,
+                    &references,
+                ) && primitive.is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .callback_execution_at(primitive, index, outer.arguments.len())
+                        .is_some()
+                }) {
+                    let inherited_owner = primitive
+                        .and_then(|primitive| {
+                            lookup.dialect.callback_owner_at(
+                                primitive,
+                                index,
+                                outer.arguments.len(),
+                            )
+                        })
+                        .map_or(OwnerEdgeKind::Preserve, callback_owner_edge_kind);
+                    sites.push(ReturnedCallbackInvocationSite {
+                        path: use_file.path.to_string(),
+                        span: outer.span,
+                        inherited_execution: primitive.and_then(|primitive| {
+                            lookup.dialect.callback_execution_at(
+                                primitive,
+                                index,
+                                outer.arguments.len(),
+                            )
+                        }),
+                        inherited_owner,
+                    });
+                }
+            }
+
+            // `lazyResult.preload()` resolves the property as a distinct
+            // method; prove the receiver from the member-expression AST.
+            if use_file.ast.members.iter().any(|member| {
+                outer.callee.contains(member.span)
+                    && use_file.source_text(member.property) == Some("preload")
+                    && returned_binding_reference(
+                        use_file,
+                        member.object,
+                        lookup,
+                        &factory_bindings,
+                        &references,
+                    )
+            }) {
+                sites.push(ReturnedCallbackInvocationSite {
+                    path: use_file.path.to_string(),
+                    span: outer.span,
+                    inherited_execution: None,
+                    inherited_owner: OwnerEdgeKind::Preserve,
+                });
+            }
+        }
+
+        for element in &use_file.ast.jsx_elements {
+            if returned_binding_reference(
+                use_file,
+                element.name.span,
+                lookup,
+                &factory_bindings,
+                &references,
+            ) {
+                sites.push(ReturnedCallbackInvocationSite {
+                    path: use_file.path.to_string(),
+                    span: element.span,
+                    inherited_execution: None,
+                    inherited_owner: OwnerEdgeKind::Preserve,
+                });
+            }
+        }
+    }
+
+    sites.sort_by_key(ReturnedCallbackInvocationSite::order_key);
+    sites.dedup();
+    sites
+}
+
+fn returned_binding_references(
+    lookup: &SemanticLookup<'_>,
+    bindings: &HashSet<SymbolId>,
+) -> HashSet<(String, u64, u64)> {
+    bindings
+        .iter()
+        .flat_map(|symbol| lookup.symbol_references(symbol.as_str()))
+        .map(|reference| {
+            (
+                reference.path.to_string(),
+                reference.start_byte,
+                reference.end_byte,
+            )
+        })
+        .collect()
+}
+
+fn returned_binding_reference(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+    bindings: &HashSet<SymbolId>,
+    references: &HashSet<(String, u64, u64)>,
+) -> bool {
+    lookup
+        .entities()
+        .at(file.path.as_str(), span)
+        .is_some_and(|symbol| bindings.contains(symbol))
+        || references.contains(&(
+            file.path.to_string(),
+            u64::from(span.start),
+            u64::from(span.end),
+        ))
 }
 
 fn function_binding_name<'a>(
@@ -5069,12 +5727,8 @@ fn inside_effect_apply(
             matches!(
                 primitive,
                 Primitive::CreateEffect | Primitive::CreateRenderEffect
-            ) && dialect
-                .callback_executions(primitive)
-                .iter()
-                .any(|(argument, execution)| {
-                    *argument == index && *execution == solid_dialect::Execution::Deferred
-                })
+            ) && dialect.callback_execution_at(primitive, index, call.arguments.len())
+                == Some(solid_dialect::Execution::Deferred)
         })
     })
 }
@@ -5161,10 +5815,18 @@ fn function_is_solid_callback(
         .map(|name| file.source_text(name.span).unwrap_or_default());
     file.ast.calls.iter().enumerate().any(|(call_index, call)| {
         known_primitive(&primitives.calls[call_index]).is_some_and(|primitive| {
-            !lookup.dialect.callback_positions(primitive).is_empty()
-                && !lookup.dialect.runs_callback_deferred(primitive)
-        }) && call.arguments.iter().any(|argument| {
-            argument_references_callback_symbol(file, argument, symbol, entities, symbol_names)
+            call.arguments.iter().enumerate().any(|(index, argument)| {
+                lookup
+                    .dialect
+                    .callback_tracks_reads_at(primitive, index, call.arguments.len())
+                    && argument_references_callback_symbol(
+                        file,
+                        argument,
+                        symbol,
+                        entities,
+                        symbol_names,
+                    )
+            })
         })
     }) || file
         .ast
@@ -5191,7 +5853,10 @@ fn counts_as_strict_read_root(
     span: Span,
     execution: ExecutionRole,
 ) -> bool {
-    execution == ExecutionRole::EffectApply || enclosing_render_function(file, span)
+    matches!(
+        execution,
+        ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
+    ) || enclosing_render_function(file, span)
 }
 
 fn enclosing_function_label(file: &solid_facts::FileFacts, span: Span) -> String {
@@ -5258,10 +5923,8 @@ fn analysis_context(
         // described as living in an "apply callback" that 1.x does not have.
         let phase = primitive.primitive().and_then(|resolved| {
             dialect
-                .callback_executions(resolved)
-                .iter()
-                .find(|(index, _)| *index == argument)
-                .and_then(|(_, execution)| match execution {
+                .callback_execution_at(resolved, argument, call.arguments.len())
+                .and_then(|execution| match execution {
                     solid_dialect::Execution::Tracked => Some("compute"),
                     // Only an effect's deferred argument is an apply phase; a
                     // deferred executor's callback keeps its enclosing label.
@@ -5347,7 +6010,7 @@ fn propagate_summary_deltas(
 fn contract_callback_execution(execution: ExecutionRole) -> &'static str {
     match execution {
         ExecutionRole::TrackedJsx => "tracked",
-        ExecutionRole::DeferredCallback => "deferred",
+        ExecutionRole::DeferredCallback | ExecutionRole::UntrackedCallback => "deferred",
         ExecutionRole::EffectApply
         | ExecutionRole::EventCallback
         | ExecutionRole::DirectiveApply
@@ -5446,6 +6109,8 @@ struct LocalAccessContext<'a> {
     async_sources: &'a HashSet<SymbolId>,
     source_declarations: &'a HashMap<SymbolId, Declaration>,
     contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
+    bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
 }
@@ -5676,9 +6341,96 @@ impl LocalAccessContext<'_> {
         let allowed = allowed_callback_spans(file, self.lookup);
         for call in &file.ast.calls {
             let callee = location(file.path.shared(), call.callee);
+            // A returned accessor can be invoked immediately without ever
+            // acquiring a binding symbol: `mapArray(list, map)()`. Preserve
+            // the package's reactive-return contract across that exact AST
+            // shape instead of making source discovery depend on `const x =`.
+            // A member callee is a different shape: `factory(...).member()`
+            // invokes the member, not the returned accessor, so no contracted
+            // read is proven there.
+            let immediate_return = file
+                .ast
+                .calls
+                .iter()
+                .filter(|nested| nested.span != call.span && call.callee.contains(nested.span))
+                .max_by_key(|nested| nested.span.end - nested.span.start)
+                .filter(|_| {
+                    !file
+                        .ast
+                        .members
+                        .iter()
+                        .any(|member| member.span == call.callee)
+                })
+                .and_then(|factory| {
+                    let symbol = self.lookup.callee_symbol(file, factory.callee)?;
+                    self.contract_returns
+                        .get(symbol)
+                        .cloned()
+                        .or_else(|| {
+                            let primitive = primitive_name(
+                                file.path.as_str(),
+                                factory.callee,
+                                factory.static_callee(&file.source),
+                                self.entities,
+                                self.symbol_names,
+                                self.lookup.dialect,
+                            )?;
+                            self.bundled_returns
+                                .get(primitive.as_str())
+                                .cloned()
+                                .map(|returned| {
+                                    (
+                                        returned,
+                                        Location {
+                                            path: format!("bundled://solid-js.json#{primitive}")
+                                                .into(),
+                                            start_byte: 0,
+                                            end_byte: 0,
+                                        },
+                                    )
+                                })
+                        })
+                        .map(|contract| (factory, contract))
+                });
+            if let Some((factory, (returned, declaration))) = immediate_return {
+                let execution = semantic_execution_role(
+                    file,
+                    call.callee,
+                    &allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
+                let reachable = self.reachable_calls.get(&callee).is_some()
+                    || enclosing_render_function(file, call.callee);
+                let key = (callee.path.clone(), callee.start_byte, callee.end_byte);
+                if reachable && seen.insert(key) {
+                    result.reads.push(Arc::new(ReactiveRead {
+                        kind: returned.kind.into(),
+                        accessor: returned.label.into(),
+                        location: location(file.path.shared(), call.span),
+                        declaration: declaration.clone(),
+                        execution,
+                        context: read_analysis_context(file, call.span, execution).into(),
+                        via: file
+                            .source_text(factory.callee)
+                            .unwrap_or_default()
+                            .to_owned()
+                            .into(),
+                        origin: Some(declaration.clone()),
+                        origin_context: Arc::from("package return contract"),
+                    }));
+                    if counts_as_strict_read_root(file, call.span, execution) {
+                        result.strict_read_obligations += 1;
+                    }
+                }
+            }
             let Some(symbol) = self.lookup.callee_symbol(file, call.callee) else {
                 continue;
             };
+            if inside_known_value_function_argument(file, call.callee, self.lookup) {
+                continue;
+            }
             let inside_function = file.ast.any_function_body_containing(call.span);
             if inside_function && self.setters.contains_key(symbol) {
                 result.write_action_obligations.insert((
@@ -5783,7 +6535,7 @@ impl LocalAccessContext<'_> {
                             call.callee,
                             self.entities,
                             self.symbol_names,
-                            self.lookup.dialect,
+                            self.lookup,
                         )
                         .map(Into::into),
                         under_loading: read_is_under_loading(
@@ -5923,7 +6675,10 @@ impl LocalAccessContext<'_> {
                     self.lookup,
                 )
                 .is_none()
-                && execution != ExecutionRole::EffectApply
+                && !matches!(
+                    execution,
+                    ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
+                )
             {
                 continue;
             }
@@ -5993,7 +6748,7 @@ impl LocalAccessContext<'_> {
                         member.span,
                         self.entities,
                         self.symbol_names,
-                        self.lookup.dialect,
+                        self.lookup,
                     )
                     .map(Into::into),
                     under_loading: read_is_under_loading(
@@ -6028,7 +6783,10 @@ impl LocalAccessContext<'_> {
                     self.lookup,
                 )
                 .is_none()
-                && execution != ExecutionRole::EffectApply
+                && !matches!(
+                    execution,
+                    ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
+                )
             {
                 continue;
             }
@@ -6091,7 +6849,7 @@ impl LocalAccessContext<'_> {
                     element.name.span,
                     self.entities,
                     self.symbol_names,
-                    self.lookup.dialect,
+                    self.lookup,
                 )
                 .map(Into::into),
                 under_loading: read_is_under_loading(

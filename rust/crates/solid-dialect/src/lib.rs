@@ -112,6 +112,10 @@ pub enum Primitive {
     OnCleanup,
     MapArray,
     Children,
+    /// Creates a context in both dialects. The provider spelling differs:
+    /// Solid 1.x exposes `.Provider`, whose value getter runs untracked;
+    /// Solid 2.0 makes the context itself the provider.
+    CreateContext,
 
     // 1.x only
     CreateComputed,
@@ -119,6 +123,10 @@ pub enum Primitive {
     CreateSelector,
     CreateResource,
     Batch,
+    CreateDynamic,
+    From,
+    Hydrate,
+    Render,
     On,
     StartTransition,
     UseTransition,
@@ -135,6 +143,7 @@ pub enum Primitive {
     Unwrap,
     CreateMutable,
     ModifyMutable,
+    WebMemo,
 
     // 2.0 only
     CreateTrackedEffect,
@@ -164,7 +173,6 @@ pub enum Primitive {
     // Solid 2.0 additions extracted from solid-js@2.0.0-beta.19 and
     // @solidjs/signals@2.0.0-beta.25 (ADR 0006's rule: the package, not the
     // docs). The engine modelled none of these before.
-    CreateContext,
     UseContext,
     CreateErrorBoundary,
     CreateLoadingBoundary,
@@ -206,10 +214,10 @@ pub enum Boundary {
 
 /// Whether creating a primitive inside a leaf owner is forbidden.
 ///
-/// The conditional case is real and load-bearing: `createSignal(fn)` is
-/// forbidden in a cleanup scope only when its first argument is a function,
-/// because that is the shape that registers work. Flattening this to a plain
-/// set would turn `createSignal(0)` into a false positive.
+/// The conditional case is real and load-bearing in Solid 2.0:
+/// `createSignal(fn)` registers a derived computation while `createSignal(0)`
+/// does not. Solid 1.x stores the function as data and therefore answers
+/// [`CleanupRule::Never`] for the same call shape.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum CleanupRule {
     /// Never allowed in a leaf-owner or cleanup scope.
@@ -345,13 +353,13 @@ pub trait Dialect: Sync {
     /// `createEffect(fn, value?)` puts a *seed value* there.
     fn callback_positions(&self, primitive: Primitive) -> &'static [usize];
 
-    /// Whether this primitive runs its callback *outside* the tracked scope of
-    /// the computation that created it.
+    /// Whether this primitive explicitly clears tracking around its callback,
+    /// or runs it later outside the creating computation's pass.
     ///
     /// Distinct from [`Dialect::callback_positions`], which says *where* a
     /// callback sits, not how it executes. The two are independent and the
     /// difference is load-bearing: `untrack(fn)` and `createMemo(fn)` both put
-    /// a callback at index 0, and one of them defers while the other tracks.
+    /// a callback at index 0, and one clears tracking while the other tracks.
     /// Asking only about position would classify a memo's compute as deferred
     /// and stop reporting reads inside it.
     fn runs_callback_deferred(&self, primitive: Primitive) -> bool;
@@ -371,17 +379,24 @@ pub trait Dialect: Sync {
         &[]
     }
 
-    /// Whether calling this primitive invokes the function arguments written
-    /// at the call.
+    /// The owner role of one callback argument in one concrete call.
     ///
-    /// A call-graph question, not a reactivity one: it is what keeps a
-    /// component defined inline in `createMemo(() => <Comp />)` from looking
-    /// unreachable. Close to the set [`Dialect::callback_positions`] answers
-    /// for and deliberately not derived from it — 2.0's `flush` takes a
-    /// callback and is excluded, because adding it would add reachability
-    /// edges the engine does not have today and that is a change with its own
-    /// fixture.
-    fn invokes_its_callbacks(&self, primitive: Primitive) -> bool;
+    /// Like [`Dialect::callback_execution_at`], this defaults to the reviewed
+    /// flat table and admits overload-specific overrides. Callers with an AST
+    /// call must use this form so a value/source overload is never assigned a
+    /// callback owner merely because another overload uses that slot.
+    fn callback_owner_at(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<CallbackOwner> {
+        let _ = argument_count;
+        self.callback_owners(primitive)
+            .iter()
+            .find(|(index, _)| *index == argument)
+            .map(|(_, owner)| *owner)
+    }
 
     /// The boundary role a JSX tag opens, if any.
     fn boundary_kind(&self, tag: &str) -> Option<Boundary>;
@@ -507,6 +522,23 @@ pub trait Dialect: Sync {
     /// have.
     fn children_accessor_parameters(&self, primitive: Primitive, key: KeyForm) -> &'static [usize];
 
+    /// Which parameters of one primitive callback are reactive accessors.
+    ///
+    /// This is the call-expression counterpart to
+    /// [`Dialect::children_accessor_parameters`]. Solid 1.x `mapArray` hands
+    /// its mapper `(item, index: Accessor<number>)`, while `indexArray` hands
+    /// it `(item: Accessor<T>, index)`. Those sources come from runtime
+    /// contracts, not TypeScript return types, so source discovery must ask
+    /// the dialect explicitly.
+    fn callback_accessor_parameters(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+    ) -> &'static [usize] {
+        let _ = (primitive, argument);
+        &[]
+    }
+
     /// Whether what this primitive returns is a store rather than an accessor.
     ///
     /// The companion to [`Dialect::creates_reactive_source`], which says
@@ -535,6 +567,17 @@ pub trait Dialect: Sync {
     /// worse than saying nothing.
     fn options_argument(&self, primitive: Primitive) -> Option<usize>;
 
+    /// Whether this primitive's options contract includes `sync`.
+    ///
+    /// An options slot alone is not evidence for a particular option key:
+    /// Solid 1.x has options objects for memos, signals, and stores but no
+    /// synchronous-node contract. Keeping the key in the dialect prevents a
+    /// 2.0-only diagnostic identity from reaching the 1.x rule catalog.
+    fn supports_sync_option(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
     /// When each callback argument of `primitive` runs.
     ///
     /// Empty means the dialect models no callback for it — the same answer the
@@ -546,6 +589,115 @@ pub trait Dialect: Sync {
     /// Hardcoding the 2.0 pair described a read in 1.x's *seed value* as being
     /// in an "apply callback" that version does not have.
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)];
+
+    /// Whether one callback argument describes work performed by a function
+    /// returned from the primitive rather than by the primitive call itself.
+    ///
+    /// Call-site analysis must prove that returned function is invoked before
+    /// treating these callbacks as reachable. This prevents a discarded lazy
+    /// adapter from manufacturing reads, owners, or diagnostics.
+    ///
+    /// This is argument-sensitive because Solid 1.x `createSelector(source,
+    /// comparator)` invokes `source` eagerly in its computation but cannot
+    /// invoke `comparator` until the returned selector receives a key.
+    fn callback_requires_return_invocation(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
+    /// How a callback passed to the function returned by `primitive` runs.
+    ///
+    /// This is deliberately separate from [`Dialect::callback_execution_at`]:
+    /// in Solid 1.x `createReaction(onInvalidate)` receives one deferred
+    /// callback now, then returns a tracker that receives a different, tracked
+    /// callback later. Flattening those two call signatures loses a runtime
+    /// boundary that neither TypeScript overloads nor the package contract's
+    /// first-order callback list can express.
+    fn returned_callback_execution_at(
+        &self,
+        primitive: Primitive,
+        result_slot: Option<usize>,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<Execution> {
+        let _ = (primitive, result_slot, argument, argument_count);
+        None
+    }
+
+    /// The owner contract of a callback accepted by a function returned from
+    /// `primitive`.
+    ///
+    /// `result_slot` preserves tuple identity. Solid 1.x `useTransition()`
+    /// returns a pending accessor at slot 0 and a starter at slot 1; only the
+    /// starter accepts a callback. TypeScript symbol identity plus the AST
+    /// binding shape must prove that slot before an owner edge may exist.
+    fn returned_callback_owner_at(
+        &self,
+        primitive: Primitive,
+        result_slot: Option<usize>,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<CallbackOwner> {
+        let _ = (primitive, result_slot, argument, argument_count);
+        None
+    }
+
+    /// How one argument of one concrete call executes.
+    ///
+    /// This is the call-site form of [`Dialect::callback_executions`]. The
+    /// table is the default and remains checkable against the bundled package
+    /// contract; dialects override this method only for overloads whose roles
+    /// depend on call shape and therefore cannot be represented by the
+    /// contract schema's flat parameter list. Solid 1.x `createResource` is
+    /// the motivating case: `(fetcher)` defers argument 0, while
+    /// `(source, fetcher)` tracks argument 0 and defers argument 1.
+    fn callback_execution_at(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<Execution> {
+        let _ = argument_count;
+        self.callback_executions(primitive)
+            .iter()
+            .find(|(index, _)| *index == argument)
+            .map(|(_, execution)| *execution)
+    }
+
+    /// Whether reads in this concrete callback argument subscribe.
+    ///
+    /// Package-contract execution and the checker's local tracking role are
+    /// close but not identical: contracts call an `onSettled` callback
+    /// `tracked` because the graph schedules it, while the callback itself is
+    /// an imperative boundary whose reads do not subscribe. The legacy
+    /// primitive-level column preserves that runtime fact; overload-sensitive
+    /// execution comes from [`Dialect::callback_execution_at`].
+    fn callback_tracks_reads_at(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        self.callback_execution_at(primitive, argument, argument_count) == Some(Execution::Tracked)
+            && !self.runs_callback_deferred(primitive)
+    }
+
+    /// Whether an untracked read in this callback is a likely dependency bug.
+    ///
+    /// Most deliberately untracked callbacks are explicit imperative scopes:
+    /// `untrack`, `onMount`, effect apply, and event-like callbacks. Solid 1.x
+    /// resource fetchers are different. They look like computations but the
+    /// runtime invokes them under `untrack`; dependencies must be declared in
+    /// the source argument, so a reactive read in the fetcher is reportable.
+    fn reports_untracked_reads_at(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        let _ = (primitive, argument, argument_count);
+        false
+    }
 
     /// The modules this dialect exports `name` from, in `position`.
     ///
@@ -698,10 +850,16 @@ mod tests {
                 let primitive = dialect
                     .primitive(name)
                     .unwrap_or_else(|| panic!("{name} resolves in {:?}", dialect.version()));
+                let canonical = dialect.name_of(primitive).unwrap_or_else(|| {
+                    panic!(
+                        "{name} has no canonical spelling in {:?}",
+                        dialect.version()
+                    )
+                });
                 assert_eq!(
-                    dialect.name_of(primitive),
-                    Some(name),
-                    "{name} round trips in {:?}",
+                    dialect.primitive(canonical),
+                    Some(primitive),
+                    "{name} canonicalizes to {canonical}, which does not resolve back in {:?}",
                     dialect.version()
                 );
             }
@@ -764,11 +922,13 @@ mod tests {
             assert!(!two.runs_callback_deferred(primitive), "{primitive:?}");
         }
 
-        // 1.x defers a wider set: batch and the transition helpers have no
-        // 2.0 counterpart.
+        // Solid 1.x batch is synchronous and startTransition restores the
+        // captured Listener before invoking its callback. Neither explicitly
+        // clears tracking; createRoot does.
         let one = Version::V1.dialect();
-        assert!(one.runs_callback_deferred(Primitive::Batch));
-        assert!(one.runs_callback_deferred(Primitive::StartTransition));
+        assert!(!one.runs_callback_deferred(Primitive::Batch));
+        assert!(!one.runs_callback_deferred(Primitive::StartTransition));
+        assert!(one.runs_callback_deferred(Primitive::CreateRoot));
         assert!(!one.runs_callback_deferred(Primitive::CreateMemo));
     }
 
@@ -1004,6 +1164,8 @@ mod tests {
         // `(compute, options?)`.
         assert_eq!(one.options_argument(Primitive::CreateMemo), Some(2));
         assert_eq!(two.options_argument(Primitive::CreateMemo), Some(1));
+        assert!(!one.supports_sync_option(Primitive::CreateMemo));
+        assert!(two.supports_sync_option(Primitive::CreateMemo));
         // And createStore's, the other way round.
         assert_eq!(one.options_argument(Primitive::CreateStore), Some(1));
         assert_eq!(two.options_argument(Primitive::CreateStore), Some(2));
@@ -1162,10 +1324,20 @@ mod tests {
                 &[(0, CallbackOwner::Inherits)],
                 "untrack inherits the caller's owner in {version:?}"
             );
-            // Unmodelled is not ownerless: a caller must not read an empty
-            // answer as "creates no owner".
-            assert!(dialect.callback_owners(Primitive::Children).is_empty());
         }
+        assert_eq!(
+            Version::V1.dialect().callback_owners(Primitive::Children),
+            &[(0, CallbackOwner::Creates)],
+            "Solid 1.x children wraps its callback in createMemo"
+        );
+        // Unmodelled is not ownerless: a caller must not read an empty answer
+        // as "creates no owner".
+        assert!(
+            Version::V2
+                .dialect()
+                .callback_owners(Primitive::Children)
+                .is_empty()
+        );
 
         // 2.0 splits the effect and runs apply unowned; 1.x has one callback
         // and index 1 is a seed value, so listing it would mark data as a
@@ -1218,43 +1390,90 @@ mod tests {
         );
     }
 
-    /// The call graph is a dialect question. It used to be one list shared by
-    /// both, which is a 2.0 list, so 1.x lost every callback-taker 2.0 does
-    /// not have -- `batch`, `startTransition`, `onMount`, `mapArray` and the
-    /// rest -- from its call graph entirely.
     #[test]
-    fn each_dialect_has_its_own_set_of_callback_invoking_primitives() {
+    fn concrete_callback_contracts_cover_overloads_and_both_dialects() {
         let one = Version::V1.dialect();
         let two = Version::V2.dialect();
 
-        for primitive in [
-            Primitive::CreateMemo,
-            Primitive::CreateSignal,
-            Primitive::Untrack,
-        ] {
-            assert!(one.invokes_its_callbacks(primitive));
-            assert!(two.invokes_its_callbacks(primitive));
-        }
+        assert_eq!(
+            one.callback_execution_at(Primitive::CreateResource, 0, 1),
+            Some(Execution::Deferred)
+        );
+        assert_eq!(
+            one.callback_owner_at(Primitive::CreateResource, 0, 1),
+            Some(CallbackOwner::None)
+        );
+        assert!(one.reports_untracked_reads_at(Primitive::CreateResource, 0, 1));
+        assert_eq!(
+            one.callback_execution_at(Primitive::CreateResource, 0, 2),
+            Some(Execution::Tracked)
+        );
+        assert_eq!(
+            one.callback_owner_at(Primitive::CreateResource, 0, 2),
+            Some(CallbackOwner::Creates)
+        );
+        assert!(!one.reports_untracked_reads_at(Primitive::CreateResource, 0, 2));
+        assert_eq!(
+            one.callback_execution_at(Primitive::CreateResource, 1, 2),
+            Some(Execution::Deferred)
+        );
+        assert!(one.reports_untracked_reads_at(Primitive::CreateResource, 1, 2));
 
-        // 1.x-only callback-takers, absent from the 2.0 list that used to
-        // serve both.
-        for primitive in [
-            Primitive::Batch,
-            Primitive::StartTransition,
-            Primitive::OnMount,
-            Primitive::MapArray,
+        assert_eq!(
+            one.callback_execution_at(Primitive::CreateSignal, 0, 1),
+            None
+        );
+        assert_eq!(
+            two.callback_execution_at(Primitive::CreateSignal, 0, 1),
+            Some(Execution::Tracked)
+        );
+        assert_eq!(
+            one.callback_execution_at(Primitive::CreateEffect, 1, 2),
+            None
+        );
+        assert_eq!(
+            two.callback_execution_at(Primitive::CreateEffect, 1, 2),
+            Some(Execution::Deferred)
+        );
+
+        for (primitive, argument, execution) in [
+            (Primitive::MapArray, 0, Execution::Tracked),
+            (Primitive::MapArray, 1, Execution::Deferred),
+            (Primitive::IndexArray, 0, Execution::Tracked),
+            (Primitive::IndexArray, 1, Execution::Deferred),
+            (Primitive::ModifyMutable, 1, Execution::Inline),
+            (Primitive::CatchError, 0, Execution::Inline),
+            (Primitive::CatchError, 1, Execution::Deferred),
         ] {
-            assert!(
-                one.invokes_its_callbacks(primitive),
-                "{primitive:?} takes a callback in 1.x"
+            assert_eq!(
+                one.callback_execution_at(primitive, argument, 2),
+                Some(execution),
+                "missing 1.x callback contract for {primitive:?}[{argument}]"
             );
         }
-
-        // `flush` is excluded in 2.0 on purpose: it takes a callback, and
-        // adding it would create reachability edges the engine never had.
-        assert!(!two.invokes_its_callbacks(Primitive::Flush));
-        // A primitive that takes no function argument never reaches one.
-        assert!(!two.invokes_its_callbacks(Primitive::GetOwner));
+        assert_eq!(
+            one.callback_accessor_parameters(Primitive::MapArray, 1),
+            &[1]
+        );
+        assert_eq!(
+            one.callback_accessor_parameters(Primitive::IndexArray, 1),
+            &[0]
+        );
+        assert!(one.reports_untracked_reads_at(Primitive::MapArray, 1, 2));
+        assert!(one.reports_untracked_reads_at(Primitive::IndexArray, 1, 2));
+        assert!(one.reports_untracked_reads_at(Primitive::RunWithOwner, 1, 2));
+        for (primitive, argument, execution) in [
+            (Primitive::Action, 0, Execution::Deferred),
+            (Primitive::Flush, 0, Execution::Inline),
+            (Primitive::CreateErrorBoundary, 1, Execution::Deferred),
+            (Primitive::CreateLoadingBoundary, 1, Execution::Deferred),
+        ] {
+            assert_eq!(
+                two.callback_execution_at(primitive, argument, 2),
+                Some(execution),
+                "missing 2.0 callback contract for {primitive:?}[{argument}]"
+            );
+        }
     }
 
     /// Source discovery is where every read-tracing rule starts, and the two

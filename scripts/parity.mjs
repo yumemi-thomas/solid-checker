@@ -14,7 +14,7 @@
 //   node scripts/parity.mjs             compare against the declared deviations
 //   node scripts/parity.mjs --update    rewrite deviations.json from this run
 //
-// `--update` keeps existing reasons and marks anything new `TRIAGE:`, which
+// `--update` keeps existing reasons and marks anything new `triage`, which
 // the comparison rejects — a new deviation has to be explained, not recorded.
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -34,14 +34,20 @@ const declared = existsSync(join(CORPUS, "deviations.json"))
 const REACTIVITY = {
   untrackedReactive: ["v1/strict-read-untracked", "v1/reactive-read-after-await", "v1/no-destructure", "v1/untracked-derived-function"],
   badSignal: ["v1/uncalled-accessor"],
-  badUnnamedDerivedSignal: ["v1/untracked-derived-function"],
-  expectedFunctionGotExpression: ["v1/expected-function-got-expression"],
+  // A runWithOwner callback is a direct untracked read in the checker (the
+  // runtime clears Listener); upstream calls the same defect an unnamed
+  // derived signal. Either evidence-backed diagnosis satisfies that case.
+  badUnnamedDerivedSignal: ["v1/untracked-derived-function", "v1/strict-read-untracked"],
+  // Passing a reactive prop member where a callback is expected is also an
+  // untracked read of that member. The checker may surface the more general
+  // proof when the callback's callable type itself is unresolved.
+  expectedFunctionGotExpression: ["v1/expected-function-got-expression", "v1/strict-read-untracked"],
   noWrite: ["v1/no-direct-mutation"],
   noAsyncTrackedScope: ["v1/no-async-tracked-scope"],
   // Upstream's analysis-integrity warnings (a createSignal/createMemo result
   // not captured in a shape its analyzer can follow) have no v1 rule: the
   // checker resolves sources through TypeScript symbols and is not blinded by
-  // capture shape. Their invalid cases are declared gaps in deviations.json.
+  // capture shape. Their invalid cases are evidence-backed deviations.
   shouldDestructure: [],
   shouldAssign: [],
 };
@@ -148,10 +154,18 @@ if (update) {
 
 const appeared = Object.keys(observed).filter((id) => !(id in declared));
 const resolved = Object.keys(declared).filter((id) => !(id in observed));
-const untriaged = Object.entries(observed).filter(([, entry]) => entry.status === "triage" || !entry.reason);
+const allowedStatuses = new Set([
+  "evidence-backed",
+  "fact-unavailable",
+  "policy",
+  "unsupported-option",
+]);
+const untriaged = Object.entries(observed).filter(
+  ([, entry]) => !allowedStatuses.has(entry.status) || !entry.reason,
+);
 for (const id of appeared) console.error(`new deviation, not declared: ${id}`);
 for (const id of resolved) console.error(`declared deviation no longer deviates, remove it: ${id}`);
-for (const [id] of untriaged) console.error(`deviation has no status or reason: ${id}`);
+for (const [id] of untriaged) console.error(`deviation has an invalid status or no reason: ${id}`);
 if (appeared.length || resolved.length || untriaged.length) {
   console.error("\nre-run with --update once every deviation above is triaged");
   process.exit(1);

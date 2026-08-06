@@ -144,14 +144,12 @@ impl Dialect for Solid2 {
         }
     }
 
-    /// Source: `solid-reactive-ir/src/execution_role.rs`, the deferred-role
-    /// site, plus `runWithOwner`. Deliberately six names, not the fourteen that
-    /// `callback_positions` answers a position for: the eight others --
-    /// `createMemo`, `createTrackedEffect`, `createSignal`, `createStore`,
-    /// `createProjection`, `createOptimistic`, `createOptimisticStore`,
-    /// `dynamic` -- are classified as tracked computes by the block above that
-    /// site, and calling them deferred would stop the engine reporting reads
-    /// inside them.
+    /// Source: the published signal/runtime implementations, transcribed at
+    /// the primitive boundary. Tracked computes such as `createMemo`,
+    /// `createTrackedEffect`, derived state/store factories, and `dynamic`
+    /// are deliberately absent: putting them here would erase their tracked
+    /// read obligations. `createRoot` and `createRevealOrder` are present
+    /// because each clears tracking while establishing an owner.
     ///
     /// `runWithOwner` is deferred for the same reason `untrack` is, and on the
     /// same evidence: `@solidjs/signals`' implementation sets `tracking =
@@ -160,7 +158,9 @@ impl Dialect for Solid2 {
     fn runs_callback_deferred(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
-            Primitive::Flush
+            Primitive::CreateRoot
+                | Primitive::CreateRevealOrder
+                | Primitive::Flush
                 | Primitive::Untrack
                 | Primitive::OnSettled
                 | Primitive::CreateReaction
@@ -304,6 +304,10 @@ impl Dialect for Solid2 {
         }
     }
 
+    fn supports_sync_option(&self, primitive: Primitive) -> bool {
+        self.options_argument(primitive).is_some()
+    }
+
     /// Source: `@solidjs/signals@2.0.0-beta.25`'s implementation, not the
     /// signatures. `createEffect` forwards `effectFn.effect || effectFn` and
     /// `createReaction` calls `(effectFn.effect || effectFn)?.()`;
@@ -331,14 +335,19 @@ impl Dialect for Solid2 {
     /// reads inside them do subscribe: they run immediately in the caller's
     /// scope and never re-run on their own. `Tracked` here would mean "this
     /// primitive re-runs it", which neither does.
+    ///
+    /// `flush` is `Inline` too, and since the engine's call graph now follows
+    /// these execution contracts, a callback handed to `flush` is reachable —
+    /// superseding the old `invokes_its_callbacks` column, which excluded it
+    /// while this row said the opposite. `flushSync(fn)` does invoke `fn`, so
+    /// the row is the truthful one; its callbacks are deferred scopes, so the
+    /// added reachability changes no read or owner diagnostic.
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)] {
         match primitive {
             Primitive::CreateMemo
             | Primitive::CreateProjection
             | Primitive::CreateTrackedEffect
             | Primitive::OnSettled
-            | Primitive::CreateErrorBoundary
-            | Primitive::CreateLoadingBoundary
             | Primitive::CreateSignal
             | Primitive::CreateStore
             | Primitive::CreateOptimistic
@@ -347,10 +356,14 @@ impl Dialect for Solid2 {
             Primitive::CreateEffect | Primitive::CreateRenderEffect => {
                 &[(0, Execution::Tracked), (1, Execution::Deferred)]
             }
-            Primitive::MapArray | Primitive::RepeatMap => &[(1, Execution::Tracked)],
-            Primitive::CreateReaction | Primitive::Resolve | Primitive::Lazy => {
-                &[(0, Execution::Deferred)]
+            Primitive::CreateErrorBoundary | Primitive::CreateLoadingBoundary => {
+                &[(0, Execution::Tracked), (1, Execution::Deferred)]
             }
+            Primitive::MapArray | Primitive::RepeatMap => &[(1, Execution::Tracked)],
+            Primitive::CreateReaction
+            | Primitive::Resolve
+            | Primitive::Lazy
+            | Primitive::Action => &[(0, Execution::Deferred)],
             Primitive::CreateRoot
             | Primitive::CreateRevealOrder
             | Primitive::Flush
@@ -360,44 +373,6 @@ impl Dialect for Solid2 {
             Primitive::RunWithOwner => &[(1, Execution::Inline)],
             _ => &[],
         }
-    }
-
-    /// Source: the pre-ADR-0006 list in `solid-reactive-ir/src/reachability.rs`,
-    /// plus the 2.0 names added since. `latest`, `isPending`, `resolve` and
-    /// both boundaries all call the function they are handed, so a component
-    /// written inline at one of those calls is reachable.
-    ///
-    /// `flush` is excluded deliberately and was excluded before: it takes a
-    /// callback at index 0, and adding it would create reachability edges the
-    /// engine has never had.
-    fn invokes_its_callbacks(&self, primitive: Primitive) -> bool {
-        matches!(
-            primitive,
-            Primitive::Action
-                | Primitive::CreateEffect
-                | Primitive::CreateMemo
-                | Primitive::CreateOptimistic
-                | Primitive::CreateOptimisticStore
-                | Primitive::CreateProjection
-                | Primitive::CreateReaction
-                | Primitive::CreateRenderEffect
-                | Primitive::CreateSignal
-                | Primitive::CreateStore
-                | Primitive::CreateTrackedEffect
-                | Primitive::Dynamic
-                | Primitive::OnSettled
-                | Primitive::Untrack
-                | Primitive::CreateErrorBoundary
-                | Primitive::CreateLoadingBoundary
-                | Primitive::Latest
-                | Primitive::IsPending
-                | Primitive::Resolve
-                | Primitive::RunWithOwner
-                | Primitive::MapArray
-                | Primitive::RepeatMap
-                | Primitive::Lazy
-                | Primitive::CreateRevealOrder
-        )
     }
 
     /// async boundary `Loading` and the error boundary `Errored`.

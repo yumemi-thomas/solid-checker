@@ -2,6 +2,16 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/after-await-extended-invalid.tsx",
+      "start": 136,
+      "end": 154,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",

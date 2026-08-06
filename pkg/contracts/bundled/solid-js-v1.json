@@ -47,7 +47,17 @@
       "returns": {
         "kind": "accessor",
         "label": "selector result"
-      }
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "inline"
+        }
+      ]
     },
     "function-14": {
       "kind": "function",

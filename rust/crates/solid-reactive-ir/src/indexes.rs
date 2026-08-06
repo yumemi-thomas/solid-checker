@@ -4,7 +4,7 @@
 //! builder asks semantic questions here instead of repeatedly scanning facts.
 
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{Arc, OnceLock},
 };
 
@@ -185,6 +185,15 @@ pub(super) struct CallSiteLoading {
     pub(super) loading_wrapped: bool,
 }
 
+#[derive(Clone)]
+struct BindingResolution {
+    file: usize,
+    binding: usize,
+    symbol: SymbolId,
+}
+
+type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
+
 /// Lazy project-wide lookups that replace repeated whole-project scans.
 ///
 /// Every map is built at most once per build, on first use, in the exact
@@ -204,7 +213,10 @@ pub(super) struct SemanticLookup<'a> {
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
     descriptors_by_symbol: OnceLock<HashMap<&'a str, &'a TypeDescriptor>>,
     callability_by_symbol: OnceLock<HashMap<&'a str, Callability>>,
+    symbols_by_id: OnceLock<HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>>>,
+    context_symbols: OnceLock<HashSet<&'a str>>,
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
+    bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
     file_primitives: OnceLock<Vec<OnceLock<FilePrimitives>>>,
 }
@@ -245,7 +257,10 @@ impl<'a> SemanticLookup<'a> {
             contained_entities_by_path: OnceLock::new(),
             descriptors_by_symbol: OnceLock::new(),
             callability_by_symbol: OnceLock::new(),
+            symbols_by_id: OnceLock::new(),
+            context_symbols: OnceLock::new(),
             jsx_call_sites: OnceLock::new(),
+            bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),
             file_primitives: OnceLock::new(),
         }
@@ -305,6 +320,174 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn entities(&self) -> &'a EntitySymbols {
         self.entities
+    }
+
+    pub(super) fn symbol_names(&self) -> &'a HashMap<SymbolId, SymbolName> {
+        self.symbol_names
+    }
+
+    pub(super) fn files(&self) -> &'a [FileFacts] {
+        &self.facts.files
+    }
+
+    pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
+        self.symbols_by_id
+            .get_or_init(|| {
+                self.facts
+                    .typescript
+                    .symbols()
+                    .map(|candidate| (candidate.id(), candidate))
+                    .collect()
+            })
+            .get(symbol)
+            .map(|candidate| candidate.references().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// The binding declaration named by an exact canonical symbol reference.
+    ///
+    /// Returned functions can cross files and destructuring patterns before
+    /// they are called. Building this reverse index once keeps that proof
+    /// linear in project facts instead of rescanning every binding for every
+    /// call site.
+    pub(super) fn binding_at_reference(
+        &self,
+        path: &str,
+        span: Span,
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact, SymbolId)> {
+        let resolution = self
+            .bindings_by_reference()
+            .get(path)?
+            .get(&(u64::from(span.start), u64::from(span.end)))?;
+        let file = &self.facts.files[resolution.file];
+        Some((
+            file,
+            &file.ast.bindings[resolution.binding],
+            resolution.symbol.clone(),
+        ))
+    }
+
+    fn bindings_by_reference(&self) -> &BindingsByReference {
+        self.bindings_by_reference.get_or_init(|| {
+            let symbols = self.symbols_by_id.get_or_init(|| {
+                self.facts
+                    .typescript
+                    .symbols()
+                    .map(|candidate| (candidate.id(), candidate))
+                    .collect()
+            });
+            let mut by_path = HashMap::<String, HashMap<(u64, u64), BindingResolution>>::new();
+            let mut by_symbol = HashMap::<SymbolId, BindingResolution>::new();
+            for (file_index, file) in self.facts.files.iter().enumerate() {
+                for (binding_index, binding) in file.ast.bindings.iter().enumerate() {
+                    for name in &binding.names {
+                        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
+                            continue;
+                        };
+                        let resolution = BindingResolution {
+                            file: file_index,
+                            binding: binding_index,
+                            symbol: symbol.clone(),
+                        };
+                        by_symbol
+                            .entry(symbol.clone())
+                            .or_insert_with(|| resolution.clone());
+                        by_path
+                            .entry(file.path.to_string())
+                            .or_default()
+                            .entry((u64::from(name.span.start), u64::from(name.span.end)))
+                            .or_insert_with(|| resolution.clone());
+                        if let Some(candidate) = symbols.get(symbol.as_str()) {
+                            for reference in candidate.references() {
+                                by_path
+                                    .entry(reference.path.to_string())
+                                    .or_default()
+                                    .entry((reference.start_byte, reference.end_byte))
+                                    .or_insert_with(|| resolution.clone());
+                            }
+                        }
+                    }
+                }
+            }
+            // The symbol-reference table proves aliases even when no entity
+            // was demanded at a use. Conversely, exact entity facts can exist
+            // at a use omitted from that reference projection. Retain both
+            // compiler proofs, matching the former direct-or-reference query.
+            for (path, entities) in &self.entities.by_path {
+                for ((start, end), symbol) in entities {
+                    if let Some(resolution) = by_symbol.get(symbol) {
+                        by_path
+                            .entry(path.clone())
+                            .or_default()
+                            .entry((*start, *end))
+                            .or_insert_with(|| resolution.clone());
+                    }
+                }
+            }
+            by_path
+        })
+    }
+
+    /// Whether the last reference in this JSX member-object span resolves to
+    /// a binding initialized by the dialect's `createContext` primitive
+    /// anywhere in the project.
+    ///
+    /// Context providers are routinely declared in one module and rendered
+    /// in another. Indexing canonical TypeScript symbols keeps that ordinary
+    /// import/re-export boundary from erasing the runtime contract while
+    /// still rejecting objects that merely expose a property named
+    /// `Provider`. Matching the reference that ends with the object span also
+    /// supports `<contexts.ValueContext.Provider>` without confusing it with
+    /// `<ValueContext.someObject.Provider>`.
+    pub(super) fn is_context_reference(&self, path: &str, span: Span) -> bool {
+        self.context_symbols().iter().any(|symbol| {
+            self.symbols_by_id
+                .get_or_init(|| {
+                    self.facts
+                        .typescript
+                        .symbols()
+                        .map(|candidate| (candidate.id(), candidate))
+                        .collect()
+                })
+                .get(symbol)
+                .is_some_and(|candidate| {
+                    candidate.references().any(|reference| {
+                        reference.path.as_ref() == path
+                            && reference.start_byte >= u64::from(span.start)
+                            && reference.end_byte == u64::from(span.end)
+                    })
+                })
+        })
+    }
+
+    fn context_symbols(&self) -> &HashSet<&'a str> {
+        self.context_symbols.get_or_init(|| {
+            self.facts
+                .files
+                .iter()
+                .flat_map(|file| {
+                    let primitives = self.primitives(file);
+                    file.ast.bindings.iter().filter_map(move |binding| {
+                        let initializer = binding.call_initializer?;
+                        let call = file
+                            .ast
+                            .calls
+                            .iter()
+                            .position(|call| call.span == initializer)?;
+                        (super::known_primitive(&primitives.calls[call])
+                            == Some(solid_dialect::Primitive::CreateContext))
+                        .then(|| {
+                            binding.names.iter().find_map(|name| {
+                                self.entities
+                                    .at(file.path.as_str(), name.span)
+                                    .map(|symbol| symbol.as_str())
+                            })
+                        })
+                        .flatten()
+                    })
+                })
+                .collect()
+        })
     }
 
     pub(super) fn call_by_callee(

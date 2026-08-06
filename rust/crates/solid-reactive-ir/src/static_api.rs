@@ -72,7 +72,9 @@ impl StaticApiContext<'_> {
             // Where each primitive takes its options object -- a second index
             // vocabulary, and the dialect's to answer: 2.0's numbers read
             // 1.x's `createMemo(fn, seed)` seed as an options object.
-            let options_index = kind.and_then(|kind| dialect.options_argument(kind));
+            let options_index = kind
+                .filter(|kind| dialect.supports_sync_option(*kind))
+                .and_then(|kind| dialect.options_argument(kind));
             if let Some(options_index) = options_index
                 && call.arguments.get(options_index).is_some_and(|argument| {
                     argument.boolean_properties.iter().any(|property| {

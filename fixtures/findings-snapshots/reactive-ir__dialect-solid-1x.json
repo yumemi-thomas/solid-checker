@@ -55,8 +55,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 2150,
-      "end": 2159,
+      "start": 2241,
+      "end": 2250,
       "fixes": 0,
       "message": "onCleanup is called inside createReaction, whose callback runs as a leaf with no owner to register cleanup on; the cleanup function will never run",
       "hint": "Register the cleanup in the computation that owns the createReaction instead, or create the surrounding scope with createRoot so disposal exists."
@@ -67,23 +67,23 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 2150,
-      "end": 2159,
+      "start": 2241,
+      "end": 2250,
       "fixes": 0,
       "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists."
     },
     {
-      "rule": "v1/strict-read-untracked",
-      "code": "SC1001",
+      "rule": "v1/no-async-tracked-scope",
+      "code": "SC5004",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 3409,
-      "end": 3415,
+      "start": 4908,
+      "end": 4921,
       "fixes": 0,
-      "message": "reactive accessor \"seed\" is read directly in rendering function, which does not track; the read sees the current value once and never updates when \"seed\" changes",
-      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
+      "message": "this createMemo scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing",
+      "hint": "Keep the createMemo scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
     }
   ]
 }

@@ -8,24 +8,25 @@ use crate::core::{SourceIdentity, Span};
 use compact_str::CompactString;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, ArrowFunctionExpression, AssignmentExpression, AwaitExpression, BindingPattern,
-    CallExpression, ComputedMemberExpression, ConditionalExpression, Declaration,
+    Argument, ArrowFunctionExpression, AssignmentExpression, AwaitExpression, BinaryExpression,
+    BindingPattern, CallExpression, ComputedMemberExpression, ConditionalExpression, Declaration,
     ExportAllDeclaration, ExportDefaultDeclaration, ExportDefaultDeclarationKind,
     ExportNamedDeclaration, Expression, FormalParameter, Function, FunctionType,
     IdentifierReference, IfStatement, ImportDeclaration, ImportDeclarationSpecifier,
-    JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement, JSXExpression,
-    LogicalExpression, LogicalOperator, ModuleExportName, NewExpression, ObjectProperty,
-    ObjectPropertyKind, PropertyKey, ReturnStatement, SpreadElement, StaticMemberExpression,
-    TSModuleDeclarationName, VariableDeclarator,
+    JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName,
+    JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName, NewExpression,
+    ObjectProperty, ObjectPropertyKind, PropertyKey, ReturnStatement, SpreadElement,
+    StaticMemberExpression, TSModuleDeclarationName, UnaryExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
+use oxc_semantic::{ScopeId, Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, SourceType, Span as OxcSpan};
 use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 19;
+pub const AST_FACTS_SCHEMA: u32 = 22;
 
 mod span_index;
 
@@ -68,6 +69,12 @@ pub struct AstFacts {
     pub tagged_templates: Vec<TaggedTemplateFact>,
     #[serde(default)]
     pub template_literals: Vec<TemplateLiteralFact>,
+    /// Operands whose operator coerces a value. A function object is never a
+    /// useful substitute for calling a reactive accessor in one of these
+    /// slots. Equality, `in`, `instanceof`, `typeof`, `void`, and `delete`
+    /// are deliberately absent because they can inspect a function itself.
+    #[serde(default)]
+    pub coercive_operands: Vec<CoerciveOperandFact>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
     #[serde(default)]
@@ -271,6 +278,13 @@ pub struct JsxElementFact {
     #[serde(default)]
     pub opening: Span,
     pub name: NamedSpan,
+    /// The object and final property of a dotted JSX name. Keeping these
+    /// spans separate lets semantic consumers prove `<Context.Provider>`
+    /// from the `Context` binding without parsing the name text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_object: Option<Span>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_property: Option<Span>,
     pub properties: Vec<Span>,
     pub boolean_properties: Vec<BooleanPropertyFact>,
     #[serde(default)]
@@ -301,6 +315,13 @@ pub struct JsxAttributeFact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub namespace: Option<Span>,
     pub local_name: Span,
+    /// Declaration selected by ECMAScript/TypeScript lexical scope lookup for
+    /// the local name of a `use:name` directive. `None` means that the binder
+    /// found no declaration in this file's scope tree. Other JSX namespaces
+    /// do not interpret their local name as a value binding and leave this
+    /// field empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directive_binding: Option<Span>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<Span>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -353,10 +374,18 @@ pub struct ObjectPropertyFact {
 
 /// A tagged template expression and the expressions interpolated into it.
 ///
-/// CSS-in-JS and HTML tag functions receive their substitutions as callbacks
-/// that the tag invokes later, which makes them a distinct execution scope from
-/// the code around them. Rules need the structure to tell those apart from an
-/// ordinary expression, and the tag's own identity to resolve what it is.
+/// CSS-in-JS and HTML tag functions receive substitutions as values and may
+/// call function-valued substitutions later. Rules need the structure to tell
+/// that contract apart from ordinary string interpolation, and the tag's own
+/// identity to resolve what it is.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaggedTemplateFact {
+    pub span: Span,
+    pub tag: Span,
+    pub expressions: Vec<Span>,
+}
+
 /// An untagged template literal and the expressions interpolated into it.
 ///
 /// Separate from [`TaggedTemplateFact`] because the two coerce differently:
@@ -367,14 +396,6 @@ pub struct ObjectPropertyFact {
 #[serde(rename_all = "camelCase")]
 pub struct TemplateLiteralFact {
     pub span: Span,
-    pub expressions: Vec<Span>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaggedTemplateFact {
-    pub span: Span,
-    pub tag: Span,
     pub expressions: Vec<Span>,
 }
 
@@ -391,6 +412,20 @@ pub struct MemberFact {
 pub struct SpreadFact {
     pub span: Span,
     pub argument: Span,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CoerciveOperandKind {
+    Binary,
+    Unary,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoerciveOperandFact {
+    pub span: Span,
+    pub kind: CoerciveOperandKind,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -483,13 +518,20 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
         return Err(AstFactsError::Parse(error.to_string()));
     }
 
-    let mut collector = Collector::new(source);
+    // JSX namespace names are not IdentifierReference nodes, so TypeScript's
+    // GetSymbolAtLocation deliberately returns no symbol for `use:name`.
+    // Build Oxc's semantic scope tree once and retain the exact declaration
+    // chosen by its binder instead of approximating scope with source text.
+    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let mut collector = Collector::new(source, semantic.scoping());
     collector.visit_program(&parsed.program);
     Ok(collector.finish(identity))
 }
 
-struct Collector<'s> {
+struct Collector<'s, 'semantic> {
     source: &'s str,
+    scoping: &'semantic Scoping,
+    scope_stack: Vec<ScopeId>,
     calls: Vec<CallFact>,
     bindings: Vec<BindingFact>,
     functions: Vec<FunctionFact>,
@@ -510,15 +552,18 @@ struct Collector<'s> {
     object_properties: Vec<ObjectPropertyFact>,
     tagged_templates: Vec<TaggedTemplateFact>,
     template_literals: Vec<TemplateLiteralFact>,
+    coercive_operands: Vec<CoerciveOperandFact>,
     assignments: Vec<AssignmentFact>,
     if_regions: Vec<IfRegionFact>,
     conditional_control_stack: Vec<Span>,
 }
 
-impl<'s> Collector<'s> {
-    fn new(source: &'s str) -> Self {
+impl<'s, 'semantic> Collector<'s, 'semantic> {
+    fn new(source: &'s str, scoping: &'semantic Scoping) -> Self {
         Self {
             source,
+            scoping,
+            scope_stack: Vec::new(),
             calls: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
@@ -539,6 +584,7 @@ impl<'s> Collector<'s> {
             object_properties: Vec::new(),
             tagged_templates: Vec::new(),
             template_literals: Vec::new(),
+            coercive_operands: Vec::new(),
             assignments: Vec::new(),
             if_regions: Vec::new(),
             conditional_control_stack: Vec::new(),
@@ -566,6 +612,7 @@ impl<'s> Collector<'s> {
         self.object_properties.sort_by_key(|fact| fact.span);
         self.tagged_templates.sort_by_key(|fact| fact.span);
         self.template_literals.sort_by_key(|fact| fact.span);
+        self.coercive_operands.sort_by_key(|fact| fact.span);
         self.assignments.sort_by_key(|fact| fact.target);
         self.if_regions.sort_by_key(|fact| fact.consequent);
         AstFacts {
@@ -592,6 +639,7 @@ impl<'s> Collector<'s> {
             object_properties: self.object_properties,
             tagged_templates: self.tagged_templates,
             template_literals: self.template_literals,
+            coercive_operands: self.coercive_operands,
             assignments: self.assignments,
             if_regions: self.if_regions,
         }
@@ -776,7 +824,22 @@ impl<'s> Collector<'s> {
     }
 }
 
-impl<'a> Visit<'a> for Collector<'_> {
+impl<'a> Visit<'a> for Collector<'_, '_> {
+    fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &std::cell::Cell<Option<ScopeId>>) {
+        // SemanticBuilder populated every scope cell in this same AST before
+        // fact collection. Falling back to the root keeps extraction total if
+        // Oxc ever introduces an unpopulated synthetic scope.
+        self.scope_stack.push(
+            scope_id
+                .get()
+                .unwrap_or_else(|| self.scoping.root_scope_id()),
+        );
+    }
+
+    fn leave_scope(&mut self) {
+        self.scope_stack.pop();
+    }
+
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
         let callee_span = call.callee.span();
         self.calls.push(CallFact {
@@ -1192,13 +1255,29 @@ impl<'a> Visit<'a> for Collector<'_> {
     }
 
     fn visit_jsx_element(&mut self, element: &JSXElement<'a>) {
+        let current_scope = self
+            .scope_stack
+            .last()
+            .copied()
+            .unwrap_or_else(|| self.scoping.root_scope_id());
         let name_span = element.opening_element.name.span();
+        let (member_object, member_property) =
+            if let JSXElementName::MemberExpression(member) = &element.opening_element.name {
+                (
+                    Some(span(member.object.span())),
+                    Some(span(member.property.span)),
+                )
+            } else {
+                (None, None)
+            };
         self.jsx_elements.push(JsxElementFact {
             span: span(element.span),
             opening: span(element.opening_element.span),
             name: NamedSpan {
                 span: span(name_span),
             },
+            member_object,
+            member_property,
             properties: element
                 .opening_element
                 .attributes
@@ -1248,10 +1327,27 @@ impl<'a> Visit<'a> for Collector<'_> {
                     let JSXAttributeItem::Attribute(attribute) = item else {
                         return None;
                     };
-                    let (name, namespace, local_name) = match &attribute.name {
-                        JSXAttributeName::Identifier(name) => (name.span, None, name.span),
+                    let (name, namespace, local_name, directive_binding) = match &attribute.name {
+                        JSXAttributeName::Identifier(name) => (name.span, None, name.span, None),
                         JSXAttributeName::NamespacedName(name) => {
-                            (name.span, Some(name.namespace.span), name.name.span)
+                            let directive_binding = (name.namespace.name == "use")
+                                .then(|| {
+                                    self.scoping
+                                        .find_binding(current_scope, name.name.name.as_str().into())
+                                        .filter(|&symbol| {
+                                            self.scoping
+                                                .symbol_flags(symbol)
+                                                .can_be_referenced_by_value()
+                                        })
+                                        .map(|symbol| span(self.scoping.symbol_span(symbol)))
+                                })
+                                .flatten();
+                            (
+                                name.span,
+                                Some(name.namespace.span),
+                                name.name.span,
+                                directive_binding,
+                            )
                         }
                     };
                     let (value, expression, value_kind) = match attribute.value.as_ref() {
@@ -1278,6 +1374,7 @@ impl<'a> Visit<'a> for Collector<'_> {
                         name: span(name),
                         namespace: namespace.map(span),
                         local_name: span(local_name),
+                        directive_binding,
                         value,
                         expression,
                         value_kind,
@@ -1335,6 +1432,50 @@ impl<'a> Visit<'a> for Collector<'_> {
             argument: span(spread.argument.span()),
         });
         walk::walk_spread_element(self, spread);
+    }
+
+    fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
+        use oxc_syntax::operator::BinaryOperator;
+
+        if !matches!(
+            expression.operator,
+            BinaryOperator::Equality
+                | BinaryOperator::Inequality
+                | BinaryOperator::StrictEquality
+                | BinaryOperator::StrictInequality
+                | BinaryOperator::In
+                | BinaryOperator::Instanceof
+        ) {
+            self.coercive_operands.extend([
+                CoerciveOperandFact {
+                    span: span(expression.left.span()),
+                    kind: CoerciveOperandKind::Binary,
+                },
+                CoerciveOperandFact {
+                    span: span(expression.right.span()),
+                    kind: CoerciveOperandKind::Binary,
+                },
+            ]);
+        }
+        walk::walk_binary_expression(self, expression);
+    }
+
+    fn visit_unary_expression(&mut self, expression: &UnaryExpression<'a>) {
+        use oxc_syntax::operator::UnaryOperator;
+
+        if matches!(
+            expression.operator,
+            UnaryOperator::UnaryPlus
+                | UnaryOperator::UnaryNegation
+                | UnaryOperator::LogicalNot
+                | UnaryOperator::BitwiseNot
+        ) {
+            self.coercive_operands.push(CoerciveOperandFact {
+                span: span(expression.argument.span()),
+                kind: CoerciveOperandKind::Unary,
+            });
+        }
+        walk::walk_unary_expression(self, expression);
     }
 }
 
@@ -1734,6 +1875,21 @@ const mixed = () => {
     }
 
     #[test]
+    fn retains_only_operators_that_coerce_accessor_values() {
+        let source = "const a = signal + 1; const b = -signal; const c = !signal; const d = signal === other; const e = typeof signal;";
+        let facts = extract("operators.ts", source).unwrap();
+        let operands = facts
+            .coercive_operands
+            .iter()
+            .filter_map(|operand| {
+                source.get(operand.span.start as usize..operand.span.end as usize)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(operands, ["signal", "1", "signal", "signal"]);
+    }
+
+    #[test]
     fn retains_array_assignments_and_if_regions_for_runtime_proofs() {
         let source = r#"
 let callbacks = null;
@@ -1782,6 +1938,96 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
         assert_eq!(facts.object_properties.len(), 1);
         assert_eq!(facts.logical_expressions.len(), 1);
         assert_eq!(facts.conditional_expressions.len(), 1);
+    }
+
+    #[test]
+    fn resolves_directive_names_through_value_scope_only() {
+        let source = r#"
+import { importedDirective } from "./directives";
+import type { typeOnlyDirective } from "./types";
+function hoistedDirective() {}
+const moduleDirective = () => {};
+const shadowedDirective = () => {};
+interface interfaceDirective {}
+
+function View(shadowedDirective: (element: HTMLDivElement) => void) {
+  const parameterUse = <div use:shadowedDirective />;
+  const visible = <div use:importedDirective use:hoistedDirective use:moduleDirective />;
+  {
+    const blockDirective = () => {};
+    const blockUse = <div use:blockDirective />;
+  }
+  const outsideBlock = <div use:blockDirective />;
+  const typeOnly = <div use:typeOnlyDirective use:interfaceDirective />;
+  return <div class:moduleDirective use:missingDirective />;
+}
+"#;
+        let facts = extract("directives.tsx", source).unwrap();
+        let attributes = facts
+            .jsx_elements
+            .iter()
+            .flat_map(|element| &element.attributes)
+            .map(|attribute| {
+                let namespace = attribute
+                    .namespace
+                    .and_then(|span| source.get(span.start as usize..span.end as usize));
+                let name = source
+                    .get(attribute.local_name.start as usize..attribute.local_name.end as usize)
+                    .unwrap();
+                let binding = attribute.directive_binding.and_then(|span| {
+                    source
+                        .get(span.start as usize..span.end as usize)
+                        .map(|text| (text, span.start))
+                });
+                (namespace, name, binding)
+            })
+            .collect::<Vec<_>>();
+
+        for name in [
+            "importedDirective",
+            "hoistedDirective",
+            "moduleDirective",
+            "blockDirective",
+        ] {
+            assert!(
+                attributes.iter().any(|&(namespace, local, binding)| {
+                    namespace == Some("use")
+                        && local == name
+                        && binding.is_some_and(|(declaration, _)| declaration == name)
+                }),
+                "missing lexical value resolution for {name}: {attributes:#?}"
+            );
+        }
+
+        let shadowed = attributes
+            .iter()
+            .find(|&&(namespace, name, _)| namespace == Some("use") && name == "shadowedDirective")
+            .and_then(|&(_, _, binding)| binding)
+            .expect("shadowed parameter binding");
+        assert_eq!(
+            shadowed.1 as usize,
+            source
+                .find("shadowedDirective: (element")
+                .expect("parameter declaration")
+        );
+
+        let unresolved = attributes
+            .iter()
+            .filter(|&&(namespace, _, binding)| namespace == Some("use") && binding.is_none())
+            .map(|&(_, name, _)| name)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            unresolved,
+            [
+                "blockDirective",
+                "typeOnlyDirective",
+                "interfaceDirective",
+                "missingDirective"
+            ]
+        );
+        assert!(attributes.iter().any(|&(namespace, name, binding)| {
+            namespace == Some("class") && name == "moduleDirective" && binding.is_none()
+        }));
     }
 
     #[test]

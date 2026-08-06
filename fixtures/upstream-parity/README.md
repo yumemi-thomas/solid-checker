@@ -36,13 +36,25 @@ project (`harness.json` holds the scaffolding), runs the checker once, and
 counts a case as matching when the rule under test fired for an `invalid` case
 and stayed silent for a `valid` one.
 
-**389 of 465 match.** The other 76 are declared in `deviations.json`, one entry
+**405 of 465 match.** The other 60 are declared in `deviations.json`, one entry
 per case, each with a status and a reason:
 
 | status | count | meaning |
 | --- | --- | --- |
-| `deliberate` | 37 | the checker differs on purpose, and the reason says why |
-| `gap` | 39 | upstream reports something the checker does not, and closing it is outstanding work |
+| `evidence-backed` | 21 | compiler, runtime, type, or contract evidence makes the checker's result more precise than upstream's syntax heuristic |
+| `unsupported-option` | 27 | the case enables a non-default upstream option; the checker deliberately has no per-rule options surface |
+| `fact-unavailable` | 11 | the isolated case supplies no fact that proves the relevant Solid or user-code contract, so the checker refuses to guess from a spelling convention |
+| `policy` | 1 | the checker intentionally enforces a stricter explicit-snapshot policy |
+
+These statuses distinguish improvements from scope choices. An
+`evidence-backed` deviation is a result we actively want. An
+`unsupported-option` deviation is expected but does not make the analysis
+smarter. A `fact-unavailable` deviation is conservative: it prevents a false
+inference from an unresolved spelling, but can either withhold a diagnostic or
+retain a warning that a real type or package contract would settle. It may
+therefore identify useful future fact coverage when the same pattern occurs in
+real typed code. `policy` requires an explicit project decision. There are no
+known correctness gaps hidden in this ledger.
 
 The comparison is exact in both directions. A case that starts deviating fails,
 and so does one that stops, so an inherited false positive cannot arrive
@@ -71,6 +83,6 @@ comparison rejects — a new deviation has to be explained, not merely recorded.
 | `code` | the case source, verbatim |
 | `errors` | how many diagnostics upstream expects (0 for valid cases) |
 | `messageIds` | upstream's message ids, which the reactivity mapping keys on |
-| `options` | upstream rule options, or `null` — the checker's rules are not configurable, so a case carrying options can only be a deviation |
+| `options` | upstream rule options, or `null` — the checker's rules are not configurable, so a case whose result differs only because of options is an `unsupported-option` deviation |
 | `output` | upstream's autofix result, or `null` |
 | `tsOnly` | upstream runs the case only under a TypeScript parser |

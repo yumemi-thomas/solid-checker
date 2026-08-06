@@ -244,22 +244,14 @@ fn style_prop(file: &FileFacts, element: &JsxElementFact, violations: &mut Vec<S
                 value_span,
                 vec![],
             );
-            let properties = value
-                .split(';')
-                .filter_map(|declaration| {
-                    let (name, value) = declaration.split_once(':')?;
-                    let name = name.trim();
-                    let value = value.trim();
-                    (!name.is_empty() && !value.is_empty())
-                        .then(|| format!("\"{name}\":\"{value}\""))
-                })
-                .collect::<Vec<_>>();
-            result.fixes.push(fix_replace(
-                file,
-                value_span,
-                "convert to a style object",
-                format!("{{{{{}}}}}", properties.join(",")),
-            ));
+            if let Some(replacement) = style_string_object_fix(&value) {
+                result.fixes.push(fix_replace(
+                    file,
+                    value_span,
+                    "convert to a style object",
+                    replacement,
+                ));
+            }
             violations.push(result);
             continue;
         }
@@ -311,6 +303,85 @@ fn style_prop(file: &FileFacts, element: &JsxElementFact, violations: &mut Vec<S
             }
         }
     }
+}
+
+fn style_string_object_fix(source: &str) -> Option<String> {
+    let declarations = split_css_at_top_level(source, ';')?;
+    let mut properties = Vec::new();
+    for declaration in declarations {
+        let declaration = declaration.trim();
+        if declaration.is_empty() {
+            continue;
+        }
+        let colon = top_level_delimiters(declaration, ':')?.into_iter().next()?;
+        let name = declaration[..colon].trim();
+        let value = declaration[colon + 1..].trim();
+        if name.is_empty() || value.is_empty() {
+            return None;
+        }
+        properties.push(format!(
+            "{}:{}",
+            serde_json::to_string(name).ok()?,
+            serde_json::to_string(value).ok()?
+        ));
+    }
+    Some(format!("{{{{{}}}}}", properties.join(",")))
+}
+
+fn split_css_at_top_level(source: &str, delimiter: char) -> Option<Vec<&str>> {
+    let delimiters = top_level_delimiters(source, delimiter)?;
+    let mut parts = Vec::with_capacity(delimiters.len() + 1);
+    let mut start = 0;
+    for index in delimiters {
+        parts.push(&source[start..index]);
+        start = index + delimiter.len_utf8();
+    }
+    parts.push(&source[start..]);
+    Some(parts)
+}
+
+fn top_level_delimiters(source: &str, delimiter: char) -> Option<Vec<usize>> {
+    let mut quote = None;
+    let mut escaped = false;
+    let mut brackets = Vec::new();
+    let mut delimiters = Vec::new();
+    for (index, character) in source.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        if character == '\\' {
+            escaped = true;
+            continue;
+        }
+        if let Some(open_quote) = quote {
+            if character == open_quote {
+                quote = None;
+            }
+            continue;
+        }
+        if matches!(character, '\'' | '"') {
+            quote = Some(character);
+            continue;
+        }
+        match character {
+            '(' | '[' | '{' => brackets.push(character),
+            ')' | ']' | '}' => {
+                let expected = match character {
+                    ')' => '(',
+                    ']' => '[',
+                    '}' => '{',
+                    _ => unreachable!(),
+                };
+                if brackets.pop() != Some(expected) {
+                    return None;
+                }
+            }
+            _ if character == delimiter && brackets.is_empty() => delimiters.push(index),
+            _ => {}
+        }
+    }
+    (!escaped && quote.is_none() && brackets.is_empty()).then_some(delimiters)
 }
 
 fn to_kebab_case(name: &str) -> String {
@@ -754,7 +825,8 @@ fn violation(
 #[cfg(test)]
 mod tests {
     use super::{
-        event_name, is_lowercase_led, looks_like_array_literal, strip_string_literal, to_kebab_case,
+        event_name, is_lowercase_led, looks_like_array_literal, strip_string_literal,
+        style_string_object_fix, to_kebab_case,
     };
 
     #[test]
@@ -801,5 +873,23 @@ mod tests {
     fn classifies_element_names_by_leading_case() {
         assert!(is_lowercase_led("div"));
         assert!(!is_lowercase_led("Component"));
+    }
+
+    #[test]
+    fn style_string_fixes_escape_javascript_strings_and_parse_css_boundaries() {
+        assert_eq!(
+            style_string_object_fix("content: \"x\""),
+            Some("{{\"content\":\"\\\"x\\\"\"}}".into())
+        );
+        assert_eq!(
+            style_string_object_fix(
+                "background: url(\"data:image/svg+xml;utf8,<svg/>\"); color: red"
+            ),
+            Some(
+                "{{\"background\":\"url(\\\"data:image/svg+xml;utf8,<svg/>\\\")\",\"color\":\"red\"}}"
+                    .into()
+            )
+        );
+        assert_eq!(style_string_object_fix("content: \"unterminated"), None);
     }
 }

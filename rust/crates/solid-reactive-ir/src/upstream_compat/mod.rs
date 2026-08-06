@@ -65,6 +65,20 @@ pub(super) struct UpstreamCompatContext<'a> {
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     /// Whether each proven source is an accessor or a store path.
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    /// Component props roots proven by component shape and propagated type
+    /// facts. Member names may be unresolved (for example an inferred `any`),
+    /// but the props object itself remains a reactive proxy.
+    pub(super) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// The proven-source symbol at each exact TypeScript reference location,
+    /// indexed path → byte range. Entity facts intentionally cover only
+    /// semantically interesting expression shapes; ordinary operator operands
+    /// can therefore have a symbol reference but no entity row. Rules that
+    /// need exact identifier identity use this as the type-fact fallback
+    /// rather than matching source text — indexed once here because scanning
+    /// every source's reference list per identifier is quadratic in project
+    /// size. Owned: the reference lists it is built from live shorter than
+    /// this struct's borrows.
+    pub(super) source_reference_index: HashMap<String, HashMap<(u64, u64), SymbolId>>,
     /// The imported symbols a package contract describes.
     ///
     /// Read as the negative: a callee absent from here, absent from the
