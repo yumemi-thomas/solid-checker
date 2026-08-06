@@ -72,6 +72,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-source-uncaptured",
+      "code": "SC9011",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 1051,
+      "end": 1056,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

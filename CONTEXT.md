@@ -33,6 +33,10 @@ _Avoid_: Index helpers, fact-table scan, range-query module
 One of the independent evidence suppliers the checker cross-references: Oxc syntax facts, Solid compiler execution facts, Type Facts, and package contracts. User-facing documentation may call them "sources of evidence"; the canonical term is fact domain.
 _Avoid_: Backends, sidecars, analysis inputs
 
+**Rule options**:
+The project-level per-rule configuration document, `.solid-checker/rule-options.json`, discovered beside a project's contracts and carrying the upstream eslint-plugin-solid options the 1.x rules honour. Defaults are upstream's defaults; parsing fails closed. Part of every build and diagnostic identity.
+_Avoid_: Rule config, checker settings, options file
+
 **Finding kind**:
 Whether a finding is a **violation** (the analyzer proved the code misbehaves at runtime) or **uncertifiable** (a proof obligation the analyzer could not resolve). Distinct from severity (error/warning).
 _Avoid_: Finding status, finding type

@@ -148,6 +148,8 @@ pub enum BackendError {
     Contract(String),
     #[error("TypeFacts compatibility handshake failed: {0}")]
     Handshake(String),
+    #[error("rule options error: {0}")]
+    RuleOptions(String),
     #[error("analysis cancelled")]
     Cancelled,
 }

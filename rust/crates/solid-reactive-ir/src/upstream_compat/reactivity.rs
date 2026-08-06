@@ -9,6 +9,13 @@
 //! engine's own analysis and are reported from the reactive IR as SC1001 and
 //! SC1002, not from here. This module owns the rest.
 //!
+//! Unlike the sibling modules, which port a 1.x-era ESLint surface, the
+//! defects here are defects in both language versions — an accessor used as
+//! a value, a proxy written through, a listener bound to a call's result —
+//! so both dialects' catalogs carry them (1.x as `v1/<rule>`, 2.0 under the
+//! checker's plain names, same SC codes so suppressions survive a
+//! migration). The one exception is `no-async-tracked-scope`; see its doc.
+//!
 //! # Proven sources, not named ones
 //!
 //! Upstream decides what is reactive from syntax and convention: a variable
@@ -27,6 +34,7 @@
 use solid_facts::FileFacts;
 use solid_facts::ast::{FunctionFact, IdentifierRole};
 use solid_facts::core::Span;
+use typefacts::Callability;
 
 use super::{UpstreamCompatContext, is_lowercase_led, text};
 use crate::{ReactiveSourceKind, StaticViolation, known_primitive, location};
@@ -38,7 +46,12 @@ pub(super) fn check_file(
 ) {
     uncalled_accessor(file, context, violations);
     no_direct_mutation(file, context, violations);
-    no_async_tracked_scope(file, context, violations);
+    // The one rule in this module whose defect is version-specific: Solid
+    // 2.0 models async computations as a feature (see the rule's doc), so
+    // only the 1.x catalog carries it.
+    if context.dialect.version() == solid_dialect::Version::V1 {
+        no_async_tracked_scope(file, context, violations);
+    }
     expected_function_got_expression(file, context, violations);
     reactive_source_uncaptured(file, context, violations);
     untracked_derived_function(file, context, violations);
@@ -72,6 +85,21 @@ pub(super) fn check_file(
 /// A single reference that fails any of those abandons the function rather
 /// than guessing. That leaves the textbook case and little else, which is the
 /// right trade for a rule whose false positives would land on correct code.
+///
+/// # Why the abandonments are not classified further
+///
+/// Two stronger fact domains were weighed here and deliberately not consulted:
+///
+/// - **Dialect callback slots / compiler tracked regions.** A call inside
+///   `createMemo(() => derived())` could be *proven* tracked instead of
+///   abandoned — but a tracked call already means the derivation works, so
+///   "proven tracked" and "abandoned" both end in silence. Classifying
+///   changes no outcome.
+/// - **Counting deferred positions as untracked evidence.** A call inside an
+///   event handler, `onMount`, or `untrack` is provably outside tracking,
+///   but reading current values there is idiomatic — upstream exempts those
+///   positions too — so counting them as defect evidence would flag correct
+///   code.
 fn untracked_derived_function(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
@@ -177,6 +205,10 @@ fn untracked_derived_function(
             continue;
         }
         let name = text(file, declared.span);
+        let effect_scope = match context.dialect.version() {
+            solid_dialect::Version::V1 => "a createEffect callback",
+            solid_dialect::Version::V2 => "the compute function of createEffect(compute, apply)",
+        };
         violations.push(StaticViolation {
             id: "SC1006".into(),
             rule: "untracked-derived-function".into(),
@@ -184,7 +216,7 @@ fn untracked_derived_function(
                 "{name} derives from reactive state but every call to it is untracked, so its reads subscribe to nothing and the derivation never updates"
             ),
             hint: format!(
-                "Call {name} from a tracking scope — JSX, a createMemo, or a createEffect callback — or inline the value if a one-off read at setup is what was meant."
+                "Call {name} from a tracking scope — JSX, a createMemo, or {effect_scope} — or inline the value if a one-off read at setup is what was meant."
             ),
             location: location(file.path.shared(), declared.span),
             analysis_context: String::new(),
@@ -326,6 +358,29 @@ fn reactive_source_uncaptured(
 /// reads — [`crate::StaticViolation`]s for those surface as
 /// `v1/reactive-read-after-await` instead, per-read and with the offending
 /// read located.
+///
+/// # Why this asks only the dialect, not contracts or async type facts
+///
+/// - **Package contracts.** A contract's `ContractCallback` carries an
+///   `execution` of `"tracked"`, but that means "the graph schedules it" —
+///   an `onSettled`-style callback is contract-tracked while its reads do
+///   not subscribe (see `Dialect::callback_tracks_reads_at`). Flagging every
+///   async literal handed to a contract-tracked slot would therefore report
+///   correct code. The engine already threads contract callbacks through its
+///   interprocedural graph, so an actual read-after-await inside one still
+///   surfaces, per-read, as SC1001/SC1002.
+/// - **`can_return_async` type facts.** A non-`async` function that returns
+///   a Promise has no `await`, so every read in it runs before any
+///   suspension and subscribes normally — the defect this rule reports
+///   cannot occur in it.
+///
+/// # Why the 2.0 catalog does not carry this rule
+///
+/// Solid 2.0 models async computations as a feature: an async compute
+/// produces an async accessor the engine tracks through `async_reads` and
+/// the `Loading`-boundary rules (SC5001–SC5003). A blanket "no async in a
+/// tracked slot" would contradict the dialect's own model there; 2.0's
+/// after-await reads are still covered per-read by SC1002.
 fn no_async_tracked_scope(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
@@ -446,13 +501,10 @@ fn expected_function_got_expression(
             // The binding must be a call spanning the whole expression. A bare
             // reference is the correct form, and a call merely *inside* the
             // expression — `onClick={() => save(id())}` — is the fix, not the
-            // defect, so equality with the trimmed text is what matters.
-            let trimmed = text(file, expression).trim();
-            let Some(call) =
-                file.ast.calls.iter().find(|call| {
-                    expression.contains(call.span) && text(file, call.span) == trimmed
-                })
-            else {
+            // defect, so the call's span must be the expression minus its
+            // surrounding whitespace.
+            let call_span = trimmed_span(file, expression);
+            let Some(call) = file.ast.calls.iter().find(|call| call.span == call_span) else {
                 continue;
             };
             let proven_accessor = context
@@ -462,11 +514,7 @@ fn expected_function_got_expression(
                     context.accessors.contains_key(symbol)
                         && context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                 });
-            let proven_not_callable = context
-                .lookup
-                .smallest_contained_descriptor(file.path.as_str(), expression)
-                .is_some_and(|descriptor| is_not_callable(descriptor.text.as_ref()));
-            if !proven_accessor && !proven_not_callable {
+            if !proven_accessor && !proven_not_callable(context, file, expression) {
                 continue;
             }
             violations.push(StaticViolation {
@@ -488,17 +536,71 @@ fn expected_function_got_expression(
     }
 }
 
-/// Whether a resolved type is provably not callable.
+/// Whether the expression's resolved type provably cannot be a listener.
 ///
-/// Conservative by construction: only the primitive types that can never hold
-/// a function count. Anything structural, generic, aliased, or unresolved is
-/// left alone, because a type this cannot read is not proof of anything.
-fn is_not_callable(descriptor: &str) -> bool {
+/// The primary proof is the checker's own [`typefacts::Callability`] verdict,
+/// which TypeScript derives from the actual call signatures of every union
+/// constituent — never from rendered type text. The descriptor-text screen
+/// below is only the fallback for spans whose callability was not demanded,
+/// and only for the primitive types that can never hold a function.
+///
+/// An array- or tuple-shaped type is exempt from the callability proof even
+/// though it has no call signatures: Solid's handler props accept a bound
+/// `[handler, data]` pair, so a call returning one is a factory for a valid
+/// listener, not a mistake.
+fn proven_not_callable(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    expression: Span,
+) -> bool {
+    // Exact-span facts first: the smallest *contained* entity of a call
+    // expression is its callee, whose callability describes the accessor
+    // being called, not the value the call produced.
+    let descriptor = super::expression_descriptor(context, file, expression);
+    let callability = super::expression_callability(context, file, expression);
+    if descriptor
+        .is_some_and(|descriptor| super::array_like_type(descriptor.text.as_ref(), callability))
+    {
+        return false;
+    }
+    match callability {
+        Some(Callability::NonCallable) => true,
+        Some(Callability::Callable | Callability::Mixed) => false,
+        Some(Callability::Unknown) | None => descriptor
+            .map(|descriptor| descriptor.text.as_ref())
+            .or_else(|| {
+                // No fact at the exact span: fall back to the contained
+                // descriptor the rule consulted before exact demands
+                // existed. Text-screened, so a callee's function type never
+                // reads as "not callable".
+                context
+                    .lookup
+                    .smallest_contained_descriptor(file.path.as_str(), expression)
+                    .map(|descriptor| descriptor.text.as_ref())
+            })
+            .is_some_and(is_not_callable_text),
+    }
+}
+
+/// The descriptor-text fallback: only the primitive types that can never
+/// hold a function count. Anything structural, generic, aliased, or
+/// unresolved is left alone, because a type this cannot read is not proof of
+/// anything.
+fn is_not_callable_text(descriptor: &str) -> bool {
     matches!(
         descriptor,
         "string" | "number" | "boolean" | "bigint" | "symbol" | "void" | "null" | "undefined"
     ) || descriptor.starts_with('"')
         || descriptor.parse::<f64>().is_ok()
+}
+
+/// The sub-span of `span` with surrounding whitespace stripped, so a span
+/// can be compared against an exact AST node span without comparing text.
+fn trimmed_span(file: &FileFacts, span: Span) -> Span {
+    let source = text(file, span);
+    let leading = source.len() - source.trim_start().len();
+    let trailing = source.len() - source.trim_end().len();
+    Span::new(span.start + leading as u32, span.end - trailing as u32)
 }
 
 /// The function written at exactly this span, if the argument is a literal
@@ -537,7 +639,7 @@ fn uncalled_accessor(
         // Proven accessor, and specifically an accessor: a store is read by
         // path, not by call, so `store.items` is correct and not this rule's
         // business.
-        let Some((name, declaration)) = context.accessors.get(symbol) else {
+        let Some((name, _)) = context.accessors.get(symbol) else {
             continue;
         };
         let name = name.as_str();
@@ -545,7 +647,12 @@ fn uncalled_accessor(
             continue;
         }
         // A call of the accessor is the correct use; so is passing it on,
-        // which hands the callee something it can call later.
+        // which hands the callee something it can call later. The exemption
+        // is deliberately unconditional: TypeFacts' resolved-call parameter
+        // callability could in principle prove a callee's slot non-callable,
+        // but a non-callable parameter receiving an accessor is already a
+        // type error TypeScript reports itself, and recovery-signature
+        // resolutions would make the "proof" wrong exactly where it fired.
         if is_called(file, identifier.span) || is_argument(file, identifier.span) {
             continue;
         }
@@ -563,7 +670,6 @@ fn uncalled_accessor(
             analysis_context: String::new(),
             fixes: vec![],
         });
-        let _ = declaration;
     }
 }
 
@@ -592,33 +698,55 @@ fn no_direct_mutation(
 ) {
     for assignment in &file.ast.assignments {
         // The assignment target is either the reactive binding itself or the
-        // object of a member chain rooted at one.
+        // object of a member chain rooted at one. The root is resolved with
+        // the same reference-index fallback `uncalled-accessor` uses: an
+        // assignment target is an ordinary operator operand, exactly the
+        // expression shape entity facts may skip (see the field doc on
+        // `source_reference_index`).
         let root = member_root(file, assignment.target).unwrap_or(assignment.target);
-        let Some(symbol) = context.entities.at(file.path.as_str(), root) else {
+        let Some(symbol) = source_symbol_at(context, file, root) else {
             continue;
         };
-        let Some((name, _)) = context.accessors.get(symbol) else {
-            continue;
+        // Proven accessors and proven props roots are both readonly through
+        // members; `prop_sources` covers the props objects the accessor map
+        // does not.
+        let (name, _) = match context.accessors.get(symbol) {
+            Some(source) => source,
+            None => {
+                let Some(source) = context.prop_sources.get(symbol) else {
+                    continue;
+                };
+                source
+            }
         };
+        let props = !context.accessors.contains_key(symbol);
         let name = name.as_str();
         let through_member = root != assignment.target;
         let kind = context.source_kinds.get(symbol).copied();
+        // A props root only misbehaves when written *through* — rebinding a
+        // local `props`-like identifier is shadowing, not a dropped write.
+        if props && !through_member {
+            continue;
+        }
         let (message, hint) = if through_member {
             (
                 format!(
                     "{name:?} is a reactive {} and is written through directly; Solid hands out a readonly proxy, so the write is dropped and nothing re-runs",
-                    match kind {
-                        Some(ReactiveSourceKind::Store) => "store",
-                        _ => "value",
+                    if props {
+                        "props object"
+                    } else {
+                        match kind {
+                            Some(ReactiveSourceKind::Store) => "store",
+                            _ => "value",
+                        }
                     }
                 ),
-                match kind {
-                    Some(ReactiveSourceKind::Store) => format!(
-                        "Write through the store's setter: setStore(\"key\", value), or produce(draft => ...) for an in-place update. Direct assignment to {name} does not notify subscribers."
-                    ),
-                    _ => format!(
+                if !props && kind == Some(ReactiveSourceKind::Store) {
+                    store_write_hint(context, name)
+                } else {
+                    format!(
                         "Props are readonly by design: the parent owns the value. Lift the state to the parent and pass a callback down, rather than assigning to {name}."
-                    ),
+                    )
                 },
             )
         } else {
@@ -638,6 +766,19 @@ fn no_direct_mutation(
             analysis_context: String::new(),
             fixes: vec![],
         });
+    }
+}
+
+/// The store-write hint, phrased in the dialect's own API: 1.x spells an
+/// in-place update `produce`, which 2.0 removed.
+fn store_write_hint(context: &UpstreamCompatContext<'_>, name: &str) -> String {
+    match context.dialect.version() {
+        solid_dialect::Version::V1 => format!(
+            "Write through the store's setter: setStore(\"key\", value), or produce(draft => ...) for an in-place update. Direct assignment to {name} does not notify subscribers."
+        ),
+        solid_dialect::Version::V2 => format!(
+            "Write through the store's setter instead. Direct assignment to {name} does not notify subscribers."
+        ),
     }
 }
 

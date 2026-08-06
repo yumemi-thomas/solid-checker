@@ -7,6 +7,19 @@ use solid_reactive_ir::RuleMetadata;
 pub enum Rule {
     StrictReadUntracked,
     ReactiveReadAfterAwait,
+    // The decomposed upstream-`reactivity` rules shared with the 1.x
+    // dialect: the defects — an accessor used where a value was meant, a
+    // readonly proxy written through, a listener bound to a call's result, a
+    // derivation nothing tracks, a source handed to an undescribed callee —
+    // are version-independent, so both catalogs carry them under the same SC
+    // codes and suppressions survive a migration. `no-async-tracked-scope`
+    // stays 1.x-only: 2.0 models async computations as a feature
+    // (SC5001–SC5003 own that surface).
+    UncalledAccessor,
+    UntrackedDerivedFunction,
+    ExpectedFunctionGotExpression,
+    NoDirectMutation,
+    ReactiveSourceUncaptured,
     ComponentPropsDestructure,
     ComponentReturnsConditionally,
     ReactiveWriteInOwnedScope,
@@ -49,9 +62,14 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 34] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
+        Self::UncalledAccessor,
+        Self::UntrackedDerivedFunction,
+        Self::ExpectedFunctionGotExpression,
+        Self::NoDirectMutation,
+        Self::ReactiveSourceUncaptured,
         Self::ComponentPropsDestructure,
         Self::ComponentReturnsConditionally,
         Self::ReactiveWriteInOwnedScope,
@@ -86,6 +104,20 @@ impl Rule {
         let (code, name, severity, uncertifiable) = match self {
             Self::StrictReadUntracked => ("SC1001", "strict-read-untracked", "warning", false),
             Self::ReactiveReadAfterAwait => ("SC1002", "reactive-read-after-await", "error", false),
+            Self::UncalledAccessor => ("SC1005", "uncalled-accessor", "warning", false),
+            Self::UntrackedDerivedFunction => {
+                ("SC1006", "untracked-derived-function", "warning", false)
+            }
+            Self::ExpectedFunctionGotExpression => (
+                "SC1007",
+                "expected-function-got-expression",
+                "warning",
+                false,
+            ),
+            Self::NoDirectMutation => ("SC2003", "no-direct-mutation", "warning", false),
+            Self::ReactiveSourceUncaptured => {
+                ("SC9011", "reactive-source-uncaptured", "warning", true)
+            }
             Self::ComponentPropsDestructure => {
                 ("SC1003", "component-props-destructure", "error", false)
             }

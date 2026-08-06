@@ -75,6 +75,13 @@ once, caches its snapshot, and projects matching findings into Oxlint. Set
 `settings.solidChecker.project` when the project uses a nonstandard config name
 or a solution-style root config that only references application configs.
 
+Per-rule options (for example `v1/no-innerhtml`'s `allowStatic`) live in the
+project's `.solid-checker/rule-options.json`, which the native analysis
+discovers itself — not in ESLint rule configuration. The adapter runs one
+analysis per project, so a single discovered file is what keeps ESLint, the
+standalone CLI, and every editor integration reading the same options. See
+`docs/rules/README.md` in the repository for the format.
+
 In StackBlitz, WebContainers, or a browser worker, import the process-free
 WASM API from the same package:
 

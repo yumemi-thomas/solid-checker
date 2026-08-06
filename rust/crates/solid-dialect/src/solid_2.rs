@@ -97,6 +97,12 @@ impl Dialect for Solid2 {
         &["solid-js", "@solidjs/web"]
     }
 
+    /// dom-expressions 0.50 (`shared/constants.rs`): `reserved_namespace`
+    /// keeps only `prop`, and `namespaces` maps the four XML prefixes.
+    fn jsx_attribute_namespaces(&self) -> &'static [&'static str] {
+        &["prop", "svg", "mathml", "xlink", "xml"]
+    }
+
     fn primitive(&self, name: &str) -> Option<Primitive> {
         lookup(TABLE, name)
     }

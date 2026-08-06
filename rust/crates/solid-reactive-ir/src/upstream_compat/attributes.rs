@@ -14,24 +14,24 @@
 //! the same "ask what was proven, not what the syntax suggests" preference
 //! [`super::reactivity`] documents for its own rules.
 //!
-//! # What upstream configures that this does not
+//! # Options
 //!
-//! As in `syntax`, this checker has no per-rule options surface, so every
-//! rule below applies upstream's *default*: `no-innerhtml { allowStatic:
-//! true }`, `style-prop { styleProps: ["style"], allowString: false }`,
-//! `event-handlers { ignoreCase: false, warnOnSpread: false }`, and
-//! `prefer-classlist { classnames: ["cn", "clsx", "classnames"] }`.
-//! `warnOnSpread`'s default of `false` means upstream's spread-handler check
-//! never fires under default settings either, so it is not implemented here.
+//! `no-innerhtml { allowStatic }`, `style-prop { styleProps, allowString }`,
+//! `event-handlers { ignoreCase, warnOnSpread }`, and `prefer-classlist
+//! { classnames }` are read from the project's
+//! `.solid-checker/rule-options.json` (see [`super::options`]), defaulting
+//! to upstream's defaults.
 
 use std::collections::HashSet;
 
 use solid_facts::FileFacts;
 use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
-use solid_facts::core::Span;
 
-use super::{UpstreamCompatContext, is_lowercase_led, text};
-use crate::{Fix, StaticViolation, TextEdit, location};
+use super::{
+    UpstreamCompatContext, binding_initializer, contains, fix_replace, is_lowercase_led,
+    literal_string_type, static_string, static_string_expression, text, violation,
+};
+use crate::StaticViolation;
 
 pub(super) fn check_file(
     file: &FileFacts,
@@ -39,12 +39,12 @@ pub(super) fn check_file(
     violations: &mut Vec<StaticViolation>,
 ) {
     for element in &file.ast.jsx_elements {
-        no_innerhtml(file, element, violations);
+        no_innerhtml(file, context, element, violations);
         no_react_specific_props(file, element, violations);
-        style_prop(file, element, violations);
+        style_prop(file, context, element, violations);
         event_handlers(file, context, element, violations);
-        no_array_handlers(file, element, violations);
-        prefer_classlist(file, element, violations);
+        no_array_handlers(file, context, element, violations);
+        prefer_classlist(file, context, element, violations);
     }
 }
 
@@ -55,7 +55,12 @@ pub(super) fn check_file(
 /// unmistakably plain text belongs in `innerText` instead, and a genuinely
 /// dynamic value is a standing XSS risk worth flagging even though nothing
 /// here can prove it unsafe.
-fn no_innerhtml(file: &FileFacts, element: &JsxElementFact, violations: &mut Vec<StaticViolation>) {
+fn no_innerhtml(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    element: &JsxElementFact,
+    violations: &mut Vec<StaticViolation>,
+) {
     for attribute in &element.attributes {
         let name = text(file, attribute.name);
         if name == "dangerouslySetInnerHTML" {
@@ -103,7 +108,32 @@ fn no_innerhtml(file: &FileFacts, element: &JsxElementFact, violations: &mut Vec
                 vec![],
             ));
         }
-        match attribute.value.and_then(|span| static_string(file, span)) {
+        // Upstream's `allowStatic: false`: every innerHTML value is a
+        // reported injection surface, static or not.
+        if !context.options.no_innerhtml.allow_static {
+            violations.push(violation(
+                file,
+                "SC8008",
+                "no-innerhtml",
+                "The innerHTML attribute is dangerous; passing unsanitized input can lead to security vulnerabilities.",
+                "innerHTML injects its value as markup verbatim. This project's rule options reject every innerHTML value; render the content as JSX instead.",
+                attribute.span,
+                vec![],
+            ));
+            continue;
+        }
+        // A value is static when its literal is written here, or when its
+        // resolved type is a string-literal type — the same value, proven by
+        // TypeScript instead of recovered from this file's text.
+        let static_value = attribute
+            .value
+            .and_then(|span| static_string(file, span))
+            .or_else(|| {
+                attribute
+                    .expression
+                    .and_then(|span| literal_string_type(context, file, span))
+            });
+        match static_value {
             Some(value) if !(value.contains('<') && value.contains('>')) => {
                 let mut result = violation(
                     file,
@@ -122,9 +152,9 @@ fn no_innerhtml(file: &FileFacts, element: &JsxElementFact, violations: &mut Vec
                 ));
                 violations.push(result);
             }
-            // `allowStatic` defaults to true and this checker carries no
-            // option to turn it off, so a value proven static at the
-            // literal (containing what looks like a tag) is accepted.
+            // `allowStatic` defaults to true (the `false` case returned
+            // above), so a value proven static at the literal (containing
+            // what looks like a tag) is accepted.
             Some(_) => {}
             None => violations.push(violation(
                 file,
@@ -216,7 +246,12 @@ fn no_react_specific_props(
 /// kebab-case, unlike React's synthetic style object), and a bare numeric
 /// value for a property where that number is ambiguous (Solid never appends
 /// an implicit `px`, unlike React).
-fn style_prop(file: &FileFacts, element: &JsxElementFact, violations: &mut Vec<StaticViolation>) {
+fn style_prop(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    element: &JsxElementFact,
+    violations: &mut Vec<StaticViolation>,
+) {
     const LENGTH_PROPERTIES: &[&str] = &[
         "width",
         "height",
@@ -226,14 +261,18 @@ fn style_prop(file: &FileFacts, element: &JsxElementFact, violations: &mut Vec<S
         "border-width",
         "font-size",
     ];
-    for attribute in element
-        .attributes
-        .iter()
-        .filter(|attribute| text(file, attribute.name) == "style")
-    {
+    // Which props carry styles is upstream's `styleProps` option (default
+    // `["style"]`, and naming others *replaces* the default); `allowString`
+    // accepts the string form instead of asking for an object.
+    let options = &context.options.style_prop;
+    for attribute in element.attributes.iter().filter(|attribute| {
+        let name = text(file, attribute.name);
+        options.style_props.iter().any(|prop| prop == name)
+    }) {
         if let Some((value_span, value)) = attribute
             .value
             .and_then(|span| static_string(file, span).map(|value| (span, value)))
+            .filter(|_| !options.allow_string)
         {
             let mut result = violation(
                 file,
@@ -502,16 +541,13 @@ fn event_handlers(
                 return true;
             }
             // Neither a literal nor an obviously-static local: ask what
-            // TypeScript actually resolved the expression to. This is the
-            // one place in this module that needs a type, not just syntax —
-            // see the module doc.
-            context
-                .lookup
-                .smallest_contained_descriptor(file.path.as_str(), span)
-                .is_some_and(|descriptor| {
-                    matches!(descriptor.text.as_ref(), "string" | "number")
-                        || descriptor.text.starts_with('"')
-                })
+            // TypeScript actually resolved the whole expression to. Exact
+            // span, so a string-typed operand inside a larger expression
+            // cannot answer for it. This proves cases upstream's constant
+            // folder cannot ('string' + dynamic() is always a string), which
+            // is a declared, evidence-backed parity deviation.
+            super::expression_descriptor(context, file, span)
+                .is_some_and(|descriptor| static_string_or_number_type(descriptor.text.as_ref()))
         });
         if type_is_static
             || matches!(
@@ -536,6 +572,11 @@ fn event_handlers(
                 attribute.span,
                 vec![],
             ));
+            continue;
+        }
+        // Upstream's `ignoreCase`: handler names are accepted as written, so
+        // the canonical-spelling and ambiguous-name advice below is off.
+        if context.options.event_handlers.ignore_case {
             continue;
         }
         let fixed = if name.eq_ignore_ascii_case("ondoubleclick") {
@@ -593,6 +634,39 @@ fn event_handlers(
             ));
         }
     }
+    // Upstream's `warnOnSpread`: a handler-named property carried into a DOM
+    // element through a JSX spread. Solid attaches listeners from attributes
+    // the compiler can see; a spread delivers the value as a plain property
+    // at runtime instead. Off by default, matching upstream.
+    if context.options.event_handlers.warn_on_spread {
+        for spread in &element.spreads {
+            for property in
+                file.ast.object_properties.iter().filter(|property| {
+                    !property.computed && contains(spread.argument, property.span)
+                })
+            {
+                let key = text(file, property.key)
+                    .trim_matches(['\'', '"'])
+                    .to_owned();
+                if !key.starts_with("on")
+                    || !key.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic)
+                {
+                    continue;
+                }
+                violations.push(violation(
+                    file,
+                    "SC8001",
+                    "event-handlers",
+                    format!(
+                        "The {key} prop should be written as a JSX attribute, not spread in; Solid attaches listeners from attributes its compiler can see."
+                    ),
+                    format!("Move {key} out of the spread and write it directly on the element."),
+                    property.span,
+                    vec![],
+                ));
+            }
+        }
+    }
 }
 
 /// `v1/no-array-handlers` (SC8007) — an array literal passed where an event
@@ -601,6 +675,7 @@ fn event_handlers(
 /// array where a function was meant compiles but silently does nothing.
 fn no_array_handlers(
     file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
     element: &JsxElementFact,
     violations: &mut Vec<StaticViolation>,
 ) {
@@ -618,6 +693,20 @@ fn no_array_handlers(
             continue;
         }
         let array = attribute.expression.is_some_and(|span| {
+            // When TypeScript resolved the whole value's type, that verdict
+            // is the answer: an array- or tuple-typed value is an array
+            // handler however it was spelled (`handlers` bound in another
+            // file), and a value the author cast to a purpose-built type
+            // (`pair as SafeArray<number>`) renders as that type, not as a
+            // tuple — the same vouching upstream honours for casts. Only
+            // without a resolved type does the rule fall back to this
+            // file's spelling, where the cast itself is the bail.
+            if let Some(descriptor) = super::expression_descriptor(context, file, span) {
+                return super::array_like_type(
+                    descriptor.text.as_ref(),
+                    super::expression_callability(context, file, span),
+                );
+            }
             let source = text(file, span).trim();
             if source.contains(" as ") {
                 return false;
@@ -645,6 +734,20 @@ fn looks_like_array_literal(source: &str) -> bool {
     source.starts_with('[')
 }
 
+/// Whether a rendered type is statically a string or number: the primitives
+/// themselves, a string/number/template literal type, or a union of those.
+/// The naive `|` split is conservative: a `|` inside a generic or a quoted
+/// literal splits into parts that fail the per-part test, so a type this
+/// cannot read is never called static.
+fn static_string_or_number_type(descriptor: &str) -> bool {
+    descriptor.split('|').map(str::trim).all(|part| {
+        matches!(part, "string" | "number")
+            || part.starts_with('"')
+            || part.starts_with('`')
+            || part.parse::<f64>().is_ok()
+    })
+}
+
 /// `v1/prefer-classlist` (SC8013) — a `class`/`className` prop set from a
 /// `classnames`-shaped helper call (`cn`, `clsx`, `classnames`) applied to an
 /// object literal. Solid's `classlist` prop accepts that exact `{ [name]:
@@ -653,10 +756,13 @@ fn looks_like_array_literal(source: &str) -> bool {
 /// every render.
 fn prefer_classlist(
     file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
     element: &JsxElementFact,
     violations: &mut Vec<StaticViolation>,
 ) {
-    const CLASSNAME_HELPERS: &[&str] = &["cn", "clsx", "classnames"];
+    // Which helper names count is upstream's `classnames` option; the
+    // default is upstream's default list.
+    let helpers = &context.options.prefer_classlist.classnames;
     if element
         .attributes
         .iter()
@@ -683,7 +789,7 @@ fn prefer_classlist(
         let Some(callee) = call.static_callee(&file.source) else {
             continue;
         };
-        if !CLASSNAME_HELPERS.contains(&callee)
+        if !helpers.iter().any(|helper| helper == callee)
             || !text(file, call.arguments[0].span)
                 .trim_start()
                 .starts_with('{')
@@ -701,132 +807,36 @@ fn prefer_classlist(
             attribute.span,
             vec![],
         );
-        result.fixes.push(fix_replace(
-            file,
-            attribute.span,
-            "rewrite as classlist",
-            format!("classlist={{{}}}", text(file, call.arguments[0].span)),
-        ));
+        // The report matches on the helper's conventional names, as upstream
+        // does — but a rewrite is only behaviour-preserving when the callee
+        // really is the classnames-style helper, not a local function that
+        // happens to share a name. An import from one of the packages is that
+        // proof; without it the report stands and the fix is withheld.
+        let imported_helper = file.ast.imports.iter().any(|import| {
+            matches!(import.module.as_str(), "clsx" | "classnames")
+                && import
+                    .bindings
+                    .iter()
+                    .any(|binding| text(file, binding.local.span) == callee)
+        });
+        if imported_helper {
+            result.fixes.push(fix_replace(
+                file,
+                attribute.span,
+                "rewrite as classlist",
+                format!("classlist={{{}}}", text(file, call.arguments[0].span)),
+            ));
+        }
         violations.push(result);
-    }
-}
-
-// --- shared helpers -------------------------------------------------------
-
-fn contains(outer: Span, inner: Span) -> bool {
-    outer.start <= inner.start && inner.end <= outer.end
-}
-
-fn binding_initializer<'a>(file: &'a FileFacts, name: &str) -> Option<(Span, &'a str)> {
-    file.ast.bindings.iter().find_map(|binding| {
-        binding
-            .names
-            .iter()
-            .any(|candidate| text(file, candidate.span) == name)
-            .then(|| binding.initializer.map(|span| (span, text(file, span))))
-            .flatten()
-    })
-}
-
-fn static_string_expression(file: &FileFacts, span: Span) -> Option<String> {
-    let source = text(file, span).trim();
-    if !source.contains('+')
-        && let Some(value) = static_string(file, span)
-    {
-        return Some(unescape_common_sequences(&value));
-    }
-    if source
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$'))
-    {
-        return binding_initializer(file, source)
-            .and_then(|(initializer, _)| static_string_expression(file, initializer));
-    }
-    concat_plus_joined_literal(source)
-}
-
-fn unescape_common_sequences(value: &str) -> String {
-    value
-        .replace("\\t", "\t")
-        .replace("\\n", "\n")
-        .replace("\\r", "\r")
-}
-
-fn concat_plus_joined_literal(source: &str) -> Option<String> {
-    let parts = source.split('+').map(str::trim).collect::<Vec<_>>();
-    if parts.len() <= 1 {
-        return None;
-    }
-    parts
-        .into_iter()
-        .map(|part| {
-            let quote = part.as_bytes().first().copied()?;
-            (matches!(quote, b'\'' | b'"') && part.as_bytes().last().copied() == Some(quote))
-                .then(|| part[1..part.len() - 1].to_owned())
-        })
-        .collect::<Option<Vec<_>>>()
-        .map(|parts| parts.concat())
-}
-
-fn static_string(file: &FileFacts, span: Span) -> Option<String> {
-    strip_string_literal(text(file, span))
-}
-
-fn strip_string_literal(source: &str) -> Option<String> {
-    let trimmed = source.trim();
-    let trimmed = trimmed
-        .strip_prefix('{')
-        .and_then(|value| value.strip_suffix('}'))
-        .map(str::trim)
-        .unwrap_or(trimmed);
-    let quote = trimmed.as_bytes().first().copied()?;
-    if !matches!(quote, b'\'' | b'"' | b'`') || trimmed.as_bytes().last().copied() != Some(quote) {
-        return None;
-    }
-    Some(trimmed[1..trimmed.len() - 1].to_owned())
-}
-
-fn fix_replace(
-    file: &FileFacts,
-    span: Span,
-    message: impl Into<String>,
-    new_text: impl Into<String>,
-) -> Fix {
-    Fix {
-        message: message.into(),
-        applicability: "safe".into(),
-        edits: vec![TextEdit {
-            location: location(file.path.shared(), span),
-            new_text: new_text.into(),
-        }],
-    }
-}
-
-fn violation(
-    file: &FileFacts,
-    id: &str,
-    rule: &str,
-    message: impl Into<String>,
-    hint: impl Into<String>,
-    span: Span,
-    fixes: Vec<Fix>,
-) -> StaticViolation {
-    StaticViolation {
-        id: id.into(),
-        rule: rule.into(),
-        message: message.into(),
-        hint: hint.into(),
-        location: location(file.path.shared(), span),
-        analysis_context: String::new(),
-        fixes,
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use super::super::strip_string_literal;
     use super::{
-        event_name, is_lowercase_led, looks_like_array_literal, strip_string_literal,
-        style_string_object_fix, to_kebab_case,
+        event_name, is_lowercase_led, looks_like_array_literal, style_string_object_fix,
+        to_kebab_case,
     };
 
     #[test]

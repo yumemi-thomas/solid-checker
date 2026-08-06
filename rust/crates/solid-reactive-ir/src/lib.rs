@@ -12,6 +12,8 @@ mod static_api;
 mod symbols;
 mod upstream_compat;
 
+pub use upstream_compat::options::RuleOptions;
+
 pub use findings::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
 
 use std::{
@@ -568,6 +570,9 @@ struct BuildIdentity {
     project_id: String,
     generation: u64,
     contracts: Vec<String>,
+    /// Per-rule options change what the static pass emits, so two runs with
+    /// different options never share a retained program.
+    rule_options: RuleOptions,
 }
 
 struct RetainedBuild {
@@ -1140,7 +1145,7 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, dialect, &[])
+        self.build_with_contracts_shared(facts, dialect, &[], &RuleOptions::default())
     }
 
     pub fn build_with_contracts(
@@ -1149,7 +1154,7 @@ impl IncrementalBuilder {
         dialect: &dyn Dialect,
         contracts: &[PackageContract],
     ) -> Result<(Program, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, dialect, contracts)
+        self.build_with_contracts_shared(facts, dialect, contracts, &RuleOptions::default())
             .map(|(program, timings)| ((*program).clone(), timings))
     }
 
@@ -1159,6 +1164,7 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
         contracts: &[PackageContract],
+        rule_options: &RuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
         let total_started = Instant::now();
         let lookup_started = Instant::now();
@@ -1170,6 +1176,7 @@ impl IncrementalBuilder {
                 .iter()
                 .map(|contract| format!("{contract:?}"))
                 .collect(),
+            rule_options: rule_options.clone(),
         };
         let source_discovery_domain = (
             format!("{:?}::{}", identity.dialect, identity.project_id),
@@ -1205,6 +1212,7 @@ impl IncrementalBuilder {
             facts,
             dialect,
             contracts,
+            rule_options,
             BuildCaches {
                 ast_indexes: Some(&mut self.ast_indexes),
                 source_discovery: Some(&mut self.source_discovery),
@@ -1763,7 +1771,13 @@ pub fn build_with_contracts_measured(
     dialect: &dyn Dialect,
     contracts: &[PackageContract],
 ) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_contracts_measured_incremental(facts, dialect, contracts, BuildCaches::default())
+    build_with_contracts_measured_incremental(
+        facts,
+        dialect,
+        contracts,
+        &RuleOptions::default(),
+        BuildCaches::default(),
+    )
 }
 
 /// Owned reactive-source facts produced by the source-discovery stage and
@@ -2649,6 +2663,7 @@ fn build_with_contracts_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
     contracts: &[PackageContract],
+    rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
 ) -> Result<(Program, BuildTimings), BuildError> {
     let BuildCaches {
@@ -3443,10 +3458,12 @@ fn build_with_contracts_measured_incremental(
     let contract_exports = interprocedural.exports;
     let mut contract_generation_obligations =
         interprocedural.contract_generation_obligations.to_vec();
-    // The upstream-compat surface: file-local rules only the dialects that
-    // catalog them expose. Gated per dialect so a v2 project never pays for
-    // (or sees) a rule its catalog does not declare.
-    if dialect.version() == solid_dialect::Version::V1 {
+    // The upstream-compat surface. Both dialects run it: the decomposed
+    // `reactivity` rules apply to both language versions, while the
+    // 1.x-only ESLint-era groups are gated inside
+    // `upstream_compat::check_file`, next to the catalogs' version table it
+    // mirrors.
+    {
         let mut source_reference_index: HashMap<String, HashMap<(u64, u64), SymbolId>> =
             HashMap::new();
         for (symbol, references) in &references_by_source {
@@ -3466,6 +3483,7 @@ fn build_with_contracts_measured_incremental(
             prop_sources: &prop_sources,
             source_reference_index,
             contracted: &resolved_contracts.by_symbol,
+            options: rule_options,
         };
         static_violations.extend(
             parallel_file_results(&facts.files, |file| {

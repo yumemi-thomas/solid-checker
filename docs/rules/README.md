@@ -22,6 +22,35 @@ Findings come in two kinds:
 - **uncertifiable** — the analyzer could not prove the code correct; the page for
   each `SC9xxx` rule explains how to make the code provable.
 
+## Rule options
+
+Six of the 1.x ESLint-surface rules carry the upstream options their behaviour
+depends on: [v1/event-handlers](v1/event-handlers.md),
+[v1/no-innerhtml](v1/no-innerhtml.md),
+[v1/self-closing-comp](v1/self-closing-comp.md),
+[v1/prefer-classlist](v1/prefer-classlist.md),
+[v1/style-prop](v1/style-prop.md), and
+[v1/no-unknown-namespaces](v1/no-unknown-namespaces.md). They are configured
+in one project-level document, `.solid-checker/rule-options.json`, discovered
+by the same ancestor walk as `.solid-checker/contracts/`:
+
+```json
+{
+  "schemaVersion": 1,
+  "rules": {
+    "v1/no-innerhtml": { "allowStatic": false },
+    "v1/style-prop": { "styleProps": ["style", "css"] }
+  }
+}
+```
+
+An absent file means upstream's defaults; a file naming an unknown rule or
+option key fails the analysis rather than silently meaning "defaults". There
+is deliberately no per-ESLint-config channel: the npm adapter runs one
+analysis per project, so a single discovered file is what keeps the CLI, the
+daemon, ESLint, and every editor integration reading the same configuration.
+Each rule's page documents its options and defaults.
+
 ## Tracking & component semantics
 
 | Code | Rule | Severity |
@@ -30,6 +59,9 @@ Findings come in two kinds:
 | SC1002 | [reactive-read-after-await](reactive-read-after-await.md) | error |
 | SC1003 | [component-props-destructure](component-props-destructure.md) | error |
 | SC1004 | [component-returns-conditionally](component-returns-conditionally.md) | error |
+| SC1005 | [uncalled-accessor](uncalled-accessor.md) | warning |
+| SC1006 | [untracked-derived-function](untracked-derived-function.md) | warning |
+| SC1007 | [expected-function-got-expression](expected-function-got-expression.md) | warning |
 
 ## Writes & actions
 
@@ -37,6 +69,7 @@ Findings come in two kinds:
 | --- | --- | --- |
 | SC2001 | [reactive-write-in-owned-scope](reactive-write-in-owned-scope.md) | error |
 | SC2002 | [action-called-in-owned-scope](action-called-in-owned-scope.md) | error |
+| SC2003 | [no-direct-mutation](no-direct-mutation.md) | warning |
 
 ## Leaf owners & cleanup
 
@@ -90,7 +123,16 @@ Findings come in two kinds:
 | SC9003 | [affects-target-unresolved](affects-target-unresolved.md) | error |
 | SC9004 | [execution-map-incomplete](execution-map-incomplete.md) | error |
 | SC9005 | [package-contract-missing](package-contract-missing.md) | error |
+| SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning |
 
+Five of the fine-grained rules decomposed out of `eslint-plugin-solid`'s
+`reactivity` (see [the migration table](#solidreactivity--the-fine-grained-rules))
+describe defects that exist in both language versions — `uncalled-accessor`,
+`untracked-derived-function`, `expected-function-got-expression`,
+`no-direct-mutation`, and `reactive-source-uncaptured` — so the 2.0 catalog
+carries them too, under the same codes. `no-async-tracked-scope` stays
+1.x-only: Solid 2.0 models async computations as a feature, and its async
+surface is owned by SC5001–SC5003.
 
 ## Solid 1.x
 

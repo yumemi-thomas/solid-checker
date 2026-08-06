@@ -35,57 +35,21 @@
     "status": "evidence-backed",
     "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
   },
-  "event-handlers__invalid__13": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"warnOnSpread\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "event-handlers__invalid__14": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"warnOnSpread\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "event-handlers__invalid__15": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"warnOnSpread\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "event-handlers__valid__10": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"ignoreCase\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "event-handlers__valid__11": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"ignoreCase\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+  "event-handlers__valid__01": {
+    "status": "evidence-backed",
+    "reason": "TypeScript proves 'string' + some_func() is a string ('+' with a string operand always yields one), so the onLy value is provably never a listener; upstream's constant folder cannot fold past the call and stays silent."
   },
   "jsx-no-undef__valid__05": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"typescriptEnabled\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
+    "status": "policy",
+    "reason": "Upstream's typescriptEnabled tells the rule to stay silent because tsc will report TS2304 for the undefined component itself. This checker's certification must not depend on a separate tsc invocation being run and read, so it reports the undefined component regardless; the option is deliberately not carried."
+  },
+  "no-array-handlers__valid__10": {
+    "status": "evidence-backed",
+    "reason": "SafeArray is undeclared in this corpus case, so the cast fails to resolve and TypeScript types the expression as the tuple itself, which the checker correctly reports as an array handler. In a real project the cast resolves to SafeArray<number> and the checker honours it, exactly as upstream intends."
   },
   "no-destructure__valid__10": {
     "status": "evidence-backed",
     "reason": "Upstream's own comment says this is caught by solid/reactivity rather than by no-destructure; the checker reports it from the destructure rule instead of a second one."
-  },
-  "no-innerhtml__invalid__00": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"allowStatic\":false}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "no-innerhtml__invalid__01": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"allowStatic\":false}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "no-innerhtml__invalid__02": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"allowStatic\":false}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "no-unknown-namespaces__valid__10": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"allowedNamespaces\":[\"foo\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "prefer-classlist__invalid__03": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"classnames\":[\"x\",\"y\",\"z\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "prefer-classlist__valid__10": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"classnames\":[\"x\",\"y\",\"z\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
   },
   "reactivity__invalid__13": {
     "status": "evidence-backed",
@@ -178,65 +142,5 @@
   "reactivity__valid__73": {
     "status": "policy",
     "reason": "strict-read-untracked requires one-time component-prop snapshots to be explicit with untrack. The fact that the local is currently unused does not change the execution contract or make the implicit snapshot certifiable."
-  },
-  "self-closing-comp__invalid__02": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"html\":\"void\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "self-closing-comp__invalid__03": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"html\":\"void\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "self-closing-comp__invalid__04": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "self-closing-comp__invalid__05": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "self-closing-comp__invalid__08": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"component\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "self-closing-comp__valid__11": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "self-closing-comp__valid__12": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "self-closing-comp__valid__13": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"html\":\"void\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "self-closing-comp__valid__14": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"html\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "self-closing-comp__valid__15": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"component\":\"none\"}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "style-prop__invalid__05": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"styleProps\":[\"style\",\"css\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "style-prop__invalid__06": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"styleProps\":[\"css\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "style-prop__valid__10": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"allowString\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "style-prop__valid__11": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"allowString\":true}]); the checker's rules take no options, so the configured behaviour has no equivalent."
-  },
-  "style-prop__valid__13": {
-    "status": "unsupported-option",
-    "reason": "Upstream configures the rule for this case ([{\"styleProps\":[\"css\"]}]); the checker's rules take no options, so the configured behaviour has no equivalent."
   }
 }

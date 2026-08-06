@@ -16,7 +16,7 @@ documentation.
 > subpath discussion below describes the `1.x` branch's wire-version-2 contract
 > shape, which this branch does not have: here the bundled 1.x contract is
 > keyed by export name and the subpath question is answered by
-> `Dialect::export_modules`, reported as SC7005.
+> `Dialect::export_modules`, reported as SC8002 (`v1/imports`).
 >
 > That index is *generated* from the installed package, not read from this
 > file, and the two are cross-checked: a dialect test asserts every name in

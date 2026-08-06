@@ -105,6 +105,22 @@ impl Dialect for Solid1x {
         ]
     }
 
+    /// The 1.x dom-expressions `reservedNameSpaces` (`on`, `oncapture`,
+    /// `use`, `prop`, `attr`, `bool`) plus the XML prefixes the compiler
+    /// passes through (`xmlns`, `xlink`).
+    fn jsx_attribute_namespaces(&self) -> &'static [&'static str] {
+        &[
+            "on",
+            "oncapture",
+            "use",
+            "prop",
+            "attr",
+            "bool",
+            "xmlns",
+            "xlink",
+        ]
+    }
+
     fn primitive(&self, name: &str) -> Option<Primitive> {
         lookup(TABLE, name).or_else(|| lookup(ALIASES, name))
     }

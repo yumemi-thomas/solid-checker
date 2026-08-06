@@ -4,22 +4,21 @@
 //! `solid_1_rules.rs` onto this checker's fact tables.
 //!
 //! Every rule here reads `file.ast.jsx_elements` and its nested attribute /
-//! spread / object-property tables; none needs a TypeScript entity lookup, so
-//! `check_file` does not touch `context` beyond the shape the caller shares
-//! with every other upstream-compat module.
+//! spread / object-property tables. The context is consulted twice, both
+//! times for vocabulary rather than syntax: `jsx-no-script-url` recovers a
+//! URL from a literal string *type* when the value's text lives in another
+//! file, and `no-unknown-namespaces` asks the dialect which namespace
+//! prefixes its compiler recognizes.
 //!
-//! # What upstream configures that this does not
+//! # Options
 //!
-//! Upstream ships `jsx-no-duplicate-props { ignoreCase }`,
-//! `no-unknown-namespaces { allowedNamespaces }`, and
-//! `self-closing-comp { component, html }` as user-configurable options. This
-//! checker has no per-rule options surface, so every rule below applies
-//! upstream's *default* — `ignoreCase: false`, no extra allowed namespaces,
-//! `component: "all"` and `html: "all"`. The last of those collapses
-//! self-closing-comp to one direction: with both defaulted to `"all"`, an
-//! element that already self-closes can never be "wrong" to do so, so only
-//! the "should self-close but doesn't" case is reachable, and that is the
-//! only case implemented.
+//! `no-unknown-namespaces { allowedNamespaces }` and `self-closing-comp
+//! { component, html }` are read from the project's
+//! `.solid-checker/rule-options.json` (see [`super::options`]), defaulting
+//! to upstream's defaults. `jsx-no-duplicate-props { ignoreCase }` is the
+//! one option upstream ships here that the checker does not carry: no
+//! upstream corpus case exercises a behaviour difference for it, and an
+//! option nothing proves is a knob that can silently rot.
 
 use std::collections::HashSet;
 
@@ -27,19 +26,22 @@ use solid_facts::FileFacts;
 use solid_facts::ast::JsxElementFact;
 use solid_facts::core::Span;
 
-use super::{UpstreamCompatContext, is_lowercase_led, text};
-use crate::{Fix, StaticViolation, TextEdit, location};
+use super::{
+    UpstreamCompatContext, contains, fix_replace, is_lowercase_led, static_string_expression, text,
+    violation,
+};
+use crate::StaticViolation;
 
 pub(super) fn check_file(
     file: &FileFacts,
-    _context: &UpstreamCompatContext<'_>,
+    context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
     for element in &file.ast.jsx_elements {
         jsx_no_duplicate_props(file, element, violations);
-        jsx_no_script_url(file, element, violations);
-        no_unknown_namespaces(file, element, violations);
-        self_closing_comp(file, element, violations);
+        jsx_no_script_url(file, context, element, violations);
+        no_unknown_namespaces(file, context, element, violations);
+        self_closing_comp(file, context, element, violations);
     }
 }
 
@@ -156,15 +158,18 @@ fn normalize_prop_name(original: &str) -> String {
 /// real event handler.
 fn jsx_no_script_url(
     file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
     element: &JsxElementFact,
     violations: &mut Vec<StaticViolation>,
 ) {
     for attribute in &element.attributes {
-        let Some(value) = attribute
-            .expression
-            .or(attribute.value)
-            .and_then(|span| static_string_expression(file, span))
-        else {
+        // The text folder recovers this file's literal shapes; the
+        // literal-string *type* recovers the same value when the binding
+        // lives elsewhere (an import, an inferred const in another file).
+        let Some(value) = attribute.expression.or(attribute.value).and_then(|span| {
+            static_string_expression(file, span)
+                .or_else(|| super::literal_string_type(context, file, span))
+        }) else {
             continue;
         };
         if is_javascript_protocol(&value) {
@@ -204,19 +209,16 @@ fn is_javascript_protocol(value: &str) -> bool {
 /// more plainly).
 fn no_unknown_namespaces(
     file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
     element: &JsxElementFact,
     violations: &mut Vec<StaticViolation>,
 ) {
-    const KNOWN: &[&str] = &[
-        "on",
-        "oncapture",
-        "use",
-        "prop",
-        "attr",
-        "bool",
-        "xmlns",
-        "xlink",
-    ];
+    // Which prefixes the compiler recognizes is dialect vocabulary, asked of
+    // the dialect rather than baked into the rule: the 2.0 compiler dropped
+    // every 1.x namespace except `prop:`. Upstream's `allowedNamespaces`
+    // option accepts extra prefixes on top.
+    let known = context.dialect.jsx_attribute_namespaces();
+    let allowed = &context.options.no_unknown_namespaces.allowed_namespaces;
     let component = !is_lowercase_led(text(file, element.name.span));
     for attribute in element
         .attributes
@@ -258,7 +260,7 @@ fn no_unknown_namespaces(
                 attribute.name,
                 vec![],
             )
-        } else if !KNOWN.contains(&namespace) {
+        } else if !known.contains(&namespace) && !allowed.iter().any(|extra| extra == namespace) {
             violation(
                 file,
                 "SC8012",
@@ -278,31 +280,94 @@ fn no_unknown_namespaces(
     }
 }
 
-/// `v1/self-closing-comp` (SC8016) — an element with no children (or only
-/// insignificant whitespace between its tags) that is not self-closing.
-/// See the module doc for why only this direction is implemented.
+/// The HTML elements with no closing tag; the only ones upstream's
+/// `html: "void"` policy wants self-closed.
+fn is_void_element(name: &str) -> bool {
+    matches!(
+        name,
+        "area"
+            | "base"
+            | "br"
+            | "col"
+            | "embed"
+            | "hr"
+            | "img"
+            | "input"
+            | "link"
+            | "meta"
+            | "param"
+            | "source"
+            | "track"
+            | "wbr"
+    )
+}
+
+/// `v1/self-closing-comp` (SC8016) — an element whose self-closing form
+/// disagrees with the configured policy for its category. Under upstream's
+/// defaults (`component: "all"`, `html: "all"`) only one direction is
+/// reachable — a childless element that fails to self-close — and that is
+/// all this rule reported before options existed. A `"none"` (or, for HTML,
+/// `"void"`) policy makes the inverse reachable: an element that self-closes
+/// where the policy says it must not.
 fn self_closing_comp(
     file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
     element: &JsxElementFact,
     violations: &mut Vec<StaticViolation>,
 ) {
-    if element.self_closing || !children_are_insignificant(file, element) {
-        return;
-    }
-    violations.push(violation(
-        file,
-        "SC8016",
-        "self-closing-comp",
-        "Empty components are self-closing.",
-        "Self-close this tag: it has no meaningful children, so the separate closing tag is unnecessary.",
-        element.opening,
-        vec![fix_replace(
+    use crate::upstream_compat::options::SelfClosePolicy;
+    let options = &context.options.self_closing_comp;
+    let name = text(file, element.name.span);
+    let component = !is_lowercase_led(name);
+    let policy = if component {
+        // `void` is not a meaningful component policy (upstream's schema
+        // forbids it); treat it as the default.
+        match options.component {
+            SelfClosePolicy::Void => SelfClosePolicy::All,
+            policy => policy,
+        }
+    } else {
+        options.html
+    };
+    let wanted = match policy {
+        SelfClosePolicy::All => true,
+        SelfClosePolicy::Void => is_void_element(name),
+        SelfClosePolicy::None => false,
+    };
+    if wanted {
+        if element.self_closing || !children_are_insignificant(file, element) {
+            return;
+        }
+        violations.push(violation(
             file,
-            Span::new(element.opening.end.saturating_sub(1), element.span.end),
-            "self-close the tag",
-            " />",
-        )],
-    ));
+            "SC8016",
+            "self-closing-comp",
+            "Empty components are self-closing.",
+            "Self-close this tag: it has no meaningful children, so the separate closing tag is unnecessary.",
+            element.opening,
+            vec![fix_replace(
+                file,
+                Span::new(element.opening.end.saturating_sub(1), element.span.end),
+                "self-close the tag",
+                " />",
+            )],
+        ));
+    } else if element.self_closing {
+        violations.push(violation(
+            file,
+            "SC8016",
+            "self-closing-comp",
+            "This element should not be self-closing.",
+            "Write the closing tag out: this project's rule options ask for explicit closing tags here.",
+            element.opening,
+            vec![fix_replace(
+                file,
+                Span::new(element.span.end.saturating_sub(2), element.span.end),
+                "write the closing tag",
+                format!("></{name}>"),
+            )],
+        ));
+    }
 }
 
 /// Whether an opening tag has nothing between it and its closing tag worth
@@ -321,148 +386,9 @@ fn children_are_insignificant(file: &FileFacts, element: &JsxElementFact) -> boo
         })
 }
 
-// --- shared helpers -------------------------------------------------------
-
-/// Whether `outer` fully contains `inner`, byte-range-wise. Used to find the
-/// object properties belonging to a `{...spread}` argument, and nothing
-/// deeper: a nested object literal several levels down is not "contained" any
-/// less by this test, which is exactly the same imprecision upstream's own
-/// scope-walking has for a spread of a computed expression.
-fn contains(outer: Span, inner: Span) -> bool {
-    outer.start <= inner.start && inner.end <= outer.end
-}
-
-/// The static string an attribute value or expression resolves to, following
-/// one level of local variable indirection and one level of `+`
-/// concatenation. Not a general constant-folder: it is exactly the shape
-/// upstream's own scope-based `getStaticValue` recovers for the common
-/// `javascript:` URL patterns (a literal, a `const url = "..."`, or
-/// `"javascript:" + something`), no more.
-fn static_string_expression(file: &FileFacts, span: Span) -> Option<String> {
-    let source = text(file, span).trim();
-    if !source.contains('+')
-        && let Some(value) = static_string(file, span)
-    {
-        return Some(unescape_common_sequences(&value));
-    }
-    if source
-        .bytes()
-        .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$'))
-    {
-        return binding_initializer(file, source)
-            .and_then(|(initializer, _)| static_string_expression(file, initializer));
-    }
-    concat_plus_joined_literal(source)
-}
-
-fn unescape_common_sequences(value: &str) -> String {
-    value
-        .replace("\\t", "\t")
-        .replace("\\n", "\n")
-        .replace("\\r", "\r")
-}
-
-/// Joins a `"a" + "b" + ...` chain of quoted literals into their concatenated
-/// value, or `None` if any `+`-separated part is not itself a quoted literal
-/// (including the degenerate case of no `+` at all).
-fn concat_plus_joined_literal(source: &str) -> Option<String> {
-    let parts = source.split('+').map(str::trim).collect::<Vec<_>>();
-    if parts.len() <= 1 {
-        return None;
-    }
-    parts
-        .into_iter()
-        .map(|part| {
-            let quote = part.as_bytes().first().copied()?;
-            (matches!(quote, b'\'' | b'"') && part.as_bytes().last().copied() == Some(quote))
-                .then(|| part[1..part.len() - 1].to_owned())
-        })
-        .collect::<Option<Vec<_>>>()
-        .map(|parts| parts.concat())
-}
-
-/// The declaration text of the nearest binding named `name` in this file, for
-/// resolving a bare identifier used as an attribute value back to its
-/// initializer. First match in file order, matching the reference port; a
-/// real scope resolution is more than this narrow rule needs.
-fn binding_initializer<'a>(file: &'a FileFacts, name: &str) -> Option<(Span, &'a str)> {
-    file.ast.bindings.iter().find_map(|binding| {
-        binding
-            .names
-            .iter()
-            .any(|candidate| text(file, candidate.span) == name)
-            .then(|| binding.initializer.map(|span| (span, text(file, span))))
-            .flatten()
-    })
-}
-
-/// The literal text of a quoted string span, unwrapping one optional
-/// surrounding `{ ... }` JSX expression-container layer first (an
-/// attribute's `value` span includes the braces when it came from
-/// `attr={"literal"}` rather than `attr="literal"`).
-fn static_string(file: &FileFacts, span: Span) -> Option<String> {
-    strip_string_literal(text(file, span))
-}
-
-fn strip_string_literal(source: &str) -> Option<String> {
-    let trimmed = source.trim();
-    let trimmed = trimmed
-        .strip_prefix('{')
-        .and_then(|value| value.strip_suffix('}'))
-        .map(str::trim)
-        .unwrap_or(trimmed);
-    let quote = trimmed.as_bytes().first().copied()?;
-    if !matches!(quote, b'\'' | b'"' | b'`') || trimmed.as_bytes().last().copied() != Some(quote) {
-        return None;
-    }
-    Some(trimmed[1..trimmed.len() - 1].to_owned())
-}
-
-fn fix_replace(
-    file: &FileFacts,
-    span: Span,
-    message: impl Into<String>,
-    new_text: impl Into<String>,
-) -> Fix {
-    Fix {
-        message: message.into(),
-        applicability: "safe".into(),
-        edits: vec![TextEdit {
-            location: location(file.path.shared(), span),
-            new_text: new_text.into(),
-        }],
-    }
-}
-
-/// Builds a static violation, filling in the boilerplate every rule above
-/// shares (identity, location, and an empty `analysis_context` — the rules
-/// that need one, like `no-unknown-namespaces`, set it after the call).
-fn violation(
-    file: &FileFacts,
-    id: &str,
-    rule: &str,
-    message: impl Into<String>,
-    hint: impl Into<String>,
-    span: Span,
-    fixes: Vec<Fix>,
-) -> StaticViolation {
-    StaticViolation {
-        id: id.into(),
-        rule: rule.into(),
-        message: message.into(),
-        hint: hint.into(),
-        location: location(file.path.shared(), span),
-        analysis_context: String::new(),
-        fixes,
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{
-        concat_plus_joined_literal, is_javascript_protocol, is_lowercase_led, normalize_prop_name,
-        strip_string_literal,
-    };
+    use super::{is_javascript_protocol, is_lowercase_led, normalize_prop_name};
 
     #[test]
     fn normalizes_on_prefixed_names_to_lowercase_on() {
@@ -501,42 +427,6 @@ mod tests {
         assert!(!is_javascript_protocol("https://example.com"));
         assert!(!is_javascript_protocol("/relative/path"));
         assert!(!is_javascript_protocol(""));
-    }
-
-    #[test]
-    fn strips_quotes_from_string_literals() {
-        assert_eq!(strip_string_literal("\"hello\""), Some("hello".to_string()));
-        assert_eq!(strip_string_literal("'hello'"), Some("hello".to_string()));
-        assert_eq!(strip_string_literal("`hello`"), Some("hello".to_string()));
-    }
-
-    #[test]
-    fn strips_an_expression_containers_braces_before_the_quotes() {
-        assert_eq!(
-            strip_string_literal("{ \"hello\" }"),
-            Some("hello".to_string())
-        );
-    }
-
-    #[test]
-    fn rejects_text_that_is_not_a_quoted_literal() {
-        assert_eq!(strip_string_literal("foo"), None);
-        assert_eq!(strip_string_literal("'unterminated"), None);
-        assert_eq!(strip_string_literal(""), None);
-    }
-
-    #[test]
-    fn joins_quoted_literal_concatenation() {
-        assert_eq!(
-            concat_plus_joined_literal("'java' + 'script:x'"),
-            Some("javascript:x".to_string())
-        );
-    }
-
-    #[test]
-    fn refuses_to_join_when_any_part_is_not_a_literal() {
-        assert_eq!(concat_plus_joined_literal("'java' + x"), None);
-        assert_eq!(concat_plus_joined_literal("'just one'"), None);
     }
 
     #[test]

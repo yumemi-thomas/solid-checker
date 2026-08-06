@@ -22,10 +22,10 @@
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, LogicalOperatorKind};
+use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind};
 use solid_facts::core::Span;
 
-use super::{UpstreamCompatContext, text};
+use super::{UpstreamCompatContext, binding_initializer, text};
 use crate::{Fix, StaticViolation, TextEdit, known_primitive, location};
 
 pub(super) fn check_file(
@@ -35,7 +35,7 @@ pub(super) fn check_file(
 ) {
     no_react_deps(file, context, violations);
     no_proxy_apis(file, context, violations);
-    prefer_for(file, violations);
+    prefer_for(file, context, violations);
     prefer_show(file, violations);
 }
 
@@ -93,26 +93,6 @@ fn no_react_deps(
             }],
         });
     }
-}
-
-/// Traces a same-file `const name = ...` binding to its initializer text.
-///
-/// A narrow, single-hop trace: it does not resolve reassignment, shadowing,
-/// or which of several same-named bindings is actually in scope at the call
-/// site. That is acceptable here because the result only ever loosens a
-/// stylistic nag (does the value this name was initialized with *look
-/// like* an array or object literal) — it is never used to decide whether a
-/// name is defined at all, which is exactly the judgement `undef.rs` refuses
-/// to make by hand, asking TypeScript facts instead.
-fn binding_initializer<'a>(file: &'a FileFacts, name: &str) -> Option<(Span, &'a str)> {
-    file.ast.bindings.iter().find_map(|binding| {
-        binding
-            .names
-            .iter()
-            .any(|candidate| text(file, candidate.span) == name)
-            .then(|| binding.initializer.map(|span| (span, text(file, span))))
-            .flatten()
-    })
 }
 
 // ---------------------------------------------------------------------
@@ -272,7 +252,11 @@ fn no_proxy_calls(
 /// their nodes. Restricted to a `.map()` whose own callback builds JSX —
 /// not every `.map()` in a component file — the same restraint the 1.x port
 /// applies.
-fn prefer_for(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
+fn prefer_for(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    violations: &mut Vec<StaticViolation>,
+) {
     for call in &file.ast.calls {
         let Some(member) = file
             .ast
@@ -304,6 +288,21 @@ fn prefer_for(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
         // pick between. `FunctionFact::parameters` already excludes rest
         // parameters, so a rest-only callback also reads as zero
         // parameters here, which correctly falls through to "no fix".
+        //
+        // The rewrite additionally requires the receiver to be a *proven*
+        // array. `.map` is matched by name, as upstream matches it, and the
+        // report is safe on a name alone — but `<For each>` iterates arrays,
+        // so rewriting an Immutable.js collection or any other `.map`-bearing
+        // type would change behaviour. TypeScript's descriptor for the
+        // receiver is that proof; without it the report stands and the fix
+        // is withheld.
+        let receiver_is_array = super::expression_descriptor(context, file, member.object)
+            .is_some_and(|descriptor| {
+                super::array_like_type(
+                    descriptor.text.as_ref(),
+                    super::expression_callability(context, file, member.object),
+                )
+            });
         let one_parameter = file
             .ast
             .functions
@@ -311,8 +310,7 @@ fn prefer_for(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
             .find(|function| function.span == argument.span)
             .is_some_and(|function| function.parameters.len() == 1);
         let (message, fixes) = if one_parameter {
-            (
-                "Use Solid's `<For />` component for efficiently rendering lists. Array#map causes DOM elements to be recreated.",
+            let fixes = if receiver_is_array {
                 vec![Fix {
                     message: "Replace Array#map with <For>.".into(),
                     applicability: "safe".into(),
@@ -324,7 +322,13 @@ fn prefer_for(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
                             text(file, argument.span)
                         ),
                     }],
-                }],
+                }]
+            } else {
+                vec![]
+            };
+            (
+                "Use Solid's `<For />` component for efficiently rendering lists. Array#map causes DOM elements to be recreated.",
+                fixes,
             )
         } else {
             (
@@ -352,13 +356,129 @@ fn prefer_for(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
 /// identifier. A call, a literal, or any other expression shape is left
 /// alone — flagging every `cond ? 1 : 2` would be noise, not help, since
 /// there is no DOM node identity at stake in those branches.
-fn expensive_branch(source: &str) -> bool {
-    let source = source.trim();
-    source.starts_with('<')
-        || source
-            .as_bytes()
-            .first()
-            .is_some_and(|byte| byte.is_ascii_alphabetic() || matches!(byte, b'_' | b'$'))
+///
+/// Classified from the fact tables, not the branch's first character: a call
+/// (`compute()`) and a member read (`user.name`) both *start* with an
+/// identifier character, but neither is an `Identifier` node, and upstream
+/// leaves both alone. Only a span that is itself a recorded JSX element,
+/// JSX fragment, or identifier reference counts.
+fn expensive_branch(file: &FileFacts, span: Span) -> bool {
+    file.ast
+        .jsx_elements
+        .iter()
+        .any(|element| element.span == span)
+        || file.ast.jsx_fragments.contains(&span)
+        || file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == span && identifier.role == IdentifierRole::Reference
+        })
+}
+
+/// Where a conditional sits relative to JSX, if it is the immediate
+/// expression of a JSX expression container at all.
+///
+/// Upstream's `prefer-show` matches `JSXExpressionContainer > Logical/
+/// ConditionalExpression` — the conditional must *be* the rendered
+/// expression, not merely appear somewhere under a JSX span. Containment
+/// alone would catch `onClick={() => ready && submit()}` and rewrite the
+/// body of an event handler into markup.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum JsxExpressionPosition {
+    /// A `{...}` child of an element or fragment; a `<Show>` element is a
+    /// drop-in replacement here, so the fix applies.
+    Child,
+    /// An attribute value container. The report stands — the branch shapes
+    /// are the same — but splicing a `<Show>` element into an attribute
+    /// value is not a rewrite, so no fix is offered.
+    Attribute,
+}
+
+fn jsx_expression_position(file: &FileFacts, span: Span) -> Option<JsxExpressionPosition> {
+    if let Some(position) = direct_container_position(file, span) {
+        return Some(position);
+    }
+    // Upstream also fires one level down: when the conditional is the
+    // expression body of an arrow that is itself the container's expression —
+    // the render-callback shape, `<For>{(item) => item.cond && <span/>}</For>`.
+    // The body must *be* the arrow's whole result (parentheses and whitespace
+    // aside); a statement inside a block body never qualifies.
+    file.ast
+        .functions
+        .iter()
+        .find(|function| {
+            function.body.contains(span) && wraps_only_parens(file, function.body, span)
+        })
+        .and_then(|function| direct_container_position(file, function.span))
+}
+
+fn direct_container_position(file: &FileFacts, span: Span) -> Option<JsxExpressionPosition> {
+    for element in &file.ast.jsx_elements {
+        if element
+            .attributes
+            .iter()
+            .any(|attribute| attribute.expression == Some(span))
+        {
+            return Some(JsxExpressionPosition::Attribute);
+        }
+        if element
+            .children
+            .iter()
+            .any(|child| container_wraps(file, *child, span))
+        {
+            return Some(JsxExpressionPosition::Child);
+        }
+    }
+    // Fragments record no child spans, so prove the container from the
+    // source instead: the nearest non-whitespace neighbours are the
+    // container's own braces, and no function written inside the fragment
+    // owns the span (which would make those braces a callback's block or
+    // object body, not an expression container).
+    file.ast
+        .jsx_fragments
+        .iter()
+        .any(|fragment| {
+            fragment.contains(span)
+                && !file.ast.functions.iter().any(|function| {
+                    fragment.contains(function.span) && function.body.contains(span)
+                })
+                && container_wraps(file, *fragment, span)
+        })
+        .then_some(JsxExpressionPosition::Child)
+}
+
+/// Whether everything between `outer`'s bounds and `span`, on both sides, is
+/// parentheses and whitespace — the test for "this span is the whole
+/// expression body of the arrow", tolerant of the wrapping parens JSX
+/// formatting conventions add.
+fn wraps_only_parens(file: &FileFacts, outer: Span, span: Span) -> bool {
+    if !outer.contains(span) {
+        return false;
+    }
+    let before = text(file, Span::new(outer.start, span.start));
+    let after = text(file, Span::new(span.end, outer.end));
+    before.chars().all(|c| c == '(' || c.is_whitespace())
+        && after.chars().all(|c| c == ')' || c.is_whitespace())
+}
+
+/// Whether `span`'s nearest non-whitespace neighbours inside `outer` are a
+/// `{ ... }` pair. For an element child span this proves the child *is* the
+/// expression container holding `span`; for a fragment (whose fact is a bare
+/// span) it proves the nearest enclosing braces are a container's. A `${`
+/// on the left is a template interpolation, not a container, and is refused.
+fn container_wraps(file: &FileFacts, outer: Span, span: Span) -> bool {
+    if !outer.contains(span) || outer == span {
+        return false;
+    }
+    braces_wrap(
+        text(file, Span::new(outer.start, span.start)),
+        text(file, Span::new(span.end, outer.end)),
+    )
+}
+
+/// The string half of [`container_wraps`], separated so it is testable
+/// without building a whole `FileFacts`.
+fn braces_wrap(before: &str, after: &str) -> bool {
+    let before = before.trim_end();
+    before.ends_with('{') && !before.ends_with("${") && after.trim_start().starts_with('}')
 }
 
 /// Wraps a branch's source text for use as JSX children: left untouched
@@ -390,13 +510,28 @@ fn show_conditional_replacement(test: &str, consequent: &str, alternate: &str) -
 
 fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
     for logical in &file.ast.logical_expressions {
-        if logical.operator != LogicalOperatorKind::And {
+        if logical.operator != LogicalOperatorKind::And || !expensive_branch(file, logical.right) {
             continue;
         }
-        let right = text(file, logical.right);
-        if !expensive_branch(right) {
+        let Some(position) = jsx_expression_position(file, logical.span) else {
             continue;
-        }
+        };
+        let fixes = if position == JsxExpressionPosition::Child {
+            vec![Fix {
+                message: "Replace with <Show>.".into(),
+                applicability: "safe".into(),
+                edits: vec![TextEdit {
+                    location: location(file.path.shared(), logical.span),
+                    new_text: format!(
+                        "<Show when={{{}}}>{}</Show>",
+                        text(file, logical.left),
+                        as_jsx_child(text(file, logical.right))
+                    ),
+                }],
+            }]
+        } else {
+            vec![]
+        };
         violations.push(StaticViolation {
             id: "SC8015".into(),
             rule: "prefer-show".into(),
@@ -405,26 +540,34 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
                 .into(),
             location: location(file.path.shared(), logical.span),
             analysis_context: String::new(),
-            fixes: vec![Fix {
-                message: "Replace with <Show>.".into(),
-                applicability: "safe".into(),
-                edits: vec![TextEdit {
-                    location: location(file.path.shared(), logical.span),
-                    new_text: format!(
-                        "<Show when={{{}}}>{}</Show>",
-                        text(file, logical.left),
-                        as_jsx_child(right)
-                    ),
-                }],
-            }],
+            fixes,
         });
     }
     for conditional in &file.ast.conditional_expressions {
-        let consequent = text(file, conditional.consequent);
-        let alternate = text(file, conditional.alternate);
-        if !expensive_branch(consequent) && !expensive_branch(alternate) {
+        if !expensive_branch(file, conditional.consequent)
+            && !expensive_branch(file, conditional.alternate)
+        {
             continue;
         }
+        let Some(position) = jsx_expression_position(file, conditional.span) else {
+            continue;
+        };
+        let fixes = if position == JsxExpressionPosition::Child {
+            vec![Fix {
+                message: "Replace with <Show fallback>.".into(),
+                applicability: "safe".into(),
+                edits: vec![TextEdit {
+                    location: location(file.path.shared(), conditional.span),
+                    new_text: show_conditional_replacement(
+                        text(file, conditional.test),
+                        text(file, conditional.consequent),
+                        text(file, conditional.alternate),
+                    ),
+                }],
+            }]
+        } else {
+            vec![]
+        };
         violations.push(StaticViolation {
             id: "SC8015".into(),
             rule: "prefer-show".into(),
@@ -432,18 +575,7 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
             hint: "Solid's compiler already covers this case; `<Show>` is a stylistic preference.".into(),
             location: location(file.path.shared(), conditional.span),
             analysis_context: String::new(),
-            fixes: vec![Fix {
-                message: "Replace with <Show fallback>.".into(),
-                applicability: "safe".into(),
-                edits: vec![TextEdit {
-                    location: location(file.path.shared(), conditional.span),
-                    new_text: show_conditional_replacement(
-                        text(file, conditional.test),
-                        consequent,
-                        alternate,
-                    ),
-                }],
-            }],
+            fixes,
         });
     }
 }
@@ -451,19 +583,22 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        as_jsx_attribute_expression, as_jsx_child, expensive_branch, show_conditional_replacement,
+        as_jsx_attribute_expression, as_jsx_child, braces_wrap, show_conditional_replacement,
     };
 
     #[test]
-    fn expensive_branch_matches_jsx_and_identifiers_only() {
-        assert!(expensive_branch("<Content />"));
-        assert!(expensive_branch("content"));
-        assert!(expensive_branch("_private"));
-        assert!(expensive_branch("$signal"));
-        assert!(expensive_branch("  <Padded />  "));
-        assert!(!expensive_branch("42"));
-        assert!(!expensive_branch("\"literal\""));
-        assert!(!expensive_branch(""));
+    fn braces_wrap_accepts_only_an_immediate_expression_container_pair() {
+        assert!(braces_wrap("<>{", "}</>"));
+        assert!(braces_wrap("{", "}"));
+        assert!(braces_wrap("<>{ ", " }</>"));
+        // A template interpolation's `${` is not a JSX container.
+        assert!(!braces_wrap("<>{`${", "}`}</>"));
+        // The span is an operand of a larger expression, not the container's
+        // own expression.
+        assert!(!braces_wrap("<>{ready && ", "}</>"));
+        assert!(!braces_wrap("<>{", " ? a : b}</>"));
+        // Block or call syntax between the braces and the span.
+        assert!(!braces_wrap("<>{fn(", ")}</>"));
     }
 
     #[test]
