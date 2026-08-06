@@ -22,9 +22,10 @@ rust-version = "1.97"
 # The JSX compiler lives in its own repository now and is pinned by revision:
 # `dom-expressions` is tracked on a feature branch, and reproducible builds
 # matter more here than picking up upstream automatically.
-# Pinned to `fix-elided-event-handler-census`, which stops a constant-folded
-# `on*`/`ref`/`children` attribute leaving a mismatched census site and
-# failing the whole file — now merged with upstream `next` at
+# Pinned to `feat/total-semantic-trace` (the fork's mainline; the
+# `fix-elided-event-handler-census` branch is merged into it), which stops a
+# constant-folded `on*`/`ref`/`children` attribute leaving a mismatched
+# census site and failing the whole file, and carries upstream `next` at
 # 0.50.0-next.37 (hydration-id symmetry for conditional spread memos, a
 # linear deferred JSX pass, directive-DCE type-only import removal).
 dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "ac3f10e8e854e8ab12638074d6b8520af4289599", default-features = false }
@@ -32,9 +33,10 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on
 # exactly one of them.
-# Pinned to `fix-elided-event-handler-census`, the same fix as above, plus
-# the two upstream correctness fixes that apply to 1.x (the linear deferred
-# JSX pass and the directive-DCE type-only removal); upstream's hydration-id
+# Pinned to `main` (the census branch is merged into it): the same fix as
+# above, plus the two upstream correctness fixes that apply to 1.x (the
+# linear deferred JSX pass and the directive-DCE type-only removal);
+# upstream's hydration-id
 # codegen change is deliberately absent because 1.x parity means matching
 # babel-plugin-jsx-dom-expressions@0.40.7 exactly.
 solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "c26d204ff921c96a2309a783460de6a05c8f8b4a", default-features = false }
