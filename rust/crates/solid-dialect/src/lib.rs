@@ -37,7 +37,8 @@ pub use solid_2::Solid2;
 pub enum Version {
     /// Solid 1.x — `Suspense`, `createResource`, `createEffect(fn)`.
     V1,
-    /// Solid 2.0 — `Loading`, `createAsync`, `createEffect(compute, apply)`.
+    /// Solid 2.0 — `Loading`, `createTrackedEffect`,
+    /// `createEffect(compute, apply)`.
     V2,
 }
 
@@ -51,24 +52,15 @@ impl Version {
         }
     }
 
-    /// The semver major this version speaks, as it appears in a package
-    /// version string. Used to tell a bundled contract's dialect from its
-    /// `package.version`.
-    #[must_use]
-    pub const fn package_major(self) -> &'static str {
-        match self {
-            Self::V1 => "1.",
-            Self::V2 => "2.",
-        }
-    }
-
     /// The dialect a resolved `solid-js` version speaks.
     ///
     /// Takes the major component of a semver string and nothing else, so
     /// `2.0.0-beta.19` is 2.0 and `1.9.14` is 1.x. Prerelease and build
     /// metadata are ignored deliberately: 2.0 has shipped only as betas so
     /// far, and refusing to classify them would leave every real 2.0 project
-    /// on the fallback.
+    /// on the fallback. Range prefixes (`^`, `~`, `>=`, `<`) are stripped for
+    /// the same reason, although the detection path only ever passes exact
+    /// installed versions.
     ///
     /// Answers `None` rather than guessing when the string is not a version
     /// or names a major nobody has released. A caller that cannot resolve the
@@ -79,7 +71,7 @@ impl Version {
     pub fn for_solid_js(version: &str) -> Option<Self> {
         match version
             .trim()
-            .trim_start_matches(['^', '~', '=', 'v', ' '])
+            .trim_start_matches(['^', '~', '=', 'v', ' ', '>', '<'])
             .split(['.', '-', '+'])
             .next()?
             .parse::<u32>()
@@ -125,25 +117,28 @@ pub enum Primitive {
     Batch,
     CreateDynamic,
     From,
-    Hydrate,
-    Render,
     On,
     StartTransition,
     UseTransition,
     OnMount,
     OnError,
     CatchError,
-    GetOwner,
-    RunWithOwner,
     IndexArray,
     MergeProps,
     SplitProps,
     Produce,
-    Reconcile,
     Unwrap,
     CreateMutable,
     ModifyMutable,
     WebMemo,
+
+    // Spelled the same in both dialects: 2.0 kept these 1.x names, and both
+    // vocabulary tables map them.
+    Hydrate,
+    Render,
+    GetOwner,
+    RunWithOwner,
+    Reconcile,
 
     // 2.0 only
     CreateTrackedEffect,
@@ -173,6 +168,9 @@ pub enum Primitive {
     // Solid 2.0 additions extracted from solid-js@2.0.0-beta.19 and
     // @solidjs/signals@2.0.0-beta.25 (ADR 0006's rule: the package, not the
     // docs). The engine modelled none of these before.
+    /// Also a 1.x core export by the same name; only the 2.0 table maps it
+    /// today, and the 1.x dialect leaves it unmodelled (inert, since the
+    /// engine keys nothing on it besides `CreateContext`).
     UseContext,
     CreateErrorBoundary,
     CreateLoadingBoundary,
@@ -339,6 +337,13 @@ pub trait Dialect: Sync {
     /// store APIs into core and the DOM package to `@solidjs/web`.
     fn modules(&self) -> &'static [&'static str];
 
+    /// The basename diagnostics cite when a fact came from this dialect's
+    /// bundled `solid-js` contract (`bundled://<basename>#<primitive>`).
+    ///
+    /// The label is the checked-in artifact the fact was actually read from,
+    /// so a 1.x diagnostic must not cite the 2.0 file.
+    fn bundled_contract_label(&self) -> &'static str;
+
     /// The JSX attribute namespace prefixes this dialect's compiler gives
     /// meaning to — the reserved compiler namespaces plus the XML namespaces
     /// it maps. Anything else compiles to nothing, which is what
@@ -495,23 +500,6 @@ pub trait Dialect: Sync {
     /// way. `None` for 1.x, which has no `ownedWrite` option — the sentence
     /// suggesting it was 2.0's and had no 1.x meaning.
     fn owned_write_opt_in(&self) -> Option<&'static str> {
-        None
-    }
-
-    /// The property holding the callback when this primitive's callback
-    /// argument is written as an options object rather than a function.
-    ///
-    /// Solid 2.0 accepts a bundle: `createEffect(compute, { effect, error })`.
-    /// `@solidjs/signals` reads it as `effectFn.effect || effectFn`, so the
-    /// two forms are interchangeable and a rule that only understands the
-    /// function form reports the object one as unresolvable.
-    ///
-    /// `createRenderEffect` is deliberately absent even though its signature
-    /// looks the same: its implementation passes `effectFn` straight through
-    /// with no `.effect` lookup, so a bundle there would be called as a
-    /// function. 1.x has no bundle form at all.
-    fn callback_bundle_property(&self, primitive: Primitive) -> Option<&'static str> {
-        let _ = primitive;
         None
     }
 

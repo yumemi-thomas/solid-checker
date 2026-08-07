@@ -14,9 +14,9 @@ pub use diagnostics::{
     PackageSummary, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit,
     SourceLocation, analysis_metrics, analyze_project, analyze_project_measured,
     analyze_project_measured_with, bundled_solid_js_contract, discovered_contract_paths,
-    imported_package_roots, load_package_contracts, load_package_contracts_with,
-    package_contract_statuses, package_contract_statuses_with, read_package_contract, snapshot,
-    source_location,
+    discovered_rule_options_path, imported_package_roots, load_package_contracts,
+    load_package_contracts_with, package_contract_statuses, package_contract_statuses_with,
+    read_package_contract, snapshot, source_location,
 };
 
 #[must_use]

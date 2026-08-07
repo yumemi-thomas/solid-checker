@@ -26,7 +26,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 22;
+pub const AST_FACTS_SCHEMA: u32 = 23;
 
 mod span_index;
 
@@ -1234,7 +1234,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 .map(|interpolated| span(interpolated.span()))
                 .collect(),
         });
-        walk::walk_tagged_template_expression(self, expression);
+        // Not the default walk: that would visit the quasi through
+        // `visit_template_literal` and record every tagged template's quasi
+        // in `template_literals`, violating that table's untagged-only
+        // contract. The tag and the interpolated expressions are visited
+        // directly so their own nested nodes — including genuinely untagged
+        // templates inside an interpolation — are still collected.
+        self.visit_expression(&expression.tag);
+        for interpolated in &expression.quasi.expressions {
+            self.visit_expression(interpolated);
+        }
     }
 
     fn visit_template_literal(&mut self, literal: &oxc_ast::ast::TemplateLiteral<'a>) {
@@ -2061,9 +2070,14 @@ function View(shadowedDirective: (element: HTMLDivElement) => void) {
         assert_eq!(facts.tagged_templates.len(), 1);
         assert_eq!(
             facts.template_literals.len(),
-            1,
-            "the quasi is still a template literal; consumers filter by containment"
+            0,
+            "a tag's quasi is filtered at collection; the table's untagged-only contract holds"
         );
+        // An untagged template nested inside a tagged interpolation is still
+        // an untagged template — the manual visit must reach it.
+        let facts = extract("App.tsx", "const styled = css`color: ${`x${theme}`}`;\n").unwrap();
+        assert_eq!(facts.tagged_templates.len(), 1);
+        assert_eq!(facts.template_literals.len(), 1);
     }
 
     /// A fragment has no element fact — no name, no attributes — so it gets

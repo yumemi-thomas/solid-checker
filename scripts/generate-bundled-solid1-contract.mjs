@@ -227,8 +227,22 @@ if (entrypointExports.get(".").has("createStore")) {
   fail("createStore must live under ./store only");
 }
 
-writeFileSync(outputPath, `${JSON.stringify(document, null, 2)}\n`);
-console.log(`wrote ${outputPath}`);
+const encoded = `${JSON.stringify(document, null, 2)}\n`;
+if (process.argv.includes("--check")) {
+  // Drift gate: the checked-in artifact is compiled into the backend, so an
+  // edit to either input (the census or the reviewed semantics map) without
+  // a regeneration must fail loudly instead of shipping a stale contract.
+  const current = readFileSync(outputPath, "utf8");
+  if (current !== encoded) {
+    fail(
+      `${outputPath} is stale relative to its inputs; re-run node scripts/generate-bundled-solid1-contract.mjs`,
+    );
+  }
+  console.log(`ok   ${outputPath} matches its inputs`);
+} else {
+  writeFileSync(outputPath, encoded);
+  console.log(`wrote ${outputPath}`);
+}
 for (const [subpath, exports] of entrypointExports) {
   console.log(`  ${subpath}: ${exports.size} exports`);
 }

@@ -1,13 +1,19 @@
-//! The two dialects compile with two different compilers, and this is the
-//! test that could tell if they ever stopped: one source, both lowerings,
-//! observably different results.
+//! The two dialects' compilers are genuinely different programs, and this is
+//! the test that could tell if the upstream crates ever converged: one
+//! source, both lowerings, observably different results.
 //!
 //! The checker never compares generated code — it consumes semantic traces —
-//! but the generated code is where the compilers' independence is cheapest to
-//! observe: the Solid 1.x compiler lowers to `solid-js/web`'s runtime with
+//! but the generated code is where the compilers' *independence* is cheapest
+//! to observe: the Solid 1.x compiler lowers to `solid-js/web`'s runtime with
 //! the 1.x template calling convention, while the 2.0 compiler lowers to its
-//! own runtime shape. If the workspace ever wired one compiler into both
-//! dialects, this test fails before any fixture does.
+//! own runtime shape.
+//!
+//! What this deliberately does not test is the *wiring* — it drives the two
+//! upstream crates directly, not either dialect's `NativeCompilerFacts`. The
+//! wiring is pinned structurally instead: `dom-expressions-compiler` is only
+//! a dev-dependency of this crate, so `solid-v1-compiler`'s library cannot
+//! reach the 2.0 compiler at all, and the dialect end-to-end fixtures assert
+//! per-dialect findings that only the right lowering produces.
 
 use solid1_dom_expressions_compiler as solid1;
 

@@ -56,6 +56,7 @@ corpus: build-rust
 
 contract-conformance:
 	node scripts/check-bundled-contracts.mjs
+	node scripts/generate-bundled-solid1-contract.mjs --check
 
 clean:
 	rm -rf bin dist rust/target .typefacts

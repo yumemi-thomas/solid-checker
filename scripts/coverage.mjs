@@ -17,7 +17,7 @@
 // deliberately excluded -- rewording a hint should not churn 30 files.
 
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, writeFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
 import process from "node:process";
 
@@ -203,6 +203,22 @@ for (const project of projects) {
 for (const pair of driftedSources()) {
   console.error(`fixture sources that must match have drifted: ${pair}`);
   changed += 1;
+}
+
+// A snapshot whose project no longer exists is a silent hole in the "no
+// finding moved" guarantee: every finding it pinned vanished from coverage
+// without anything failing. Deleting a fixture project must be as loud as
+// changing one — and `--update` prunes the orphan instead.
+const expectedFiles = new Set(projects.map((project) => `${project.id.replace("/", "__")}.json`));
+for (const entry of readdirSync(snapshots)) {
+  if (!entry.endsWith(".json") || expectedFiles.has(entry)) continue;
+  if (update) {
+    rmSync(join(snapshots, entry));
+    console.log(`pruned orphaned snapshot ${entry}`);
+  } else {
+    console.error(`orphaned snapshot ${entry} -- its fixture project is gone; run with --update to prune`);
+    changed += 1;
+  }
 }
 
 const verb = update ? "recorded" : "compared";

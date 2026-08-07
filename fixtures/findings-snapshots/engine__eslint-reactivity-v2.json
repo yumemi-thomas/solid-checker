@@ -392,6 +392,16 @@
       "fixes": 0
     },
     {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/mount-root.tsx",
+      "start": 521,
+      "end": 533,
+      "fixes": 0
+    },
+    {
       "rule": "action-called-in-owned-scope",
       "code": "SC2002",
       "kind": "violation",

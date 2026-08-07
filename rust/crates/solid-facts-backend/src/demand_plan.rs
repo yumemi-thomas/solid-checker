@@ -85,6 +85,25 @@ fn plan_file(
     }
     for element in &file.ast.jsx_elements {
         add_symbol(element.name.span, false);
+        // `v1/jsx-no-undef` judges a dotted tag by its root identifier
+        // alone (`Foo` in `<Foo.Bar/>`), so the root span needs its own
+        // resolution — the combined span above answers a different
+        // question. Only the 1.x catalog reads this answer.
+        if dialect.vocabulary.version() == solid_dialect::Version::V1
+            && let Some(name) = file.source_text(element.name.span)
+            && let Some(dot) = name.find('.')
+        {
+            let root_length = name[..dot].trim_end().len();
+            if root_length > 0 {
+                add_symbol(
+                    solid_facts::core::Span::new(
+                        element.name.span.start,
+                        element.name.span.start + u32::try_from(root_length).unwrap_or_default(),
+                    ),
+                    false,
+                );
+            }
+        }
         let native = file
             .source_text(element.name.span)
             .is_some_and(|name| name.starts_with(|c: char| c.is_ascii_lowercase()));

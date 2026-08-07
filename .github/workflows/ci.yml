@@ -25,6 +25,11 @@ jobs:
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
       - run: make test-rust
+      # The two fixture gates: "no finding moved" over every fixture
+      # project, and eslint-plugin-solid's own 465 cases with every
+      # deviation declared. Both are meaningless unless something runs them.
+      - run: make coverage
+      - run: make parity
 
   rust-package:
     strategy:
@@ -120,6 +125,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - run: sh -n scripts/*.sh
       - run: node --test scripts/*.test.mjs
       - run: jq empty schema/*.json pkg/contracts/bundled/*.json
+      # The bundled 1.x contract is generated from the census and the
+      # reviewed semantics map; a stale artifact ships wrong semantics
+      # compiled into the backend.
+      - run: node scripts/generate-bundled-solid1-contract.mjs --check
+      - run: make test-cli

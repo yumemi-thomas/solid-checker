@@ -1529,7 +1529,11 @@ fn discover_file_sources(
                             symbol_id(&returned.label),
                             primitive.into(),
                             Location {
-                                path: format!("bundled://solid-js.json#{primitive}").into(),
+                                path: format!(
+                                    "bundled://{}#{primitive}",
+                                    lookup.dialect.bundled_contract_label()
+                                )
+                                .into(),
                                 start_byte: 0,
                                 end_byte: 0,
                             },
@@ -2084,8 +2088,11 @@ fn discover_sources(
                                         symbol_id(&returned.label),
                                         primitive.into(),
                                         Location {
-                                            path: format!("bundled://solid-js.json#{primitive}")
-                                                .into(),
+                                            path: format!(
+                                                "bundled://{}#{primitive}",
+                                                semantic_lookup.dialect.bundled_contract_label()
+                                            )
+                                            .into(),
                                             start_byte: 0,
                                             end_byte: 0,
                                         },
@@ -4226,6 +4233,12 @@ fn find_missing_owners(
                 call.span,
             );
             let operation = match primitive {
+                // `createRenderEffect` is deliberately included alongside
+                // `createEffect`: both register a computation on the owner,
+                // and 2.0's render effect outside any owner leaks the same
+                // way. The engine matched only `createEffect` and
+                // `createTrackedEffect` before the dialect extraction; that
+                // omission was the gap, not the rule.
                 Some(
                     Primitive::CreateEffect
                     | Primitive::CreateRenderEffect
@@ -4496,6 +4509,9 @@ fn discover_owner_file(
             continue;
         }
         let operation = match known_primitive(&call_primitives[call_index]) {
+            // See the batch owner pass: `createRenderEffect` belongs with the
+            // other effect constructors, and its earlier absence there was
+            // the two passes' drift, not a narrower contract.
             Some(
                 Primitive::CreateEffect
                 | Primitive::CreateRenderEffect
@@ -5201,11 +5217,7 @@ fn inside_known_value_function_argument(
                         .stores_function_argument_as_value(primitive, argument_index)
                         || (lookup
                             .dialect
-                            .callback_execution_at(
-                                primitive,
-                                argument_index,
-                                call.arguments.len(),
-                            )
+                            .callback_execution_at(primitive, argument_index, call.arguments.len())
                             .is_some()
                             && callback_execution_at_call(
                                 file,
@@ -5961,7 +5973,19 @@ fn analysis_context(
             dialect
                 .callback_execution_at(resolved, argument, call.arguments.len())
                 .and_then(|execution| match execution {
-                    solid_dialect::Execution::Tracked => Some("compute"),
+                    // "compute" only where reads actually subscribe: an
+                    // `onSettled` callback is contract-tracked (the graph
+                    // schedules it) but imperative to its reads, and calling
+                    // it a compute would describe the wrong phase.
+                    solid_dialect::Execution::Tracked
+                        if dialect.callback_tracks_reads_at(
+                            resolved,
+                            argument,
+                            call.arguments.len(),
+                        ) =>
+                    {
+                        Some("compute")
+                    }
                     // Only an effect's deferred argument is an apply phase; a
                     // deferred executor's callback keeps its enclosing label.
                     solid_dialect::Execution::Deferred
@@ -6384,50 +6408,52 @@ impl LocalAccessContext<'_> {
             // A member callee is a different shape: `factory(...).member()`
             // invokes the member, not the returned accessor, so no contracted
             // read is proven there.
-            let immediate_return = file
-                .ast
-                .calls
-                .iter()
-                .filter(|nested| nested.span != call.span && call.callee.contains(nested.span))
-                .max_by_key(|nested| nested.span.end - nested.span.start)
-                .filter(|_| {
-                    !file
-                        .ast
-                        .members
-                        .iter()
-                        .any(|member| member.span == call.callee)
-                })
-                .and_then(|factory| {
-                    let symbol = self.lookup.callee_symbol(file, factory.callee)?;
-                    self.contract_returns
-                        .get(symbol)
-                        .cloned()
-                        .or_else(|| {
-                            let primitive = primitive_name(
-                                file.path.as_str(),
-                                factory.callee,
-                                factory.static_callee(&file.source),
-                                self.entities,
-                                self.symbol_names,
-                                self.lookup.dialect,
-                            )?;
-                            self.bundled_returns
-                                .get(primitive.as_str())
-                                .cloned()
-                                .map(|returned| {
-                                    (
-                                        returned,
-                                        Location {
-                                            path: format!("bundled://solid-js.json#{primitive}")
+            let immediate_return =
+                file.ast
+                    .calls
+                    .iter()
+                    .filter(|nested| nested.span != call.span && call.callee.contains(nested.span))
+                    .max_by_key(|nested| nested.span.end - nested.span.start)
+                    .filter(|_| {
+                        !file
+                            .ast
+                            .members
+                            .iter()
+                            .any(|member| member.span == call.callee)
+                    })
+                    .and_then(|factory| {
+                        let symbol = self.lookup.callee_symbol(file, factory.callee)?;
+                        self.contract_returns
+                            .get(symbol)
+                            .cloned()
+                            .or_else(|| {
+                                let primitive = primitive_name(
+                                    file.path.as_str(),
+                                    factory.callee,
+                                    factory.static_callee(&file.source),
+                                    self.entities,
+                                    self.symbol_names,
+                                    self.lookup.dialect,
+                                )?;
+                                self.bundled_returns.get(primitive.as_str()).cloned().map(
+                                    |returned| {
+                                        (
+                                            returned,
+                                            Location {
+                                                path: format!(
+                                                    "bundled://{}#{primitive}",
+                                                    self.lookup.dialect.bundled_contract_label()
+                                                )
                                                 .into(),
-                                            start_byte: 0,
-                                            end_byte: 0,
-                                        },
-                                    )
-                                })
-                        })
-                        .map(|contract| (factory, contract))
-                });
+                                                start_byte: 0,
+                                                end_byte: 0,
+                                            },
+                                        )
+                                    },
+                                )
+                            })
+                            .map(|contract| (factory, contract))
+                    });
             if let Some((factory, (returned, declaration))) = immediate_return {
                 let execution = semantic_execution_role(
                     file,

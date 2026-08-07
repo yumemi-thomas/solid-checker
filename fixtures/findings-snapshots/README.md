@@ -45,8 +45,11 @@ into a fixture does not read as every finding below it moving; and
 **repository-relative paths**, so snapshots do not carry anyone's home
 directory.
 
-Two projects are excepted and keep their text: `dialect-solid-1x` and
-`dialect-solid-2`. See below.
+Four projects are excepted and keep their text (the `KEEPS_WORDING` set in
+`scripts/coverage.mjs`): `dialect-solid-1x`, `dialect-solid-2`,
+`import-location`, and `solid-1x-leftovers`. For those, the wording *is* the
+behaviour under test — a dialect-specific diagnostic quoting the wrong
+signature is exactly the failure they exist to catch.
 
 Included on purpose: `status`. A change that keeps every finding but flips the
 project's verdict is still a change.
@@ -91,8 +94,12 @@ Adding a dialect-gated rule means adding its case to both halves.
 
 ## Scope, and what this does not cover
 
-30 fixture projects, 269 findings. That is every directory under `fixtures/`
-holding a `tsconfig.json`.
+Every directory under `fixtures/reactive-ir/` and `fixtures/engine/` holding
+a `tsconfig.json` — 45 projects, 416 findings as of this writing; the run's
+own summary line is the authoritative count. Fixture groups outside those
+two (`fixtures/package-contracts/`, the parity corpus) have their own
+harnesses and are not snapshotted here. A snapshot whose project was deleted
+fails the gate as an orphan rather than silently dropping its findings.
 
 It does not cover: the corpus (`make corpus`, Solid Primitives, a separate and
 much larger body), compiler execution facts (`make conformance`), or anything

@@ -954,6 +954,19 @@ fn the_dialect_pair_reports_different_findings_from_identical_sources() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
+    // Pin the premise before consuming it: if the pair's sources drift, the
+    // finding diff below stops meaning "the dialect changed the answer".
+    // (`scripts/coverage.mjs` enforces the same identity; this assert keeps
+    // the test self-contained when run without the snapshot gate.)
+    let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/reactive-ir");
+    for file in ["App.tsx", "solid-js.d.ts", "tsconfig.json"] {
+        assert_eq!(
+            std::fs::read_to_string(fixtures.join("dialect-solid-1x").join(file)).unwrap(),
+            std::fs::read_to_string(fixtures.join("dialect-solid-2").join(file)).unwrap(),
+            "{file} drifted between the dialect pair projects"
+        );
+    }
+
     let one = dialect_pair_findings("dialect-solid-1x");
     let two = dialect_pair_findings("dialect-solid-2");
     assert_ne!(one, two, "the dialects agreed on everything");

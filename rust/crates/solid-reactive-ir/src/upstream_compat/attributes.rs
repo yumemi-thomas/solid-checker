@@ -28,8 +28,8 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
 
 use super::{
-    UpstreamCompatContext, binding_initializer, contains, fix_replace, is_lowercase_led,
-    literal_string_type, static_string, static_string_expression, text, violation,
+    UpstreamCompatContext, binding_initializer, fix_replace, is_lowercase_led, literal_string_type,
+    static_string, static_string_expression, text, violation,
 };
 use crate::StaticViolation;
 
@@ -73,43 +73,38 @@ fn no_innerhtml(
                 attribute.span,
                 vec![],
             );
-            if let Some(expression) = attribute.expression {
-                let properties = file
-                    .ast
-                    .object_properties
-                    .iter()
-                    .filter(|property| contains(expression, property.span))
-                    .collect::<Vec<_>>();
-                if let [only] = properties.as_slice()
-                    && text(file, only.key) == "__html"
-                {
-                    result.fixes.push(fix_replace(
-                        file,
-                        attribute.span,
-                        "rewrite as innerHTML",
-                        format!("innerHTML={{{}}}", text(file, only.value)),
-                    ));
-                }
+            // Upstream fixes only the exact `{{ __html: value }}` shape: the
+            // value must be an object literal whose single own entry is a
+            // plain `__html` key. A `__html` nested deeper, or accompanied by
+            // other entries, has no unambiguous rewrite.
+            if let Some(properties) = attribute
+                .expression
+                .and_then(|expression| super::direct_object_literal_properties(file, expression))
+                && let [only] = properties.as_slice()
+                && !only.computed
+                && text(file, only.key) == "__html"
+            {
+                result.fixes.push(fix_replace(
+                    file,
+                    attribute.span,
+                    "rewrite as innerHTML",
+                    format!("innerHTML={{{}}}", text(file, only.value)),
+                ));
             }
             violations.push(result);
             continue;
         }
-        if !matches!(name, "innerHTML" | "innerhtml") {
+        // Exactly `innerHTML`: a lowercase `innerhtml` is an ordinary,
+        // unrecognized attribute to Solid's compiler, and upstream leaves it
+        // alone (`jsx-no-duplicate-props` still counts both spellings as one
+        // content source).
+        if name != "innerHTML" {
             continue;
         }
-        if !element.children.is_empty() {
-            violations.push(violation(
-                file,
-                "SC8008",
-                "no-innerhtml",
-                "The innerHTML attribute should not be used on an element with child elements; they will be overwritten.",
-                "Remove either the JSX children or the innerHTML prop; whichever renders last wins, and which one that is depends on implementation detail rather than anything visible here.",
-                element.span,
-                vec![],
-            ));
-        }
         // Upstream's `allowStatic: false`: every innerHTML value is a
-        // reported injection surface, static or not.
+        // reported injection surface, static or not — and the only report;
+        // the conflict and not-HTML advice below exist solely on the
+        // static-acceptance path.
         if !context.options.no_innerhtml.allow_static {
             violations.push(violation(
                 file,
@@ -134,7 +129,23 @@ fn no_innerhtml(
                     .and_then(|span| literal_string_type(context, file, span))
             });
         match static_value {
-            Some(value) if !(value.contains('<') && value.contains('>')) => {
+            // A static value that is provably markup is accepted — unless
+            // the element also has JSX children, in which case the two
+            // content sources overwrite each other.
+            Some(value) if super::upstream_data::is_html(&value) => {
+                if !element.children.is_empty() {
+                    violations.push(violation(
+                        file,
+                        "SC8008",
+                        "no-innerhtml",
+                        "The innerHTML attribute should not be used on an element with child elements; they will be overwritten.",
+                        "Remove either the JSX children or the innerHTML prop; whichever renders last wins, and which one that is depends on implementation detail rather than anything visible here.",
+                        element.span,
+                        vec![],
+                    ));
+                }
+            }
+            Some(_) => {
                 let mut result = violation(
                     file,
                     "SC8008",
@@ -152,10 +163,6 @@ fn no_innerhtml(
                 ));
                 violations.push(result);
             }
-            // `allowStatic` defaults to true (the `false` case returned
-            // above), so a value proven static at the literal (containing
-            // what looks like a tag) is accepted.
-            Some(_) => {}
             None => violations.push(violation(
                 file,
                 "SC8008",
@@ -252,15 +259,6 @@ fn style_prop(
     element: &JsxElementFact,
     violations: &mut Vec<StaticViolation>,
 ) {
-    const LENGTH_PROPERTIES: &[&str] = &[
-        "width",
-        "height",
-        "margin",
-        "margin-top",
-        "padding",
-        "border-width",
-        "font-size",
-    ];
     // Which props carry styles is upstream's `styleProps` option (default
     // `["style"]`, and naming others *replaces* the default); `allowString`
     // accepts the string form instead of asking for an object.
@@ -294,51 +292,85 @@ fn style_prop(
             violations.push(result);
             continue;
         }
-        let Some(expression) = attribute.expression else {
+        // Upstream inspects only a style value that is itself an object
+        // literal, and only that object's own entries — an object built by a
+        // helper call, or nested as some entry's value, is left alone.
+        let Some(properties) = attribute
+            .expression
+            .and_then(|expression| super::direct_object_literal_properties(file, expression))
+        else {
             continue;
         };
-        for property in file
-            .ast
-            .object_properties
-            .iter()
-            .filter(|property| contains(expression, property.span))
-        {
-            let name = text(file, property.key).trim_matches(['\'', '"']);
-            if name.chars().any(char::is_uppercase) {
-                let kebab = to_kebab_case(name);
-                let mut result = violation(
-                    file,
-                    "SC8017",
-                    "style-prop",
-                    format!("Use {kebab} instead of {name}."),
-                    "Solid's style prop sets CSS properties directly, which are always kebab-case; a camelCase key is simply not a CSS property and has no effect.",
-                    property.key,
-                    vec![],
-                );
-                result.fixes.push(fix_replace(
-                    file,
-                    property.key,
-                    "convert to kebab-case",
-                    format!("\"{kebab}\""),
-                ));
-                violations.push(result);
-            }
-            if LENGTH_PROPERTIES.contains(&name)
-                && text(file, property.value)
-                    .trim()
-                    .trim_start_matches('-')
-                    .parse::<f64>()
-                    .is_ok_and(|value| value != 0.0)
-            {
-                violations.push(violation(
-                    file,
-                    "SC8017",
-                    "style-prop",
-                    "This CSS property value should be a string with a unit; Solid does not automatically append a \"px\" unit.",
-                    "Quote the value and add a unit, e.g. \"10px\"; an unquoted number is passed to the DOM as-is and most length properties reject a unitless value.",
-                    property.value,
-                    vec![],
-                ));
+        for property in properties {
+            // Upstream's `getPropertyName` resolves plain and quoted keys;
+            // a computed key it cannot fold answers no name, which skips
+            // the name checks but still reaches the numeric-value check.
+            let name = (!property.computed)
+                .then(|| text(file, property.key).trim_matches(['\'', '"']))
+                .filter(|name| !name.is_empty());
+            match name {
+                // Custom properties are CSS's own escape hatch; upstream
+                // skips `--` names entirely.
+                Some(name) if name.starts_with("--") => {}
+                Some(name) if !super::upstream_data::is_known_css_property(name) => {
+                    let kebab = to_kebab_case(name);
+                    if super::upstream_data::is_known_css_property(&kebab) {
+                        let mut result = violation(
+                            file,
+                            "SC8017",
+                            "style-prop",
+                            format!("Use {kebab} instead of {name}."),
+                            "Solid's style prop sets CSS properties directly, which are always kebab-case; a camelCase key is simply not a CSS property and has no effect.",
+                            property.key,
+                            vec![],
+                        );
+                        result.fixes.push(fix_replace(
+                            file,
+                            property.key,
+                            "convert to kebab-case",
+                            format!("\"{kebab}\""),
+                        ));
+                        violations.push(result);
+                    } else {
+                        // Not a CSS property under any casing. There is no
+                        // rewrite to offer — kebab-casing a typo produces a
+                        // different typo — so this reports without a fix,
+                        // as upstream's `invalidStyleProp` does.
+                        violations.push(violation(
+                            file,
+                            "SC8017",
+                            "style-prop",
+                            format!("{name} is not a valid CSS property."),
+                            "Check the spelling against the CSS property list; Solid passes style object keys to the DOM as-is.",
+                            property.key,
+                            vec![],
+                        ));
+                    }
+                }
+                // A known kebab-case property naming a length, or a key the
+                // folder could not resolve: a bare non-zero number is a
+                // missing unit either way.
+                Some(name)
+                    if !name.starts_with("--")
+                        && !super::upstream_data::names_length_property(name) => {}
+                _ => {
+                    if text(file, property.value)
+                        .trim()
+                        .trim_start_matches('-')
+                        .parse::<f64>()
+                        .is_ok_and(|value| value != 0.0)
+                    {
+                        violations.push(violation(
+                            file,
+                            "SC8017",
+                            "style-prop",
+                            "This CSS property value should be a string with a unit; Solid does not automatically append a \"px\" unit.",
+                            "Quote the value and add a unit, e.g. \"10px\"; an unquoted number is passed to the DOM as-is and most length properties reject a unitless value.",
+                            property.value,
+                            vec![],
+                        ));
+                    }
+                }
             }
         }
     }
@@ -540,14 +572,18 @@ fn event_handlers(
             }) {
                 return true;
             }
-            // Neither a literal nor an obviously-static local: ask what
-            // TypeScript actually resolved the whole expression to. Exact
-            // span, so a string-typed operand inside a larger expression
-            // cannot answer for it. This proves cases upstream's constant
-            // folder cannot ('string' + dynamic() is always a string), which
-            // is a declared, evidence-backed parity deviation.
-            super::expression_descriptor(context, file, span)
-                .is_some_and(|descriptor| static_string_or_number_type(descriptor.text.as_ref()))
+            // Neither a literal nor an obviously-static local: for a plain
+            // reference — one identifier or member read, nothing else — ask
+            // what TypeScript resolved it to. Only that shape: the entity
+            // recorded for a compound expression's span carries the type of
+            // its *leading token* (`'a' === x ? f : 'b'` answers `"a"`), so
+            // consulting it for anything larger manufactures a static
+            // verdict upstream's constant folder would never reach.
+            (file.ast.identifiers.iter().any(|id| id.span == span)
+                || file.ast.members.iter().any(|member| member.span == span))
+                && super::expression_descriptor(context, file, span).is_some_and(|descriptor| {
+                    static_string_or_number_type(descriptor.text.as_ref())
+                })
         });
         if type_is_static
             || matches!(
@@ -637,20 +673,21 @@ fn event_handlers(
     // Upstream's `warnOnSpread`: a handler-named property carried into a DOM
     // element through a JSX spread. Solid attaches listeners from attributes
     // the compiler can see; a spread delivers the value as a plain property
-    // at runtime instead. Off by default, matching upstream.
+    // at runtime instead. Off by default, matching upstream — which looks
+    // only at a spread that is itself an object literal, reads that object's
+    // own entries, and takes any plain `on*`-named identifier key (no
+    // third-letter requirement: this judges the object's shape, not whether
+    // the name could be a real event).
     if context.options.event_handlers.warn_on_spread {
         for spread in &element.spreads {
             for property in
-                file.ast.object_properties.iter().filter(|property| {
-                    !property.computed && contains(spread.argument, property.span)
-                })
+                super::direct_object_literal_properties(file, spread.argument).unwrap_or_default()
             {
-                let key = text(file, property.key)
-                    .trim_matches(['\'', '"'])
-                    .to_owned();
-                if !key.starts_with("on")
-                    || !key.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic)
-                {
+                if property.computed {
+                    continue;
+                }
+                let key = text(file, property.key);
+                if key.starts_with(['\'', '"']) || !key.starts_with("on") {
                     continue;
                 }
                 violations.push(violation(

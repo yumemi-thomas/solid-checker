@@ -12,3 +12,7 @@ declare module "solid-js" {
   export function merge<A, B>(first: A, second: B): A & B;
   export function omit<T extends object, K extends keyof T>(value: T, ...keys: K[]): Omit<T, K>;
 }
+
+declare module "@solidjs/web" {
+  export function render(code: () => unknown, element: object): () => void;
+}

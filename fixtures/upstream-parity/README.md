@@ -36,20 +36,24 @@ project (`harness.json` holds the scaffolding), runs the checker once, and
 counts a case as matching when the rule under test fired for an `invalid` case
 and stayed silent for a `valid` one.
 
-**405 of 465 match.** The other 60 are declared in `deviations.json`, one entry
+**429 of 465 match.** The other 36 are declared in `deviations.json`, one entry
 per case, each with a status and a reason:
 
 | status | count | meaning |
 | --- | --- | --- |
-| `evidence-backed` | 21 | compiler, runtime, type, or contract evidence makes the checker's result more precise than upstream's syntax heuristic |
-| `unsupported-option` | 27 | the case enables a non-default upstream option; the checker deliberately has no per-rule options surface |
+| `evidence-backed` | 23 | compiler, runtime, type, or contract evidence makes the checker's result more precise than upstream's syntax heuristic |
 | `fact-unavailable` | 11 | the isolated case supplies no fact that proves the relevant Solid or user-code contract, so the checker refuses to guess from a spelling convention |
-| `policy` | 1 | the checker intentionally enforces a stricter explicit-snapshot policy |
+| `policy` | 2 | the checker intentionally enforces a stricter explicit-snapshot policy |
+
+There used to be a fourth status, `unsupported-option`, for cases enabling a
+non-default upstream option. It emptied when the six option-bearing rules
+grew the upstream options surface (`.solid-checker/rule-options.json` —
+"Rule options" in `CONTEXT.md`), and the harness now materialises those
+cases with the case's own options.
 
 These statuses distinguish improvements from scope choices. An
-`evidence-backed` deviation is a result we actively want. An
-`unsupported-option` deviation is expected but does not make the analysis
-smarter. A `fact-unavailable` deviation is conservative: it prevents a false
+`evidence-backed` deviation is a result we actively want. A
+`fact-unavailable` deviation is conservative: it prevents a false
 inference from an unresolved spelling, but can either withhold a diagnostic or
 retain a warning that a real type or package contract would settle. It may
 therefore identify useful future fact coverage when the same pattern occurs in
@@ -83,6 +87,6 @@ comparison rejects — a new deviation has to be explained, not merely recorded.
 | `code` | the case source, verbatim |
 | `errors` | how many diagnostics upstream expects (0 for valid cases) |
 | `messageIds` | upstream's message ids, which the reactivity mapping keys on |
-| `options` | upstream rule options, or `null` — the checker's rules are not configurable, so a case whose result differs only because of options is an `unsupported-option` deviation |
+| `options` | upstream rule options, or `null` — for the six rules carrying upstream's options (`.solid-checker/rule-options.json`), the harness materialises the case in its own project with exactly these options |
 | `output` | upstream's autofix result, or `null` |
 | `tsOnly` | upstream runs the case only under a TypeScript parser |

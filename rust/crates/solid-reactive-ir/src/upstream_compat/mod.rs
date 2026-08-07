@@ -27,6 +27,7 @@ mod reactivity;
 mod structure;
 mod syntax;
 mod undef;
+mod upstream_data;
 
 use std::collections::HashMap;
 
@@ -112,13 +113,55 @@ pub(super) fn expression_callability(
 // modules: these used to be duplicated per file with the doc comments on only
 // one of the copies.
 
-/// Whether `outer` fully contains `inner`, byte-range-wise. Used to find the
-/// object properties belonging to a `{...spread}` argument, and nothing
-/// deeper: a nested object literal several levels down is not "contained" any
-/// less by this test, which is exactly the same imprecision upstream's own
-/// scope-walking has for a spread of a computed expression.
+/// Whether `outer` fully contains `inner`, byte-range-wise. Containment is
+/// transitive — a node nested several levels down still satisfies it — so
+/// rules that must see only an object literal's *own* entries go through
+/// [`direct_object_literal_properties`] instead of filtering on this alone.
 pub(super) fn contains(outer: Span, inner: Span) -> bool {
     outer.start <= inner.start && inner.end <= outer.end
+}
+
+/// The top-level properties of the object literal `expression` is, or `None`
+/// when the expression is not itself an object literal.
+///
+/// Upstream reads `ObjectExpression.properties` — the node's own entries.
+/// The fact tables record every object property in the file flat, so "own"
+/// is recovered in two steps: the expression's text (modulo wrapping
+/// parentheses) must be the `{ ... }` literal itself, and a property nested
+/// inside another contained property's key or value is someone else's.
+pub(super) fn direct_object_literal_properties(
+    file: &FileFacts,
+    expression: Span,
+) -> Option<Vec<&solid_facts::ast::ObjectPropertyFact>> {
+    let mut source = text(file, expression).trim();
+    while let Some(inner) = source
+        .strip_prefix('(')
+        .and_then(|rest| rest.strip_suffix(')'))
+    {
+        source = inner.trim();
+    }
+    if !(source.starts_with('{') && source.ends_with('}')) {
+        return None;
+    }
+    let inside = file
+        .ast
+        .object_properties
+        .iter()
+        .filter(|property| contains(expression, property.span))
+        .collect::<Vec<_>>();
+    Some(
+        inside
+            .iter()
+            .filter(|property| {
+                !inside.iter().any(|other| {
+                    other.span != property.span
+                        && (contains(other.value, property.span)
+                            || contains(other.key, property.span))
+                })
+            })
+            .copied()
+            .collect(),
+    )
 }
 
 /// The declaration text of the nearest binding named `name` in this file, for
@@ -184,14 +227,15 @@ pub(super) fn concat_plus_joined_literal(source: &str) -> Option<String> {
     parts
         .into_iter()
         .map(|part| {
-            let quote = part.as_bytes().first().copied()?;
-            // A lone quote character passes the first==last comparison against
-            // itself; the length gate keeps `"+"`-shaped attribute text (split
-            // into single-quote parts) from slicing out of bounds.
-            (part.len() >= 2
-                && matches!(quote, b'\'' | b'"')
-                && part.as_bytes().last().copied() == Some(quote))
-            .then(|| part[1..part.len() - 1].to_owned())
+            // Each part must be one whole quoted literal on its own —
+            // [`strip_string_literal`] carries the length guard (a lone
+            // quote character is not a literal) and the unescaped-inner-
+            // quote scan (`'b' ? c : 'd'` starts and ends with a quote but
+            // is not one). Backtick parts are refused: `a` + `b` folds fine
+            // at runtime, but upstream's folder never joins templates.
+            part.starts_with(['\'', '"'])
+                .then(|| strip_string_literal(part))
+                .flatten()
         })
         .collect::<Option<Vec<_>>>()
         .map(|parts| parts.concat())
@@ -219,7 +263,27 @@ pub(super) fn strip_string_literal(source: &str) -> Option<String> {
     {
         return None;
     }
-    Some(trimmed[1..trimmed.len() - 1].to_owned())
+    let inside = &trimmed[1..trimmed.len() - 1];
+    // Matching first and last quotes prove nothing if the text between them
+    // leaves the literal: `'a' === x ? f : 'b'` starts and ends with a quote
+    // but is a conditional, and `` `x${y}` `` is a template whose value is
+    // not its text. An unescaped inner quote, or an interpolation in a
+    // template, disqualifies the span — the same answer upstream's constant
+    // folder gives for both.
+    let mut escaped = false;
+    for byte in inside.bytes() {
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if byte == quote {
+            return None;
+        }
+    }
+    if quote == b'`' && inside.contains("${") {
+        return None;
+    }
+    Some(inside.to_owned())
 }
 
 pub(super) fn fix_replace(

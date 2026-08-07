@@ -55,6 +55,7 @@ const TABLE: &[(&str, Primitive)] = &[
     ("flush", Primitive::Flush),
     ("For", Primitive::For),
     ("getOwner", Primitive::GetOwner),
+    ("hydrate", Primitive::Hydrate),
     ("isPending", Primitive::IsPending),
     ("latest", Primitive::Latest),
     ("lazy", Primitive::Lazy),
@@ -67,6 +68,7 @@ const TABLE: &[(&str, Primitive)] = &[
     ("onSettled", Primitive::OnSettled),
     ("reconcile", Primitive::Reconcile),
     ("refresh", Primitive::Refresh),
+    ("render", Primitive::Render),
     ("Repeat", Primitive::Repeat),
     ("repeat", Primitive::RepeatMap),
     ("resolve", Primitive::Resolve),
@@ -93,8 +95,25 @@ impl Dialect for Solid2 {
     }
 
     /// 2.0 folds the store APIs into core and moves the DOM package out.
+    /// The web subpaths are owned too: `export_modules` answers with them
+    /// for the generated export tables' rows, and a module this dialect
+    /// reports exports from is a module it must own.
     fn modules(&self) -> &'static [&'static str] {
-        &["solid-js", "@solidjs/web"]
+        &[
+            "solid-js",
+            "@solidjs/web",
+            "@solidjs/web/serialization",
+            "@solidjs/web/server-functions",
+            "@solidjs/web/server-functions/client",
+            "@solidjs/web/server-functions/server",
+            "@solidjs/web/storage",
+        ]
+    }
+
+    /// `pkg/contracts/bundled/solid-js.json`, the artifact
+    /// `solid-facts-backend` compiles in for this dialect.
+    fn bundled_contract_label(&self) -> &'static str {
+        "solid-js.json"
     }
 
     /// dom-expressions 0.50 (`shared/constants.rs`): `reserved_namespace`
@@ -193,7 +212,6 @@ impl Dialect for Solid2 {
         }
     }
 
-    /// Source: `solid-js@2.0.0-beta.19`'s `types/index.d.ts`. 2.0 spells the
     /// Source: the `@solidjs/signals@2.0.0-beta.25` implementations, read
     /// rather than inferred. What matters is whether the body creates an owner
     /// before invoking the callback:
@@ -242,6 +260,13 @@ impl Dialect for Solid2 {
             Primitive::Flush | Primitive::Untrack | Primitive::Latest | Primitive::IsPending => {
                 &[(0, CallbackOwner::Inherits)]
             }
+            // Both mount entry points wrap the application callback in the
+            // root owner they create (`render` is `createRoot` plus insert).
+            Primitive::Render | Primitive::Hydrate => &[(0, CallbackOwner::Creates)],
+            // `dynamic(() => Comp)` renders the resolved component under the
+            // component owner the wrapper creates, so primitives created in
+            // the thunk are disposed with the dynamic node.
+            Primitive::Dynamic => &[(0, CallbackOwner::Creates)],
             _ => &[],
         }
     }
@@ -310,20 +335,24 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// Spelled out per the trait's rule that an options slot alone is not
+    /// evidence for a particular option key. Today the list coincides with
+    /// [`Solid2::options_argument`]'s domain — every entry is a computation
+    /// node in `@solidjs/signals` — but a future options-bearing addition
+    /// has to earn its `sync` row here instead of inheriting it.
     fn supports_sync_option(&self, primitive: Primitive) -> bool {
-        self.options_argument(primitive).is_some()
-    }
-
-    /// Source: `@solidjs/signals@2.0.0-beta.25`'s implementation, not the
-    /// signatures. `createEffect` forwards `effectFn.effect || effectFn` and
-    /// `createReaction` calls `(effectFn.effect || effectFn)?.()`;
-    /// `createRenderEffect` passes `effectFn` through untouched.
-    fn callback_bundle_property(&self, primitive: Primitive) -> Option<&'static str> {
         matches!(
             primitive,
-            Primitive::CreateEffect | Primitive::CreateReaction
+            Primitive::CreateMemo
+                | Primitive::CreateSignal
+                | Primitive::CreateOptimistic
+                | Primitive::CreateTrackedEffect
+                | Primitive::CreateStore
+                | Primitive::CreateProjection
+                | Primitive::CreateOptimisticStore
+                | Primitive::CreateEffect
+                | Primitive::CreateRenderEffect
         )
-        .then_some("effect")
     }
 
     /// Source: the reviewed `SOLID_2` and `SOLIDJS_WEB` semantics tables in
@@ -377,6 +406,11 @@ impl Dialect for Solid2 {
             | Primitive::Latest
             | Primitive::IsPending => &[(0, Execution::Inline)],
             Primitive::RunWithOwner => &[(1, Execution::Inline)],
+            // `render(() => <App/>, el)` and `hydrate` invoke the code
+            // callback once, immediately, under the root they create.
+            // Source: `solidjs-web.json`'s callback rows, the same shape 1.x
+            // models for its `solid-js/web` pair.
+            Primitive::Render | Primitive::Hydrate => &[(0, Execution::Inline)],
             _ => &[],
         }
     }
@@ -540,14 +574,15 @@ impl Dialect for Solid2 {
         found
     }
 
-    /// Source: `solid-reactive-ir/src/symbols.rs`, `add_solid_namespace_names`.
-    ///
-    /// Note the module test: the engine matches `solid-js` exactly but any
-    /// `@solidjs/` prefix, so this is not `modules()` membership.
+    /// Source: `solid-reactive-ir/src/symbols.rs`, `add_solid_import_names`,
+    /// which before ADR 0006 matched `"solid-js"` and `"@solidjs/web"` each
+    /// exactly. `dynamic` is an `@solidjs/web` root export; a third-party
+    /// `@solidjs/*` package exporting a same-spelled `dynamic` is not this
+    /// primitive and must not resolve as it.
     fn namespace_import_primitives(&self, module: &str) -> &'static [&'static str] {
         if module == "solid-js" {
             NAMESPACE_SOLID_JS
-        } else if module.starts_with("@solidjs/") {
+        } else if module == "@solidjs/web" {
             &["dynamic"]
         } else {
             &[]
@@ -637,6 +672,7 @@ mod tests {
                 "flush",
                 "For",
                 "getOwner",
+                "hydrate",
                 "isPending",
                 "latest",
                 "lazy",
@@ -649,6 +685,7 @@ mod tests {
                 "onSettled",
                 "reconcile",
                 "refresh",
+                "render",
                 "Repeat",
                 "repeat",
                 "resolve",
@@ -710,14 +747,23 @@ mod tests {
     /// package by `contracts_process.rs`.
     #[test]
     fn every_callback_taking_export_is_modelled_or_excluded() {
-        let contract = include_str!("../contracts/solid-js.json");
-        let exports: std::collections::BTreeMap<String, serde_json::Value> =
+        // Both bundled contracts: `render`/`hydrate` live in `@solidjs/web`,
+        // and reading only the core contract is exactly how an unmodelled
+        // mount entry point went unnoticed.
+        let exports: std::collections::BTreeMap<String, serde_json::Value> = [
+            include_str!("../contracts/solid-js.json"),
+            include_str!("../contracts/solidjs-web.json"),
+        ]
+        .iter()
+        .flat_map(|contract| {
             serde_json::from_str::<serde_json::Value>(contract).unwrap()["exports"]
                 .as_object()
                 .unwrap()
                 .iter()
                 .map(|(k, v)| (k.clone(), v.clone()))
-                .collect();
+                .collect::<Vec<_>>()
+        })
+        .collect();
 
         // The contract records callbacks it knows about; the vocabulary is
         // this crate's. Anything in the first and not the second is a gap.

@@ -27,8 +27,7 @@ use solid_facts::ast::JsxElementFact;
 use solid_facts::core::Span;
 
 use super::{
-    UpstreamCompatContext, contains, fix_replace, is_lowercase_led, static_string_expression, text,
-    violation,
+    UpstreamCompatContext, fix_replace, is_lowercase_led, static_string_expression, text, violation,
 };
 use crate::StaticViolation;
 
@@ -58,6 +57,11 @@ fn jsx_no_duplicate_props(
     // prop name, so both need to be in one candidate list, sorted back into
     // source order — a spread's properties are collected after direct
     // attributes but can appear anywhere among them in the actual JSX.
+    //
+    // Upstream's `jsxGetAllProps` looks inside a spread only when its
+    // argument is literally an object expression, and then reads that
+    // object's own entries: a key nested in some property's value, or a
+    // property of a call's argument, is not a prop of this element.
     let mut candidates = element
         .attributes
         .iter()
@@ -65,10 +69,10 @@ fn jsx_no_duplicate_props(
         .collect::<Vec<_>>();
     for spread in &element.spreads {
         candidates.extend(
-            file.ast
-                .object_properties
-                .iter()
-                .filter(|property| !property.computed && contains(spread.argument, property.span))
+            super::direct_object_literal_properties(file, spread.argument)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|property| !property.computed)
                 .map(|property| {
                     (
                         property.key,
@@ -246,7 +250,11 @@ fn no_unknown_namespaces(
                 local,
             ));
             result
-        } else if matches!(namespace, "style" | "class") {
+        } else if matches!(namespace, "style" | "class") && known.contains(&namespace) {
+            // Recognized by the 1.x compiler (the dialect's namespace table
+            // lists both), but upstream still steers authors to the plain
+            // prop with this exact message — the namespaced form exists for
+            // per-name toggling the plain prop usually expresses better.
             violation(
                 file,
                 "SC8012",

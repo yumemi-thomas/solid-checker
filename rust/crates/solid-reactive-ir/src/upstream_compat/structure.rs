@@ -5,12 +5,12 @@
 //! `prefer-for` and `prefer-show` are intent judgements, not correctness
 //! checks: Solid's compiler already handles a plain `.map()` or `&&`/ternary
 //! correctly, so these rules exist only to steer style toward the
-//! primitives that make list and branch identity explicit. Upstream and the
-//! 1.x port both keep them conservative for exactly that reason — a wrong
-//! "prefer" nag is worse than a missed one. This port keeps the same
-//! restraint: `prefer-for` fires only for a `.map()` whose own callback
-//! builds JSX, and `prefer-show` only for the "expensive" branch shapes
-//! upstream defines (a JSX element/fragment, or a bare identifier).
+//! primitives that make list and branch identity explicit. Upstream keeps
+//! them conservative for exactly that reason — a wrong "prefer" nag is worse
+//! than a missed one — and this port carries upstream's own gates: both
+//! rules fire only when the judged expression is itself rendered as JSX
+//! children, and `prefer-show` additionally only for the "expensive" branch
+//! shapes upstream defines (a JSX element/fragment, or a bare identifier).
 //!
 //! `no-react-deps` and `no-proxy-apis` resolve their callees through the
 //! dialect's own primitive table (`context.lookup.primitives`) instead of
@@ -25,7 +25,7 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind};
 use solid_facts::core::Span;
 
-use super::{UpstreamCompatContext, binding_initializer, text};
+use super::{UpstreamCompatContext, binding_initializer, contains, text};
 use crate::{Fix, StaticViolation, TextEdit, known_primitive, location};
 
 pub(super) fn check_file(
@@ -159,85 +159,103 @@ fn no_proxy_calls(
                 call.span,
             ));
         }
-        if known_primitive(&primitives.calls[index]) == Some(Primitive::MergeProps)
-            && call.arguments.first().is_some_and(|argument| {
-                let source = text(file, argument.span).trim();
-                !source.starts_with('{')
-                    && binding_initializer(file, source)
-                        .is_none_or(|(_, initializer)| !initializer.trim_start().starts_with('{'))
-            })
-        {
-            violations.push(proxy_violation(
-                file,
-                "The first argument to mergeProps should be an object literal.",
-                "If you pass a function to `mergeProps`, it will create a Proxy, which are incompatible with your target environment.",
-                call.span,
-            ));
+        if known_primitive(&primitives.calls[index]) == Some(Primitive::MergeProps) {
+            // Upstream judges every argument, not just the first: a spread,
+            // a function (written inline or resolved through a binding), or
+            // an identifier that neither resolves to an object literal nor
+            // names props (`/[pP]rops/`) each makes `mergeProps` fall back
+            // to a Proxy. Object literals, calls, and member reads pass.
+            for argument in &call.arguments {
+                let spread = file
+                    .ast
+                    .spreads
+                    .iter()
+                    .any(|spread| spread.span == argument.span);
+                let reported = spread
+                    || match argument.value {
+                        ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction => true,
+                        ArgumentValueKind::Identifier => {
+                            let name = text(file, argument.span).trim();
+                            match binding_initializer(file, name) {
+                                // Resolved to a function: a Proxy source no
+                                // matter what the binding is called.
+                                Some((initializer_span, _))
+                                    if file
+                                        .ast
+                                        .functions
+                                        .iter()
+                                        .any(|function| function.span == initializer_span) =>
+                                {
+                                    true
+                                }
+                                // Resolved to anything else written in this
+                                // file — an object literal, a call, a member
+                                // read — passes, as upstream's trace does.
+                                Some(_) => false,
+                                // An imported binding passes: upstream's
+                                // trace lands on the import specifier, which
+                                // is not an identifier, so it never reaches
+                                // the props-name test.
+                                None if file.ast.imports.iter().any(|import| {
+                                    import
+                                        .bindings
+                                        .iter()
+                                        .any(|binding| text(file, binding.local.span) == name)
+                                }) =>
+                                {
+                                    false
+                                }
+                                // Unresolvable: upstream reports unless the
+                                // name reads as props.
+                                None => !name.contains("props") && !name.contains("Props"),
+                            }
+                        }
+                        _ => false,
+                    };
+                if reported {
+                    violations.push(proxy_violation(
+                        file,
+                        "Passing anything but an object literal or a props object to mergeProps may require a Proxy.",
+                        "If you pass a function to `mergeProps`, it will create a Proxy, which are incompatible with your target environment.",
+                        argument.span,
+                    ));
+                }
+            }
         }
     }
     for element in &file.ast.jsx_elements {
         for spread in &element.spreads {
-            let is_call = file
-                .ast
-                .calls
-                .iter()
-                .any(|call| call.span == spread.argument);
-            let is_member = file
+            // Upstream's selectors are `JSXSpreadAttribute MemberExpression`
+            // and `JSXSpreadAttribute CallExpression`: every descendant
+            // counts, not just the argument's own node. `{...foo.bar}`,
+            // `{...{ a: foo.bar }}`, and `{...make({ a: b() })}` are all
+            // Proxy sources, and a call whose callee is a member read
+            // reports both nodes, exactly as two selector matches do.
+            for member in file
                 .ast
                 .members
                 .iter()
-                .any(|member| member.span == spread.argument);
-            if is_call {
-                violations.push(proxy_violation(
-                    file,
-                    "Spreading a call expression may require a Proxy.",
-                    "Using a function call in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
-                    spread.span,
-                ));
-            } else if is_member {
+                .filter(|member| contains(spread.argument, member.span))
+            {
                 violations.push(proxy_violation(
                     file,
                     "Spreading a member expression may require a Proxy.",
                     "Using a property access in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
-                    spread.span,
+                    member.span,
                 ));
             }
-
-            // `<div {...{ ...source() }} />` has an object literal as the JSX
-            // spread argument, but evaluating that object still performs the
-            // nested dynamic spread. Oxc exports every ordinary spread as a
-            // fact, so walk all descendants instead of judging only the
-            // outer JSX argument's node kind.
-            for nested in file
+            for call in file
                 .ast
-                .spreads
+                .calls
                 .iter()
-                .filter(|nested| spread.argument.contains(nested.span))
+                .filter(|call| contains(spread.argument, call.span))
             {
-                let nested_call = file
-                    .ast
-                    .calls
-                    .iter()
-                    .any(|call| call.span == nested.argument);
-                let nested_member = file
-                    .ast
-                    .members
-                    .iter()
-                    .any(|member| member.span == nested.argument);
-                let (message, hint) = if nested_call {
-                    (
-                        "Spreading a call expression may require a Proxy.",
-                        "Using a function call in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
-                    )
-                } else if nested_member {
-                    (
-                        "Spreading a member expression may require a Proxy.",
-                        "Using a property access in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
-                    )
-                } else {
-                    continue;
-                };
-                violations.push(proxy_violation(file, message, hint, nested.span));
+                violations.push(proxy_violation(
+                    file,
+                    "Spreading a call expression may require a Proxy.",
+                    "Using a function call in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
+                    call.span,
+                ));
             }
         }
     }
@@ -247,17 +265,24 @@ fn no_proxy_calls(
 // SC8014 v1/prefer-for
 // ---------------------------------------------------------------------
 
-/// `Array#map` returning JSX recreates every DOM node on each update;
-/// `<For>` keys elements by array identity instead so unchanged items keep
-/// their nodes. Restricted to a `.map()` whose own callback builds JSX —
-/// not every `.map()` in a component file — the same restraint the 1.x port
-/// applies.
+/// `Array#map` rendered as JSX children recreates every DOM node on each
+/// update; `<For>` keys elements by array identity instead so unchanged
+/// items keep their nodes. Position carries the whole judgement, exactly as
+/// upstream's `JSXExpressionContainer` parent checks do: the `.map()` call
+/// must itself be the expression a JSX element or fragment renders. The
+/// callback does not have to build JSX — `<ol>{items.map(x => x.name)}</ol>`
+/// still renders a list — and a `.map()` anywhere else (assigned to a
+/// variable, inside an attribute) is not rendered as a list and is left
+/// alone.
 fn prefer_for(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
     for call in &file.ast.calls {
+        if direct_container_position(file, call.span) != Some(JsxExpressionPosition::Child) {
+            continue;
+        }
         let Some(member) = file
             .ast
             .members
@@ -273,12 +298,7 @@ fn prefer_for(
         if !matches!(
             argument.value,
             ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction
-        ) || !file
-            .ast
-            .jsx_elements
-            .iter()
-            .any(|element| argument.span.contains(element.span))
-        {
+        ) {
             continue;
         }
         // Upstream's autofix applies only when the callback takes exactly
@@ -384,11 +404,12 @@ fn expensive_branch(file: &FileFacts, span: Span) -> bool {
 #[derive(Clone, Copy, Eq, PartialEq)]
 enum JsxExpressionPosition {
     /// A `{...}` child of an element or fragment; a `<Show>` element is a
-    /// drop-in replacement here, so the fix applies.
+    /// drop-in replacement here, so the rule fires and the fix applies.
     Child,
-    /// An attribute value container. The report stands — the branch shapes
-    /// are the same — but splicing a `<Show>` element into an attribute
-    /// value is not a rewrite, so no fix is offered.
+    /// An attribute value container. Upstream requires the container's
+    /// parent to be a JSX element or fragment, and an attribute container's
+    /// parent is the attribute — so the rules consulting this position stay
+    /// silent here, exactly as upstream does.
     Attribute,
 }
 
@@ -411,14 +432,21 @@ fn jsx_expression_position(file: &FileFacts, span: Span) -> Option<JsxExpression
 }
 
 fn direct_container_position(file: &FileFacts, span: Span) -> Option<JsxExpressionPosition> {
-    for element in &file.ast.jsx_elements {
-        if element
+    // The attribute answer must be settled across every element before any
+    // child-brace check runs: an attribute container's braces sit inside an
+    // element that is itself another element's child span, so an enclosing
+    // element visited first would otherwise claim the span as its own child
+    // (`<div><button icon={cond ? <A/> : <B/>} /></div>` — the braces the
+    // div's child wraps are the button's attribute container).
+    if file.ast.jsx_elements.iter().any(|element| {
+        element
             .attributes
             .iter()
             .any(|attribute| attribute.expression == Some(span))
-        {
-            return Some(JsxExpressionPosition::Attribute);
-        }
+    }) {
+        return Some(JsxExpressionPosition::Attribute);
+    }
+    for element in &file.ast.jsx_elements {
         if element
             .children
             .iter()
@@ -513,25 +541,25 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
         if logical.operator != LogicalOperatorKind::And || !expensive_branch(file, logical.right) {
             continue;
         }
-        let Some(position) = jsx_expression_position(file, logical.span) else {
+        // Upstream reports only when the container's parent is a JSX
+        // element or fragment. An attribute-value container's parent is the
+        // attribute — `fallback={cond ? <A/> : <B/>}` — and upstream stays
+        // silent there, so this port does too.
+        if jsx_expression_position(file, logical.span) != Some(JsxExpressionPosition::Child) {
             continue;
-        };
-        let fixes = if position == JsxExpressionPosition::Child {
-            vec![Fix {
-                message: "Replace with <Show>.".into(),
-                applicability: "safe".into(),
-                edits: vec![TextEdit {
-                    location: location(file.path.shared(), logical.span),
-                    new_text: format!(
-                        "<Show when={{{}}}>{}</Show>",
-                        text(file, logical.left),
-                        as_jsx_child(text(file, logical.right))
-                    ),
-                }],
-            }]
-        } else {
-            vec![]
-        };
+        }
+        let fixes = vec![Fix {
+            message: "Replace with <Show>.".into(),
+            applicability: "safe".into(),
+            edits: vec![TextEdit {
+                location: location(file.path.shared(), logical.span),
+                new_text: format!(
+                    "<Show when={{{}}}>{}</Show>",
+                    text(file, logical.left),
+                    as_jsx_child(text(file, logical.right))
+                ),
+            }],
+        }];
         violations.push(StaticViolation {
             id: "SC8015".into(),
             rule: "prefer-show".into(),
@@ -549,25 +577,21 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
         {
             continue;
         }
-        let Some(position) = jsx_expression_position(file, conditional.span) else {
+        if jsx_expression_position(file, conditional.span) != Some(JsxExpressionPosition::Child) {
             continue;
-        };
-        let fixes = if position == JsxExpressionPosition::Child {
-            vec![Fix {
-                message: "Replace with <Show fallback>.".into(),
-                applicability: "safe".into(),
-                edits: vec![TextEdit {
-                    location: location(file.path.shared(), conditional.span),
-                    new_text: show_conditional_replacement(
-                        text(file, conditional.test),
-                        text(file, conditional.consequent),
-                        text(file, conditional.alternate),
-                    ),
-                }],
-            }]
-        } else {
-            vec![]
-        };
+        }
+        let fixes = vec![Fix {
+            message: "Replace with <Show fallback>.".into(),
+            applicability: "safe".into(),
+            edits: vec![TextEdit {
+                location: location(file.path.shared(), conditional.span),
+                new_text: show_conditional_replacement(
+                    text(file, conditional.test),
+                    text(file, conditional.consequent),
+                    text(file, conditional.alternate),
+                ),
+            }],
+        }];
         violations.push(StaticViolation {
             id: "SC8015".into(),
             rule: "prefer-show".into(),

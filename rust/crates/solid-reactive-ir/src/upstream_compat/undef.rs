@@ -11,15 +11,11 @@
 //! spans the fact-extraction demand plan requested — there is no separate
 //! scope walk here to turn off.
 //!
-//! One thing upstream reports sits outside what today's demand plan resolves,
-//! and this rule stays silent on it rather than guess:
-//!
-//! - A dotted JSX tag name (`<Foo.Bar />`) is queried as a single span
-//!   covering the whole expression, so an unresolved entity there could
-//!   mean `Foo` itself is undefined, or that `Foo` resolves fine but has no
-//!   `Bar` member — two different defects with two different fixes. We
-//!   only ever asked the compiler the combined question, so we do not
-//!   report either answer from it.
+//! A dotted JSX tag name (`<Foo.Bar />`) is handled the way upstream handles
+//! it: only the root identifier's own resolution is judged, from a demand the
+//! plan places on exactly that root span. Whether a resolved `Foo` actually
+//! has a `Bar` member is a different question with a different fix, and this
+//! rule does not speculate about it — upstream does not either.
 //!
 //! TypeScript deliberately does not bind the local-name node in a namespaced
 //! JSX attribute, so `GetSymbolAtLocation` cannot answer for
@@ -81,10 +77,37 @@ pub(super) fn check_file(
     let mut missing_auto_imports = BTreeSet::new();
     for element in &file.ast.jsx_elements {
         let name = file.source_text(element.name.span).unwrap_or_default();
-        if name.is_empty() || name.contains('.') {
-            // Dotted member-expression tag name: see the module doc for why
-            // this rule cannot isolate the root identifier's own
-            // resolution from the fact recorded for the whole expression.
+        if name.is_empty() {
+            continue;
+        }
+        if let Some(dot) = name.find('.') {
+            // A dotted tag name: upstream walks to the root identifier and
+            // checks that alone — `<Foo.Bar/>` reports 'Foo' when `Foo` is
+            // unbound, and never speculates about the `Bar` member. The
+            // demand plan asks TypeScript about exactly this root span, so
+            // an unresolved entity here means the compiler looked and found
+            // nothing. No DOM exemption (upstream applies it to plain tags
+            // only) and no auto-import; `this` is never a binding.
+            let root = name[..dot].trim_end();
+            let root_span = Span::new(
+                element.name.span.start,
+                element.name.span.start + u32::try_from(root.len()).unwrap_or_default(),
+            );
+            if root == "this" || root.is_empty() {
+                continue;
+            }
+            if context.entities.at(path, root_span).is_some() {
+                continue;
+            }
+            violations.push(StaticViolation {
+                id: "SC8005".into(),
+                rule: "jsx-no-undef".into(),
+                message: format!("'{root}' is not defined."),
+                hint: "Import it, declare it, or check the spelling — TypeScript could not resolve this tag's object to any binding.".into(),
+                location: location(file.path.shared(), root_span),
+                analysis_context: String::new(),
+                fixes: vec![],
+            });
             continue;
         }
         if is_dom_or_this(name) {

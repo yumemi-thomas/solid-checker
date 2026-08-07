@@ -1116,6 +1116,23 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
     Ok(RuleOptions::default())
 }
 
+/// The rule-options document [`discover_rule_options`] would load for this
+/// project, if one exists on disk right now.
+///
+/// The retained check daemon folds this into its cached-snapshot input set:
+/// per-rule options are part of every diagnostic identity, so editing,
+/// creating, or deleting `.solid-checker/rule-options.json` must invalidate
+/// a cached answer exactly like an edited contract does.
+pub fn discovered_rule_options_path(project_directory: &Path) -> Option<PathBuf> {
+    for ancestor in project_directory.ancestors() {
+        let candidate = ancestor.join(".solid-checker").join("rule-options.json");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
 fn local_contract_path(project_directory: &Path, module: &str) -> PathBuf {
     project_directory
         .join(".solid-checker")

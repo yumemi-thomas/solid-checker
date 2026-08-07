@@ -1,0 +1,155 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/list-cases.tsx",
+      "start": 463,
+      "end": 502,
+      "fixes": 1
+    },
+    {
+      "rule": "v1/prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/list-cases.tsx",
+      "start": 520,
+      "end": 560,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/prefer-show",
+      "code": "SC8015",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/upstream-divergences/list-cases.tsx",
+      "start": 782,
+      "end": 804,
+      "fixes": 1
+    },
+    {
+      "rule": "v1/no-innerhtml",
+      "code": "SC8008",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
+      "start": 420,
+      "end": 443,
+      "fixes": 1
+    },
+    {
+      "rule": "v1/jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
+      "start": 453,
+      "end": 482,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-innerhtml",
+      "code": "SC8008",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
+      "start": 453,
+      "end": 512,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-innerhtml",
+      "code": "SC8008",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
+      "start": 561,
+      "end": 583,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-proxy-apis",
+      "code": "SC8009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/proxy-cases.tsx",
+      "start": 429,
+      "end": 445,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-proxy-apis",
+      "code": "SC8009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/proxy-cases.tsx",
+      "start": 558,
+      "end": 566,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/proxy-cases.tsx",
+      "start": 637,
+      "end": 638,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/primitive-in-leaf-owner",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/resource-cases.tsx",
+      "start": 548,
+      "end": 562,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/style-prop",
+      "code": "SC8017",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
+      "start": 426,
+      "end": 431,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/style-prop",
+      "code": "SC8017",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
+      "start": 465,
+      "end": 473,
+      "fixes": 1
+    },
+    {
+      "rule": "v1/style-prop",
+      "code": "SC8017",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
+      "start": 520,
+      "end": 521,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/jsx-no-undef",
+      "code": "SC8005",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/tag-cases.tsx",
+      "start": 527,
+      "end": 534,
+      "fixes": 0
+    }
+  ]
+}

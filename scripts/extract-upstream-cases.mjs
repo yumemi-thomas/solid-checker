@@ -44,10 +44,19 @@ for (const entry of readdirSync(source).filter((f) => f.endsWith(".test.ts"))) {
   }
   const normalise = (test, expected) => {
     const object = typeof test === "string" ? { code: test } : test;
+    // RuleTester also accepts `errors: 3` — a bare count with no message
+    // ids. Upstream's current suites all use the array form, but a future
+    // re-extraction must not crash on (or miscount) the numeric one.
+    const errorList = Array.isArray(object.errors) ? object.errors : [];
+    const errorCount = Array.isArray(object.errors)
+      ? object.errors.length
+      : typeof object.errors === "number"
+        ? object.errors
+        : 1;
     return {
       code: object.code,
-      errors: expected ? (object.errors?.length ?? 1) : 0,
-      messageIds: expected ? (object.errors ?? []).map((e) => e.messageId).filter(Boolean) : [],
+      errors: expected ? errorCount : 0,
+      messageIds: expected ? errorList.map((e) => e.messageId).filter(Boolean) : [],
       options: object.options ?? null,
       output: object.output ?? null,
       tsOnly: Boolean(object[Symbol.for("ts only")]),

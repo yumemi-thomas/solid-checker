@@ -105,13 +105,26 @@ impl Dialect for Solid1x {
         ]
     }
 
-    /// The 1.x dom-expressions `reservedNameSpaces` (`on`, `oncapture`,
-    /// `use`, `prop`, `attr`, `bool`) plus the XML prefixes the compiler
-    /// passes through (`xmlns`, `xlink`).
+    /// `pkg/contracts/bundled/solid-js-v1.json`, the artifact
+    /// `solid-facts-backend` compiles in for this dialect — not the reviewed
+    /// semantics source (`contracts/solid-js-1x.json` in this crate), which
+    /// no diagnostic reads at runtime.
+    fn bundled_contract_label(&self) -> &'static str {
+        "solid-js-v1.json"
+    }
+
+    /// The 1.x dom-expressions `reservedNameSpaces` (`class`, `on`,
+    /// `oncapture`, `style`, `use`, `prop`, `attr`, `bool`) plus the XML
+    /// prefixes the compiler passes through (`xmlns`, `xlink`). `class:` and
+    /// `style:` are recognized — the compiler binds them per-name — even
+    /// though `no-unknown-namespaces` still steers authors toward the plain
+    /// props, exactly as upstream's rule does.
     fn jsx_attribute_namespaces(&self) -> &'static [&'static str] {
         &[
+            "class",
             "on",
             "oncapture",
+            "style",
             "use",
             "prop",
             "attr",
@@ -419,6 +432,13 @@ impl Dialect for Solid1x {
             Primitive::MapArray | Primitive::IndexArray => {
                 &[(0, Execution::Tracked), (1, Execution::Deferred)]
             }
+            // `on`'s deps run *inline* in whatever computation invokes the
+            // returned adapter — deliberately not `Tracked`, although the
+            // reads do subscribe there: the engine's returned-adapter
+            // classifier keys on `Inline` to derive the role from the
+            // concrete invocation site (`createEffect(on(...))` tracks, a
+            // bare top-level adapter call does not). `mapArray`'s list stays
+            // `Tracked` because its row computations re-read it themselves.
             Primitive::On => &[(0, Execution::Inline), (1, Execution::Deferred)],
             Primitive::RunWithOwner | Primitive::ModifyMutable => &[(1, Execution::Inline)],
             _ => &[],
@@ -583,6 +603,10 @@ impl Dialect for Solid1x {
             | Primitive::Hydrate
             | Primitive::Render
             | Primitive::WebMemo
+            // createResource eagerly creates computations (a render effect
+            // when a source is supplied) that need disposal, the same
+            // obligation its `creates_directive_owner` row records.
+            | Primitive::CreateResource
             | Primitive::Children => CleanupRule::Always,
             _ => CleanupRule::Never,
         }

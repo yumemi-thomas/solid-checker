@@ -541,17 +541,26 @@ pub(super) fn named_callback_execution_role(
                 {
                     return false;
                 }
-                // An effect's tracked compute is not classified here: none of
-                // the arms below answers for it (the tracked arm excludes
-                // effects), so admitting it would fall through to the
-                // rendering tail and misreport `createEffect(namedCompute)`
-                // as untracked. Answering None instead defers those reads to
-                // compiler facts. Only the apply argument names a role this
-                // function can truthfully return for an effect.
-                if is_effect(primitive)
-                    && effect_apply_argument(dialect, primitive, call.arguments.len())
-                        != Some(argument_index)
-                {
+                // Admit only positions some arm below can truthfully
+                // classify. An effect's tracked compute and an inline
+                // adapter argument (1.x `on`'s deps) satisfy none of them —
+                // admitting those would fall through to the rendering tail
+                // and misreport `createEffect(namedCompute)` as untracked
+                // rendering. Answering None instead defers such reads to
+                // compiler facts and the returned-adapter classifiers.
+                let count = call.arguments.len();
+                let classifiable =
+                    dialect.reports_untracked_reads_at(primitive, argument_index, count)
+                        || effect_apply_argument(dialect, primitive, count) == Some(argument_index)
+                        || (!is_effect(primitive)
+                            && dialect.callback_tracks_reads_at(primitive, argument_index, count))
+                        || callback_runs_outside_tracking(
+                            dialect,
+                            primitive,
+                            argument_index,
+                            count,
+                        );
+                if !classifiable {
                     return false;
                 }
                 call.arguments.get(argument_index).is_some_and(|argument| {

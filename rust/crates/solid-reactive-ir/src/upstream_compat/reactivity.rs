@@ -840,20 +840,16 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
 
     // An untagged template literal stringifies each interpolation, so an
     // accessor there renders its own source text. A *tagged* one hands the
-    // interpolations to the tag as values, which may legitimately call them —
-    // and since a tag's quasi is also a template literal, the containment
-    // check is what keeps `css`color: ${theme}`` out of this rule.
-    let tagged = |slot: Span| {
-        file.ast
-            .tagged_templates
-            .iter()
-            .any(|template| template.span.contains(slot))
-    };
+    // interpolations to the tag as values, which may legitimately call
+    // them. The fact table records only untagged literals — a tag's quasi
+    // is filtered out at collection — so `css`color: ${theme}`` stays out
+    // of this rule while an untagged template nested inside a tagged
+    // interpolation still reports.
     if file
         .ast
         .template_literals
         .iter()
-        .any(|template| !tagged(template.span) && template.expressions.contains(&span))
+        .any(|template| template.expressions.contains(&span))
     {
         return Some("a template literal");
     }

@@ -635,6 +635,14 @@ fn contract_files(
         .parent()
         .ok_or("tsconfig has no parent directory")?;
     let mut paths = discovered_contract_paths(directory, modules)?;
+    // Rule options carry the same weight as a contract: they are part of
+    // every diagnostic identity, and `DiagnosticSession::analyze` re-reads
+    // them from disk on every run. The cached-answer short-circuit returns
+    // before analyze does, so the file must be in this input set or an
+    // options edit keeps serving the old snapshot for a whole generation.
+    if let Some(path) = solid_facts_backend::discovered_rule_options_path(directory) {
+        paths.push(path);
+    }
     paths.extend(explicit.iter().map(PathBuf::from));
     paths.sort();
     paths.dedup();
@@ -733,12 +741,13 @@ fn spawn_and_connect(
         .arg(&request.project_id)
         .arg("--typefacts")
         .arg(&request.typefacts_executable);
-    // The client hashed the resolved dialect into the socket path; the spawned
-    // daemon must resolve identically, so an explicit request id is forwarded
-    // rather than re-detected.
-    if let Some(dialect) = &request.dialect {
-        command.arg("--dialect").arg(dialect);
-    }
+    // The client hashed the resolved dialect into the socket path; the
+    // spawned daemon must resolve identically. Detection can flip between
+    // the client's hash and daemon startup (an `npm install` finishing, a
+    // package.json edit), and a daemon that re-detects then binds a socket
+    // the client never connects to — so the resolved id is always
+    // forwarded, never re-derived.
+    command.arg("--dialect").arg(resolve_dialect(request)?.id);
     command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
