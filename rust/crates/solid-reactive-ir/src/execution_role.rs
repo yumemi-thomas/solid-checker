@@ -541,6 +541,19 @@ pub(super) fn named_callback_execution_role(
                 {
                     return false;
                 }
+                // An effect's tracked compute is not classified here: none of
+                // the arms below answers for it (the tracked arm excludes
+                // effects), so admitting it would fall through to the
+                // rendering tail and misreport `createEffect(namedCompute)`
+                // as untracked. Answering None instead defers those reads to
+                // compiler facts. Only the apply argument names a role this
+                // function can truthfully return for an effect.
+                if is_effect(primitive)
+                    && effect_apply_argument(dialect, primitive, call.arguments.len())
+                        != Some(argument_index)
+                {
+                    return false;
+                }
                 call.arguments.get(argument_index).is_some_and(|argument| {
                     argument_references_callback_symbol(
                         file,

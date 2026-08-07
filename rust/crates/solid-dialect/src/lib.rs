@@ -674,6 +674,21 @@ pub trait Dialect: Sync {
             .map(|(_, execution)| *execution)
     }
 
+    /// Whether a function passed at `argument` is stored as a plain value the
+    /// primitive never invokes.
+    ///
+    /// Positive knowledge only. Solid 1.x `createSignal(() => value)` keeps
+    /// the function as the signal's value, so reads inside it are dormant —
+    /// while the same source under 2.0 is a derived signal whose compute
+    /// tracks them. Answering `false` means "unmodelled", never "invoked":
+    /// a missing [`Dialect::callback_executions`] row (2.0 `children`,
+    /// `onCleanup`) is not evidence in either direction, and engines must not
+    /// treat that absence as proof of dormancy.
+    fn stores_function_argument_as_value(&self, primitive: Primitive, argument: usize) -> bool {
+        let _ = (primitive, argument);
+        false
+    }
+
     /// Whether reads in this concrete callback argument subscribe.
     ///
     /// Package-contract execution and the checker's local tracking role are

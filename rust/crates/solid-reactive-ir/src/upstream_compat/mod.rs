@@ -185,8 +185,13 @@ pub(super) fn concat_plus_joined_literal(source: &str) -> Option<String> {
         .into_iter()
         .map(|part| {
             let quote = part.as_bytes().first().copied()?;
-            (matches!(quote, b'\'' | b'"') && part.as_bytes().last().copied() == Some(quote))
-                .then(|| part[1..part.len() - 1].to_owned())
+            // A lone quote character passes the first==last comparison against
+            // itself; the length gate keeps `"+"`-shaped attribute text (split
+            // into single-quote parts) from slicing out of bounds.
+            (part.len() >= 2
+                && matches!(quote, b'\'' | b'"')
+                && part.as_bytes().last().copied() == Some(quote))
+            .then(|| part[1..part.len() - 1].to_owned())
         })
         .collect::<Option<Vec<_>>>()
         .map(|parts| parts.concat())
@@ -208,7 +213,10 @@ pub(super) fn strip_string_literal(source: &str) -> Option<String> {
         .map(str::trim)
         .unwrap_or(trimmed);
     let quote = trimmed.as_bytes().first().copied()?;
-    if !matches!(quote, b'\'' | b'"' | b'`') || trimmed.as_bytes().last().copied() != Some(quote) {
+    if trimmed.len() < 2
+        || !matches!(quote, b'\'' | b'"' | b'`')
+        || trimmed.as_bytes().last().copied() != Some(quote)
+    {
         return None;
     }
     Some(trimmed[1..trimmed.len() - 1].to_owned())
@@ -387,5 +395,16 @@ mod tests {
     fn refuses_to_join_when_any_part_is_not_a_literal() {
         assert_eq!(concat_plus_joined_literal("'java' + x"), None);
         assert_eq!(concat_plus_joined_literal("'just one'"), None);
+    }
+
+    #[test]
+    fn survives_a_plus_adjacent_to_a_quote() {
+        // Attribute text like `"+ Add"` splits into parts whose first is a
+        // lone quote character; these must answer None, not slice `[1..0]`.
+        assert_eq!(concat_plus_joined_literal("\"+ Add\""), None);
+        assert_eq!(concat_plus_joined_literal("'+'"), None);
+        assert_eq!(concat_plus_joined_literal("\"x+\""), None);
+        assert_eq!(strip_string_literal("'"), None);
+        assert_eq!(strip_string_literal("{ \" }"), None);
     }
 }

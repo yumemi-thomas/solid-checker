@@ -5166,15 +5166,16 @@ fn inside_unclassified_callback(file: &solid_facts::FileFacts, span: Span) -> bo
 }
 
 /// Whether `span` is inside a syntactically direct function argument that a
-/// known primitive treats as a value rather than a callback.
+/// known primitive provably never invokes.
 ///
-/// Function values are ordinary data in APIs such as Solid 1.x
-/// `createSignal(() => value)`. Reachability is deliberately conservative and
-/// may retain anonymous functions nested in a component, so the primitive
-/// resolution, argument shape, and AST position are the stronger fact domains
-/// here: together they prove the primitive never invokes the outer function.
-/// Requiring the argument itself to be a function keeps an IIFE passed as a
-/// value from being mistaken for dormant code.
+/// Two positive proofs qualify, and nothing else: the dialect declares the
+/// position a stored value (Solid 1.x `createSignal(() => value)`), or the
+/// position's modelled callback belongs to a returned lazy adapter that this
+/// call never consumes (`mapArray` whose result is discarded). A primitive
+/// with no callback model at all — 2.0 `children`, `onCleanup` — proves
+/// nothing: those callbacks do run, so their reads must not be treated as
+/// dormant. Requiring the argument itself to be a function keeps an IIFE
+/// passed as a value from being mistaken for dormant code.
 fn inside_known_value_function_argument(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -5195,8 +5196,25 @@ fn inside_known_value_function_argument(
                         solid_facts::ast::ArgumentValueKind::Function
                             | solid_facts::ast::ArgumentValueKind::AsyncFunction
                     )
-                    && callback_execution_at_call(file, call, primitive, argument_index, lookup)
-                        .is_none()
+                    && (lookup
+                        .dialect
+                        .stores_function_argument_as_value(primitive, argument_index)
+                        || (lookup
+                            .dialect
+                            .callback_execution_at(
+                                primitive,
+                                argument_index,
+                                call.arguments.len(),
+                            )
+                            .is_some()
+                            && callback_execution_at_call(
+                                file,
+                                call,
+                                primitive,
+                                argument_index,
+                                lookup,
+                            )
+                            .is_none()))
             })
     })
 }

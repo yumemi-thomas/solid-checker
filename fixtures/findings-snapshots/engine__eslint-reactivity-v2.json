@@ -92,6 +92,26 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/cleanup-thunk-write.tsx",
+      "start": 403,
+      "end": 424,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/engine/eslint-reactivity-v2/cleanup-thunk-write.tsx",
+      "start": 412,
+      "end": 419,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

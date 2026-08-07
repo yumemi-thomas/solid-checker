@@ -439,6 +439,23 @@ impl Dialect for Solid1x {
                 ))
     }
 
+    /// The function arguments 1.x stores instead of invoking: a signal's
+    /// initial value, and the `prev` seed threaded into effects, computeds,
+    /// and memos. 2.0 answers differently for the first — `createSignal(fn)`
+    /// there is a derived signal whose compute runs tracked. Source:
+    /// `docs/solid-1x-api-surface.md`.
+    fn stores_function_argument_as_value(&self, primitive: Primitive, argument: usize) -> bool {
+        (primitive == Primitive::CreateSignal && argument == 0)
+            || (argument == 1
+                && matches!(
+                    primitive,
+                    Primitive::CreateEffect
+                        | Primitive::CreateRenderEffect
+                        | Primitive::CreateComputed
+                        | Primitive::CreateMemo
+                ))
+    }
+
     fn returned_callback_execution_at(
         &self,
         primitive: Primitive,
