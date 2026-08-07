@@ -267,7 +267,9 @@ impl Dialect for Solid1x {
             // under a synthetic error effect, so one flat owner role would
             // fabricate certainty.
             Primitive::CatchError => &[(0, CallbackOwner::Creates)],
-            Primitive::RunWithOwner => &[(1, CallbackOwner::Creates)],
+            // The supplied owner is nullable. The call-site classifier
+            // sharpens this to Creates or None when its value is proven.
+            Primitive::RunWithOwner => &[(1, CallbackOwner::Conditional)],
             Primitive::CreateReaction => &[(0, CallbackOwner::Leaf)],
             // The flat package-contract form records the two-argument
             // fetcher. `callback_owner_at` supplies both overloads and the

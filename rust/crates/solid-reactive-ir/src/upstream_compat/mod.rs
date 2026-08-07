@@ -29,7 +29,7 @@ mod syntax;
 mod undef;
 mod upstream_data;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::indexes::SemanticLookup;
 use crate::{
@@ -134,13 +134,10 @@ pub(super) fn direct_object_literal_properties(
     expression: Span,
 ) -> Option<Vec<&solid_facts::ast::ObjectPropertyFact>> {
     let mut source = text(file, expression).trim();
-    while let Some(inner) = source
-        .strip_prefix('(')
-        .and_then(|rest| rest.strip_suffix(')'))
-    {
-        source = inner.trim();
+    while source.starts_with('(') && entire_delimited(source, '(', ')') {
+        source = source[1..source.len() - 1].trim();
     }
-    if !(source.starts_with('{') && source.ends_with('}')) {
+    if !source.starts_with('{') || !entire_delimited(source, '{', '}') {
         return None;
     }
     let inside = file
@@ -164,56 +161,127 @@ pub(super) fn direct_object_literal_properties(
     )
 }
 
-/// The declaration text of the nearest binding named `name` in this file, for
-/// resolving a bare identifier back to its initializer.
+/// Whether the first delimiter closes at the end of `source` rather than at
+/// some earlier point. Quotes and templates are skipped; unsupported lexical
+/// shapes conservatively answer false through unbalanced depth, withholding a
+/// fix rather than manufacturing an object-literal proof.
+fn entire_delimited(source: &str, open: char, close: char) -> bool {
+    if !source.starts_with(open) || !source.ends_with(close) {
+        return false;
+    }
+    let mut depth = 0_u32;
+    let mut quote = None;
+    let mut escaped = false;
+    for (index, character) in source.char_indices() {
+        if let Some(active) = quote {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == active {
+                quote = None;
+            }
+            continue;
+        }
+        if matches!(character, '\'' | '"' | '`') {
+            quote = Some(character);
+            continue;
+        }
+        if character == open {
+            depth += 1;
+        } else if character == close {
+            let Some(next) = depth.checked_sub(1) else {
+                return false;
+            };
+            depth = next;
+            if depth == 0 {
+                return index + character.len_utf8() == source.len();
+            }
+        }
+    }
+    false
+}
+
+/// The declaration text of the binding an exact identifier reference resolves
+/// to, using TypeScript's canonical symbol rather than its spelling.
 ///
-/// A narrow, single-hop trace, first match in file order: it does not resolve
-/// reassignment, shadowing, or which of several same-named bindings is in
-/// scope at the use site. Acceptable for the rules that call it because the
-/// result only ever loosens a stylistic judgement about what the value *looks
-/// like* — it is never used to decide whether a name is defined at all, which
-/// is exactly the judgement `undef.rs` refuses to make by hand, asking
-/// TypeScript facts instead.
-pub(super) fn binding_initializer<'a>(file: &'a FileFacts, name: &str) -> Option<(Span, &'a str)> {
-    file.ast.bindings.iter().find_map(|binding| {
-        binding
-            .names
-            .iter()
-            .any(|candidate| text(file, candidate.span) == name)
-            .then(|| binding.initializer.map(|span| (span, text(file, span))))
-            .flatten()
+/// The reverse binding index includes local declarations, cross-file aliases,
+/// and every compiler-proven reference. Parameters and shadowed names resolve
+/// to their own symbols and therefore cannot fall through to an unrelated
+/// same-spelled initializer.
+pub(super) fn binding_initializer<'a>(
+    context: &UpstreamCompatContext<'a>,
+    file: &FileFacts,
+    reference: Span,
+) -> Option<(&'a FileFacts, Span, &'a str, SymbolId)> {
+    let (binding_file, binding, symbol) = context
+        .lookup
+        .binding_at_reference(file.path.as_str(), reference)?;
+    let initializer = binding.initializer?;
+    Some((
+        binding_file,
+        initializer,
+        text(binding_file, initializer),
+        symbol,
+    ))
+}
+
+/// Whether an exact identifier reference resolves to one of this file's
+/// imports. Comparing canonical symbols keeps a parameter that shadows an
+/// import from inheriting the import's treatment merely by sharing its name.
+pub(super) fn is_import_reference(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    reference: Span,
+) -> bool {
+    let Some(symbol) = context.entities.at(file.path.as_str(), reference) else {
+        return false;
+    };
+    file.ast.imports.iter().any(|import| {
+        import.bindings.iter().any(|binding| {
+            context.entities.at(file.path.as_str(), binding.local.span) == Some(symbol)
+        })
     })
 }
 
 /// The static string an attribute value or expression resolves to, following
-/// one level of local variable indirection and one level of `+`
+/// compiler-resolved local variable indirection and one level of `+`
 /// concatenation. Not a general constant-folder: it is exactly the shape
 /// upstream's own scope-based `getStaticValue` recovers for the common
 /// patterns (a literal, a `const url = "..."`, or `"javascript:" +
 /// something`), no more. [`literal_string_type`] complements it with the
 /// values TypeScript proves.
-pub(super) fn static_string_expression(file: &FileFacts, span: Span) -> Option<String> {
+pub(super) fn static_string_expression(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<String> {
+    static_string_expression_inner(context, file, span, &mut HashSet::new())
+}
+
+fn static_string_expression_inner(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+    visiting: &mut HashSet<SymbolId>,
+) -> Option<String> {
     let source = text(file, span).trim();
-    if !source.contains('+')
-        && let Some(value) = static_string(file, span)
-    {
-        return Some(unescape_common_sequences(&value));
+    if let Some(value) = decode_string_literal(source) {
+        return Some(value);
     }
     if source
         .bytes()
         .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'$'))
     {
-        return binding_initializer(file, source)
-            .and_then(|(initializer, _)| static_string_expression(file, initializer));
+        let (binding_file, initializer, _, symbol) = binding_initializer(context, file, span)?;
+        if !visiting.insert(symbol.clone()) {
+            return None;
+        }
+        let value = static_string_expression_inner(context, binding_file, initializer, visiting);
+        visiting.remove(&symbol);
+        return value;
     }
     concat_plus_joined_literal(source)
-}
-
-fn unescape_common_sequences(value: &str) -> String {
-    value
-        .replace("\\t", "\t")
-        .replace("\\n", "\n")
-        .replace("\\r", "\r")
 }
 
 /// Joins a `"a" + "b" + ...` chain of quoted literals into their concatenated
@@ -228,13 +296,12 @@ pub(super) fn concat_plus_joined_literal(source: &str) -> Option<String> {
         .into_iter()
         .map(|part| {
             // Each part must be one whole quoted literal on its own —
-            // [`strip_string_literal`] carries the length guard (a lone
-            // quote character is not a literal) and the unescaped-inner-
-            // quote scan (`'b' ? c : 'd'` starts and ends with a quote but
-            // is not one). Backtick parts are refused: `a` + `b` folds fine
-            // at runtime, but upstream's folder never joins templates.
+            // [`decode_string_literal`] carries the length guard (a lone
+            // quote character is not a literal), syntax validation, and
+            // escape decoding. Backtick parts are refused: `a` + `b` folds
+            // fine at runtime, but upstream's folder never joins templates.
             part.starts_with(['\'', '"'])
-                .then(|| strip_string_literal(part))
+                .then(|| decode_string_literal(part))
                 .flatten()
         })
         .collect::<Option<Vec<_>>>()
@@ -250,6 +317,10 @@ pub(super) fn static_string(file: &FileFacts, span: Span) -> Option<String> {
 }
 
 pub(super) fn strip_string_literal(source: &str) -> Option<String> {
+    string_literal_body(source).map(|(_, inside)| inside.to_owned())
+}
+
+fn string_literal_body(source: &str) -> Option<(u8, &str)> {
     let trimmed = source.trim();
     let trimmed = trimmed
         .strip_prefix('{')
@@ -283,7 +354,78 @@ pub(super) fn strip_string_literal(source: &str) -> Option<String> {
     if quote == b'`' && inside.contains("${") {
         return None;
     }
-    Some(inside.to_owned())
+    Some((quote, inside))
+}
+
+fn decode_string_literal(source: &str) -> Option<String> {
+    let (_, inside) = string_literal_body(source)?;
+    let mut decoded = String::with_capacity(inside.len());
+    let mut characters = inside.chars().peekable();
+    while let Some(character) = characters.next() {
+        if character != '\\' {
+            decoded.push(character);
+            continue;
+        }
+        let escaped = characters.next()?;
+        match escaped {
+            '\'' => decoded.push('\''),
+            '"' => decoded.push('"'),
+            '`' => decoded.push('`'),
+            '\\' => decoded.push('\\'),
+            'b' => decoded.push('\u{0008}'),
+            'f' => decoded.push('\u{000c}'),
+            'n' => decoded.push('\n'),
+            'r' => decoded.push('\r'),
+            't' => decoded.push('\t'),
+            'v' => decoded.push('\u{000b}'),
+            '0' if characters.peek().is_none_or(|next| !next.is_ascii_digit()) => {
+                decoded.push('\0');
+            }
+            'x' => decoded.push(char::from_u32(read_hex_escape(&mut characters, 2)?)?),
+            'u' if characters.peek() == Some(&'{') => {
+                characters.next();
+                let mut digits = String::new();
+                let mut closed = false;
+                for digit in characters.by_ref() {
+                    if digit == '}' {
+                        closed = true;
+                        break;
+                    }
+                    if !digit.is_ascii_hexdigit() || digits.len() == 6 {
+                        return None;
+                    }
+                    digits.push(digit);
+                }
+                if digits.is_empty() || !closed {
+                    return None;
+                }
+                decoded.push(char::from_u32(u32::from_str_radix(&digits, 16).ok()?)?);
+            }
+            'u' => decoded.push(char::from_u32(read_hex_escape(&mut characters, 4)?)?),
+            '\n' => {}
+            '\r' => {
+                if characters.peek() == Some(&'\n') {
+                    characters.next();
+                }
+            }
+            '\u{2028}' | '\u{2029}' => {}
+            // ECMAScript identity escapes evaluate to the escaped character.
+            other if !other.is_ascii_digit() => decoded.push(other),
+            _ => return None,
+        }
+    }
+    Some(decoded)
+}
+
+fn read_hex_escape(
+    characters: &mut std::iter::Peekable<std::str::Chars<'_>>,
+    length: usize,
+) -> Option<u32> {
+    let mut value = 0_u32;
+    for _ in 0..length {
+        value = value.checked_mul(16)? + characters.next()?.to_digit(16)?;
+    }
+    Some(value)
 }
 
 pub(super) fn fix_replace(
@@ -423,7 +565,9 @@ pub(super) fn check_file(
 
 #[cfg(test)]
 mod tests {
-    use super::{concat_plus_joined_literal, strip_string_literal};
+    use super::{
+        concat_plus_joined_literal, decode_string_literal, entire_delimited, strip_string_literal,
+    };
 
     #[test]
     fn strips_quotes_from_string_literals() {
@@ -453,6 +597,25 @@ mod tests {
             concat_plus_joined_literal("'java' + 'script:x'"),
             Some("javascript:x".to_string())
         );
+    }
+
+    #[test]
+    fn decodes_ecmascript_hex_and_unicode_escapes() {
+        assert_eq!(
+            decode_string_literal(r#"'\x6a\u0061\u{76}ascript:'"#),
+            Some("javascript:".to_string())
+        );
+        assert_eq!(
+            concat_plus_joined_literal(r#"'\u006aava' + 'script:'"#),
+            Some("javascript:".to_string())
+        );
+    }
+
+    #[test]
+    fn delimiter_proof_rejects_separate_parenthesized_expressions() {
+        assert!(entire_delimited("({ __html: html })", '(', ')'));
+        assert!(!entire_delimited("({ __html: html }) + ({})", '(', ')'));
+        assert!(!entire_delimited("{ __html: html } + {}", '{', '}'));
     }
 
     #[test]

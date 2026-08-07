@@ -170,10 +170,18 @@ fn jsx_no_script_url(
         // The text folder recovers this file's literal shapes; the
         // literal-string *type* recovers the same value when the binding
         // lives elsewhere (an import, an inferred const in another file).
-        let Some(value) = attribute.expression.or(attribute.value).and_then(|span| {
-            static_string_expression(file, span)
-                .or_else(|| super::literal_string_type(context, file, span))
-        }) else {
+        let value = attribute.expression.map_or_else(
+            || {
+                attribute
+                    .value
+                    .and_then(|span| super::static_string(file, span))
+            },
+            |span| {
+                static_string_expression(context, file, span)
+                    .or_else(|| super::literal_string_type(context, file, span))
+            },
+        );
+        let Some(value) = value else {
             continue;
         };
         if is_javascript_protocol(&value) {

@@ -237,9 +237,9 @@ impl Dialect for Solid2 {
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
             | Primitive::Resolve => &[(0, CallbackOwner::Creates)],
-            // runWithOwner(owner, fn) supplies an owner rather than creating
-            // one, and hands it to the function at index 1.
-            Primitive::RunWithOwner => &[(1, CallbackOwner::Creates)],
+            // The supplied owner is nullable. The call-site classifier
+            // sharpens this to Creates or None when its value is proven.
+            Primitive::RunWithOwner => &[(1, CallbackOwner::Conditional)],
             // createOwner() then runWithOwner(owner, () => fn()).
             Primitive::CreateRevealOrder => &[(0, CallbackOwner::Creates)],
             // The loader is invoked from the wrapper component body.
@@ -613,6 +613,7 @@ const NAMESPACE_SOLID_JS: &[&str] = &[
     "createReaction",
     "createRoot",
     "createOwner",
+    "runWithOwner",
     "untrack",
     "onSettled",
     "onCleanup",
@@ -716,6 +717,15 @@ mod tests {
                 "{name} maps to a primitive another name already claims"
             );
         }
+    }
+
+    #[test]
+    fn named_and_namespace_imports_can_resolve_run_with_owner() {
+        assert!(
+            Solid2
+                .namespace_import_primitives("solid-js")
+                .contains(&"runWithOwner")
+        );
     }
 
     /// Solid 2.0 exports that take a callback and are deliberately **not**

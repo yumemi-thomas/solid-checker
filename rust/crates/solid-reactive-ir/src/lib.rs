@@ -170,7 +170,15 @@ pub struct OwnerRequirement {
     pub operation: String,
     pub location: Location,
     pub uncertain: bool,
+    /// The uncertainty specifically comes from a nullable owner supplied to
+    /// `runWithOwner`, rather than an exported function's unknown callers.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub conditional_owner: bool,
     pub report: bool,
+}
+
+const fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -3898,6 +3906,7 @@ enum OwnerEdgeKind {
     Preserve,
     Owned,
     Unowned,
+    Conditional,
     Leaf,
 }
 
@@ -3983,6 +3992,13 @@ struct OwnerRequirementCandidate {
     report_mask: u8,
     allow_uncertain: bool,
     settled_target: Option<OwnerTarget>,
+}
+
+#[derive(Clone, Copy)]
+struct OwnerRequirementStatus {
+    uncertain: bool,
+    conditional_owner: bool,
+    report: bool,
 }
 
 struct CachedOwnerFile {
@@ -4283,21 +4299,24 @@ fn find_missing_owners(
                 _ => None,
             };
             if let Some((operation, report)) = operation {
-                let uncertain = containing_function_indexed(
-                    &nodes,
-                    &nodes_by_path,
-                    file.path.as_str(),
-                    call.span,
-                )
-                .is_some_and(|index| {
-                    nodes[index].exported
-                        && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
-                        && !nodes[index]
-                            .name
-                            .as_deref()
-                            .and_then(|name| name.chars().next())
-                            .is_some_and(char::is_uppercase)
-                });
+                let conditional_owner = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+                    == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                let uncertain = conditional_owner
+                    || containing_function_indexed(
+                        &nodes,
+                        &nodes_by_path,
+                        file.path.as_str(),
+                        call.span,
+                    )
+                    .is_some_and(|index| {
+                        nodes[index].exported
+                            && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
+                            && !nodes[index]
+                                .name
+                                .as_deref()
+                                .and_then(|name| name.chars().next())
+                                .is_some_and(char::is_uppercase)
+                    });
                 let operation_span = if operation == "settled-cleanup" {
                     call.arguments
                         .first()
@@ -4311,8 +4330,11 @@ fn find_missing_owners(
                     operation,
                     file.path.as_str(),
                     operation_span,
-                    uncertain,
-                    report,
+                    OwnerRequirementStatus {
+                        uncertain,
+                        conditional_owner,
+                        report,
+                    },
                 );
             }
         }
@@ -4344,14 +4366,19 @@ fn find_missing_owners(
             ) {
                 continue;
             }
+            let conditional_owner = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+                == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
                 "boundary",
                 file.path.as_str(),
                 Span::new(element.span.start, element.name.span.end),
-                false,
-                context & OWNER_CONTEXT_UNOWNED != 0,
+                OwnerRequirementStatus {
+                    uncertain: conditional_owner,
+                    conditional_owner,
+                    report: context & OWNER_CONTEXT_UNOWNED != 0,
+                },
             );
         }
     }
@@ -4777,24 +4804,30 @@ fn find_missing_owners_incremental(
                     .copied()
             });
             let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
-            let uncertain = candidate.allow_uncertain
-                && owner_index.is_some_and(|index| {
-                    nodes[index].exported
-                        && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
-                        && !nodes[index]
-                            .name
-                            .as_deref()
-                            .and_then(|name| name.chars().next())
-                            .is_some_and(char::is_uppercase)
-                });
+            let conditional_owner = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+                == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+            let uncertain = conditional_owner
+                || (candidate.allow_uncertain
+                    && owner_index.is_some_and(|index| {
+                        nodes[index].exported
+                            && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
+                            && !nodes[index]
+                                .name
+                                .as_deref()
+                                .and_then(|name| name.chars().next())
+                                .is_some_and(char::is_uppercase)
+                    }));
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
                 candidate.operation,
                 file.path.as_str(),
                 candidate.operation_span,
-                uncertain,
-                context & candidate.report_mask != 0,
+                OwnerRequirementStatus {
+                    uncertain,
+                    conditional_owner,
+                    report: context & candidate.report_mask != 0,
+                },
             );
         }
     }
@@ -4848,6 +4881,7 @@ const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
         OwnerEdgeKind::Preserve => source,
         OwnerEdgeKind::Owned => OWNER_CONTEXT_OWNED,
         OwnerEdgeKind::Unowned => OWNER_CONTEXT_UNOWNED,
+        OwnerEdgeKind::Conditional => OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
         OwnerEdgeKind::Leaf => OWNER_CONTEXT_LEAF,
     }
 }
@@ -4869,8 +4903,7 @@ fn push_owner_requirement(
     operation: &str,
     path: &str,
     span: Span,
-    uncertain: bool,
-    report: bool,
+    status: OwnerRequirementStatus,
 ) {
     let location = location(path, span);
     if seen.insert((
@@ -4882,8 +4915,9 @@ fn push_owner_requirement(
         requirements.push(OwnerRequirement {
             operation: operation.into(),
             location,
-            uncertain,
-            report,
+            uncertain: status.uncertain,
+            conditional_owner: status.conditional_owner,
+            report: status.report,
         });
     }
 }
@@ -4923,11 +4957,7 @@ fn owner_callback_edges(
     };
     let mut edges = Vec::new();
     for argument in 0..call.arguments.len() {
-        let Some(owner) =
-            lookup
-                .dialect
-                .callback_owner_at(primitive, argument, call.arguments.len())
-        else {
+        let Some(owner) = callback_owner_at_call(file, call, primitive, argument, lookup) else {
             continue;
         };
         let kind = callback_owner_edge_kind(owner);
@@ -4960,6 +4990,7 @@ fn owner_callback_edges(
 const fn callback_owner_edge_kind(owner: solid_dialect::CallbackOwner) -> OwnerEdgeKind {
     match owner {
         solid_dialect::CallbackOwner::Creates => OwnerEdgeKind::Owned,
+        solid_dialect::CallbackOwner::Conditional => OwnerEdgeKind::Conditional,
         solid_dialect::CallbackOwner::Inherits => OwnerEdgeKind::Preserve,
         solid_dialect::CallbackOwner::None => OwnerEdgeKind::Unowned,
         solid_dialect::CallbackOwner::Leaf => OwnerEdgeKind::Leaf,
@@ -5277,9 +5308,61 @@ pub(crate) fn callback_owner_at_call(
     {
         return None;
     }
+    if primitive == Primitive::RunWithOwner && argument == 1 {
+        return run_with_owner_callback_owner(file, call, lookup);
+    }
     lookup
         .dialect
         .callback_owner_at(primitive, argument, call.arguments.len())
+}
+
+/// `runWithOwner` is the one ownership primitive whose owner is data. Both
+/// dialects accept `Owner | null`; 2.0 makes the null spelling the documented
+/// way to detach a root. Preserve a definite answer where the call site proves
+/// one and keep a conditional edge everywhere else so certification cannot
+/// silently assume a nullable owner exists.
+fn run_with_owner_callback_owner(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    lookup: &SemanticLookup<'_>,
+) -> Option<solid_dialect::CallbackOwner> {
+    let owner = call.arguments.first()?;
+    let source = file.source_text(owner.span)?.trim();
+    if owner.value == solid_facts::ast::ArgumentValueKind::Undefined
+        || source == "null"
+        || source == "undefined"
+        || source.starts_with("void ")
+    {
+        return Some(solid_dialect::CallbackOwner::None);
+    }
+
+    // 2.0's createOwner() is non-null by construction. Resolve the nested
+    // call semantically so a local function with the same spelling proves
+    // nothing.
+    if let Some(index) = file
+        .ast
+        .calls
+        .iter()
+        .position(|candidate| candidate.span == owner.span)
+        && known_primitive(&lookup.primitives(file).calls[index]) == Some(Primitive::CreateOwner)
+    {
+        return Some(solid_dialect::CallbackOwner::Creates);
+    }
+
+    if let Some(descriptor) = lookup
+        .entity_at(file.path.as_str(), owner.span)
+        .and_then(|entity| entity.type_descriptor.as_deref())
+    {
+        // TypeScript may preserve a user alias's name rather than render its
+        // nullable expansion, so absence of the word `null` is not proof.
+        // The Solid export itself (including a flow-narrowed Owner | null)
+        // renders as Owner; everything else stays conditional.
+        if descriptor.text.trim() == "Owner" {
+            return Some(solid_dialect::CallbackOwner::Creates);
+        }
+    }
+
+    Some(solid_dialect::CallbackOwner::Conditional)
 }
 
 /// Resolve the primitive whose returned function is the callee of `call`.
@@ -5425,11 +5508,7 @@ fn returned_callback_invocation_sites(
                 .iter()
                 .position(|candidate| candidate.span == outer.span)
                 .and_then(|call_index| known_primitive(&lookup.primitives(file).calls[call_index]))
-                .and_then(|primitive| {
-                    lookup
-                        .dialect
-                        .callback_owner_at(primitive, index, outer.arguments.len())
-                })
+                .and_then(|primitive| callback_owner_at_call(file, outer, primitive, index, lookup))
                 .map_or(OwnerEdgeKind::Preserve, callback_owner_edge_kind);
             sites.push(ReturnedCallbackInvocationSite {
                 path: file.path.to_string(),
@@ -5539,11 +5618,7 @@ fn returned_callback_invocation_sites(
                 }) {
                     let inherited_owner = primitive
                         .and_then(|primitive| {
-                            lookup.dialect.callback_owner_at(
-                                primitive,
-                                index,
-                                outer.arguments.len(),
-                            )
+                            callback_owner_at_call(use_file, outer, primitive, index, lookup)
                         })
                         .map_or(OwnerEdgeKind::Preserve, callback_owner_edge_kind);
                     sites.push(ReturnedCallbackInvocationSite {

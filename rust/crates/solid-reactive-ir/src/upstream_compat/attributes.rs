@@ -566,10 +566,7 @@ fn event_handlers(
             continue;
         }
         let type_is_static = attribute.expression.is_some_and(|span| {
-            let expression = text(file, span).trim();
-            if binding_initializer(file, expression).is_some_and(|(initializer, _)| {
-                static_string_expression(file, initializer).is_some()
-            }) {
+            if static_string_expression(context, file, span).is_some() {
                 return true;
             }
             // Neither a literal nor an obviously-static local: for a plain
@@ -749,7 +746,7 @@ fn no_array_handlers(
                 return false;
             }
             looks_like_array_literal(source)
-                || binding_initializer(file, source).is_some_and(|(_, initializer)| {
+                || binding_initializer(context, file, span).is_some_and(|(_, _, initializer, _)| {
                     looks_like_array_literal(initializer.trim_start())
                 })
         });

@@ -266,12 +266,15 @@ pub struct EffectSignature {
 pub enum CallbackOwner {
     /// The callback runs under a definite owner this primitive establishes.
     ///
-    /// Usually one it creates and later disposes — `createRoot`. Also covers
-    /// `runWithOwner(owner, fn)`, which supplies an owner it was handed rather
-    /// than making one: the distinction matters to the runtime and not to any
-    /// caller here, all of which are asking whether the callback has an owner
-    /// at all.
+    /// Usually one it creates and later disposes — `createRoot`. At a concrete
+    /// `runWithOwner(owner, fn)` call this also covers a supplied owner proven
+    /// non-null: the distinction between making and supplying it matters to
+    /// the runtime, while callers here ask whether the callback has one.
     Creates,
+    /// The callback may run with or without an owner depending on a runtime
+    /// value. `runWithOwner(owner, fn)` has this shape whenever `owner` is
+    /// nullable and the call site cannot prove which branch it holds.
+    Conditional,
     /// Whatever owner the *call* runs under. The callback adds no scope of
     /// its own, so an effect inside it is exactly as owned as the call site.
     Inherits,
@@ -1367,6 +1370,15 @@ mod tests {
                 .callback_owners(Primitive::CreateEffect),
             &[(0, CallbackOwner::Creates)]
         );
+
+        // Both signatures accept Owner | null. A concrete call sharpens this
+        // flat answer from its first argument.
+        for version in [Version::V1, Version::V2] {
+            assert_eq!(
+                version.dialect().callback_owners(Primitive::RunWithOwner),
+                &[(1, CallbackOwner::Conditional)]
+            );
+        }
 
         // resolve(fn) wraps its thunk in createRoot, which its signature does
         // not suggest.

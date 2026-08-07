@@ -25,7 +25,7 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind};
 use solid_facts::core::Span;
 
-use super::{UpstreamCompatContext, binding_initializer, contains, text};
+use super::{UpstreamCompatContext, binding_initializer, contains, is_import_reference, text};
 use crate::{Fix, StaticViolation, TextEdit, known_primitive, location};
 
 pub(super) fn check_file(
@@ -71,8 +71,8 @@ fn no_react_deps(
         let argument = &call.arguments[1];
         let source = text(file, argument.span).trim();
         let looks_like_deps = source.starts_with('[')
-            || binding_initializer(file, source)
-                .is_some_and(|(_, initializer)| initializer.trim_start().starts_with('['));
+            || binding_initializer(context, file, argument.span)
+                .is_some_and(|(_, _, initializer, _)| initializer.trim_start().starts_with('['));
         if !looks_like_deps {
             continue;
         }
@@ -176,11 +176,11 @@ fn no_proxy_calls(
                         ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction => true,
                         ArgumentValueKind::Identifier => {
                             let name = text(file, argument.span).trim();
-                            match binding_initializer(file, name) {
+                            match binding_initializer(context, file, argument.span) {
                                 // Resolved to a function: a Proxy source no
                                 // matter what the binding is called.
-                                Some((initializer_span, _))
-                                    if file
+                                Some((binding_file, initializer_span, _, _))
+                                    if binding_file
                                         .ast
                                         .functions
                                         .iter()
@@ -196,15 +196,7 @@ fn no_proxy_calls(
                                 // trace lands on the import specifier, which
                                 // is not an identifier, so it never reaches
                                 // the props-name test.
-                                None if file.ast.imports.iter().any(|import| {
-                                    import
-                                        .bindings
-                                        .iter()
-                                        .any(|binding| text(file, binding.local.span) == name)
-                                }) =>
-                                {
-                                    false
-                                }
+                                None if is_import_reference(context, file, argument.span) => false,
                                 // Unresolvable: upstream reports unless the
                                 // name reads as props.
                                 None => !name.contains("props") && !name.contains("Props"),

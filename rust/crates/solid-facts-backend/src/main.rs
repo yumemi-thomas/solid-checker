@@ -420,7 +420,7 @@ fn print_help() {
          Options:\n\
            --project <PATH>             TypeScript project (default: tsconfig.json)\n\
            --format <default|text|json> Output format (default: default)\n\
-           --dialect <ID>               Solid dialect to check with (default: solid-v2)\n\
+           --dialect <ID>               Solid dialect (default: detect from solid-js; fallback: solid-v2)\n\
            --certify                    Exit 1 unless the project is certified\n\
            --check-contracts            Report imported Solid packages without contracts\n\
            --contract <PATH>            Override/discover a package contract (repeatable)\n\

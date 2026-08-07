@@ -946,6 +946,132 @@ fn solid_one_cyclic_adapter_invocations_terminate_and_classify() {
     );
 }
 
+#[test]
+fn solid_one_upstream_helpers_respect_runtime_values_and_ast_structure() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/solid-1x-upstream-regressions");
+    let source = std::fs::read_to_string(fixture.join("App.tsx")).expect("read fixture");
+    let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some("solid-v1"));
+
+    let in_function = |finding: &&serde_json::Value, name: &str| {
+        let start = source.find(&format!("function {name}")).unwrap() as u64;
+        let next = source[usize::try_from(start).unwrap() + 1..]
+            .find("export function ")
+            .map_or(source.len() as u64, |offset| start + 1 + offset as u64);
+        finding["primaryLocation"]["startByte"]
+            .as_u64()
+            .is_some_and(|position| position >= start && position < next)
+    };
+
+    assert!(
+        findings
+            .iter()
+            .filter(|finding| in_function(finding, "ShadowedHandler"))
+            .all(|finding| finding["id"] != "SC8001"),
+        "a shadowed function parameter was resolved to the unrelated string binding: {findings:#?}"
+    );
+    assert!(
+        findings.iter().any(|finding| {
+            finding["id"] == "SC8004" && in_function(&finding, "EscapedScriptUrl")
+        }),
+        "the decoded unicode escape must expose the javascript: URL: {findings:#?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .filter(|finding| in_function(finding, "JsxBackslashIsLiteral"))
+            .all(|finding| finding["id"] != "SC8004"),
+        "JSX attribute text must keep its backslash literal: {findings:#?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .filter(|finding| in_function(finding, "CyclicUrl"))
+            .all(|finding| finding["id"] != "SC8004"),
+        "a cyclic initializer must terminate without manufacturing a URL value: {findings:#?}"
+    );
+
+    let inner_html = findings
+        .iter()
+        .filter(|finding| finding["id"] == "SC8008" && in_function(finding, "InnerHtmlFixes"))
+        .collect::<Vec<_>>();
+    assert_eq!(inner_html.len(), 2, "both unsupported props must report");
+    assert_eq!(inner_html[0]["fixes"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        inner_html[1]["fixes"].as_array().map_or(0, Vec::len),
+        0,
+        "a binary expression must not receive the object-literal rewrite"
+    );
+}
+
+#[test]
+fn run_with_owner_distinguishes_null_definite_and_nullable_owners_in_both_dialects() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let fixture =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/run-with-owner-null");
+    let source = std::fs::read_to_string(fixture.join("App.ts")).expect("read fixture");
+    let null_region = source.find("runWithOwner(null").unwrap();
+    let null_effect = source[null_region..]
+        .find("createEffect")
+        .map(|offset| (null_region + offset) as u64)
+        .unwrap();
+    let definite_effect = source[usize::try_from(null_effect).unwrap() + 1..]
+        .find("createEffect")
+        .map(|offset| null_effect + 1 + offset as u64)
+        .unwrap();
+    let nullable_effect = source[usize::try_from(definite_effect).unwrap() + 1..]
+        .find("createEffect")
+        .map(|offset| definite_effect + 1 + offset as u64)
+        .unwrap();
+    let aliased_nullable_effect = source[usize::try_from(nullable_effect).unwrap() + 1..]
+        .find("createEffect")
+        .map(|offset| nullable_effect + 1 + offset as u64)
+        .unwrap();
+
+    for dialect in ["solid-v1", "solid-v2"] {
+        let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some(dialect));
+        let owners = findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC4001")
+            .collect::<Vec<_>>();
+        assert!(
+            owners.iter().any(|finding| {
+                finding["primaryLocation"]["startByte"] == null_effect
+                    && finding["kind"] == "violation"
+            }),
+            "{dialect} missed the definitely detached effect: {findings:#?}"
+        );
+        assert!(
+            owners
+                .iter()
+                .all(|finding| { finding["primaryLocation"]["startByte"] != definite_effect }),
+            "{dialect} rejected a statically non-null owner: {findings:#?}"
+        );
+        assert!(
+            owners.iter().any(|finding| {
+                finding["primaryLocation"]["startByte"] == nullable_effect
+                    && finding["kind"] == "uncertifiable"
+                    && finding["message"]
+                        .as_str()
+                        .is_some_and(|message| message.contains("runWithOwner may receive null"))
+            }),
+            "{dialect} treated a nullable owner as definitely present: {findings:#?}"
+        );
+        assert!(
+            owners.iter().any(|finding| {
+                finding["primaryLocation"]["startByte"] == aliased_nullable_effect
+                    && finding["kind"] == "uncertifiable"
+            }),
+            "{dialect} treated an aliased nullable owner as definitely present: {findings:#?}"
+        );
+    }
+}
+
 /// The pair is duplicated source on purpose: the two fixture projects differ
 /// only in the `solid-js` version their `node_modules` resolves, so every
 /// difference between their findings is the dialect's doing.
