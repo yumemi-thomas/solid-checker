@@ -6,11 +6,18 @@ members = [
   "crates/solid-reactive-ir",
   "crates/solid-facts-backend",
   "crates/solid-checker-wasm",
+  "crates/napi-build-host-aware",
   "dialects/solid-v1/compiler",
   "dialects/solid-v1/rules",
   "dialects/solid-v2/compiler",
   "dialects/solid-v2/rules",
 ]
+
+[patch.crates-io]
+# solid-1x-compiler's build.rs still calls napi-build when its optional `node`
+# feature is disabled. The host-aware shim preserves napi-build 2.3.2 everywhere
+# else and suppresses only that invalid WASI cdylib registration edge.
+napi-build = { path = "crates/napi-build-host-aware" }
 
 [workspace.package]
 edition = "2024"

@@ -67,7 +67,7 @@ the artifact worth reading.
 
 `dialect-solid-1x` and `dialect-solid-2` hold byte-identical sources and differ
 in one file: `node_modules/solid-js/package.json`, which says `1.9.14` in one
-and `2.0.0-beta.19` in the other. That is the whole mechanism — the checker
+and `2.0.0-beta.31` in the other. That is the whole mechanism — the checker
 reads the version the project would actually import and picks its dialect, so
 the fixtures exercise the real detection path rather than a test-only override.
 

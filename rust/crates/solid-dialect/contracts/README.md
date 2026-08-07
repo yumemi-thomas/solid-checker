@@ -3,9 +3,9 @@
 Reactivity summaries of the packages each dialect models, one file per
 package:
 
-- `solid-js.json` — `solid-js@2.0.0-beta.19`
+- `solid-js.json` — `solid-js@2.0.0-beta.31`
 - `solid-js-1x.json` — `solid-js@1.9.14`
-- `solidjs-web.json` — `@solidjs/web@2.0.0-beta.19`
+- `solidjs-web.json` — `@solidjs/web@2.0.0-beta.31`
 
 They exist for one purpose: the crate's tests hold the hand-written dialect
 tables to them. `callback_executions` must not contradict a contract's

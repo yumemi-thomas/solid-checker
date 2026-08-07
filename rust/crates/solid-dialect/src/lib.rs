@@ -55,7 +55,7 @@ impl Version {
     /// The dialect a resolved `solid-js` version speaks.
     ///
     /// Takes the major component of a semver string and nothing else, so
-    /// `2.0.0-beta.19` is 2.0 and `1.9.14` is 1.x. Prerelease and build
+    /// `2.0.0-beta.31` is 2.0 and `1.9.14` is 1.x. Prerelease and build
     /// metadata are ignored deliberately: 2.0 has shipped only as betas so
     /// far, and refusing to classify them would leave every real 2.0 project
     /// on the fallback. Range prefixes (`^`, `~`, `>=`, `<`) are stripped for
@@ -153,6 +153,8 @@ pub enum Primitive {
     Refresh,
     Affects,
     Dynamic,
+    ClientOnly,
+    UseHead,
 
     // Control flow — component tags
     For,
@@ -165,8 +167,8 @@ pub enum Primitive {
     SuspenseList,
     ErrorBoundary,
     Loading,
-    // Solid 2.0 additions extracted from solid-js@2.0.0-beta.19 and
-    // @solidjs/signals@2.0.0-beta.25 (ADR 0006's rule: the package, not the
+    // Solid 2.0 additions extracted from solid-js@2.0.0-beta.31 and its
+    // bundled @solidjs/signals runtime (ADR 0006's rule: the package, not the
     // docs). The engine modelled none of these before.
     /// Also a 1.x core export by the same name; only the 2.0 table maps it
     /// today, and the 1.x dialect leaves it unmodelled (inert, since the
@@ -683,9 +685,8 @@ pub trait Dialect: Sync {
     /// Whether reads in this concrete callback argument subscribe.
     ///
     /// Package-contract execution and the checker's local tracking role are
-    /// close but not identical: contracts call an `onSettled` callback
-    /// `tracked` because the graph schedules it, while the callback itself is
-    /// an imperative boundary whose reads do not subscribe. The legacy
+    /// close but not identical. A callback can be reachable yet deliberately
+    /// untracked, such as `onSettled` or a `clientOnly` loader. The legacy
     /// primitive-level column preserves that runtime fact; overload-sensitive
     /// execution comes from [`Dialect::callback_execution_at`].
     fn callback_tracks_reads_at(
@@ -915,13 +916,15 @@ mod tests {
         assert!(two.runs_callback_deferred(Primitive::Untrack));
         assert!(!two.runs_callback_deferred(Primitive::CreateMemo));
 
-        // 2.0 defers five of the thirteen primitives that answer index 0.
+        // 2.0 defers these imperative or loader callbacks even though each is
+        // reachable from the call.
         let deferred = [
             Primitive::Flush,
             Primitive::Untrack,
             Primitive::OnSettled,
             Primitive::CreateReaction,
             Primitive::Action,
+            Primitive::ClientOnly,
         ];
         for primitive in deferred {
             assert!(two.runs_callback_deferred(primitive), "{primitive:?}");
@@ -1011,7 +1014,7 @@ mod tests {
         assert_eq!(Version::for_solid_js("1.9.14"), Some(Version::V1));
         // 2.0 has only ever shipped as a prerelease; refusing to classify one
         // would leave every real 2.0 project on the caller's fallback.
-        assert_eq!(Version::for_solid_js("2.0.0-beta.19"), Some(Version::V2));
+        assert_eq!(Version::for_solid_js("2.0.0-beta.31"), Some(Version::V2));
         assert_eq!(Version::for_solid_js("^1.8.0"), Some(Version::V1));
         assert_eq!(Version::for_solid_js("v2.0.0"), Some(Version::V2));
         // No guessing: a major nobody has released and a string that is not a

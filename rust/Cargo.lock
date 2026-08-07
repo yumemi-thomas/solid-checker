@@ -160,9 +160,7 @@ dependencies = [
  "html5ever",
  "htmlize",
  "markup5ever_rcdom",
- "napi",
  "napi-build",
- "napi-derive",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",
@@ -451,8 +449,6 @@ dependencies = [
 [[package]]
 name = "napi-build"
 version = "2.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9c366d2c8c60b86fa632df75f745509b52f9128f91a6bad4c796e44abb505e1"
 
 [[package]]
 name = "napi-derive"
@@ -1080,7 +1076,6 @@ checksum = "e8e2fb0f499abb4d162f2bedad68f5ef91a1682b5a03596ddb67efd37768d100"
 name = "solid-checker-wasm"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-compiler 0.0.0",
  "napi",
  "napi-build",
  "napi-derive",

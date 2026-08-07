@@ -2,18 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "package-contract-missing",
-      "code": "SC9005",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
-      "start": 0,
-      "end": 93,
-      "fixes": 0,
-      "message": "imported Solid package \"solid-js\" has no reactivity contract; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
-      "hint": "Create a local contract at /Users/thomas/Documents/Github/solid-checker/fixtures/reactive-ir/dialect-solid-2/.solid-checker/contracts/solid-js/solid-reactivity.json, or pass one explicitly with --contract <PATH>. If you maintain solid-js, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format."
-    },
-    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "violation",
@@ -48,6 +36,30 @@
       "fixes": 0,
       "message": "createMemo is marked sync: true but its computation can return a Promise or AsyncIterable; a sync node must settle in the same flush and cannot suspend, so an async result throws at runtime",
       "hint": "Drop sync: true and let the read suspend to a <Loading> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here."
+    },
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2700,
+      "end": 2705,
+      "fixes": 0,
+      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export batch; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+      "hint": "Add an export summary for batch to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+    },
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2707,
+      "end": 2714,
+      "fixes": 0,
+      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export onMount; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+      "hint": "Add an export summary for onMount to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
     },
     {
       "rule": "strict-read-untracked",

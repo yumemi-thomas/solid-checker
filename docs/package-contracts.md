@@ -120,8 +120,8 @@ as expressive as before without repeating `{ "kind": "function" }` hundreds of
 times. Summary identifiers are document-local and have no semantic meaning.
 
 Every contract requires a package version and is accepted only when that exact
-version is installed. A bundled beta-26 contract therefore cannot silently
-certify beta 25, beta 27, or Solid 1.x.
+version is installed. A bundled beta-31 contract therefore cannot silently
+certify beta 30, a later beta, or Solid 1.x.
 
 Application developers can also maintain a contract when a package does not
 publish one. Put it at:
@@ -228,7 +228,7 @@ an exact compiler-resolved retaining runtime position, such as a Proxy handler.
 
 Verified contracts for `solid-js` and `@solidjs/web` are embedded in the
 checker and selected automatically from project imports. They pin Solid
-`2.0.0-beta.26` and its npm integrity. The core contract covers the root and
+`2.0.0-beta.31` and its npm integrity. The core contract covers the root and
 refresh entrypoints; the web contract covers all 11 runtime entrypoints,
 including server-functions, frames, serialization, storage, and the JSX
 runtimes.

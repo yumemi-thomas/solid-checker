@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "package": {
     "name": "@solidjs/web",
-    "version": "2.0.0-beta.26",
-    "integrity": "sha512-t0GkzS7wZCuPej8OIQN0+6/uBOHRRhottvAIqnXK4QwiVhCiXr51Bx+sR194INQvvURiP50eprt9TusgKh/Taw=="
+    "version": "2.0.0-beta.31",
+    "integrity": "sha512-8ILyKQlByNORS7B0pSmQAmrlazi0/W6xKUGAYZFOu1HrzCt+HHJ8dTEzIFHq6T+dYCE8Q9duKESCOER1xm51OA=="
   },
   "compilerFactsProtocol": 1,
   "summaries": {
@@ -52,6 +52,7 @@
           "claimElement",
           "claimElementTree",
           "className",
+          "clientOnly",
           "createComponent",
           "delegateEvents",
           "dynamic",
@@ -71,6 +72,8 @@
           "getNextSibling",
           "getOwner",
           "getRequestEvent",
+          "httpHeader",
+          "httpStatus",
           "hydrate",
           "Hydration",
           "HydrationScript",
@@ -121,7 +124,8 @@
           "unregisterDelegatedContainer",
           "unregisterDelegatedRoot",
           "untrack",
-          "useAssets"
+          "useAssets",
+          "useHead"
         ],
         "value": [
           "ChildProperties",
@@ -135,6 +139,7 @@
           "Namespaces",
           "RawTextElements",
           "RequestContext",
+          "REVALIDATE_HEADER",
           "SVGElements",
           "VoidElements"
         ],
@@ -165,6 +170,7 @@
           "createJSONDataTable",
           "createServerComponentHandler",
           "frameTransformDirectResult",
+          "frameTransformFlightResult",
           "frameTransformResult",
           "getFrameHost",
           "installServerComponents",
@@ -216,6 +222,7 @@
         "function": [
           "createFrameSink",
           "frameTransformDirectResult",
+          "frameTransformFlightResult",
           "frameTransformResult",
           "isFrameStreamResponse",
           "renderServerComponent",
@@ -243,6 +250,7 @@
           "claimElement",
           "claimElementTree",
           "className",
+          "clientOnly",
           "createComponent",
           "delegateEvents",
           "dynamic",
@@ -263,6 +271,8 @@
           "getNextSibling",
           "getOwner",
           "getRequestEvent",
+          "httpHeader",
+          "httpStatus",
           "hydrate",
           "Hydration",
           "HydrationScript",
@@ -311,7 +321,8 @@
           "unregisterDelegatedContainer",
           "unregisterDelegatedRoot",
           "untrack",
-          "useAssets"
+          "useAssets",
+          "useHead"
         ],
         "value": [
           "ChildProperties",
@@ -325,6 +336,7 @@
           "Namespaces",
           "RawTextElements",
           "RequestContext",
+          "REVALIDATE_HEADER",
           "SVGElements",
           "VoidElements"
         ]
@@ -362,17 +374,31 @@
     "./server-functions": {
       "exports": {
         "function": [
+          "ChunkReader",
+          "clearFlashCookie",
           "configureServerFunctionsClient",
           "configureServerFunctionsServer",
+          "createChunk",
+          "createNoJSHandler",
           "createServerReference",
           "decodeErrorHeaderValue",
+          "decodeFlashCookie",
           "decodeResponse",
+          "decodeResponsePayload",
+          "deserializeStream",
           "encodeErrorHeaderValue",
+          "encodeFlashCookie",
+          "foldSetCookies",
+          "frameAddress",
           "GET",
+          "getEventServerFunctionInvocation",
+          "getFlightDataConsumer",
           "getServerFunction",
-          "getServerFunctionMeta",
+          "getServerFunctionInvocation",
           "getServerFunctionMetadata",
+          "getServerFunctionsCodec",
           "handleServerFunctionRequest",
+          "hasFlashCookie",
           "isServerFunction",
           "registerServerFunction",
           "registerServerReference",
@@ -381,8 +407,10 @@
         ],
         "value": [
           "ERROR_HEADER",
+          "FLASH_COOKIE",
           "FUNCTION_HEADER",
           "INSTANCE_HEADER",
+          "REVALIDATE_HEADER",
           "SINGLE_FLIGHT_HEADER"
         ]
       },
@@ -397,13 +425,23 @@
     "./server-functions/client": {
       "exports": {
         "function": [
+          "ChunkReader",
+          "clearFlashCookie",
           "configureServerFunctionsClient",
+          "createChunk",
           "createServerReference",
           "decodeErrorHeaderValue",
           "decodeResponse",
+          "decodeResponsePayload",
+          "deserializeStream",
           "encodeErrorHeaderValue",
+          "frameAddress",
           "GET",
+          "getFlightDataConsumer",
+          "getServerFunctionInvocation",
           "getServerFunctionMetadata",
+          "getServerFunctionsCodec",
+          "hasFlashCookie",
           "isServerFunction",
           "registerServerReference",
           "subscribeFlightData",
@@ -411,8 +449,10 @@
         ],
         "value": [
           "ERROR_HEADER",
+          "FLASH_COOKIE",
           "FUNCTION_HEADER",
           "INSTANCE_HEADER",
+          "REVALIDATE_HEADER",
           "SINGLE_FLIGHT_HEADER"
         ]
       },
@@ -423,16 +463,24 @@
     "./server-functions/server": {
       "exports": {
         "function": [
+          "clearFlashCookie",
           "configureServerFunctionsServer",
+          "createNoJSHandler",
           "createServerReference",
           "decodeErrorHeaderValue",
+          "decodeFlashCookie",
           "decodeResponse",
+          "decodeResponsePayload",
           "encodeErrorHeaderValue",
+          "encodeFlashCookie",
+          "foldSetCookies",
           "GET",
+          "getEventServerFunctionInvocation",
           "getServerFunction",
-          "getServerFunctionMeta",
+          "getServerFunctionInvocation",
           "getServerFunctionMetadata",
           "handleServerFunctionRequest",
+          "hasFlashCookie",
           "isServerFunction",
           "registerServerFunction",
           "registerServerReference",
@@ -441,6 +489,7 @@
         ],
         "value": [
           "ERROR_HEADER",
+          "FLASH_COOKIE",
           "FUNCTION_HEADER",
           "INSTANCE_HEADER",
           "SINGLE_FLIGHT_HEADER"

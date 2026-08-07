@@ -9,17 +9,12 @@ test("checks an in-memory project through WASI", () => {
   const projectId = "/workspace/example/tsconfig.json";
   const typeFacts = {
     schema: 2,
-    projectId,
     generation: 1,
-    table: {
-      schema: 2,
-      generation: 1,
-      projectId,
-      sources: [],
-      entities: [],
-      symbols: [],
-      files: []
-    }
+    projectId,
+    sources: [],
+    entities: [],
+    symbols: [],
+    files: []
   };
   const snapshot = JSON.parse(checkSync(JSON.stringify({
     projectId,

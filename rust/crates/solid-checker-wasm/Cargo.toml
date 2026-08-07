@@ -20,10 +20,5 @@ solid-facts = { path = "../solid-facts" }
 solid-facts-backend = { path = "../solid-facts-backend" }
 typefacts.workspace = true
 
-[target.'cfg(target_family = "wasm")'.dependencies]
-# The wasm cdylib needs the compiler's Node-API registrations linked in, so
-# this one keeps the crate's default `node` feature.
-dom-expressions-compiler = { workspace = true, features = ["node"] }
-
 [build-dependencies]
 napi-build = "2"

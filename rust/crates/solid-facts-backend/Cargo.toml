@@ -38,3 +38,7 @@ path = "src/bin/solid-checker-session-bench.rs"
 [[bin]]
 name = "solid-checker-cold-start-bench"
 path = "src/bin/solid-checker-cold-start-bench.rs"
+
+[[bin]]
+name = "solid-contract-gen"
+path = "src/bin/solid-contract-gen.rs"

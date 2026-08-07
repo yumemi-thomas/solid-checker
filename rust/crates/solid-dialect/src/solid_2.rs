@@ -5,9 +5,9 @@
 //! is recorded per table so that wiring the engine onto this crate can be held
 //! to a no-behaviour-change bar.
 //!
-//! One entry is no longer an extraction. `runWithOwner` was added from the
-//! published package (see [`TABLE`]); anything else added the same way needs
-//! the same treatment -- a cited source and a fixture.
+//! Entries added after the original extraction come from the exact published
+//! packages (see [`TABLE`]); each needs the same treatment -- a cited source
+//! and a fixture or focused regression test.
 
 use crate::{
     Boundary, CallbackOwner, CleanupRule, Dialect, EffectSignature, Execution, Primitive,
@@ -24,7 +24,7 @@ pub struct Solid2;
 /// `solid-js`, and `dynamic` from `@solidjs/*`.
 ///
 /// `runWithOwner` is the one name here that came from neither. It is extracted
-/// from `solid-js@2.0.0-beta.19`, which re-exports it from `@solidjs/signals`
+/// from `solid-js@2.0.0-beta.31`, which re-exports it from `@solidjs/signals`
 /// as `runWithOwner<T>(owner: Owner | null, fn: () => T): T` — the same
 /// signature 1.x has. The engine had always recognised it by spelling whatever
 /// the dialect, so before this it resolved to `PrimitiveName::Other` under 2.0
@@ -33,6 +33,7 @@ const TABLE: &[(&str, Primitive)] = &[
     ("action", Primitive::Action),
     ("affects", Primitive::Affects),
     ("children", Primitive::Children),
+    ("clientOnly", Primitive::ClientOnly),
     ("createContext", Primitive::CreateContext),
     ("createEffect", Primitive::CreateEffect),
     ("createErrorBoundary", Primitive::CreateErrorBoundary),
@@ -78,6 +79,7 @@ const TABLE: &[(&str, Primitive)] = &[
     ("Switch", Primitive::Switch),
     ("untrack", Primitive::Untrack),
     ("useContext", Primitive::UseContext),
+    ("useHead", Primitive::UseHead),
 ];
 
 /// Every name this dialect exports, derived from [`TABLE`] rather than
@@ -101,7 +103,11 @@ impl Dialect for Solid2 {
     fn modules(&self) -> &'static [&'static str] {
         &[
             "solid-js",
+            "solid-js/refresh",
             "@solidjs/web",
+            "@solidjs/web/frames",
+            "@solidjs/web/frames/client",
+            "@solidjs/web/frames/server",
             "@solidjs/web/serialization",
             "@solidjs/web/server-functions",
             "@solidjs/web/server-functions/client",
@@ -154,6 +160,7 @@ impl Dialect for Solid2 {
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
             | Primitive::Dynamic
+            | Primitive::ClientOnly
             | Primitive::Flush
             | Primitive::Untrack
             | Primitive::OnSettled
@@ -164,6 +171,7 @@ impl Dialect for Solid2 {
             | Primitive::IsPending
             | Primitive::Resolve
             | Primitive::Lazy
+            | Primitive::UseHead
             | Primitive::CreateRevealOrder => &[0],
             _ => &[],
         }
@@ -190,6 +198,7 @@ impl Dialect for Solid2 {
                 | Primitive::OnSettled
                 | Primitive::CreateReaction
                 | Primitive::Action
+                | Primitive::ClientOnly
                 | Primitive::RunWithOwner
                 // resolve(fn) returns a Promise -- the thunk's reads settle
                 // outside the current computation. isPending(fn) and
@@ -212,7 +221,8 @@ impl Dialect for Solid2 {
         }
     }
 
-    /// Source: the `@solidjs/signals@2.0.0-beta.25` implementations, read
+    /// Source: the `solid-js@2.0.0-beta.31` and `@solidjs/web@2.0.0-beta.31`
+    /// implementations, read
     /// rather than inferred. What matters is whether the body creates an owner
     /// before invoking the callback:
     ///
@@ -253,6 +263,12 @@ impl Dialect for Solid2 {
                 &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)]
             }
             Primitive::CreateTrackedEffect | Primitive::OnSettled => &[(0, CallbackOwner::Leaf)],
+            // Client builds either call the loader at declaration time or on
+            // first render; server builds never call it.
+            Primitive::ClientOnly => &[(0, CallbackOwner::Conditional)],
+            // The browser implementation wraps the thunk in `effect`; SSR
+            // registers it for evaluation under the renderer's scope.
+            Primitive::UseHead => &[(0, CallbackOwner::Creates)],
             // Both build a row owner -- `_owner: createOwner()` in
             // @solidjs/signals -- so a primitive created in a row callback is
             // disposed with the row rather than leaking.
@@ -271,7 +287,7 @@ impl Dialect for Solid2 {
         }
     }
 
-    /// Source: `solid-js@2.0.0-beta.19`'s `types/client/flow.d.ts`, read from
+    /// Source: `solid-js@2.0.0-beta.31`'s `types/client/flow.d.ts`, read from
     /// the installed package, which spells the three `<For>` forms out:
     ///
     /// ```text
@@ -356,12 +372,13 @@ impl Dialect for Solid2 {
     }
 
     /// Source: the reviewed `SOLID_2` and `SOLIDJS_WEB` semantics tables in
-    /// `solid-contract-gen`, which the bundled contract is generated from and
-    /// which `the_callback_executions_agree_with_the_bundled_contract` holds
-    /// this to.
+    /// `solid-contract-gen`, which the dialect review contract is generated
+    /// from and which `the_callback_executions_agree_with_the_bundled_contract`
+    /// holds this to.
     ///
     /// The four `createX(fn, …)` derived forms are not in that table and were
-    /// read from `@solidjs/signals@2.0.0-beta.25` instead: `createSignal`,
+    /// read from the runtime bundled by `solid-js@2.0.0-beta.31` instead:
+    /// `createSignal`,
     /// `createOptimistic`, `createStore` and `createOptimisticStore` all branch
     /// on `typeof first === "function"` and build a computed from it, so
     /// argument 0 is a tracked compute exactly when a function is passed.
@@ -382,12 +399,12 @@ impl Dialect for Solid2 {
             Primitive::CreateMemo
             | Primitive::CreateProjection
             | Primitive::CreateTrackedEffect
-            | Primitive::OnSettled
             | Primitive::CreateSignal
             | Primitive::CreateStore
             | Primitive::CreateOptimistic
             | Primitive::CreateOptimisticStore
-            | Primitive::Dynamic => &[(0, Execution::Tracked)],
+            | Primitive::Dynamic
+            | Primitive::UseHead => &[(0, Execution::Tracked)],
             Primitive::CreateEffect | Primitive::CreateRenderEffect => {
                 &[(0, Execution::Tracked), (1, Execution::Deferred)]
             }
@@ -396,9 +413,11 @@ impl Dialect for Solid2 {
             }
             Primitive::MapArray | Primitive::RepeatMap => &[(1, Execution::Tracked)],
             Primitive::CreateReaction
+            | Primitive::OnSettled
             | Primitive::Resolve
             | Primitive::Lazy
-            | Primitive::Action => &[(0, Execution::Deferred)],
+            | Primitive::Action
+            | Primitive::ClientOnly => &[(0, Execution::Deferred)],
             Primitive::CreateRoot
             | Primitive::CreateRevealOrder
             | Primitive::Flush
@@ -466,6 +485,7 @@ impl Dialect for Solid2 {
             | Primitive::CreateRevealOrder
             | Primitive::CreateErrorBoundary
             | Primitive::CreateLoadingBoundary
+            | Primitive::UseHead
             | Primitive::Children => CleanupRule::Always,
             Primitive::CreateSignal
             | Primitive::CreateStore
@@ -534,6 +554,7 @@ impl Dialect for Solid2 {
                 | Primitive::CreateOwner
                 | Primitive::CreateErrorBoundary
                 | Primitive::CreateLoadingBoundary
+                | Primitive::UseHead
         )
     }
 
@@ -546,7 +567,7 @@ impl Dialect for Solid2 {
         }
     }
 
-    /// Source: `solid-js@2.0.0-beta.19`'s `types/index.d.ts`, which re-exports
+    /// Source: `solid-js@2.0.0-beta.31`'s `types/index.d.ts`, which re-exports
     /// the whole vocabulary from the package root. 2.0 folded the store API
     /// into core, so there is no `solid-js/store`; the one primitive that
     /// lives elsewhere is `dynamic`, from the web package.
@@ -583,14 +604,14 @@ impl Dialect for Solid2 {
         if module == "solid-js" {
             NAMESPACE_SOLID_JS
         } else if module == "@solidjs/web" {
-            &["dynamic"]
+            &["clientOnly", "dynamic", "useHead"]
         } else {
             &[]
         }
     }
 }
 
-/// The 25 names a `solid-js` namespace import exposes.
+/// The names a `solid-js` namespace import exposes.
 ///
 /// Deliberately narrower than [`TABLE`]: `children`, `For` and `Repeat` are
 /// primitives this dialect models, reachable through a direct import or a JSX
@@ -651,6 +672,7 @@ mod tests {
                 "action",
                 "affects",
                 "children",
+                "clientOnly",
                 "createContext",
                 "createEffect",
                 "createErrorBoundary",
@@ -696,6 +718,7 @@ mod tests {
                 "Switch",
                 "untrack",
                 "useContext",
+                "useHead",
             ]
         );
     }
@@ -728,19 +751,59 @@ mod tests {
         );
     }
 
+    #[test]
+    fn beta_31_web_primitives_have_distinct_callback_roles() {
+        assert_eq!(Solid2.primitive("clientOnly"), Some(Primitive::ClientOnly));
+        assert_eq!(Solid2.primitive("useHead"), Some(Primitive::UseHead));
+        assert_eq!(
+            Solid2.callback_executions(Primitive::ClientOnly),
+            &[(0, Execution::Deferred)]
+        );
+        assert_eq!(
+            Solid2.callback_executions(Primitive::UseHead),
+            &[(0, Execution::Tracked)]
+        );
+        assert!(Solid2.runs_callback_deferred(Primitive::ClientOnly));
+        assert!(!Solid2.runs_callback_deferred(Primitive::UseHead));
+        assert_eq!(
+            Solid2.export_modules("clientOnly", crate::ExportPosition::Value),
+            vec!["@solidjs/web"]
+        );
+        assert_eq!(
+            Solid2.export_modules("useHead", crate::ExportPosition::Value),
+            vec!["@solidjs/web"]
+        );
+        assert!(
+            Solid2
+                .namespace_import_primitives("@solidjs/web")
+                .contains(&"clientOnly")
+        );
+        assert!(
+            Solid2
+                .namespace_import_primitives("@solidjs/web")
+                .contains(&"useHead")
+        );
+    }
+
     /// Solid 2.0 exports that take a callback and are deliberately **not**
     /// modelled, with the reason. The list exists so that "every
     /// callback-taking export is in the vocabulary" can be asserted rather
     /// than asserted-with-exceptions-nobody-wrote-down.
     ///
-    /// All three are internals. `createComponent` and `devComponent` are
-    /// emitted by the JSX transform; `ssrScope` runs only on the server entry
-    /// point. None appears in application code, and modelling one would mean
+    /// All four are internals. `createComponent` and `devComponent` are
+    /// emitted by the JSX transform; `ssrScope` and
+    /// `runInServerComponentScope` support server compilation. None appears in
+    /// application code, and modelling one would mean
     /// inventing behavioural columns nothing could check.
     ///
-    /// Mirrored by `EXCLUDED` in `tasks/contracts/solid-js-contract.test.mjs`,
-    /// which checks the same list against the installed package.
-    const UNMODELLED_CALLBACK_TAKERS: &[&str] = &["createComponent", "devComponent", "ssrScope"];
+    /// The generator records the same reviewed callback shapes in the checked-
+    /// in contract, which the completeness test below reads directly.
+    const UNMODELLED_CALLBACK_TAKERS: &[&str] = &[
+        "createComponent",
+        "devComponent",
+        "runInServerComponentScope",
+        "ssrScope",
+    ];
 
     /// Every `solid-js` 2.0 export that takes a callback is either in the
     /// vocabulary or on the exclusion list above.
@@ -757,7 +820,8 @@ mod tests {
     /// package by `contracts_process.rs`.
     #[test]
     fn every_callback_taking_export_is_modelled_or_excluded() {
-        // Both bundled contracts: `render`/`hydrate` live in `@solidjs/web`,
+        // Both dialect review contracts: `render`/`hydrate` live in
+        // `@solidjs/web`,
         // and reading only the core contract is exactly how an unmodelled
         // mount entry point went unnoticed.
         let exports: std::collections::BTreeMap<String, serde_json::Value> = [

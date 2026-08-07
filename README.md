@@ -74,6 +74,19 @@ npx solid-checker --project tsconfig.json --certify
 Linux (x64, arm64), macOS (x64, arm64), and Windows (x64) are supported; npm
 downloads only the binary matching your platform.
 
+## Solid compatibility
+
+The release is certified against two distinct runtime APIs:
+
+- Solid 1.x: `solid-js@1.9.14`.
+- Solid 2: `solid-js@2.0.0-beta.31` with `@solidjs/web@2.0.0-beta.31`.
+
+The checker detects the installed `solid-js` major automatically. Use
+`--dialect solid-v1` or `--dialect solid-v2` only when a package manager or
+fixture prevents version discovery. Solid 2 is still a beta API, so its
+bundled contracts intentionally require the exact audited beta; a later beta
+must be reviewed before it can certify a project.
+
 On macOS and Linux, optimized release checks retain one project actor for up
 to two idle minutes. It owns the TypeScript program and analysis caches,
 resynchronizes source and contract inputs before every answer, and makes
@@ -135,6 +148,7 @@ Run `solid-checker --help` for the full list. The options you'll reach for most:
 | Option | Description |
 | --- | --- |
 | `--project <PATH>` | TypeScript project to analyze (default: `tsconfig.json`). |
+| `--dialect <solid-v1\|solid-v2>` | Override automatic Solid major-version detection. |
 | `--format <default\|text\|json>` | Output format. `default` prints framed source excerpts, `text` is compact, `json` is machine-readable. |
 | `--certify` | Exit non-zero unless the project is fully certified. Use this in CI. |
 | `--check-contracts` | Report imported Solid packages that ship no reactivity contract. |

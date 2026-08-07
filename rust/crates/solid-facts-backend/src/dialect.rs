@@ -168,7 +168,7 @@ mod tests {
 
         std::fs::write(
             package.join("package.json"),
-            r#"{"name":"solid-js","version":"2.0.0-beta.19"}"#,
+            r#"{"name":"solid-js","version":"2.0.0-beta.31"}"#,
         )
         .unwrap();
         assert_eq!(detect(&project).id, "solid-v2");

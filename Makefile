@@ -1,8 +1,11 @@
 RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
+SOLID_1_PACKAGE ?= node_modules/solid-js-1x
+SOLID_2_PACKAGE ?= node_modules/solid-js
+SOLIDJS_WEB_PACKAGE ?= node_modules/@solidjs/web
 
-.PHONY: build build-typefacts build-rust package test test-rust test-cli verify verify-performance corpus contract-conformance coverage coverage-update parity parity-update clean
+.PHONY: build build-typefacts build-rust package test test-rust test-cli verify verify-performance corpus contract-conformance contracts contracts-check coverage coverage-update parity parity-update clean
 
 build: build-rust
 
@@ -57,6 +60,16 @@ corpus: build-rust
 contract-conformance:
 	node scripts/check-bundled-contracts.mjs
 	node scripts/generate-bundled-solid1-contract.mjs --check
+
+contracts:
+	cargo +$(RUST_TOOLCHAIN) run --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-contract-gen -- --package $(SOLID_1_PACKAGE) --dialect solid-js-1x --out rust/crates/solid-dialect/contracts/solid-js-1x.json --index-out rust/crates/solid-dialect/src/exports/solid_js_1x.rs
+	cargo +$(RUST_TOOLCHAIN) run --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-contract-gen -- --package $(SOLID_2_PACKAGE) --dialect solid-js --out rust/crates/solid-dialect/contracts/solid-js.json --index-out rust/crates/solid-dialect/src/exports/solid_js_2.rs
+	cargo +$(RUST_TOOLCHAIN) run --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-contract-gen -- --package $(SOLIDJS_WEB_PACKAGE) --dialect solidjs-web --out rust/crates/solid-dialect/contracts/solidjs-web.json --index-out rust/crates/solid-dialect/src/exports/solidjs_web.rs
+
+contracts-check:
+	cargo +$(RUST_TOOLCHAIN) run --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-contract-gen -- --package $(SOLID_1_PACKAGE) --dialect solid-js-1x --out rust/crates/solid-dialect/contracts/solid-js-1x.json --index-out rust/crates/solid-dialect/src/exports/solid_js_1x.rs --check
+	cargo +$(RUST_TOOLCHAIN) run --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-contract-gen -- --package $(SOLID_2_PACKAGE) --dialect solid-js --out rust/crates/solid-dialect/contracts/solid-js.json --index-out rust/crates/solid-dialect/src/exports/solid_js_2.rs --check
+	cargo +$(RUST_TOOLCHAIN) run --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-contract-gen -- --package $(SOLIDJS_WEB_PACKAGE) --dialect solidjs-web --out rust/crates/solid-dialect/contracts/solidjs-web.json --index-out rust/crates/solid-dialect/src/exports/solidjs_web.rs --check
 
 clean:
 	rm -rf bin dist rust/target .typefacts
