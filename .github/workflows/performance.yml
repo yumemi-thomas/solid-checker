@@ -18,6 +18,9 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
+        with:
+          # The relative gate builds the merge base in a worktree.
+          fetch-depth: 0
       - uses: actions/setup-go@v5
         with:
           go-version: stable
@@ -42,6 +45,29 @@ jobs:
           SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
         run: node benchmarks/verify-performance.mjs
 
+      # The relative gate: build the merge base in a worktree and race it
+      # against the head on this same runner, interleaved so scheduler drift
+      # cancels. This is what catches a 26ms -> 60ms regression that still
+      # clears the shared-runner absolute ceiling above.
+      - name: Build the merge-base benchmark runtime
+        if: github.event_name == 'pull_request'
+        run: |
+          base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
+          git worktree add /tmp/perf-base "$base"
+          cd /tmp/perf-base
+          scripts/build-typefacts.sh
+          cargo build --release --manifest-path rust/Cargo.toml \
+            -p solid-facts-backend --bin solid-checker-session-bench
+
+      - name: Compare performance with the merge base
+        if: github.event_name == 'pull_request'
+        run: |
+          node benchmarks/compare-performance.mjs \
+            --base-bench /tmp/perf-base/rust/target/release/solid-checker-session-bench \
+            --base-typefacts /tmp/perf-base/bin/solid-typefacts \
+            --head-bench rust/target/release/solid-checker-session-bench \
+            --head-typefacts bin/solid-typefacts
+
       - name: Prepare the deterministic corpus
         run: |
           node benchmarks/generate-bench-corpus.mjs \
@@ -50,7 +76,11 @@ jobs:
       # This analysis spans the Rust process and the Type Facts child process.
       # CodSpeed CPU simulation does not follow child processes, so wall time is
       # the correct end-to-end instrument here.
-      - name: Compare performance with the base commit
+      # Optional extra beyond the merge-base comparison above: enable after
+      # registering the repository with CodSpeed by setting the repository
+      # variable CODSPEED_ENABLED to true.
+      - name: Compare performance with the base commit on CodSpeed
+        if: vars.CODSPEED_ENABLED == 'true'
         uses: CodSpeedHQ/action@v4
         with:
           mode: walltime

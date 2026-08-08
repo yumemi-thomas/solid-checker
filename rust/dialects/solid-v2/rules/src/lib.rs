@@ -3,7 +3,7 @@ mod rules;
 use solid_reactive_ir::{ExecutionRole, Program};
 use std::time::Instant;
 
-pub use rules::{DOCS_BASE_URL, Rule, docs_url};
+pub use rules::{DOCS_BASE_URL, Rule, docs_url, manifest_json};
 pub use solid_reactive_ir::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
 
 #[must_use]
@@ -21,7 +21,9 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
         .filter(|read| {
             matches!(
                 read.execution,
-                ExecutionRole::UntrackedRendering | ExecutionRole::EffectApply
+                ExecutionRole::UntrackedRendering
+                    | ExecutionRole::UntrackedCallback
+                    | ExecutionRole::EffectApply
             )
         })
         .map(|read| Finding {
@@ -262,6 +264,7 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
             ),
         };
         let uncertain = requirement.uncertain;
+        let conditional_owner = requirement.conditional_owner;
         Some(Finding {
             kind: if uncertain {
                 "uncertifiable".into()
@@ -274,10 +277,20 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
                 rule.metadata().severity.into()
             },
             evidence: vec![EvidenceStep {
-                message: "no containing component, computation, or root owner dominates this operation".into(),
+                message: if conditional_owner {
+                    "runWithOwner receives a nullable owner, so this operation may execute detached"
+                        .into()
+                } else {
+                    "no containing component, computation, or root owner dominates this operation"
+                        .into()
+                },
                 location: Some(requirement.location.clone()),
             }],
-            hint: if uncertain {
+            hint: if conditional_owner {
+                format!(
+                    "{hint} Narrow the owner to a non-null value before runWithOwner, or handle the detached lifetime explicitly."
+                )
+            } else if uncertain {
                 format!(
                     "{hint} If every caller runs this exported function under an owner, document that in the package's reactivity contract."
                 )
@@ -286,7 +299,11 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
             },
             ..Finding::new(
                 rule.metadata(),
-                if uncertain {
+                if conditional_owner {
+                    format!(
+                        "{message}; runWithOwner may receive null, so solid-checker cannot prove this execution has an owner"
+                    )
+                } else if uncertain {
                     format!(
                         "{message}; this function is exported, so solid-checker cannot prove its callers provide an owner"
                     )
@@ -401,6 +418,7 @@ const fn allowed_write_role(role: ExecutionRole) -> bool {
         role,
         ExecutionRole::EventCallback
             | ExecutionRole::DeferredCallback
+            | ExecutionRole::UntrackedCallback
             | ExecutionRole::EffectApply
             | ExecutionRole::DirectiveApply
     )

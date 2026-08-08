@@ -1,6 +1,6 @@
 # Solid 2 semantic inventory
 
-This inventory was re-audited against the Solid `2.0.0-beta.19` public exports,
+This inventory was re-audited against the Solid `2.0.0-beta.31` public exports,
 diagnostic union, and runtime call sites. “Conditional” means static certification
 requires type, execution-region, ownership, async, or compiler facts; it does
 not mean the checker may ignore the obligation.

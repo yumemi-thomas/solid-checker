@@ -8,23 +8,25 @@ use crate::core::{SourceIdentity, Span};
 use compact_str::CompactString;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, ArrowFunctionExpression, AssignmentExpression, AwaitExpression, BindingPattern,
-    CallExpression, ComputedMemberExpression, ConditionalExpression, Declaration,
+    Argument, ArrowFunctionExpression, AssignmentExpression, AwaitExpression, BinaryExpression,
+    BindingPattern, CallExpression, ComputedMemberExpression, ConditionalExpression, Declaration,
     ExportAllDeclaration, ExportDefaultDeclaration, ExportDefaultDeclarationKind,
     ExportNamedDeclaration, Expression, FormalParameter, Function, FunctionType,
     IdentifierReference, IfStatement, ImportDeclaration, ImportDeclarationSpecifier,
-    JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement, JSXExpression,
-    ModuleExportName, NewExpression, ObjectPropertyKind, PropertyKey, ReturnStatement,
-    SpreadElement, StaticMemberExpression, TSModuleDeclarationName, VariableDeclarator,
+    JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName,
+    JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName, NewExpression,
+    ObjectProperty, ObjectPropertyKind, PropertyKey, ReturnStatement, SpreadElement,
+    StaticMemberExpression, TSModuleDeclarationName, UnaryExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
+use oxc_semantic::{ScopeId, Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, SourceType, Span as OxcSpan};
 use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 18;
+pub const AST_FACTS_SCHEMA: u32 = 23;
 
 mod span_index;
 
@@ -44,6 +46,12 @@ pub struct AstFacts {
     pub awaits: Vec<Span>,
     pub returns: Vec<ReturnFact>,
     pub jsx_elements: Vec<JsxElementFact>,
+    /// JSX fragment spans (`<>…</>`). A fragment's children are as tracked
+    /// as an element's, but it has no name and no attributes, so it gets a
+    /// bare span rather than a [`JsxElementFact`]; consumers asking "is this
+    /// span inside JSX" must consult both tables.
+    #[serde(default)]
+    pub jsx_fragments: Vec<Span>,
     pub members: Vec<MemberFact>,
     #[serde(default)]
     pub computed_members: Vec<Span>,
@@ -51,6 +59,22 @@ pub struct AstFacts {
     pub parameter_properties: Vec<Span>,
     pub spreads: Vec<SpreadFact>,
     pub conditional_tests: Vec<Span>,
+    #[serde(default)]
+    pub conditional_expressions: Vec<ConditionalExpressionFact>,
+    #[serde(default)]
+    pub logical_expressions: Vec<LogicalExpressionFact>,
+    #[serde(default)]
+    pub object_properties: Vec<ObjectPropertyFact>,
+    #[serde(default)]
+    pub tagged_templates: Vec<TaggedTemplateFact>,
+    #[serde(default)]
+    pub template_literals: Vec<TemplateLiteralFact>,
+    /// Operands whose operator coerces a value. A function object is never a
+    /// useful substitute for calling a reactive accessor in one of these
+    /// slots. Equality, `in`, `instanceof`, `typeof`, `void`, and `delete`
+    /// are deliberately absent because they can inspect a function itself.
+    #[serde(default)]
+    pub coercive_operands: Vec<CoerciveOperandFact>,
     #[serde(default)]
     pub assignments: Vec<AssignmentFact>,
     #[serde(default)]
@@ -251,9 +275,128 @@ pub struct ReturnFact {
 #[serde(rename_all = "camelCase")]
 pub struct JsxElementFact {
     pub span: Span,
+    #[serde(default)]
+    pub opening: Span,
     pub name: NamedSpan,
+    /// The object and final property of a dotted JSX name. Keeping these
+    /// spans separate lets semantic consumers prove `<Context.Provider>`
+    /// from the `Context` binding without parsing the name text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_object: Option<Span>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub member_property: Option<Span>,
     pub properties: Vec<Span>,
     pub boolean_properties: Vec<BooleanPropertyFact>,
+    #[serde(default)]
+    pub attributes: Vec<JsxAttributeFact>,
+    #[serde(default)]
+    pub spreads: Vec<JsxSpreadAttributeFact>,
+    #[serde(default)]
+    pub self_closing: bool,
+    #[serde(default)]
+    pub children: Vec<Span>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum JsxAttributeValueKind {
+    Boolean,
+    String,
+    Expression,
+    Element,
+    Fragment,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsxAttributeFact {
+    pub span: Span,
+    pub name: Span,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub namespace: Option<Span>,
+    pub local_name: Span,
+    /// Declaration selected by ECMAScript/TypeScript lexical scope lookup for
+    /// the local name of a `use:name` directive. `None` means that the binder
+    /// found no declaration in this file's scope tree. Other JSX namespaces
+    /// do not interpret their local name as a value binding and leave this
+    /// field empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub directive_binding: Option<Span>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<Span>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expression: Option<Span>,
+    pub value_kind: JsxAttributeValueKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JsxSpreadAttributeFact {
+    pub span: Span,
+    pub argument: Span,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConditionalExpressionFact {
+    pub span: Span,
+    pub test: Span,
+    pub consequent: Span,
+    pub alternate: Span,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum LogicalOperatorKind {
+    And,
+    Or,
+    Coalesce,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LogicalExpressionFact {
+    pub span: Span,
+    pub left: Span,
+    pub right: Span,
+    pub operator: LogicalOperatorKind,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectPropertyFact {
+    pub span: Span,
+    pub key: Span,
+    pub value: Span,
+    pub computed: bool,
+    pub shorthand: bool,
+}
+
+/// A tagged template expression and the expressions interpolated into it.
+///
+/// CSS-in-JS and HTML tag functions receive substitutions as values and may
+/// call function-valued substitutions later. Rules need the structure to tell
+/// that contract apart from ordinary string interpolation, and the tag's own
+/// identity to resolve what it is.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaggedTemplateFact {
+    pub span: Span,
+    pub tag: Span,
+    pub expressions: Vec<Span>,
+}
+
+/// An untagged template literal and the expressions interpolated into it.
+///
+/// Separate from [`TaggedTemplateFact`] because the two coerce differently:
+/// a tag receives the interpolations as values and may do anything with them,
+/// while an untagged literal stringifies each one. That makes this the fact
+/// that proves an interpolated accessor renders its own source text.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TemplateLiteralFact {
+    pub span: Span,
+    pub expressions: Vec<Span>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -269,6 +412,20 @@ pub struct MemberFact {
 pub struct SpreadFact {
     pub span: Span,
     pub argument: Span,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum CoerciveOperandKind {
+    Binary,
+    Unary,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CoerciveOperandFact {
+    pub span: Span,
+    pub kind: CoerciveOperandKind,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -361,13 +518,20 @@ pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFac
         return Err(AstFactsError::Parse(error.to_string()));
     }
 
-    let mut collector = Collector::new(source);
+    // JSX namespace names are not IdentifierReference nodes, so TypeScript's
+    // GetSymbolAtLocation deliberately returns no symbol for `use:name`.
+    // Build Oxc's semantic scope tree once and retain the exact declaration
+    // chosen by its binder instead of approximating scope with source text.
+    let semantic = SemanticBuilder::new().build(&parsed.program).semantic;
+    let mut collector = Collector::new(source, semantic.scoping());
     collector.visit_program(&parsed.program);
     Ok(collector.finish(identity))
 }
 
-struct Collector<'s> {
+struct Collector<'s, 'semantic> {
     source: &'s str,
+    scoping: &'semantic Scoping,
+    scope_stack: Vec<ScopeId>,
     calls: Vec<CallFact>,
     bindings: Vec<BindingFact>,
     functions: Vec<FunctionFact>,
@@ -377,20 +541,29 @@ struct Collector<'s> {
     awaits: Vec<Span>,
     returns: Vec<ReturnFact>,
     jsx_elements: Vec<JsxElementFact>,
+    jsx_fragments: Vec<Span>,
     members: Vec<MemberFact>,
     computed_members: Vec<Span>,
     parameter_properties: Vec<Span>,
     spreads: Vec<SpreadFact>,
     conditional_tests: Vec<Span>,
+    conditional_expressions: Vec<ConditionalExpressionFact>,
+    logical_expressions: Vec<LogicalExpressionFact>,
+    object_properties: Vec<ObjectPropertyFact>,
+    tagged_templates: Vec<TaggedTemplateFact>,
+    template_literals: Vec<TemplateLiteralFact>,
+    coercive_operands: Vec<CoerciveOperandFact>,
     assignments: Vec<AssignmentFact>,
     if_regions: Vec<IfRegionFact>,
     conditional_control_stack: Vec<Span>,
 }
 
-impl<'s> Collector<'s> {
-    fn new(source: &'s str) -> Self {
+impl<'s, 'semantic> Collector<'s, 'semantic> {
+    fn new(source: &'s str, scoping: &'semantic Scoping) -> Self {
         Self {
             source,
+            scoping,
+            scope_stack: Vec::new(),
             calls: Vec::new(),
             bindings: Vec::new(),
             functions: Vec::new(),
@@ -400,11 +573,18 @@ impl<'s> Collector<'s> {
             awaits: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
+            jsx_fragments: Vec::new(),
             members: Vec::new(),
             computed_members: Vec::new(),
             parameter_properties: Vec::new(),
             spreads: Vec::new(),
             conditional_tests: Vec::new(),
+            conditional_expressions: Vec::new(),
+            logical_expressions: Vec::new(),
+            object_properties: Vec::new(),
+            tagged_templates: Vec::new(),
+            template_literals: Vec::new(),
+            coercive_operands: Vec::new(),
             assignments: Vec::new(),
             if_regions: Vec::new(),
             conditional_control_stack: Vec::new(),
@@ -421,11 +601,18 @@ impl<'s> Collector<'s> {
         self.awaits.sort_unstable();
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
+        self.jsx_fragments.sort();
         self.members.sort_by_key(|fact| fact.span);
         self.computed_members.sort_unstable();
         self.parameter_properties.sort_unstable();
         self.spreads.sort_by_key(|fact| fact.span);
         self.conditional_tests.sort_unstable();
+        self.conditional_expressions.sort_by_key(|fact| fact.span);
+        self.logical_expressions.sort_by_key(|fact| fact.span);
+        self.object_properties.sort_by_key(|fact| fact.span);
+        self.tagged_templates.sort_by_key(|fact| fact.span);
+        self.template_literals.sort_by_key(|fact| fact.span);
+        self.coercive_operands.sort_by_key(|fact| fact.span);
         self.assignments.sort_by_key(|fact| fact.target);
         self.if_regions.sort_by_key(|fact| fact.consequent);
         AstFacts {
@@ -441,11 +628,18 @@ impl<'s> Collector<'s> {
             awaits: self.awaits,
             returns: self.returns,
             jsx_elements: self.jsx_elements,
+            jsx_fragments: self.jsx_fragments,
             members: self.members,
             computed_members: self.computed_members,
             parameter_properties: self.parameter_properties,
             spreads: self.spreads,
             conditional_tests: self.conditional_tests,
+            conditional_expressions: self.conditional_expressions,
+            logical_expressions: self.logical_expressions,
+            object_properties: self.object_properties,
+            tagged_templates: self.tagged_templates,
+            template_literals: self.template_literals,
+            coercive_operands: self.coercive_operands,
             assignments: self.assignments,
             if_regions: self.if_regions,
         }
@@ -630,7 +824,22 @@ impl<'s> Collector<'s> {
     }
 }
 
-impl<'a> Visit<'a> for Collector<'_> {
+impl<'a> Visit<'a> for Collector<'_, '_> {
+    fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &std::cell::Cell<Option<ScopeId>>) {
+        // SemanticBuilder populated every scope cell in this same AST before
+        // fact collection. Falling back to the root keeps extraction total if
+        // Oxc ever introduces an unpopulated synthetic scope.
+        self.scope_stack.push(
+            scope_id
+                .get()
+                .unwrap_or_else(|| self.scoping.root_scope_id()),
+        );
+    }
+
+    fn leave_scope(&mut self) {
+        self.scope_stack.pop();
+    }
+
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
         let callee_span = call.callee.span();
         self.calls.push(CallFact {
@@ -976,16 +1185,108 @@ impl<'a> Visit<'a> for Collector<'_> {
 
     fn visit_conditional_expression(&mut self, expression: &ConditionalExpression<'a>) {
         self.conditional_tests.push(span(expression.test.span()));
+        self.conditional_expressions
+            .push(ConditionalExpressionFact {
+                span: span(expression.span),
+                test: span(expression.test.span()),
+                consequent: span(expression.consequent.span()),
+                alternate: span(expression.alternate.span()),
+            });
         walk::walk_conditional_expression(self, expression);
     }
 
+    fn visit_logical_expression(&mut self, expression: &LogicalExpression<'a>) {
+        self.logical_expressions.push(LogicalExpressionFact {
+            span: span(expression.span),
+            left: span(expression.left.span()),
+            right: span(expression.right.span()),
+            operator: match expression.operator {
+                LogicalOperator::And => LogicalOperatorKind::And,
+                LogicalOperator::Or => LogicalOperatorKind::Or,
+                LogicalOperator::Coalesce => LogicalOperatorKind::Coalesce,
+            },
+        });
+        walk::walk_logical_expression(self, expression);
+    }
+
+    fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {
+        self.object_properties.push(ObjectPropertyFact {
+            span: span(property.span),
+            key: span(property.key.span()),
+            value: span(property.value.span()),
+            computed: property.computed,
+            shorthand: property.shorthand,
+        });
+        walk::walk_object_property(self, property);
+    }
+
+    fn visit_tagged_template_expression(
+        &mut self,
+        expression: &oxc_ast::ast::TaggedTemplateExpression<'a>,
+    ) {
+        self.tagged_templates.push(TaggedTemplateFact {
+            span: span(expression.span),
+            tag: span(expression.tag.span()),
+            expressions: expression
+                .quasi
+                .expressions
+                .iter()
+                .map(|interpolated| span(interpolated.span()))
+                .collect(),
+        });
+        // Not the default walk: that would visit the quasi through
+        // `visit_template_literal` and record every tagged template's quasi
+        // in `template_literals`, violating that table's untagged-only
+        // contract. The tag and the interpolated expressions are visited
+        // directly so their own nested nodes — including genuinely untagged
+        // templates inside an interpolation — are still collected.
+        self.visit_expression(&expression.tag);
+        for interpolated in &expression.quasi.expressions {
+            self.visit_expression(interpolated);
+        }
+    }
+
+    fn visit_template_literal(&mut self, literal: &oxc_ast::ast::TemplateLiteral<'a>) {
+        self.template_literals.push(TemplateLiteralFact {
+            span: span(literal.span),
+            expressions: literal
+                .expressions
+                .iter()
+                .map(|interpolated| span(interpolated.span()))
+                .collect(),
+        });
+        walk::walk_template_literal(self, literal);
+    }
+
+    fn visit_jsx_fragment(&mut self, fragment: &oxc_ast::ast::JSXFragment<'a>) {
+        self.jsx_fragments.push(span(fragment.span));
+        walk::walk_jsx_fragment(self, fragment);
+    }
+
     fn visit_jsx_element(&mut self, element: &JSXElement<'a>) {
+        let current_scope = self
+            .scope_stack
+            .last()
+            .copied()
+            .unwrap_or_else(|| self.scoping.root_scope_id());
         let name_span = element.opening_element.name.span();
+        let (member_object, member_property) =
+            if let JSXElementName::MemberExpression(member) = &element.opening_element.name {
+                (
+                    Some(span(member.object.span())),
+                    Some(span(member.property.span)),
+                )
+            } else {
+                (None, None)
+            };
         self.jsx_elements.push(JsxElementFact {
             span: span(element.span),
+            opening: span(element.opening_element.span),
             name: NamedSpan {
                 span: span(name_span),
             },
+            member_object,
+            member_property,
             properties: element
                 .opening_element
                 .attributes
@@ -1027,6 +1328,88 @@ impl<'a> Visit<'a> for Collector<'_> {
                     })
                 })
                 .collect(),
+            attributes: element
+                .opening_element
+                .attributes
+                .iter()
+                .filter_map(|item| {
+                    let JSXAttributeItem::Attribute(attribute) = item else {
+                        return None;
+                    };
+                    let (name, namespace, local_name, directive_binding) = match &attribute.name {
+                        JSXAttributeName::Identifier(name) => (name.span, None, name.span, None),
+                        JSXAttributeName::NamespacedName(name) => {
+                            let directive_binding = (name.namespace.name == "use")
+                                .then(|| {
+                                    self.scoping
+                                        .find_binding(current_scope, name.name.name.as_str().into())
+                                        .filter(|&symbol| {
+                                            self.scoping
+                                                .symbol_flags(symbol)
+                                                .can_be_referenced_by_value()
+                                        })
+                                        .map(|symbol| span(self.scoping.symbol_span(symbol)))
+                                })
+                                .flatten();
+                            (
+                                name.span,
+                                Some(name.namespace.span),
+                                name.name.span,
+                                directive_binding,
+                            )
+                        }
+                    };
+                    let (value, expression, value_kind) = match attribute.value.as_ref() {
+                        None => (None, None, JsxAttributeValueKind::Boolean),
+                        Some(JSXAttributeValue::StringLiteral(value)) => {
+                            (Some(span(value.span)), None, JsxAttributeValueKind::String)
+                        }
+                        Some(JSXAttributeValue::ExpressionContainer(container)) => (
+                            Some(span(container.span)),
+                            Some(span(container.expression.span())),
+                            JsxAttributeValueKind::Expression,
+                        ),
+                        Some(JSXAttributeValue::Element(value)) => {
+                            (Some(span(value.span)), None, JsxAttributeValueKind::Element)
+                        }
+                        Some(JSXAttributeValue::Fragment(value)) => (
+                            Some(span(value.span)),
+                            None,
+                            JsxAttributeValueKind::Fragment,
+                        ),
+                    };
+                    Some(JsxAttributeFact {
+                        span: span(attribute.span),
+                        name: span(name),
+                        namespace: namespace.map(span),
+                        local_name: span(local_name),
+                        directive_binding,
+                        value,
+                        expression,
+                        value_kind,
+                    })
+                })
+                .collect(),
+            spreads: element
+                .opening_element
+                .attributes
+                .iter()
+                .filter_map(|item| {
+                    let JSXAttributeItem::SpreadAttribute(attribute) = item else {
+                        return None;
+                    };
+                    Some(JsxSpreadAttributeFact {
+                        span: span(attribute.span),
+                        argument: span(attribute.argument.span()),
+                    })
+                })
+                .collect(),
+            self_closing: element.closing_element.is_none(),
+            children: element
+                .children
+                .iter()
+                .map(|child| span(child.span()))
+                .collect(),
         });
         walk::walk_jsx_element(self, element);
     }
@@ -1058,6 +1441,50 @@ impl<'a> Visit<'a> for Collector<'_> {
             argument: span(spread.argument.span()),
         });
         walk::walk_spread_element(self, spread);
+    }
+
+    fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
+        use oxc_syntax::operator::BinaryOperator;
+
+        if !matches!(
+            expression.operator,
+            BinaryOperator::Equality
+                | BinaryOperator::Inequality
+                | BinaryOperator::StrictEquality
+                | BinaryOperator::StrictInequality
+                | BinaryOperator::In
+                | BinaryOperator::Instanceof
+        ) {
+            self.coercive_operands.extend([
+                CoerciveOperandFact {
+                    span: span(expression.left.span()),
+                    kind: CoerciveOperandKind::Binary,
+                },
+                CoerciveOperandFact {
+                    span: span(expression.right.span()),
+                    kind: CoerciveOperandKind::Binary,
+                },
+            ]);
+        }
+        walk::walk_binary_expression(self, expression);
+    }
+
+    fn visit_unary_expression(&mut self, expression: &UnaryExpression<'a>) {
+        use oxc_syntax::operator::UnaryOperator;
+
+        if matches!(
+            expression.operator,
+            UnaryOperator::UnaryPlus
+                | UnaryOperator::UnaryNegation
+                | UnaryOperator::LogicalNot
+                | UnaryOperator::BitwiseNot
+        ) {
+            self.coercive_operands.push(CoerciveOperandFact {
+                span: span(expression.argument.span()),
+                kind: CoerciveOperandKind::Unary,
+            });
+        }
+        walk::walk_unary_expression(self, expression);
     }
 }
 
@@ -1457,6 +1884,21 @@ const mixed = () => {
     }
 
     #[test]
+    fn retains_only_operators_that_coerce_accessor_values() {
+        let source = "const a = signal + 1; const b = -signal; const c = !signal; const d = signal === other; const e = typeof signal;";
+        let facts = extract("operators.ts", source).unwrap();
+        let operands = facts
+            .coercive_operands
+            .iter()
+            .filter_map(|operand| {
+                source.get(operand.span.start as usize..operand.span.end as usize)
+            })
+            .collect::<Vec<_>>();
+
+        assert_eq!(operands, ["signal", "1", "signal", "signal"]);
+    }
+
+    #[test]
     fn retains_array_assignments_and_if_regions_for_runtime_proofs() {
         let source = r#"
 let callbacks = null;
@@ -1476,5 +1918,207 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
                     .get(region.consequent.start as usize..region.consequent.end as usize)
                     .is_some_and(|consequent| consequent.contains("callbacks.push(fn)"))
         }));
+    }
+
+    #[test]
+    fn retains_complete_jsx_rule_structure() {
+        let source = r#"<Button use:focus style={{ fontSize: 12 }} {...props}>
+  {ready && <Content />}
+  {ready ? <Yes /> : <No />}
+</Button>"#;
+        let facts = extract("rules.tsx", source).unwrap();
+        let button = &facts.jsx_elements[0];
+
+        assert!(!button.self_closing);
+        assert_eq!(button.attributes.len(), 2);
+        assert_eq!(button.spreads.len(), 1);
+        assert_eq!(button.children.len(), 5);
+        let directive = &button.attributes[0];
+        assert_eq!(
+            directive
+                .namespace
+                .and_then(|span| source.get(span.start as usize..span.end as usize)),
+            Some("use")
+        );
+        assert_eq!(
+            source.get(directive.local_name.start as usize..directive.local_name.end as usize),
+            Some("focus")
+        );
+        assert_eq!(facts.object_properties.len(), 1);
+        assert_eq!(facts.logical_expressions.len(), 1);
+        assert_eq!(facts.conditional_expressions.len(), 1);
+    }
+
+    #[test]
+    fn resolves_directive_names_through_value_scope_only() {
+        let source = r#"
+import { importedDirective } from "./directives";
+import type { typeOnlyDirective } from "./types";
+function hoistedDirective() {}
+const moduleDirective = () => {};
+const shadowedDirective = () => {};
+interface interfaceDirective {}
+
+function View(shadowedDirective: (element: HTMLDivElement) => void) {
+  const parameterUse = <div use:shadowedDirective />;
+  const visible = <div use:importedDirective use:hoistedDirective use:moduleDirective />;
+  {
+    const blockDirective = () => {};
+    const blockUse = <div use:blockDirective />;
+  }
+  const outsideBlock = <div use:blockDirective />;
+  const typeOnly = <div use:typeOnlyDirective use:interfaceDirective />;
+  return <div class:moduleDirective use:missingDirective />;
+}
+"#;
+        let facts = extract("directives.tsx", source).unwrap();
+        let attributes = facts
+            .jsx_elements
+            .iter()
+            .flat_map(|element| &element.attributes)
+            .map(|attribute| {
+                let namespace = attribute
+                    .namespace
+                    .and_then(|span| source.get(span.start as usize..span.end as usize));
+                let name = source
+                    .get(attribute.local_name.start as usize..attribute.local_name.end as usize)
+                    .unwrap();
+                let binding = attribute.directive_binding.and_then(|span| {
+                    source
+                        .get(span.start as usize..span.end as usize)
+                        .map(|text| (text, span.start))
+                });
+                (namespace, name, binding)
+            })
+            .collect::<Vec<_>>();
+
+        for name in [
+            "importedDirective",
+            "hoistedDirective",
+            "moduleDirective",
+            "blockDirective",
+        ] {
+            assert!(
+                attributes.iter().any(|&(namespace, local, binding)| {
+                    namespace == Some("use")
+                        && local == name
+                        && binding.is_some_and(|(declaration, _)| declaration == name)
+                }),
+                "missing lexical value resolution for {name}: {attributes:#?}"
+            );
+        }
+
+        let shadowed = attributes
+            .iter()
+            .find(|&&(namespace, name, _)| namespace == Some("use") && name == "shadowedDirective")
+            .and_then(|&(_, _, binding)| binding)
+            .expect("shadowed parameter binding");
+        assert_eq!(
+            shadowed.1 as usize,
+            source
+                .find("shadowedDirective: (element")
+                .expect("parameter declaration")
+        );
+
+        let unresolved = attributes
+            .iter()
+            .filter(|&&(namespace, _, binding)| namespace == Some("use") && binding.is_none())
+            .map(|&(_, name, _)| name)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            unresolved,
+            [
+                "blockDirective",
+                "typeOnlyDirective",
+                "interfaceDirective",
+                "missingDirective"
+            ]
+        );
+        assert!(attributes.iter().any(|&(namespace, name, binding)| {
+            namespace == Some("class") && name == "moduleDirective" && binding.is_none()
+        }));
+    }
+
+    #[test]
+    fn retains_untagged_template_interpolations() {
+        let facts = extract(
+            "App.tsx",
+            "const label = `count is ${count} of ${total()}`;\n",
+        )
+        .unwrap();
+        assert_eq!(facts.template_literals.len(), 1);
+        let literal = &facts.template_literals[0];
+        assert_eq!(literal.expressions.len(), 2);
+        assert_eq!(
+            literal
+                .expressions
+                .iter()
+                .map(|slot| &"const label = `count is ${count} of ${total()}`;\n"
+                    [slot.start as usize..slot.end as usize])
+                .collect::<Vec<_>>(),
+            ["count", "total()"]
+        );
+    }
+
+    /// A tagged template owns a template literal, and the walker visits both.
+    /// The two tables are separate questions -- a tag receives the values, an
+    /// untagged literal stringifies them -- so a consumer asking "is this
+    /// interpolated into a string" must not be answered by a tagged one.
+    #[test]
+    fn a_tagged_template_is_not_also_an_untagged_one() {
+        let facts = extract("App.tsx", "const styled = css`color: ${theme}`;\n").unwrap();
+        assert_eq!(facts.tagged_templates.len(), 1);
+        assert_eq!(
+            facts.template_literals.len(),
+            0,
+            "a tag's quasi is filtered at collection; the table's untagged-only contract holds"
+        );
+        // An untagged template nested inside a tagged interpolation is still
+        // an untagged template — the manual visit must reach it.
+        let facts = extract("App.tsx", "const styled = css`color: ${`x${theme}`}`;\n").unwrap();
+        assert_eq!(facts.tagged_templates.len(), 1);
+        assert_eq!(facts.template_literals.len(), 1);
+    }
+
+    /// A fragment has no element fact — no name, no attributes — so it gets
+    /// its own span table, and a consumer asking "is this span inside JSX"
+    /// must consult both. Only the element table answered that question
+    /// before, which made fragment children invisible.
+    #[test]
+    fn fragments_are_recorded_beside_elements() {
+        let facts = extract(
+            "App.tsx",
+            "const view = <>{outer()}<div>{inner()}</div></>;\n",
+        )
+        .unwrap();
+        assert_eq!(facts.jsx_fragments.len(), 1);
+        assert_eq!(facts.jsx_elements.len(), 1);
+        let fragment = facts.jsx_fragments[0];
+        let element = facts.jsx_elements[0].span;
+        assert!(
+            fragment.contains(element),
+            "the fragment wraps the element: {fragment:?} vs {element:?}"
+        );
+    }
+
+    #[test]
+    fn retains_tagged_templates_with_their_interpolations() {
+        let source = "const styled = css`color: ${primary}; font-size: ${size()}px;`;";
+        let facts = extract("styles.ts", source).unwrap();
+
+        assert_eq!(facts.tagged_templates.len(), 1);
+        let template = &facts.tagged_templates[0];
+        assert_eq!(
+            source.get(template.tag.start as usize..template.tag.end as usize),
+            Some("css")
+        );
+        assert_eq!(
+            template
+                .expressions
+                .iter()
+                .map(|expression| source.get(expression.start as usize..expression.end as usize))
+                .collect::<Vec<_>>(),
+            [Some("primary"), Some("size()")]
+        );
     }
 }

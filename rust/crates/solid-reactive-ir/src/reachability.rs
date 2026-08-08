@@ -11,8 +11,8 @@ use super::{
     CachedReachabilityFile, EntitySymbols, FunctionNode, ProjectIndexes, ReachabilityEdge,
     ReachabilityTarget, SemanticLookup, SourceDiscoveryTypeScriptDelta, SymbolId,
     containing_function_indexed, function_indices_by_path, function_is_solid_callback, location,
-    parallel_slice_results, primitive_name, same_compiler_semantics, source_discovery_identity,
-    source_discovery_identity_matches,
+    parallel_slice_results, primitive_name, returned_callback_execution_at_call,
+    same_compiler_semantics, source_discovery_identity, source_discovery_identity_matches,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -35,7 +35,15 @@ fn reachability_topology(
     edges: &[ReachabilityEdge],
     callback_edges: &[(Option<Span>, Vec<ReachabilityTarget>)],
 ) -> ReachabilityTopology {
-    let local = |span: Span| functions.iter().position(|function| function.span == span);
+    // One map, not a `position` scan per edge: every edge and callback edge
+    // resolves an owner and a target span, so scanning made building a file's
+    // topology quadratic in its function count. `or_insert` keeps the first
+    // index for a repeated span, exactly as the scan did.
+    let mut indices_by_span = HashMap::with_capacity(functions.len());
+    for (index, function) in functions.iter().enumerate() {
+        indices_by_span.entry(function.span).or_insert(index);
+    }
+    let local = |span: Span| indices_by_span.get(&span).copied();
     let target = |target: &ReachabilityTarget| match target {
         ReachabilityTarget::Symbol(symbol) => {
             Some(ReachabilityTopologyTarget::Symbol(symbol.clone()))
@@ -209,32 +217,28 @@ fn discover_reachability_file(
                 target: ReachabilityTarget::Symbol(symbol.clone()),
             });
         }
-        if matches!(
-            primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-            )
-            .as_deref(),
-            Some(
-                "createMemo"
-                    | "createEffect"
-                    | "createRenderEffect"
-                    | "createTrackedEffect"
-                    | "createSignal"
-                    | "createStore"
-                    | "createProjection"
-                    | "createOptimistic"
-                    | "createOptimisticStore"
-                    | "dynamic"
-                    | "createReaction"
-                    | "untrack"
-                    | "onSettled"
-                    | "action"
-            )
-        ) {
+        let primitive = primitive_name(
+            file.path.as_str(),
+            call.callee,
+            call.static_callee(&file.source),
+            entities,
+            symbol_names,
+            lookup.dialect,
+        )
+        .as_ref()
+        .and_then(super::PrimitiveName::primitive);
+        if primitive.is_some()
+            || (0..call.arguments.len()).any(|index| {
+                returned_callback_execution_at_call(file, call, index, lookup).is_some()
+            })
+        {
+            // Every argument of a matched primitive call, not only the ones
+            // carrying a callback-execution fact. The runtime invokes functions
+            // it finds in options objects too -- `createMemo(fn, { equals: cmp
+            // })` calls `cmp` -- and the dialect's callback table models
+            // positional callbacks only, so narrowing this to modelled
+            // positions would make every such comparator unreachable and
+            // report it as dead code.
             for function in &functions {
                 if call
                     .arguments
@@ -288,15 +292,21 @@ fn discover_reachability_file(
         }
         callback_edges.push((owner, targets));
     }
+    // As in `reachability_topology`: one map rather than a scan per call.
+    let mut function_indices_by_span = HashMap::with_capacity(functions.len());
+    for (index, function) in functions.iter().enumerate() {
+        function_indices_by_span
+            .entry(function.span)
+            .or_insert(index);
+    }
     let call_owner_indices = call_owners
         .iter()
-        .map(|owner| {
-            owner.and_then(|span| functions.iter().position(|function| function.span == span))
-        })
+        .map(|owner| owner.and_then(|span| function_indices_by_span.get(&span).copied()))
         .collect();
     let topology = reachability_topology(&functions, &roots, &edges, &callback_edges);
     CachedReachabilityFile {
         identity: source_discovery_identity(file, indexes),
+        cross_file_proofs: lookup.returned_callback_proof_digest(),
         compiler: file.compiler.clone(),
         functions,
         roots,
@@ -370,8 +380,9 @@ pub(super) fn reachable_call_multiplicity_incremental(
                     &file.source_hash,
                     typescript_unchanged,
                     typescript_delta,
-                ) && (Arc::ptr_eq(&cached.compiler, &file.compiler)
-                    || same_compiler_semantics(&cached.compiler, &file.compiler))
+                ) && cached.cross_file_proofs == lookup.returned_callback_proof_digest()
+                    && (Arc::ptr_eq(&cached.compiler, &file.compiler)
+                        || same_compiler_semantics(&cached.compiler, &file.compiler))
             });
         if reusable {
             reused_files += 1;
@@ -547,242 +558,49 @@ pub(super) fn reachable_call_multiplicity_incremental(
     (reused_files, recomputed_files)
 }
 
-pub(super) fn reachable_call_multiplicity(
-    facts: &ProjectFacts,
-    indexes: &ProjectIndexes<'_>,
-    entities: &EntitySymbols,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-    lookup: &SemanticLookup<'_>,
+/// Reachability for a build with no cache to answer from.
+///
+/// Deliberately not a second implementation of the edge rules. Every rule --
+/// which functions are roots, which arguments of a matched primitive call reach
+/// a function, how an options object's named callbacks are followed -- used to
+/// exist twice, once here and once in [`discover_reachability_file`], and the
+/// two copies drifted: the options-object `identifier_properties` edges and the
+/// export-declaration root were added to the fragment pass only, so the same
+/// project facts produced a different IR depending on which builder ran.
+///
+/// Running the incremental pass over an empty cache instead keeps one copy of
+/// every rule. With no cached fragment to match, no file is reusable and the
+/// empty multiplicity table forces the full graph assembly, so this reduces to
+/// the from-scratch computation by construction.
+pub(super) fn reachable_call_multiplicity<'a>(
+    facts: &'a ProjectFacts,
+    indexes: &'a ProjectIndexes<'a>,
+    entities: &'a EntitySymbols,
+    symbol_names: &'a HashMap<SymbolId, SymbolId>,
+    lookup: &'a SemanticLookup<'a>,
 ) -> HashMap<Location, usize> {
-    let mut functions = Vec::new();
-    for file in &facts.files {
-        for function in &file.ast.functions {
-            let symbol = function.name.as_ref().and_then(|name| {
-                entities
-                    .get(&location(file.path.shared(), name.span))
-                    .cloned()
-            });
-            functions.push(FunctionNode {
-                path: file.path.to_string(),
-                span: function.span,
-                body: function.body,
-                name: function
-                    .name
-                    .as_ref()
-                    .map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
-                symbol,
-            });
-        }
-    }
-    let functions_by_path = function_indices_by_path(&functions);
-    let call_owners = facts
-        .files
-        .iter()
-        .map(|file| {
-            file.ast
-                .calls
-                .iter()
-                .map(|call| {
-                    containing_function_indexed(
-                        &functions,
-                        &functions_by_path,
-                        file.path.as_str(),
-                        call.span,
-                    )
-                })
-                .collect::<Vec<_>>()
-        })
-        .collect::<Vec<_>>();
-    let by_symbol = functions
-        .iter()
-        .enumerate()
-        .filter_map(|(index, function)| function.symbol.clone().map(|symbol| (symbol, index)))
-        .collect::<HashMap<_, _>>();
-    let mut exported_bodies = HashMap::<&str, HashSet<(u64, u64)>>::new();
-    for file in facts.typescript.files() {
-        for function in file.functions.iter() {
-            if function.exported {
-                exported_bodies
-                    .entry(file.path.as_ref())
-                    .or_default()
-                    .insert((function.body.start_byte, function.body.end_byte));
-            }
-        }
-    }
-    let mut exported_symbols = HashSet::new();
-    for file in &facts.files {
-        for export in &file.ast.exports {
-            if functions_by_path
-                .get(file.path.as_str())
-                .into_iter()
-                .flatten()
-                .any(|index| export.span.contains(functions[*index].span))
-            {
-                continue;
-            }
-            for entity in indexes.entities_for_path(file.path.as_str()) {
-                let Ok(start) = u32::try_from(entity.location.start_byte) else {
-                    continue;
-                };
-                let Ok(end) = u32::try_from(entity.location.end_byte) else {
-                    continue;
-                };
-                if export.span.contains(Span::new(start, end))
-                    && let Some(symbol) = entities.get(&entity.location)
-                {
-                    exported_symbols.insert(symbol.clone());
-                }
-            }
-        }
-    }
-    let mut edges = vec![Vec::new(); functions.len()];
-    let mut roots = Vec::new();
-    for (index, function) in functions.iter().enumerate() {
-        let component = function
-            .name
-            .as_deref()
-            .and_then(|name| name.chars().next())
-            .is_some_and(char::is_uppercase);
-        let callback = facts
-            .files
-            .iter()
-            .find(|file| file.path.as_str() == function.path)
-            .and_then(|file| {
-                file.ast
-                    .functions
-                    .iter()
-                    .find(|candidate| candidate.span == function.span)
-                    .map(|candidate| (file, candidate))
-            })
-            .is_some_and(|(file, candidate)| {
-                function_is_solid_callback(file, candidate, entities, symbol_names, lookup)
-            });
-        let exported = exported_bodies
-            .get(function.path.as_str())
-            .is_some_and(|bodies| {
-                bodies.contains(&(u64::from(function.body.start), u64::from(function.body.end)))
-            })
-            || function
-                .symbol
-                .as_ref()
-                .is_some_and(|symbol| exported_symbols.contains(symbol));
-        if component || callback || exported {
-            roots.push(index);
-        }
-    }
-    for (file_index, file) in facts.files.iter().enumerate() {
-        for (call_index, call) in file.ast.calls.iter().enumerate() {
-            let owner = call_owners[file_index][call_index];
-            let callee = location(file.path.shared(), call.callee);
-            if let Some(target) = entities
-                .get(&callee)
-                .and_then(|symbol| by_symbol.get(symbol))
-                .copied()
-            {
-                if let Some(owner) = owner {
-                    edges[owner].push(target);
-                } else {
-                    roots.push(target);
-                }
-            }
-            if matches!(
-                primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    entities,
-                    symbol_names,
-                )
-                .as_deref(),
-                Some(
-                    "createMemo"
-                        | "createEffect"
-                        | "createRenderEffect"
-                        | "createSignal"
-                        | "createStore"
-                        | "createProjection"
-                        | "createOptimistic"
-                        | "createOptimisticStore"
-                        | "dynamic"
-                        | "createTrackedEffect"
-                        | "createReaction"
-                        | "untrack"
-                        | "onSettled"
-                        | "action"
-                )
-            ) {
-                for index in functions_by_path
-                    .get(file.path.as_str())
-                    .into_iter()
-                    .flatten()
-                    .copied()
-                {
-                    let function = &functions[index];
-                    if call
-                        .arguments
-                        .iter()
-                        .any(|argument| argument.span.contains(function.span))
-                    {
-                        if let Some(owner) = owner {
-                            edges[owner].push(index);
-                        } else {
-                            roots.push(index);
-                        }
-                    }
-                }
-            }
-        }
-        for callback in &file.compiler.callback_roles {
-            let owner = containing_function_indexed(
-                &functions,
-                &functions_by_path,
-                file.path.as_str(),
-                callback.span,
-            );
-            let mut targets = functions_by_path
-                .get(file.path.as_str())
-                .into_iter()
-                .flatten()
-                .copied()
-                .filter(|index| callback.span.contains(functions[*index].span))
-                .collect::<Vec<_>>();
-            if let Some(symbol) = entities.get(&location(file.path.shared(), callback.span))
-                && let Some(target) = by_symbol.get(symbol)
-            {
-                targets.push(*target);
-            }
-            targets.sort_unstable();
-            targets.dedup();
-            for target in targets {
-                if let Some(owner) = owner {
-                    edges[owner].push(target);
-                } else {
-                    roots.push(target);
-                }
-            }
-        }
-    }
-    roots.sort_unstable();
-    roots.dedup();
-    let mut multiplicity = vec![0_usize; functions.len()];
-    for root in roots {
-        accumulate_function(root, &edges, &mut HashSet::new(), &mut multiplicity);
-    }
-    let mut result = HashMap::new();
-    for (file_index, file) in facts.files.iter().enumerate() {
-        for (call_index, call) in file.ast.calls.iter().enumerate() {
-            let owner = call_owners[file_index][call_index];
-            if let Some(function) = owner
-                && multiplicity[function] != 0
-            {
-                result.insert(
-                    location(file.path.shared(), call.callee),
-                    multiplicity[function],
-                );
-            }
-        }
-    }
-    result
+    let mut files = HashMap::new();
+    let mut multiplicity_by_path = HashMap::new();
+    let mut calls = HashMap::new();
+    let mut function_symbols = HashSet::new();
+    reachable_call_multiplicity_incremental(
+        ReachabilityInputs {
+            facts,
+            indexes,
+            entities,
+            symbol_names,
+            typescript_unchanged: false,
+            typescript_delta: None,
+            lookup,
+        },
+        ReachabilityState {
+            files: &mut files,
+            multiplicity_by_path: &mut multiplicity_by_path,
+            calls: &mut calls,
+            function_symbols: &mut function_symbols,
+        },
+    );
+    calls
 }
 
 fn accumulate_function(

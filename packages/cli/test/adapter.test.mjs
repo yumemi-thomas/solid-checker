@@ -3,6 +3,7 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  rmSync,
   writeFileSync
 } from "node:fs";
 import { createRequire } from "node:module";
@@ -166,6 +167,35 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
   assert.equal(readFileSync(counter, "utf8"), "1");
 });
 
+test("caches a failed analysis instead of re-spawning every lint pass", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-"));
+  writeFileSync(join(root, "tsconfig.json"), "{}\n");
+  const counter = join(root, "runs.txt");
+  const analyzer = join(root, "analyzer.mjs");
+  writeFileSync(analyzer, `import { existsSync, readFileSync, writeFileSync } from "node:fs";
+const counter = process.argv[2];
+const count = existsSync(counter) ? Number(readFileSync(counter, "utf8")) : 0;
+writeFileSync(counter, String(count + 1));
+process.stderr.write("analysis exploded");
+process.exit(2);
+`);
+
+  plugin._testing.snapshotCache.clear();
+  const filename = join(root, "App.tsx");
+  writeFileSync(filename, "export {};\n");
+  const context = {
+    filename,
+    physicalFilename: filename,
+    settings: { solidChecker: { command: process.execPath, commandArgs: [analyzer, counter] } },
+    options: []
+  };
+  const expected = /analysis failed \(2\): analysis exploded/;
+  assert.throws(() => plugin._testing.loadSnapshot(context), expected);
+  assert.throws(() => plugin._testing.loadSnapshot(context), expected);
+  assert.equal(readFileSync(counter, "utf8"), "1");
+  plugin._testing.snapshotCache.clear();
+});
+
 test("reuses an ESLint parser project before filesystem discovery", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-"));
   const project = join(root, "tsconfig.eslint.json");
@@ -178,3 +208,151 @@ test("reuses an ESLint parser project before filesystem discovery", () => {
     project
   );
 });
+
+test("per-rule surface: every catalog identity is an ESLint rule", () => {
+  const v1 = JSON.parse(readFileSync(new URL("../lib/rules-v1.json", import.meta.url)));
+  const v2 = JSON.parse(readFileSync(new URL("../lib/rules-v2.json", import.meta.url)));
+  for (const entry of [...v1.rules, ...v2.rules]) {
+    assert.ok(plugin.rules[entry.name], `missing rule ${entry.name}`);
+  }
+  for (const entry of v1.rules) {
+    assert.ok(entry.name.startsWith("v1/"), `v1 catalog entry ${entry.name} must be namespaced`);
+  }
+  for (const entry of v2.rules) {
+    assert.ok(!entry.name.includes("/"), `v2 stays unprefixed: ${entry.name}`);
+  }
+  // The two dialect configs enable exactly their own catalog, plus the
+  // certification switch-off that keeps them composable with `recommended`.
+  assert.equal(Object.keys(plugin.configs.v1.rules).length, v1.rules.length + 1);
+  assert.equal(Object.keys(plugin.configs.v2.rules).length, v2.rules.length + 1);
+  assert.equal(plugin.configs.v1.rules["solid-checker/certification"], "off");
+  assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
+});
+
+test("recommended followed by a dialect config reports each finding once", () => {
+  // Flat config semantics: later configs win per rule, so merging the rule
+  // maps in listed order is exactly what ESLint resolves.
+  const merged = {
+    ...plugin.configs.recommended.rules,
+    ...plugin.configs.v1.rules
+  };
+  assert.equal(merged["solid-checker/certification"], "off");
+
+  const findings = [finding("SC1003", "v1/no-destructure", 0, 2)];
+  const reported = [];
+  lintPass(enabledRules(merged), syntheticContext({ findings }, reported));
+  assert.equal(reported.length, 1);
+  assert.match(reported[0].data.message, /SC1003/);
+});
+
+test("a dialect config followed by recommended reports each finding once", () => {
+  // Reverse listing: `recommended` wins the certification entry, so both the
+  // per-rule rules and certification are enabled for the same pass. The
+  // per-file registry has to keep certification from re-reporting what the
+  // per-rule rules own.
+  const merged = {
+    ...plugin.configs.v1.rules,
+    ...plugin.configs.recommended.rules
+  };
+  assert.equal(merged["solid-checker/certification"], "error");
+
+  const findings = [
+    finding("SC1003", "v1/no-destructure", 0, 2),
+    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+  ];
+  const reported = [];
+  lintPass(enabledRules(merged), syntheticContext({ findings }, reported));
+  assert.equal(reported.length, 2);
+  const ids = reported.map(entry => entry.data.message.slice(1, 7)).sort();
+  assert.deepEqual(ids, ["SC1001", "SC1003"]);
+});
+
+test("certification alone still reports every finding", () => {
+  const findings = [
+    finding("SC1003", "v1/no-destructure", 0, 2),
+    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+  ];
+  const reported = [];
+  lintPass(["certification"], syntheticContext({ findings }, reported));
+  assert.equal(reported.length, 2);
+});
+
+test("per-rule registrations do not leak into a later certification-only pass", () => {
+  // A persistent ESLint server can lint the same file under a per-rule
+  // config, then again after the config dropped to certification only. The
+  // second pass must report everything: registrations live for one pass.
+  const findings = [
+    finding("SC1003", "v1/no-destructure", 0, 2),
+    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+  ];
+  const first = [];
+  lintPass(enabledRules(plugin.configs.v1.rules), syntheticContext({ findings }, first));
+  assert.equal(first.length, 2);
+  assert.equal(plugin._testing.ownedRules.size, 0);
+
+  const second = [];
+  lintPass(["certification"], syntheticContext({ findings }, second));
+  assert.equal(second.length, 2);
+});
+
+test("per-rule surface: a rule reports only the findings it owns", () => {
+  const findings = [
+    finding("SC1003", "v1/no-destructure", 0, 2),
+    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+  ];
+  const reported = [];
+  lintPass(["v1/no-destructure"], syntheticContext({ findings }, reported));
+  assert.equal(reported.length, 1);
+  assert.match(reported[0].data.message, /SC1003/);
+});
+
+test("per-rule surface: one snapshot load serves every rule of a dialect", () => {
+  plugin._testing.snapshotCache.clear();
+  const findings = [finding("SC1003", "v1/no-destructure", 0, 2)];
+  const snapshotPath = join(tmpdir(), `solid-checker-adapter-shared-${process.pid}.json`);
+  writeFileSync(snapshotPath, JSON.stringify({ findings }));
+  const reported = [];
+  const base = syntheticContext(undefined, reported);
+  base.settings = { solidChecker: { snapshotPath } };
+  const before = plugin._testing.snapshotCache.size;
+  lintPass(["v1/no-destructure", "v1/strict-read-untracked"], base);
+  assert.equal(plugin._testing.snapshotCache.size, before + 1);
+  rmSync(snapshotPath);
+});
+
+// Simulate ESLint's per-file execution model: every enabled rule's create()
+// builds its listener map before any traversal event fires, then the Program
+// enter event reaches every listener before any Program:exit does.
+function lintPass(ruleNames, context) {
+  const program = { type: "Program" };
+  const listeners = ruleNames.map(name => plugin.rules[name].create(context));
+  for (const map of listeners) map.Program?.(program);
+  for (const map of listeners) map["Program:exit"]?.(program);
+}
+
+function enabledRules(merged) {
+  return Object.entries(merged)
+    .filter(([, severity]) => severity !== "off")
+    .map(([name]) => name.slice("solid-checker/".length));
+}
+
+function finding(id, rule, start, end) {
+  return {
+    id,
+    rule,
+    kind: "violation",
+    severity: "error",
+    message: "m",
+    primaryLocation: { path: "/tmp/adapter-per-rule.tsx", startByte: start, endByte: end }
+  };
+}
+
+function syntheticContext(snapshot, reported) {
+  return {
+    settings: snapshot === undefined ? {} : { solidChecker: { snapshot } },
+    options: [],
+    physicalFilename: "/tmp/adapter-per-rule.tsx",
+    sourceCode: { text: "abcdefgh", getLocFromIndex: index => ({ line: 1, column: index }) },
+    report: entry => reported.push(entry)
+  };
+}

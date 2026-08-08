@@ -1,0 +1,404 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "solid-js",
+    "version": "1.9.14"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "function-10": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "memo result"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "function-11": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "resolved children"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "function-12": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "selector result"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "inline"
+        }
+      ]
+    },
+    "function-13": {
+      "kind": "function",
+      "returns": {
+        "kind": "store-path",
+        "label": "mutable store"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "function-3": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "function-4": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "function-5": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 1,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "function-6": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 1,
+          "execution": "inline"
+        }
+      ]
+    },
+    "function-7": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "deferred value"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "function-8": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "external source value"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "function-9": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "mapped array"
+      },
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "function": {
+      "kind": "function"
+    },
+    "value": {
+      "kind": "value"
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function": [
+          "DevHooks",
+          "ErrorBoundary",
+          "For",
+          "IS_DEV",
+          "Index",
+          "Match",
+          "Owner",
+          "SUPPORTS_PROXY",
+          "Show",
+          "Suspense",
+          "SuspenseList",
+          "Switch",
+          "Transition",
+          "cancelCallback",
+          "createComponent",
+          "createContext",
+          "createSignal",
+          "createUniqueId",
+          "devComponent",
+          "enableExternalSource",
+          "enableHydration",
+          "enableScheduling",
+          "equalFn",
+          "getListener",
+          "getOwner",
+          "getSuspenseContext",
+          "mergeProps",
+          "nextHydrateContext",
+          "observable",
+          "on",
+          "readSignal",
+          "registerGraph",
+          "requestCallback",
+          "resetErrorBoundaries",
+          "resumeEffects",
+          "setHydrateContext",
+          "splitProps",
+          "useContext",
+          "useTransition",
+          "writeSignal"
+        ],
+        "function-1": [
+          "createReaction",
+          "lazy",
+          "onCleanup",
+          "onError",
+          "onMount"
+        ],
+        "function-10": [
+          "createMemo"
+        ],
+        "function-11": [
+          "children"
+        ],
+        "function-12": [
+          "createSelector"
+        ],
+        "function-2": [
+          "catchError"
+        ],
+        "function-3": [
+          "batch",
+          "createRoot",
+          "startTransition",
+          "untrack"
+        ],
+        "function-4": [
+          "createComputed",
+          "createEffect",
+          "createRenderEffect"
+        ],
+        "function-5": [
+          "createResource"
+        ],
+        "function-6": [
+          "runWithOwner"
+        ],
+        "function-7": [
+          "createDeferred"
+        ],
+        "function-8": [
+          "from"
+        ],
+        "function-9": [
+          "indexArray",
+          "mapArray"
+        ],
+        "value": [
+          "$DEVCOMP",
+          "$PROXY",
+          "$TRACK",
+          "DEV",
+          "sharedConfig"
+        ]
+      },
+      "conditions": [
+        "default",
+        "import"
+      ]
+    },
+    "./store": {
+      "exports": {
+        "function": [
+          "DevHooks",
+          "IS_DEV",
+          "createStore",
+          "getNode",
+          "getNodes",
+          "isWrappable",
+          "ownKeys",
+          "proxyDescriptor",
+          "reconcile",
+          "setProperty",
+          "trackSelf",
+          "unwrap",
+          "updatePath"
+        ],
+        "function-13": [
+          "createMutable"
+        ],
+        "function-3": [
+          "produce"
+        ],
+        "function-6": [
+          "modifyMutable"
+        ],
+        "value": [
+          "$RAW",
+          "DEV"
+        ]
+      },
+      "conditions": [
+        "default",
+        "import"
+      ]
+    },
+    "./web": {
+      "exports": {
+        "function": [
+          "Aliases",
+          "Assets",
+          "ChildProperties",
+          "DOMElements",
+          "DelegatedEvents",
+          "Dynamic",
+          "ErrorBoundary",
+          "For",
+          "Hydration",
+          "HydrationScript",
+          "Index",
+          "Match",
+          "NoHydration",
+          "Portal",
+          "Properties",
+          "RequestContext",
+          "SVGElements",
+          "SVGNamespace",
+          "Show",
+          "Suspense",
+          "SuspenseList",
+          "Switch",
+          "addEventListener",
+          "assign",
+          "classList",
+          "className",
+          "clearDelegatedEvents",
+          "createComponent",
+          "delegateEvents",
+          "dynamicProperty",
+          "escape",
+          "generateHydrationScript",
+          "getAssets",
+          "getHydrationKey",
+          "getNextElement",
+          "getNextMarker",
+          "getNextMatch",
+          "getOwner",
+          "getPropAlias",
+          "getRequestEvent",
+          "insert",
+          "mergeProps",
+          "pipeToNodeWritable",
+          "pipeToWritable",
+          "renderToStream",
+          "renderToString",
+          "renderToStringAsync",
+          "resolveSSRNode",
+          "runHydrationEvents",
+          "setAttribute",
+          "setAttributeNS",
+          "setBoolAttribute",
+          "setProperty",
+          "setStyleProperty",
+          "spread",
+          "ssr",
+          "ssrAttribute",
+          "ssrClassList",
+          "ssrElement",
+          "ssrHydrationKey",
+          "ssrSpread",
+          "ssrStyle",
+          "style",
+          "template",
+          "use",
+          "useAssets"
+        ],
+        "function-10": [
+          "memo"
+        ],
+        "function-3": [
+          "hydrate",
+          "render",
+          "untrack"
+        ],
+        "function-4": [
+          "createDynamic",
+          "effect"
+        ],
+        "value": [
+          "isDev",
+          "isServer"
+        ]
+      },
+      "conditions": [
+        "default",
+        "import"
+      ]
+    }
+  },
+  "evidence": {
+    "kind": "verified",
+    "generator": "solid-checker bundled Solid 1.x model"
+  }
+}

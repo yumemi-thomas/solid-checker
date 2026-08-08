@@ -1,0 +1,95 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/no-proxy-apis",
+      "code": "SC8009",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 67,
+      "end": 112,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 133,
+      "end": 140,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/uncalled-accessor",
+      "code": "SC1005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 386,
+      "end": 391,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 1039,
+      "end": 1049,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-async-tracked-scope",
+      "code": "SC5004",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 1358,
+      "end": 1413,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-read-after-await",
+      "code": "SC1002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 1400,
+      "end": 1406,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/expected-function-got-expression",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 2024,
+      "end": 2031,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-source-uncaptured",
+      "code": "SC9011",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 2701,
+      "end": 2706,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/untracked-derived-function",
+      "code": "SC1006",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 2947,
+      "end": 2954,
+      "fixes": 0
+    }
+  ]
+}

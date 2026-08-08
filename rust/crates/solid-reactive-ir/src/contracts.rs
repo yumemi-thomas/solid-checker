@@ -11,6 +11,7 @@ use std::{
     sync::Arc,
 };
 
+use solid_dialect::Dialect;
 use solid_facts::ProjectFacts;
 use typefacts::{Callability, Location, ReferenceSpace};
 
@@ -36,10 +37,34 @@ pub(super) struct ResolvedContracts {
     pub(super) missing_exports: Vec<StaticViolation>,
 }
 
+/// Whether the dialect's own vocabulary outranks a package contract for a name
+/// imported from `module`.
+///
+/// Solid's built-ins have richer native semantics than any cross-package
+/// contract summary can express: ownership, async provenance, writes, and
+/// cleanup phases. The reviewed contract stays as evidence and for export
+/// completeness, but its coarse callbacks/returns must not be layered over
+/// native facts.
+///
+/// The gate is the dialect's module-ownership answer, not the literal package
+/// name `solid-js`. 1.x reaches `createStore` only through `solid-js/store` and
+/// `Portal` only through `solid-js/web`; 2.0 moved the whole DOM surface to the
+/// separate `@solidjs/web` package. Comparing package names gave the package
+/// root native precedence and every other entrypoint the contract's coarse
+/// answer, for the same primitives.
+fn native_vocabulary_outranks_contract(
+    dialect: &dyn Dialect,
+    module: &str,
+    imported: &str,
+) -> bool {
+    dialect.owns_module(module) && dialect.declares_primitive(imported)
+}
+
 pub(super) fn resolve_contract_imports(
     facts: &ProjectFacts,
     contracts: &[PackageContract],
     entities: &EntitySymbols,
+    dialect: &dyn Dialect,
 ) -> ResolvedContracts {
     let mut bindings = Vec::new();
     let mut by_symbol = HashMap::new();
@@ -120,8 +145,16 @@ pub(super) fn resolve_contract_imports(
                             },
                             summary,
                         };
-                        bindings.push(resolved.clone());
-                        by_symbol.insert(symbol, resolved);
+                        // Native dialect facts are richer than the package
+                        // schema, but the reviewed package contract remains
+                        // the only semantic evidence for public Solid exports
+                        // outside that native vocabulary. Apply the same
+                        // precedence to namespace and named imports.
+                        if !native_vocabulary_outranks_contract(dialect, &import.module, &imported)
+                        {
+                            bindings.push(resolved.clone());
+                            by_symbol.insert(symbol, resolved);
+                        }
                     }
                     continue;
                 }
@@ -192,10 +225,77 @@ pub(super) fn resolve_contract_imports(
                 // provenance, writes, and cleanup phases). Keep the bundled
                 // contract as evidence and for export completeness, but do
                 // not layer its coarse callbacks/returns over native facts.
-                if contract.package.name != "solid-js" {
+                if !native_vocabulary_outranks_contract(dialect, &import.module, imported) {
                     bindings.push(resolved.clone());
                     by_symbol.insert(symbol, resolved);
                 }
+            }
+        }
+        for export in &file.ast.exports {
+            if export.type_only {
+                continue;
+            }
+            let Some(module) = export.module.as_deref() else {
+                continue;
+            };
+            let Some(contract) = contracts
+                .iter()
+                .filter(|contract| {
+                    module == contract.package.name
+                        || module
+                            .strip_prefix(&contract.package.name)
+                            .is_some_and(|suffix| suffix.starts_with('/'))
+                })
+                .max_by_key(|contract| contract.package.name.len())
+            else {
+                continue;
+            };
+            for specifier in &export.specifiers {
+                if specifier.type_only {
+                    continue;
+                }
+                let imported = file.source_text(specifier.local.span).unwrap_or_default();
+                let specifier_location = location(file.path.shared(), specifier.local.span);
+                let Some(symbol) = entities.get(&specifier_location).cloned() else {
+                    continue;
+                };
+                let Some(summary) = contract
+                    .exports_for_module(module)
+                    .and_then(|exports| exports.get(imported))
+                    .cloned()
+                else {
+                    missing_exports.push(StaticViolation {
+                        id: "SC9001".into(),
+                        rule: "package-contract-export-missing".into(),
+                        message: format!(
+                            "the reactivity contract for {module} has no entrypoint/export summary for re-exported export {imported}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified"
+                        ),
+                        hint: format!(
+                            "Add an export summary for {imported} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+                        ),
+                        location: specifier_location,
+                        analysis_context: String::new(),
+                        fixes: vec![],
+                    });
+                    continue;
+                };
+                if native_vocabulary_outranks_contract(dialect, module, imported) {
+                    continue;
+                }
+                let resolved = ResolvedContractBinding {
+                    local_name: specifier.exported.to_string(),
+                    imported_name: imported.to_owned(),
+                    package_name: contract.package.name.clone(),
+                    symbol: symbol.clone(),
+                    contract_location: Location {
+                        path: format!("{}#{imported}", contract.source_path).into(),
+                        start_byte: 0,
+                        end_byte: 0,
+                    },
+                    summary,
+                };
+                bindings.push(resolved.clone());
+                by_symbol.insert(symbol, resolved);
             }
         }
     }

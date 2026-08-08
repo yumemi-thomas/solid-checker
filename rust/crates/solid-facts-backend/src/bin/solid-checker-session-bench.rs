@@ -14,6 +14,7 @@ use solid_facts_backend::{
 struct Options {
     project: PathBuf,
     typefacts: String,
+    dialect: Option<String>,
     iterations: usize,
     warmups: usize,
     edit: Option<PathBuf>,
@@ -70,17 +71,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let project_id = project.to_string_lossy().into_owned();
     let startup = Instant::now();
     let typescript = TypeFactsSession::open(&options.typefacts, &project_id, &[])?;
-    let (mut session, sources) = NativeIncrementalSession::open_pipelined(
-        solid_facts_backend::dialect::default_dialect(),
-        project_id,
-        typescript,
-    )?;
+    let dialect = match options.dialect.as_deref() {
+        Some(id) => solid_facts_backend::dialect::by_id(id)
+            .ok_or_else(|| format!("unknown dialect {id:?}"))?,
+        None => solid_facts_backend::dialect::detect(&project),
+    };
+    let (mut session, sources) =
+        NativeIncrementalSession::open_pipelined(dialect, project_id, typescript)?;
     let source_count = sources.len();
     let source_setup_ns = nanos(startup.elapsed());
     let mut reactive_ir = solid_reactive_ir::IncrementalBuilder::default();
 
     let first = Instant::now();
-    let mut first_timings = analyze_full(&mut session, &mut reactive_ir)?;
+    let mut first_timings = analyze_full(&mut session, &mut reactive_ir, dialect)?;
     first_timings.wall = first.elapsed();
     let first_analysis_ns = nanos(first_timings.wall);
 
@@ -103,6 +106,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             index,
             &mut version,
             &mut reactive_ir,
+            dialect,
         )?;
     }
     let mut samples = Vec::with_capacity(options.iterations);
@@ -117,6 +121,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             index + options.warmups,
             &mut version,
             &mut reactive_ir,
+            dialect,
         )?;
         timings.wall = started.elapsed();
         samples.push(nanos(timings.wall));
@@ -232,6 +237,10 @@ fn enforce_transfer_limits(
     Ok(())
 }
 
+// One more parameter than clippy's default: the iteration needs the session,
+// the edit it alternates, the counters, the IR builder and the dialect, and
+// bundling them into a struct would only move the same list behind a name.
+#[allow(clippy::too_many_arguments)]
 fn analyze_iteration(
     session: &mut NativeIncrementalSession,
     edit_path: Option<&Path>,
@@ -240,6 +249,7 @@ fn analyze_iteration(
     iteration: usize,
     version: &mut u64,
     reactive_ir: &mut solid_reactive_ir::IncrementalBuilder,
+    dialect: &'static solid_facts_backend::dialect::Dialect,
 ) -> Result<AnalysisTimings, Box<dyn std::error::Error>> {
     if let (Some(path), Some(original)) = (edit_path, original) {
         *version = version.checked_add(1).ok_or("edit version overflow")?;
@@ -266,7 +276,7 @@ fn analyze_iteration(
             }],
             None,
         )?;
-        let (reactive_ir_timings, solver) = solve_facts(&facts, reactive_ir)?;
+        let (reactive_ir_timings, solver) = solve_facts(&facts, reactive_ir, dialect)?;
         return Ok(AnalysisTimings {
             wall: std::time::Duration::ZERO,
             facts: session.last_build_timings(),
@@ -274,15 +284,16 @@ fn analyze_iteration(
             solver,
         });
     }
-    analyze_full(session, reactive_ir)
+    analyze_full(session, reactive_ir, dialect)
 }
 
 fn analyze_full(
     session: &mut NativeIncrementalSession,
     reactive_ir: &mut solid_reactive_ir::IncrementalBuilder,
+    dialect: &'static solid_facts_backend::dialect::Dialect,
 ) -> Result<AnalysisTimings, Box<dyn std::error::Error>> {
     let facts = session.analyze()?;
-    let (reactive_ir_timings, solver) = solve_facts(&facts, reactive_ir)?;
+    let (reactive_ir_timings, solver) = solve_facts(&facts, reactive_ir, dialect)?;
     Ok(AnalysisTimings {
         wall: std::time::Duration::ZERO,
         facts: session.last_build_timings(),
@@ -294,6 +305,7 @@ fn analyze_full(
 fn solve_facts(
     facts: &solid_facts::ProjectFacts,
     reactive_ir: &mut solid_reactive_ir::IncrementalBuilder,
+    dialect: &'static solid_facts_backend::dialect::Dialect,
 ) -> Result<
     (
         solid_reactive_ir::BuildTimings,
@@ -301,9 +313,8 @@ fn solve_facts(
     ),
     Box<dyn std::error::Error>,
 > {
-    let (program, reactive_ir) = reactive_ir.build_shared(facts)?;
-    let (_findings, solver) =
-        (solid_facts_backend::dialect::default_dialect().solve_measured)(&program);
+    let (program, reactive_ir) = reactive_ir.build_shared(facts, dialect.vocabulary)?;
+    let (_findings, solver) = (dialect.solve_measured)(&program);
     Ok((reactive_ir, solver))
 }
 
@@ -469,6 +480,7 @@ fn rust_pipeline_breakdown(
 fn parse_args() -> Result<Options, Box<dyn std::error::Error>> {
     let mut project = PathBuf::from("tsconfig.json");
     let mut typefacts = env::var("SOLID_TYPEFACTS_BIN").unwrap_or_default();
+    let mut dialect = None;
     let mut iterations = 20_usize;
     let mut warmups = 3_usize;
     let mut edit = None;
@@ -488,6 +500,7 @@ fn parse_args() -> Result<Options, Box<dyn std::error::Error>> {
         match argument.as_str() {
             "--project" => project = value(&mut index)?.into(),
             "--typefacts" => typefacts = value(&mut index)?.into(),
+            "--dialect" => dialect = Some(value(&mut index)?.to_owned()),
             "--iterations" => iterations = value(&mut index)?.parse()?,
             "--warmups" => warmups = value(&mut index)?.parse()?,
             "--edit" => edit = Some(PathBuf::from(value(&mut index)?)),
@@ -515,6 +528,7 @@ fn parse_args() -> Result<Options, Box<dyn std::error::Error>> {
                     "Usage: solid-checker-session-bench [OPTIONS]\n\n\
                      --project <PATH>       TypeScript project\n\
                      --typefacts <PATH>     TypeFacts service executable\n\
+                     --dialect <ID>         Dialect to benchmark (default: detect, then solid-v2)\n\
                      --iterations <COUNT>   Measured iterations (default: 20)\n\
                      --warmups <COUNT>      Warm-up iterations (default: 3)\n\
                      --edit <PATH>          Alternate an in-memory edit before each analysis\n\
@@ -539,6 +553,7 @@ fn parse_args() -> Result<Options, Box<dyn std::error::Error>> {
     Ok(Options {
         project,
         typefacts,
+        dialect,
         iterations,
         warmups,
         edit,

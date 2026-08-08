@@ -43,3 +43,111 @@ forked or copied into this repository.
 
 Solid Primitives is fetched only by the optional corpus workflow. Its source is
 not redistributed as part of this repository.
+
+## eslint-plugin-solid
+
+- Upstream: https://github.com/solidjs-community/eslint-plugin-solid
+- Version: `0.14.5` (test corpus extracted from commit `6d3bc311`)
+- License: MIT
+
+The plugin's rule test suites are vendored as data in
+`fixtures/upstream-parity/upstream-cases.json`: every `valid` and `invalid`
+case, including its verbatim source snippet, extracted by
+`scripts/extract-upstream-cases.mjs`. The Rust rules in
+`rust/crates/solid-reactive-ir/src/upstream_compat/` reproduce the plugin's
+rule surface over this checker's own fact tables; the plugin's implementation
+is not copied.
+
+```
+MIT License
+
+Copyright (c) 2021 Josh Wilson
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## known-css-properties
+
+- Upstream: https://github.com/known-css/known-css-properties
+- Version: `0.30.0`
+- License: MIT
+
+The package's `data/all.json` property list is vendored as the
+`KNOWN_CSS_PROPERTIES` table in
+`rust/crates/solid-reactive-ir/src/upstream_compat/upstream_data.rs`, so the
+ported `style-prop` rule judges the same names upstream judges.
+
+```
+MIT License
+
+Copyright (c) 2017 Mavrix Technologies
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## html-tags
+
+- Upstream: https://github.com/sindresorhus/html-tags
+- Version: `3.3.1`
+- License: MIT
+
+The package's tag list is vendored as the `HTML_TAGS` table in
+`rust/crates/solid-reactive-ir/src/upstream_compat/upstream_data.rs`, the same
+list `is-html@2.0.0` compiles into the detection regex upstream's
+`no-innerhtml` rule calls.
+
+```
+MIT License
+
+Copyright (c) Sindre Sorhus <sindresorhus@gmail.com> (https://sindresorhus.com)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```

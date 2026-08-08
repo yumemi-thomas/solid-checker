@@ -155,14 +155,12 @@ dependencies = [
 [[package]]
 name = "dom-expressions-compiler"
 version = "0.0.0"
-source = "git+https://github.com/yumemi-thomas/dom-expressions?rev=f8cbb73b16ec8599cd428b01d3a5ca85337b8320#f8cbb73b16ec8599cd428b01d3a5ca85337b8320"
+source = "git+https://github.com/yumemi-thomas/dom-expressions?rev=ac3f10e8e854e8ab12638074d6b8520af4289599#ac3f10e8e854e8ab12638074d6b8520af4289599"
 dependencies = [
  "html5ever",
  "htmlize",
  "markup5ever_rcdom",
- "napi",
  "napi-build",
- "napi-derive",
  "oxc_allocator",
  "oxc_ast",
  "oxc_ast_visit",
@@ -171,6 +169,26 @@ dependencies = [
  "oxc_semantic",
  "oxc_span",
  "oxc_syntax",
+]
+
+[[package]]
+name = "dom-expressions-compiler"
+version = "0.1.0"
+source = "git+https://github.com/yumemi-thomas/solid-1x-compiler?rev=c26d204ff921c96a2309a783460de6a05c8f8b4a#c26d204ff921c96a2309a783460de6a05c8f8b4a"
+dependencies = [
+ "html5ever",
+ "htmlize",
+ "markup5ever_rcdom",
+ "napi-build",
+ "oxc_allocator",
+ "oxc_ast",
+ "oxc_ast_visit",
+ "oxc_codegen",
+ "oxc_parser",
+ "oxc_semantic",
+ "oxc_span",
+ "oxc_syntax",
+ "serde",
 ]
 
 [[package]]
@@ -431,8 +449,6 @@ dependencies = [
 [[package]]
 name = "napi-build"
 version = "2.3.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9c366d2c8c60b86fa632df75f745509b52f9128f91a6bad4c796e44abb505e1"
 
 [[package]]
 name = "napi-derive"
@@ -1060,7 +1076,6 @@ checksum = "e8e2fb0f499abb4d162f2bedad68f5ef91a1682b5a03596ddb67efd37768d100"
 name = "solid-checker-wasm"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-compiler",
  "napi",
  "napi-build",
  "napi-derive",
@@ -1072,6 +1087,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "solid-dialect"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "solid-facts"
 version = "0.1.0"
 dependencies = [
@@ -1080,6 +1103,7 @@ dependencies = [
  "oxc_ast",
  "oxc_ast_visit",
  "oxc_parser",
+ "oxc_semantic",
  "oxc_span",
  "oxc_syntax",
  "serde",
@@ -1098,8 +1122,11 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "solid-dialect",
  "solid-facts",
  "solid-reactive-ir",
+ "solid-v1-compiler",
+ "solid-v1-rules",
  "solid-v2-compiler",
  "solid-v2-rules",
  "thiserror",
@@ -1111,9 +1138,30 @@ name = "solid-reactive-ir"
 version = "0.1.0"
 dependencies = [
  "serde",
+ "serde_json",
  "sha2",
+ "solid-dialect",
  "solid-facts",
  "thiserror",
+ "typefacts",
+]
+
+[[package]]
+name = "solid-v1-compiler"
+version = "0.1.0"
+dependencies = [
+ "dom-expressions-compiler 0.0.0",
+ "dom-expressions-compiler 0.1.0",
+ "solid-facts",
+]
+
+[[package]]
+name = "solid-v1-rules"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "solid-dialect",
+ "solid-reactive-ir",
  "typefacts",
 ]
 
@@ -1121,7 +1169,7 @@ dependencies = [
 name = "solid-v2-compiler"
 version = "0.1.0"
 dependencies = [
- "dom-expressions-compiler",
+ "dom-expressions-compiler 0.0.0",
  "solid-facts",
 ]
 
@@ -1219,7 +1267,7 @@ dependencies = [
 [[package]]
 name = "typefacts"
 version = "0.6.0"
-source = "git+https://github.com/yumemi-thomas/solid-ts-facts?rev=d708b506bebaa0ea81e061a0d4dd27100c42a433#d708b506bebaa0ea81e061a0d4dd27100c42a433"
+source = "git+https://github.com/yumemi-thomas/solid-ts-facts?rev=0b2d303d2f67c1ca9b108bd6886bab8882cd462e#0b2d303d2f67c1ca9b108bd6886bab8882cd462e"
 dependencies = [
  "ciborium",
  "serde",

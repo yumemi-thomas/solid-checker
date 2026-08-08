@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "component-props-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/engine/oxlint-conformance/failing.tsx",
+      "start": 24,
+      "end": 33,
+      "fixes": 1
+    }
+  ]
+}

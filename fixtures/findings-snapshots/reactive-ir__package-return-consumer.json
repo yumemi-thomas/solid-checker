@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-return-consumer/App.tsx",
+      "start": 178,
+      "end": 185,
+      "fixes": 0
+    }
+  ]
+}

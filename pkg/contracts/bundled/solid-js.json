@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "package": {
     "name": "solid-js",
-    "version": "2.0.0-beta.26",
-    "integrity": "sha512-ffP6D49w3uL7xoh6Pj3GReRjuAIayw9q2lOeeqnRXDuFPMrhdcMlHQ2P0whmXaXTrMTsI2yngRR1nszJIJHwyA=="
+    "version": "2.0.0-beta.31",
+    "integrity": "sha512-IsDOrIMkrEdqVV0jBCQ1yrVZriJ174krjUZtMH7MMJ73jEYXuQU+GwUG8nnti+AnU0mipBKViMIktXqk06QLuQ=="
   },
   "compilerFactsProtocol": 1,
   "summaries": {
@@ -162,6 +162,7 @@
           "Repeat",
           "resolve",
           "Reveal",
+          "runInServerComponentScope",
           "Show",
           "snapshot",
           "ssrHandleError",

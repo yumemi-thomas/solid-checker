@@ -13,6 +13,11 @@ checkout="${SOLID_TYPEFACTS_CHECKOUT:-$root/.typefacts}"
 output="${1:-$root/bin/solid-typefacts}"
 build_id="${TYPEFACTS_BUILD_ID:-dev}"
 
+case "$output" in
+  /*) ;;
+  *) output="$root/$output" ;;
+esac
+
 revision=$(
   sed -n 's/^typefacts = .*rev = "\([0-9a-f]\{40\}\)".*/\1/p' "$root/rust/Cargo.toml"
 )

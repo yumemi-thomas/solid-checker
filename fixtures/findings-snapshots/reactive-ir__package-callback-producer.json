@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-callback-producer/App.tsx",
+      "start": 274,
+      "end": 284,
+      "fixes": 0
+    }
+  ]
+}

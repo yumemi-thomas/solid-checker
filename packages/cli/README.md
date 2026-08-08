@@ -75,6 +75,36 @@ once, caches its snapshot, and projects matching findings into Oxlint. Set
 `settings.solidChecker.project` when the project uses a nonstandard config name
 or a solution-style root config that only references application configs.
 
+By default the analysis picks its dialect from the `solid-js` version the
+project resolves. Set `settings.solidChecker.dialect` to `"solid-v1"` or
+`"solid-v2"` to override detection for every rule the adapter runs.
+
+Every catalog rule is also its own ESLint rule, so a project can disable one
+finding without losing the rest: unprefixed names
+(`solid-checker/strict-read-untracked`) come from the Solid 2.0 catalog, and
+`v1/`-prefixed names (`solid-checker/v1/no-destructure`) come from the Solid
+1.x catalog. A `v1/` rule analyzes with the 1.x dialect on its own when the
+configuration has not chosen one. All rules of one dialect share a single
+cached analysis run, so enabling an entire catalog still spawns the checker
+once per project.
+
+The plugin ships three flat configs. `configs.recommended` enables only
+`solid-checker/certification`, which reports every finding through one rule.
+`configs.v1` and `configs.v2` enable their catalog's rules at each rule's
+native severity and turn `certification` off. The configs compose in either
+order: each finding reports exactly once, per rule. Even when a listing such
+as `[configs.v1, configs.recommended]` re-enables `certification` (flat
+config resolves each rule from the later entry), certification skips every
+finding an enabled per-rule rule owns for the linted file and reports only
+the rest.
+
+Per-rule options (for example `v1/no-innerhtml`'s `allowStatic`) live in the
+project's `.solid-checker/rule-options.json`, which the native analysis
+discovers itself — not in ESLint rule configuration. The adapter runs one
+analysis per project, so a single discovered file is what keeps ESLint, the
+standalone CLI, and every editor integration reading the same options. See
+`docs/rules/README.md` in the repository for the format.
+
 In StackBlitz, WebContainers, or a browser worker, import the process-free
 WASM API from the same package:
 

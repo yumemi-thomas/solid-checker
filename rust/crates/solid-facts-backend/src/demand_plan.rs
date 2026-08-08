@@ -7,20 +7,28 @@ use std::collections::{HashMap, HashSet};
 use solid_facts::FileFacts;
 use typefacts::v3::EntityDemand;
 
+use crate::dialect::Dialect;
 use crate::{
     BackendError, callee_property_location, structural_accessor_spans, typefacts_location,
 };
 
-pub(crate) fn plan(files: &[FileFacts]) -> Result<Vec<EntityDemand>, BackendError> {
+pub(crate) fn plan(
+    dialect: &'static Dialect,
+    files: &[FileFacts],
+) -> Result<Vec<EntityDemand>, BackendError> {
     let mut demands = Vec::new();
     for file in files {
-        plan_file(file, &mut demands)?;
+        plan_file(dialect, file, &mut demands)?;
     }
     stable_deduplicate(&mut demands);
     Ok(demands)
 }
 
-fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), BackendError> {
+fn plan_file(
+    dialect: &'static Dialect,
+    file: &FileFacts,
+    demands: &mut Vec<EntityDemand>,
+) -> Result<(), BackendError> {
     let path = file.path.to_string();
     let structural_accessors = structural_accessor_spans(file);
     let mut symbol_spans = HashMap::new();
@@ -77,6 +85,115 @@ fn plan_file(file: &FileFacts, demands: &mut Vec<EntityDemand>) -> Result<(), Ba
     }
     for element in &file.ast.jsx_elements {
         add_symbol(element.name.span, false);
+        // `v1/jsx-no-undef` judges a dotted tag by its root identifier
+        // alone (`Foo` in `<Foo.Bar/>`), so the root span needs its own
+        // resolution — the combined span above answers a different
+        // question. Only the 1.x catalog reads this answer.
+        if dialect.vocabulary.version() == solid_dialect::Version::V1
+            && let Some(name) = file.source_text(element.name.span)
+            && let Some(dot) = name.find('.')
+        {
+            let root_length = name[..dot].trim_end().len();
+            if root_length > 0 {
+                add_symbol(
+                    solid_facts::core::Span::new(
+                        element.name.span.start,
+                        element.name.span.start + u32::try_from(root_length).unwrap_or_default(),
+                    ),
+                    false,
+                );
+            }
+        }
+        let native = file
+            .source_text(element.name.span)
+            .is_some_and(|name| name.starts_with(|c: char| c.is_ascii_lowercase()));
+        for attribute in &element.attributes {
+            let Some(expression) = attribute.expression else {
+                continue;
+            };
+            let name = file.source_text(attribute.name).unwrap_or_default();
+            // A native event-handler value is judged by its resolved type:
+            // `expected-function-got-expression` (both catalogs) proves the
+            // value non-callable, `event-handlers` and `no-array-handlers`
+            // (1.x) prove it statically string/number or array-shaped. The
+            // `on:` namespace form is a handler too.
+            let handler = native
+                && ((attribute.namespace.is_none()
+                    && name.starts_with("on")
+                    && name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic))
+                    || attribute
+                        .namespace
+                        .is_some_and(|namespace| file.source_text(namespace) == Some("on")));
+            // The 1.x catalog also recovers string values from literal
+            // string *types*: `no-innerhtml`'s allowStatic acceptance, and
+            // `jsx-no-script-url` for URL-carrying attributes.
+            let v1_string_recovered = dialect.vocabulary.version() == solid_dialect::Version::V1
+                && matches!(
+                    name,
+                    "innerHTML"
+                        | "innerhtml"
+                        | "href"
+                        | "src"
+                        | "action"
+                        | "formaction"
+                        | "formAction"
+                        | "data"
+                        | "to"
+                        | "xlink:href"
+                );
+            if handler || v1_string_recovered {
+                add_symbol(expression, false);
+                type_descriptor_spans.insert(expression);
+            }
+        }
+    }
+    // Value positions that coerce whatever they receive: an untagged template
+    // interpolation stringifies it, a computed member key stringifies it as a
+    // property name. Both are positions where handing over an accessor
+    // *function* is provably not what the author meant, and
+    // `uncalled-accessor` — in both dialects' catalogs — needs the
+    // interpolated identifier to resolve to a symbol.
+    for template in &file.ast.template_literals {
+        for interpolated in &template.expressions {
+            add_symbol(*interpolated, false);
+        }
+    }
+    for member in &file.ast.members {
+        // `computed_members` is sorted by the extractor.
+        if file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_ok()
+        {
+            add_symbol(member.property, false);
+        }
+    }
+    // `prefer-for` (1.x) rewrites `.map()` to `<For>` only when the
+    // receiver's type proves an actual array; demand it at exactly the call
+    // shape the rule fires on.
+    if dialect.vocabulary.version() == solid_dialect::Version::V1 {
+        for call in &file.ast.calls {
+            let is_single_function_map = call.arguments.len() == 1
+                && matches!(
+                    call.arguments[0].value,
+                    solid_facts::ast::ArgumentValueKind::Function
+                        | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                )
+                && file.ast.members.iter().any(|member| {
+                    member.span == call.callee && file.source_text(member.property) == Some("map")
+                });
+            if is_single_function_map {
+                let member = file
+                    .ast
+                    .members
+                    .iter()
+                    .find(|member| member.span == call.callee)
+                    .expect("matched above");
+                add_symbol(member.object, false);
+                type_descriptor_spans.insert(member.object);
+            }
+        }
     }
     for returned in &file.ast.returns {
         if let Some(callee) = returned.callee

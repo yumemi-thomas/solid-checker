@@ -7,6 +7,19 @@ use solid_reactive_ir::RuleMetadata;
 pub enum Rule {
     StrictReadUntracked,
     ReactiveReadAfterAwait,
+    // The decomposed upstream-`reactivity` rules shared with the 1.x
+    // dialect: the defects — an accessor used where a value was meant, a
+    // readonly proxy written through, a listener bound to a call's result, a
+    // derivation nothing tracks, a source handed to an undescribed callee —
+    // are version-independent, so both catalogs carry them under the same SC
+    // codes and suppressions survive a migration. `no-async-tracked-scope`
+    // stays 1.x-only: 2.0 models async computations as a feature
+    // (SC5001–SC5003 own that surface).
+    UncalledAccessor,
+    UntrackedDerivedFunction,
+    ExpectedFunctionGotExpression,
+    NoDirectMutation,
+    ReactiveSourceUncaptured,
     ComponentPropsDestructure,
     ComponentReturnsConditionally,
     ReactiveWriteInOwnedScope,
@@ -49,9 +62,14 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 34] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
+        Self::UncalledAccessor,
+        Self::UntrackedDerivedFunction,
+        Self::ExpectedFunctionGotExpression,
+        Self::NoDirectMutation,
+        Self::ReactiveSourceUncaptured,
         Self::ComponentPropsDestructure,
         Self::ComponentReturnsConditionally,
         Self::ReactiveWriteInOwnedScope,
@@ -86,6 +104,20 @@ impl Rule {
         let (code, name, severity, uncertifiable) = match self {
             Self::StrictReadUntracked => ("SC1001", "strict-read-untracked", "warning", false),
             Self::ReactiveReadAfterAwait => ("SC1002", "reactive-read-after-await", "error", false),
+            Self::UncalledAccessor => ("SC1005", "uncalled-accessor", "warning", false),
+            Self::UntrackedDerivedFunction => {
+                ("SC1006", "untracked-derived-function", "warning", false)
+            }
+            Self::ExpectedFunctionGotExpression => (
+                "SC1007",
+                "expected-function-got-expression",
+                "warning",
+                false,
+            ),
+            Self::NoDirectMutation => ("SC2003", "no-direct-mutation", "warning", false),
+            Self::ReactiveSourceUncaptured => {
+                ("SC9011", "reactive-source-uncaptured", "warning", true)
+            }
             Self::ComponentPropsDestructure => {
                 ("SC1003", "component-props-destructure", "error", false)
             }
@@ -125,6 +157,10 @@ impl Rule {
             ),
             Self::MissingEffectFunction => ("SC7001", "missing-effect-function", "error", false),
             Self::SyncNodeReceivedAsync => ("SC7002", "sync-node-received-async", "error", false),
+            // SC7003 and SC9003 each carry two rule names on purpose: the
+            // code identifies the defect (an invalid or unresolved target),
+            // while the name identifies the surface it was found on
+            // (`refresh` versus `affects`).
             Self::InvalidRefreshTarget => ("SC7003", "invalid-refresh-target", "error", false),
             Self::InvalidAffectsTarget => ("SC7003", "invalid-affects-target", "error", false),
             Self::AffectsKeysOnAccessor => ("SC7004", "affects-keys-on-accessor", "error", false),
@@ -153,8 +189,50 @@ impl Rule {
     }
 }
 
+/// The catalog as the npm plugin consumes it: one JSON entry per rule, in
+/// catalog order. Generated into `packages/cli/lib/rules-v2.json` by the test
+/// below; `SOLID_RULES_UPDATE=1 cargo test -p solid-v2-rules` rewrites it, a plain
+/// test run fails on drift. The JS surface must never hand-maintain rule
+/// facts the catalog already owns.
+#[must_use]
+pub fn manifest_json() -> String {
+    let mut out = format!("{{\n  \"docsBaseUrl\": \"{DOCS_BASE_URL}\",\n  \"rules\": [\n");
+    for (index, rule) in Rule::ALL.into_iter().enumerate() {
+        let metadata = rule.metadata();
+        out.push_str(&format!(
+            "    {{ \"code\": \"{}\", \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {} }}{}\n",
+            metadata.code,
+            metadata.name,
+            metadata.severity,
+            metadata.uncertifiable,
+            if index + 1 == Rule::ALL.len() { "" } else { "," }
+        ));
+    }
+    out.push_str("  ]\n}\n");
+    out
+}
+
 #[cfg(test)]
 mod tests {
+    /// The npm plugin reads the catalog from a checked-in JSON file; this is
+    /// what keeps that file the catalog. `SOLID_RULES_UPDATE=1` rewrites it.
+    #[test]
+    fn the_shipped_manifest_is_the_catalog() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../../packages/cli/lib/rules-v2.json");
+        let expected = super::manifest_json();
+        if std::env::var_os("SOLID_RULES_UPDATE").is_some() {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(&path, &expected).unwrap();
+            return;
+        }
+        let shipped = std::fs::read_to_string(&path).unwrap_or_default();
+        assert_eq!(
+            shipped, expected,
+            "packages/cli/lib/rules-v2.json has drifted from the catalog; run SOLID_RULES_UPDATE=1 cargo test -p solid-v2-rules to rewrite it"
+        );
+    }
+
     use std::collections::HashSet;
 
     use super::Rule;

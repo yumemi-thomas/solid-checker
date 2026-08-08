@@ -1,0 +1,185 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 158,
+      "end": 170,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 158,
+      "end": 170,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 181,
+      "end": 193,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 181,
+      "end": 193,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 203,
+      "end": 212,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-node-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 216,
+      "end": 226,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-node-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 259,
+      "end": 271,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-node-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 304,
+      "end": 315,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-node-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 375,
+      "end": 391,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-node-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 451,
+      "end": 467,
+      "fixes": 0
+    },
+    {
+      "rule": "sync-node-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 500,
+      "end": 521,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 619,
+      "end": 631,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-refresh-target",
+      "code": "SC7003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 791,
+      "end": 805,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 797,
+      "end": 805,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-refresh-target",
+      "code": "SC7003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 816,
+      "end": 818,
+      "fixes": 0
+    },
+    {
+      "rule": "affects-keys-on-accessor",
+      "code": "SC7004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 821,
+      "end": 828,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-affects-target",
+      "code": "SC7003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 847,
+      "end": 854,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 908,
+      "end": 922,
+      "fixes": 0
+    }
+  ]
+}

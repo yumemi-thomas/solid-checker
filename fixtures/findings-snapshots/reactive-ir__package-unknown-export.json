@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-unknown-export/App.tsx",
+      "start": 9,
+      "end": 25,
+      "fixes": 0
+    }
+  ]
+}

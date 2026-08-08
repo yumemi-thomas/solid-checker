@@ -1,0 +1,521 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@solidjs/web",
+    "version": "2.0.0-beta.31"
+  },
+  "compilerFactsProtocol": 1,
+  "exports": {
+    "acquireAsset": {
+      "kind": "function"
+    },
+    "addEvent": {
+      "kind": "function"
+    },
+    "applyFrameResponse": {
+      "kind": "function"
+    },
+    "applyRef": {
+      "kind": "function"
+    },
+    "Assets": {
+      "kind": "function"
+    },
+    "assign": {
+      "kind": "function"
+    },
+    "ChildProperties": {
+      "kind": "value"
+    },
+    "ChunkReader": {
+      "kind": "function"
+    },
+    "claimElement": {
+      "kind": "function"
+    },
+    "claimElementTree": {
+      "kind": "function"
+    },
+    "className": {
+      "kind": "function"
+    },
+    "clearFlashCookie": {
+      "kind": "function"
+    },
+    "clientOnly": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred"
+        }
+      ]
+    },
+    "configureServerFunctionsClient": {
+      "kind": "function"
+    },
+    "configureServerFunctionsServer": {
+      "kind": "function"
+    },
+    "createChunk": {
+      "kind": "function"
+    },
+    "createComponent": {
+      "kind": "function"
+    },
+    "createFrame": {
+      "kind": "function"
+    },
+    "createFrameElement": {
+      "kind": "function"
+    },
+    "createFrameHost": {
+      "kind": "function"
+    },
+    "createFrameSink": {
+      "kind": "function"
+    },
+    "createHydrationSerializer": {
+      "kind": "function"
+    },
+    "createJSONDataTable": {
+      "kind": "function"
+    },
+    "createJSONDeserializer": {
+      "kind": "function"
+    },
+    "createNoJSHandler": {
+      "kind": "function"
+    },
+    "createSerializer": {
+      "kind": "function"
+    },
+    "createServerComponentHandler": {
+      "kind": "function"
+    },
+    "createServerReference": {
+      "kind": "function"
+    },
+    "decodeErrorHeaderValue": {
+      "kind": "function"
+    },
+    "decodeFlashCookie": {
+      "kind": "function"
+    },
+    "decodeResponse": {
+      "kind": "function"
+    },
+    "decodeResponsePayload": {
+      "kind": "function"
+    },
+    "DEFAULT_WEB_PLUGINS": {
+      "kind": "value"
+    },
+    "DelegatedEvents": {
+      "kind": "value"
+    },
+    "delegateEvents": {
+      "kind": "function"
+    },
+    "deserializeStream": {
+      "kind": "function"
+    },
+    "DOMElements": {
+      "kind": "value"
+    },
+    "DOMWithState": {
+      "kind": "value"
+    },
+    "Dynamic": {
+      "kind": "function"
+    },
+    "dynamic": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "dynamicProperty": {
+      "kind": "function"
+    },
+    "effect": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "encodeErrorHeaderValue": {
+      "kind": "function"
+    },
+    "encodeFlashCookie": {
+      "kind": "function"
+    },
+    "ERROR_HEADER": {
+      "kind": "value"
+    },
+    "Errored": {
+      "kind": "function"
+    },
+    "escape": {
+      "kind": "function"
+    },
+    "FLASH_COOKIE": {
+      "kind": "value"
+    },
+    "foldSetCookies": {
+      "kind": "function"
+    },
+    "For": {
+      "kind": "function"
+    },
+    "FRAME_APPLIED_EVENT": {
+      "kind": "value"
+    },
+    "FRAME_STREAM_HEADER": {
+      "kind": "value"
+    },
+    "frameAddress": {
+      "kind": "function"
+    },
+    "frameTransformDirectResult": {
+      "kind": "function"
+    },
+    "frameTransformFlightResult": {
+      "kind": "function"
+    },
+    "frameTransformResult": {
+      "kind": "function"
+    },
+    "FUNCTION_HEADER": {
+      "kind": "value"
+    },
+    "generateHydrationScript": {
+      "kind": "function"
+    },
+    "GET": {
+      "kind": "function"
+    },
+    "getAssets": {
+      "kind": "function"
+    },
+    "getDelegatedRoot": {
+      "kind": "function"
+    },
+    "getEventServerFunctionInvocation": {
+      "kind": "function"
+    },
+    "getFlightDataConsumer": {
+      "kind": "function"
+    },
+    "getFrameHost": {
+      "kind": "function"
+    },
+    "getHydrationKey": {
+      "kind": "function"
+    },
+    "getLocalHeaderScript": {
+      "kind": "function"
+    },
+    "getNextElement": {
+      "kind": "function"
+    },
+    "getNextMarker": {
+      "kind": "function"
+    },
+    "getNextMatch": {
+      "kind": "function"
+    },
+    "getOwner": {
+      "kind": "function"
+    },
+    "getRequestEvent": {
+      "kind": "function"
+    },
+    "getServerFunction": {
+      "kind": "function"
+    },
+    "getServerFunctionInvocation": {
+      "kind": "function"
+    },
+    "getServerFunctionMetadata": {
+      "kind": "function"
+    },
+    "getServerFunctionsCodec": {
+      "kind": "function"
+    },
+    "handleServerFunctionRequest": {
+      "kind": "function"
+    },
+    "hasFlashCookie": {
+      "kind": "function"
+    },
+    "HREF": {
+      "kind": "value"
+    },
+    "httpHeader": {
+      "kind": "function"
+    },
+    "httpStatus": {
+      "kind": "function"
+    },
+    "hydrate": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "Hydration": {
+      "kind": "function"
+    },
+    "HydrationScript": {
+      "kind": "function"
+    },
+    "insert": {
+      "kind": "function"
+    },
+    "installServerComponents": {
+      "kind": "function"
+    },
+    "INSTANCE_HEADER": {
+      "kind": "value"
+    },
+    "isDev": {
+      "kind": "value"
+    },
+    "isFrameStreamResponse": {
+      "kind": "function"
+    },
+    "isHref": {
+      "kind": "function"
+    },
+    "isResponseEnvelope": {
+      "kind": "function"
+    },
+    "isServer": {
+      "kind": "value"
+    },
+    "isServerFunction": {
+      "kind": "function"
+    },
+    "Loading": {
+      "kind": "function"
+    },
+    "Match": {
+      "kind": "function"
+    },
+    "MathMLElements": {
+      "kind": "value"
+    },
+    "memo": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "mergeProps": {
+      "kind": "function"
+    },
+    "Namespaces": {
+      "kind": "value"
+    },
+    "NoHydration": {
+      "kind": "function"
+    },
+    "Portal": {
+      "kind": "function"
+    },
+    "provideRequestEvent": {
+      "kind": "function"
+    },
+    "RawTextElements": {
+      "kind": "value"
+    },
+    "redirect": {
+      "kind": "function"
+    },
+    "ref": {
+      "kind": "function"
+    },
+    "registerDelegatedContainer": {
+      "kind": "function"
+    },
+    "registerDelegatedRoot": {
+      "kind": "function"
+    },
+    "registerElementClaim": {
+      "kind": "function"
+    },
+    "registerServerFunction": {
+      "kind": "function"
+    },
+    "registerServerReference": {
+      "kind": "function"
+    },
+    "reload": {
+      "kind": "function"
+    },
+    "render": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
+    },
+    "renderServerComponent": {
+      "kind": "function"
+    },
+    "renderToFrameStream": {
+      "kind": "function"
+    },
+    "renderToStream": {
+      "kind": "function"
+    },
+    "renderToString": {
+      "kind": "function"
+    },
+    "renderToStringAsync": {
+      "kind": "function"
+    },
+    "Repeat": {
+      "kind": "function"
+    },
+    "RequestContext": {
+      "kind": "value"
+    },
+    "resolveSerializerPlugins": {
+      "kind": "function"
+    },
+    "resolveSSRNode": {
+      "kind": "function"
+    },
+    "respond": {
+      "kind": "function"
+    },
+    "ResponseEnvelope": {
+      "kind": "function"
+    },
+    "REVALIDATE_HEADER": {
+      "kind": "value"
+    },
+    "Reveal": {
+      "kind": "function"
+    },
+    "runHydrationEvents": {
+      "kind": "function"
+    },
+    "scope": {
+      "kind": "function"
+    },
+    "serializeJSON": {
+      "kind": "function"
+    },
+    "SERVER_COMPONENT_BOOTSTRAP": {
+      "kind": "value"
+    },
+    "ServerComponentPlugin": {
+      "kind": "value"
+    },
+    "serverComponentResponse": {
+      "kind": "function"
+    },
+    "setAttribute": {
+      "kind": "function"
+    },
+    "setAttributeNS": {
+      "kind": "function"
+    },
+    "setProperty": {
+      "kind": "function"
+    },
+    "setStyleProperty": {
+      "kind": "function"
+    },
+    "Show": {
+      "kind": "function"
+    },
+    "SINGLE_FLIGHT_HEADER": {
+      "kind": "value"
+    },
+    "spread": {
+      "kind": "function"
+    },
+    "ssr": {
+      "kind": "function"
+    },
+    "ssrAttribute": {
+      "kind": "function"
+    },
+    "ssrClassList": {
+      "kind": "function"
+    },
+    "ssrElement": {
+      "kind": "function"
+    },
+    "ssrHydrationKey": {
+      "kind": "function"
+    },
+    "ssrStyle": {
+      "kind": "function"
+    },
+    "style": {
+      "kind": "function"
+    },
+    "subscribeFlightData": {
+      "kind": "function"
+    },
+    "SVGElements": {
+      "kind": "value"
+    },
+    "Switch": {
+      "kind": "function"
+    },
+    "template": {
+      "kind": "function"
+    },
+    "unregisterDelegatedContainer": {
+      "kind": "function"
+    },
+    "unregisterDelegatedRoot": {
+      "kind": "function"
+    },
+    "untrack": {
+      "kind": "function"
+    },
+    "useAssets": {
+      "kind": "function"
+    },
+    "useHead": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
+    },
+    "VoidElements": {
+      "kind": "value"
+    },
+    "withMeta": {
+      "kind": "function"
+    }
+  },
+  "evidence": {
+    "kind": "reviewed",
+    "generator": "solid-contract-gen"
+  }
+}

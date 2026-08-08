@@ -10,6 +10,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use solid_dialect::Dialect;
 use solid_facts::{ProjectFacts, TypeScriptSymbol, TypeScriptTable};
 use typefacts::{Declaration, Location};
 
@@ -23,13 +24,15 @@ use super::{
 pub(super) fn add_solid_import_names(
     facts: &ProjectFacts,
     entities: &EntitySymbols,
+    dialect: &dyn Dialect,
     names: &mut HashMap<SymbolId, SymbolName>,
 ) {
     for file in &facts.files {
         for import in &file.ast.imports {
-            let Some(primitives) = solid_module_primitives(import.module.as_str()) else {
+            let primitives = dialect.namespace_import_primitives(import.module.as_str());
+            if primitives.is_empty() {
                 continue;
-            };
+            }
             for binding in &import.bindings {
                 let location = location(file.path.shared(), binding.local.span);
                 let Some(symbol) = entities.get(&location) else {
@@ -53,9 +56,10 @@ pub(super) fn add_solid_import_names(
             let Some(module) = export.module.as_deref() else {
                 continue;
             };
-            let Some(primitives) = solid_module_primitives(module) else {
+            let primitives = dialect.namespace_import_primitives(module);
+            if primitives.is_empty() {
                 continue;
-            };
+            }
             for specifier in &export.specifiers {
                 let Some(primitive) = file.source_text(specifier.local.span) else {
                     continue;
@@ -69,40 +73,6 @@ pub(super) fn add_solid_import_names(
                 }
             }
         }
-    }
-}
-
-fn solid_module_primitives(module: &str) -> Option<&'static [&'static str]> {
-    match module {
-        "solid-js" => Some(&[
-            "createSignal",
-            "createMemo",
-            "mapArray",
-            "createStore",
-            "createProjection",
-            "createOptimistic",
-            "createOptimisticStore",
-            "createEffect",
-            "createRenderEffect",
-            "createTrackedEffect",
-            "createReaction",
-            "createRoot",
-            "createOwner",
-            "untrack",
-            "onSettled",
-            "onCleanup",
-            "flush",
-            "Loading",
-            "Show",
-            "Match",
-            "Switch",
-            "merge",
-            "refresh",
-            "affects",
-            "action",
-        ]),
-        "@solidjs/web" => Some(&["dynamic"]),
-        _ => None,
     }
 }
 
@@ -203,6 +173,7 @@ pub(super) fn patch_typescript_indexes(
     cache: &mut CachedTypeScriptIndexes,
     table: &TypeScriptTable,
     symbols_by_id: &HashMap<&str, TypeScriptSymbol<'_>>,
+    dialect: &dyn Dialect,
     changes: &solid_facts::TypeScriptChanges,
 ) -> Option<(Duration, Duration)> {
     // An empty non-reuse change set is the sidecar's fail-closed description
@@ -365,7 +336,7 @@ pub(super) fn patch_typescript_indexes(
                     .insert(root.clone(), declaration.clone());
             }
             for declaration in symbol.declarations() {
-                if solid_primitive_declaration(declaration) {
+                if solid_primitive_declaration(declaration, dialect) {
                     cache
                         .symbol_names
                         .insert(root.clone(), symbol_name(declaration.name.as_ref()));
@@ -467,6 +438,7 @@ pub(super) fn symbol_names(
     table: &TypeScriptTable,
     roots: &HashMap<SymbolId, SymbolId>,
     interner: &SymbolInterner,
+    dialect: &dyn Dialect,
 ) -> HashMap<SymbolId, SymbolName> {
     let mut names = HashMap::new();
     for symbol in table.symbols() {
@@ -475,7 +447,7 @@ pub(super) fn symbol_names(
             .cloned()
             .unwrap_or_else(|| interner.intern(symbol.id()));
         for declaration in symbol.declarations() {
-            if solid_primitive_declaration(declaration) {
+            if solid_primitive_declaration(declaration, dialect) {
                 names.insert(root.clone(), symbol_name(declaration.name.as_ref()));
             }
         }
@@ -509,40 +481,55 @@ pub(super) fn references_for_sources<'a>(
     references
 }
 
-fn solid_primitive_declaration(declaration: &Declaration) -> bool {
+/// The proven-source symbol at each exact TypeScript reference location, as
+/// `path -> byte range -> source symbol`.
+///
+/// Built straight from the symbol table rather than projected out of
+/// [`references_for_sources`]. That map exists to give the interprocedural pass
+/// ordered, de-duplicated per-symbol reference lists; this one needs neither,
+/// and reaching it through those lists costs a `Location` clone plus a sort and
+/// a dedup per source symbol, and then a fresh `String` per reference to
+/// re-key by path.
+pub(super) fn source_reference_locations<'a>(
+    table: &TypeScriptTable,
+    symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
+    sources: impl Iterator<Item = &'a SymbolId>,
+) -> super::SourceReferenceLocations {
+    let mut index = super::SourceReferenceLocations::new();
+    let mut record = |root: &SymbolId, reference: &Location| {
+        let path = reference.path.as_ref();
+        if !index.contains_key(path) {
+            index.insert(path.to_owned(), HashMap::new());
+        }
+        index
+            .get_mut(path)
+            .expect("path inserted above")
+            .insert((reference.start_byte, reference.end_byte), root.clone());
+    };
+    for root in sources {
+        if let Some(members) = symbols_by_root.get(root.as_str()) {
+            for member in members {
+                if let Some(symbol) = table.symbol(member.as_str()) {
+                    for reference in symbol.references() {
+                        record(root, reference);
+                    }
+                }
+            }
+        } else if let Some(symbol) = table.symbol(root.as_str()) {
+            for reference in symbol.references() {
+                record(root, reference);
+            }
+        }
+    }
+    index
+}
+
+fn solid_primitive_declaration(declaration: &Declaration, dialect: &dyn Dialect) -> bool {
     // Bootstrap analysis of Solid's own implementation, where there is no
     // package import to establish provenance. Require an exact package path
     // component; substring matches would misclassify similarly named projects.
     declaration_path_is_solid_package(declaration.location.path.as_ref())
-        && matches!(
-            declaration.name.as_ref(),
-            "createSignal"
-                | "createMemo"
-                | "mapArray"
-                | "createStore"
-                | "createProjection"
-                | "createOptimistic"
-                | "createOptimisticStore"
-                | "dynamic"
-                | "createEffect"
-                | "createRenderEffect"
-                | "createTrackedEffect"
-                | "createReaction"
-                | "createRoot"
-                | "createOwner"
-                | "untrack"
-                | "onSettled"
-                | "onCleanup"
-                | "flush"
-                | "Loading"
-                | "Show"
-                | "Match"
-                | "Switch"
-                | "merge"
-                | "refresh"
-                | "affects"
-                | "action"
-        )
+        && dialect.declares_primitive(declaration.name.as_ref())
 }
 
 fn declaration_path_is_solid_package(path: &str) -> bool {

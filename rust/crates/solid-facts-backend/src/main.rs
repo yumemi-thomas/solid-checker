@@ -23,8 +23,10 @@ use solid_facts_backend::{
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct Request {
     project_id: String,
-    #[serde(default = "default_dialect_id")]
-    dialect: String,
+    /// Absent means "detect from the project's resolved solid-js"; the
+    /// default dialect is the fallback when nothing resolves.
+    #[serde(default)]
+    dialect: Option<String>,
     generation: u64,
     sources: Vec<SourceFile>,
     typefacts_executable: String,
@@ -79,10 +81,6 @@ fn json_format() -> String {
     "json".into()
 }
 
-fn default_dialect_id() -> String {
-    dialect::default_dialect().id.into()
-}
-
 fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let started = Instant::now();
     // A JSON request arrives on stdin only when the caller passed no
@@ -100,17 +98,19 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         print_help();
         return Ok(0);
     }
-    let dialect = dialect::by_id(&request.dialect).ok_or_else(|| {
-        format!(
-            "unknown dialect {:?}; known dialects: {}",
-            request.dialect,
-            dialect::ALL
-                .iter()
-                .map(|dialect| dialect.id)
-                .collect::<Vec<_>>()
-                .join(", ")
-        )
-    })?;
+    let dialect = match request.dialect.as_deref() {
+        Some(id) => dialect::by_id(id).ok_or_else(|| {
+            format!(
+                "unknown dialect {id:?}; known dialects: {}",
+                dialect::ALL
+                    .iter()
+                    .map(|dialect| dialect.id)
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            )
+        })?,
+        None => dialect::detect(Path::new(&request.project_id)),
+    };
     if !request.validate_contract_paths.is_empty() {
         for path in &request.validate_contract_paths {
             read_package_contract(Path::new(path))?;
@@ -276,7 +276,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let arguments = std::env::args().skip(1).collect::<Vec<_>>();
     let mut project = PathBuf::from("tsconfig.json");
     let mut typefacts = default_typefacts_executable();
-    let mut dialect_id = default_dialect_id();
+    let mut dialect_id: Option<String> = None;
     let mut contract_paths = Vec::new();
     let mut format = "default".to_owned();
     let mut certify = false;
@@ -298,7 +298,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             continue;
         }
         if let Some(value) = argument.strip_prefix("--dialect=") {
-            dialect_id = value.to_owned();
+            dialect_id = Some(value.to_owned());
             continue;
         }
         if let Some(value) = argument.strip_prefix("--typefacts=") {
@@ -350,7 +350,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                 project = PathBuf::from(args.next().ok_or("--project needs a path")?)
             }
             "--typefacts" => typefacts = args.next().ok_or("--typefacts needs a path")?,
-            "--dialect" => dialect_id = args.next().ok_or("--dialect needs an id")?,
+            "--dialect" => dialect_id = Some(args.next().ok_or("--dialect needs an id")?),
             "--contract" => contract_paths.push(args.next().ok_or("--contract needs a path")?),
             "--format" => format = args.next().ok_or("--format needs a value")?,
             "--certify" => certify = true,
@@ -420,7 +420,7 @@ fn print_help() {
          Options:\n\
            --project <PATH>             TypeScript project (default: tsconfig.json)\n\
            --format <default|text|json> Output format (default: default)\n\
-           --dialect <ID>               Solid dialect to check with (default: solid-v2)\n\
+           --dialect <ID>               Solid dialect (default: detect from solid-js; fallback: solid-v2)\n\
            --certify                    Exit 1 unless the project is certified\n\
            --check-contracts            Report imported Solid packages without contracts\n\
            --contract <PATH>            Override/discover a package contract (repeatable)\n\

@@ -9,7 +9,9 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
-use solid_reactive_ir::{CacheRetention, Finding, IncrementalBuilder, PackageContract, Program};
+use solid_reactive_ir::{
+    CacheRetention, Finding, IncrementalBuilder, PackageContract, Program, RuleOptions,
+};
 
 use crate::dialect::{self, Dialect};
 use crate::{BackendError, SourceFile};
@@ -123,6 +125,10 @@ struct DiagnosticIdentity {
     generation: u64,
     contracts: Vec<String>,
     explicit_contract_paths: Vec<String>,
+    /// Per-rule options are re-read from disk on every analysis, so an
+    /// edited `.solid-checker/rule-options.json` invalidates a retained
+    /// diagnostic even within one generation.
+    rule_options: RuleOptions,
 }
 
 struct RetainedDiagnostic {
@@ -182,6 +188,7 @@ impl DiagnosticSession {
             explicit_contract_paths,
             bundled_solid_js,
         )?;
+        let rule_options = discover_rule_options(project)?;
         let identity = DiagnosticIdentity {
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
@@ -191,6 +198,7 @@ impl DiagnosticSession {
                 .map(|contract| format!("{contract:?}"))
                 .collect(),
             explicit_contract_paths: explicit_contract_paths.to_vec(),
+            rule_options: rule_options.clone(),
         };
         if let Some(retained) = &self.retained
             && retained.identity == identity
@@ -205,9 +213,12 @@ impl DiagnosticSession {
             ));
         }
 
-        let (program, _) = self
-            .builder
-            .build_with_contracts_shared(facts, &contracts)?;
+        let (program, _) = self.builder.build_with_contracts_shared(
+            facts,
+            self.dialect.vocabulary,
+            &contracts,
+            &rule_options,
+        )?;
         let reactive_ir = ir_started.elapsed();
         let solve_started = Instant::now();
         let analysis = Arc::new(finish_analysis(
@@ -660,6 +671,22 @@ pub(crate) fn bundled_contract_v2(package: &str) -> Result<Option<PackageContrac
     })
 }
 
+/// The Solid 1.x dialect's bundled contract for `solid-js@1.x`, covering the
+/// `.`, `./store` and `./web` entrypoints of the package that version
+/// actually ships.
+pub(crate) fn bundled_contract_v1(package: &str) -> Result<Option<PackageContract>, BackendError> {
+    Ok(match package {
+        "solid-js" => {
+            let mut bundled = decode_package_contract(include_bytes!(
+                "../../../../pkg/contracts/bundled/solid-js-v1.json"
+            ))?;
+            bundled.source_path = "bundled://solid-js-v1.json".into();
+            Some(bundled)
+        }
+        _ => None,
+    })
+}
+
 pub fn load_package_contracts(
     dialect: &'static Dialect,
     project: &Path,
@@ -1061,6 +1088,49 @@ fn discover_package_directory(
         }
     }
     Ok(None)
+}
+
+/// Loads the project's per-rule options from the nearest
+/// `.solid-checker/rule-options.json`, walking ancestors exactly as local
+/// contract discovery does. A project without one gets upstream's defaults;
+/// a file that fails to parse fails the analysis rather than silently
+/// meaning "defaults".
+pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError> {
+    let directory = if project.is_dir() {
+        project
+    } else {
+        project.parent().unwrap_or(project)
+    };
+    for ancestor in directory.ancestors() {
+        let candidate = ancestor.join(".solid-checker").join("rule-options.json");
+        match fs::read_to_string(&candidate) {
+            Ok(encoded) => {
+                return RuleOptions::parse(&encoded).map_err(|error| {
+                    BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
+                });
+            }
+            Err(error) if error.kind() == io::ErrorKind::NotFound => {}
+            Err(error) => return Err(error.into()),
+        }
+    }
+    Ok(RuleOptions::default())
+}
+
+/// The rule-options document [`discover_rule_options`] would load for this
+/// project, if one exists on disk right now.
+///
+/// The retained check daemon folds this into its cached-snapshot input set:
+/// per-rule options are part of every diagnostic identity, so editing,
+/// creating, or deleting `.solid-checker/rule-options.json` must invalidate
+/// a cached answer exactly like an edited contract does.
+pub fn discovered_rule_options_path(project_directory: &Path) -> Option<PathBuf> {
+    for ancestor in project_directory.ancestors() {
+        let candidate = ancestor.join(".solid-checker").join("rule-options.json");
+        if candidate.is_file() {
+            return Some(candidate);
+        }
+    }
+    None
 }
 
 fn local_contract_path(project_directory: &Path, module: &str) -> PathBuf {

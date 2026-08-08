@@ -13,7 +13,10 @@ serde_json.workspace = true
 sha2.workspace = true
 oxc_diagnostics.workspace = true
 oxc_miette.workspace = true
+solid-dialect = { path = "../solid-dialect" }
 solid-facts = { path = "../solid-facts" }
+solid-v1-compiler = { path = "../../dialects/solid-v1/compiler" }
+solid-v1-rules = { path = "../../dialects/solid-v1/rules" }
 solid-v2-compiler = { path = "../../dialects/solid-v2/compiler" }
 typefacts.workspace = true
 solid-reactive-ir = { path = "../solid-reactive-ir" }
@@ -35,3 +38,7 @@ path = "src/bin/solid-checker-session-bench.rs"
 [[bin]]
 name = "solid-checker-cold-start-bench"
 path = "src/bin/solid-checker-cold-start-bench.rs"
+
+[[bin]]
+name = "solid-contract-gen"
+path = "src/bin/solid-contract-gen.rs"

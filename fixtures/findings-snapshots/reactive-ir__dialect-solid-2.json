@@ -1,0 +1,89 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1340,
+      "end": 1352,
+      "fixes": 0,
+      "message": "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
+      "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 1684,
+      "end": 1696,
+      "fixes": 0,
+      "message": "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
+      "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
+    },
+    {
+      "rule": "sync-node-received-async",
+      "code": "SC7002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2021,
+      "end": 2031,
+      "fixes": 0,
+      "message": "createMemo is marked sync: true but its computation can return a Promise or AsyncIterable; a sync node must settle in the same flush and cannot suspend, so an async result throws at runtime",
+      "hint": "Drop sync: true and let the read suspend to a <Loading> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here."
+    },
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2974,
+      "end": 2979,
+      "fixes": 0,
+      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export batch; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+      "hint": "Add an export summary for batch to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+    },
+    {
+      "rule": "package-contract-export-missing",
+      "code": "SC9001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 2981,
+      "end": 2988,
+      "fixes": 0,
+      "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export onMount; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+      "hint": "Add an export summary for onMount to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 3947,
+      "end": 3953,
+      "fixes": 0,
+      "message": "reactive accessor \"seed\" is read directly in createEffect apply callback, which does not track; the read sees the current value once and never updates when \"seed\" changes",
+      "hint": "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
+      "start": 3968,
+      "end": 3973,
+      "fixes": 0,
+      "message": "cannot prove that the createEffect callback returns only a cleanup function or undefined; an unresolved return value may throw at runtime",
+      "hint": "Make the return shape explicit at each return site: return a function literal, a named local function, or nothing. Returns of member expressions, call results, or values that cross files defeat this analysis."
+    }
+  ]
+}

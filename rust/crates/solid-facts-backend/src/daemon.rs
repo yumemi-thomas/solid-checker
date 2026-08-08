@@ -98,8 +98,13 @@ fn retained_format(format: &str) -> bool {
 fn resolve_dialect(
     request: &Request,
 ) -> Result<&'static solid_facts_backend::dialect::Dialect, Box<dyn Error>> {
-    solid_facts_backend::dialect::by_id(&request.dialect)
-        .ok_or_else(|| format!("unknown dialect {:?}", request.dialect).into())
+    match request.dialect.as_deref() {
+        Some(id) => solid_facts_backend::dialect::by_id(id)
+            .ok_or_else(|| format!("unknown dialect {id:?}").into()),
+        None => Ok(solid_facts_backend::dialect::detect(Path::new(
+            &request.project_id,
+        ))),
+    }
 }
 
 fn socket_path(project_id: &str, typefacts_executable: &str, dialect_id: &str) -> PathBuf {
@@ -426,7 +431,7 @@ pub fn serve(request: &Request) -> Result<i32, Box<dyn Error>> {
     let socket = socket_path(
         &request.project_id,
         &request.typefacts_executable,
-        &request.dialect,
+        resolve_dialect(request)?.id,
     );
     if UnixStream::connect(&socket).is_ok() {
         return Ok(0); // a live daemon already serves this project
@@ -630,6 +635,14 @@ fn contract_files(
         .parent()
         .ok_or("tsconfig has no parent directory")?;
     let mut paths = discovered_contract_paths(directory, modules)?;
+    // Rule options carry the same weight as a contract: they are part of
+    // every diagnostic identity, and `DiagnosticSession::analyze` re-reads
+    // them from disk on every run. The cached-answer short-circuit returns
+    // before analyze does, so the file must be in this input set or an
+    // options edit keeps serving the old snapshot for a whole generation.
+    if let Some(path) = solid_facts_backend::discovered_rule_options_path(directory) {
+        paths.push(path);
+    }
     paths.extend(explicit.iter().map(PathBuf::from));
     paths.sort();
     paths.dedup();
@@ -642,14 +655,20 @@ fn contract_files(
 
 pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     let started = Instant::now();
+    // Resolved exactly once and threaded through every use -- the socket
+    // hash, the spawned daemon's --dialect, the emission. Detection reads
+    // the filesystem, so resolving again later could answer differently (an
+    // `npm install` finishing between the calls) and split the client and
+    // its daemon across two dialects.
+    let dialect = resolve_dialect(request)?;
     let socket = socket_path(
         &request.project_id,
         &request.typefacts_executable,
-        &request.dialect,
+        dialect.id,
     );
     let stream = match UnixStream::connect(&socket) {
         Ok(stream) => stream,
-        Err(_) => spawn_and_connect(request, &socket)?,
+        Err(_) => spawn_and_connect(request, &socket, dialect)?,
     };
     let payload = serde_json::to_vec(&CheckRequest {
         project_id: request.project_id.clone(),
@@ -681,7 +700,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         return Err("daemon response status does not match snapshot".into());
     }
     let emission = snapshot_emission::emit(
-        resolve_dialect(request)?,
+        dialect,
         &request.format,
         &request.project_id,
         &snapshot,
@@ -719,14 +738,24 @@ fn timing_value(header: &CheckHeader, elapsed: Duration, received_bytes: u64) ->
 fn spawn_and_connect(
     request: &Request,
     socket: &std::path::Path,
+    dialect: &'static solid_facts_backend::dialect::Dialect,
 ) -> Result<UnixStream, Box<dyn Error>> {
     let executable = std::env::current_exe()?;
-    Command::new(executable)
+    let mut command = Command::new(executable);
+    command
         .arg("--serve")
         .arg("--project")
         .arg(&request.project_id)
         .arg("--typefacts")
-        .arg(&request.typefacts_executable)
+        .arg(&request.typefacts_executable);
+    // `check` hashed this same resolved dialect into the socket path; the
+    // spawned daemon must resolve identically. Detection can flip between
+    // the client's hash and daemon startup (an `npm install` finishing, a
+    // package.json edit), and a daemon that re-detects then binds a socket
+    // the client never connects to — so the value `check` resolved once is
+    // passed in and forwarded, never re-derived.
+    command.arg("--dialect").arg(dialect.id);
+    command
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())

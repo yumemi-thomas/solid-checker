@@ -1,0 +1,4460 @@
+[
+  {
+    "rule": "components-return-once",
+    "valid": [
+      {
+        "code": "function Component() {\n      return <div />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function someFunc() {\n      if (condition) {\n        return 5;\n      }\n      return 10;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function notAComponent() {\n      if (condition) {\n        return <div />;\n      }\n      return <div />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "callback(() => {\n      if (condition) {\n        return <div />;\n      }\n      return <div />;\n    });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const renderContent = () => {\n        if (false) return <></>;\n        return <></>;\n      }\n      return <>{renderContent()}</>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      function renderContent() {\n        if (false) return <></>;\n        return <></>;\n      }\n      return <>{renderContent()}</>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const renderContent = () => {\n        const renderContentInner = () => {\n          // ifs in render functions are fine no matter what nesting level this is\n          if (false) return;\n          return <></>;\n        };\n        return <>{renderContentInner()}</>;\n      };\n      return <></>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      return <>{hoisted()}</>;\n      function hoisted() {\n        return 'hoisted';\n      }\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      return <></>;\n      const hoisted = 'hoisted';\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      return <></>;\n      class Hoisted {}\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "function Component() {\n        if (condition) {\n          return <div />;\n        };\n        return <span />;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "noEarlyReturn"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const Component = () => {\n        if (condition) {\n          return <div />;\n        }\n        return <span />;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "noEarlyReturn"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const Component = () => {\n        if (condition) {\n          return <div />;\n        }\n        return <span />;\n        function hoisted() {}\n      }",
+        "errors": 1,
+        "messageIds": [
+          "noEarlyReturn"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n  return Math.random() > 0.5 ? <div>Big!</div> : <div>Small!</div>;\n}",
+        "errors": 1,
+        "messageIds": [
+          "noConditionalReturn"
+        ],
+        "options": null,
+        "output": "function Component() {\n  return <>{Math.random() > 0.5 ? <div>Big!</div> : <div>Small!</div>}</>;\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n  return Math.random() > 0.5 ? <div>Big!</div> : \"Small!\";\n}",
+        "errors": 1,
+        "messageIds": [
+          "noConditionalReturn"
+        ],
+        "options": null,
+        "output": "function Component() {\n  return <>{Math.random() > 0.5 ? <div>Big!</div> : \"Small!\"}</>;\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n  return Math.random() > 0.5 ? (\n    <div>\n      Big!\n      No, really big!\n    </div>\n  ) : <div>Small!</div>;\n}",
+        "errors": 1,
+        "messageIds": [
+          "noConditionalReturn"
+        ],
+        "options": null,
+        "output": "function Component() {\n  return <Show when={Math.random() > 0.5} fallback={<div>Small!</div>}><div>\n      Big!\n      No, really big!\n    </div></Show>;\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n  return props.cond1 ? (\n    <div>Condition 1</div>\n  ) : Boolean(props.cond2) ? (\n    <div>Not condition 1, but condition 2</div>\n  ) : (\n    <div>Neither condition 1 or 2</div>\n  );\n}",
+        "errors": 1,
+        "messageIds": [
+          "noConditionalReturn"
+        ],
+        "options": null,
+        "output": "function Component(props) {\n  return <Switch fallback={<div>Neither condition 1 or 2</div>}>\n<Match when={props.cond1}><div>Condition 1</div></Match>\n<Match when={Boolean(props.cond2)}><div>Not condition 1, but condition 2</div></Match>\n</Switch>;\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n  return !!props.cond && <div>Conditional</div>;\n}",
+        "errors": 1,
+        "messageIds": [
+          "noConditionalReturn"
+        ],
+        "options": null,
+        "output": "function Component(props) {\n  return <Show when={!!props.cond}><div>Conditional</div></Show>;\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n  return props.primary || <div>{props.secondaryText}</div>;\n}",
+        "errors": 1,
+        "messageIds": [
+          "noConditionalReturn"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "HOC(() => {\n        if (condition) {\n          return <div />;\n        }\n        return <div />;\n      });",
+        "errors": 1,
+        "messageIds": [
+          "noEarlyReturn"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "event-handlers",
+    "valid": [
+      {
+        "code": "const onfoo = () => 42;\n    let el = <div onClick={onfoo} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const string = 'string' + some_func();\n    let el = <div onLy={string} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      return <div onClick={props.onClick} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      return <div onFoo={props.onFoo} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div attr:only={() => {}} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onLy={() => {}} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div on:ly={() => {}} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <foo.bar only=\"true\" />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onDblClick={() => {}} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const onClick = () => 42;\n    let el = <div {...{ onClick }} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onclick={onclick} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "ignoreCase": true
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div only={only} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "ignoreCase": true
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <div only />",
+        "errors": 1,
+        "messageIds": [
+          "detected-attr"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div only={() => {}} />",
+        "errors": 1,
+        "messageIds": [
+          "naming"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onclick={() => {}} />",
+        "errors": 1,
+        "messageIds": [
+          "capitalization"
+        ],
+        "options": null,
+        "output": "let el = <div onClick={() => {}} />",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onClIcK={() => {}} />",
+        "errors": 1,
+        "messageIds": [
+          "capitalization"
+        ],
+        "options": null,
+        "output": "let el = <div onClick={() => {}} />",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div oncLICK={() => {}} />",
+        "errors": 1,
+        "messageIds": [
+          "capitalization"
+        ],
+        "options": null,
+        "output": "let el = <div onClick={() => {}} />",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onLy />",
+        "errors": 1,
+        "messageIds": [
+          "detected-attr"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onLy=\"string\" />",
+        "errors": 1,
+        "messageIds": [
+          "detected-attr"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onLy={5} />",
+        "errors": 1,
+        "messageIds": [
+          "detected-attr"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onLy={\"string\"} />",
+        "errors": 1,
+        "messageIds": [
+          "detected-attr"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const string = 'string';\n      let el = <div onLy={string} />",
+        "errors": 1,
+        "messageIds": [
+          "detected-attr"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div onDoubleClick={() => {}} />;",
+        "errors": 1,
+        "messageIds": [
+          "nonstandard"
+        ],
+        "options": null,
+        "output": "let el = <div onDblClick={() => {}} />;",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div ondoubleclick={() => {}} />;",
+        "errors": 1,
+        "messageIds": [
+          "nonstandard"
+        ],
+        "options": null,
+        "output": "let el = <div onDblClick={() => {}} />;",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div ondblclick={() => {}} />;",
+        "errors": 1,
+        "messageIds": [
+          "capitalization"
+        ],
+        "options": null,
+        "output": "let el = <div onDblClick={() => {}} />;",
+        "tsOnly": false
+      },
+      {
+        "code": "const handleClick = () => 42;\n      let el = <div {...{ onClick: handleClick, foo }} />;",
+        "errors": 1,
+        "messageIds": [
+          "spread-handler"
+        ],
+        "options": [
+          {
+            "warnOnSpread": true
+          }
+        ],
+        "output": "const handleClick = () => 42;\n      let el = <div {...{  foo }} onClick={handleClick} />;",
+        "tsOnly": false
+      },
+      {
+        "code": "const handleClick = () => 42;\n      let el = <div {...{ foo, onClick: handleClick, }} />;",
+        "errors": 1,
+        "messageIds": [
+          "spread-handler"
+        ],
+        "options": [
+          {
+            "warnOnSpread": true
+          }
+        ],
+        "output": "const handleClick = () => 42;\n      let el = <div {...{ foo,  }} onClick={handleClick} />;",
+        "tsOnly": false
+      },
+      {
+        "code": "const handleClick = () => 42;\n      let el = <div {...{ onClick: handleClick }} />;",
+        "errors": 1,
+        "messageIds": [
+          "spread-handler"
+        ],
+        "options": [
+          {
+            "warnOnSpread": true
+          }
+        ],
+        "output": "const handleClick = () => 42;\n      let el = <div  onClick={handleClick} />;",
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "imports",
+    "valid": [
+      {
+        "code": "import { createSignal, mergeProps as merge } from \"solid-js\";",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "import { createSignal, mergeProps as merge } from 'solid-js';",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "import { render, hydrate } from \"solid-js/web\";",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "import { createStore, produce } from \"solid-js/store\";",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "import { createSignal } from \"solid-js\";\n    import { render } from \"solid-js/web\";\n    import { something } from \"somewhere/else\";\n    import { createStore } from \"solid-js/store\";",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "import * as Solid from \"solid-js\"; Solid.render();",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "import type { Component, JSX } from \"solid-js\";\nimport type { Store } from \"solid-js/store\";",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      }
+    ],
+    "invalid": [
+      {
+        "code": "import { createEffect } from \"solid-js/web\";",
+        "errors": 1,
+        "messageIds": [
+          "prefer-source"
+        ],
+        "options": null,
+        "output": "import { createEffect } from \"solid-js\";\n",
+        "tsOnly": false
+      },
+      {
+        "code": "import { createEffect } from \"solid-js/web\";\nimport { createSignal } from \"solid-js\";",
+        "errors": 1,
+        "messageIds": [
+          "prefer-source"
+        ],
+        "options": null,
+        "output": "\nimport { createSignal, createEffect } from \"solid-js\";",
+        "tsOnly": false
+      },
+      {
+        "code": "import type { Component } from \"solid-js/store\";\nimport { createSignal } from \"solid-js\";\nconsole.log('hi');",
+        "errors": 1,
+        "messageIds": [
+          "prefer-source"
+        ],
+        "options": null,
+        "output": "\nimport { createSignal, Component } from \"solid-js\";\nconsole.log('hi');",
+        "tsOnly": true
+      },
+      {
+        "code": "import { createSignal } from \"solid-js/web\";\nimport \"solid-js\";",
+        "errors": 1,
+        "messageIds": [
+          "prefer-source"
+        ],
+        "options": null,
+        "output": "\nimport { createSignal } from \"solid-js\";",
+        "tsOnly": false
+      },
+      {
+        "code": "import { createSignal } from \"solid-js/web\";\nimport {} from \"solid-js\";",
+        "errors": 1,
+        "messageIds": [
+          "prefer-source"
+        ],
+        "options": null,
+        "output": "\nimport { createSignal } from \"solid-js\";",
+        "tsOnly": false
+      },
+      {
+        "code": "import { createEffect } from \"solid-js/web\";\nimport { render } from \"solid-js\";",
+        "errors": 2,
+        "messageIds": [
+          "prefer-source",
+          "prefer-source"
+        ],
+        "options": null,
+        "output": "\nimport { render, createEffect } from \"solid-js\";",
+        "tsOnly": false
+      },
+      {
+        "code": "\nimport { render, createEffect } from \"solid-js\";",
+        "errors": 1,
+        "messageIds": [
+          "prefer-source"
+        ],
+        "options": null,
+        "output": "\nimport { render } from \"solid-js/web\";\nimport {  createEffect } from \"solid-js\";",
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "jsx-no-duplicate-props",
+    "valid": [
+      {
+        "code": "let el = <div a=\"a\" b=\"b\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div a=\"a\" {...{ b: \"b\" }} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div a=\"a\" {...{ \"b\": \"b\" }} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div a=\"a\" A=\"A\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div a=\"a\" {...{ A: \"A\" }} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class=\"blue\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div children={<div />} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div><div /></div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <div a=\"a\" a=\"aaaa\" />",
+        "errors": 1,
+        "messageIds": [
+          "noDuplicateProps"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div a=\"a\" {...{a: \"aaaa\" }} />",
+        "errors": 1,
+        "messageIds": [
+          "noDuplicateProps"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div {...{a: \"aaaa\" }} a=\"a\" />",
+        "errors": 1,
+        "messageIds": [
+          "noDuplicateProps"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div a=\"a\" {...{ \"a\": \"aaaa\" }} />",
+        "errors": 1,
+        "messageIds": [
+          "noDuplicateProps"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class=\"blue\" class=\"green\" />",
+        "errors": 1,
+        "messageIds": [
+          "noDuplicateClass"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class=\"blue\" {...{ class: \"green\" }} />",
+        "errors": 1,
+        "messageIds": [
+          "noDuplicateClass"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div children={<div />}><div /></div>",
+        "errors": 1,
+        "messageIds": [
+          "noDuplicateChildren"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div innerHTML=\"<p></p>\" textContent=\"howdy!\" />",
+        "errors": 1,
+        "messageIds": [
+          "noDuplicateChildren"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "jsx-no-script-url",
+    "valid": [
+      {
+        "code": "let el = <a href=\"https://example.com\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Link to=\"https://example.com\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Foo bar=\"https://example.com\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const link = \"https://example.com\";\n    let el = <a href={link} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <a href=\"javascript:alert('hacked!')\" />",
+        "errors": 1,
+        "messageIds": [
+          "noJSURL"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Link to=\"javascript:alert('hacked!')\" />",
+        "errors": 1,
+        "messageIds": [
+          "noJSURL"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Foo bar=\"javascript:alert('hacked!')\" />",
+        "errors": 1,
+        "messageIds": [
+          "noJSURL"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const link = \"javascript:alert('hacked!')\";\n    let el = <a href={link} />",
+        "errors": 1,
+        "messageIds": [
+          "noJSURL"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const link = \"\\tj\\na\\tv\\na\\ts\\nc\\tr\\ni\\tpt:alert('hacked!')\";\n    let el = <a href={link} />",
+        "errors": 1,
+        "messageIds": [
+          "noJSURL"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const link = \"javascrip\" + \"t:alert('hacked!')\";\n    let el = <a href={link} />",
+        "errors": 1,
+        "messageIds": [
+          "noJSURL"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "jsx-no-undef",
+    "valid": [
+      {
+        "code": "let X; let el = <div use:X={{}} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "(X => <div use:X={{}} />)()",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let X; let el = <div use:X />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let X, el = <div use:X />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component, X = <Component use:X />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Component />",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "typescriptEnabled": true
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <Component />;",
+        "errors": 1,
+        "messageIds": [
+          "undefined"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div use:X />;",
+        "errors": 1,
+        "messageIds": [
+          "customDirectiveUndefined"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div use:X />;",
+        "errors": 1,
+        "messageIds": [
+          "customDirectiveUndefined"
+        ],
+        "options": [
+          {
+            "typescriptEnabled": true
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div use:X={{}} />;",
+        "errors": 1,
+        "messageIds": [
+          "customDirectiveUndefined"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div use:X />;",
+        "errors": 1,
+        "messageIds": [
+          "customDirectiveUndefined"
+        ],
+        "options": [
+          {
+            "allowGlobals": true
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <For each={items}>{item => item.name}</For>",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "import { For } from \"solid-js\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Show when={item}>{item => item.name}</Show>",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "import { Show } from \"solid-js\";\nlet el = <Show when={item}>{item => item.name}</Show>",
+        "tsOnly": false
+      },
+      {
+        "code": "\nrender(\n  <Switch fallback={<div>Not Found</div>}>\n    <Match when={state.route === \"home\"} />\n  </Switch>\n)",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "import { Switch, Match } from \"solid-js\";\n\nrender(\n  <Switch fallback={<div>Not Found</div>}>\n    <Match when={state.route === \"home\"} />\n  </Switch>\n)",
+        "tsOnly": false
+      },
+      {
+        "code": "\nimport X from \"x\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "\nimport { For } from \"solid-js\";\nimport X from \"x\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "tsOnly": false
+      },
+      {
+        "code": "\nimport { Show } from \"solid-js\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "\nimport { Show, For } from \"solid-js\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "tsOnly": false
+      },
+      {
+        "code": "\nimport { For, Switch } from \"solid-js\";\nrender(\n  <Switch fallback={<div>Not Found</div>}>\n    <Match when={state.route === \"home\"} />\n  </Switch>\n)",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "\nimport { For, Switch, Match } from \"solid-js\";\nrender(\n  <Switch fallback={<div>Not Found</div>}>\n    <Match when={state.route === \"home\"} />\n  </Switch>\n)",
+        "tsOnly": false
+      },
+      {
+        "code": "\nimport X from \"x\";\nimport { Show } from \"solid-js\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "\nimport X from \"x\";\nimport { Show, For } from \"solid-js\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "tsOnly": false
+      },
+      {
+        "code": "\nimport X from \"x\";\nimport Solid from \"solid-js\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "\nimport X from \"x\";\nimport Solid, { For } from \"solid-js\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "tsOnly": false
+      },
+      {
+        "code": "\nimport X from \"x\";\nimport \"solid-js\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "\nimport X from \"x\";\nimport { For } from \"solid-js\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "tsOnly": false
+      },
+      {
+        "code": "\n// attached comment\nimport X from \"x\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "\nimport { For } from \"solid-js\";\n// attached comment\nimport X from \"x\";\nlet el = <For each={items}>{item => item.name}</For>",
+        "tsOnly": false
+      },
+      {
+        "code": "\nimport X from \"x\"; // attached comment\nlet el = <For each={items}>{item => item.name}</For>",
+        "errors": 1,
+        "messageIds": [
+          "autoImport"
+        ],
+        "options": null,
+        "output": "\nimport { For } from \"solid-js\";\nimport X from \"x\"; // attached comment\nlet el = <For each={items}>{item => item.name}</For>",
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "no-array-handlers",
+    "valid": [
+      {
+        "code": "let el = <button style={{background: 'red'}} onClick={() => 9001} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const handler = () => 1+1;\n    let el = <button onClick={handler} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <button onclick={() => 9001} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const handler = () => 1+1;\n    let el = <button style={{background: 'pink'}} onclick={handler} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <button attr:click={[(x) => x, 9001]} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <button prop:onClick={[(x) => x, 9001]} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <button on:Click={() => 1+1} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      return <div onClick={props.onClick} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "<button onClick={() => [handler, \"abc\"]} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "<button onClick={() => [handler, {data:true}]} /> ",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      return <div onClick={[(n: number) => n*n, 2] as SafeArray<number>} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <button onClick={[(n) => console.log(n), 'str']} />",
+        "errors": 1,
+        "messageIds": [
+          "noArrayHandlers"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <button onClick={[(k: string) => k.toUpperCase(), 'hello']} />",
+        "errors": 1,
+        "messageIds": [
+          "noArrayHandlers"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      },
+      {
+        "code": "let el = <div onMouseOver={[1,2,3]} />",
+        "errors": 1,
+        "messageIds": [
+          "noArrayHandlers"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div on:click={[handler, i()]} />",
+        "errors": 1,
+        "messageIds": [
+          "noArrayHandlers"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <button type=\"button\" onclick={[handler, i() + 2]} class=\"btn\" />",
+        "errors": 1,
+        "messageIds": [
+          "noArrayHandlers"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let handler = [(x) => x*2, 54];\n      let el = <button style={{background: 'pink'}} onclick={handler} />",
+        "errors": 1,
+        "messageIds": [
+          "noArrayHandlers"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const thing = (props) => <div onclick={[props.callback, props.id]}><button type=\"button\" onclick={handler} class=\"btn\" /></div>",
+        "errors": 1,
+        "messageIds": [
+          "noArrayHandlers"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const arr = [(n: number) => n*n, 2];\n      return <div onClick={arr} />;\n    }",
+        "errors": 1,
+        "messageIds": [
+          "noArrayHandlers"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      }
+    ]
+  },
+  {
+    "rule": "no-destructure",
+    "valid": [
+      {
+        "code": "let Component = props => <div />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props) => <div />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props) => { return <div />; }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props) => (<div />)",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = props => null",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props) => <div a={props.a} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props) => { \n      const [local, rest] = splitProps(props, ['a']);\n      return <div a={local.a} b={rest.b} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = props => {\n      const { a } = someFunction();\n      return <div a={a} />\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let NotAComponent = ({ a }, more, params) => <div a={a} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = props => {\n      let inner = ({ a, ...rest }) => a;\n      let a = inner({ a: 5 });\n      return <div a={a} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n    // This one might be surprising, since we're clearly destructuring props!\n    // But this will be caught as a reactive expression use outside of\n    // a tracked scope, in the \"solid/reactivity\" rule. There's really \n    // nothing wrong with destructuring props in tracked scopes when done \n    // correctly, but catching it in the params covers the most common \n    // cases with good DX.\n    let Component = props => {\n      let { a } = props;\n      return <div a={a} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let element = <div />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props: Props) => <div />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let Component = ({}) => <div />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (props) => <div />",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a }) => <div a={a} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (props) => <div a={props.a} />",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a }) => (<div a={a} />)",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (props) => (<div a={props.a} />)",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a: A }) => <div a={A} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (props) => <div a={props.a} />",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ 'a': A }) => <div a={A} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (props) => <div a={props['a']} />",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ ['a' + '']: a }) => <div a={a} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (props) => <div a={props['a' + '']} />",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ ['a' + '']: a, b }) => <div a={a} b={b} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (props) => <div a={props['a' + '']} b={props.b} />",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a = 5 }) => <div a={a} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const props = mergeProps({ a: 5 }, _props);\n  return (<div a={props.a} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a = 5 }) => (<div a={a} />)",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const props = mergeProps({ a: 5 }, _props);\n  return (<div a={props.a} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a: A = 5 }) => <div a={A} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const props = mergeProps({ a: 5 }, _props);\n  return (<div a={props.a} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ 'a': A = 5 }) => <div a={A} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const props = mergeProps({ 'a': 5 }, _props);\n  return (<div a={props['a']} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ ['a' + '']: a = 5 }) => <div a={a} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const props = mergeProps({ ['a' + '']: 5 }, _props);\n  return (<div a={props['a' + '']} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ ['a' + '']: a = 5, b = 10, c }) => <div a={a} b={b} c={c} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const props = mergeProps({ ['a' + '']: 5, b: 10 }, _props);\n  return (<div a={props['a' + '']} b={props.b} c={props.c} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a = 5 }) => { \n        return <div a={a} />; \n      }",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => { \n          const props = mergeProps({ a: 5 }, _props);\nreturn <div a={props.a} />; \n      }",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a = 5 }) => { \n        various();\n        statements();\n        return <div a={a} />; \n      }",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => { \n          const props = mergeProps({ a: 5 }, _props);\nvarious();\n        statements();\n        return <div a={props.a} />; \n      }",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ ...rest }) => <div a={rest.a} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(_props, []);\n  return (<div a={rest.a} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a, ...rest }) => <div a={a} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(_props, [\"a\"]);\n  return (<div a={props.a} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a, ...rest }) => (<div a={a} />)",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(_props, [\"a\"]);\n  return (<div a={props.a} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a, ...other }) => <div a={a} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, other] = splitProps(_props, [\"a\"]);\n  return (<div a={props.a} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a, ...rest }) => <div a={a} b={rest.b} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(_props, [\"a\"]);\n  return (<div a={props.a} b={rest.b} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a: A, ...rest }) => <div a={A} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(_props, [\"a\"]);\n  return (<div a={props.a} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ 'a': A, ...rest }) => <div a={A} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(_props, ['a']);\n  return (<div a={props['a']} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ ['a' + '']: A, ...rest }) => <div a={A} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(_props, ['a' + '']);\n  return (<div a={props['a' + '']} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ ['a' + '']: A, ...rest }) => <div a={A} b={rest.b} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(_props, ['a' + '']);\n  return (<div a={props['a' + '']} b={rest.b} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a = 5, ...rest }) => { \n        return <div a={a} b={rest.b} />; \n      }",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => { \n          const [props, rest] = splitProps(mergeProps({ a: 5 }, _props), [\"a\"]);return <div a={props.a} b={rest.b} />; \n      }",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ a = 5, ...rest }) => (<div a={a} b={rest.b} />)",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(mergeProps({ a: 5 }, _props), [\"a\"]);  return (<div a={props.a} b={rest.b} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ ['a' + '']: A = 5, ...rest }) => <div a={A} b={rest.b} />",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (_props) => {\n  const [props, rest] = splitProps(mergeProps({ ['a' + '']: 5 }, _props), ['a' + '']);  return (<div a={props['a' + '']} b={rest.b} />);\n}",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = ({ prop1, prop2 }: Props) => <div p1={prop1} p2={prop2} />;",
+        "errors": 1,
+        "messageIds": [
+          "noDestructure"
+        ],
+        "options": null,
+        "output": "let Component = (props: Props) => <div p1={props.prop1} p2={props.prop2} />;",
+        "tsOnly": true
+      }
+    ]
+  },
+  {
+    "rule": "no-innerhtml",
+    "valid": [
+      {
+        "code": "let el = <div prop1 prop2={2}>Hello world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Box prop1 prop2={2}>Hello world!</Box>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div prop1 prop2={2} innerHTML=\"<p>Hello</p><p>world!</p>\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div prop1 prop2={2} innerHTML={\"<p>Hello</p>\" + \"<p>world!</p>\"} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div prop1 prop2={2} innerHTML=\"<p>Hello</p><p>world!</p>\"></div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <div prop1 prop2={2} innerHTML=\"<p>Hello</><p>world!</p>\" />",
+        "errors": 1,
+        "messageIds": [
+          "dangerous"
+        ],
+        "options": [
+          {
+            "allowStatic": false
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div innerHTML={\"<p>Hello</p><p>world!</p>\"} />",
+        "errors": 1,
+        "messageIds": [
+          "dangerous"
+        ],
+        "options": [
+          {
+            "allowStatic": false
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div prop1 prop2={2} innerHTML={\"<p>Hello</p>\" + \"<p>world!</p>\"} />",
+        "errors": 1,
+        "messageIds": [
+          "dangerous"
+        ],
+        "options": [
+          {
+            "allowStatic": false
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div prop1 prop2={2} innerHTML={Math.random()} />",
+        "errors": 1,
+        "messageIds": [
+          "dangerous"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div prop1 prop2={2} innerHTML=\"Hello world!\" />",
+        "errors": 1,
+        "messageIds": [
+          "notHtml"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n        let el = (\n          <div prop1 prop2={2} innerHTML=\"<p>Hello</p><p>world!</p>\">\n            <p>Child element content</p>\n          </div>\n        );\n      ",
+        "errors": 1,
+        "messageIds": [
+          "conflict"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n        let el = (\n          <div prop1 prop2={2} innerHTML=\"<p>Hello</p><p>world!</p>\">\n            <p>Child element content 1</p>\n            <p>Child element context 2</p>\n          </div>\n        );\n      ",
+        "errors": 1,
+        "messageIds": [
+          "conflict"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n        let el = (\n          <div prop1 prop2={2} innerHTML=\"<p>Hello</p><p>world!</p>\">\n            {\"Child text content\"}\n          </div>\n        );\n      ",
+        "errors": 1,
+        "messageIds": [
+          "conflict"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n        let el = (\n          <div prop1 prop2={2} innerHTML=\"<p>Hello</p><p>world!</p>\">\n            {identifier}\n          </div>\n        );\n      ",
+        "errors": 1,
+        "messageIds": [
+          "conflict"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div dangerouslySetInnerHTML={{ __html: \"<p>Hello</p><p>world!</p>\" }} />",
+        "errors": 1,
+        "messageIds": [
+          "dangerouslySetInnerHTML"
+        ],
+        "options": null,
+        "output": "let el = <div innerHTML={\"<p>Hello</p><p>world!</p>\"} />",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div dangerouslySetInnerHTML={foo} />",
+        "errors": 1,
+        "messageIds": [
+          "dangerouslySetInnerHTML"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div dangerouslySetInnerHTML={{}} />",
+        "errors": 1,
+        "messageIds": [
+          "dangerouslySetInnerHTML"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "no-proxy-apis",
+    "valid": [
+      {
+        "code": "let merged = mergeProps({}, props);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const obj = {}; let merged = mergeProps(obj, props);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let obj = {}; let merged = mergeProps(obj, props);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let merged = mergeProps({ get asdf() { signal() } }, props);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div {...{ asdf: 'asdf' }} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div {...asdf} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let obj = { Proxy: 1 }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let proxy = new Proxy(asdf, {});",
+        "errors": 1,
+        "messageIds": [
+          "proxyLiteral"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let proxy = Proxy.revocable(asdf, {});",
+        "errors": 1,
+        "messageIds": [
+          "proxyLiteral"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "import {} from 'solid-js/store';",
+        "errors": 1,
+        "messageIds": [
+          "noStore"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div {...maybeSignal()} />",
+        "errors": 1,
+        "messageIds": [
+          "spreadCall"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div {...{ ...maybeSignal() }} />",
+        "errors": 1,
+        "messageIds": [
+          "spreadCall"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div {...maybeProps.foo} />",
+        "errors": 1,
+        "messageIds": [
+          "spreadMember"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div {...{ ...maybeProps.foo }} />",
+        "errors": 1,
+        "messageIds": [
+          "spreadMember"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let merged = mergeProps(maybeSignal)",
+        "errors": 1,
+        "messageIds": [
+          "mergeProps"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let func = () => ({}); let merged = mergeProps(func, props)",
+        "errors": 1,
+        "messageIds": [
+          "mergeProps"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "no-react-deps",
+    "valid": [
+      {
+        "code": "createEffect(() => {\n      console.log(signal());\n    });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "createEffect((prev) => {\n      console.log(signal());\n      return prev + 1;\n    }, 0);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "createEffect((prev) => {\n      console.log(signal());\n      return (prev || 0) + 1;\n    });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "createEffect((prev) => {\n      console.log(signal());\n      return prev ? prev + 1 : 1;\n    }, undefined);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const value = createMemo(() => computeExpensiveValue(a(), b()));",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const sum = createMemo((prev) => input() + prev, 0);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const args = [() => { console.log(signal()); }, [signal()]];\n    createEffect(...args);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "createEffect(() => {\n        console.log(signal());\n      }, [signal()]);",
+        "errors": 1,
+        "messageIds": [
+          "noUselessDep"
+        ],
+        "options": null,
+        "output": "createEffect(() => {\n        console.log(signal());\n      }, );",
+        "tsOnly": false
+      },
+      {
+        "code": "createEffect(() => {\n        console.log(signal());\n      }, [signal]);",
+        "errors": 1,
+        "messageIds": [
+          "noUselessDep"
+        ],
+        "options": null,
+        "output": "createEffect(() => {\n        console.log(signal());\n      }, );",
+        "tsOnly": false
+      },
+      {
+        "code": "const deps = [signal];\n      createEffect(() => {\n        console.log(signal());\n      }, deps);",
+        "errors": 1,
+        "messageIds": [
+          "noUselessDep"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const value = createMemo(() => computeExpensiveValue(a(), b()), [a(), b()]);",
+        "errors": 1,
+        "messageIds": [
+          "noUselessDep"
+        ],
+        "options": null,
+        "output": "const value = createMemo(() => computeExpensiveValue(a(), b()), );",
+        "tsOnly": false
+      },
+      {
+        "code": "const value = createMemo(() => computeExpensiveValue(a(), b()), [a, b]);",
+        "errors": 1,
+        "messageIds": [
+          "noUselessDep"
+        ],
+        "options": null,
+        "output": "const value = createMemo(() => computeExpensiveValue(a(), b()), );",
+        "tsOnly": false
+      },
+      {
+        "code": "const value = createMemo(() => computeExpensiveValue(a(), b()), [a, b()]);",
+        "errors": 1,
+        "messageIds": [
+          "noUselessDep"
+        ],
+        "options": null,
+        "output": "const value = createMemo(() => computeExpensiveValue(a(), b()), );",
+        "tsOnly": false
+      },
+      {
+        "code": "const deps = [a, b];\n      const value = createMemo(() => computeExpensiveValue(a(), b()), deps);",
+        "errors": 1,
+        "messageIds": [
+          "noUselessDep"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const deps = [a, b];\n      const memoFn = () => computeExpensiveValue(a(), b());\n      const value = createMemo(memoFn, deps);",
+        "errors": 1,
+        "messageIds": [
+          "noUselessDep"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "no-react-specific-props",
+    "valid": [
+      {
+        "code": "let el = <div>Hello world!</div>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class=\"greeting\">Hello world!</div>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class={\"greeting\"}>Hello world!</div>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div many other attributes class=\"greeting\">Hello world!</div>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <label for=\"id\">Hello world!</label>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <label for=\"id\">Hello world!</label>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <label for={\"id\"}>Hello world!</label>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <label many other attributes for=\"id\">Hello world!</label>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <PascalComponent class=\"greeting\" for=\"id\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <PascalComponent key={item.id} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <div className=\"greeting\">Hello world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "prefer"
+        ],
+        "options": null,
+        "output": "let el = <div class=\"greeting\">Hello world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div className={\"greeting\"}>Hello world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "prefer"
+        ],
+        "options": null,
+        "output": "let el = <div class={\"greeting\"}>Hello world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div className=\"greeting\" />",
+        "errors": 1,
+        "messageIds": [
+          "prefer"
+        ],
+        "options": null,
+        "output": "let el = <div class=\"greeting\" />",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div many other attributes className=\"greeting\">Hello world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "prefer"
+        ],
+        "options": null,
+        "output": "let el = <div many other attributes class=\"greeting\">Hello world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <PascalComponent className=\"greeting\">Hello world!</PascalComponent>",
+        "errors": 1,
+        "messageIds": [
+          "prefer"
+        ],
+        "options": null,
+        "output": "let el = <PascalComponent class=\"greeting\">Hello world!</PascalComponent>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <label htmlFor=\"id\">Hello world!</label>",
+        "errors": 1,
+        "messageIds": [
+          "prefer"
+        ],
+        "options": null,
+        "output": "let el = <label for=\"id\">Hello world!</label>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <label htmlFor={\"id\"}>Hello world!</label>",
+        "errors": 1,
+        "messageIds": [
+          "prefer"
+        ],
+        "options": null,
+        "output": "let el = <label for={\"id\"}>Hello world!</label>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <label many other attributes htmlFor=\"id\">Hello world!</label>",
+        "errors": 1,
+        "messageIds": [
+          "prefer"
+        ],
+        "options": null,
+        "output": "let el = <label many other attributes for=\"id\">Hello world!</label>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <PascalComponent htmlFor=\"id\">Hello world!</PascalComponent>",
+        "errors": 1,
+        "messageIds": [
+          "prefer"
+        ],
+        "options": null,
+        "output": "let el = <PascalComponent for=\"id\">Hello world!</PascalComponent>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div key={item.id} />",
+        "errors": 1,
+        "messageIds": [
+          "noUselessKey"
+        ],
+        "options": null,
+        "output": "let el = <div  />",
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "no-unknown-namespaces",
+    "valid": [
+      {
+        "code": "let el = <div on:click={null} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div on:focus={null} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div on:quux />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div oncapture:click={null} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div oncapture:focus={null} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div use:X={null} />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div use:X />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div prop:scrollTop=\"0px\" />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div attr:title=\"title\" />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <svg xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\"></svg>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <bar foo=\"http://www.w3.org/2000/svg\" version=\"1.1\" foo:bar=\"http://www.w3.org/1999/xlink\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "allowedNamespaces": [
+              "foo"
+            ]
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <div foo:boo={null} />",
+        "errors": 1,
+        "messageIds": [
+          "unknown"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div bar:car={null} />",
+        "errors": 1,
+        "messageIds": [
+          "unknown"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style:width=\"100%\" />",
+        "errors": 1,
+        "messageIds": [
+          "style"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style:width={0} />",
+        "errors": 1,
+        "messageIds": [
+          "style"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class:mt-10={true} />",
+        "errors": 1,
+        "messageIds": [
+          "style"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class:mt-10 />",
+        "errors": 1,
+        "messageIds": [
+          "style"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Box attr:foo=\"bar\" />",
+        "errors": 1,
+        "messageIds": [
+          "component"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Box foo:boo={null} />",
+        "errors": 1,
+        "messageIds": [
+          "component"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "prefer-classlist",
+    "valid": [
+      {
+        "code": "let el = <div classlist={{ red: true }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class=\"red\">Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div className=\"red\">Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div something={cn({ red: true })}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div something={clsx({ red: true })}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div something={classnames({ red: true })}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class={someOtherClassFunction({ red: true })}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class={cn({ red: true }, condition && \"yellow\")}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div something={cn(condition && \"yellow\")}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class={clsx({ red: true })} classlist={{}}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class={clsx({ red: true })}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "classnames": [
+              "x",
+              "y",
+              "z"
+            ]
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <div class={cn({ red: true })}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "preferClasslist"
+        ],
+        "options": null,
+        "output": "let el = <div classlist={{ red: true }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class={clsx({ red: true })}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "preferClasslist"
+        ],
+        "options": null,
+        "output": "let el = <div classlist={{ red: true }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class={classnames({ red: true })}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "preferClasslist"
+        ],
+        "options": null,
+        "output": "let el = <div classlist={{ red: true }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class={x({ red: true })}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "preferClasslist"
+        ],
+        "options": [
+          {
+            "classnames": [
+              "x",
+              "y",
+              "z"
+            ]
+          }
+        ],
+        "output": "let el = <div classlist={{ red: true }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div className={cn({ red: true })}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "preferClasslist"
+        ],
+        "options": null,
+        "output": "let el = <div classlist={{ red: true }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div class={cn({ red: true, \"mx-4\": props.size > 2 })}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "preferClasslist"
+        ],
+        "options": null,
+        "output": "let el = <div classlist={{ red: true, \"mx-4\": props.size > 2 }}>Hello, world!</div>",
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "prefer-for",
+    "valid": [
+      {
+        "code": "let Component = (props) => <ol><For each={props.data}>{d => <li>{d.text}</li>}</For></ol>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let abc = x.map(y => y + z);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props) => {\n      let abc = x.map(y => y + z);\n      return <div>Hello, world!</div>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let Component = (props) => <ol>{props.data.map(d => <li>{d.text}</li>)}</ol>;",
+        "errors": 1,
+        "messageIds": [
+          "preferFor"
+        ],
+        "options": null,
+        "output": "let Component = (props) => <ol><For each={props.data}>{d => <li>{d.text}</li>}</For></ol>;",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props) => <>{props.data.map(d => <li>{d.text}</li>)}</>;",
+        "errors": 1,
+        "messageIds": [
+          "preferFor"
+        ],
+        "options": null,
+        "output": "let Component = (props) => <><For each={props.data}>{d => <li>{d.text}</li>}</For></>;",
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props) => <ol>{props.data.map(d => <li key={d.id}>{d.text}</li>)}</ol>;",
+        "errors": 1,
+        "messageIds": [
+          "preferFor"
+        ],
+        "options": null,
+        "output": "let Component = (props) => <ol><For each={props.data}>{d => <li key={d.id}>{d.text}</li>}</For></ol>;",
+        "tsOnly": false
+      },
+      {
+        "code": "\n      function Component(props) {\n        return <ol>{props.data.map(d => <li>{d.text}</li>)}</ol>;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "preferFor"
+        ],
+        "options": null,
+        "output": "\n      function Component(props) {\n        return <ol><For each={props.data}>{d => <li>{d.text}</li>}</For></ol>;\n      }",
+        "tsOnly": false
+      },
+      {
+        "code": "\n      function Component(props) {\n        return <ol>{props.data?.map(d => <li>{d.text}</li>)}</ol>;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "preferFor"
+        ],
+        "options": null,
+        "output": "\n      function Component(props) {\n        return <ol>{<For each={props.data}>{d => <li>{d.text}</li>}</For>}</ol>;\n      }",
+        "tsOnly": true
+      },
+      {
+        "code": "let Component = (props) => <ol>{props.data.map(() => <li />)}</ol>;",
+        "errors": 1,
+        "messageIds": [
+          "preferForOrIndex"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = (props) => <ol>{props.data.map((...args) => <li>{args[0].text}</li>)}</ol>;",
+        "errors": 1,
+        "messageIds": [
+          "preferForOrIndex"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "prefer-show",
+    "valid": [
+      {
+        "code": "function Component(props) {\n      return <Show when={props.cond}>Content</Show>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      return <Show when={props.cond} fallback=\"Fallback\">Content</Show>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "\n      function Component(props) {\n        return <div>{props.cond && <span>Content</span>}</div>;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "preferShowAnd"
+        ],
+        "options": null,
+        "output": "\n      function Component(props) {\n        return <div><Show when={props.cond}><span>Content</span></Show></div>;\n      }",
+        "tsOnly": false
+      },
+      {
+        "code": "\n      function Component(props) {\n        return <>{props.cond && <span>Content</span>}</>;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "preferShowAnd"
+        ],
+        "options": null,
+        "output": "\n      function Component(props) {\n        return <><Show when={props.cond}><span>Content</span></Show></>;\n      }",
+        "tsOnly": false
+      },
+      {
+        "code": "\n      function Component(props) {\n        return (\n          <div>\n            {props.cond ? (\n              <span>Content</span> \n            ) : (\n              <span>Fallback</span>\n            )}\n          </div>\n        );\n      }",
+        "errors": 1,
+        "messageIds": [
+          "preferShowTernary"
+        ],
+        "options": null,
+        "output": "\n      function Component(props) {\n        return (\n          <div>\n            <Show when={props.cond} fallback={<span>Fallback</span>}><span>Content</span></Show>\n          </div>\n        );\n      }",
+        "tsOnly": false
+      },
+      {
+        "code": "\n      function Component(props) {\n        return (\n          <For each={props.someList}>\n            {(listItem) => listItem.cond && <span>Content</span>}\n          </For>\n        );\n      }",
+        "errors": 1,
+        "messageIds": [
+          "preferShowAnd"
+        ],
+        "options": null,
+        "output": "\n      function Component(props) {\n        return (\n          <For each={props.someList}>\n            {(listItem) => <Show when={listItem.cond}><span>Content</span></Show>}\n          </For>\n        );\n      }",
+        "tsOnly": false
+      },
+      {
+        "code": "\n      function Component(props) {\n        return (\n          <For each={props.someList}>\n            {(listItem) => (listItem.cond ? (\n              <span>Content</span> \n            ) : (\n              <span>Fallback</span>\n            ))}\n          </For>\n        );\n      }",
+        "errors": 1,
+        "messageIds": [
+          "preferShowTernary"
+        ],
+        "options": null,
+        "output": "\n      function Component(props) {\n        return (\n          <For each={props.someList}>\n            {(listItem) => (<Show when={listItem.cond} fallback={<span>Fallback</span>}><span>Content</span></Show>)}\n          </For>\n        );\n      }",
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "reactivity",
+    "valid": [
+      {
+        "code": "function MyComponent(props) {\n      return <div>Hello {props.name}</div>;\n    }\n    let el = <MyComponent name=\"Solid\" />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [first, setFirst] = createSignal(\"JSON\");\n    const [last, setLast] = createSignal(\"Bourne\");\n    createEffect(() => console.log(`${first()} ${last()}`));",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = props => {\n      return <div>{props.value || \"default\"}</div>;\n    };",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = props => {\n      const value = () => props.value || \"default\";\n      return <div>{value()}</div>;\n    };",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = props => {\n      const value = createMemo(() => props.value || \"default\");\n      return <div>{value()}</div>;\n    };",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = _props => {\n      const props = mergeProps({ value: \"default\" }, _props);\n      return <div>{props.value}</div>;\n    };",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = _props => {\n      const [foo, bar, baz] = splitProps(_props, [\"foo\"], [\"bar\"]);\n      return <div>{foo.foo} {bar.bar} {baz.baz}</div>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let Component = () => {\n      const [a, setA] = createSignal(1);\n      const [b, setB] = createSignal(1);\n      createEffect(() => {\n        console.log(a(), untrack(b));\n      });\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      const [value, setValue] = createSignal();\n      return <div class={props.class}>{value()}</div>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      const [value, setValue] = createSignal();\n      createEffect(() => console.log(value()));\n      return <div class={props.class}>{value()}</div>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [value, setValue] = createSignal();\n    on(value, () => console.log('hello'));",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [value, setValue] = createSignal();\n    on([value], () => console.log('hello'));",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      return <div {...props} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      return <div {...props.nestedProps} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const [signal, setSignal] = createSignal({});\n      return <div {...signal()} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let c = () => {\n      const [signal] = createSignal();\n      const d = () => {\n        function e() { // <-- e becomes a derived signal\n          signal();\n        }\n      } // <-- d never uses it\n      d(); // <-- this is fine\n    };",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal] = createSignal();\n    createEffect(() => console.log(signal()));",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal] = createSignal();\n    const memo = createMemo(() => signal());",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const el = <button onClick={() => toggleShow(!show())}>\n      {show() ? \"Hide\" : \"Show\"}\n    </button>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [count] = createSignal();\n    createEffect(() => {\n      (() => count())()\n    })",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [count] = createSignal();\n    const el = <div>{(() => count())()}</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [count, setCount] = createSignal();\n    const el = <button type=\"button\" onClick={() => setCount(count() + 1)}>Increment</button>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const el = <div />",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal] = createSignal();\n    createEffect(() => {\n      const owner = getOwner();\n      runWithOwner(owner, () => console.log(signal()));\n    });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal] = createSignal();\n    createEffect(() => {\n      runWithOwner(undefined, () => console.log(signal()));\n    });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal] = createSignal();\n    createEffect(() => {\n      [1, 2].forEach(() => console.log(signal()));\n    });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      createEffect(() => {\n        [1, 2].forEach(() => console.log(props.foo));\n      });\n      return <div />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(bleargh /* doesn't match props regex */) {\n      createEffect(() => {\n        [1, 2].forEach(() => console.log(bleargh.foo));\n      });\n      return <div />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal] = createSignal(5);\n    setTimeout(() => console.log(signal()), 500);\n    setInterval(() => console.log(signal()), 600);\n    setImmediate(() => console.log(signal()));\n    requestAnimationFrame(() => console.log(signal()));\n    requestIdleCallback(() => console.log(signal()));",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal] = createSignal(5);\n    new IntersectionObserver(() => console.log(signal()));\n    new MutationObserver(() => console.log(signal()));\n    new PerformanceObserver(() => console.log(signal()));\n    new ReportingObserver(() => console.log(signal()));\n    new ResizeObserver(() => console.log(signal()));",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [photos, setPhotos] = createSignal([]);\n    onMount(async () => {\n      const res = await fetch(\"https://jsonplaceholder.typicode.com/photos?_limit=20\");\n      setPhotos(await res.json());\n    });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [a, setA] = createSignal(1);\n    const [b] = createSignal(2);\n    on(b, async () => { await delay(1000); setA(a() + 1) });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const Component = (props) => {\n      const localRef = () => props.ref;\n      const composedRef1 = useComposedRefs(localRef);\n      const composedRef2 = useComposedRefs(() => props.ref);\n      const composedRef3 = createComposedRefs(localRef);\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function createFoo(v) {}\n    const [bar, setBar] = createSignal();\n    createFoo({ onBar: () => bar() });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function createFoo(v) {}\n    const [bar, setBar] = createSignal();\n    createFoo({ onBar() { bar() } });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function createFoo(v) {}\n    const [bar, setBar] = createSignal();\n    createFoo(bar);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function createFoo(v) {}\n    const [bar, setBar] = createSignal();\n    createFoo([bar]);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function createFoo(v) {}\n      const [bar, setBar] = createSignal();\n      createFoo({ onBar: () => bar() } as object);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      },
+      {
+        "code": "const [bar, setBar] = createSignal();\n    X.createFoo(() => bar());",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [bar, setBar] = createSignal();\n    X . Y\n. createFoo(() => bar());",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function customQuery(v) {}\n      const [signal, setSignal] = createSignal();\n      customQuery(() => signal());",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "customReactiveFunctions": [
+              "customQuery"
+            ]
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal, setSignal] = createSignal(1);\n    const element = document.getElementById(\"id\");\n    element.addEventListener(\"click\", () => {\n      console.log(signal());\n    }, { once: true });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal, setSignal] = createSignal(1);\n    const element = document.getElementById(\"id\");\n    element.onclick = () => {\n      console.log(signal());\n    };",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const [signal, setSignal] = createSignal(1);\n      return <div onClick={() => console.log(signal())} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const [signal, setSignal] = createSignal(1);\n      const handler = () => console.log(signal());\n      return <div onClick={handler} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const [signal, setSignal] = createSignal(1);\n      return <div onClick={signal} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const [signal, setSignal] = createSignal(1);\n      return <div on:click={() => console.log(signal())} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      return <div onClick={e => props.onClick(e)} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const Parent = props => {\n      return <Child onClick={props.onClick} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const Parent = props => {\n      return <Child onClick={e => props.onClick(e)} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const Component = props => {\n      const [signal] = createSignal();\n      return <SomeContext.Provider value={signal}>{props.children}</SomeContext.Provider>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      const [count, setCount] = useSignal(props.initialCount);\n      return <div>{count()}</div>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      const [count, setCount] = useSignal(props.defaultCount);\n      return <div>{count()}</div>;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [state, setState] = createStore({\n      firstName: 'Will',\n      lastName: 'Smith',\n      get fullName() {\n        return state.firstName + \" \" + state.lastName;\n      }\n    });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal] = createSignal(5);\n    untrack(() => {\n      console.log(signal());\n    });",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function notAComponent(something) {\n      console.log(something.a);\n      return <div />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "css`color: ${props => props.color}`;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "html`<div>${props => props.name}</div>`;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "styled.css`color: ${props => props.color};`",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      let canvas;\n      return <canvas ref={canvas} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      let canvas;\n      return (\n        <canvas ref={c => {\n          canvas = c;\n        }} />\n      );\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const [index] = createSignal(0);\n      let canvas;\n      return (\n        <canvas ref={c => {\n          index();\n          canvas = c;\n        }} />\n      );\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const [canvas, setCanvas] = createSignal();\n      return <canvas ref={c => setCanvas(c)} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function createCustomStore() {\n      const [store, updateStore] = createStore({});\n\n      return mapArray(\n        // the first argument to mapArray is a tracked scope\n        () => store.path.to.field,\n        (item) => ({})\n      );\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function createCustomStore() {\n      const [store, updateStore] = createStore({});\n\n      return indexArray(\n        // the first argument to mapArray is a tracked scope\n        () => store.path.to.field,\n        (item) => ({})\n      );\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const m = createMemo(() => 5) as Accessor<number>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      },
+      {
+        "code": "const m = createMemo(() => 5)!;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      },
+      {
+        "code": "const m = createMemo(() => 5)! as Accessor<number>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      },
+      {
+        "code": "const m = createMemo(() => 5) satisfies Accessor<number>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      },
+      {
+        "code": "const [s] = createSignal('a' as string)",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      },
+      {
+        "code": "createFoo('a' as string)",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": true
+      },
+      {
+        "code": "function Component(props) {\n      return (\n        <div>{() => {\n          console.log('hello');\n          return props.greeting;\n        }}</div>\n      );\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal, setSignal] = createSignal();\n    let el = <Child foo={() => signal()}></Child>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      const value = props.staticValue;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component() {\n      const staticValue = () => props.value;\n      const value = staticValue();\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function Component(props) {\n      const count$ = observable(() => props.count);\n      return <div />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "const [signal, setSignal] = createSignal(0);\n    const value$ = observable(signal);",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let someHook;\n    function Component(props) {\n      return <div use:someHook={() => props.count} />;\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "function formObjectDispatch(formObject, action) {\n      const { field } = action.payload;\n      formObject.findIndex((props) => props.field === field);\n      formObject.findIndex((props) => props.field === field);\n    }",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal(5);\n        console.log(signal());\n        return null;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal(5);\n        console.log(signal());\n        return <div>{signal()}</div>\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        const value = props.value;\n        return <div>{value()}</div>;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        const { value: valueProp } = props;\n        const value = createMemo(() => valueProp || \"default\");\n        return <div>{value()}</div>;\n      };",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        const valueProp = props.value;\n        const value = createMemo(() => valueProp || \"default\");\n        return <div>{value()}</div>;\n      };",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        const [value] = createSignal(props.value);\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        const derived = () => props.value;\n        const oops = derived();\n        return <div>{oops}</div>;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      function Component(something) {\n        console.log(something.a);\n        return <div />;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal();\n        const d = () => { // <-- d becomes a derived signal\n          signal();\n        }\n        d(); // not ok\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal();\n        function d() { // <-- d becomes a derived signal\n          signal();\n        }\n        d(); // not ok\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal();\n        const d = () => { // <-- d becomes a derived signal\n          const e = () => { // <-- e becomes a derived signal\n            signal();\n          }\n          e();\n        }\n        d(); // not ok\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal1] = createSignal();\n        const d = () => { // <-- d becomes a derived signal\n          const [signal2] = createSignal();\n          const e = () => { // <-- e becomes a derived signal\n            signal1();\n            signal2();\n          }\n          e(); // not ok, signal2 is in scope\n        }\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal();\n        const foo = () => { // foo becomes a derived signal\n          signal();\n        }\n        const bar = () => { // bar becomes a derived signal\n          foo();\n        }\n        bar(); // not ok\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        createSignal();\n      }",
+        "errors": 1,
+        "messageIds": [
+          "shouldDestructure"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [, setSignal] = createSignal();\n      }",
+        "errors": 1,
+        "messageIds": [
+          "shouldDestructure"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        createMemo(() => 5);\n      }",
+        "errors": 1,
+        "messageIds": [
+          "shouldAssign"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal();\n        return <div>{signal}</div>\n      }",
+        "errors": 1,
+        "messageIds": [
+          "badSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const memo = createMemo(() => 5);\n        return <div>{memo}</div>\n      }",
+        "errors": 1,
+        "messageIds": [
+          "badSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal();\n        return <button type={signal}>Button</button>\n      }",
+        "errors": 1,
+        "messageIds": [
+          "badSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal(\"world\");\n        const memo = createMemo(() => \"hello \" + signal)\n      }",
+        "errors": 1,
+        "messageIds": [
+          "badSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal(\"world\");\n        const memo = createMemo(() => `hello ${signal}`)\n      }",
+        "errors": 1,
+        "messageIds": [
+          "badSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = () => {\n        const [signal] = createSignal(5);\n        const memo = createMemo(() => -signal)\n      }",
+        "errors": 1,
+        "messageIds": [
+          "badSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = (props) => {\n        const [signal] = createSignal(5);\n        const memo = createMemo(() => props.array[signal])\n      }",
+        "errors": 1,
+        "messageIds": [
+          "badSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        return <div onClick={props.onClick} />;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "expectedFunctionGotExpression"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        createEffect(props.theEffect);\n      }",
+        "errors": 1,
+        "messageIds": [
+          "expectedFunctionGotExpression"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        return <SomeContext.Provider value={props.value}>{props.children}</SomeContext.Provider>;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        return <SomeProvider value={props.value}>{props.children}</SomeProvider>;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const Component = props => {\n        const [signal] = createSignal();\n        return <SomeContext.Provider value={signal()} someOtherProp={props.foo}>{props.children}</SomeContext.Provider>;\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const owner = getOwner();\n      const [signal] = createSignal();\n      createEffect(() => runWithOwner(owner, () => console.log(signal())));",
+        "errors": 1,
+        "messageIds": [
+          "badUnnamedDerivedSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      function Component() {\n        const owner = getOwner();\n        const [signal] = createSignal();\n        createEffect(() => runWithOwner(owner, () => console.log(signal())));\n      }",
+        "errors": 1,
+        "messageIds": [
+          "badUnnamedDerivedSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [count, setCount] = createSignal(0);\n      createEffect(async () => {\n        await Promise.resolve();\n        console.log(count());\n      });",
+        "errors": 1,
+        "messageIds": [
+          "noAsyncTrackedScope"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [photos, setPhotos] = createSignal([]);\n      createEffect(async () => {\n        const res = await fetch(\"https://jsonplaceholder.typicode.com/photos?_limit=20\");\n        setPhotos(await res.json());\n      });",
+        "errors": 1,
+        "messageIds": [
+          "noAsyncTrackedScope"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [signal] = createSignal(\"red\");\n      css`color: ${signal}`;",
+        "errors": 1,
+        "messageIds": [
+          "badSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [signal] = createSignal(\"red\");\n      const f = () => signal();\n      css`color: ${f}`;",
+        "errors": 1,
+        "messageIds": [
+          "badSignal"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      function createCustomStore() {\n        const [store, updateStore] = createStore({});\n        return mapArray(\n          [],\n          (item) => store.path.to.field\n        );\n      }",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [array] = createSignal([]);\n      const result = mapArray(array, (item, i) => {\n        i()\n      });",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [array] = createSignal([]);\n      const result = indexArray(array, (item) => {\n        item()\n      });",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [signal] = createSignal();\n      let el = <Component staticProp={signal()} />;",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [signal] = createSignal(0);\n      useExample(signal())",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [signal] = createSignal(0);\n      useExample([signal()])",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [signal] = createSignal(0);\n      useExample({ value: signal() })",
+        "errors": 1,
+        "messageIds": [
+          "untrackedReactive"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "\n      const [signal] = createSignal(0);\n      useExample((() => signal())())",
+        "errors": 1,
+        "messageIds": [
+          "expectedFunctionGotExpression"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "self-closing-comp",
+    "valid": [
+      {
+        "code": "let el = <Component name=\"Foo\" />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Compound.Component name=\"Foo\" />;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Component><img src=\"picture.png\" /></Component>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Compound.Component><img src=\"picture.png\" /></Compound.Component>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Component>\n      <Component name=\"Foo\" />\n    </Component>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Compound.Component>\n      <Compound.Component />\n    </Compound.Component>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Component name=\"Foo\"> </Component>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Compound.Component name=\"Foo\"> </Compound.Component>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Component name=\"Foo\">            </Component>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div>&nbsp;</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div>{' '}</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div></div>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "html": "none"
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <img></img>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "html": "none"
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div></div>;",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "html": "void"
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = (\n        <div>\n        </div>\n      )",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "html": "none"
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Component></Component>",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "component": "none"
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <div></div>;",
+        "errors": 1,
+        "messageIds": [
+          "selfClose"
+        ],
+        "options": null,
+        "output": "let el = <div />;",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <img></img>;",
+        "errors": 1,
+        "messageIds": [
+          "selfClose"
+        ],
+        "options": null,
+        "output": "let el = <img />;",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div/>;",
+        "errors": 1,
+        "messageIds": [
+          "dontSelfClose"
+        ],
+        "options": [
+          {
+            "html": "void"
+          }
+        ],
+        "output": "let el = <div></div>;",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div />;",
+        "errors": 1,
+        "messageIds": [
+          "dontSelfClose"
+        ],
+        "options": [
+          {
+            "html": "void"
+          }
+        ],
+        "output": "let el = <div></div>;",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <img/>;",
+        "errors": 1,
+        "messageIds": [
+          "dontSelfClose"
+        ],
+        "options": [
+          {
+            "html": "none"
+          }
+        ],
+        "output": "let el = <img></img>;",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <img />;",
+        "errors": 1,
+        "messageIds": [
+          "dontSelfClose"
+        ],
+        "options": [
+          {
+            "html": "none"
+          }
+        ],
+        "output": "let el = <img></img>;",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = (\n        <div>\n        </div>\n      );",
+        "errors": 1,
+        "messageIds": [
+          "selfClose"
+        ],
+        "options": null,
+        "output": "let el = (\n        <div />\n      );",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = (\n        <Component>\n        </Component>\n      );",
+        "errors": 1,
+        "messageIds": [
+          "selfClose"
+        ],
+        "options": null,
+        "output": "let el = (\n        <Component />\n      );",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <Component />;",
+        "errors": 1,
+        "messageIds": [
+          "dontSelfClose"
+        ],
+        "options": [
+          {
+            "component": "none"
+          }
+        ],
+        "output": "let el = <Component></Component>;",
+        "tsOnly": false
+      }
+    ]
+  },
+  {
+    "rule": "style-prop",
+    "valid": [
+      {
+        "code": "let el = <div style={{ color: 'red' }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ color: 'red', 'background-color': 'green' }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ color: \"red\", \"background-color\": \"green\" }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ \"-webkit-align-content\": \"center\" }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ \"font-size\": \"10px\" }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ \"font-size\": \"0\" }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ \"font-size\": 0 }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div STYLE={{ fontSize: 10 }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ \"flex-grow\": 1 }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ \"--custom-width\": 1 }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style=\"color: red;\" />",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "allowString": true
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={`color: ${themeColor};`} />",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "allowString": true
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div css={{ color: 'red' }}>Hello, world</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "styleProps": [
+              "style",
+              "css"
+            ]
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ fontSize: 10 }}>Hello, world!</div>",
+        "errors": 0,
+        "messageIds": [],
+        "options": [
+          {
+            "styleProps": [
+              "css"
+            ]
+          }
+        ],
+        "output": null,
+        "tsOnly": false
+      }
+    ],
+    "invalid": [
+      {
+        "code": "let el = <div style={{ fontSize: '10px' }}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "kebabStyleProp"
+        ],
+        "options": null,
+        "output": "let el = <div style={{ \"font-size\": '10px' }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ backgroundColor: 'red' }}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "kebabStyleProp"
+        ],
+        "options": null,
+        "output": "let el = <div style={{ \"background-color\": 'red' }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ \"-webkitAlignContent\": \"center\" }}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "kebabStyleProp"
+        ],
+        "options": null,
+        "output": "let el = <div style={{ \"-webkit-align-content\": \"center\" }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ COLOR: '10px' }}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "invalidStyleProp"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ unknownStyleProp: '10px' }}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "invalidStyleProp"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div css={{ fontSize: '10px' }}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "kebabStyleProp"
+        ],
+        "options": [
+          {
+            "styleProps": [
+              "style",
+              "css"
+            ]
+          }
+        ],
+        "output": "let el = <div css={{ \"font-size\": '10px' }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div css={{ fontSize: '10px' }}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "kebabStyleProp"
+        ],
+        "options": [
+          {
+            "styleProps": [
+              "css"
+            ]
+          }
+        ],
+        "output": "let el = <div css={{ \"font-size\": '10px' }}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style=\"font-size: 10px;\">Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "stringStyle"
+        ],
+        "options": null,
+        "output": "let el = <div style={{\"font-size\":\"10px\"}}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={\"font-size: 10px;\"}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "stringStyle"
+        ],
+        "options": null,
+        "output": "let el = <div style={{\"font-size\":\"10px\"}}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style=\"font-size: 10px; missing-value: ;\">Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "stringStyle"
+        ],
+        "options": null,
+        "output": "let el = <div style={{\"font-size\":\"10px\"}}>Hello, world!</div>",
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style=\"Super invalid CSS! Not CSS at all!\">Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "stringStyle"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={`font-size: 10px;`}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "stringStyle"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ 'font-size': 10 }}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "numericStyleValue"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      },
+      {
+        "code": "let el = <div style={{ 'margin-top': -10 }}>Hello, world!</div>",
+        "errors": 1,
+        "messageIds": [
+          "numericStyleValue"
+        ],
+        "options": null,
+        "output": null,
+        "tsOnly": false
+      }
+    ]
+  }
+]
