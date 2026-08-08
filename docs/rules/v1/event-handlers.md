@@ -1,5 +1,7 @@
 # v1/event-handlers
 
+`SC8001` · **warning** · violation
+
 Validates Solid JSX event-handler spelling and values from Oxc JSX facts.
 
 ## Options

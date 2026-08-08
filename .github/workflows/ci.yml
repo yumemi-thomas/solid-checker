@@ -134,5 +134,13 @@ jobs:
       # The bundled 1.x contract is generated from the census and the
       # reviewed semantics map; a stale artifact ships wrong semantics
       # compiled into the backend.
+      #
+      # `make contracts-check` -- the drift gate against a *real installed*
+      # solid-js -- stays local-only: it needs the exact package versions
+      # the checked-in artifacts were generated from placed under
+      # node_modules by hand (see the Makefile's `contracts` comment), and
+      # no CI job installs them. The generator hard-fails on any entrypoint
+      # it cannot resolve, so a layout change cannot regenerate a silently
+      # truncated artifact.
       - run: node scripts/generate-bundled-solid1-contract.mjs --check
       - run: make test-cli

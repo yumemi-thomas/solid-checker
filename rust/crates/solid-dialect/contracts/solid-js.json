@@ -7,7 +7,13 @@
   "compilerFactsProtocol": 1,
   "exports": {
     "action": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "deferred"
+        }
+      ]
     },
     "affects": {
       "kind": "function"
@@ -60,6 +66,10 @@
         {
           "parameter": 0,
           "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
         }
       ]
     },
@@ -73,6 +83,10 @@
         {
           "parameter": 0,
           "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
         }
       ]
     },
@@ -206,7 +220,13 @@
       "kind": "function"
     },
     "flush": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "For": {
       "kind": "function"
@@ -233,13 +253,25 @@
       "kind": "function"
     },
     "isPending": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "isWrappable": {
       "kind": "function"
     },
     "latest": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "lazy": {
       "kind": "function",
@@ -387,7 +419,13 @@
       "kind": "value"
     },
     "untrack": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
+      ]
     },
     "useContext": {
       "kind": "function"

@@ -258,9 +258,7 @@ impl Rule {
 /// facts the catalog already owns.
 #[must_use]
 pub fn manifest_json() -> String {
-    let mut out = String::from(
-        "{\n  \"docsBaseUrl\": \"https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules\",\n  \"rules\": [\n",
-    );
+    let mut out = format!("{{\n  \"docsBaseUrl\": \"{DOCS_BASE_URL}\",\n  \"rules\": [\n");
     for (index, rule) in Rule::ALL.into_iter().enumerate() {
         let metadata = rule.metadata();
         out.push_str(&format!(

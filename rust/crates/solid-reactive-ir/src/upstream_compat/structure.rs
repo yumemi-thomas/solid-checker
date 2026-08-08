@@ -25,7 +25,10 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind};
 use solid_facts::core::Span;
 
-use super::{UpstreamCompatContext, binding_initializer, contains, is_import_reference, text};
+use super::{
+    UpstreamCompatContext, binding_initializer, contains, deletion_with_leading_comma,
+    is_import_reference, text,
+};
 use crate::{Fix, StaticViolation, TextEdit, known_primitive, location};
 
 pub(super) fn check_file(
@@ -87,7 +90,13 @@ fn no_react_deps(
                 message: "Remove the dependency array.".into(),
                 applicability: "safe".into(),
                 edits: vec![TextEdit {
-                    location: location(file.path.shared(), argument.span),
+                    // The deletion swallows the `,` separating the two
+                    // arguments too — removing only the argument's own span
+                    // would leave `createEffect(fn, )` behind.
+                    location: location(
+                        file.path.shared(),
+                        deletion_with_leading_comma(&file.source, argument.span),
+                    ),
                     new_text: String::new(),
                 }],
             }],

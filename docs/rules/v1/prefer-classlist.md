@@ -1,5 +1,7 @@
 # v1/prefer-classlist
 
+`SC8013` · **warning** · violation
+
 Suggests `classList` for conditional class expressions.
 
 ## Options

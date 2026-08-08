@@ -142,7 +142,13 @@
       "kind": "function"
     },
     "effect": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
     },
     "encodeErrorHeaderValue": {
       "kind": "function"
@@ -310,7 +316,13 @@
       "kind": "value"
     },
     "memo": {
-      "kind": "function"
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ]
     },
     "mergeProps": {
       "kind": "function"

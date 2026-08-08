@@ -1,5 +1,7 @@
 # v1/style-prop
 
+`SC8017` · **warning** · violation
+
 Validates Solid's JSX `style` property representation and CSS property names.
 
 ## Options

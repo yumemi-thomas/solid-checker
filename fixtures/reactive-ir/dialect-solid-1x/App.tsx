@@ -1,10 +1,12 @@
 import { createEffect, createMemo, createReaction, createSignal, onCleanup } from "solid-js";
 
-// createStore is the only primitive both dialects have and export from
-// different modules, which makes it the one name that can show this rule
-// firing in both directions. Exactly one of these two lines is correct in each
-// dialect, and it is the other one each time. The second is aliased because
-// TypeScript will not take the same name twice -- which also exercises the
+// createStore is the one name both dialects have and export from different
+// modules. Under 1.x the root import on the first line is wrong -- createStore
+// lives in solid-js/store -- and SC8002 (v1/imports) says so, while the
+// subpath import is correct. The imports rule is v1-only, so 2.0 reports
+// neither line here; its wrong-module coverage is the contract rules, which
+// OneXOnly below exercises. The second import is aliased because TypeScript
+// will not take the same name twice -- which also exercises the
 // `imported`-vs-`local` path, where the reported name is the one on the left
 // of the `as`.
 import { createStore } from "solid-js";
@@ -34,8 +36,10 @@ export function NoArgument() {
   return null;
 }
 
-// SC7002's hint names a boundary component, and the dialects spell it
-// differently: <Suspense> in 1.x, <Loading> in 2.0.
+// The same async computation is a different defect in each dialect. 1.x has
+// no sync option, so the async createMemo scope is SC5004 and the hint points
+// at createResource. 2.0 models { sync: true } and reports SC7002, whose hint
+// names <Loading>.
 export function SyncAsync() {
   return createMemo(async () => 1, { sync: true });
 }
@@ -73,8 +77,9 @@ export function OneXOnly() {
 //
 // 1.x: createEffect(fn, value?) -- argument 1 is a function-valued seed. Its
 //      body is never invoked by createEffect, so the read is dormant. Silent.
-// 2.0: createEffect(compute, apply) -- argument 1 is the apply callback, a
-//      legitimate place to read. Silent.
+// 2.0: createEffect(compute, apply) -- argument 1 is the apply callback. It
+//      runs, and it does not track: the seed() read is SC1001, and the
+//      `return value` cannot be proven cleanup-or-undefined, so SC9002.
 //
 // The engine classified index 1 as an invoked effect apply in both dialects
 // until callback execution came from the concrete dialect call contract.

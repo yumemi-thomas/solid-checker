@@ -159,7 +159,13 @@ fn plan_file(
         }
     }
     for member in &file.ast.members {
-        if file.ast.computed_members.contains(&member.span) {
+        // `computed_members` is sorted by the extractor.
+        if file
+            .ast
+            .computed_members
+            .binary_search(&member.span)
+            .is_ok()
+        {
             add_symbol(member.property, false);
         }
     }

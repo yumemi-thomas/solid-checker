@@ -34,7 +34,11 @@ make parity
 `scripts/parity.mjs` materialises every case as its own file in one synthetic
 project (`harness.json` holds the scaffolding), runs the checker once, and
 counts a case as matching when the rule under test fired for an `invalid` case
-and stayed silent for a `valid` one.
+and stayed silent for a `valid` one. The comparison is fired/not-fired per
+case and nothing more: upstream's expected diagnostic *counts* (`errors`) and
+autofix *outputs* (`output`) travel with the corpus but are deliberately not
+compared — the checker's message identities, report multiplicity, and fix
+texts all differ from upstream's by design.
 
 **429 of 465 match.** The other 36 are declared in `deviations.json`, one entry
 per case, each with a status and a reason:

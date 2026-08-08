@@ -129,7 +129,8 @@ impl Dialect for Solid2 {
     }
 
     fn primitive(&self, name: &str) -> Option<Primitive> {
-        lookup(TABLE, name)
+        static INDEX: crate::NameIndex = crate::NameIndex::new();
+        lookup(&INDEX, &[TABLE], name)
     }
 
     fn name_of(&self, primitive: Primitive) -> Option<&'static str> {
@@ -188,6 +189,12 @@ impl Dialect for Solid2 {
     /// same evidence: `@solidjs/signals`' implementation sets `tracking =
     /// false` around the call. It swaps the owner, not the observer, so a read
     /// inside it does not subscribe. 1.x classifies it the same way.
+    ///
+    /// `latest(fn)` and `isPending(fn)` are deliberately absent. Each catches
+    /// `NotReadyError` around `fn` — that is what they change — but neither
+    /// clears tracking, so reads inside them subscribe in the caller's scope
+    /// exactly as a bare `fn()` would. Listing them here would erase those
+    /// read obligations; their `callback_executions` rows say the same thing.
     fn runs_callback_deferred(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
@@ -201,12 +208,8 @@ impl Dialect for Solid2 {
                 | Primitive::ClientOnly
                 | Primitive::RunWithOwner
                 // resolve(fn) returns a Promise -- the thunk's reads settle
-                // outside the current computation. isPending(fn) and
-                // latest(fn) deliberately read without subscribing, which is
-                // the whole point of them.
+                // outside the current computation.
                 | Primitive::Resolve
-                | Primitive::IsPending
-                | Primitive::Latest
                 | Primitive::Lazy
         )
     }
@@ -229,9 +232,12 @@ impl Dialect for Solid2 {
     /// - `createRoot(init)` is `createOwner()` then `runWithOwner`. Creates.
     /// - `resolve(fn)` wraps `fn` in `createRoot` too, which its signature
     ///   does not suggest -- it reads as a plain thunk-taker.
-    /// - `flush(fn)`, `untrack(fn)`, `latest(fn)`, `isPending(fn)` set a flag
-    ///   and call `fn()` directly. No owner is created, so the callback is
-    ///   exactly as owned as the call site: Inherits, not None.
+    /// - `flush(fn)`, `untrack(fn)`, `latest(fn)`, `isPending(fn)` call
+    ///   `fn()` directly. No owner is created, so the callback is exactly as
+    ///   owned as the call site: Inherits, not None. (What each wraps the
+    ///   call in differs — `untrack` clears tracking, `latest`/`isPending`
+    ///   only catch `NotReadyError` and leave reads subscribing — but that is
+    ///   `runs_callback_deferred`'s question, not this one's.)
     /// - `createEffect(compute, apply)` owns at 0 and runs `apply` unowned,
     ///   which is why these are argument positions and not
     ///   [`Solid2::callback_positions`].
@@ -469,6 +475,12 @@ impl Dialect for Solid2 {
     /// Source: `solid-reactive-ir/src/cleanup.rs`, both arms of the match —
     /// the unconditional list and the four that depend on the first argument
     /// being a function.
+    ///
+    /// `createReaction` is a correction to that extraction, not part of it:
+    /// the beta.31 runtime allocates a computation for the reaction when it
+    /// is called, exactly as `createEffect` does, so creating one in a leaf
+    /// or cleanup scope leaks it. Its `creates_directive_owner` row already
+    /// recorded the disposal obligation this arm was missing.
     fn cleanup_rule(&self, primitive: Primitive) -> CleanupRule {
         match primitive {
             Primitive::OnCleanup
@@ -476,6 +488,7 @@ impl Dialect for Solid2 {
             | Primitive::CreateMemo
             | Primitive::CreateEffect
             | Primitive::CreateRenderEffect
+            | Primitive::CreateReaction
             | Primitive::CreateTrackedEffect
             | Primitive::CreateProjection
             | Primitive::CreateRoot
@@ -790,10 +803,14 @@ mod tests {
     /// callback-taking export is in the vocabulary" can be asserted rather
     /// than asserted-with-exceptions-nobody-wrote-down.
     ///
-    /// All four are internals. `createComponent` and `devComponent` are
+    /// All six are internals. `createComponent` and `devComponent` are
     /// emitted by the JSX transform; `ssrScope` and
-    /// `runInServerComponentScope` support server compilation. None appears in
-    /// application code, and modelling one would mean
+    /// `runInServerComponentScope` support server compilation; `effect` and
+    /// `memo` are `@solidjs/web`'s dom-expressions runtime helpers, called by
+    /// compiled JSX output rather than written by hand (unlike 1.x, whose
+    /// `solid-js/web` re-exports them as public aliases of
+    /// `createRenderEffect` and a memo factory, which that dialect models).
+    /// None appears in application code, and modelling one would mean
     /// inventing behavioural columns nothing could check.
     ///
     /// The generator records the same reviewed callback shapes in the checked-
@@ -801,6 +818,8 @@ mod tests {
     const UNMODELLED_CALLBACK_TAKERS: &[&str] = &[
         "createComponent",
         "devComponent",
+        "effect",
+        "memo",
         "runInServerComponentScope",
         "ssrScope",
     ];

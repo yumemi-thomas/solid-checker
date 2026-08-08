@@ -77,9 +77,15 @@ The diff between their two snapshots is the only automated evidence that the
 - `createEffect(fn)` is a complete effect in 1.x and a missing-apply violation
   in 2.0 (SC7001), because the callback moves from argument 0 to argument 1.
 - `createEffect(undefined)` is SC7001 in both, quoting a different signature.
-- SC7002's hint names `<Suspense>` in 1.x and `<Loading>` in 2.0.
-- 1.x raises an extra SC9002 that 2.0 does not. That is pinned, not endorsed —
-  it is a real divergence nobody has explained yet.
+- The async `createMemo` is a different defect per dialect: SC5004 in 1.x
+  (async tracked scope, no sync option exists), SC7002 in 2.0, whose hint
+  names `<Loading>`.
+- `createEffect`'s second argument splits the dialects: a dormant seed in 1.x
+  (silent), the apply callback in 2.0 — where its untracked read is SC1001 and
+  its unproven return is SC9002.
+- The v1-only rules (SC8002 imports, SC8009 proxy APIs, SC3001/SC4002 leaf
+  cleanup) fire on the 1.x half alone, because 2.0 has no such catalog
+  entries.
 
 Two rules the runner enforces for this pair, both of which fail loudly:
 
@@ -95,7 +101,7 @@ Adding a dialect-gated rule means adding its case to both halves.
 ## Scope, and what this does not cover
 
 Every directory under `fixtures/reactive-ir/` and `fixtures/engine/` holding
-a `tsconfig.json` — 45 projects, 416 findings as of this writing; the run's
+a `tsconfig.json` — 45 projects, 426 findings as of this writing; the run's
 own summary line is the authoritative count. Fixture groups outside those
 two (`fixtures/package-contracts/`, the parity corpus) have their own
 harnesses and are not snapshotted here. A snapshot whose project was deleted

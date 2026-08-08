@@ -10,10 +10,9 @@ use typefacts::Location;
 use super::{
     CachedReachabilityFile, EntitySymbols, FunctionNode, ProjectIndexes, ReachabilityEdge,
     ReachabilityTarget, SemanticLookup, SourceDiscoveryTypeScriptDelta, SymbolId,
-    callback_execution_at_call, containing_function_indexed, function_indices_by_path,
-    function_is_solid_callback, location, parallel_slice_results, primitive_name,
-    returned_callback_execution_at_call, same_compiler_semantics, source_discovery_identity,
-    source_discovery_identity_matches,
+    containing_function_indexed, function_indices_by_path, function_is_solid_callback, location,
+    parallel_slice_results, primitive_name, returned_callback_execution_at_call,
+    same_compiler_semantics, source_discovery_identity, source_discovery_identity_matches,
 };
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -225,22 +224,16 @@ fn discover_reachability_file(
                 returned_callback_execution_at_call(file, call, index, lookup).is_some()
             })
         {
-            let invoked_arguments = call
-                .arguments
-                .iter()
-                .enumerate()
-                .filter(|(index, _)| {
-                    primitive
-                        .and_then(|primitive| {
-                            callback_execution_at_call(file, call, primitive, *index, lookup)
-                        })
-                        .or_else(|| returned_callback_execution_at_call(file, call, *index, lookup))
-                        .is_some()
-                })
-                .map(|(_, argument)| argument)
-                .collect::<Vec<_>>();
+            // Every argument of a matched primitive call, not only the ones
+            // carrying a callback-execution fact. The runtime invokes functions
+            // it finds in options objects too -- `createMemo(fn, { equals: cmp
+            // })` calls `cmp` -- and the dialect's callback table models
+            // positional callbacks only, so narrowing this to modelled
+            // positions would make every such comparator unreachable and
+            // report it as dead code.
             for function in &functions {
-                if invoked_arguments
+                if call
+                    .arguments
                     .iter()
                     .any(|argument| argument.span.contains(function.span))
                 {
@@ -250,7 +243,8 @@ fn discover_reachability_file(
                     });
                 }
             }
-            for property in invoked_arguments
+            for property in call
+                .arguments
                 .iter()
                 .flat_map(|argument| &argument.identifier_properties)
             {
@@ -299,6 +293,7 @@ fn discover_reachability_file(
     let topology = reachability_topology(&functions, &roots, &edges, &callback_edges);
     CachedReachabilityFile {
         identity: source_discovery_identity(file, indexes),
+        cross_file_proofs: lookup.returned_callback_proof_digest(),
         compiler: file.compiler.clone(),
         functions,
         roots,
@@ -372,8 +367,9 @@ pub(super) fn reachable_call_multiplicity_incremental(
                     &file.source_hash,
                     typescript_unchanged,
                     typescript_delta,
-                ) && (Arc::ptr_eq(&cached.compiler, &file.compiler)
-                    || same_compiler_semantics(&cached.compiler, &file.compiler))
+                ) && cached.cross_file_proofs == lookup.returned_callback_proof_digest()
+                    && (Arc::ptr_eq(&cached.compiler, &file.compiler)
+                        || same_compiler_semantics(&cached.compiler, &file.compiler))
             });
         if reusable {
             reused_files += 1;
@@ -709,32 +705,14 @@ pub(super) fn reachable_call_multiplicity(
                     .copied()
                 {
                     let function = &functions[index];
+                    // All arguments, for the reason given in
+                    // `discover_reachability_file`: an options-object
+                    // comparator is invoked by the runtime and has no
+                    // positional callback fact to prove it.
                     if call
                         .arguments
                         .iter()
-                        .enumerate()
-                        .any(|(argument_index, argument)| {
-                            primitive
-                                .and_then(|primitive| {
-                                    callback_execution_at_call(
-                                        file,
-                                        call,
-                                        primitive,
-                                        argument_index,
-                                        lookup,
-                                    )
-                                })
-                                .or_else(|| {
-                                    returned_callback_execution_at_call(
-                                        file,
-                                        call,
-                                        argument_index,
-                                        lookup,
-                                    )
-                                })
-                                .is_some()
-                                && argument.span.contains(function.span)
-                        })
+                        .any(|argument| argument.span.contains(function.span))
                     {
                         if let Some(owner) = owner {
                             edges[owner].push(index);

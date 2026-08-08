@@ -37,6 +37,29 @@ pub(super) struct ResolvedContracts {
     pub(super) missing_exports: Vec<StaticViolation>,
 }
 
+/// Whether the dialect's own vocabulary outranks a package contract for a name
+/// imported from `module`.
+///
+/// Solid's built-ins have richer native semantics than any cross-package
+/// contract summary can express: ownership, async provenance, writes, and
+/// cleanup phases. The reviewed contract stays as evidence and for export
+/// completeness, but its coarse callbacks/returns must not be layered over
+/// native facts.
+///
+/// The gate is the dialect's module-ownership answer, not the literal package
+/// name `solid-js`. 1.x reaches `createStore` only through `solid-js/store` and
+/// `Portal` only through `solid-js/web`; 2.0 moved the whole DOM surface to the
+/// separate `@solidjs/web` package. Comparing package names gave the package
+/// root native precedence and every other entrypoint the contract's coarse
+/// answer, for the same primitives.
+fn native_vocabulary_outranks_contract(
+    dialect: &dyn Dialect,
+    module: &str,
+    imported: &str,
+) -> bool {
+    dialect.owns_module(module) && dialect.declares_primitive(imported)
+}
+
 pub(super) fn resolve_contract_imports(
     facts: &ProjectFacts,
     contracts: &[PackageContract],
@@ -127,8 +150,7 @@ pub(super) fn resolve_contract_imports(
                         // the only semantic evidence for public Solid exports
                         // outside that native vocabulary. Apply the same
                         // precedence to namespace and named imports.
-                        if contract.package.name != "solid-js"
-                            || !dialect.declares_primitive(&imported)
+                        if !native_vocabulary_outranks_contract(dialect, &import.module, &imported)
                         {
                             bindings.push(resolved.clone());
                             by_symbol.insert(symbol, resolved);
@@ -203,7 +225,7 @@ pub(super) fn resolve_contract_imports(
                 // provenance, writes, and cleanup phases). Keep the bundled
                 // contract as evidence and for export completeness, but do
                 // not layer its coarse callbacks/returns over native facts.
-                if contract.package.name != "solid-js" || !dialect.declares_primitive(imported) {
+                if !native_vocabulary_outranks_contract(dialect, &import.module, imported) {
                     bindings.push(resolved.clone());
                     by_symbol.insert(symbol, resolved);
                 }
@@ -257,7 +279,7 @@ pub(super) fn resolve_contract_imports(
                     });
                     continue;
                 };
-                if contract.package.name == "solid-js" && dialect.declares_primitive(imported) {
+                if native_vocabulary_outranks_contract(dialect, module, imported) {
                     continue;
                 }
                 let resolved = ResolvedContractBinding {

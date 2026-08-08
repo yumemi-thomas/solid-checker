@@ -1,5 +1,7 @@
 # v1/jsx-no-undef
 
+`SC8005` · **error** · violation
+
 Reports undefined JSX component and `use:` directive names.
 
 Component tags join Oxc JSX spans to TypeScript symbol facts, so imports,

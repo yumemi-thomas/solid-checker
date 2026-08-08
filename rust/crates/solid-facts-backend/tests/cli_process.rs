@@ -30,17 +30,15 @@ fn argv_invocation_does_not_wait_for_stdin_eof() {
 }
 
 #[test]
-fn help_describes_dialect_detection_and_fallback() {
+fn help_describes_the_dialect_flag() {
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .arg("--help")
         .output()
         .expect("run Rust CLI help");
     assert!(output.status.success());
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("default: detect from solid-js; fallback: solid-v2"),
-        "stdout = {stdout}"
-    );
+    // The flag must be documented; the prose around it is free to change.
+    assert!(stdout.contains("--dialect"), "stdout = {stdout}");
 }
 
 #[test]

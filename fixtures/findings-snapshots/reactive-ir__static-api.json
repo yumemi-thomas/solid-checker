@@ -132,6 +132,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 797,
+      "end": 805,
+      "fixes": 0
+    },
+    {
       "rule": "invalid-refresh-target",
       "code": "SC7003",
       "kind": "violation",

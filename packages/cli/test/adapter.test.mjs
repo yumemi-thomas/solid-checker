@@ -167,6 +167,35 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
   assert.equal(readFileSync(counter, "utf8"), "1");
 });
 
+test("caches a failed analysis instead of re-spawning every lint pass", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-"));
+  writeFileSync(join(root, "tsconfig.json"), "{}\n");
+  const counter = join(root, "runs.txt");
+  const analyzer = join(root, "analyzer.mjs");
+  writeFileSync(analyzer, `import { existsSync, readFileSync, writeFileSync } from "node:fs";
+const counter = process.argv[2];
+const count = existsSync(counter) ? Number(readFileSync(counter, "utf8")) : 0;
+writeFileSync(counter, String(count + 1));
+process.stderr.write("analysis exploded");
+process.exit(2);
+`);
+
+  plugin._testing.snapshotCache.clear();
+  const filename = join(root, "App.tsx");
+  writeFileSync(filename, "export {};\n");
+  const context = {
+    filename,
+    physicalFilename: filename,
+    settings: { solidChecker: { command: process.execPath, commandArgs: [analyzer, counter] } },
+    options: []
+  };
+  const expected = /analysis failed \(2\): analysis exploded/;
+  assert.throws(() => plugin._testing.loadSnapshot(context), expected);
+  assert.throws(() => plugin._testing.loadSnapshot(context), expected);
+  assert.equal(readFileSync(counter, "utf8"), "1");
+  plugin._testing.snapshotCache.clear();
+});
+
 test("reuses an ESLint parser project before filesystem discovery", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-"));
   const project = join(root, "tsconfig.eslint.json");
@@ -192,9 +221,32 @@ test("per-rule surface: every catalog identity is an ESLint rule", () => {
   for (const entry of v2.rules) {
     assert.ok(!entry.name.includes("/"), `v2 stays unprefixed: ${entry.name}`);
   }
-  // The two dialect configs enable exactly their own catalog.
-  assert.equal(Object.keys(plugin.configs.v1.rules).length, v1.rules.length);
-  assert.equal(Object.keys(plugin.configs.v2.rules).length, v2.rules.length);
+  // The two dialect configs enable exactly their own catalog, plus the
+  // certification switch-off that keeps them composable with `recommended`.
+  assert.equal(Object.keys(plugin.configs.v1.rules).length, v1.rules.length + 1);
+  assert.equal(Object.keys(plugin.configs.v2.rules).length, v2.rules.length + 1);
+  assert.equal(plugin.configs.v1.rules["solid-checker/certification"], "off");
+  assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
+});
+
+test("recommended followed by a dialect config reports each finding once", () => {
+  // Flat config semantics: later configs win per rule, so merging the rule
+  // maps in listed order is exactly what ESLint resolves.
+  const merged = {
+    ...plugin.configs.recommended.rules,
+    ...plugin.configs.v1.rules
+  };
+  assert.equal(merged["solid-checker/certification"], "off");
+
+  const findings = [finding("SC1003", "v1/no-destructure", 0, 2)];
+  const reported = [];
+  for (const [name, severity] of Object.entries(merged)) {
+    if (severity === "off") continue;
+    const rule = plugin.rules[name.slice("solid-checker/".length)];
+    rule.create(syntheticContext({ findings }, reported)).Program({});
+  }
+  assert.equal(reported.length, 1);
+  assert.match(reported[0].data.message, /SC1003/);
 });
 
 test("per-rule surface: a rule reports only the findings it owns", () => {

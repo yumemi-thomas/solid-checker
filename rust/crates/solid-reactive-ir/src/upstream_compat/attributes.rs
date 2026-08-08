@@ -238,9 +238,15 @@ fn no_react_specific_props(
                 attribute.span,
                 vec![],
             );
-            result
-                .fixes
-                .push(fix_replace(file, attribute.span, "remove the key prop", ""));
+            // The deletion swallows the whitespace separating the attribute
+            // from what precedes it too — removing only the attribute's own
+            // span would leave a doubled space (`<div  />`) behind.
+            result.fixes.push(fix_replace(
+                file,
+                super::deletion_with_leading_whitespace(&file.source, attribute.span),
+                "remove the key prop",
+                "",
+            ));
             violations.push(result);
         }
     }
@@ -304,7 +310,8 @@ fn style_prop(
         for property in properties {
             // Upstream's `getPropertyName` resolves plain and quoted keys;
             // a computed key it cannot fold answers no name, which skips
-            // the name checks but still reaches the numeric-value check.
+            // every name-keyed check below — including the missing-unit
+            // one, which must know the property is a length to report.
             let name = (!property.computed)
                 .then(|| text(file, property.key).trim_matches(['\'', '"']))
                 .filter(|name| !name.is_empty());
@@ -347,33 +354,50 @@ fn style_prop(
                         ));
                     }
                 }
-                // A known kebab-case property naming a length, or a key the
-                // folder could not resolve: a bare non-zero number is a
-                // missing unit either way.
-                Some(name)
-                    if !name.starts_with("--")
-                        && !super::upstream_data::names_length_property(name) => {}
-                _ => {
-                    if text(file, property.value)
-                        .trim()
-                        .trim_start_matches('-')
-                        .parse::<f64>()
-                        .is_ok_and(|value| value != 0.0)
-                    {
-                        violations.push(violation(
-                            file,
-                            "SC8017",
-                            "style-prop",
-                            "This CSS property value should be a string with a unit; Solid does not automatically append a \"px\" unit.",
-                            "Quote the value and add a unit, e.g. \"10px\"; an unquoted number is passed to the DOM as-is and most length properties reject a unitless value.",
-                            property.value,
-                            vec![],
-                        ));
-                    }
+                // The missing-unit advice applies only to a key that
+                // *resolves* to a known length property; [`missing_unit`]
+                // carries the reasoning for the keys it declines.
+                _ if missing_unit(name, text(file, property.value)) => {
+                    violations.push(violation(
+                        file,
+                        "SC8017",
+                        "style-prop",
+                        "This CSS property value should be a string with a unit; Solid does not automatically append a \"px\" unit.",
+                        "Quote the value and add a unit, e.g. \"10px\"; an unquoted number is passed to the DOM as-is and most length properties reject a unitless value.",
+                        property.value,
+                        vec![],
+                    ));
                 }
+                _ => {}
             }
         }
     }
+}
+
+/// Whether a style-object entry misses its unit: the key must *resolve* to a
+/// known length property, and the value must be a bare non-zero number
+/// (Solid never appends an implicit `px`, and zero is unit-optional in CSS).
+///
+/// Everything else declines. A resolved non-length property (`opacity`,
+/// `z-index`) legally takes a bare number, so it is no missing unit. A
+/// computed key the folder could not resolve (`[key]: 0.5`) names no
+/// property at all — whether its number needs a unit depends on which
+/// property it lands on at runtime, so reporting would false-positive on the
+/// unitless-legal ones. And a `--` custom property is CSS's own escape hatch,
+/// skipped even when its name happens to contain a length word
+/// (`--max-width`).
+fn missing_unit(name: Option<&str>, value: &str) -> bool {
+    let Some(name) = name else {
+        return false;
+    };
+    if name.starts_with("--") || !super::upstream_data::names_length_property(name) {
+        return false;
+    }
+    value
+        .trim()
+        .trim_start_matches('-')
+        .parse::<f64>()
+        .is_ok_and(|value| value != 0.0)
 }
 
 fn style_string_object_fix(source: &str) -> Option<String> {
@@ -869,8 +893,8 @@ fn prefer_classlist(
 mod tests {
     use super::super::strip_string_literal;
     use super::{
-        event_name, is_lowercase_led, looks_like_array_literal, style_string_object_fix,
-        to_kebab_case,
+        event_name, is_lowercase_led, looks_like_array_literal, missing_unit,
+        style_string_object_fix, to_kebab_case,
     };
 
     #[test]
@@ -917,6 +941,24 @@ mod tests {
     fn classifies_element_names_by_leading_case() {
         assert!(is_lowercase_led("div"));
         assert!(!is_lowercase_led("Component"));
+    }
+
+    #[test]
+    fn missing_unit_reports_only_resolved_length_properties() {
+        // A resolved length property with a bare non-zero number.
+        assert!(missing_unit(Some("width"), "10"));
+        assert!(missing_unit(Some("margin-top"), "-2.5"));
+        // A computed/unresolvable key names no property, so no report —
+        // the value could land on a unitless-legal property like opacity.
+        assert!(!missing_unit(None, "0.5"));
+        // A resolved property where a bare number is legal.
+        assert!(!missing_unit(Some("opacity"), "0.5"));
+        assert!(!missing_unit(Some("z-index"), "2"));
+        // Zero is unit-optional, a custom property is skipped even when its
+        // name contains a length word, and a non-numeric value has a unit.
+        assert!(!missing_unit(Some("width"), "0"));
+        assert!(!missing_unit(Some("--max-width"), "10"));
+        assert!(!missing_unit(Some("width"), "\"10px\""));
     }
 
     #[test]

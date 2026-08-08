@@ -8,6 +8,7 @@ use std::{
     sync::{Arc, OnceLock},
 };
 
+use sha2::{Digest, Sha256};
 use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts, TypeScriptSymbol, TypeScriptTable};
 use typefacts::{Callability, EntityFact, FileFact, Location, ResolvedCall, TypeDescriptor};
@@ -134,6 +135,17 @@ impl CachedAstFileIndex {
         self.calls_by_span.get(&span).map(|index| self.call(*index))
     }
 
+    /// The position of the call with exactly this span in `file.ast.calls`.
+    ///
+    /// The primitive, execution-role, and owner tables are index-aligned with
+    /// that array, so every classifier that starts from a `CallFact` and needs
+    /// its resolved primitive has to translate a span back into an index. Doing
+    /// that with `calls.iter().position(..)` is a linear scan per processed
+    /// call, which is quadratic in a file's call count.
+    pub(super) fn call_index_by_span(&self, span: Span) -> Option<usize> {
+        self.calls_by_span.get(&span).copied()
+    }
+
     pub(super) fn direct_call_by_callee(&self, span: Span) -> Option<&solid_facts::ast::CallFact> {
         self.direct_calls_by_callee
             .get(&span)
@@ -219,7 +231,40 @@ pub(super) struct SemanticLookup<'a> {
     bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
     file_primitives: OnceLock<Vec<OnceLock<FilePrimitives>>>,
+    project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
+    callback_capabilities: OnceLock<DialectCallbackCapabilities>,
+    returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
 }
+
+/// Which parts of the returned-adapter contract this build's dialect can
+/// actually answer, for the primitives this project names.
+///
+/// Solid 2.0 leaves every method behind these flags at its `false`/`None`
+/// default: no primitive routes callbacks through a returned adapter, and none
+/// stores a function argument as a value. The engine still has to *ask* those
+/// questions per call, and the asking is not free — proving a returned adapter
+/// is invoked walks binding chains across every project file. One probe of the
+/// vocabulary per build lets the passes skip machinery that provably cannot
+/// answer.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct DialectCallbackCapabilities {
+    /// Some primitive routes a callback through a function it returns, so
+    /// call-site proofs of that returned function's use are meaningful.
+    pub(super) returned_callbacks: bool,
+    /// Some primitive stores a function argument instead of invoking it, so
+    /// dormant-argument classification is meaningful.
+    pub(super) stored_function_arguments: bool,
+}
+
+/// Digest of the project facts the cross-file returned-callback proofs read.
+pub(super) type CrossFileProofDigest = [u8; 32];
+
+/// Argument positions, argument counts, and tuple slots wide enough to cover
+/// every Solid signature either dialect models. Each probe is one table
+/// lookup, and the whole sweep runs once per build over the handful of
+/// primitives a project actually names.
+const PROBED_ARGUMENTS: usize = 8;
+const PROBED_RESULT_SLOTS: usize = 4;
 
 /// Resolved Solid primitive names for one file's calls and JSX elements,
 /// index-aligned with `file.ast.calls` / `file.ast.jsx_elements`. Computed
@@ -263,7 +308,142 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),
             file_primitives: OnceLock::new(),
+            project_primitives: OnceLock::new(),
+            callback_capabilities: OnceLock::new(),
+            returned_callback_proof_digest: OnceLock::new(),
         }
+    }
+
+    /// Every primitive this build can resolve at a call site.
+    ///
+    /// `primitive_name` answers only through the symbol-name table, so a
+    /// primitive absent from this set cannot appear at any call, JSX tag, or
+    /// binding initializer in this project. That makes the set a sound domain
+    /// for probing what the dialect models.
+    fn project_primitives(&self) -> &HashSet<solid_dialect::Primitive> {
+        self.project_primitives.get_or_init(|| {
+            self.symbol_names
+                .values()
+                .filter_map(|name| self.dialect.primitive(name.as_str()))
+                .collect()
+        })
+    }
+
+    pub(super) fn callback_capabilities(&self) -> DialectCallbackCapabilities {
+        *self.callback_capabilities.get_or_init(|| {
+            let mut capabilities = DialectCallbackCapabilities::default();
+            for primitive in self.project_primitives() {
+                for argument in 0..PROBED_ARGUMENTS {
+                    capabilities.returned_callbacks |= self
+                        .dialect
+                        .callback_requires_return_invocation(*primitive, argument);
+                    capabilities.stored_function_arguments |= self
+                        .dialect
+                        .stores_function_argument_as_value(*primitive, argument);
+                    for count in 0..PROBED_ARGUMENTS {
+                        for slot in std::iter::once(None).chain((0..PROBED_RESULT_SLOTS).map(Some))
+                        {
+                            capabilities.returned_callbacks |= self
+                                .dialect
+                                .returned_callback_execution_at(*primitive, slot, argument, count)
+                                .is_some()
+                                || self
+                                    .dialect
+                                    .returned_callback_owner_at(*primitive, slot, argument, count)
+                                    .is_some();
+                        }
+                    }
+                }
+            }
+            capabilities
+        })
+    }
+
+    /// Whether the dialect routes any callback of a primitive this project
+    /// names through a function the primitive returns.
+    pub(super) fn models_returned_callbacks(&self) -> bool {
+        self.callback_capabilities().returned_callbacks
+    }
+
+    /// Whether the dialect stores any function argument of a primitive this
+    /// project names as a plain value instead of invoking it.
+    pub(super) fn models_stored_function_arguments(&self) -> bool {
+        self.callback_capabilities().stored_function_arguments
+    }
+
+    /// Identity of the whole-project facts that the cross-file
+    /// returned-callback proofs read, or `None` when no such proof can exist.
+    ///
+    /// Those proofs — "is the function `mapArray` returned in file A ever
+    /// invoked?" — scan every project file's calls, members, JSX tags and
+    /// bindings, yet their answers land in *per-file* cache fragments keyed on
+    /// that one file's source hash. Editing the only file that invokes the
+    /// adapter would otherwise leave the factory file's fragment untouched and
+    /// stale. Folding this digest into those fragments' reuse identity closes
+    /// that hole.
+    ///
+    /// The granularity is deliberately coarse: one digest over every file's
+    /// `(path, source_hash)`, so any source edit anywhere recomputes every
+    /// fragment of the caches that consume these proofs. Nothing cheaper is
+    /// sound without a project-wide reverse index from adapter bindings to
+    /// their use sites, and the coarse answer costs nothing where it cannot
+    /// apply: `None` under Solid 2.0 (the dialect models no returned adapter at
+    /// all) and `None` in any 1.x project that never names a factory
+    /// primitive, which leaves those builds' reuse identities exactly as they
+    /// were.
+    pub(super) fn returned_callback_proof_digest(&self) -> Option<CrossFileProofDigest> {
+        *self.returned_callback_proof_digest.get_or_init(|| {
+            if !self.models_returned_callbacks() {
+                return None;
+            }
+            let mut inputs = self
+                .facts
+                .files
+                .iter()
+                .map(|file| (file.path.as_str(), file.source_hash.as_str()))
+                .collect::<Vec<_>>();
+            // Facts arrive in configured-source order; sort so a reordered
+            // source set cannot read as a changed one.
+            inputs.sort_unstable();
+            let mut hasher = Sha256::new();
+            for (path, source_hash) in inputs {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(source_hash.as_bytes());
+            }
+            Some(hasher.finalize().into())
+        })
+    }
+
+    /// The position of a call in `file.ast.calls`, for the primitive tables
+    /// that are index-aligned with it.
+    pub(super) fn call_index(&self, file: &FileFacts, span: Span) -> Option<usize> {
+        self.ast_indexes
+            .get(file.path.as_str())
+            .and_then(|index| index.call_index_by_span(span))
+    }
+
+    /// The primitive resolved for the call occupying exactly `span`.
+    pub(super) fn primitive_at_call(
+        &self,
+        file: &FileFacts,
+        span: Span,
+    ) -> Option<solid_dialect::Primitive> {
+        let index = self.call_index(file, span)?;
+        super::known_primitive(&self.primitives(file).calls[index])
+    }
+
+    /// Whether a member expression occupies exactly `span`, which distinguishes
+    /// `factory(...).member()` from `factory(...)()`.
+    pub(super) fn is_member_span(&self, file: &FileFacts, span: Span) -> bool {
+        self.member_property_at(file, span).is_some()
+    }
+
+    /// The property span of the member expression occupying exactly `span`.
+    pub(super) fn member_property_at(&self, file: &FileFacts, span: Span) -> Option<Span> {
+        self.ast_indexes
+            .get(file.path.as_str())
+            .and_then(|index| index.member_property(span))
     }
 
     /// The memoized primitive names for one project file.

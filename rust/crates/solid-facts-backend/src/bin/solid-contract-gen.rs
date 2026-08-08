@@ -98,7 +98,13 @@ const fn internal(path: &'static str) -> Entry {
     Entry { module: None, path }
 }
 
-struct Dialect {
+/// One contract artifact this generator can produce: a package at a pinned
+/// major, with its declaration entry points and reviewed semantics.
+///
+/// Not a `dialect::Dialect` — those name Solid language versions
+/// (`solid-v1`/`solid-v2`), while these ids name packages and their generated
+/// artifacts (`solid-js-1x`, `solidjs-web`); one dialect can bundle several.
+struct ContractTarget {
     /// Contract file stem, and the `--dialect` name.
     id: &'static str,
     package: &'static str,
@@ -121,7 +127,7 @@ struct Dialect {
 
 /// Solid 2.0. Sourced by reading `solid-js@2.0.0-beta.31` and its bundled
 /// `@solidjs/signals` implementation, not the signatures — see the module docs.
-static SOLID_2: Dialect = Dialect {
+static SOLID_2: ContractTarget = ContractTarget {
     id: "solid-js",
     package: "solid-js",
     major: "2.",
@@ -187,11 +193,13 @@ static SOLID_2: Dialect = Dialect {
         ),
         ("repeat", cb(&[Callback(1, "tracked")])),
         ("createReaction", cb(&[Callback(0, "deferred")])),
-        // Both own the scope their body runs in and return an accessor.
+        // Both own the scope their body runs in and return an accessor. The
+        // fallback argument is a callback too, invoked only when the boundary
+        // trips.
         (
             "createErrorBoundary",
             both(
-                &[Callback(0, "tracked")],
+                &[Callback(0, "tracked"), Callback(1, "deferred")],
                 "accessor",
                 "guarded value or error fallback",
             ),
@@ -199,7 +207,7 @@ static SOLID_2: Dialect = Dialect {
         (
             "createLoadingBoundary",
             both(
-                &[Callback(0, "tracked")],
+                &[Callback(0, "tracked"), Callback(1, "deferred")],
                 "accessor",
                 "guarded value or loading fallback",
             ),
@@ -208,6 +216,15 @@ static SOLID_2: Dialect = Dialect {
         // suggest it.
         ("resolve", cb(&[Callback(0, "deferred")])),
         ("lazy", cb(&[Callback(0, "deferred")])),
+        // Scope wrappers that run their thunk immediately in the caller's
+        // scope. latest/isPending catch NotReadyError but do not clear
+        // tracking, so reads inside subscribe -- same inline row as untrack.
+        ("untrack", cb(&[Callback(0, "inline")])),
+        ("flush", cb(&[Callback(0, "inline")])),
+        ("latest", cb(&[Callback(0, "inline")])),
+        ("isPending", cb(&[Callback(0, "inline")])),
+        // The handler runs when the action is dispatched, never at creation.
+        ("action", cb(&[Callback(0, "deferred")])),
         ("createRevealOrder", cb(&[Callback(0, "inline")])),
         ("createComponent", cb(&[Callback(0, "inline")])),
         ("devComponent", cb(&[Callback(0, "inline")])),
@@ -225,7 +242,7 @@ static SOLID_2: Dialect = Dialect {
 ///
 /// Returning a cleanup is a 2.0 idea: 1.x threads an effect callback's return
 /// value to the next run as `prev`.
-static SOLID_1X: Dialect = Dialect {
+static SOLID_1X: ContractTarget = ContractTarget {
     id: "solid-js-1x",
     package: "solid-js",
     major: "1.",
@@ -266,10 +283,34 @@ static SOLID_1X: Dialect = Dialect {
                 "selector result",
             ),
         ),
-        ("children", ret("accessor", "resolved children")),
-        ("mapArray", ret("accessor", "mapped array")),
-        ("indexArray", ret("accessor", "mapped array")),
-        ("from", ret("accessor", "external source value")),
+        (
+            "children",
+            both(&[Callback(0, "tracked")], "accessor", "resolved children"),
+        ),
+        (
+            "mapArray",
+            both(
+                &[Callback(0, "tracked"), Callback(1, "deferred")],
+                "accessor",
+                "mapped array",
+            ),
+        ),
+        (
+            "indexArray",
+            both(
+                &[Callback(0, "tracked"), Callback(1, "deferred")],
+                "accessor",
+                "mapped array",
+            ),
+        ),
+        (
+            "from",
+            both(
+                &[Callback(0, "inline")],
+                "accessor",
+                "external source value",
+            ),
+        ),
         ("createRoot", cb(&[Callback(0, "inline")])),
         ("runWithOwner", cb(&[Callback(1, "inline")])),
         ("untrack", cb(&[Callback(0, "inline")])),
@@ -292,13 +333,16 @@ static SOLID_1X: Dialect = Dialect {
         ("render", cb(&[Callback(0, "inline")])),
         ("hydrate", cb(&[Callback(0, "inline")])),
         ("effect", cb(&[Callback(0, "tracked")])),
-        ("memo", ret("accessor", "memo result")),
+        (
+            "memo",
+            both(&[Callback(0, "tracked")], "accessor", "memo result"),
+        ),
         ("createDynamic", cb(&[Callback(0, "tracked")])),
     ],
 };
 
 /// `@solidjs/web`, 2.0's DOM package.
-static SOLIDJS_WEB: Dialect = Dialect {
+static SOLIDJS_WEB: ContractTarget = ContractTarget {
     id: "solidjs-web",
     package: "@solidjs/web",
     major: "2.",
@@ -374,6 +418,11 @@ static SOLIDJS_WEB: Dialect = Dialect {
         ("render", cb(&[Callback(0, "inline")])),
         ("hydrate", cb(&[Callback(0, "inline")])),
         ("dynamic", cb(&[Callback(0, "tracked")])),
+        // Compiler-runtime helpers the JSX transform emits calls to; the
+        // dialect reviews them as unmodelled callback-takers rather than
+        // user-facing primitives, but the contract still carries their shape.
+        ("effect", cb(&[Callback(0, "tracked")])),
+        ("memo", cb(&[Callback(0, "tracked")])),
         // Browser default is immediate, `{ lazy: true }` defers until the
         // wrapper renders, and the server never invokes the loader. The flat
         // schema cannot express that condition, so `deferred` is the safe
@@ -385,7 +434,7 @@ static SOLIDJS_WEB: Dialect = Dialect {
     ],
 };
 
-static DIALECTS: &[&Dialect] = &[&SOLID_2, &SOLID_1X, &SOLIDJS_WEB];
+static TARGETS: &[&ContractTarget] = &[&SOLID_2, &SOLID_1X, &SOLIDJS_WEB];
 
 /// The names one declaration entry exports, split by position.
 #[derive(Default)]
@@ -402,19 +451,28 @@ struct Exports {
 /// Types are collected alongside values because the import-location index
 /// needs them: `import type { Store } from "solid-js"` does not resolve in
 /// 1.x either, and a value-only index cannot say so.
-fn exported_names(entry: &Path, out: &mut Exports, seen: &mut BTreeSet<PathBuf>) {
-    let Ok(canonical) = entry.canonicalize() else {
-        return;
-    };
+///
+/// A resolution failure is a hard error, never a skip. This walk *is* the
+/// export set: a missing, unreadable, or unparseable file swallowed here
+/// regenerates a silently truncated contract with exit 0, and `--check` then
+/// certifies the truncation as in sync. The `names.is_empty()` and
+/// stale-semantics checks downstream stay as secondary guards, but they only
+/// catch truncations large enough to lose a reviewed name.
+fn exported_names(
+    entry: &Path,
+    out: &mut Exports,
+    seen: &mut BTreeSet<PathBuf>,
+) -> Result<(), String> {
+    let canonical = entry
+        .canonicalize()
+        .map_err(|error| format!("no declaration file at {}: {error}", entry.display()))?;
     if !seen.insert(canonical.clone()) {
-        return;
+        return Ok(());
     }
-    let Ok(source) = fs::read_to_string(&canonical) else {
-        return;
-    };
-    let Ok(facts) = solid_facts::ast::extract(canonical.to_string_lossy(), &source) else {
-        return;
-    };
+    let source = fs::read_to_string(&canonical)
+        .map_err(|error| format!("read {}: {error}", canonical.display()))?;
+    let facts = solid_facts::ast::extract(canonical.to_string_lossy(), &source)
+        .map_err(|error| format!("parse {}: {error}", canonical.display()))?;
     for export in &facts.exports {
         // Two different flags, and in a `.d.ts` only one of them is usable.
         //
@@ -460,20 +518,55 @@ fn exported_names(entry: &Path, out: &mut Exports, seen: &mut BTreeSet<PathBuf>)
             && module.starts_with('.')
         {
             let base = canonical.parent().unwrap_or(Path::new("."));
-            let stem = module.trim_end_matches(".js").trim_end_matches(".mjs");
-            exported_names(&base.join(format!("{stem}.d.ts")), out, seen);
-            exported_names(&base.join(stem).join("index.d.ts"), out, seen);
+            let stem = [".js", ".mjs", ".cjs", ".mts", ".cts"]
+                .iter()
+                .find_map(|extension| module.strip_suffix(extension))
+                .unwrap_or(module);
+            let candidates = [
+                base.join(format!("{stem}.d.ts")),
+                base.join(format!("{stem}.d.mts")),
+                base.join(format!("{stem}.d.cts")),
+                base.join(stem).join("index.d.ts"),
+            ];
+            // Every existing candidate is walked -- a `.d.ts` and a
+            // directory index can coexist and each contribute names. None
+            // existing is the same silent-truncation class as an unreadable
+            // entry point, so it is answered the same way.
+            let mut resolved = false;
+            for candidate in candidates.iter().filter(|candidate| candidate.is_file()) {
+                resolved = true;
+                exported_names(candidate, out, seen)?;
+            }
+            if !resolved {
+                return Err(format!(
+                    "cannot resolve `export * from \"{module}\"` in {}: tried {}",
+                    canonical.display(),
+                    candidates
+                        .iter()
+                        .map(|candidate| candidate.display().to_string())
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                ));
+            }
         }
     }
+    Ok(())
 }
 
-fn render(dialect: &Dialect, version: &str, names: &BTreeSet<String>) -> String {
-    let semantics: BTreeMap<_, _> = dialect
+/// A JSON string literal for `text`, escaped. Export names come out of a
+/// parser, and `export { x as "a\"b" }` is a legal declaration whose name
+/// concatenated raw would emit invalid JSON.
+fn json_string(text: &str) -> String {
+    serde_json::to_string(text).expect("a string always serializes")
+}
+
+fn render(target: &ContractTarget, version: &str, names: &BTreeSet<String>) -> String {
+    let semantics: BTreeMap<_, _> = target
         .semantics
         .iter()
         .map(|(name, value)| (*name, value))
         .collect();
-    let values: BTreeSet<_> = dialect.values.iter().copied().collect();
+    let values: BTreeSet<_> = target.values.iter().copied().collect();
 
     let mut sorted: Vec<_> = names.iter().collect();
     sorted.sort_by_key(|name| name.trim_start_matches('$').to_lowercase());
@@ -482,7 +575,10 @@ fn render(dialect: &Dialect, version: &str, names: &BTreeSet<String>) -> String 
     for (index, name) in sorted.iter().enumerate() {
         let entry = semantics.get(name.as_str());
         let is_value = values.contains(name.as_str()) && entry.is_none();
-        body.push_str(&format!("    \"{name}\": {{\n      \"kind\": \""));
+        body.push_str(&format!(
+            "    {}: {{\n      \"kind\": \"",
+            json_string(name)
+        ));
         body.push_str(if is_value { "value" } else { "function" });
         body.push('"');
         if let Some(Semantics {
@@ -519,8 +615,9 @@ fn render(dialect: &Dialect, version: &str, names: &BTreeSet<String>) -> String 
     }
 
     format!(
-        "{{\n  \"schemaVersion\": 1,\n  \"package\": {{\n    \"name\": \"{}\",\n    \"version\": \"{version}\"\n  }},\n  \"compilerFactsProtocol\": 1,\n  \"exports\": {{\n{body}  }},\n  \"evidence\": {{\n    \"kind\": \"reviewed\",\n    \"generator\": \"solid-contract-gen\"\n  }}\n}}\n",
-        dialect.package
+        "{{\n  \"schemaVersion\": 1,\n  \"package\": {{\n    \"name\": {},\n    \"version\": {}\n  }},\n  \"compilerFactsProtocol\": 1,\n  \"exports\": {{\n{body}  }},\n  \"evidence\": {{\n    \"kind\": \"reviewed\",\n    \"generator\": \"solid-contract-gen\"\n  }}\n}}\n",
+        json_string(target.package),
+        json_string(version)
     )
 }
 
@@ -542,11 +639,10 @@ struct Index {
 fn render_table(name: &str, doc: &str, table: &BTreeMap<String, BTreeSet<String>>) -> String {
     let mut body = String::new();
     for (export, modules) in table {
-        let modules: Vec<_> = modules
-            .iter()
-            .map(|module| format!("\"{module}\""))
-            .collect();
-        body.push_str(&format!("    (\"{export}\", &[{}]),\n", modules.join(", ")));
+        // `{:?}` renders a Rust string literal, escaped -- the export names
+        // are parser output, and this file is compiled.
+        let modules: Vec<_> = modules.iter().map(|module| format!("{module:?}")).collect();
+        body.push_str(&format!("    ({export:?}, &[{}]),\n", modules.join(", ")));
     }
     // `rustfmt::skip` is load bearing, not tidiness. Without it `cargo fmt`
     // explodes the multi-module rows across five lines each, `--check` then
@@ -561,7 +657,7 @@ fn render_table(name: &str, doc: &str, table: &BTreeMap<String, BTreeSet<String>
 /// `solid-dialect` has no reader, sits below every other crate, and the answer
 /// is a constant. The cost is that it is checked in, which is why `--check`
 /// covers it — a hand-edit is the same failure as a stale contract.
-fn render_index(dialect: &Dialect, version: &str, index: &Index) -> String {
+fn render_index(target: &ContractTarget, version: &str, index: &Index) -> String {
     format!(
         "//! Where `{}@{version}` exports each name, keyed by the module specifier a\n\
          //! user writes in an import.\n\
@@ -574,7 +670,7 @@ fn render_index(dialect: &Dialect, version: &str, index: &Index) -> String {
          //! resolves.\n\
          \n\
          {}\n{}",
-        dialect.package,
+        target.package,
         render_table(
             "VALUES",
             "/// Names exported in value position.\n",
@@ -613,15 +709,15 @@ fn main() -> ExitCode {
     else {
         eprintln!(
             "usage: solid-contract-gen --package <dir> --dialect <{}> --out <path> --index-out <path> [--check]",
-            DIALECTS
+            TARGETS
                 .iter()
-                .map(|dialect| dialect.id)
+                .map(|target| target.id)
                 .collect::<Vec<_>>()
                 .join("|")
         );
         return ExitCode::from(2);
     };
-    let Some(dialect) = DIALECTS.iter().find(|dialect| dialect.id == id) else {
+    let Some(target) = TARGETS.iter().find(|target| target.id == id) else {
         eprintln!("unknown dialect {id}");
         return ExitCode::from(2);
     };
@@ -634,18 +730,21 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
-    let Some(version) = manifest
-        .split("\"version\"")
-        .nth(1)
-        .and_then(|rest| rest.split('"').nth(1))
-    else {
+    let manifest: serde_json::Value = match serde_json::from_str(&manifest) {
+        Ok(manifest) => manifest,
+        Err(error) => {
+            eprintln!("{package}/package.json is not JSON: {error}");
+            return ExitCode::from(2);
+        }
+    };
+    let Some(version) = manifest.get("version").and_then(serde_json::Value::as_str) else {
         eprintln!("{package}/package.json has no version");
         return ExitCode::from(2);
     };
-    if !version.starts_with(dialect.major) {
+    if !version.starts_with(target.major) {
         eprintln!(
             "{package} is {} {version}, not {}x",
-            dialect.package, dialect.major
+            target.package, target.major
         );
         return ExitCode::FAILURE;
     }
@@ -656,9 +755,14 @@ fn main() -> ExitCode {
     // skips that file and leaves the web module missing all nine.
     let mut index = Index::default();
     let mut names = BTreeSet::new();
-    for entry in dialect.entries {
+    for entry in target.entries {
         let mut exports = Exports::default();
-        exported_names(&root.join(entry.path), &mut exports, &mut BTreeSet::new());
+        if let Err(error) =
+            exported_names(&root.join(entry.path), &mut exports, &mut BTreeSet::new())
+        {
+            eprintln!("{error}");
+            return ExitCode::FAILURE;
+        }
         // The contract's export set is every value name from every entry; the
         // index only records the ones a specifier reaches.
         names.extend(
@@ -690,7 +794,7 @@ fn main() -> ExitCode {
 
     // A table naming an export the package does not have is stale, and a stale
     // entry is invisible: it simply never matches.
-    let stale: Vec<_> = dialect
+    let stale: Vec<_> = target
         .semantics
         .iter()
         .map(|(name, _)| *name)
@@ -699,17 +803,17 @@ fn main() -> ExitCode {
     if !stale.is_empty() {
         eprintln!(
             "the {id} semantics table names exports {} {version} does not have: {}",
-            dialect.package,
+            target.package,
             stale.join(", ")
         );
         return ExitCode::FAILURE;
     }
 
     let outputs = [
-        (out, render(dialect, version, &names)),
-        (index_out, render_index(dialect, version, &index)),
+        (out, render(target, version, &names)),
+        (index_out, render_index(target, version, &index)),
     ];
-    let published: BTreeSet<_> = dialect
+    let published: BTreeSet<_> = target
         .entries
         .iter()
         .filter_map(|entry| entry.module)
@@ -744,4 +848,64 @@ fn main() -> ExitCode {
         println!("wrote {path}");
     }
     ExitCode::SUCCESS
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A restructured package layout must fail the run, not shrink the
+    /// contract: `main` turns any `exported_names` error into a non-zero
+    /// exit in both generate and `--check` modes.
+    #[test]
+    fn resolution_failures_are_errors_not_omissions() {
+        let root =
+            std::env::temp_dir().join(format!("solid-contract-gen-loud-{}", std::process::id()));
+        std::fs::create_dir_all(&root).unwrap();
+
+        // A missing entry point.
+        let missing = exported_names(
+            &root.join("missing.d.ts"),
+            &mut Exports::default(),
+            &mut BTreeSet::new(),
+        );
+        assert!(missing.is_err());
+
+        // An `export *` whose target no candidate stem resolves.
+        let entry = root.join("index.d.ts");
+        std::fs::write(&entry, "export * from \"./gone.js\";\n").unwrap();
+        let unresolved =
+            exported_names(&entry, &mut Exports::default(), &mut BTreeSet::new()).unwrap_err();
+        assert!(unresolved.contains("export * from"), "{unresolved}");
+
+        // A resolvable chain collects names, `.d.mts` stems included.
+        std::fs::write(
+            &entry,
+            "export * from \"./inner.mjs\";\nexport * from \"./modern.mts\";\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("inner.d.ts"),
+            "export declare function first(): void;\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("modern.d.mts"),
+            "export declare function second(): void;\n",
+        )
+        .unwrap();
+        let mut exports = Exports::default();
+        exported_names(&entry, &mut exports, &mut BTreeSet::new()).unwrap();
+        assert!(exports.values.contains("first"));
+        assert!(exports.values.contains("second"));
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    /// The emitted JSON and Rust are built by interpolation, so every parsed
+    /// name goes through an escaping serializer.
+    #[test]
+    fn interpolated_names_are_escaped() {
+        assert_eq!(json_string("a\"b"), r#""a\"b""#);
+        assert_eq!(format!("{:?}", "a\"b"), r#""a\"b""#);
+    }
 }

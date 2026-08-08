@@ -1,5 +1,7 @@
 # v1/no-innerhtml
 
+`SC8008` · **error** · violation
+
 Validates `innerHTML` and React-style dangerous HTML properties from Oxc JSX
 facts.
 

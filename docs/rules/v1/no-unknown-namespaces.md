@@ -1,5 +1,7 @@
 # v1/no-unknown-namespaces
 
+`SC8012` · **error** · violation
+
 Reports unknown JSX namespaces from Oxc JSX facts.
 
 ## Options

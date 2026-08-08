@@ -35,7 +35,9 @@ use execution_role::{
     named_callback_execution_role, read_analysis_context, semantic_execution_role,
 };
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
-use indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
+use indexes::{
+    CachedAstFileIndex, CrossFileProofDigest, EntitySymbols, ProjectIndexes, SemanticLookup,
+};
 use interproc::{
     InterproceduralContext, InterproceduralResult, InterproceduralTimings, SummaryNode,
     SummaryRead, SummaryReads,
@@ -859,6 +861,11 @@ struct ReachabilityEdge {
 
 struct CachedReachabilityFile {
     identity: SourceDiscoveryIdentity,
+    /// See [`SemanticLookup::returned_callback_proof_digest`]. Reachability
+    /// edges for a primitive whose callbacks run through a returned adapter
+    /// depend on whether *some other file* invokes that adapter, so this
+    /// fragment cannot be reused across a change to any file.
+    cross_file_proofs: Option<CrossFileProofDigest>,
     compiler: Arc<solid_facts::compiler::ExecutionMap>,
     functions: Vec<FunctionNode>,
     roots: Vec<ReachabilityTarget>,
@@ -913,6 +920,10 @@ struct LocalAccessSymbolState {
 
 struct CachedLocalAccessFile {
     source_hash: SourceHash,
+    /// See [`SemanticLookup::returned_callback_proof_digest`]. Whether a read
+    /// inside a returned adapter's callback is dormant or live depends on
+    /// whether any project file invokes that adapter.
+    cross_file_proofs: Option<CrossFileProofDigest>,
     compiler: Arc<solid_facts::compiler::ExecutionMap>,
     dependencies: HashSet<SymbolId>,
     call_multiplicities: Vec<(Location, Option<usize>)>,
@@ -927,12 +938,20 @@ struct CachedLocalAccesses {
     prop_sources: HashMap<SymbolId, (SymbolId, Location)>,
 }
 
+/// The proven-source symbol at each exact TypeScript reference location:
+/// `path -> byte range -> source symbol`.
+type SourceReferenceLocations = HashMap<String, HashMap<(u64, u64), SymbolId>>;
+
 struct CachedLateStages {
     inputs: HashMap<SourcePath, LateStageFileInput>,
     local_accesses: CachedLocalAccesses,
     interprocedural: Option<InterproceduralResult>,
     missing_owners: Option<Vec<OwnerRequirement>>,
     owner_files: HashMap<SourcePath, CachedOwnerFile>,
+    /// The upstream-compat surface's location-keyed reference map. Retained
+    /// under the same condition as `interprocedural`, because both are
+    /// functions of the TypeScript table and the proven source set.
+    compat_reference_locations: Option<SourceReferenceLocations>,
 }
 
 fn same_reachability_ast(
@@ -1317,6 +1336,26 @@ impl FunctionBoundary for FunctionNode {
 pub enum BuildError {
     #[error("fact location offset does not fit Oxc span")]
     SpanWidth,
+}
+
+/// Whether a caller-supplied `solid-js` contract is the artifact whose name the
+/// dialect stamps into provenance.
+///
+/// Every return kind `bundled_returns` contributes is cited as
+/// `bundled://<dialect label>#<primitive>`. The two majors answer different
+/// questions under the same export names, so reading one contract while citing
+/// the other's filename attributes a fact to a file that was never consulted.
+/// Two discriminators, in order of strength: the backend stamps its own
+/// embedded artifacts' `source_path`, and both those artifacts (like every real
+/// install of the package) carry a semver `package.version`. A `solid-js`
+/// contract with neither proves nothing about which dialect it describes and is
+/// therefore not read here -- dropping a fact is a silent gap, citing the wrong
+/// file is a false claim.
+fn bundled_contract_matches_dialect(contract: &PackageContract, dialect: &dyn Dialect) -> bool {
+    if let Some(label) = contract.source_path.strip_prefix("bundled://") {
+        return label == dialect.bundled_contract_label();
+    }
+    solid_dialect::Version::for_solid_js(&contract.package.version) == Some(dialect.version())
 }
 
 fn source_discovery_identity(
@@ -1870,7 +1909,10 @@ fn discover_sources(
     let mut accessors = HashMap::<SymbolId, (SymbolId, Location)>::new();
     let bundled_returns = contracts
         .iter()
-        .find(|contract| contract.package.name == "solid-js")
+        .find(|contract| {
+            contract.package.name == "solid-js"
+                && bundled_contract_matches_dialect(contract, semantic_lookup.dialect)
+        })
         .map(|contract| {
             contract
                 .root_exports()
@@ -2264,7 +2306,10 @@ fn discover_sources(
         let Some(descriptor) = &entity.type_descriptor else {
             continue;
         };
-        if descriptor.origin_module != "solid-js".into() {
+        if !semantic_lookup
+            .dialect
+            .owns_module(descriptor.origin_module.as_ref())
+        {
             continue;
         }
         let Some(symbol) = entities.get(&entity.location) else {
@@ -2761,6 +2806,7 @@ fn build_with_contracts_measured_incremental(
             retained.local_accesses.aggregate = None;
             retained.interprocedural = None;
             retained.missing_owners = None;
+            retained.compat_reference_locations = None;
         } else {
             *cache = Some(CachedLateStages {
                 inputs: current_late_stage_inputs(facts),
@@ -2768,6 +2814,7 @@ fn build_with_contracts_measured_incremental(
                 interprocedural: None,
                 missing_owners: None,
                 owner_files: HashMap::new(),
+                compat_reference_locations: None,
             });
         }
     }
@@ -3223,16 +3270,20 @@ fn build_with_contracts_measured_incremental(
                 .cloned()
         })
         .flatten();
-    // Upstream-compat value-position checks also consume this exact
-    // TypeScript reference map. Entity facts are intentionally sparse and do
-    // not include every plain identifier operand, so retain the complete
-    // source-reference projection even when interprocedural results are
-    // reusable.
-    let references_by_source = references_for_sources(
-        &facts.typescript,
-        &typescript_indexes.symbols_by_root,
-        accessors.keys(),
-    );
+    // Only the interprocedural pass consumes the ordered per-symbol reference
+    // lists, so a warm interprocedural cache means nobody asks for them. The
+    // upstream-compat surface needs the same references, but keyed by location
+    // rather than by symbol, and it gets that map from its own cached
+    // projection below.
+    let references_by_source = if cached_interprocedural.is_some() {
+        HashMap::new()
+    } else {
+        references_for_sources(
+            &facts.typescript,
+            &typescript_indexes.symbols_by_root,
+            accessors.keys(),
+        )
+    };
     let local_access_cache = late_stage_cache
         .as_deref_mut()
         .and_then(Option::as_mut)
@@ -3479,16 +3530,24 @@ fn build_with_contracts_measured_incremental(
     // `upstream_compat::check_file`, next to the catalogs' version table it
     // mirrors.
     {
-        let mut source_reference_index: HashMap<String, HashMap<(u64, u64), SymbolId>> =
-            HashMap::new();
-        for (symbol, references) in &references_by_source {
-            for reference in references {
-                source_reference_index
-                    .entry(reference.path.to_string())
-                    .or_default()
-                    .insert((reference.start_byte, reference.end_byte), symbol.clone());
-            }
-        }
+        // The location-keyed reference map is a pure function of the TypeScript
+        // table and the proven accessor set, and `late_stages_reusable` is
+        // exactly the condition under which both are unchanged (it is the same
+        // gate the interprocedural results are reused behind). Move the retained
+        // map through the compat context and back into the cache rather than
+        // cloning it: the context owns the field, and the rules only ever read
+        // it.
+        let retained_reference_locations = late_stage_cache
+            .as_deref_mut()
+            .and_then(Option::as_mut)
+            .and_then(|cache| {
+                if late_stages_reusable {
+                    cache.compat_reference_locations.take()
+                } else {
+                    cache.compat_reference_locations = None;
+                    None
+                }
+            });
         let compat_context = upstream_compat::UpstreamCompatContext {
             dialect,
             lookup: semantic_lookup,
@@ -3496,7 +3555,13 @@ fn build_with_contracts_measured_incremental(
             accessors: &accessors,
             source_kinds: &source_kinds,
             prop_sources: &prop_sources,
-            source_reference_index,
+            source_reference_index: retained_reference_locations.unwrap_or_else(|| {
+                symbols::source_reference_locations(
+                    &facts.typescript,
+                    &typescript_indexes.symbols_by_root,
+                    accessors.keys(),
+                )
+            }),
             contracted: &resolved_contracts.by_symbol,
             options: rule_options,
         };
@@ -3507,6 +3572,9 @@ fn build_with_contracts_measured_incremental(
             .into_iter()
             .flatten(),
         );
+        if let Some(cache) = late_stage_cache.as_deref_mut().and_then(Option::as_mut) {
+            cache.compat_reference_locations = Some(compat_context.source_reference_index);
+        }
     }
     leaf_operations.extend(
         parallel_file_results(&facts.files, |file| {
@@ -3922,9 +3990,14 @@ impl ReturnedCallbackInvocationSite {
     /// Total order over every field, for sort-then-dedup. A key that omitted
     /// a field could leave equal sites non-adjacent, and `dedup` only removes
     /// adjacent duplicates.
-    fn order_key(&self) -> (String, Span, u8, Option<u8>) {
+    ///
+    /// Borrows the path. `sort_by_key` calls its key function on every
+    /// comparison, so cloning the path here allocated a `String` per comparison
+    /// -- `O(n log n)` allocations to order a list whose elements already own
+    /// their paths.
+    fn order_key(&self) -> (&str, Span, u8, Option<u8>) {
         (
-            self.path.clone(),
+            self.path.as_str(),
             self.span,
             self.inherited_owner as u8,
             self.inherited_execution.map(|execution| execution as u8),
@@ -4003,6 +4076,10 @@ struct OwnerRequirementStatus {
 
 struct CachedOwnerFile {
     source_hash: SourceHash,
+    /// See [`SemanticLookup::returned_callback_proof_digest`]. Owner edges for
+    /// a returned adapter's callbacks exist only where the project invokes that
+    /// adapter, which is a fact about every other file.
+    cross_file_proofs: Option<CrossFileProofDigest>,
     compiler: Arc<solid_facts::compiler::ExecutionMap>,
     nodes: Vec<OwnerNode>,
     edges: Vec<SymbolicOwnerEdge>,
@@ -4613,6 +4690,7 @@ fn discover_owner_file(
     }
     CachedOwnerFile {
         source_hash: file.source_hash.clone(),
+        cross_file_proofs: lookup.returned_callback_proof_digest(),
         compiler: file.compiler.clone(),
         nodes,
         edges,
@@ -4657,6 +4735,7 @@ fn find_missing_owners_incremental(
         if retained_source_paths.contains(file.path.as_str())
             && let Some(cached) = cache.get(file.path.as_str())
             && cached.source_hash == file.source_hash
+            && cached.cross_file_proofs == lookup.returned_callback_proof_digest()
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
         {
@@ -4932,6 +5011,13 @@ fn owner_callback_edges(
     lookup: &SemanticLookup<'_>,
 ) -> Vec<OwnerCallbackEdge> {
     let Some(primitive) = known_primitive(primitive) else {
+        // A call that names no primitive can still be an invocation of a
+        // function some primitive returned -- but only where the dialect models
+        // such a function. Solid 2.0 models none, so the binding-chain walk
+        // below would resolve a primitive and then be told `None` every time.
+        if !lookup.models_returned_callbacks() {
+            return Vec::new();
+        }
         let Some((returned, result_slot)) = returned_primitive_invocation(file, call, lookup)
         else {
             return Vec::new();
@@ -5228,38 +5314,36 @@ fn inside_known_value_function_argument(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    let primitives = lookup.primitives(file);
-    file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
-            return false;
-        };
-        call.arguments
-            .iter()
-            .enumerate()
-            .any(|(argument_index, argument)| {
-                argument.span.contains(span)
-                    && matches!(
-                        argument.value,
-                        solid_facts::ast::ArgumentValueKind::Function
-                            | solid_facts::ast::ArgumentValueKind::AsyncFunction
-                    )
-                    && (lookup
-                        .dialect
-                        .stores_function_argument_as_value(primitive, argument_index)
-                        || (lookup
-                            .dialect
-                            .callback_execution_at(primitive, argument_index, call.arguments.len())
-                            .is_some()
-                            && callback_execution_at_call(
-                                file,
-                                call,
-                                primitive,
-                                argument_index,
-                                lookup,
-                            )
-                            .is_none()))
-            })
-    })
+    // Both proofs are dialect answers that Solid 2.0 leaves at their negative
+    // default, so under 2.0 this question is provably always "no" and the
+    // containment query below need not run at all.
+    if !lookup.models_stored_function_arguments() && !lookup.models_returned_callbacks() {
+        return false;
+    }
+    // Only the calls whose arguments actually contain `span` can answer. The
+    // former whole-file scan asked every call in the file, once per call being
+    // classified, which is quadratic in a file's call count.
+    file.ast
+        .arguments_containing(span)
+        .any(|(call, argument_index)| {
+            let Some(primitive) = lookup.primitive_at_call(file, call.span) else {
+                return false;
+            };
+            let argument = &call.arguments[argument_index];
+            matches!(
+                argument.value,
+                solid_facts::ast::ArgumentValueKind::Function
+                    | solid_facts::ast::ArgumentValueKind::AsyncFunction
+            ) && (lookup
+                .dialect
+                .stores_function_argument_as_value(primitive, argument_index)
+                || (lookup
+                    .dialect
+                    .callback_execution_at(primitive, argument_index, call.arguments.len())
+                    .is_some()
+                    && callback_execution_at_call(file, call, primitive, argument_index, lookup)
+                        .is_none()))
+        })
 }
 
 /// The callback execution fact for one concrete primitive call, after proving
@@ -5339,13 +5423,7 @@ fn run_with_owner_callback_owner(
     // 2.0's createOwner() is non-null by construction. Resolve the nested
     // call semantically so a local function with the same spelling proves
     // nothing.
-    if let Some(index) = file
-        .ast
-        .calls
-        .iter()
-        .position(|candidate| candidate.span == owner.span)
-        && known_primitive(&lookup.primitives(file).calls[index]) == Some(Primitive::CreateOwner)
-    {
+    if lookup.primitive_at_call(file, owner.span) == Some(Primitive::CreateOwner) {
         return Some(solid_dialect::CallbackOwner::Creates);
     }
 
@@ -5390,11 +5468,7 @@ pub(crate) fn returned_primitive_invocation(
             return None;
         }
         if let Some(initializer) = binding.call_initializer {
-            let call_index = binding_file
-                .ast
-                .calls
-                .iter()
-                .position(|candidate| candidate.span == initializer)?;
+            let call_index = lookup.call_index(binding_file, initializer)?;
             let result_slot = match binding.shape {
                 solid_facts::ast::BindingShape::Array => {
                     Some(binding.array_slots.iter().position(|slot| {
@@ -5422,6 +5496,12 @@ pub(crate) fn returned_callback_execution_at_call(
     argument: usize,
     lookup: &SemanticLookup<'_>,
 ) -> Option<solid_dialect::Execution> {
+    // Solid 2.0 answers `None` for every returned-callback contract, so the
+    // binding-chain resolution below cannot produce an answer there. Skip it
+    // rather than walk it once per call and discard the result.
+    if !lookup.models_returned_callbacks() {
+        return None;
+    }
     let (primitive, result_slot) = returned_primitive_invocation(file, call, lookup)?;
     lookup.dialect.returned_callback_execution_at(
         primitive,
@@ -5453,9 +5533,7 @@ fn returned_callback_invocation_sites(
 ) -> Vec<ReturnedCallbackInvocationSite> {
     let direct_factory_value = |argument: Span| {
         file.ast
-            .calls
-            .iter()
-            .filter(|nested| argument.contains(nested.span))
+            .calls_within(argument)
             .max_by_key(|nested| nested.span.end - nested.span.start)
             .is_some_and(|nested| nested.span == factory_call.span)
     };
@@ -5465,19 +5543,17 @@ fn returned_callback_invocation_sites(
             && outer.callee.contains(factory_call.span)
             && file
                 .ast
-                .calls
-                .iter()
-                .filter(|nested| nested.span != outer.span && outer.callee.contains(nested.span))
+                .calls_within(outer.callee)
+                .filter(|nested| nested.span != outer.span)
                 .max_by_key(|nested| nested.span.end - nested.span.start)
                 .is_some_and(|nested| nested.span == factory_call.span)
             // `factory(...).member()` invokes the member, not the returned
             // function, so it proves nothing about the factory's callbacks.
             // `preload` is the one member the runtime routes to the loader,
             // matching the binding-based preload proof below.
-            && file.ast.members.iter().all(|member| {
-                member.span != outer.callee
-                    || file.source_text(member.property) == Some("preload")
-            })
+            && lookup
+                .member_property_at(file, outer.callee)
+                .is_none_or(|property| file.source_text(property) == Some("preload"))
     }) {
         sites.push(ReturnedCallbackInvocationSite {
             path: file.path.to_string(),
@@ -5488,12 +5564,7 @@ fn returned_callback_invocation_sites(
     }
 
     for (outer, index) in file.ast.arguments_containing(factory_call.span) {
-        let primitive = file
-            .ast
-            .calls
-            .iter()
-            .position(|candidate| candidate.span == outer.span)
-            .and_then(|call_index| known_primitive(&lookup.primitives(file).calls[call_index]));
+        let primitive = lookup.primitive_at_call(file, outer.span);
         if direct_factory_value(outer.arguments[index].span)
             && primitive.is_some_and(|primitive| {
                 lookup
@@ -5502,12 +5573,7 @@ fn returned_callback_invocation_sites(
                     .is_some()
             })
         {
-            let inherited_owner = file
-                .ast
-                .calls
-                .iter()
-                .position(|candidate| candidate.span == outer.span)
-                .and_then(|call_index| known_primitive(&lookup.primitives(file).calls[call_index]))
+            let inherited_owner = primitive
                 .and_then(|primitive| callback_owner_at_call(file, outer, primitive, index, lookup))
                 .map_or(OwnerEdgeKind::Preserve, callback_owner_edge_kind);
             sites.push(ReturnedCallbackInvocationSite {
@@ -5532,7 +5598,7 @@ fn returned_callback_invocation_sites(
         .filter_map(|name| lookup.entities().at(file.path.as_str(), name.span).cloned())
         .collect::<HashSet<_>>();
     if factory_bindings.is_empty() {
-        sites.sort_by_key(ReturnedCallbackInvocationSite::order_key);
+        sites.sort_by(|left, right| left.order_key().cmp(&right.order_key()));
         sites.dedup();
         return sites;
     }
@@ -5595,15 +5661,8 @@ fn returned_callback_invocation_sites(
                     inherited_owner: OwnerEdgeKind::Preserve,
                 });
             }
+            let primitive = lookup.primitive_at_call(use_file, outer.span);
             for (index, argument) in outer.arguments.iter().enumerate() {
-                let primitive = use_file
-                    .ast
-                    .calls
-                    .iter()
-                    .position(|candidate| candidate.span == outer.span)
-                    .and_then(|call_index| {
-                        known_primitive(&lookup.primitives(use_file).calls[call_index])
-                    });
                 if returned_binding_reference(
                     use_file,
                     argument.span,
@@ -5676,7 +5735,7 @@ fn returned_callback_invocation_sites(
         }
     }
 
-    sites.sort_by_key(ReturnedCallbackInvocationSite::order_key);
+    sites.sort_by(|left, right| left.order_key().cmp(&right.order_key()));
     sites.dedup();
     sites
 }
@@ -5864,11 +5923,20 @@ fn typed_accessor_descriptor_at<'a>(
 ) -> Option<&'a typefacts::TypeDescriptor> {
     lookup
         .smallest_contained_descriptor(path, callee)
-        .filter(|descriptor| go_solid_accessor_descriptor(descriptor))
+        .filter(|descriptor| go_solid_accessor_descriptor(descriptor, lookup.dialect))
 }
 
-fn go_solid_accessor_descriptor(descriptor: &typefacts::TypeDescriptor) -> bool {
-    descriptor.origin_module == "solid-js".into()
+/// Whether a typed descriptor's declaring module is one this dialect owns.
+///
+/// The module is the dialect's answer, not a literal: 1.x spreads its exports
+/// across `solid-js/store`, `solid-js/web` and `solid-js/universal`, and 2.0
+/// declares its DOM surface in `@solidjs/web`. Comparing against the package
+/// root alone silently dropped every accessor whose type came from a subpath.
+pub(crate) fn go_solid_accessor_descriptor(
+    descriptor: &typefacts::TypeDescriptor,
+    dialect: &dyn Dialect,
+) -> bool {
+    dialect.owns_module(descriptor.origin_module.as_ref())
 }
 
 fn source_function_exported(
@@ -6340,6 +6408,7 @@ impl LocalAccessContext<'_> {
                     file.path.clone(),
                     CachedLocalAccessFile {
                         source_hash: file.source_hash.clone(),
+                        cross_file_proofs: self.lookup.returned_callback_proof_digest(),
                         compiler: file.compiler.clone(),
                         dependencies: self.dependencies(file),
                         call_multiplicities: self.call_multiplicities(file),
@@ -6460,6 +6529,7 @@ impl LocalAccessContext<'_> {
     ) -> bool {
         retained_source_path
             && cached.source_hash == file.source_hash
+            && cached.cross_file_proofs == self.lookup.returned_callback_proof_digest()
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
             && (global_async_context_unchanged || cached.contribution.async_reads.is_empty())
@@ -6485,17 +6555,10 @@ impl LocalAccessContext<'_> {
             // read is proven there.
             let immediate_return =
                 file.ast
-                    .calls
-                    .iter()
-                    .filter(|nested| nested.span != call.span && call.callee.contains(nested.span))
+                    .calls_within(call.callee)
+                    .filter(|nested| nested.span != call.span)
                     .max_by_key(|nested| nested.span.end - nested.span.start)
-                    .filter(|_| {
-                        !file
-                            .ast
-                            .members
-                            .iter()
-                            .any(|member| member.span == call.callee)
-                    })
+                    .filter(|_| !self.lookup.is_member_span(file, call.callee))
                     .and_then(|factory| {
                         let symbol = self.lookup.callee_symbol(file, factory.callee)?;
                         self.contract_returns

@@ -61,6 +61,16 @@ contract-conformance:
 	node scripts/check-bundled-contracts.mjs
 	node scripts/generate-bundled-solid1-contract.mjs --check
 
+# `contracts` and `contracts-check` read real installed packages, and the
+# repository has no root package.json to install them from: they need the
+# exact versions the checked-in artifacts were generated against (solid-js
+# 1.9.14 aliased as solid-js-1x, solid-js and @solidjs/web 2.0.0-beta.31)
+# placed under node_modules by hand. CI cannot run them without adding an
+# install step for those pins, so the gate is local-only, run when the
+# artifacts are regenerated. What CI does verify: the generator's entrypoint
+# resolution fails loudly instead of truncating (unit-tested), the bundled
+# 1.x backend contract is regenerated and diffed by the `contracts` job, and
+# `make test-rust` compiles the generated export indexes.
 contracts:
 	cargo +$(RUST_TOOLCHAIN) run --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-contract-gen -- --package $(SOLID_1_PACKAGE) --dialect solid-js-1x --out rust/crates/solid-dialect/contracts/solid-js-1x.json --index-out rust/crates/solid-dialect/src/exports/solid_js_1x.rs
 	cargo +$(RUST_TOOLCHAIN) run --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-contract-gen -- --package $(SOLID_2_PACKAGE) --dialect solid-js --out rust/crates/solid-dialect/contracts/solid-js.json --index-out rust/crates/solid-dialect/src/exports/solid_js_2.rs

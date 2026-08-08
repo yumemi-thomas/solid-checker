@@ -157,6 +157,10 @@ impl Rule {
             ),
             Self::MissingEffectFunction => ("SC7001", "missing-effect-function", "error", false),
             Self::SyncNodeReceivedAsync => ("SC7002", "sync-node-received-async", "error", false),
+            // SC7003 and SC9003 each carry two rule names on purpose: the
+            // code identifies the defect (an invalid or unresolved target),
+            // while the name identifies the surface it was found on
+            // (`refresh` versus `affects`).
             Self::InvalidRefreshTarget => ("SC7003", "invalid-refresh-target", "error", false),
             Self::InvalidAffectsTarget => ("SC7003", "invalid-affects-target", "error", false),
             Self::AffectsKeysOnAccessor => ("SC7004", "affects-keys-on-accessor", "error", false),
@@ -192,9 +196,7 @@ impl Rule {
 /// facts the catalog already owns.
 #[must_use]
 pub fn manifest_json() -> String {
-    let mut out = String::from(
-        "{\n  \"docsBaseUrl\": \"https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules\",\n  \"rules\": [\n",
-    );
+    let mut out = format!("{{\n  \"docsBaseUrl\": \"{DOCS_BASE_URL}\",\n  \"rules\": [\n");
     for (index, rule) in Rule::ALL.into_iter().enumerate() {
         let metadata = rule.metadata();
         out.push_str(&format!(

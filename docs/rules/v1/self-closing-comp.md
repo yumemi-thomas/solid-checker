@@ -1,5 +1,7 @@
 # v1/self-closing-comp
 
+`SC8016` · **warning** · violation
+
 Enforces self-closing syntax for elements without children.
 
 ## Options

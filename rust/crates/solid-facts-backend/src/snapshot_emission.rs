@@ -388,7 +388,10 @@ mod tests {
         assert!(text.contains("destructuring component props"));
         assert!(text.contains("Keep the props object intact"));
         assert!(text.contains("docs/rules/component-props-destructure.md"));
-        assert!(text.contains("Finished in 295ms on 1 files with 34 rules using"));
+        assert!(text.contains(&format!(
+            "Finished in 295ms on 1 files with {} rules using",
+            solid_facts_backend::dialect::default_dialect().rule_count
+        )));
         assert_eq!(rendered.exit_code, 1);
         remove_dir_all(directory).unwrap();
     }

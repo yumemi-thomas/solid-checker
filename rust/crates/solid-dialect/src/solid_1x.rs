@@ -115,10 +115,11 @@ impl Dialect for Solid1x {
 
     /// The 1.x dom-expressions `reservedNameSpaces` (`class`, `on`,
     /// `oncapture`, `style`, `use`, `prop`, `attr`, `bool`) plus the XML
-    /// prefixes the compiler passes through (`xmlns`, `xlink`). `class:` and
-    /// `style:` are recognized — the compiler binds them per-name — even
-    /// though `no-unknown-namespaces` still steers authors toward the plain
-    /// props, exactly as upstream's rule does.
+    /// prefixes the compiler maps (`xmlns`, `xlink`, `xml` — dom-expressions
+    /// 0.40's namespace table, so `xml:lang` and `xml:space` stay legal SVG).
+    /// `class:` and `style:` are recognized — the compiler binds them
+    /// per-name — even though `no-unknown-namespaces` still steers authors
+    /// toward the plain props, exactly as upstream's rule does.
     fn jsx_attribute_namespaces(&self) -> &'static [&'static str] {
         &[
             "class",
@@ -131,11 +132,13 @@ impl Dialect for Solid1x {
             "bool",
             "xmlns",
             "xlink",
+            "xml",
         ]
     }
 
     fn primitive(&self, name: &str) -> Option<Primitive> {
-        lookup(TABLE, name).or_else(|| lookup(ALIASES, name))
+        static INDEX: crate::NameIndex = crate::NameIndex::new();
+        lookup(&INDEX, &[TABLE, ALIASES], name)
     }
 
     fn name_of(&self, primitive: Primitive) -> Option<&'static str> {
@@ -222,9 +225,16 @@ impl Dialect for Solid1x {
     /// `docs/solid-1x-api-surface.md` records `Errored` as a false positive,
     /// present only as the `"errored"` member of `createResource`'s state
     /// union.
+    ///
+    /// `SuspenseList` is deliberately absent. In the published 1.9.14 runtime
+    /// only `Suspense` provides a `SuspenseContext`; `SuspenseList` registers
+    /// a `SuspenseListContext` that coordinates the *reveal order* of child
+    /// `Suspense` boundaries and bounds nothing itself. A pending read beneath
+    /// a `SuspenseList` with no `Suspense` between them escapes to the nearest
+    /// outer `Suspense`, exactly as if the list were not there.
     fn boundary_kind(&self, tag: &str) -> Option<Boundary> {
         match tag {
-            "Suspense" | "SuspenseList" => Some(Boundary::Async),
+            "Suspense" => Some(Boundary::Async),
             "ErrorBoundary" => Some(Boundary::Error),
             _ => None,
         }
@@ -273,8 +283,9 @@ impl Dialect for Solid1x {
             Primitive::CreateReaction => &[(0, CallbackOwner::Leaf)],
             // The flat package-contract form records the two-argument
             // fetcher. `callback_owner_at` supplies both overloads and the
-            // tracked source's created owner.
-            Primitive::CreateResource => &[(1, CallbackOwner::None)],
+            // tracked source's created owner; see it for why the fetcher's
+            // owner is Conditional rather than None.
+            Primitive::CreateResource => &[(1, CallbackOwner::Conditional)],
             Primitive::MapArray | Primitive::IndexArray => &[(1, CallbackOwner::Creates)],
             Primitive::ModifyMutable => &[(1, CallbackOwner::Inherits)],
             Primitive::Untrack
@@ -288,6 +299,23 @@ impl Dialect for Solid1x {
         }
     }
 
+    /// `createResource`'s fetcher owner depends on which path invokes it,
+    /// which is why both overloads answer [`CallbackOwner::Conditional`]
+    /// rather than [`CallbackOwner::None`]. The published 1.9.14 runtime has
+    /// three invocation paths:
+    ///
+    /// - **Sourced** `createResource(source, fetcher)` calls `load` from
+    ///   inside the resource's internal `createComputed(() => load(false))`,
+    ///   so the fetcher runs under that computation's owner.
+    /// - **Unsourced** `createResource(fetcher)` runs its initial `load(false)`
+    ///   synchronously during the `createResource` call itself, under
+    ///   whatever owner the caller has.
+    /// - **`refetch()`** may be called from any site — an event handler, a
+    ///   timeout — and there `load` runs with no owner at all.
+    ///
+    /// So the fetcher usually runs owned and sometimes does not; only a
+    /// call-site proof (this is the initial load, not a refetch) could
+    /// sharpen the answer, and this table cannot carry one.
     fn callback_owner_at(
         &self,
         primitive: Primitive,
@@ -296,9 +324,9 @@ impl Dialect for Solid1x {
     ) -> Option<CallbackOwner> {
         if primitive == Primitive::CreateResource {
             return match (argument_count, argument) {
-                (1, 0) => Some(CallbackOwner::None),
+                (1, 0) => Some(CallbackOwner::Conditional),
                 (2.., 0) => Some(CallbackOwner::Creates),
-                (2.., 1) => Some(CallbackOwner::None),
+                (2.., 1) => Some(CallbackOwner::Conditional),
                 _ => None,
             };
         }
@@ -330,9 +358,16 @@ impl Dialect for Solid1x {
         match primitive {
             // Keyed <Show>/<Match> hand the callback the raw value; unkeyed
             // hand it an accessor. Both overloads are in flow.d.ts.
+            //
+            // `keyed` is a *boolean* prop in 1.x — the key-function form is
+            // 2.0's — so `keyed={expr}` is a flag whose truthiness picks the
+            // overload at runtime: truthy hands the callback the raw value,
+            // falsy an accessor. A static table cannot prove which, and
+            // claiming an accessor for a raw value would fabricate a source,
+            // so the expression form claims nothing.
             Primitive::Show | Primitive::Match => match key {
-                crate::KeyForm::Keyed => &[],
-                _ => &[0],
+                crate::KeyForm::Keyed | crate::KeyForm::CustomKey => &[],
+                crate::KeyForm::Unkeyed | crate::KeyForm::Absent => &[0],
             },
             Primitive::For => &[1],
             Primitive::Index => &[0],
@@ -375,6 +410,16 @@ impl Dialect for Solid1x {
     /// `createComputed`, `createDeferred` and `createSelector` are here and
     /// were in no list before: 2.0 has none of them, so nothing 2.0-shaped
     /// could have had an opinion.
+    ///
+    /// `on(deps, fn, options?)` takes `{ defer }` at index 2. The slot is
+    /// modelled because it is where the options are; the `defer` key itself
+    /// is deliberately unmodelled. The engine's only options consumer today
+    /// is sync-option detection, which every 1.x primitive opts out of via
+    /// `supports_sync_option`, and `defer` is not a sync option — it makes
+    /// the runtime skip `fn` until deps first *change*. Modelling that skip
+    /// (the callback is dormant until a dependency writes) would need engine
+    /// machinery for first-run reachability that does not exist yet; future
+    /// work, not a table entry.
     fn options_argument(&self, primitive: Primitive) -> Option<usize> {
         match primitive {
             Primitive::CreateSignal
@@ -385,7 +430,8 @@ impl Dialect for Solid1x {
             | Primitive::CreateEffect
             | Primitive::CreateRenderEffect
             | Primitive::CreateComputed
-            | Primitive::CreateSelector => Some(2),
+            | Primitive::CreateSelector
+            | Primitive::On => Some(2),
             _ => None,
         }
     }
@@ -426,6 +472,13 @@ impl Dialect for Solid1x {
             Primitive::CreateRoot
             | Primitive::Untrack
             | Primitive::Batch
+            // Timing caveat: with transitions enabled the 1.9 runtime invokes
+            // startTransition's callback in a Promise.resolve().then()
+            // microtask, not synchronously. `Inline` is still the right
+            // classification, because it describes tracking, and the runtime
+            // restores the captured Listener around the callback — reads
+            // inside it subscribe exactly as at the call site, and it never
+            // re-runs.
             | Primitive::StartTransition
             | Primitive::From
             | Primitive::Hydrate
@@ -487,6 +540,10 @@ impl Dialect for Solid1x {
     ) -> Option<Execution> {
         match (primitive, result_slot, argument, argument_count) {
             (Primitive::CreateReaction, None, 0, 1..) => Some(Execution::Tracked),
+            // The transition starter shares startTransition's timing caveat:
+            // the 1.9 runtime may invoke it in a Promise.resolve().then()
+            // microtask, but it restores the captured Listener, so
+            // tracking-wise it is the call site's scope — Inline.
             (Primitive::UseTransition, Some(1), 0, 1..) => Some(Execution::Inline),
             _ => None,
         }
@@ -547,9 +604,9 @@ impl Dialect for Solid1x {
     /// `Suspense`, not `Loading`; `ErrorBoundary`, not `Errored`. Source:
     /// `docs/solid-1x-api-surface.md`, the control-flow components.
     ///
-    /// `SuspenseList` also opens an async boundary, so this is not a total
-    /// inverse of [`Solid1x::boundary_kind`] -- it names the one to *suggest*,
-    /// and suggesting `SuspenseList` for a single pending read would be wrong.
+    /// A total inverse of [`Solid1x::boundary_kind`]: `SuspenseList` is in
+    /// neither, because it coordinates child `Suspense` boundaries' reveal
+    /// order without providing a `SuspenseContext` of its own.
     fn boundary_name(&self, boundary: Boundary) -> &'static str {
         match boundary {
             Boundary::Async => "Suspense",
@@ -598,6 +655,12 @@ impl Dialect for Solid1x {
             | Primitive::CreateDeferred
             | Primitive::CreateDynamic
             | Primitive::CreateSelector
+            // createReaction allocates a computation the moment it is called
+            // (1.9.14 builds one with `createComputation` and reuses it for
+            // every `track`), so like createEffect it needs an owner to
+            // dispose it -- one created in a leaf or cleanup scope leaks.
+            // Its `creates_directive_owner` row records the same obligation.
+            | Primitive::CreateReaction
             | Primitive::CreateRoot
             | Primitive::MapArray
             | Primitive::IndexArray
@@ -868,10 +931,46 @@ mod tests {
     }
 
     #[test]
-    fn suspense_list_is_an_async_boundary_too() {
-        // SuspenseList coordinates Suspense boundaries; a pending read beneath
-        // one is still bounded.
-        assert_eq!(Solid1x.boundary_kind("SuspenseList"), Some(Boundary::Async));
+    fn suspense_list_is_not_an_async_boundary() {
+        // SuspenseList only coordinates the reveal order of child Suspense
+        // boundaries -- the 1.9.14 runtime gives it no SuspenseContext, so a
+        // pending read beneath one (with no Suspense in between) is NOT
+        // bounded by it. The name stays in the vocabulary as a component; it
+        // just opens no boundary.
+        assert_eq!(Solid1x.boundary_kind("SuspenseList"), None);
+        assert_eq!(
+            Solid1x.primitive("SuspenseList"),
+            Some(Primitive::SuspenseList)
+        );
+    }
+
+    #[test]
+    fn keyed_is_a_boolean_prop_so_the_expression_form_claims_no_accessor() {
+        for primitive in [Primitive::Show, Primitive::Match] {
+            // Unkeyed (or absent) hands the children callback an accessor.
+            assert_eq!(
+                Solid1x.children_accessor_parameters(primitive, crate::KeyForm::Absent),
+                &[0]
+            );
+            assert_eq!(
+                Solid1x.children_accessor_parameters(primitive, crate::KeyForm::Unkeyed),
+                &[0]
+            );
+            // Keyed hands it the raw value.
+            assert!(
+                Solid1x
+                    .children_accessor_parameters(primitive, crate::KeyForm::Keyed)
+                    .is_empty()
+            );
+            // `keyed={expr}` is a boolean flag in 1.x, not 2.0's key
+            // function: truthy picks the raw-value overload, so claiming an
+            // accessor here would fabricate a source over a raw value.
+            assert!(
+                Solid1x
+                    .children_accessor_parameters(primitive, crate::KeyForm::CustomKey)
+                    .is_empty()
+            );
+        }
     }
 
     #[test]

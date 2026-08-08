@@ -1112,8 +1112,16 @@ fn the_dialect_pair_reports_different_findings_from_identical_sources() {
     }
 
     // The headline arity difference: `createEffect(() => ...)` is the 1.x
-    // signature, so only 2.0 reports the one-argument call (byte 1197); both
-    // report `createEffect(undefined)` (byte 1541).
+    // signature, so only 2.0 reports the one-argument call; both report
+    // `createEffect(undefined)`.
+    let source =
+        std::fs::read_to_string(fixtures.join("dialect-solid-1x").join("App.tsx")).unwrap();
+    let one_argument_call = source
+        .find("createEffect(() => {\n    reader()")
+        .expect("one-argument createEffect marker") as u64;
+    let undefined_argument_call = source
+        .find("createEffect(undefined)")
+        .expect("createEffect(undefined) marker") as u64;
     let sc7001 = |findings: &[(String, String, u64)]| {
         findings
             .iter()
@@ -1121,8 +1129,11 @@ fn the_dialect_pair_reports_different_findings_from_identical_sources() {
             .map(|(_, _, byte)| *byte)
             .collect::<Vec<_>>()
     };
-    assert_eq!(sc7001(&one), vec![1541]);
-    assert_eq!(sc7001(&two), vec![1197, 1541]);
+    assert_eq!(sc7001(&one), vec![undefined_argument_call]);
+    assert_eq!(
+        sc7001(&two),
+        vec![one_argument_call, undefined_argument_call]
+    );
 
     // createReaction is a leaf owner only in 1.x: onCleanup inside its
     // callback is a 1.x finding and 2.0 silence.

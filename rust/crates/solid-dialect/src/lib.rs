@@ -186,9 +186,13 @@ pub enum Primitive {
     /// [`Primitive::ErrorBoundary`], which is 1.x's spelling of the same role;
     /// [`Dialect::boundary_kind`] is where the two meet.
     Errored,
-    /// `lazy(() => import("./Comp"))`. The loader is called in place inside
-    /// the wrapper component, so it inherits that owner; its result is awaited
-    /// and memoised, so nothing in it subscribes.
+    /// `lazy(() => import("./Comp"))` — both dialects' vocabulary, with the
+    /// same shape and different timing. In 2.0 the loader is called in place
+    /// inside the wrapper component, so it inherits that owner; in 1.x the
+    /// loader is stored on the returned component and invoked only when that
+    /// component first renders (or its `preload` method is called). In both,
+    /// the result is awaited and memoised, so nothing in the loader
+    /// subscribes.
     Lazy,
     /// `createRevealOrder(fn, options?)`. Creates an owner and runs `fn` under
     /// it, coordinating the reveal timing of sibling loading boundaries.
@@ -366,11 +370,21 @@ pub trait Dialect: Sync {
     /// The exported name for a primitive in this dialect.
     fn name_of(&self, primitive: Primitive) -> Option<&'static str>;
 
-    /// Which argument positions of a call to this primitive hold callbacks.
+    /// The argument positions the legacy engine treats as the primitive's
+    /// *primary* callback slots — the places a rule looks when it needs "the"
+    /// effect or compute function of a call.
     ///
-    /// This is the difference ADR 0001 led with: 2.0's
-    /// `createEffect(compute, apply)` puts a callback at index 1, while 1.x's
-    /// `createEffect(fn, value?)` puts a *seed value* there.
+    /// Not a census of every argument that holds a callback: 2.0's
+    /// `createEffect(compute, apply)` answers `[1]` here — the slot the
+    /// missing-effect-function rule checks — while [`Dialect::callback_executions`]
+    /// records that the tracked compute sits at 0 and the deferred apply at 1.
+    /// A caller that wants to know where callbacks are and how they run must
+    /// use [`Dialect::callback_executions`] (or its call-shape-aware form,
+    /// [`Dialect::callback_execution_at`]), not this.
+    ///
+    /// The dialect split it exists for is still ADR 0001's: 1.x's
+    /// `createEffect(fn, value?)` answers `[0]`, because index 1 there is a
+    /// *seed value* and checking it would fire on every correct 1.x effect.
     fn callback_positions(&self, primitive: Primitive) -> &'static [usize];
 
     /// Whether this primitive explicitly clears tracking around its callback,
@@ -777,12 +791,33 @@ pub trait Dialect: Sync {
     }
 }
 
-/// Looks a name up in a `(name, primitive)` table.
-pub(crate) fn lookup(table: &[(&'static str, Primitive)], name: &str) -> Option<Primitive> {
-    table
-        .iter()
-        .find(|(candidate, _)| *candidate == name)
-        .map(|(_, primitive)| *primitive)
+/// A lazily built name → primitive index. One static per dialect.
+pub(crate) type NameIndex = std::sync::OnceLock<std::collections::HashMap<&'static str, Primitive>>;
+
+/// Looks a name up across `(name, primitive)` tables through a hash index
+/// built once on first use.
+///
+/// [`Dialect::primitive`] sits on hot engine paths — every call expression
+/// and import the engine classifies asks it — and a linear scan of a
+/// ~50-entry table there is pure overhead. The tables stay the source of
+/// truth (the tests iterate and cross-check them); the map is only the
+/// access path, so the semantics are exactly the scan's. Table order cannot
+/// matter: the sortedness tests hold each table free of duplicate names, so
+/// no entry can shadow another.
+pub(crate) fn lookup(
+    index: &'static NameIndex,
+    tables: &[&'static [(&'static str, Primitive)]],
+    name: &str,
+) -> Option<Primitive> {
+    index
+        .get_or_init(|| {
+            tables
+                .iter()
+                .flat_map(|table| table.iter().copied())
+                .collect()
+        })
+        .get(name)
+        .copied()
 }
 
 /// Reverse of [`lookup`].
@@ -814,10 +849,36 @@ mod tests {
     /// crate below `solid-facts-backend` cannot depend on it. The files are
     /// parsed with `serde_json`, a dev-dependency that exists for this.
     ///
-    /// Deliberately one-directional. The dialect may model a callback the
-    /// contract does not: 2.0's `createSignal(fn)` builds a computed, which is
-    /// a fact about the runtime and not something the contract's schema has a
-    /// column for. What it may not do is *contradict* the contract.
+    /// Names whose dialect-modelled callbacks are runtime facts the review
+    /// contract's flat schema cannot carry, exempted from the reverse
+    /// direction of the agreement test below. Every entry needs a reason:
+    ///
+    /// - 2.0 `createSignal`/`createStore`/`createOptimistic`/
+    ///   `createOptimisticStore`: the derived `createX(fn, …)` forms branch on
+    ///   `typeof first === "function"` at runtime; the contract describes the
+    ///   value form, which takes no callback.
+    /// - 1.x `on`: the dialect's `(0, Inline)` row is an engine keying — the
+    ///   returned adapter's invocation site decides the role (see
+    ///   `callback_executions`' comment) — not a package fact the review
+    ///   contract should record as `inline`.
+    fn contract_schema_exemptions(version: Version, name: &str) -> bool {
+        match version {
+            Version::V1 => name == "on",
+            Version::V2 => matches!(
+                name,
+                "createSignal" | "createStore" | "createOptimistic" | "createOptimisticStore"
+            ),
+        }
+    }
+
+    /// Two-directional since the contracts gained their missing rows. The
+    /// forward direction is the old one: a contract row the dialect
+    /// contradicts means one of them was edited alone. The reverse direction
+    /// closes the gap that let `effect`/`memo` sit in a contract with no
+    /// `callbacks` column while the dialect modelled both: a name the dialect
+    /// models callbacks for must carry those rows in some contract file of
+    /// its version, unless [`contract_schema_exemptions`] records why the
+    /// flat schema cannot express the fact.
     #[test]
     fn the_callback_executions_agree_with_the_bundled_contract() {
         let contracts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("contracts");
@@ -827,6 +888,12 @@ mod tests {
             (Version::V2, vec!["solid-js.json", "solidjs-web.json"]),
         ] {
             let dialect = version.dialect();
+            // name -> union of (parameter, execution) rows across the
+            // version's contract files, for the reverse direction: a name
+            // re-exported by a second entrypoint (2.0's `untrack`) need not
+            // repeat its rows there.
+            let mut contract_rows: std::collections::BTreeMap<String, Vec<(usize, Execution)>> =
+                std::collections::BTreeMap::new();
             for file in files {
                 let text = std::fs::read_to_string(contracts.join(file)).unwrap();
                 let contract: serde_json::Value = serde_json::from_str(&text).unwrap();
@@ -836,6 +903,7 @@ mod tests {
                         continue;
                     };
                     let modelled = dialect.callback_executions(primitive);
+                    contract_rows.entry(name.clone()).or_default();
                     for callback in entry["callbacks"].as_array().into_iter().flatten() {
                         let index =
                             usize::try_from(callback["parameter"].as_u64().unwrap()).unwrap();
@@ -850,10 +918,31 @@ mod tests {
                             "{file}: {name} argument {index} is {expected:?} in the contract, \
                              and the {version:?} dialect says {modelled:?}"
                         );
+                        contract_rows
+                            .get_mut(name.as_str())
+                            .unwrap()
+                            .push((index, expected));
                         checked += 1;
                     }
                 }
             }
+            let mut missing = Vec::new();
+            for (name, rows) in &contract_rows {
+                if contract_schema_exemptions(version, name) {
+                    continue;
+                }
+                let primitive = dialect.primitive(name).unwrap();
+                for entry in dialect.callback_executions(primitive) {
+                    if !rows.contains(entry) {
+                        missing.push(format!("{name} {entry:?}"));
+                    }
+                }
+            }
+            assert!(
+                missing.is_empty(),
+                "{version:?} dialect models callbacks its contract files do not carry \
+                 (add the rows, or record a schema exemption with a reason): {missing:?}"
+            );
         }
         // A silent zero here would make the assertion above unreachable and
         // this test a no-op, which is how the sidecar protocol check rotted.
@@ -937,13 +1026,22 @@ mod tests {
             Primitive::CreateOptimistic,
             Primitive::CreateOptimisticStore,
             Primitive::Dynamic,
+            // latest(fn) and isPending(fn) catch NotReadyError but do NOT
+            // clear tracking: reads inside them subscribe in the caller's
+            // scope, so classifying them as deferred would erase those read
+            // obligations.
+            Primitive::Latest,
+            Primitive::IsPending,
         ] {
             assert!(!two.runs_callback_deferred(primitive), "{primitive:?}");
         }
 
         // Solid 1.x batch is synchronous and startTransition restores the
         // captured Listener before invoking its callback. Neither explicitly
-        // clears tracking; createRoot does.
+        // clears tracking; createRoot does. (Timing caveat: the 1.9 runtime
+        // invokes the transition callback in a Promise.resolve().then()
+        // microtask, but tracking-wise it behaves like the call site, which
+        // is what this question asks.)
         let one = Version::V1.dialect();
         assert!(!one.runs_callback_deferred(Primitive::Batch));
         assert!(!one.runs_callback_deferred(Primitive::StartTransition));
@@ -1427,9 +1525,14 @@ mod tests {
             one.callback_execution_at(Primitive::CreateResource, 0, 1),
             Some(Execution::Deferred)
         );
+        // The fetcher's owner is Conditional in both overloads: the sourced
+        // form invokes it inside the resource's internal createComputed and
+        // the unsourced form's initial load runs synchronously under the
+        // caller's owner, but a later refetch() runs it from an arbitrary,
+        // ownerless site.
         assert_eq!(
             one.callback_owner_at(Primitive::CreateResource, 0, 1),
-            Some(CallbackOwner::None)
+            Some(CallbackOwner::Conditional)
         );
         assert!(one.reports_untracked_reads_at(Primitive::CreateResource, 0, 1));
         assert_eq!(
@@ -1444,6 +1547,10 @@ mod tests {
         assert_eq!(
             one.callback_execution_at(Primitive::CreateResource, 1, 2),
             Some(Execution::Deferred)
+        );
+        assert_eq!(
+            one.callback_owner_at(Primitive::CreateResource, 1, 2),
+            Some(CallbackOwner::Conditional)
         );
         assert!(one.reports_untracked_reads_at(Primitive::CreateResource, 1, 2));
 
@@ -1616,6 +1723,22 @@ mod tests {
         );
         // Unrestricted.
         assert_eq!(two.cleanup_rule(Primitive::For), CleanupRule::Never);
+
+        // createReaction allocates a computation the moment it is called, in
+        // both runtimes, so it carries the same leaf-scope disposal
+        // obligation as createEffect.
+        for version in [Version::V1, Version::V2] {
+            let dialect = version.dialect();
+            assert_eq!(
+                dialect.cleanup_rule(Primitive::CreateReaction),
+                CleanupRule::Always,
+                "createReaction needs disposal in {version:?}"
+            );
+            assert_eq!(
+                dialect.cleanup_rule(Primitive::CreateEffect),
+                CleanupRule::Always
+            );
+        }
     }
 
     #[test]

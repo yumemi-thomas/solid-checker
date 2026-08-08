@@ -655,14 +655,20 @@ fn contract_files(
 
 pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
     let started = Instant::now();
+    // Resolved exactly once and threaded through every use -- the socket
+    // hash, the spawned daemon's --dialect, the emission. Detection reads
+    // the filesystem, so resolving again later could answer differently (an
+    // `npm install` finishing between the calls) and split the client and
+    // its daemon across two dialects.
+    let dialect = resolve_dialect(request)?;
     let socket = socket_path(
         &request.project_id,
         &request.typefacts_executable,
-        resolve_dialect(request)?.id,
+        dialect.id,
     );
     let stream = match UnixStream::connect(&socket) {
         Ok(stream) => stream,
-        Err(_) => spawn_and_connect(request, &socket)?,
+        Err(_) => spawn_and_connect(request, &socket, dialect)?,
     };
     let payload = serde_json::to_vec(&CheckRequest {
         project_id: request.project_id.clone(),
@@ -694,7 +700,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         return Err("daemon response status does not match snapshot".into());
     }
     let emission = snapshot_emission::emit(
-        resolve_dialect(request)?,
+        dialect,
         &request.format,
         &request.project_id,
         &snapshot,
@@ -732,6 +738,7 @@ fn timing_value(header: &CheckHeader, elapsed: Duration, received_bytes: u64) ->
 fn spawn_and_connect(
     request: &Request,
     socket: &std::path::Path,
+    dialect: &'static solid_facts_backend::dialect::Dialect,
 ) -> Result<UnixStream, Box<dyn Error>> {
     let executable = std::env::current_exe()?;
     let mut command = Command::new(executable);
@@ -741,13 +748,13 @@ fn spawn_and_connect(
         .arg(&request.project_id)
         .arg("--typefacts")
         .arg(&request.typefacts_executable);
-    // The client hashed the resolved dialect into the socket path; the
+    // `check` hashed this same resolved dialect into the socket path; the
     // spawned daemon must resolve identically. Detection can flip between
     // the client's hash and daemon startup (an `npm install` finishing, a
     // package.json edit), and a daemon that re-detects then binds a socket
-    // the client never connects to — so the resolved id is always
-    // forwarded, never re-derived.
-    command.arg("--dialect").arg(resolve_dialect(request)?.id);
+    // the client never connects to — so the value `check` resolved once is
+    // passed in and forwarded, never re-derived.
+    command.arg("--dialect").arg(dialect.id);
     command
         .stdin(Stdio::null())
         .stdout(Stdio::null())

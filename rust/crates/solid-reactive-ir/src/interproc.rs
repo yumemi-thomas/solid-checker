@@ -186,7 +186,7 @@ fn discover_typed_accessors(
             })
             .and_then(|entity| entity.type_descriptor.as_ref());
         let Some(descriptor) =
-            descriptor.filter(|descriptor| go_solid_accessor_descriptor(descriptor))
+            descriptor.filter(|descriptor| go_solid_accessor_descriptor(descriptor, dialect))
         else {
             continue;
         };
@@ -1359,7 +1359,11 @@ fn direct_reference_contributions(
                     });
             if let Some((primitive, returned)) = factory_return {
                 let contract_location = Location {
-                    path: format!("bundled://solid-js.json#{primitive}").into(),
+                    path: format!(
+                        "bundled://{}#{primitive}",
+                        lookup.dialect.bundled_contract_label()
+                    )
+                    .into(),
                     start_byte: 0,
                     end_byte: 0,
                 };
@@ -1901,7 +1905,8 @@ fn interprocedural_reads(
                                                 returned,
                                                 Location {
                                                     path: format!(
-                                                        "bundled://solid-js.json#{primitive}"
+                                                        "bundled://{}#{primitive}",
+                                                        lookup.dialect.bundled_contract_label()
                                                     )
                                                     .into(),
                                                     start_byte: 0,

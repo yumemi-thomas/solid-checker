@@ -259,18 +259,19 @@ fn returned_factory_callback_execution_role(
     lookup: &SemanticLookup<'_>,
     classifying: &mut HashSet<(String, Span)>,
 ) -> Option<ExecutionRole> {
+    // Every proof this composition needs starts from
+    // `callback_requires_return_invocation`, which Solid 2.0 leaves at its
+    // `false` default for every primitive.
+    if !lookup.models_returned_callbacks() {
+        return None;
+    }
     file.ast
         .arguments_containing(span)
         .find_map(|(factory_call, index)| {
             if !direct_callback_contains(file, factory_call.arguments[index].span, span) {
                 return None;
             }
-            let call_index = file
-                .ast
-                .calls
-                .iter()
-                .position(|candidate| candidate.span == factory_call.span)?;
-            let primitive = known_primitive(&lookup.primitives(file).calls[call_index])?;
+            let primitive = lookup.primitive_at_call(file, factory_call.span)?;
             if !lookup
                 .dialect
                 .callback_requires_return_invocation(primitive, index)

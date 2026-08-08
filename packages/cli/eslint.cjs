@@ -77,7 +77,20 @@ function loadSnapshot(context) {
   const contracts = Array.isArray(config.contracts) ? config.contracts : [];
   const dialect = config.dialect ?? null;
   const key = JSON.stringify({ command, commandArgs, project, contracts, dialect });
-  if (snapshotCache.has(key)) return snapshotCache.get(key);
+  if (snapshotCache.has(key)) {
+    const cached = snapshotCache.get(key);
+    if (cached instanceof Error) throw cached;
+    return cached;
+  }
+
+  // Failures share the snapshot cache and its process lifetime: a persistent
+  // editor session with a broken binary reports the cached error to every
+  // rule of every lint pass instead of re-spawning the checker each time.
+  const failure = message => {
+    const error = new Error(message);
+    snapshotCache.set(key, error);
+    return error;
+  };
 
   const args = [
     ...commandArgs,
@@ -94,10 +107,10 @@ function loadSnapshot(context) {
     env: process.env
   });
   if (result.error) {
-    throw new Error(`solid-checker adapter could not start analysis: ${result.error.message}`);
+    throw failure(`solid-checker adapter could not start analysis: ${result.error.message}`);
   }
   if (result.status !== 0) {
-    throw new Error(
+    throw failure(
       `solid-checker adapter analysis failed (${result.status}): ${result.stderr.trim()}`
     );
   }
@@ -105,7 +118,7 @@ function loadSnapshot(context) {
   try {
     snapshot = JSON.parse(result.stdout);
   } catch (error) {
-    throw new Error(`solid-checker adapter received invalid JSON: ${error.message}`);
+    throw failure(`solid-checker adapter received invalid JSON: ${error.message}`);
   }
   snapshotCache.set(key, snapshot);
   return snapshot;
@@ -311,12 +324,20 @@ plugin.configs.recommended = {
 for (const [dialect, catalog] of Object.entries(manifests)) {
   plugin.configs[dialect] = {
     plugins: { "solid-checker": plugin },
-    rules: Object.fromEntries(
-      catalog.rules.map(entry => [
-        `solid-checker/${entry.name}`,
-        entry.severity === "error" ? "error" : "warn"
-      ])
-    )
+    rules: {
+      // The certification rule reports every finding the per-rule rules
+      // already own, so a dialect config placed after `recommended` turns it
+      // off rather than double-reporting. Flat config resolves per-rule with
+      // the later entry winning; list `recommended` after a dialect config
+      // and certification comes back, duplicates included.
+      "solid-checker/certification": "off",
+      ...Object.fromEntries(
+        catalog.rules.map(entry => [
+          `solid-checker/${entry.name}`,
+          entry.severity === "error" ? "error" : "warn"
+        ])
+      )
+    }
   };
 }
 

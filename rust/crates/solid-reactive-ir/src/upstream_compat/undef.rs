@@ -36,7 +36,7 @@ use solid_facts::FileFacts;
 use solid_facts::ast::ImportKind;
 use solid_facts::core::Span;
 
-use super::UpstreamCompatContext;
+use super::{UpstreamCompatContext, is_lowercase_led};
 use crate::{Fix, StaticViolation, TextEdit, location};
 
 /// Control-flow components upstream auto-imports from `"solid-js"` instead
@@ -110,7 +110,10 @@ pub(super) fn check_file(
             });
             continue;
         }
-        if is_dom_or_this(name) {
+        // Upstream's `isDOMElementName` plus its separate `this` guard:
+        // `this` also starts lowercase, so the one shared lowercase-led
+        // check covers both exemptions.
+        if is_lowercase_led(name) {
             continue;
         }
         if context.entities.at(path, element.name.span).is_some() {
@@ -133,13 +136,6 @@ pub(super) fn check_file(
     if !missing_auto_imports.is_empty() {
         report_missing_auto_imports(file, &missing_auto_imports, violations);
     }
-}
-
-/// Upstream's `isDOMElementName`: a lowercase-first tag name is a DOM
-/// intrinsic (`div`, `span`), never a component. `this` also starts
-/// lowercase, so the same check covers upstream's separate `this` guard.
-fn is_dom_or_this(name: &str) -> bool {
-    name.as_bytes().first().is_some_and(u8::is_ascii_lowercase)
 }
 
 /// Upstream's `formatList`: a sentence-cased, Oxford-comma-joined name list
@@ -252,10 +248,27 @@ fn auto_import_fix(
         return None;
     }
     // A default-only import (`import Default from "solid-js";`): add a
-    // named-imports clause before the module specifier.
-    let offset = source.find(" from ").unwrap_or(source.len());
+    // named-imports clause before the module specifier — that is, before the
+    // `from` keyword. When the keyword cannot be located (an unanticipated
+    // spelling), this reports without a fix rather than splice text at a
+    // guessed offset and emit a syntactically broken "safe" edit.
+    let offset = from_keyword_offset(source)?;
     let at = import.span.start + u32::try_from(offset).unwrap_or_default();
     Some(insert_fix(file, at, format!(", {{ {joined} }}")))
+}
+
+/// The byte offset in an import declaration's text at which a named-imports
+/// clause can be inserted: just before its `from` keyword. TypeScript does
+/// not require a space *after* the keyword (`import D from"solid-js";` is
+/// valid), so the match accepts whitespace or the module string's opening
+/// quote there; the space *before* the keyword is mandatory (it separates
+/// `from` from the default binding's name), so ` from` anchors the search.
+/// `None` when no such keyword is found.
+fn from_keyword_offset(source: &str) -> Option<usize> {
+    source.match_indices(" from").find_map(|(index, keyword)| {
+        let after = source[index + keyword.len()..].chars().next()?;
+        (after.is_whitespace() || matches!(after, '"' | '\'')).then_some(index)
+    })
 }
 
 fn insert_fix(file: &FileFacts, at: u32, new_text: String) -> Fix {
@@ -275,14 +288,33 @@ fn replace_fix(file: &FileFacts, span: Span, new_text: String) -> Fix {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_names, is_dom_or_this, leading_insertion_point};
+    use super::{format_names, from_keyword_offset, is_lowercase_led, leading_insertion_point};
 
     #[test]
     fn dom_and_this_are_lowercase_first() {
-        assert!(is_dom_or_this("div"));
-        assert!(is_dom_or_this("this"));
-        assert!(!is_dom_or_this("Show"));
-        assert!(!is_dom_or_this("MyComponent"));
+        // The shared helper carries both of upstream's exemptions: DOM
+        // intrinsics and `this` are lowercase-led, components are not.
+        assert!(is_lowercase_led("div"));
+        assert!(is_lowercase_led("this"));
+        assert!(!is_lowercase_led("Show"));
+        assert!(!is_lowercase_led("MyComponent"));
+    }
+
+    #[test]
+    fn from_keyword_is_found_with_and_without_a_following_space() {
+        assert_eq!(from_keyword_offset("import D from \"solid-js\";"), Some(8));
+        // TypeScript accepts no space between `from` and the module string;
+        // guessing `source.len()` here used to emit a broken fix.
+        assert_eq!(from_keyword_offset("import D from\"solid-js\";"), Some(8));
+        assert_eq!(from_keyword_offset("import D from'solid-js';"), Some(8));
+    }
+
+    #[test]
+    fn no_from_keyword_means_no_fix_offset() {
+        // No ` from` at all, or one not followed by whitespace/quote —
+        // `auto_import_fix` reports without a fix in both cases.
+        assert_eq!(from_keyword_offset("import \"solid-js\";"), None);
+        assert_eq!(from_keyword_offset("import D fromage;"), None);
     }
 
     #[test]

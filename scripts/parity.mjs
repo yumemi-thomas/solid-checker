@@ -184,7 +184,9 @@ for (const { rule, options, members } of configured.values()) {
 const fired = new Map();
 for (const output of runs) {
   for (const finding of JSON.parse(output).findings ?? []) {
-    const id = finding.primaryLocation.path.split("/").pop().replace(/\.tsx$/, "");
+    // Separator-agnostic: the checker reports whichever separator the host
+    // OS uses, and a Windows path never splits on "/".
+    const id = finding.primaryLocation.path.split(/[\\/]/).pop().replace(/\.tsx$/, "");
     if (!fired.has(id)) fired.set(id, new Set());
     fired.get(id).add(finding.rule);
   }
@@ -222,11 +224,14 @@ if (update) {
 
 const appeared = Object.keys(observed).filter((id) => !(id in declared));
 const resolved = Object.keys(declared).filter((id) => !(id in observed));
+// The full status vocabulary; the README's table documents each. A retired
+// status (like `unsupported-option`, emptied when the option-bearing rules
+// grew upstream's options surface) is removed here so it cannot quietly
+// come back.
 const allowedStatuses = new Set([
   "evidence-backed",
   "fact-unavailable",
   "policy",
-  "unsupported-option",
 ]);
 const untriaged = Object.entries(observed).filter(
   ([, entry]) => !allowedStatuses.has(entry.status) || !entry.reason,

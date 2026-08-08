@@ -214,10 +214,14 @@ Two consequences worth knowing before switching a project over:
   upstream guessed it reports less. `v1/reactive-source-uncaptured` is the one
   rule that exists to say "the analyzer could not follow this", which is why it
   is the only `uncertifiable` member of the set.
-- **One defect, one rule.** No defect is reported by two rules of the set. An
-  untracked read is `v1/strict-read-untracked` and never also
-  `v1/uncalled-accessor`; a read after an `await` is
-  `v1/reactive-read-after-await` and not also an untracked read.
+- **One defect class, one rule.** Each rule owns a distinct defect, so a
+  single defect is never reported under two names: an untracked read is
+  `v1/strict-read-untracked` and never also `v1/uncalled-accessor`; a read
+  after an `await` is `v1/reactive-read-after-await` and not also an untracked
+  read. A region that contains several defects still collects a finding per
+  defect — an `async` callback in a tracked scope is
+  `v1/no-async-tracked-scope`, and a reactive read after its `await` is a
+  separate `v1/reactive-read-after-await` finding.
 
 ### The other nineteen
 

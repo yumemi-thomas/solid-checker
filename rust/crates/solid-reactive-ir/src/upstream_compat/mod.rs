@@ -285,27 +285,53 @@ fn static_string_expression_inner(
 }
 
 /// Joins a `"a" + "b" + ...` chain of quoted literals into their concatenated
-/// value, or `None` if any `+`-separated part is not itself a quoted literal
-/// (including the degenerate case of no `+` at all).
+/// value, or `None` unless the whole expression is quoted literals joined by
+/// `+` (including the degenerate case of a single literal with no `+` at
+/// all). The chain is read literal-by-literal rather than split on `+`, so a
+/// `+` *inside* a literal (`'javascript:' + 'a+b'`) folds correctly instead
+/// of splitting the literal apart.
 pub(super) fn concat_plus_joined_literal(source: &str) -> Option<String> {
-    let parts = source.split('+').map(str::trim).collect::<Vec<_>>();
-    if parts.len() <= 1 {
-        return None;
+    let mut rest = source.trim_start();
+    let mut value = String::new();
+    let mut parts = 0_usize;
+    loop {
+        // The next token must be one whole quoted literal —
+        // [`decode_string_literal`] carries the syntax validation and escape
+        // decoding. Backtick parts are refused: `a` + `b` folds fine at
+        // runtime, but upstream's folder never joins templates.
+        if !rest.starts_with(['\'', '"']) {
+            return None;
+        }
+        let end = quoted_literal_end(rest)?;
+        value.push_str(&decode_string_literal(&rest[..end])?);
+        parts += 1;
+        rest = rest[end..].trim_start();
+        if rest.is_empty() {
+            break;
+        }
+        rest = rest.strip_prefix('+')?.trim_start();
     }
-    parts
-        .into_iter()
-        .map(|part| {
-            // Each part must be one whole quoted literal on its own —
-            // [`decode_string_literal`] carries the length guard (a lone
-            // quote character is not a literal), syntax validation, and
-            // escape decoding. Backtick parts are refused: `a` + `b` folds
-            // fine at runtime, but upstream's folder never joins templates.
-            part.starts_with(['\'', '"'])
-                .then(|| decode_string_literal(part))
-                .flatten()
-        })
-        .collect::<Option<Vec<_>>>()
-        .map(|parts| parts.concat())
+    (parts > 1).then_some(value)
+}
+
+/// The byte length of the quoted string literal `source` starts with — the
+/// index one past its closing quote — honouring backslash escapes. Bytes are
+/// compared directly: the quote and backslash are ASCII, so a multi-byte
+/// character inside the literal can never be mistaken for either.
+fn quoted_literal_end(source: &str) -> Option<usize> {
+    let mut bytes = source.bytes().enumerate();
+    let (_, quote) = bytes.next()?;
+    let mut escaped = false;
+    for (index, byte) in bytes {
+        if escaped {
+            escaped = false;
+        } else if byte == b'\\' {
+            escaped = true;
+        } else if byte == quote {
+            return Some(index + 1);
+        }
+    }
+    None
 }
 
 /// The literal text of a quoted string span, unwrapping one optional
@@ -426,6 +452,48 @@ fn read_hex_escape(
         value = value.checked_mul(16)? + characters.next()?.to_digit(16)?;
     }
     Some(value)
+}
+
+/// Widens a deletion span leftward over the whitespace that separated the
+/// deleted text from what precedes it, so removing a JSX attribute leaves
+/// `<div id="a"/>` rather than `<div  id="a"/>`. Purely byte-wise and ASCII:
+/// a multi-byte character can never end in an ASCII whitespace byte, so the
+/// walk cannot stop inside one.
+pub(super) fn deletion_with_leading_whitespace(source: &str, span: Span) -> Span {
+    let bytes = source.as_bytes();
+    let mut start = span.start as usize;
+    if start > bytes.len() {
+        return span;
+    }
+    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
+        start -= 1;
+    }
+    Span::new(u32::try_from(start).unwrap_or(span.start), span.end)
+}
+
+/// Widens a deletion span leftward over the `,` separator (and the
+/// whitespace on either side of it) that joined the deleted text to the
+/// previous list item, so removing a call's last argument leaves `f(a)`
+/// rather than `f(a, )`. When what precedes is not a comma — a comment, an
+/// opening parenthesis — the span is returned unchanged rather than guess at
+/// a byte that is not the separator.
+pub(super) fn deletion_with_leading_comma(source: &str, span: Span) -> Span {
+    let bytes = source.as_bytes();
+    let mut start = span.start as usize;
+    if start > bytes.len() {
+        return span;
+    }
+    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
+        start -= 1;
+    }
+    if start == 0 || bytes[start - 1] != b',' {
+        return span;
+    }
+    start -= 1;
+    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
+        start -= 1;
+    }
+    Span::new(u32::try_from(start).unwrap_or(span.start), span.end)
 }
 
 pub(super) fn fix_replace(
@@ -566,8 +634,19 @@ pub(super) fn check_file(
 #[cfg(test)]
 mod tests {
     use super::{
-        concat_plus_joined_literal, decode_string_literal, entire_delimited, strip_string_literal,
+        concat_plus_joined_literal, decode_string_literal, deletion_with_leading_comma,
+        deletion_with_leading_whitespace, entire_delimited, strip_string_literal,
     };
+    use solid_facts::core::Span;
+
+    /// What a deletion fix's output would be: the span's text removed.
+    fn delete(source: &str, span: Span) -> String {
+        format!(
+            "{}{}",
+            &source[..span.start as usize],
+            &source[span.end as usize..]
+        )
+    }
 
     #[test]
     fn strips_quotes_from_string_literals() {
@@ -596,6 +675,69 @@ mod tests {
         assert_eq!(
             concat_plus_joined_literal("'java' + 'script:x'"),
             Some("javascript:x".to_string())
+        );
+    }
+
+    #[test]
+    fn joins_literals_that_themselves_contain_a_plus() {
+        // Split-on-`+` would shear `'a+b'` in half; the literal-by-literal
+        // read folds it whole.
+        assert_eq!(
+            concat_plus_joined_literal("'javascript:' + 'a+b'"),
+            Some("javascript:a+b".to_string())
+        );
+        assert_eq!(
+            concat_plus_joined_literal("'+' + '+'"),
+            Some("++".to_string())
+        );
+    }
+
+    #[test]
+    fn refuses_chains_with_a_non_plus_joiner_or_trailing_operand() {
+        assert_eq!(concat_plus_joined_literal("'a' 'b'"), None);
+        assert_eq!(concat_plus_joined_literal("'a' + 'b' +"), None);
+        assert_eq!(concat_plus_joined_literal("'a' === x ? f : 'b'"), None);
+    }
+
+    #[test]
+    fn argument_deletion_swallows_the_separating_comma() {
+        let source = "createEffect(fn, [a])";
+        let span = Span::new(17, 20); // `[a]`
+        assert_eq!(
+            delete(source, deletion_with_leading_comma(source, span)),
+            "createEffect(fn)"
+        );
+        let spaced = "createEffect(fn ,  [a])";
+        let span = Span::new(19, 22); // `[a]`
+        assert_eq!(
+            delete(spaced, deletion_with_leading_comma(spaced, span)),
+            "createEffect(fn)"
+        );
+    }
+
+    #[test]
+    fn comma_swallowing_declines_when_no_comma_precedes() {
+        // A comment (or anything else) between the comma and the deleted
+        // text: the span comes back unchanged rather than eat a byte that
+        // is not the separator.
+        let source = "createEffect(fn, /* deps */ [a])";
+        let span = Span::new(28, 31); // `[a]`
+        assert_eq!(deletion_with_leading_comma(source, span), span);
+    }
+
+    #[test]
+    fn attribute_deletion_swallows_the_separating_whitespace() {
+        let source = "<div key={x} />";
+        let span = Span::new(5, 12); // `key={x}`
+        assert_eq!(
+            delete(source, deletion_with_leading_whitespace(source, span)),
+            "<div />"
+        );
+        let multiline = "<div\n  key={x}\n/>";
+        let span = Span::new(7, 14); // `key={x}`
+        assert_eq!(
+            delete(multiline, deletion_with_leading_whitespace(multiline, span)),
+            "<div\n/>"
         );
     }
 

@@ -481,6 +481,49 @@ pub(super) fn references_for_sources<'a>(
     references
 }
 
+/// The proven-source symbol at each exact TypeScript reference location, as
+/// `path -> byte range -> source symbol`.
+///
+/// Built straight from the symbol table rather than projected out of
+/// [`references_for_sources`]. That map exists to give the interprocedural pass
+/// ordered, de-duplicated per-symbol reference lists; this one needs neither,
+/// and reaching it through those lists costs a `Location` clone plus a sort and
+/// a dedup per source symbol, and then a fresh `String` per reference to
+/// re-key by path.
+pub(super) fn source_reference_locations<'a>(
+    table: &TypeScriptTable,
+    symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
+    sources: impl Iterator<Item = &'a SymbolId>,
+) -> super::SourceReferenceLocations {
+    let mut index = super::SourceReferenceLocations::new();
+    let mut record = |root: &SymbolId, reference: &Location| {
+        let path = reference.path.as_ref();
+        if !index.contains_key(path) {
+            index.insert(path.to_owned(), HashMap::new());
+        }
+        index
+            .get_mut(path)
+            .expect("path inserted above")
+            .insert((reference.start_byte, reference.end_byte), root.clone());
+    };
+    for root in sources {
+        if let Some(members) = symbols_by_root.get(root.as_str()) {
+            for member in members {
+                if let Some(symbol) = table.symbol(member.as_str()) {
+                    for reference in symbol.references() {
+                        record(root, reference);
+                    }
+                }
+            }
+        } else if let Some(symbol) = table.symbol(root.as_str()) {
+            for reference in symbol.references() {
+                record(root, reference);
+            }
+        }
+    }
+    index
+}
+
 fn solid_primitive_declaration(declaration: &Declaration, dialect: &dyn Dialect) -> bool {
     // Bootstrap analysis of Solid's own implementation, where there is no
     // package import to establish provenance. Require an exact package path

@@ -104,9 +104,22 @@ fn resolved_solid_version(project: &Path) -> Option<solid_dialect::Version> {
         let Ok(encoded) = std::fs::read_to_string(&manifest) else {
             continue;
         };
-        let version = serde_json::from_str::<serde_json::Value>(&encoded)
+        // A manifest that parses to no version string -- broken JSON, or no
+        // "version" field -- is treated exactly like an unreadable one: the
+        // walk continues, because a broken stub (a half-written install, an
+        // empty placeholder) must not mask a real installation higher up.
+        let Some(version) = serde_json::from_str::<serde_json::Value>(&encoded)
             .ok()
-            .and_then(|manifest| manifest.get("version")?.as_str().map(str::to_owned))?;
+            .and_then(|manifest| Some(manifest.get("version")?.as_str()?.to_owned()))
+        else {
+            continue;
+        };
+        // A version string that names no released major ("workspace:*",
+        // "0.5.0", "3.0.0") stops the walk and answers `None` -- per
+        // `Version::for_solid_js`'s docs, refusing to classify is deliberate,
+        // and the caller falls back to the v2 default. This is the nearest
+        // `solid-js` the project would import; a resolvable-but-unclassifiable
+        // install is an answer, not an absence.
         return solid_dialect::Version::for_solid_js(&version);
     }
     None
@@ -180,6 +193,43 @@ mod tests {
         )
         .unwrap();
         assert_eq!(detect(&project).id, default_dialect().id);
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn a_broken_nearer_manifest_does_not_mask_an_installation_higher_up() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-dialect-broken-stub-{}",
+            std::process::id()
+        ));
+        let outer = root.join("node_modules/solid-js");
+        let inner = root.join("workspace/node_modules/solid-js");
+        std::fs::create_dir_all(&outer).unwrap();
+        std::fs::create_dir_all(&inner).unwrap();
+        std::fs::create_dir_all(root.join("workspace/src")).unwrap();
+        std::fs::write(
+            outer.join("package.json"),
+            r#"{"name":"solid-js","version":"1.9.14"}"#,
+        )
+        .unwrap();
+        let project = root.join("workspace/src/tsconfig.json");
+        std::fs::write(&project, "{}").unwrap();
+
+        // Unparseable JSON and a version-less manifest are both the walk
+        // continuing, exactly like an unreadable file.
+        std::fs::write(inner.join("package.json"), "{ not json").unwrap();
+        assert_eq!(detect(&project).id, "solid-v1");
+        std::fs::write(inner.join("package.json"), r#"{"name":"solid-js"}"#).unwrap();
+        assert_eq!(detect(&project).id, "solid-v1");
+
+        // A parseable version that classifies stops the walk at the nearest
+        // manifest, masking the outer 1.x -- resolution order, not breakage.
+        std::fs::write(
+            inner.join("package.json"),
+            r#"{"name":"solid-js","version":"2.0.0-beta.31"}"#,
+        )
+        .unwrap();
+        assert_eq!(detect(&project).id, "solid-v2");
         std::fs::remove_dir_all(&root).unwrap();
     }
 }
