@@ -108,8 +108,12 @@ try {
     );
   }
 
+  // Shared ubuntu-24.04 runners have measured this retained edit path at
+  // 48ms while the same revision is about 27ms locally. Keep the absolute
+  // invariant above that observed baseline; CodSpeed supplies the relative
+  // comparison that catches smaller PR regressions.
   const maximumIncremental = Number(
-    process.env.SOLID_CHECKER_MAX_INCREMENTAL_NS ?? 30_000_000
+    process.env.SOLID_CHECKER_MAX_INCREMENTAL_NS ?? 60_000_000
   );
   if (incremental.medianNs > maximumIncremental) {
     throw new Error(
