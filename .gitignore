@@ -10,6 +10,10 @@
 # Contract integration tests use small, hand-written packages as fixtures.
 !fixtures/reactive-ir/package-*/node_modules/
 !fixtures/reactive-ir/package-*/node_modules/**
+!fixtures/reactive-ir/upstream-divergences/node_modules/
+!fixtures/reactive-ir/upstream-divergences/node_modules/**
+!fixtures/reactive-ir/v1-reactivity/node_modules/
+!fixtures/reactive-ir/v1-reactivity/node_modules/**
 !fixtures/package-contracts/external-reexport/node_modules/
 !fixtures/package-contracts/external-reexport/node_modules/**
 /.pnpm-store/

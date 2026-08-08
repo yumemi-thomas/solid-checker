@@ -4,7 +4,6 @@ options:
   warmup-time: 0s
   min-rounds: 3
   max-rounds: 3
-  max-time: 15s
 
 benchmarks:
   - id: fresh-analysis-1000
