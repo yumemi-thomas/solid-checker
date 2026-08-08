@@ -50,7 +50,10 @@ jobs:
       # This analysis spans the Rust process and the Type Facts child process.
       # CodSpeed CPU simulation does not follow child processes, so wall time is
       # the correct end-to-end instrument here.
+      # Enable this after registering the repository with CodSpeed by setting
+      # the repository variable CODSPEED_ENABLED to true.
       - name: Compare performance with the base commit
+        if: vars.CODSPEED_ENABLED == 'true'
         uses: CodSpeedHQ/action@v4
         with:
           mode: walltime
