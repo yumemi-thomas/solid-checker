@@ -478,6 +478,24 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
     assert_eq!(findings[0].rule, "strict-read-untracked");
     assert!(findings[0].primary_location.path.ends_with("App.tsx"));
 }
+/// Opens the producer, absorbing the Linux `ETXTBSY` race: exec'ing a
+/// just-written wrapper script can collide with another test thread's fork
+/// inheriting the writer's file descriptor for the instant before its own
+/// exec. The window is microscopic, so a short retry is enough.
+fn open_type_facts_session(executable: &str, project_id: &str) -> TypeFactsSession {
+    let mut last = None;
+    for _ in 0..50 {
+        match TypeFactsSession::open(executable, project_id, &[]) {
+            Err(error) if format!("{error:?}").contains("ExecutableFileBusy") => {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                last = Some(error);
+            }
+            result => return result.unwrap(),
+        }
+    }
+    panic!("the producer executable stayed busy: {last:?}");
+}
+
 fn tracer_fixture_session(typefacts_executable: &str) -> (NativeIncrementalSession, Vec<PathBuf>) {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let fixture = root.join("fixtures/reactive-ir/tracer");
@@ -495,7 +513,7 @@ fn tracer_fixture_session(typefacts_executable: &str) -> (NativeIncrementalSessi
             compiler_options: CompilerOptions::default(),
         })
         .collect();
-    let typescript = TypeFactsSession::open(typefacts_executable, &project_id, &[]).unwrap();
+    let typescript = open_type_facts_session(typefacts_executable, &project_id);
     let session =
         NativeIncrementalSession::open(dialect::default_dialect(), project_id, sources, typescript)
             .unwrap();
