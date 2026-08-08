@@ -38,8 +38,22 @@ func (g *demandGroup) ensureExpanded() error {
 	if err != nil {
 		return err
 	}
+	canonicalizeDemandRun(g.path, demands)
 	g.demands = demands
 	return nil
+}
+
+// canonicalizeDemandRun restores the retained group's clean path invariant
+// after expanding compact rows. The compact string table carries paths as
+// sent by the client, which can use forward slashes on Windows even though
+// filepath.Clean(group.Path) produced a backslash-separated retention key.
+func canonicalizeDemandRun(path string, demands []EntityDemand) {
+	for index := range demands {
+		demands[index].Location.Path = path
+		if demands[index].QueryLocation != nil {
+			demands[index].QueryLocation.Path = filepath.Clean(demands[index].QueryLocation.Path)
+		}
+	}
 }
 
 func (g *demandGroup) releaseExpanded() {
@@ -57,7 +71,13 @@ func (g *demandGroup) appendAsyncDemands(target []EntityDemand) ([]EntityDemand,
 		}
 		return target, nil
 	}
-	return appendCompactDemandsWithFlag(target, g.compact, g.strings, demandFlagAsync)
+	start := len(target)
+	result, err := appendCompactDemandsWithFlag(target, g.compact, g.strings, demandFlagAsync)
+	if err != nil {
+		return nil, err
+	}
+	canonicalizeDemandRun(g.path, result[start:])
+	return result, nil
 }
 
 func validateCanonicalSourceFiles(files []SourceFile) error {

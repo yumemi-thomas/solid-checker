@@ -116,6 +116,47 @@ func TestRetainedDemandStoreOwnsCompactRunsWithoutExpandedRows(t *testing.T) {
 	}
 }
 
+func TestRetainedDemandStoreCanonicalizesExpandedCompactPaths(t *testing.T) {
+	clean := filepath.Join("project", "source.ts")
+	separator := string(filepath.Separator)
+	dirty := "project" + separator + "." + separator + "nested" + separator + ".." + separator + "source.ts"
+	query := Location{Path: dirty, StartByte: 2, EndByte: 3}
+	compact := CompactDemandsV3From([]EntityDemand{{
+		Location:      Location{Path: dirty, StartByte: 1, EndByte: 2},
+		QueryLocation: &query,
+		Symbol:        true,
+		Async:         true,
+	}})
+
+	var store retainedDemandStore
+	transaction, err := store.beginCompact(compact, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transaction.commit()
+
+	demands := store.at(clean)
+	if len(demands) != 1 ||
+		demands[0].Location.Path != clean ||
+		demands[0].QueryLocation == nil ||
+		demands[0].QueryLocation.Path != clean {
+		t.Fatalf("expanded compact demands = %#v", demands)
+	}
+	if compact.Strings[1] != dirty {
+		t.Fatalf("compact request was mutated: %#v", compact.Strings)
+	}
+	async, err := store.groups[0].appendAsyncDemands(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(async) != 1 ||
+		async[0].Location.Path != clean ||
+		async[0].QueryLocation == nil ||
+		async[0].QueryLocation.Path != clean {
+		t.Fatalf("expanded compact async demands = %#v", async)
+	}
+}
+
 func TestMalformedCompactDemandDoesNotMutateRetainedState(t *testing.T) {
 	var store retainedDemandStore
 	initial := store.begin([]EntityDemand{demandAt("a.ts", 1)}, nil, true)
