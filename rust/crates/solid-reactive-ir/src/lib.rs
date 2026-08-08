@@ -30,9 +30,10 @@ use contracts::{
 };
 use directives::{DirectiveCreationCollector, is_created_primitive, push_directive_creation};
 use execution_role::{
-    allowed_callback_spans, argument_references_callback_symbol, assigned_member_function_contains,
-    async_execution_role, control_flow_execution_role, execution_role, function_symbol,
-    named_callback_execution_role, read_analysis_context, semantic_execution_role,
+    NamedCallbackRoles, allowed_callback_spans, argument_references_callback_symbol,
+    assigned_member_function_contains, async_execution_role, control_flow_execution_role,
+    execution_role, function_symbol, named_callback_execution_role, named_callback_roles,
+    read_analysis_context, semantic_execution_role,
 };
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
 use indexes::{
@@ -6672,14 +6673,8 @@ impl LocalAccessContext<'_> {
                                 self.lookup.dialect,
                             )
                             .is_some()
-                            || named_callback_execution_role(
-                                file,
-                                call.callee,
-                                self.entities,
-                                self.symbol_names,
-                                self.lookup,
-                            )
-                            .is_some()
+                            || named_callback_execution_role(file, call.callee, self.lookup)
+                                .is_some()
                             || enclosing_render_function(file, call.callee))))
                 .then_some(1)
             }) else {
@@ -6688,14 +6683,7 @@ impl LocalAccessContext<'_> {
             let key = (callee.path.clone(), callee.start_byte, callee.end_byte);
             if let Some((name, declaration)) = self.accessors.get(symbol)
                 && (!inside_lowercase_named_function(file, call.callee, self.lookup.dialect)
-                    || named_callback_execution_role(
-                        file,
-                        call.callee,
-                        self.entities,
-                        self.symbol_names,
-                        self.lookup,
-                    )
-                    .is_some())
+                    || named_callback_execution_role(file, call.callee, self.lookup).is_some())
                 && seen.insert(key.clone())
             {
                 let origin = self.accessor_origins.get(symbol);
@@ -6867,14 +6855,7 @@ impl LocalAccessContext<'_> {
             );
             if (inside_lowercase_named_function(file, member.span, self.lookup.dialect)
                 || inside_unclassified_callback(file, member.span))
-                && named_callback_execution_role(
-                    file,
-                    member.span,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                )
-                .is_none()
+                && named_callback_execution_role(file, member.span, self.lookup).is_none()
                 && !matches!(
                     execution,
                     ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
@@ -6975,14 +6956,7 @@ impl LocalAccessContext<'_> {
             );
             if (inside_lowercase_named_function(file, spread.span, self.lookup.dialect)
                 || inside_unclassified_callback(file, spread.span))
-                && named_callback_execution_role(
-                    file,
-                    spread.span,
-                    self.entities,
-                    self.symbol_names,
-                    self.lookup,
-                )
-                .is_none()
+                && named_callback_execution_role(file, spread.span, self.lookup).is_none()
                 && !matches!(
                     execution,
                     ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback

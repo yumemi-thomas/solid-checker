@@ -1,146 +1,251 @@
 {
-  "components-return-once__invalid__00": {
-    "status": "evidence-backed",
-    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+  "schemaVersion": 2,
+  "fired": {
+    "components-return-once__invalid__00": {
+      "status": "evidence-backed",
+      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+    },
+    "components-return-once__invalid__01": {
+      "status": "evidence-backed",
+      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+    },
+    "components-return-once__invalid__02": {
+      "status": "evidence-backed",
+      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+    },
+    "components-return-once__invalid__03": {
+      "status": "evidence-backed",
+      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+    },
+    "components-return-once__invalid__04": {
+      "status": "evidence-backed",
+      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+    },
+    "components-return-once__invalid__05": {
+      "status": "evidence-backed",
+      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+    },
+    "components-return-once__invalid__07": {
+      "status": "evidence-backed",
+      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+    },
+    "components-return-once__invalid__08": {
+      "status": "evidence-backed",
+      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
+    },
+    "components-return-once__invalid__09": {
+      "status": "evidence-backed",
+      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+    },
+    "event-handlers__valid__01": {
+      "status": "evidence-backed",
+      "reason": "TypeScript proves 'string' + some_func() is a string ('+' with a string operand always yields one), so the onLy value is provably never a listener; upstream's constant folder cannot fold past the call and stays silent."
+    },
+    "jsx-no-undef__valid__05": {
+      "status": "policy",
+      "reason": "Upstream's typescriptEnabled tells the rule to stay silent because tsc will report TS2304 for the undefined component itself. This checker's certification must not depend on a separate tsc invocation being run and read, so it reports the undefined component regardless; the option is deliberately not carried."
+    },
+    "no-array-handlers__valid__10": {
+      "status": "evidence-backed",
+      "reason": "SafeArray is undeclared in this corpus case, so the cast fails to resolve and TypeScript types the expression as the tuple itself, which the checker correctly reports as an array handler. In a real project the cast resolves to SafeArray<number> and the checker honours it, exactly as upstream intends."
+    },
+    "no-destructure__valid__10": {
+      "status": "evidence-backed",
+      "reason": "Upstream's own comment says this is caught by solid/reactivity rather than by no-destructure; the checker reports it from the destructure rule instead of a second one."
+    },
+    "reactivity__invalid__13": {
+      "status": "evidence-backed",
+      "reason": "This is upstream's analysis-integrity warning for a capture shape its syntax analyzer cannot follow, not a Solid runtime defect. The checker resolves sources through TypeScript symbols and does not expose analyzer bookkeeping as a user rule."
+    },
+    "reactivity__invalid__14": {
+      "status": "evidence-backed",
+      "reason": "Keeping only a signal setter is valid Solid when a scope writes but never reads the value. Upstream reports the partial tuple because its syntax analyzer expects both slots; the checker follows the resolved setter contract."
+    },
+    "reactivity__invalid__15": {
+      "status": "evidence-backed",
+      "reason": "As reactivity__invalid__13: this is an upstream analyzer-capture warning for a discarded createMemo result, not evidence of an incorrect reactive read/write contract."
+    },
+    "reactivity__invalid__16": {
+      "status": "evidence-backed",
+      "reason": "Solid lowers a function child to insert(el, fn), which calls it reactively, so <div>{signal}</div> works and upstream's report is a false positive."
+    },
+    "reactivity__invalid__17": {
+      "status": "evidence-backed",
+      "reason": "Same as reactivity__invalid__16: a memo passed as a JSX child is called by insert()."
+    },
+    "reactivity__invalid__25": {
+      "status": "fact-unavailable",
+      "reason": "SomeContext is undeclared in this corpus case, so neither TypeScript nor the compiler can prove a Context.Provider contract. The checker does not infer framework semantics from a property spelled Provider."
+    },
+    "reactivity__invalid__26": {
+      "status": "fact-unavailable",
+      "reason": "SomeProvider is undeclared and a component name ending in Provider is not proof that its value prop is eagerly consumed. The checker requires a resolved component or contract rather than upstream's name convention."
+    },
+    "reactivity__invalid__27": {
+      "status": "fact-unavailable",
+      "reason": "As reactivity__invalid__25: the corpus leaves SomeContext undeclared, so no provider contract can be resolved for either value or someOtherProp."
+    },
+    "reactivity__invalid__32": {
+      "status": "fact-unavailable",
+      "reason": "A tagged template hands its interpolations to the tag, which may legitimately call them, so uncalled-accessor deliberately excludes them; see its value_position doc."
+    },
+    "reactivity__invalid__33": {
+      "status": "fact-unavailable",
+      "reason": "As reactivity__invalid__32."
+    },
+    "reactivity__invalid__34": {
+      "status": "evidence-backed",
+      "reason": "Solid 1.x mapArray only allocates and returns an adapter; its list and mapper execute when that returned function is invoked. Here createCustomStore is never called, so canonical-symbol reachability and the AST call graph prove the mapper's store read is dormant."
+    },
+    "reactivity__invalid__35": {
+      "status": "evidence-backed",
+      "reason": "Solid 1.x mapArray does not execute its mapper until the returned adapter is invoked. The adapter is assigned to result and never consumed, so the mapper's index-accessor read is unreachable and upstream's eager syntax report is a false positive."
+    },
+    "reactivity__invalid__36": {
+      "status": "evidence-backed",
+      "reason": "Solid 1.x indexArray does not execute its mapper until the returned adapter is invoked. The adapter is assigned to result and never consumed, so the mapper's item-accessor read is unreachable and upstream's eager syntax report is a false positive."
+    },
+    "reactivity__invalid__37": {
+      "status": "evidence-backed",
+      "reason": "Solid's compiler classifies a dynamic component property as CallerContext and lowers it to a lazy getter, so signal() is evaluated when the child reads the prop rather than once at the parent call site. Upstream's report contradicts that compiler fact."
+    },
+    "reactivity__invalid__38": {
+      "status": "fact-unavailable",
+      "reason": "useExample is an unresolved ambient callee. Upstream guesses reactive behavior from its use-prefixed name; the checker requires a body or package contract and does not claim the value argument is wrong without one."
+    },
+    "reactivity__invalid__39": {
+      "status": "fact-unavailable",
+      "reason": "As reactivity__invalid__38, inside an array literal."
+    },
+    "reactivity__invalid__40": {
+      "status": "fact-unavailable",
+      "reason": "As reactivity__invalid__38, inside an object literal."
+    },
+    "reactivity__invalid__41": {
+      "status": "fact-unavailable",
+      "reason": "As reactivity__invalid__38: the IIFE is evaluated, but whether passing its value is a defect depends on the unresolved useExample contract. A use-prefixed name is not a callback/value contract."
+    },
+    "reactivity__valid__23": {
+      "status": "evidence-backed",
+      "reason": "Solid 1.9's runWithOwner saves Listener and sets it to null while invoking the callback. Capturing the current owner inside an effect restores ownership, not dependency tracking, so the signal read is genuinely untracked and the checker intentionally reports it."
+    },
+    "reactivity__valid__24": {
+      "status": "evidence-backed",
+      "reason": "runWithOwner(undefined, callback) clears Listener while the callback runs in no supplied owner. The checker follows the Solid 1.9 runtime and reports the signal read; upstream's valid case is a false negative."
+    },
+    "reactivity__valid__51": {
+      "status": "fact-unavailable",
+      "reason": "useSignal is unresolved in this corpus case. The checker does not infer a snapshot or tracking contract from use-prefixed spelling; an intentional initial props snapshot can be made explicit with untrack, or an imported helper can provide a package contract."
+    },
+    "reactivity__valid__52": {
+      "status": "fact-unavailable",
+      "reason": "As reactivity__valid__51."
+    },
+    "reactivity__valid__73": {
+      "status": "policy",
+      "reason": "strict-read-untracked requires one-time component-prop snapshots to be explicit with untrack. The fact that the local is currently unused does not change the execution contract or make the implicit snapshot certifiable."
+    }
   },
-  "components-return-once__invalid__01": {
-    "status": "evidence-backed",
-    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
+  "counts": {
+    "components-return-once__invalid__06": {
+      "ours": 2,
+      "theirs": 1,
+      "status": "per-site",
+      "reason": "A chained ternary: `props.cond1 ? <div/> : Boolean(props.cond2) ? <div/> : <div/>`. Both conditionals have their own reactive test, and each independently freezes its branch choice at setup, so the checker anchors one SC1004 on each proven-reactive condition (line 2 `props.cond1`, line 4 `Boolean(props.cond2)`). Upstream reports the return once, whichever way the chain nests."
+    },
+    "reactivity__invalid__10": {
+      "ours": 2,
+      "theirs": 1,
+      "status": "per-site",
+      "reason": "Two nested derived functions: `d` calls `e`, `e` reads `signal()`, and every call site of both is untracked. The checker names the derivation that will not update, and there are two of them, so `d` and `e` each get an SC1006. Upstream anchors its one report on the reactive read at the bottom of the chain."
+    },
+    "reactivity__invalid__30": {
+      "ours": 2,
+      "theirs": 1,
+      "status": "rule-split",
+      "reason": "Upstream's single `noAsyncTrackedScope` covers both halves of an async effect; the checker splits them. SC5004 (v1/no-async-tracked-scope) reports the scope -- this createEffect callback is async, so tracking stops at the first await -- and SC1002 (v1/reactive-read-after-await) reports the specific read of `count` that lands after it. Both rules are in the set upstream's one `reactivity` rule maps onto, so both count against its expected 1."
+    }
   },
-  "components-return-once__invalid__02": {
-    "status": "evidence-backed",
-    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
-  },
-  "components-return-once__invalid__03": {
-    "status": "evidence-backed",
-    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
-  },
-  "components-return-once__invalid__04": {
-    "status": "evidence-backed",
-    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
-  },
-  "components-return-once__invalid__05": {
-    "status": "evidence-backed",
-    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
-  },
-  "components-return-once__invalid__07": {
-    "status": "evidence-backed",
-    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
-  },
-  "components-return-once__invalid__08": {
-    "status": "evidence-backed",
-    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
-  },
-  "components-return-once__invalid__09": {
-    "status": "evidence-backed",
-    "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
-  },
-  "event-handlers__valid__01": {
-    "status": "evidence-backed",
-    "reason": "TypeScript proves 'string' + some_func() is a string ('+' with a string operand always yields one), so the onLy value is provably never a listener; upstream's constant folder cannot fold past the call and stays silent."
-  },
-  "jsx-no-undef__valid__05": {
-    "status": "policy",
-    "reason": "Upstream's typescriptEnabled tells the rule to stay silent because tsc will report TS2304 for the undefined component itself. This checker's certification must not depend on a separate tsc invocation being run and read, so it reports the undefined component regardless; the option is deliberately not carried."
-  },
-  "no-array-handlers__valid__10": {
-    "status": "evidence-backed",
-    "reason": "SafeArray is undeclared in this corpus case, so the cast fails to resolve and TypeScript types the expression as the tuple itself, which the checker correctly reports as an array handler. In a real project the cast resolves to SafeArray<number> and the checker honours it, exactly as upstream intends."
-  },
-  "no-destructure__valid__10": {
-    "status": "evidence-backed",
-    "reason": "Upstream's own comment says this is caught by solid/reactivity rather than by no-destructure; the checker reports it from the destructure rule instead of a second one."
-  },
-  "reactivity__invalid__13": {
-    "status": "evidence-backed",
-    "reason": "This is upstream's analysis-integrity warning for a capture shape its syntax analyzer cannot follow, not a Solid runtime defect. The checker resolves sources through TypeScript symbols and does not expose analyzer bookkeeping as a user rule."
-  },
-  "reactivity__invalid__14": {
-    "status": "evidence-backed",
-    "reason": "Keeping only a signal setter is valid Solid when a scope writes but never reads the value. Upstream reports the partial tuple because its syntax analyzer expects both slots; the checker follows the resolved setter contract."
-  },
-  "reactivity__invalid__15": {
-    "status": "evidence-backed",
-    "reason": "As reactivity__invalid__13: this is an upstream analyzer-capture warning for a discarded createMemo result, not evidence of an incorrect reactive read/write contract."
-  },
-  "reactivity__invalid__16": {
-    "status": "evidence-backed",
-    "reason": "Solid lowers a function child to insert(el, fn), which calls it reactively, so <div>{signal}</div> works and upstream's report is a false positive."
-  },
-  "reactivity__invalid__17": {
-    "status": "evidence-backed",
-    "reason": "Same as reactivity__invalid__16: a memo passed as a JSX child is called by insert()."
-  },
-  "reactivity__invalid__25": {
-    "status": "fact-unavailable",
-    "reason": "SomeContext is undeclared in this corpus case, so neither TypeScript nor the compiler can prove a Context.Provider contract. The checker does not infer framework semantics from a property spelled Provider."
-  },
-  "reactivity__invalid__26": {
-    "status": "fact-unavailable",
-    "reason": "SomeProvider is undeclared and a component name ending in Provider is not proof that its value prop is eagerly consumed. The checker requires a resolved component or contract rather than upstream's name convention."
-  },
-  "reactivity__invalid__27": {
-    "status": "fact-unavailable",
-    "reason": "As reactivity__invalid__25: the corpus leaves SomeContext undeclared, so no provider contract can be resolved for either value or someOtherProp."
-  },
-  "reactivity__invalid__32": {
-    "status": "fact-unavailable",
-    "reason": "A tagged template hands its interpolations to the tag, which may legitimately call them, so uncalled-accessor deliberately excludes them; see its value_position doc."
-  },
-  "reactivity__invalid__33": {
-    "status": "fact-unavailable",
-    "reason": "As reactivity__invalid__32."
-  },
-  "reactivity__invalid__34": {
-    "status": "evidence-backed",
-    "reason": "Solid 1.x mapArray only allocates and returns an adapter; its list and mapper execute when that returned function is invoked. Here createCustomStore is never called, so canonical-symbol reachability and the AST call graph prove the mapper's store read is dormant."
-  },
-  "reactivity__invalid__35": {
-    "status": "evidence-backed",
-    "reason": "Solid 1.x mapArray does not execute its mapper until the returned adapter is invoked. The adapter is assigned to result and never consumed, so the mapper's index-accessor read is unreachable and upstream's eager syntax report is a false positive."
-  },
-  "reactivity__invalid__36": {
-    "status": "evidence-backed",
-    "reason": "Solid 1.x indexArray does not execute its mapper until the returned adapter is invoked. The adapter is assigned to result and never consumed, so the mapper's item-accessor read is unreachable and upstream's eager syntax report is a false positive."
-  },
-  "reactivity__invalid__37": {
-    "status": "evidence-backed",
-    "reason": "Solid's compiler classifies a dynamic component property as CallerContext and lowers it to a lazy getter, so signal() is evaluated when the child reads the prop rather than once at the parent call site. Upstream's report contradicts that compiler fact."
-  },
-  "reactivity__invalid__38": {
-    "status": "fact-unavailable",
-    "reason": "useExample is an unresolved ambient callee. Upstream guesses reactive behavior from its use-prefixed name; the checker requires a body or package contract and does not claim the value argument is wrong without one."
-  },
-  "reactivity__invalid__39": {
-    "status": "fact-unavailable",
-    "reason": "As reactivity__invalid__38, inside an array literal."
-  },
-  "reactivity__invalid__40": {
-    "status": "fact-unavailable",
-    "reason": "As reactivity__invalid__38, inside an object literal."
-  },
-  "reactivity__invalid__41": {
-    "status": "fact-unavailable",
-    "reason": "As reactivity__invalid__38: the IIFE is evaluated, but whether passing its value is a defect depends on the unresolved useExample contract. A use-prefixed name is not a callback/value contract."
-  },
-  "reactivity__valid__23": {
-    "status": "evidence-backed",
-    "reason": "Solid 1.9's runWithOwner saves Listener and sets it to null while invoking the callback. Capturing the current owner inside an effect restores ownership, not dependency tracking, so the signal read is genuinely untracked and the checker intentionally reports it."
-  },
-  "reactivity__valid__24": {
-    "status": "evidence-backed",
-    "reason": "runWithOwner(undefined, callback) clears Listener while the callback runs in no supplied owner. The checker follows the Solid 1.9 runtime and reports the signal read; upstream's valid case is a false negative."
-  },
-  "reactivity__valid__51": {
-    "status": "fact-unavailable",
-    "reason": "useSignal is unresolved in this corpus case. The checker does not infer a snapshot or tracking contract from use-prefixed spelling; an intentional initial props snapshot can be made explicit with untrack, or an imported helper can provide a package contract."
-  },
-  "reactivity__valid__52": {
-    "status": "fact-unavailable",
-    "reason": "As reactivity__valid__51."
-  },
-  "reactivity__valid__73": {
-    "status": "policy",
-    "reason": "strict-read-untracked requires one-time component-prop snapshots to be explicit with untrack. The fact that the local is currently unused does not change the execution contract or make the implicit snapshot certifiable."
+  "outputs": {
+    "imports__invalid__00": {
+      "ours": "import { createEffect } from \"solid-js\";",
+      "status": "different-strategy",
+      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Here the wrong declaration is the whole file, and upstream's replacement statement ends with a newline, so its recorded output carries a trailing \"\\n\" that an in-place specifier rewrite has no reason to add."
+    },
+    "imports__invalid__01": {
+      "ours": "import { createEffect } from \"solid-js\";\nimport { createSignal } from \"solid-js\";",
+      "status": "different-strategy",
+      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Upstream merges `createEffect` into the existing \"solid-js\" declaration; the in-place rewrite leaves two declarations of \"solid-js\", which is legal TypeScript and imports exactly the same two bindings."
+    },
+    "imports__invalid__02": {
+      "ours": "import type { Component } from \"solid-js\";\nimport { createSignal } from \"solid-js\";\nconsole.log('hi');",
+      "status": "different-strategy",
+      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Upstream's merge moves `Component` out of `import type` and into the value import, dropping the type-only modifier; the in-place rewrite keeps `import type { Component } from \"solid-js\"`, which is what verbatimModuleSyntax and isolatedModules require of a type-only name. Ours is the safer text here, not merely a different one."
+    },
+    "imports__invalid__03": {
+      "ours": "import { createSignal } from \"solid-js\";\nimport \"solid-js\";",
+      "status": "different-strategy",
+      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Upstream consumes the side-effect declaration `import \"solid-js\";` by giving it the named clause; the in-place rewrite leaves it standing next to the corrected import. A bare `import \"solid-js\"` alongside a named import of the same module is redundant but inert -- it requests the same module record that is already being loaded."
+    },
+    "imports__invalid__04": {
+      "ours": "import { createSignal } from \"solid-js\";\nimport {} from \"solid-js\";",
+      "status": "different-strategy",
+      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. As imports__invalid__03, with an empty clause (`import {} from \"solid-js\";`) as the declaration upstream fills and the checker leaves standing."
+    },
+    "imports__invalid__05": {
+      "ours": "import { createEffect } from \"solid-js\";\nimport { render } from \"solid-js/web\";",
+      "status": "different-strategy",
+      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Both declarations are wrong in this case -- `createEffect` from \"solid-js/web\" and `render` from \"solid-js\" -- and the checker corrects both in one pass. ESLint applies one pass and skips the second fix because it overlaps the first's insertion into the same declaration, so upstream's recorded output still imports `render` from \"solid-js\", where it is not exported. Upstream's output is an intermediate state a second lint pass would carry further; ours is the finished program."
+    },
+    "jsx-no-undef__invalid__07": {
+      "ours": "import { Match, Switch } from \"solid-js\";\n\nrender(\n  <Switch fallback={<div>Not Found</div>}>\n    <Match when={state.route === \"home\"} />\n  </Switch>\n)",
+      "status": "cosmetic",
+      "reason": "The file has no imports at all, so both insert a new `import { … } from \"solid-js\";` at the top; only the order of names inside the braces differs. The checker collects the missing components in a sorted set, so the diagnostic message and the fix agree on one order no matter which tag the walk met first; upstream lists them in first-appearance order (`Switch, Match`)."
+    },
+    "jsx-no-undef__invalid__08": {
+      "ours": "import { For } from \"solid-js\";\n\nimport X from \"x\";\nlet el = <For each={items}>{item => item.name}</For>",
+      "status": "cosmetic",
+      "reason": "The file already has an unrelated `import X from \"x\";` and no \"solid-js\" declaration to extend, so both insert a new one. The checker inserts at the top of the file (past a shebang only); upstream inserts immediately before the first existing statement, which here is after the case source's leading blank line. Byte-identical declaration, one blank line's difference in where it lands."
+    },
+    "jsx-no-undef__invalid__14": {
+      "ours": "import { For } from \"solid-js\";\n\n// attached comment\nimport X from \"x\";\nlet el = <For each={items}>{item => item.name}</For>",
+      "status": "cosmetic",
+      "reason": "As jsx-no-undef__invalid__08, with a comment on the line before the first import. The checker's top-of-file insertion puts the new declaration above the blank line, leaving the comment adjacent to the import it was written for; upstream's lands between the blank line and the comment, which separates them. Same program either way."
+    },
+    "jsx-no-undef__invalid__15": {
+      "ours": "import { For } from \"solid-js\";\n\nimport X from \"x\"; // attached comment\nlet el = <For each={items}>{item => item.name}</For>",
+      "status": "cosmetic",
+      "reason": "As jsx-no-undef__invalid__08. The trailing `// attached comment` on the existing import is inside neither fix's range, so the whole difference is again whether the new declaration goes above or below the leading blank line."
+    },
+    "no-react-deps__invalid__00": {
+      "ours": "createEffect(() => {\n        console.log(signal());\n      });",
+      "status": "tighter-cleanup",
+      "reason": "One shared edit across no-react-deps__invalid__00, 01, 03, 04 and 05: the checker's deletion swallows the `,` that separated the dependency array from the callback (deletion_with_leading_comma), leaving `createEffect(fn)`; upstream removes only the argument's own range and leaves `createEffect(fn, )` behind. A trailing comma in an argument list has been legal since ES2017, so both texts are the same program -- ours is just the one a reader would have written."
+    },
+    "no-react-deps__invalid__01": {
+      "ours": "createEffect(() => {\n        console.log(signal());\n      });",
+      "status": "tighter-cleanup",
+      "reason": "One shared edit across no-react-deps__invalid__00, 01, 03, 04 and 05: the checker's deletion swallows the `,` that separated the dependency array from the callback (deletion_with_leading_comma), leaving `createEffect(fn)`; upstream removes only the argument's own range and leaves `createEffect(fn, )` behind. A trailing comma in an argument list has been legal since ES2017, so both texts are the same program -- ours is just the one a reader would have written."
+    },
+    "no-react-deps__invalid__03": {
+      "ours": "const value = createMemo(() => computeExpensiveValue(a(), b()));",
+      "status": "tighter-cleanup",
+      "reason": "One shared edit across no-react-deps__invalid__00, 01, 03, 04 and 05: the checker's deletion swallows the `,` that separated the dependency array from the callback (deletion_with_leading_comma), leaving `createEffect(fn)`; upstream removes only the argument's own range and leaves `createEffect(fn, )` behind. A trailing comma in an argument list has been legal since ES2017, so both texts are the same program -- ours is just the one a reader would have written."
+    },
+    "no-react-deps__invalid__04": {
+      "ours": "const value = createMemo(() => computeExpensiveValue(a(), b()));",
+      "status": "tighter-cleanup",
+      "reason": "One shared edit across no-react-deps__invalid__00, 01, 03, 04 and 05: the checker's deletion swallows the `,` that separated the dependency array from the callback (deletion_with_leading_comma), leaving `createEffect(fn)`; upstream removes only the argument's own range and leaves `createEffect(fn, )` behind. A trailing comma in an argument list has been legal since ES2017, so both texts are the same program -- ours is just the one a reader would have written."
+    },
+    "no-react-deps__invalid__05": {
+      "ours": "const value = createMemo(() => computeExpensiveValue(a(), b()));",
+      "status": "tighter-cleanup",
+      "reason": "One shared edit across no-react-deps__invalid__00, 01, 03, 04 and 05: the checker's deletion swallows the `,` that separated the dependency array from the callback (deletion_with_leading_comma), leaving `createEffect(fn)`; upstream removes only the argument's own range and leaves `createEffect(fn, )` behind. A trailing comma in an argument list has been legal since ES2017, so both texts are the same program -- ours is just the one a reader would have written."
+    },
+    "no-react-specific-props__invalid__09": {
+      "ours": "let el = <div />",
+      "status": "tighter-cleanup",
+      "reason": "Removing the React-only `key` attribute, the checker's deletion also takes the whitespace that separated it from the tag name (deletion_with_leading_whitespace), emitting `<div />`; upstream removes the attribute's own range and leaves `<div  />` with the double space. The same element, and the only no-react-specific-props case where the fix is a deletion rather than a rename -- the other nine agree byte for byte."
+    }
   }
 }

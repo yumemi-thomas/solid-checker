@@ -91,11 +91,12 @@ once per project.
 The plugin ships three flat configs. `configs.recommended` enables only
 `solid-checker/certification`, which reports every finding through one rule.
 `configs.v1` and `configs.v2` enable their catalog's rules at each rule's
-native severity and turn `certification` off, so listing a dialect config
-after `recommended` reports each finding exactly once, per rule. Order
-matters: flat config resolves each rule from the later entry, so listing
-`recommended` after a dialect config re-enables `certification` and every
-finding reports twice.
+native severity and turn `certification` off. The configs compose in either
+order: each finding reports exactly once, per rule. Even when a listing such
+as `[configs.v1, configs.recommended]` re-enables `certification` (flat
+config resolves each rule from the later entry), certification skips every
+finding an enabled per-rule rule owns for the linted file and reports only
+the rest.
 
 Per-rule options (for example `v1/no-innerhtml`'s `allowStatic`) live in the
 project's `.solid-checker/rule-options.json`, which the native analysis

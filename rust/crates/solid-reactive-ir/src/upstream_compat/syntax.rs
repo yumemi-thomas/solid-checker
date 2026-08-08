@@ -27,7 +27,8 @@ use solid_facts::ast::JsxElementFact;
 use solid_facts::core::Span;
 
 use super::{
-    UpstreamCompatContext, fix_replace, is_lowercase_led, static_string_expression, text, violation,
+    UpstreamCompatContext, deletion_with_leading_whitespace, fix_replace, is_lowercase_led,
+    static_string_expression, text, violation,
 };
 use crate::StaticViolation;
 
@@ -376,9 +377,17 @@ fn self_closing_comp(
             "This element should not be self-closing.",
             "Write the closing tag out: this project's rule options ask for explicit closing tags here.",
             element.opening,
+            // The `/>` is replaced by `></name>`, and the whitespace that
+            // separated it from the tag name or last attribute goes with it:
+            // `<div />` becomes `<div></div>`, not `<div ></div>`. The
+            // replacement text opens with `>`, so nothing that was holding
+            // tokens apart is lost.
             vec![fix_replace(
                 file,
-                Span::new(element.span.end.saturating_sub(2), element.span.end),
+                deletion_with_leading_whitespace(
+                    &file.source,
+                    Span::new(element.span.end.saturating_sub(2), element.span.end),
+                ),
                 "write the closing tag",
                 format!("></{name}>"),
             )],

@@ -207,6 +207,26 @@ fn leading_insertion_point(source: &str) -> u32 {
     }
 }
 
+/// Where new names go inside an existing named-imports clause, and the
+/// separator they need there: `None` when the declaration has no `}` at all
+/// (a side-effect, default-only, or namespace import — handled separately).
+///
+/// With existing bindings the names are appended directly after the last one
+/// rather than in front of the closing brace, so `import { Show }` becomes
+/// `import { Show, For }` and not `import { Show , For}` — the padding the
+/// author put inside the braces stays where it is. An empty clause
+/// (`import {}`) has no binding to append to, so the brace itself is the
+/// insertion point and no separator is needed.
+fn named_clause_insertion(source: &str) -> Option<(usize, &'static str)> {
+    let brace = source.rfind('}')?;
+    let trimmed = source[..brace].trim_end();
+    Some(if trimmed.ends_with('{') {
+        (brace, "")
+    } else {
+        (trimmed.len(), ", ")
+    })
+}
+
 /// A same-file fix appending the missing names to an existing `"solid-js"`
 /// import, or `None` when the existing import shape has no unambiguous
 /// same-file rewrite.
@@ -216,13 +236,7 @@ fn auto_import_fix(
     joined: &str,
 ) -> Option<Fix> {
     let source = file.source_text(import.span).unwrap_or_default();
-    if let Some(offset) = source.rfind('}') {
-        let prefix = &source[..offset];
-        let separator = if prefix.trim_end().ends_with('{') {
-            ""
-        } else {
-            ", "
-        };
+    if let Some((offset, separator)) = named_clause_insertion(source) {
         let at = import.span.start + u32::try_from(offset).unwrap_or_default();
         return Some(insert_fix(file, at, format!("{separator}{joined}")));
     }
@@ -288,7 +302,55 @@ fn replace_fix(file: &FileFacts, span: Span, new_text: String) -> Fix {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_names, from_keyword_offset, is_lowercase_led, leading_insertion_point};
+    use super::{
+        format_names, from_keyword_offset, is_lowercase_led, leading_insertion_point,
+        named_clause_insertion,
+    };
+
+    /// Applies what [`named_clause_insertion`] decided, so the assertions
+    /// read as the text a user would get from the fix.
+    fn extend(source: &str, names: &str) -> String {
+        let (offset, separator) = named_clause_insertion(source).expect("a named clause");
+        format!(
+            "{}{separator}{names}{}",
+            &source[..offset],
+            &source[offset..]
+        )
+    }
+
+    #[test]
+    fn new_names_are_appended_after_the_last_binding() {
+        // Inserting in front of the `}` instead produced `{ Show , For}`.
+        assert_eq!(
+            extend("import { Show } from \"solid-js\";", "For"),
+            "import { Show, For } from \"solid-js\";"
+        );
+        assert_eq!(
+            extend("import { For, Switch } from \"solid-js\";", "Match"),
+            "import { For, Switch, Match } from \"solid-js\";"
+        );
+        // No padding to preserve, and none invented.
+        assert_eq!(
+            extend("import {Show} from \"solid-js\";", "For"),
+            "import {Show, For} from \"solid-js\";"
+        );
+    }
+
+    #[test]
+    fn an_empty_clause_takes_the_names_at_its_brace() {
+        // Nothing to append to, so no `, ` separator and the brace stays the
+        // insertion point.
+        assert_eq!(
+            extend("import {} from \"solid-js\";", "For"),
+            "import {For} from \"solid-js\";"
+        );
+    }
+
+    #[test]
+    fn a_declaration_without_a_clause_has_no_insertion_point() {
+        assert_eq!(named_clause_insertion("import \"solid-js\";"), None);
+        assert_eq!(named_clause_insertion("import D from \"solid-js\";"), None);
+    }
 
     #[test]
     fn dom_and_this_are_lowercase_first() {

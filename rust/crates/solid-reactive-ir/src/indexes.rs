@@ -231,6 +231,7 @@ pub(super) struct SemanticLookup<'a> {
     bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
     file_primitives: OnceLock<Vec<OnceLock<FilePrimitives>>>,
+    file_named_callback_roles: OnceLock<Vec<OnceLock<super::NamedCallbackRoles>>>,
     project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
     callback_capabilities: OnceLock<DialectCallbackCapabilities>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
@@ -308,6 +309,7 @@ impl<'a> SemanticLookup<'a> {
             bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),
             file_primitives: OnceLock::new(),
+            file_named_callback_roles: OnceLock::new(),
             project_primitives: OnceLock::new(),
             callback_capabilities: OnceLock::new(),
             returned_callback_proof_digest: OnceLock::new(),
@@ -371,6 +373,23 @@ impl<'a> SemanticLookup<'a> {
         self.callback_capabilities().stored_function_arguments
     }
 
+    /// Whether the cross-file proofs can read anything at all from this file.
+    ///
+    /// Every read either machine makes of a file *other* than the one it was
+    /// asked about is drawn from one of four AST tables: `calls` (invocation
+    /// sites and the `factory(...)()` shape), `jsx_elements` (a rendered
+    /// adapter), `members` (`lazyResult.preload()`), and `bindings` (the factory
+    /// seed, its destructured tuple slots, and every identifier alias the
+    /// closure walks). A file with all four empty is never resolved against, so
+    /// its TypeScript facts are never consulted either — and editing it cannot
+    /// move any proof.
+    fn participates_in_returned_callback_proofs(file: &FileFacts) -> bool {
+        !file.ast.calls.is_empty()
+            || !file.ast.jsx_elements.is_empty()
+            || !file.ast.members.is_empty()
+            || !file.ast.bindings.is_empty()
+    }
+
     /// Identity of the whole-project facts that the cross-file
     /// returned-callback proofs read, or `None` when no such proof can exist.
     ///
@@ -382,15 +401,35 @@ impl<'a> SemanticLookup<'a> {
     /// stale. Folding this digest into those fragments' reuse identity closes
     /// that hole.
     ///
-    /// The granularity is deliberately coarse: one digest over every file's
-    /// `(path, source_hash)`, so any source edit anywhere recomputes every
-    /// fragment of the caches that consume these proofs. Nothing cheaper is
-    /// sound without a project-wide reverse index from adapter bindings to
-    /// their use sites, and the coarse answer costs nothing where it cannot
-    /// apply: `None` under Solid 2.0 (the dialect models no returned adapter at
-    /// all) and `None` in any 1.x project that never names a factory
-    /// primitive, which leaves those builds' reuse identities exactly as they
-    /// were.
+    /// One thing narrows it, provable from the machinery's loop headers alone: a
+    /// file contributes only if a proof can read anything from it at all (see
+    /// [`Self::participates_in_returned_callback_proofs`]). Editing a
+    /// declaration-only module therefore invalidates nothing.
+    ///
+    /// # Why the contribution is still the whole source hash
+    ///
+    /// The obvious next step — digest each participating file's *proof-relevant
+    /// projection* (its call callees, member invocations and alias bindings)
+    /// instead of its source — is not sound, for two independent reasons.
+    ///
+    /// The proofs resolve every position through the project-wide TypeScript
+    /// symbol and reference tables: `returned_binding_reference` accepts a span
+    /// because some adapter symbol's *reference list* covers it, and
+    /// `returned_primitive_invocation` walks binding chains through
+    /// `binding_at_reference`. Those tables are a whole-project product, so an
+    /// edit to file A can change what a position in file B resolves to while B's
+    /// own AST is byte-identical. A projection of B alone cannot see that.
+    ///
+    /// And the local-access fragments depend on more than whether a site exists:
+    /// `returned_factory_callback_execution_role` classifies each site's span
+    /// *in the using file*, so the answer folds in that file's whole execution
+    /// context. A projection would have to carry the classifier's entire input,
+    /// which is the file.
+    ///
+    /// Decomposing the digest per file therefore needs the project-wide reverse
+    /// index from adapter bindings to their use sites that the machinery does
+    /// not build. Until it exists, a participating file's contribution stays its
+    /// source hash: coarse, but never stale.
     pub(super) fn returned_callback_proof_digest(&self) -> Option<CrossFileProofDigest> {
         *self.returned_callback_proof_digest.get_or_init(|| {
             if !self.models_returned_callbacks() {
@@ -400,6 +439,7 @@ impl<'a> SemanticLookup<'a> {
                 .facts
                 .files
                 .iter()
+                .filter(|file| Self::participates_in_returned_callback_proofs(file))
                 .map(|file| (file.path.as_str(), file.source_hash.as_str()))
                 .collect::<Vec<_>>();
             // Facts arrive in configured-source order; sort so a reordered
@@ -446,22 +486,48 @@ impl<'a> SemanticLookup<'a> {
             .and_then(|index| index.member_property(span))
     }
 
+    /// The position of a file in project facts, for the per-file memo tables.
+    fn file_index(&self, file: &FileFacts) -> usize {
+        *self
+            .files_by_path
+            .get_or_init(|| {
+                self.facts
+                    .files
+                    .iter()
+                    .enumerate()
+                    .map(|(index, file)| (file.path.as_str(), index))
+                    .collect()
+            })
+            .get(file.path.as_str())
+            .expect("per-file lookup for a file outside project facts")
+    }
+
+    /// How this file's callback positions name its own functions, memoized.
+    ///
+    /// The answer depends only on the file, so a read-by-read derivation was
+    /// re-scanning every call and JSX element in the file for every read the
+    /// classifier was asked about.
+    pub(super) fn named_callback_roles(&self, file: &FileFacts) -> &super::NamedCallbackRoles {
+        let index = self.file_index(file);
+        let slots = self
+            .file_named_callback_roles
+            .get_or_init(|| self.facts.files.iter().map(|_| OnceLock::new()).collect());
+        slots[index].get_or_init(|| {
+            super::named_callback_roles(
+                &self.facts.files[index],
+                self.entities,
+                self.symbol_names,
+                self,
+            )
+        })
+    }
+
     /// The memoized primitive names for one project file.
     pub(super) fn primitives(&self, file: &FileFacts) -> &FilePrimitives {
-        let files_by_path = self.files_by_path.get_or_init(|| {
-            self.facts
-                .files
-                .iter()
-                .enumerate()
-                .map(|(index, file)| (file.path.as_str(), index))
-                .collect()
-        });
+        let index = self.file_index(file);
         let slots = self
             .file_primitives
             .get_or_init(|| self.facts.files.iter().map(|_| OnceLock::new()).collect());
-        let index = *files_by_path
-            .get(file.path.as_str())
-            .expect("primitive lookup for a file outside project facts");
         slots[index].get_or_init(|| {
             let file = &self.facts.files[index];
             FilePrimitives {

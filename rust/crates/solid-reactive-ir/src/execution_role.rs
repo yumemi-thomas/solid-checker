@@ -163,7 +163,7 @@ fn semantic_execution_role_within(
     if assigned_member_function_contains(file, span, entities) {
         return ExecutionRole::DeferredCallback;
     }
-    if let Some(role) = named_callback_execution_role(file, span, entities, symbol_names, lookup) {
+    if let Some(role) = named_callback_execution_role(file, span, lookup) {
         return role;
     }
     if let Some(role) = returned_callback_execution_role(file, span, lookup, classifying) {
@@ -514,167 +514,257 @@ pub(super) fn control_flow_execution_role(
     }
 }
 
-pub(super) fn named_callback_execution_role(
+/// How this file's primitive calls and control-flow JSX name each of its own
+/// functions as a callback.
+///
+/// Every flag is a property of the *function*, not of the read being
+/// classified: which argument positions name it, and how the dialect executes
+/// those positions. Deriving them once per file replaces the whole-file call and
+/// JSX scans [`named_callback_execution_role`] used to run for every read it was
+/// asked about -- five of them per read in the worst case.
+#[derive(Default)]
+pub(super) struct NamedCallbackRoles {
+    by_function: HashMap<Span, NamedCallbackRole>,
+}
+
+/// The classification a named callback's positions support, in the order
+/// [`named_callback_execution_role`] consults them.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct NamedCallbackRole {
+    /// Some position naming this function is one an arm below can truthfully
+    /// classify. An effect's tracked compute and an inline adapter argument
+    /// (1.x `on`'s deps) satisfy none of them -- admitting those would fall
+    /// through to the rendering tail and misreport `createEffect(namedCompute)`
+    /// as untracked rendering. Answering None instead defers such reads to
+    /// compiler facts and the returned-adapter classifiers.
+    admitted: bool,
+    untracked_callback: bool,
+    effect_apply: bool,
+    tracked: bool,
+    deferred: bool,
+}
+
+impl NamedCallbackRoles {
+    fn entry(&mut self, function: Span) -> &mut NamedCallbackRole {
+        self.by_function.entry(function).or_default()
+    }
+
+    fn get(&self, function: Span) -> NamedCallbackRole {
+        self.by_function.get(&function).copied().unwrap_or_default()
+    }
+}
+
+/// Every way this file's callback positions can name one of its own functions.
+///
+/// The three maps are the *semantic* alternatives to comparing source text: an
+/// exact demanded entity, a proven TypeScript reference to the function's
+/// symbol, and -- for a function whose symbol carries a canonical Solid name --
+/// that name. Admitting a function because some identifier in a callback
+/// position happens to be spelled the same, which is what these replace,
+/// accepts a same-spelled binding from any other scope or module.
+struct NamedCallbackIndex<'a> {
+    /// This file's functions that resolve to a symbol, in AST order.
+    functions: Vec<Span>,
+    by_symbol: HashMap<&'a str, Vec<usize>>,
+    by_reference: HashMap<Span, Vec<usize>>,
+    by_canonical_name: HashMap<&'a str, Vec<usize>>,
+}
+
+impl<'a> NamedCallbackIndex<'a> {
+    fn new(
+        file: &solid_facts::FileFacts,
+        entities: &'a EntitySymbols,
+        symbol_names: &'a HashMap<SymbolId, SymbolId>,
+        lookup: &SemanticLookup<'_>,
+    ) -> Self {
+        let candidates = file
+            .ast
+            .functions
+            .iter()
+            .filter_map(|function| {
+                Some((function.span, function_symbol(file, function, entities)?))
+            })
+            .collect::<Vec<_>>();
+        let mut by_symbol = HashMap::<&str, Vec<usize>>::new();
+        let mut by_reference = HashMap::<Span, Vec<usize>>::new();
+        let mut by_canonical_name = HashMap::<&str, Vec<usize>>::new();
+        for (index, (_, symbol)) in candidates.iter().enumerate() {
+            by_symbol.entry(symbol.as_str()).or_default().push(index);
+            if let Some(name) = symbol_names.get(*symbol) {
+                by_canonical_name
+                    .entry(name.as_str())
+                    .or_default()
+                    .push(index);
+            }
+            for reference in lookup.symbol_references(symbol.as_str()) {
+                if reference.path.as_ref() != file.path.as_str() {
+                    continue;
+                }
+                let (Ok(start), Ok(end)) = (
+                    u32::try_from(reference.start_byte),
+                    u32::try_from(reference.end_byte),
+                ) else {
+                    continue;
+                };
+                by_reference
+                    .entry(Span::new(start, end))
+                    .or_default()
+                    .push(index);
+            }
+        }
+        Self {
+            functions: candidates.iter().map(|(span, _)| *span).collect(),
+            by_symbol,
+            by_canonical_name,
+            by_reference,
+        }
+    }
+
+    /// The functions an exact demanded entity at `span` names -- the whole of a
+    /// bare `createEffect(compute, applyValue)` argument, say.
+    fn identity_at(
+        &self,
+        file: &solid_facts::FileFacts,
+        entities: &EntitySymbols,
+        span: Span,
+    ) -> &[usize] {
+        entities
+            .at(file.path.as_str(), span)
+            .and_then(|symbol| self.by_symbol.get(symbol.as_str()))
+            .map_or(&[], Vec::as_slice)
+    }
+
+    /// The functions a use at `span` names, by any of the three proofs.
+    fn named_at(
+        &self,
+        file: &solid_facts::FileFacts,
+        entities: &EntitySymbols,
+        span: Span,
+        matched: &mut Vec<usize>,
+    ) {
+        matched.extend(self.identity_at(file, entities, span));
+        if let Some(references) = self.by_reference.get(&span) {
+            matched.extend(references.iter().copied());
+        }
+        if let Some(text) = file.source_text(span)
+            && let Some(named) = self.by_canonical_name.get(text)
+        {
+            matched.extend(named.iter().copied());
+        }
+    }
+}
+
+/// Derive [`NamedCallbackRoles`] for one file. Memoized by
+/// [`SemanticLookup::named_callback_roles`]; nothing else should call it.
+pub(super) fn named_callback_roles(
     file: &solid_facts::FileFacts,
-    span: Span,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     lookup: &SemanticLookup<'_>,
-) -> Option<ExecutionRole> {
+) -> NamedCallbackRoles {
     let dialect = lookup.dialect;
+    let index = NamedCallbackIndex::new(file, entities, symbol_names, lookup);
+    let mut roles = NamedCallbackRoles::default();
+    if index.functions.is_empty() {
+        return roles;
+    }
     let primitives = lookup.primitives(file);
-    let callback = file.ast.functions_body_containing(span).find(|function| {
-        let Some(symbol) = function_symbol(file, function, entities) else {
-            return false;
+    let mut named = Vec::new();
+    for (call_index, call) in file.ast.calls.iter().enumerate() {
+        let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
+            continue;
         };
-        let binding_name = function
-            .name
-            .as_ref()
-            .or_else(|| function_binding_name(file, function))
-            .map(|name| file.source_text(name.span).unwrap_or_default());
-        file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-            let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
-                return false;
-            };
-            (0..call.arguments.len()).any(|argument_index| {
-                if callback_execution_at_call(file, call, primitive, argument_index, lookup)
-                    .is_none()
-                {
-                    return false;
-                }
-                // Admit only positions some arm below can truthfully
-                // classify. An effect's tracked compute and an inline
-                // adapter argument (1.x `on`'s deps) satisfy none of them —
-                // admitting those would fall through to the rendering tail
-                // and misreport `createEffect(namedCompute)` as untracked
-                // rendering. Answering None instead defers such reads to
-                // compiler facts and the returned-adapter classifiers.
-                let count = call.arguments.len();
-                let classifiable =
-                    dialect.reports_untracked_reads_at(primitive, argument_index, count)
-                        || effect_apply_argument(dialect, primitive, count) == Some(argument_index)
-                        || (!is_effect(primitive)
-                            && dialect.callback_tracks_reads_at(primitive, argument_index, count))
-                        || callback_runs_outside_tracking(
-                            dialect,
-                            primitive,
-                            argument_index,
-                            count,
-                        );
-                if !classifiable {
-                    return false;
-                }
-                call.arguments.get(argument_index).is_some_and(|argument| {
-                    argument_references_callback_symbol(
-                        file,
-                        argument,
-                        symbol,
-                        entities,
-                        symbol_names,
-                    ) || argument
-                        .identifier_properties
-                        .iter()
-                        .any(|property| binding_name == file.source_text(property.span))
-                })
-            })
-        }) || file
-            .ast
-            .jsx_elements
-            .iter()
-            .enumerate()
-            .any(|(element_index, element)| {
-                known_primitive(&primitives.jsx[element_index])
-                    .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
-                    && file.ast.identifiers_within(element.span).any(|identifier| {
-                        identifier.role == solid_facts::ast::IdentifierRole::Reference
-                            && !file.ast.jsx_containing(identifier.span).any(|nested| {
-                                nested.span != element.span && element.span.contains(nested.span)
-                            })
-                            && (entities
-                                .get(&location(file.path.shared(), identifier.span))
-                                .is_some_and(|candidate| candidate.as_str() == symbol.as_str())
-                                || binding_name == file.source_text(identifier.span))
-                    })
-            })
-    })?;
+        let count = call.arguments.len();
+        for (argument_index, argument) in call.arguments.iter().enumerate() {
+            // The argument itself, plus the callbacks an options object names
+            // through its `effect`/`error` properties.
+            named.clear();
+            index.named_at(file, entities, argument.span, &mut named);
+            for property in &argument.identifier_properties {
+                index.named_at(file, entities, property.span, &mut named);
+            }
+            named.sort_unstable();
+            named.dedup();
+            if named.is_empty() {
+                continue;
+            }
+            let proven =
+                callback_execution_at_call(file, call, primitive, argument_index, lookup).is_some();
+            let untracked = dialect.reports_untracked_reads_at(primitive, argument_index, count);
+            // Deliberately not gated on `proven`: an effect's apply position is
+            // read straight off the dialect signature, as it always was.
+            let effect_apply =
+                effect_apply_argument(dialect, primitive, count) == Some(argument_index);
+            let tracked = !is_effect(primitive)
+                && dialect.callback_tracks_reads_at(primitive, argument_index, count);
+            let deferred =
+                callback_runs_outside_tracking(dialect, primitive, argument_index, count);
+            for candidate in &named {
+                let entry = roles.entry(index.functions[*candidate]);
+                entry.admitted |= proven && (untracked || effect_apply || tracked || deferred);
+                entry.untracked_callback |= proven && untracked;
+                entry.effect_apply |= effect_apply;
+            }
+            // The tracked and deferred arms have always demanded that the whole
+            // argument *be* the function, never that an options object mention
+            // it.
+            for candidate in index.identity_at(file, entities, argument.span) {
+                let entry = roles.entry(index.functions[*candidate]);
+                entry.tracked |= proven && tracked;
+                entry.deferred |= proven && deferred;
+            }
+        }
+    }
+    for (element_index, element) in file.ast.jsx_elements.iter().enumerate() {
+        if !known_primitive(&primitives.jsx[element_index])
+            .is_some_and(|primitive| dialect.renders_children_through_callback(primitive))
+        {
+            continue;
+        }
+        for identifier in file.ast.identifiers_within(element.span) {
+            if identifier.role != solid_facts::ast::IdentifierRole::Reference
+                || file
+                    .ast
+                    .jsx_containing(identifier.span)
+                    .any(|nested| nested.span != element.span && element.span.contains(nested.span))
+            {
+                continue;
+            }
+            named.clear();
+            index.named_at(file, entities, identifier.span, &mut named);
+            for candidate in &named {
+                roles.entry(index.functions[*candidate]).admitted = true;
+            }
+        }
+    }
+    roles
+}
+
+pub(super) fn named_callback_execution_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<ExecutionRole> {
+    let roles = lookup.named_callback_roles(file);
+    let callback = file
+        .ast
+        .functions_body_containing(span)
+        .find(|function| roles.get(function.span).admitted)?;
     let owner = containing_ast_function(&file.ast, span)?;
     if owner.span != callback.span {
         return Some(ExecutionRole::DeferredCallback);
     }
-    if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        known_primitive(&primitives.calls[call_index]).is_some_and(|primitive| {
-            call.arguments.iter().enumerate().any(|(index, argument)| {
-                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                    && dialect.reports_untracked_reads_at(primitive, index, call.arguments.len())
-                    && function_symbol(file, callback, entities).is_some_and(|symbol| {
-                        argument_references_callback_symbol(
-                            file,
-                            argument,
-                            symbol,
-                            entities,
-                            symbol_names,
-                        )
-                    })
-            })
-        })
-    }) {
+    let role = roles.get(callback.span);
+    if role.untracked_callback {
         return Some(ExecutionRole::UntrackedCallback);
     }
-    if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        known_primitive(&primitives.calls[call_index])
-            .and_then(|primitive| effect_apply_argument(dialect, primitive, call.arguments.len()))
-            .and_then(|index| call.arguments.get(index))
-            .is_some_and(|argument| {
-                function_symbol(file, callback, entities).is_some_and(|symbol| {
-                    argument_references_callback_symbol(
-                        file,
-                        argument,
-                        symbol,
-                        entities,
-                        symbol_names,
-                    )
-                }) || function_binding_name(file, callback)
-                    .or(callback.name.as_ref())
-                    .is_some_and(|name| {
-                        argument.identifier_properties.iter().any(|property| {
-                            file.source_text(property.span) == file.source_text(name.span)
-                        })
-                    })
-            })
-    }) {
+    if role.effect_apply {
         return Some(ExecutionRole::EffectApply);
     }
-    if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        known_primitive(&primitives.calls[call_index]).is_some_and(|primitive| {
-            !is_effect(primitive)
-                && call.arguments.iter().enumerate().any(|(index, argument)| {
-                    callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                        && dialect.callback_tracks_reads_at(primitive, index, call.arguments.len())
-                        && function_symbol(file, callback, entities).is_some_and(|symbol| {
-                            entities.get(&location(file.path.shared(), argument.span))
-                                == Some(symbol)
-                        })
-                })
-        })
-    }) {
+    if role.tracked {
         return Some(ExecutionRole::TrackedJsx);
     }
-    if file.ast.calls.iter().enumerate().any(|(call_index, call)| {
-        known_primitive(&primitives.calls[call_index]).is_some_and(|primitive| {
-            call.arguments.iter().enumerate().any(|(index, argument)| {
-                callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                    && callback_runs_outside_tracking(
-                        dialect,
-                        primitive,
-                        index,
-                        call.arguments.len(),
-                    )
-                    && function_symbol(file, callback, entities).is_some_and(|symbol| {
-                        entities.get(&location(file.path.shared(), argument.span)) == Some(symbol)
-                    })
-            })
-        })
-    }) {
+    if role.deferred {
         return Some(ExecutionRole::DeferredCallback);
     }
     if file

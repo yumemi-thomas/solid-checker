@@ -91,8 +91,8 @@ try {
   // GitHub's shared ubuntu-24.04 runners have measured this cold path at
   // 158us/source while the same revision is about 55us/source locally. Keep
   // enough runner headroom to reject a real regression without failing on a
-  // single-digit scheduling swing; an enabled CodSpeed integration handles
-  // relative PR comparisons.
+  // single-digit scheduling swing; compare-performance.mjs races the merge
+  // base on the same runner for the relative PR comparison.
   const maximumFirstIrPerSource = Number(
     process.env.SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE ?? 175_000
   );
@@ -112,8 +112,8 @@ try {
   // Shared ubuntu-24.04 runners have measured this retained edit path at
   // 67ms while A/B runs of the same revisions are about 26ms locally. Keep
   // this absolute invariant as a gross-regression guard with enough runner
-  // headroom; an enabled CodSpeed integration supplies the relative comparison
-  // for smaller changes.
+  // headroom; compare-performance.mjs supplies the relative comparison for
+  // smaller changes by racing the merge base on the same runner.
   const maximumIncremental = Number(
     process.env.SOLID_CHECKER_MAX_INCREMENTAL_NS ?? 100_000_000
   );

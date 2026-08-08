@@ -7,6 +7,38 @@ const { spawnSync } = require("node:child_process");
 const packageVersion = require("./package.json").version;
 const snapshotCache = new Map();
 
+/**
+ * Per-file registry of the diagnostic identities that enabled per-rule rules
+ * own during the current lint pass, so `certification` can skip them and
+ * report each finding exactly once regardless of config order.
+ *
+ * ESLint builds every enabled rule's listener map — calling each rule's
+ * `create` — before it emits a single traversal event for the file. By the
+ * time `certification`'s `Program` listener fires, every enabled per-rule
+ * rule has therefore registered, whether its config was listed before or
+ * after `recommended`. Each per-rule rule releases its registration in
+ * `Program:exit` (enter events always precede exit events), so a later pass
+ * over the same file — an autofix iteration, or a persistent server whose
+ * config dropped the per-rule rules — starts from a clean registry.
+ */
+const ownedRules = new Map();
+
+function registerOwnedRule(filename, ruleName) {
+  let owned = ownedRules.get(filename);
+  if (!owned) {
+    owned = new Set();
+    ownedRules.set(filename, owned);
+  }
+  owned.add(ruleName);
+}
+
+function releaseOwnedRule(filename, ruleName) {
+  const owned = ownedRules.get(filename);
+  if (!owned) return;
+  owned.delete(ruleName);
+  if (owned.size === 0) ownedRules.delete(filename);
+}
+
 function contextFilename(context) {
   return (
     context.physicalFilename ??
@@ -182,6 +214,35 @@ const adapterSchema = [{
   }
 }];
 
+/**
+ * Project findings into ESLint reports: byte-range conversion, same-file
+ * filtering, safe fixes. Shared by `certification` and every per-rule rule,
+ * so the two surfaces render one finding identically.
+ */
+function projectFindings(context, program, findings) {
+  const sourceCode = context.sourceCode ?? context.getSourceCode();
+  const filename = contextFilename(context);
+  for (const finding of findings) {
+    const location = finding.primaryLocation;
+    if (location?.path && !samePath(location.path, filename)) continue;
+    const range = location ? findingRange(sourceCode, location) : [0, 0];
+    context.report({
+      node: program,
+      loc: {
+        start: sourceCode.getLocFromIndex(range[0]),
+        end: sourceCode.getLocFromIndex(range[1])
+      },
+      messageId: "finding",
+      data: {
+        message: findingMessage(finding)
+      },
+      fix: finding.fixes?.length
+        ? fixer => fixForFinding(fixer, finding, sourceCode, filename)
+        : undefined
+    });
+  }
+}
+
 const certification = {
   meta: {
     type: "problem",
@@ -197,58 +258,32 @@ const certification = {
     return {
       Program(program) {
         const snapshot = loadSnapshot(context);
-        const sourceCode = context.sourceCode ?? context.getSourceCode();
-        const filename = contextFilename(context);
-        for (const finding of snapshot.findings ?? []) {
-          const location = finding.primaryLocation;
-          if (location?.path && !samePath(location.path, filename)) continue;
-          const range = location ? findingRange(sourceCode, location) : [0, 0];
-          context.report({
-            node: program,
-            loc: {
-              start: sourceCode.getLocFromIndex(range[0]),
-              end: sourceCode.getLocFromIndex(range[1])
-            },
-            messageId: "finding",
-            data: {
-              message: findingMessage(finding)
-            },
-            fix: finding.fixes?.length
-              ? fixer => fixForFinding(fixer, finding, sourceCode, filename)
-              : undefined
-          });
-        }
+        // Skip findings a per-rule rule registered for during this pass:
+        // that rule reports them at its own severity, so certification
+        // reporting them again would duplicate every one of its findings.
+        const owned = ownedRules.get(contextFilename(context));
+        const findings = (snapshot.findings ?? []).filter(
+          finding => !owned?.has(finding.rule)
+        );
+        projectFindings(context, program, findings);
       }
     };
   }
 };
 
 /**
- * Hand the certification rule a snapshot narrowed to one diagnostic identity.
- *
- * `loadSnapshot` short-circuits on `settings.solidChecker.snapshot`, so a
- * context carrying a pre-filtered snapshot re-runs the projection (byte-range
- * conversion, same-file filtering, safe fixes) without re-running the
- * analysis. Options are cleared except the dialect: every other option the
- * adapter accepts concerns snapshot acquisition, which has already happened.
- */
-function narrowedContext(context, snapshot) {
-  const solidChecker = { ...(context.settings?.solidChecker ?? {}), snapshot };
-  return Object.create(context, {
-    settings: { value: { ...context.settings, solidChecker }, enumerable: true },
-    options: { value: [], enumerable: true }
-  });
-}
-
-/**
  * One ESLint rule per diagnostic identity, so a project can disable
  * `solid-checker/strict-read-untracked` without losing every other finding.
  *
  * The rule owns no analysis: it narrows the shared snapshot to its own rule
- * name and re-enters `certification`, whose projection is reused rather than
- * copied. Every rule of one dialect shares one analysis run — the module-level
- * snapshot cache keys on the dialect, so 38 v1 rules over a project still
- * spawn the binary once.
+ * name and reuses `certification`'s projection rather than copying it. Every
+ * rule of one dialect shares one analysis run — the module-level snapshot
+ * cache keys on the dialect, so 38 v1 rules over a project still spawn the
+ * binary once.
+ *
+ * `create` registers the rule's identity for the linted file before any
+ * traversal event fires, which is how `certification` knows to leave these
+ * findings alone whichever config order enabled both surfaces.
  */
 function reportingRule(entry, dialect) {
   return {
@@ -264,6 +299,8 @@ function reportingRule(entry, dialect) {
       messages: { finding: "{{message}}" }
     },
     create(context) {
+      const filename = contextFilename(context);
+      registerOwnedRule(filename, entry.name);
       return {
         Program(program) {
           // A v1/-namespaced rule analyzes with the v1 dialect unless the
@@ -278,9 +315,10 @@ function reportingRule(entry, dialect) {
             finding => finding.rule === entry.name
           );
           if (findings.length === 0) return;
-          certification
-            .create(narrowedContext(context, { ...snapshot, findings }))
-            .Program(program);
+          projectFindings(context, program, findings);
+        },
+        "Program:exit"() {
+          releaseOwnedRule(filename, entry.name);
         }
       };
     }
@@ -325,11 +363,10 @@ for (const [dialect, catalog] of Object.entries(manifests)) {
   plugin.configs[dialect] = {
     plugins: { "solid-checker": plugin },
     rules: {
-      // The certification rule reports every finding the per-rule rules
-      // already own, so a dialect config placed after `recommended` turns it
-      // off rather than double-reporting. Flat config resolves per-rule with
-      // the later entry winning; list `recommended` after a dialect config
-      // and certification comes back, duplicates included.
+      // Turning certification off keeps a `[recommended, dialect]` listing
+      // from even creating the rule. The reverse listing re-enables it, but
+      // the per-file registry above makes certification skip every finding a
+      // per-rule rule owns, so both orders report each finding exactly once.
       "solid-checker/certification": "off",
       ...Object.fromEntries(
         catalog.rules.map(entry => [
@@ -347,5 +384,6 @@ module.exports._testing = {
   configuredProject,
   findProject,
   loadSnapshot,
+  ownedRules,
   snapshotCache
 };

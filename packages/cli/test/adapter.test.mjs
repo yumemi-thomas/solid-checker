@@ -240,13 +240,59 @@ test("recommended followed by a dialect config reports each finding once", () =>
 
   const findings = [finding("SC1003", "v1/no-destructure", 0, 2)];
   const reported = [];
-  for (const [name, severity] of Object.entries(merged)) {
-    if (severity === "off") continue;
-    const rule = plugin.rules[name.slice("solid-checker/".length)];
-    rule.create(syntheticContext({ findings }, reported)).Program({});
-  }
+  lintPass(enabledRules(merged), syntheticContext({ findings }, reported));
   assert.equal(reported.length, 1);
   assert.match(reported[0].data.message, /SC1003/);
+});
+
+test("a dialect config followed by recommended reports each finding once", () => {
+  // Reverse listing: `recommended` wins the certification entry, so both the
+  // per-rule rules and certification are enabled for the same pass. The
+  // per-file registry has to keep certification from re-reporting what the
+  // per-rule rules own.
+  const merged = {
+    ...plugin.configs.v1.rules,
+    ...plugin.configs.recommended.rules
+  };
+  assert.equal(merged["solid-checker/certification"], "error");
+
+  const findings = [
+    finding("SC1003", "v1/no-destructure", 0, 2),
+    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+  ];
+  const reported = [];
+  lintPass(enabledRules(merged), syntheticContext({ findings }, reported));
+  assert.equal(reported.length, 2);
+  const ids = reported.map(entry => entry.data.message.slice(1, 7)).sort();
+  assert.deepEqual(ids, ["SC1001", "SC1003"]);
+});
+
+test("certification alone still reports every finding", () => {
+  const findings = [
+    finding("SC1003", "v1/no-destructure", 0, 2),
+    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+  ];
+  const reported = [];
+  lintPass(["certification"], syntheticContext({ findings }, reported));
+  assert.equal(reported.length, 2);
+});
+
+test("per-rule registrations do not leak into a later certification-only pass", () => {
+  // A persistent ESLint server can lint the same file under a per-rule
+  // config, then again after the config dropped to certification only. The
+  // second pass must report everything: registrations live for one pass.
+  const findings = [
+    finding("SC1003", "v1/no-destructure", 0, 2),
+    finding("SC1001", "v1/strict-read-untracked", 3, 5)
+  ];
+  const first = [];
+  lintPass(enabledRules(plugin.configs.v1.rules), syntheticContext({ findings }, first));
+  assert.equal(first.length, 2);
+  assert.equal(plugin._testing.ownedRules.size, 0);
+
+  const second = [];
+  lintPass(["certification"], syntheticContext({ findings }, second));
+  assert.equal(second.length, 2);
 });
 
 test("per-rule surface: a rule reports only the findings it owns", () => {
@@ -255,8 +301,7 @@ test("per-rule surface: a rule reports only the findings it owns", () => {
     finding("SC1001", "v1/strict-read-untracked", 3, 5)
   ];
   const reported = [];
-  const context = syntheticContext({ findings }, reported);
-  plugin.rules["v1/no-destructure"].create(context).Program({});
+  lintPass(["v1/no-destructure"], syntheticContext({ findings }, reported));
   assert.equal(reported.length, 1);
   assert.match(reported[0].data.message, /SC1003/);
 });
@@ -270,11 +315,26 @@ test("per-rule surface: one snapshot load serves every rule of a dialect", () =>
   const base = syntheticContext(undefined, reported);
   base.settings = { solidChecker: { snapshotPath } };
   const before = plugin._testing.snapshotCache.size;
-  plugin.rules["v1/no-destructure"].create(base).Program({});
-  plugin.rules["v1/strict-read-untracked"].create(base).Program({});
+  lintPass(["v1/no-destructure", "v1/strict-read-untracked"], base);
   assert.equal(plugin._testing.snapshotCache.size, before + 1);
   rmSync(snapshotPath);
 });
+
+// Simulate ESLint's per-file execution model: every enabled rule's create()
+// builds its listener map before any traversal event fires, then the Program
+// enter event reaches every listener before any Program:exit does.
+function lintPass(ruleNames, context) {
+  const program = { type: "Program" };
+  const listeners = ruleNames.map(name => plugin.rules[name].create(context));
+  for (const map of listeners) map.Program?.(program);
+  for (const map of listeners) map["Program:exit"]?.(program);
+}
+
+function enabledRules(merged) {
+  return Object.entries(merged)
+    .filter(([, severity]) => severity !== "off")
+    .map(([name]) => name.slice("solid-checker/".length));
+}
 
 function finding(id, rule, start, end) {
   return {

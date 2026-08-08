@@ -30,6 +30,25 @@ jobs:
       # deviation declared. Both are meaningless unless something runs them.
       - run: make coverage
       - run: make parity
+      # The contract drift gate against real installed packages: install the
+      # exact pins the checked-in artifacts were generated from, regenerate,
+      # and diff. The workspace is already built, so this is one npm install
+      # plus three cargo runs.
+      - name: Install the pinned contract packages
+        run: |
+          mkdir -p /tmp/contract-packages
+          cd /tmp/contract-packages
+          npm init -y >/dev/null
+          npm install --ignore-scripts --no-audit --no-fund \
+            solid-js-1x@npm:solid-js@1.9.14 \
+            solid-js@2.0.0-beta.31 \
+            @solidjs/web@2.0.0-beta.31
+      - name: Check the contracts against the installed packages
+        run: |
+          make contracts-check \
+            SOLID_1_PACKAGE=/tmp/contract-packages/node_modules/solid-js-1x \
+            SOLID_2_PACKAGE=/tmp/contract-packages/node_modules/solid-js \
+            SOLIDJS_WEB_PACKAGE=/tmp/contract-packages/node_modules/@solidjs/web
 
   rust-package:
     strategy:
@@ -133,14 +152,8 @@ jobs:
       - run: jq empty schema/*.json pkg/contracts/bundled/*.json
       # The bundled 1.x contract is generated from the census and the
       # reviewed semantics map; a stale artifact ships wrong semantics
-      # compiled into the backend.
-      #
-      # `make contracts-check` -- the drift gate against a *real installed*
-      # solid-js -- stays local-only: it needs the exact package versions
-      # the checked-in artifacts were generated from placed under
-      # node_modules by hand (see the Makefile's `contracts` comment), and
-      # no CI job installs them. The generator hard-fails on any entrypoint
-      # it cannot resolve, so a layout change cannot regenerate a silently
-      # truncated artifact.
+      # compiled into the backend. The drift gate against *real installed*
+      # packages (`make contracts-check`) runs in the rust-engine job, which
+      # installs the exact pins and regenerates all three artifacts.
       - run: node scripts/generate-bundled-solid1-contract.mjs --check
       - run: make test-cli

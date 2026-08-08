@@ -529,6 +529,47 @@ fn as_jsx_attribute_expression(source: &str) -> String {
     format!("{{{source}}}")
 }
 
+/// The span a `<Show>` replacement should occupy: the surrounding
+/// `{ ... }` expression container when the conditional *is* that container's
+/// whole expression, otherwise the conditional itself.
+///
+/// A `<Show>` element is a JSX child in its own right, so leaving the braces
+/// behind would emit `<div>{<Show …></Show>}</div>` — valid, and identical at
+/// runtime, but a container that now wraps nothing but an element and will
+/// never be reformatted away. Upstream replaces the container for the same
+/// reason.
+///
+/// The braces must be `span`'s immediate neighbours, which is exactly what
+/// keeps the render-callback shape (`<For>{(item) => item.cond && …}</For>`)
+/// out: there the nearest text on the left is `=>` or `(`, the container
+/// belongs to the arrow, and only the conditional inside it is replaced —
+/// again as upstream does. Byte-wise and ASCII, so the walk cannot stop
+/// inside a multi-byte character.
+fn show_replacement_span(source: &str, span: Span) -> Span {
+    let bytes = source.as_bytes();
+    let (mut start, mut end) = (span.start as usize, span.end as usize);
+    if end > bytes.len() {
+        return span;
+    }
+    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
+        start -= 1;
+    }
+    while end < bytes.len() && bytes[end].is_ascii_whitespace() {
+        end += 1;
+    }
+    // `${` opens a template interpolation, not a JSX container.
+    let opens = start > 0 && bytes[start - 1] == b'{' && !(start > 1 && bytes[start - 2] == b'$');
+    let closes = end < bytes.len() && bytes[end] == b'}';
+    if opens && closes {
+        Span::new(
+            u32::try_from(start - 1).unwrap_or(span.start),
+            u32::try_from(end + 1).unwrap_or(span.end),
+        )
+    } else {
+        span
+    }
+}
+
 fn show_conditional_replacement(test: &str, consequent: &str, alternate: &str) -> String {
     format!(
         "<Show when={{{test}}} fallback={}>{}</Show>",
@@ -553,7 +594,10 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
             message: "Replace with <Show>.".into(),
             applicability: "safe".into(),
             edits: vec![TextEdit {
-                location: location(file.path.shared(), logical.span),
+                location: location(
+                    file.path.shared(),
+                    show_replacement_span(&file.source, logical.span),
+                ),
                 new_text: format!(
                     "<Show when={{{}}}>{}</Show>",
                     text(file, logical.left),
@@ -585,7 +629,10 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
             message: "Replace with <Show fallback>.".into(),
             applicability: "safe".into(),
             edits: vec![TextEdit {
-                location: location(file.path.shared(), conditional.span),
+                location: location(
+                    file.path.shared(),
+                    show_replacement_span(&file.source, conditional.span),
+                ),
                 new_text: show_conditional_replacement(
                     text(file, conditional.test),
                     text(file, conditional.consequent),
@@ -609,7 +656,61 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
 mod tests {
     use super::{
         as_jsx_attribute_expression, as_jsx_child, braces_wrap, show_conditional_replacement,
+        show_replacement_span,
     };
+    use solid_facts::core::Span;
+
+    /// The substring [`show_replacement_span`] chose, given the span of the
+    /// conditional written between `[[` and `]]`.
+    fn replaced(marked: &str) -> String {
+        let start = marked.find("[[").expect("a start marker");
+        let end = marked[start + 2..].find("]]").expect("an end marker") + start + 2;
+        let source = format!(
+            "{}{}{}",
+            &marked[..start],
+            &marked[start + 2..end],
+            &marked[end + 2..]
+        );
+        let span = Span::new(
+            u32::try_from(start).unwrap(),
+            u32::try_from(end - 2).unwrap(),
+        );
+        let widened = show_replacement_span(&source, span);
+        source[widened.start as usize..widened.end as usize].to_string()
+    }
+
+    #[test]
+    fn a_show_replacement_takes_the_container_it_is_the_whole_expression_of() {
+        // The braces would otherwise survive as `{<Show …></Show>}`.
+        assert_eq!(
+            replaced("<div>{[[props.cond && <span/>]]}</div>"),
+            "{props.cond && <span/>}"
+        );
+        // Padding and newlines inside the container go with it.
+        assert_eq!(
+            replaced("<div>\n  { [[a ? <A/> : <B/>]] }\n</div>"),
+            "{ a ? <A/> : <B/> }"
+        );
+    }
+
+    #[test]
+    fn a_show_replacement_leaves_a_container_it_does_not_own() {
+        // The render-callback shape: the container belongs to the arrow, and
+        // upstream replaces only the conditional inside it too.
+        assert_eq!(
+            replaced("<For each={xs}>{(x) => [[x.cond && <span/>]]}</For>"),
+            "x.cond && <span/>"
+        );
+        // Parenthesised body: the nearest neighbour is `(`, not `{`.
+        assert_eq!(
+            replaced("<For each={xs}>{(x) => ([[x.cond && <span/>]])}</For>"),
+            "x.cond && <span/>"
+        );
+        // An operand of a larger expression.
+        assert_eq!(replaced("<div>{ready && [[a ? b : c]]}</div>"), "a ? b : c");
+        // A template interpolation is not a JSX container.
+        assert_eq!(replaced("<div>{`${[[a ? b : c]]}`}</div>"), "a ? b : c");
+    }
 
     #[test]
     fn braces_wrap_accepts_only_an_immediate_expression_container_pair() {
