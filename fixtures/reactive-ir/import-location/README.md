@@ -4,7 +4,7 @@ SC7005, `primitive-imported-from-wrong-module`, on Solid 1.x — the dialect
 with four subpaths, and so the only one where "which module exports this?" has
 an interesting answer.
 
-The snapshot keeps message text (`KEEPS_WORDING` in `tasks/coverage/coverage.mjs`).
+The snapshot keeps message text (`KEEPS_WORDING` in `scripts/coverage.mjs`).
 The wording is the behaviour under test: the message names the module the
 checker believes the name comes from, and a rule that reported the right line
 with the wrong module would otherwise pass.

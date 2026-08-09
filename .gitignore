@@ -1,5 +1,7 @@
 /bin/
 /coverage.out
+# extract-upstream-cases.mjs writes typecheck stubs here during re-extraction.
+fixtures/upstream-parity/.staging/
 /dist/
 /.solid-checker/
 /.profiles/

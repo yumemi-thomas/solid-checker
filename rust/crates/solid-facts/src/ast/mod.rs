@@ -26,7 +26,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 23;
+pub const AST_FACTS_SCHEMA: u32 = 24;
 
 mod span_index;
 
@@ -65,8 +65,6 @@ pub struct AstFacts {
     pub logical_expressions: Vec<LogicalExpressionFact>,
     #[serde(default)]
     pub object_properties: Vec<ObjectPropertyFact>,
-    #[serde(default)]
-    pub tagged_templates: Vec<TaggedTemplateFact>,
     #[serde(default)]
     pub template_literals: Vec<TemplateLiteralFact>,
     /// Operands whose operator coerces a value. A function object is never a
@@ -369,29 +367,15 @@ pub struct ObjectPropertyFact {
     pub key: Span,
     pub value: Span,
     pub computed: bool,
-    pub shorthand: bool,
-}
-
-/// A tagged template expression and the expressions interpolated into it.
-///
-/// CSS-in-JS and HTML tag functions receive substitutions as values and may
-/// call function-valued substitutions later. Rules need the structure to tell
-/// that contract apart from ordinary string interpolation, and the tag's own
-/// identity to resolve what it is.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaggedTemplateFact {
-    pub span: Span,
-    pub tag: Span,
-    pub expressions: Vec<Span>,
 }
 
 /// An untagged template literal and the expressions interpolated into it.
 ///
-/// Separate from [`TaggedTemplateFact`] because the two coerce differently:
-/// a tag receives the interpolations as values and may do anything with them,
-/// while an untagged literal stringifies each one. That makes this the fact
-/// that proves an interpolated accessor renders its own source text.
+/// Tagged templates are deliberately excluded because the two coerce
+/// differently: a tag receives the interpolations as values and may do
+/// anything with them, while an untagged literal stringifies each one. That
+/// makes this the fact that proves an interpolated accessor renders its own
+/// source text.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TemplateLiteralFact {
@@ -550,7 +534,6 @@ struct Collector<'s, 'semantic> {
     conditional_expressions: Vec<ConditionalExpressionFact>,
     logical_expressions: Vec<LogicalExpressionFact>,
     object_properties: Vec<ObjectPropertyFact>,
-    tagged_templates: Vec<TaggedTemplateFact>,
     template_literals: Vec<TemplateLiteralFact>,
     coercive_operands: Vec<CoerciveOperandFact>,
     assignments: Vec<AssignmentFact>,
@@ -582,7 +565,6 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             conditional_expressions: Vec::new(),
             logical_expressions: Vec::new(),
             object_properties: Vec::new(),
-            tagged_templates: Vec::new(),
             template_literals: Vec::new(),
             coercive_operands: Vec::new(),
             assignments: Vec::new(),
@@ -610,7 +592,6 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.conditional_expressions.sort_by_key(|fact| fact.span);
         self.logical_expressions.sort_by_key(|fact| fact.span);
         self.object_properties.sort_by_key(|fact| fact.span);
-        self.tagged_templates.sort_by_key(|fact| fact.span);
         self.template_literals.sort_by_key(|fact| fact.span);
         self.coercive_operands.sort_by_key(|fact| fact.span);
         self.assignments.sort_by_key(|fact| fact.target);
@@ -637,7 +618,6 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             conditional_expressions: self.conditional_expressions,
             logical_expressions: self.logical_expressions,
             object_properties: self.object_properties,
-            tagged_templates: self.tagged_templates,
             template_literals: self.template_literals,
             coercive_operands: self.coercive_operands,
             assignments: self.assignments,
@@ -1215,7 +1195,6 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             key: span(property.key.span()),
             value: span(property.value.span()),
             computed: property.computed,
-            shorthand: property.shorthand,
         });
         walk::walk_object_property(self, property);
     }
@@ -1224,16 +1203,6 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         &mut self,
         expression: &oxc_ast::ast::TaggedTemplateExpression<'a>,
     ) {
-        self.tagged_templates.push(TaggedTemplateFact {
-            span: span(expression.span),
-            tag: span(expression.tag.span()),
-            expressions: expression
-                .quasi
-                .expressions
-                .iter()
-                .map(|interpolated| span(interpolated.span()))
-                .collect(),
-        });
         // Not the default walk: that would visit the quasi through
         // `visit_template_literal` and record every tagged template's quasi
         // in `template_literals`, violating that table's untagged-only
@@ -2060,14 +2029,13 @@ function View(shadowedDirective: (element: HTMLDivElement) => void) {
         );
     }
 
-    /// A tagged template owns a template literal, and the walker visits both.
-    /// The two tables are separate questions -- a tag receives the values, an
-    /// untagged literal stringifies them -- so a consumer asking "is this
-    /// interpolated into a string" must not be answered by a tagged one.
+    /// A tagged template owns a template literal, but a tag receives the
+    /// values while an untagged literal stringifies them -- so a consumer
+    /// asking "is this interpolated into a string" must not be answered by a
+    /// tagged one.
     #[test]
     fn a_tagged_template_is_not_also_an_untagged_one() {
         let facts = extract("App.tsx", "const styled = css`color: ${theme}`;\n").unwrap();
-        assert_eq!(facts.tagged_templates.len(), 1);
         assert_eq!(
             facts.template_literals.len(),
             0,
@@ -2076,7 +2044,6 @@ function View(shadowedDirective: (element: HTMLDivElement) => void) {
         // An untagged template nested inside a tagged interpolation is still
         // an untagged template — the manual visit must reach it.
         let facts = extract("App.tsx", "const styled = css`color: ${`x${theme}`}`;\n").unwrap();
-        assert_eq!(facts.tagged_templates.len(), 1);
         assert_eq!(facts.template_literals.len(), 1);
     }
 
@@ -2098,27 +2065,6 @@ function View(shadowedDirective: (element: HTMLDivElement) => void) {
         assert!(
             fragment.contains(element),
             "the fragment wraps the element: {fragment:?} vs {element:?}"
-        );
-    }
-
-    #[test]
-    fn retains_tagged_templates_with_their_interpolations() {
-        let source = "const styled = css`color: ${primary}; font-size: ${size()}px;`;";
-        let facts = extract("styles.ts", source).unwrap();
-
-        assert_eq!(facts.tagged_templates.len(), 1);
-        let template = &facts.tagged_templates[0];
-        assert_eq!(
-            source.get(template.tag.start as usize..template.tag.end as usize),
-            Some("css")
-        );
-        assert_eq!(
-            template
-                .expressions
-                .iter()
-                .map(|expression| source.get(expression.start as usize..expression.end as usize))
-                .collect::<Vec<_>>(),
-            [Some("primary"), Some("size()")]
         );
     }
 }

@@ -7,7 +7,5 @@ publish.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-serde.workspace = true
-solid-dialect = { path = "../../../crates/solid-dialect" }
 solid-reactive-ir = { path = "../../../crates/solid-reactive-ir" }
 typefacts.workspace = true

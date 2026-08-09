@@ -1803,13 +1803,6 @@ pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, Bui
     build_with_contracts(facts, dialect, &[])
 }
 
-pub fn build_measured(
-    facts: &ProjectFacts,
-    dialect: &dyn Dialect,
-) -> Result<(Program, BuildTimings), BuildError> {
-    build_with_contracts_measured(facts, dialect, &[])
-}
-
 pub fn build_with_contracts(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
