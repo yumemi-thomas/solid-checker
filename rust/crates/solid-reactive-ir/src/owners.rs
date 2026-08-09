@@ -320,7 +320,14 @@ pub(crate) fn find_missing_owners(
     let mut nodes = Vec::new();
     for file in &facts.files {
         for function in &file.ast.functions {
-            let symbol = function.name.as_ref().and_then(|name| {
+            // The binding-aware name, so an arrow bound to `const Foo = ...`
+            // carries the same identity as `function Foo()`: `symbol` is how
+            // call edges reach this node, `name` is how component casing and
+            // export status seed its context, and the two passes must derive
+            // both from the same lookup or fresh and incremental builds
+            // disagree on arrow-bound functions.
+            let name = function_binding_name(file, function);
+            let symbol = name.and_then(|name| {
                 entities
                     .get(&location(file.path.shared(), name.span))
                     .cloned()
@@ -347,11 +354,7 @@ pub(crate) fn find_missing_owners(
                 path: file.path.to_string(),
                 span: function.span,
                 body: function.body,
-                name: function
-                    .name
-                    .as_ref()
-                    .or_else(|| function_binding_name(file, function))
-                    .map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
+                name: name.map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
                 symbol,
                 exported,
             });
@@ -681,15 +684,15 @@ pub(crate) fn discover_owner_file(
         .functions
         .iter()
         .map(|function| {
-            let symbol = function
-                .name
-                .as_ref()
-                .or_else(|| function_binding_name(file, function))
-                .and_then(|name| {
-                    entities
-                        .get(&location(file.path.shared(), name.span))
-                        .cloned()
-                });
+            // The same binding-aware name the fresh pass uses; see
+            // `find_missing_owners`. Deriving `symbol` and `name` from one
+            // lookup keeps arrow-bound functions identical across passes.
+            let name = function_binding_name(file, function);
+            let symbol = name.and_then(|name| {
+                entities
+                    .get(&location(file.path.shared(), name.span))
+                    .cloned()
+            });
             let exported =
                 indexes
                     .typescript_file(file.path.as_str())
@@ -712,10 +715,7 @@ pub(crate) fn discover_owner_file(
                 path: file.path.to_string(),
                 span: function.span,
                 body: function.body,
-                name: function
-                    .name
-                    .as_ref()
-                    .map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
+                name: name.map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
                 symbol,
                 exported,
             }
