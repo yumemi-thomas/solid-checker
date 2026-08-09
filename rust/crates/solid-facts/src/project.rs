@@ -406,13 +406,7 @@ impl FileFacts {
         self.compiler
             .seed_spans()
             .into_iter()
-            .map(|span| {
-                Ok(Location {
-                    path: self.path.shared(),
-                    start_byte: u64::from(span.start),
-                    end_byte: u64::from(span.end),
-                })
-            })
+            .map(|span| Ok(span.location(self.path.shared())))
             .collect()
     }
 
@@ -430,11 +424,7 @@ impl FileFacts {
         self.ast
             .structural_seed_spans()
             .into_iter()
-            .map(|span| Location {
-                path: self.path.shared(),
-                start_byte: u64::from(span.start),
-                end_byte: u64::from(span.end),
-            })
+            .map(|span| span.location(self.path.shared()))
             .collect()
     }
 }

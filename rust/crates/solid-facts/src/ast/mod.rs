@@ -447,6 +447,23 @@ pub enum ReturnValueKind {
 }
 
 impl AstFacts {
+    /// The non-array bindings an export statement itself declares: inside the
+    /// export's span, but not inside the body of any function the same export
+    /// contains (those belong to the function, not the export surface).
+    pub fn exported_bindings<'a>(
+        &'a self,
+        export: &'a ExportFact,
+    ) -> impl Iterator<Item = &'a BindingFact> {
+        self.bindings.iter().filter(move |binding| {
+            binding.shape != BindingShape::Array
+                && export.span.contains(binding.declaration)
+                && !self.functions.iter().any(|function| {
+                    export.span.contains(function.span)
+                        && function.body.contains(binding.declaration)
+                })
+        })
+    }
+
     #[must_use]
     pub fn structural_seed_spans(&self) -> Vec<Span> {
         let mut spans = self

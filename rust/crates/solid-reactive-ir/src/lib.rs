@@ -1104,11 +1104,7 @@ fn jsx_primitive_name(
 }
 
 fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
-    Location {
-        path: path.into(),
-        start_byte: u64::from(span.start),
-        end_byte: u64::from(span.end),
-    }
+    span.location(path)
 }
 
 #[cfg(test)]

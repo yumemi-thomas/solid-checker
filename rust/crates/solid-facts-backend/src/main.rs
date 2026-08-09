@@ -862,14 +862,7 @@ fn exported_names_for_file(
                 .filter(|specifier| !specifier.type_only)
                 .map(|specifier| specifier.exported.to_string()),
         );
-        for binding in file.ast.bindings.iter().filter(|binding| {
-            binding.shape != solid_facts::ast::BindingShape::Array
-                && export.span.contains(binding.declaration)
-                && !file.ast.functions.iter().any(|function| {
-                    export.span.contains(function.span)
-                        && function.body.contains(binding.declaration)
-                })
-        }) {
+        for binding in file.ast.exported_bindings(export) {
             names.extend(binding.names.iter().filter_map(|name| {
                 file.source_text(name.span)
                     .filter(|name| !name.is_empty())

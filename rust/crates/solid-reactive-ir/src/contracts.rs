@@ -661,14 +661,7 @@ fn contract_export_fragment(
                 .syntax
                 .push((specifier.exported.to_string(), summary, true));
         }
-        for binding in file.ast.bindings.iter().filter(|binding| {
-            binding.shape != solid_facts::ast::BindingShape::Array
-                && export.span.contains(binding.declaration)
-                && !file.ast.functions.iter().any(|function| {
-                    export.span.contains(function.span)
-                        && function.body.contains(binding.declaration)
-                })
-        }) {
+        for binding in file.ast.exported_bindings(export) {
             for name in &binding.names {
                 let target = graph
                     .entities

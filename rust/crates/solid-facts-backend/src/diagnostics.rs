@@ -340,11 +340,7 @@ fn finish_analysis(
                     .imports
                     .iter()
                     .find(|import| package_root(&import.module) == status.name)
-                    .map(|import| typefacts::Location {
-                        path: file.path.as_str().to_owned().into(),
-                        start_byte: u64::from(import.span.start),
-                        end_byte: u64::from(import.span.end),
-                    })
+                    .map(|import| import.span.location(file.path.shared()))
             })
             .unwrap_or_else(|| typefacts::Location {
                 path: project.to_string_lossy().into_owned().into(),
