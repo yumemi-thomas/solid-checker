@@ -1,10 +1,8 @@
 /bin/
-/coverage.out
 # extract-upstream-cases.mjs writes typecheck stubs here during re-extraction.
 fixtures/upstream-parity/.staging/
 /dist/
 /.solid-checker/
-/.profiles/
 .DS_Store
 **/.DS_Store
 **/target/
@@ -25,7 +23,6 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/import-location/node_modules/**
 !fixtures/engine/eslint-reactivity-v1/node_modules/
 !fixtures/engine/eslint-reactivity-v1/node_modules/**
-/.pnpm-store/
 packages/wasm/browser.js
 packages/wasm/generated.d.ts
 packages/wasm/index.js
@@ -33,5 +30,4 @@ packages/wasm/solid-checker-wasm.wasi-browser.js
 packages/wasm/solid-checker-wasm.wasi.cjs
 packages/wasm/solid-checker-wasm.wasm32-wasi*.wasm
 packages/wasm/wasi-worker*.mjs
-*.test
 /.typefacts/

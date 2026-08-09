@@ -7,7 +7,7 @@ whose original notices remain applicable.
 
 - Upstream: https://github.com/ryansolid/dom-expressions
 - Consumed fork: https://github.com/yumemi-thomas/dom-expressions
-- Pinned revision: `209e1bf78f5616885d473dd04a68913cd6bb2ce0`
+- Pinned revision: `ac3f10e8e854e8ab12638074d6b8520af4289599`
 - License: MIT
 
 The `dom-expressions-compiler` crate is consumed as a pinned Cargo git
@@ -15,10 +15,22 @@ dependency, built without its Node-API feature. It is not forked or copied into
 this repository; the semantic trace that `solid-checker` reads is maintained
 upstream in that fork.
 
+## Solid 1.x compiler (dom-expressions fork)
+
+- Upstream: https://github.com/ryansolid/dom-expressions
+- Consumed fork: https://github.com/yumemi-thomas/solid-1x-compiler
+- Pinned revision: `c26d204ff921c96a2309a783460de6a05c8f8b4a`
+- License: MIT
+
+The Solid 1.x dialect consumes the same `dom-expressions-compiler` crate name
+from its own repository, kept at differential parity with the Babel compiler
+Solid 1.x ships. It is consumed as a pinned Cargo git dependency and is not
+copied into this repository.
+
 ## Oxc
 
 - Upstream: https://github.com/oxc-project/oxc
-- Version: `0.118`, resolved exactly by the compiler's `Cargo.lock`
+- Version: `0.118`, resolved exactly by this repository's `rust/Cargo.lock`
 - License: MIT
 
 Oxc is consumed as published Rust crates. It is not forked or copied into this

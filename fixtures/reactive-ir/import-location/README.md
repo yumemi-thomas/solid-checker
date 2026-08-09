@@ -1,6 +1,6 @@
 # import-location
 
-SC7005, `primitive-imported-from-wrong-module`, on Solid 1.x — the dialect
+SC8002, `v1/imports`, on Solid 1.x — the dialect
 with four subpaths, and so the only one where "which module exports this?" has
 an interesting answer.
 
