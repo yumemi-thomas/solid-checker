@@ -74,17 +74,7 @@ pub(super) fn resolve_contract_imports(
             if import.type_only {
                 continue;
             }
-            let Some(contract) = contracts
-                .iter()
-                .filter(|contract| {
-                    import.module == contract.package.name
-                        || import
-                            .module
-                            .strip_prefix(&contract.package.name)
-                            .is_some_and(|suffix| suffix.starts_with('/'))
-                })
-                .max_by_key(|contract| contract.package.name.len())
-            else {
+            let Some(contract) = PackageContract::for_module(contracts, &import.module) else {
                 continue;
             };
             for binding in &import.bindings {
@@ -238,16 +228,7 @@ pub(super) fn resolve_contract_imports(
             let Some(module) = export.module.as_deref() else {
                 continue;
             };
-            let Some(contract) = contracts
-                .iter()
-                .filter(|contract| {
-                    module == contract.package.name
-                        || module
-                            .strip_prefix(&contract.package.name)
-                            .is_some_and(|suffix| suffix.starts_with('/'))
-                })
-                .max_by_key(|contract| contract.package.name.len())
-            else {
+            let Some(contract) = PackageContract::for_module(contracts, module) else {
                 continue;
             };
             for specifier in &export.specifiers {

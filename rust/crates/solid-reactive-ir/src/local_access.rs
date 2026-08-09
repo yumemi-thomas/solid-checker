@@ -275,45 +275,38 @@ impl LocalAccessContext<'_> {
             // A member callee is a different shape: `factory(...).member()`
             // invokes the member, not the returned accessor, so no contracted
             // read is proven there.
-            let immediate_return =
-                file.ast
-                    .calls_within(call.callee)
-                    .filter(|nested| nested.span != call.span)
-                    .max_by_key(|nested| nested.span.end - nested.span.start)
-                    .filter(|_| !self.lookup.is_member_span(file, call.callee))
-                    .and_then(|factory| {
-                        let symbol = self.lookup.callee_symbol(file, factory.callee)?;
-                        self.contract_returns
-                            .get(symbol)
-                            .cloned()
-                            .or_else(|| {
-                                let primitive = primitive_name(
-                                    file.path.as_str(),
-                                    factory.callee,
-                                    factory.static_callee(&file.source),
-                                    self.entities,
-                                    self.symbol_names,
-                                    self.lookup.dialect,
-                                )?;
-                                self.bundled_returns.get(primitive.as_str()).cloned().map(
-                                    |returned| {
-                                        (
-                                            returned,
-                                            Location {
-                                                path: format!(
-                                                    "bundled://{}#{primitive}",
-                                                    self.lookup.dialect.bundled_contract_label()
-                                                )
-                                                .into(),
-                                                start_byte: 0,
-                                                end_byte: 0,
-                                            },
-                                        )
-                                    },
-                                )
-                            })
-                            .map(|contract| (factory, contract))
-                    });
+            let immediate_return = file
+                .ast
+                .calls_within(call.callee)
+                .filter(|nested| nested.span != call.span)
+                .max_by_key(|nested| nested.span.end - nested.span.start)
+                .filter(|_| !self.lookup.is_member_span(file, call.callee))
+                .and_then(|factory| {
+                    let symbol = self.lookup.callee_symbol(file, factory.callee)?;
+                    self.contract_returns
+                        .get(symbol)
+                        .cloned()
+                        .or_else(|| {
+                            let primitive = primitive_name(
+                                file.path.as_str(),
+                                factory.callee,
+                                factory.static_callee(&file.source),
+                                self.entities,
+                                self.symbol_names,
+                                self.lookup.dialect,
+                            )?;
+                            self.bundled_returns
+                                .get(primitive.as_str())
+                                .cloned()
+                                .map(|returned| {
+                                    (
+                                        returned,
+                                        bundled_contract_location(self.lookup.dialect, &primitive),
+                                    )
+                                })
+                        })
+                        .map(|contract| (factory, contract))
+                });
             if let Some((factory, (returned, declaration))) = immediate_return {
                 let execution = semantic_execution_role(
                     file,

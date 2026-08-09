@@ -39,6 +39,16 @@ pub(crate) fn bundled_contract_matches_dialect(
     solid_dialect::Version::for_solid_js(&contract.package.version) == Some(dialect.version())
 }
 
+/// The provenance stamped on facts read from a bundled contract:
+/// `bundled://<dialect label>#<primitive>`, carrying no span of its own.
+pub(crate) fn bundled_contract_location(dialect: &dyn Dialect, primitive: &str) -> Location {
+    Location {
+        path: format!("bundled://{}#{primitive}", dialect.bundled_contract_label()).into(),
+        start_byte: 0,
+        end_byte: 0,
+    }
+}
+
 pub(crate) fn source_discovery_identity(
     file: &FileFacts,
     indexes: &ProjectIndexes<'_>,
@@ -256,15 +266,7 @@ pub(crate) fn discover_file_sources(
                         (
                             symbol_id(&returned.label),
                             primitive.into(),
-                            Location {
-                                path: format!(
-                                    "bundled://{}#{primitive}",
-                                    lookup.dialect.bundled_contract_label()
-                                )
-                                .into(),
-                                start_byte: 0,
-                                end_byte: 0,
-                            },
+                            bundled_contract_location(lookup.dialect, primitive),
                         ),
                     ));
                 }
@@ -785,15 +787,10 @@ pub(crate) fn discover_sources(
                                     (
                                         symbol_id(&returned.label),
                                         primitive.into(),
-                                        Location {
-                                            path: format!(
-                                                "bundled://{}#{primitive}",
-                                                semantic_lookup.dialect.bundled_contract_label()
-                                            )
-                                            .into(),
-                                            start_byte: 0,
-                                            end_byte: 0,
-                                        },
+                                        bundled_contract_location(
+                                            semantic_lookup.dialect,
+                                            primitive,
+                                        ),
                                     ),
                                 );
                             }

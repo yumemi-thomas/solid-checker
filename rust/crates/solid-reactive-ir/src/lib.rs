@@ -411,6 +411,24 @@ impl PackageContract {
         Ok(())
     }
 
+    /// The contract governing an imported module specifier, if any.
+    ///
+    /// A specifier matches a contract whose package name it equals or extends
+    /// with a `/`-separated subpath. Scoped and nested package names can both
+    /// prefix the same specifier (`@scope/pkg` and `@scope/pkg-extra`), so the
+    /// longest matching name wins.
+    pub fn for_module<'a>(contracts: &'a [Self], module: &str) -> Option<&'a Self> {
+        contracts
+            .iter()
+            .filter(|contract| {
+                module == contract.package.name
+                    || module
+                        .strip_prefix(&contract.package.name)
+                        .is_some_and(|suffix| suffix.starts_with('/'))
+            })
+            .max_by_key(|contract| contract.package.name.len())
+    }
+
     pub fn exports_for_module(&self, module: &str) -> Option<&BTreeMap<String, ContractExport>> {
         let suffix = module.strip_prefix(&self.package.name)?;
         if !suffix.is_empty() && !suffix.starts_with('/') {

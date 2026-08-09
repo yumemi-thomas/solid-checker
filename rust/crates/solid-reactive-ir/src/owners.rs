@@ -1341,11 +1341,7 @@ pub(crate) fn read_is_under_loading(
     }) {
         return true;
     }
-    let Some(owner) = file
-        .ast
-        .functions_body_containing(span)
-        .min_by_key(|function| function.body.end - function.body.start)
-    else {
+    let Some(owner) = containing_ast_function(&file.ast, span) else {
         return false;
     };
     // For call sites whose target matched (file, owner), the "wrapper" the
@@ -1467,9 +1463,7 @@ pub(crate) fn inside_unclassified_callback(file: &solid_facts::FileFacts, span: 
     {
         return false;
     }
-    file.ast
-        .functions_body_containing(span)
-        .min_by_key(|function| function.body.end - function.body.start)
+    containing_ast_function(&file.ast, span)
         .is_some_and(|function| function_binding_name(file, function).is_none())
 }
 
@@ -2226,16 +2220,9 @@ pub(crate) fn counts_as_strict_read_root(
 }
 
 pub(crate) fn enclosing_function_label(file: &solid_facts::FileFacts, span: Span) -> String {
-    let Some(function) = file
-        .ast
-        .functions_body_containing(span)
-        .min_by_key(|function| function.body.end - function.body.start)
-    else {
+    let Some(function) = containing_ast_function(&file.ast, span) else {
         return String::new();
     };
-    if let Some(name) = &function.name {
-        return file.source_text(name.span).unwrap_or_default().to_owned();
-    }
     function_binding_name(file, function).map_or_else(String::new, |name| {
         file.source_text(name.span).unwrap_or_default().to_owned()
     })

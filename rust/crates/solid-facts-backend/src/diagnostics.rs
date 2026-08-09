@@ -514,17 +514,7 @@ pub fn analysis_metrics(
     let mut contracted_functions = HashMap::<String, Option<String>>::new();
     for file in &facts.files {
         for import in &file.ast.imports {
-            let Some(contract) = contracts
-                .iter()
-                .filter(|contract| {
-                    import.module == contract.package.name
-                        || import
-                            .module
-                            .strip_prefix(&contract.package.name)
-                            .is_some_and(|suffix| suffix.starts_with('/'))
-                })
-                .max_by_key(|contract| contract.package.name.len())
-            else {
+            let Some(contract) = PackageContract::for_module(contracts, &import.module) else {
                 continue;
             };
             for binding in &import.bindings {

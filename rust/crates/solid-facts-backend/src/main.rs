@@ -681,15 +681,7 @@ fn dependency_export_summary(
     module: &str,
     name: &str,
 ) -> Option<solid_reactive_ir::ContractExport> {
-    dependency_contracts
-        .iter()
-        .filter(|contract| {
-            module == contract.package.name
-                || module
-                    .strip_prefix(&contract.package.name)
-                    .is_some_and(|suffix| suffix.starts_with('/'))
-        })
-        .max_by_key(|contract| contract.package.name.len())
+    solid_reactive_ir::PackageContract::for_module(dependency_contracts, module)
         .and_then(|contract| contract.exports_for_module(module))
         .and_then(|exports| exports.get(name))
         .cloned()
@@ -826,16 +818,11 @@ fn exported_names_for_file(
                 .as_deref()
                 .ok_or("export-all declaration has no module")?;
             if !module.starts_with('.') {
-                let contract = dependency_contracts
-                    .iter()
-                    .filter(|contract| {
-                        module == contract.package.name
-                            || module
-                                .strip_prefix(&contract.package.name)
-                                .is_some_and(|suffix| suffix.starts_with('/'))
-                    })
-                    .max_by_key(|contract| contract.package.name.len())
-                    .ok_or_else(|| {
+                let contract = solid_reactive_ir::PackageContract::for_module(
+                    dependency_contracts,
+                    module,
+                )
+                .ok_or_else(|| {
                         format!(
                             "emit package contract: cannot statically expand external export-all {module:?} from {}; generate and pass its dependency contract with --contract",
                             path.display()
