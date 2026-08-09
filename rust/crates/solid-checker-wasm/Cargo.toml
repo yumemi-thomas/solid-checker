@@ -18,7 +18,6 @@ serde.workspace = true
 serde_json.workspace = true
 solid-facts = { path = "../solid-facts" }
 solid-facts-backend = { path = "../solid-facts-backend" }
-typefacts.workspace = true
 
 [build-dependencies]
 napi-build = "2"
