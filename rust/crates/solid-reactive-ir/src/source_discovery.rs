@@ -634,216 +634,38 @@ pub(crate) fn discover_sources(
     let mut changed_source_symbols = HashSet::<SymbolId>::new();
     match source_discovery_cache {
         None => {
-            for file in &facts.files {
-                for binding in &file.ast.bindings {
-                    let Some(initializer) = binding.call_initializer else {
-                        continue;
-                    };
-                    let Some(call) = project_indexes
+            let contributions = parallel_file_results(&facts.files, |file| {
+                discover_file_sources(
+                    semantic_lookup,
+                    file,
+                    project_indexes
                         .ast_files_by_path
                         .get(file.path.as_str())
-                        .and_then(|index| index.call_by_span(initializer))
-                    else {
-                        continue;
-                    };
-                    let contracted = entities
-                        .get(&location(file.path.shared(), call.callee))
-                        .and_then(|symbol| resolved_contracts.by_symbol.get(symbol));
-                    if let Some(contracted) = contracted
-                        && let Some(contracted_return) = contracted.summary.returns.as_ref()
-                    {
-                        let source_name = binding.names.first();
-                        if let Some(name) = source_name {
-                            let declaration = location(file.path.shared(), name.span);
-                            if let Some(symbol) = entities.get(&declaration) {
-                                accessors.insert(
-                                    symbol.clone(),
-                                    (
-                                        symbol_id(file.source_text(name.span).unwrap_or_default()),
-                                        contracted.contract_location.clone(),
-                                    ),
-                                );
-                                contracted_accessor_symbols.insert(symbol.clone());
-                                accessor_origins.insert(
-                                    symbol.clone(),
-                                    (
-                                        symbol_id(&contracted_return.label),
-                                        symbol_id(&contracted.local_name),
-                                        contracted.contract_location.clone(),
-                                    ),
-                                );
-                                source_kinds.insert(
-                                    symbol.clone(),
-                                    if contracted_return.kind == "store-path" {
-                                        ReactiveSourceKind::Store
-                                    } else {
-                                        ReactiveSourceKind::Accessor
-                                    },
-                                );
-                            }
-                        }
-                        continue;
-                    }
-                    let primitive = primitive_name(
-                        file.path.as_str(),
-                        call.callee,
-                        call.static_callee(&file.source),
-                        entities,
-                        symbol_names,
-                        semantic_lookup.dialect,
-                    );
-                    let resolved = known_primitive(&primitive);
-                    if resolved == Some(Primitive::Action) {
-                        if let Some(name) = binding.names.first() {
-                            let location = location(file.path.shared(), name.span);
-                            if let Some(symbol) = entities.get(&location) {
-                                actions.insert(
-                                    symbol.clone(),
-                                    (
-                                        symbol_id(file.source_text(name.span).unwrap_or_default()),
-                                        location,
-                                    ),
-                                );
-                            }
-                        }
-                        continue;
-                    }
-                    if resolved == Some(Primitive::Dynamic) {
-                        if let Some(name) = binding.names.first() {
-                            let declaration = location(file.path.shared(), name.span);
-                            if let Some(symbol) = entities.get(&declaration) {
-                                source_primitives.insert(symbol.clone(), "dynamic".into());
-                                if call.arguments.first().is_some_and(|argument| {
-                                    computation_is_async(semantic_lookup, file, argument.span)
-                                }) {
-                                    async_sources.insert(symbol.clone());
-                                }
-                            }
-                        }
-                        continue;
-                    }
-                    if !matches!(
-                        resolved,
-                        Some(primitive)
-                            if semantic_lookup.dialect.creates_reactive_source(primitive)
-                    ) && !primitive
-                        .as_deref()
-                        .is_some_and(|primitive| bundled_returns.contains_key(primitive))
-                    {
-                        continue;
-                    }
-                    let source_name = if binding.shape == solid_facts::ast::BindingShape::Array {
-                        binding.array_slots.first().and_then(Option::as_ref)
-                    } else {
-                        binding.names.first()
-                    };
-                    if let Some(name) = source_name {
-                        let declaration = location(file.path.shared(), name.span);
-                        if let Some(symbol) = entities.get(&declaration) {
-                            accessors.insert(
-                                symbol.clone(),
-                                (
-                                    symbol_id(file.source_text(name.span).unwrap_or_default()),
-                                    declaration,
-                                ),
-                            );
-                            let go_returned_source = binding.shape
-                                == solid_facts::ast::BindingShape::Array
-                                && matches!(
-                                    resolved,
-                                    Some(Primitive::CreateSignal | Primitive::CreateStore)
-                                )
-                                && go_binding_pattern_accepts_call(
-                                    file.source.as_ref(),
-                                    binding,
-                                    call,
-                                );
-                            source_phases.insert(
-                                symbol.clone(),
-                                if go_returned_source && resolved == Some(Primitive::CreateStore) {
-                                    2
-                                } else if go_returned_source {
-                                    0
-                                } else {
-                                    1
-                                },
-                            );
-                            if go_returned_source {
-                                returned_source_symbols.insert(symbol.clone());
-                                summary_source_symbols.insert(symbol.clone());
-                            }
-                            if binding.shape != solid_facts::ast::BindingShape::Array
-                                && primitive.as_deref().is_some_and(|primitive| {
-                                    bundled_returns.contains_key(primitive)
-                                })
-                            {
-                                summary_source_symbols.insert(symbol.clone());
-                            }
-                            if let Some(primitive) = primitive.as_deref()
-                                && let Some(returned) = bundled_returns.get(primitive)
-                            {
-                                accessor_origins.insert(
-                                    symbol.clone(),
-                                    (
-                                        symbol_id(&returned.label),
-                                        primitive.into(),
-                                        bundled_contract_location(
-                                            semantic_lookup.dialect,
-                                            primitive,
-                                        ),
-                                    ),
-                                );
-                            }
-                            source_kinds.insert(
-                                symbol.clone(),
-                                if primitive
-                                    .as_deref()
-                                    .and_then(|primitive| bundled_returns.get(primitive))
-                                    .is_some_and(|returned| returned.kind == "store-path")
-                                    || matches!(
-                                        resolved,
-                                        Some(primitive)
-                                            if semantic_lookup.dialect.returns_store(primitive)
-                                    )
-                                {
-                                    ReactiveSourceKind::Store
-                                } else {
-                                    ReactiveSourceKind::Accessor
-                                },
-                            );
-                            if let Some(primitive) = primitive.as_deref() {
-                                source_primitives.insert(symbol.clone(), primitive.into());
-                            }
-                            source_owned_write.insert(symbol.clone(), call.owned_write_option);
-                            if call.arguments.first().is_some_and(|argument| {
-                                computation_is_async(semantic_lookup, file, argument.span)
-                            }) {
-                                async_sources.insert(symbol.clone());
-                            }
-                        }
-                    }
-                    if resolved != Some(Primitive::CreateMemo)
-                        && let Some(name) =
-                            if binding.shape == solid_facts::ast::BindingShape::Array {
-                                binding.array_slots.get(1).and_then(Option::as_ref)
-                            } else {
-                                binding.names.get(1)
-                            }
-                    {
-                        let declaration = location(file.path.shared(), name.span);
-                        if let Some(symbol) = entities.get(&declaration) {
-                            setters.insert(
-                                symbol.clone(),
-                                (
-                                    symbol_id(file.source_text(name.span).unwrap_or_default()),
-                                    declaration,
-                                    call.owned_write_option,
-                                ),
-                            );
-                        }
-                    }
-                }
+                        .expect("project index contains every source file"),
+                    entities,
+                    symbol_names,
+                    resolved_contracts,
+                    &bundled_returns,
+                )
+            });
+            let mut aggregate = SourceDiscoveryAggregate::default();
+            for contribution in &contributions {
+                aggregate.merge(contribution);
             }
+            aggregate.append_to(SourceDiscoveryMergeTarget {
+                accessors: &mut accessors,
+                accessor_origins: &mut accessor_origins,
+                setters: &mut setters,
+                actions: &mut actions,
+                source_kinds: &mut source_kinds,
+                source_primitives: &mut source_primitives,
+                source_phases: &mut source_phases,
+                returned_source_symbols: &mut returned_source_symbols,
+                summary_source_symbols: &mut summary_source_symbols,
+                source_owned_write: &mut source_owned_write,
+                async_sources: &mut async_sources,
+                contracted_accessor_symbols: &mut contracted_accessor_symbols,
+            });
         }
         Some(cache) => {
             let current_paths = facts

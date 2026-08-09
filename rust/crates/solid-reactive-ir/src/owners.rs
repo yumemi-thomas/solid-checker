@@ -210,6 +210,151 @@ pub(crate) struct OwnerFileIndex {
     pub(crate) providing_regions: Vec<Span>,
 }
 
+impl OwnerFileIndex {
+    /// The per-call primitive resolutions and owner-providing argument spans
+    /// a file's owner analysis classifies calls against — one derivation for
+    /// both the fresh and incremental passes.
+    pub(crate) fn for_file(
+        file: &solid_facts::FileFacts,
+        entities: &EntitySymbols,
+        symbol_names: &HashMap<SymbolId, SymbolId>,
+        lookup: &SemanticLookup<'_>,
+    ) -> Self {
+        let call_primitives = file
+            .ast
+            .calls
+            .iter()
+            .map(|call| {
+                primitive_name(
+                    file.path.as_str(),
+                    call.callee,
+                    call.static_callee(&file.source),
+                    entities,
+                    symbol_names,
+                    lookup.dialect,
+                )
+            })
+            .collect::<Vec<_>>();
+        let providing_regions = file
+            .ast
+            .calls
+            .iter()
+            .zip(&call_primitives)
+            .filter_map(|(call, primitive)| {
+                let argument =
+                    owner_providing_argument(file, call, known_primitive(primitive), lookup)?;
+                call.arguments.get(argument).and_then(|argument| {
+                    matches!(
+                        argument.value,
+                        solid_facts::ast::ArgumentValueKind::Identifier
+                            | solid_facts::ast::ArgumentValueKind::Function
+                            | solid_facts::ast::ArgumentValueKind::AsyncFunction
+                    )
+                    .then_some(argument.span)
+                })
+            })
+            .collect();
+        Self {
+            call_primitives,
+            providing_regions,
+        }
+    }
+}
+
+/// One owner-graph node per function, from the binding-aware name: an arrow
+/// bound to `const Foo = ...` carries the same identity as `function Foo()`.
+/// `symbol` is how call edges reach the node, `name` is how component casing
+/// and export status seed its context, and both passes must derive both from
+/// this one lookup or fresh and incremental builds disagree on arrow-bound
+/// functions.
+fn owner_node(
+    file: &solid_facts::FileFacts,
+    indexes: &ProjectIndexes<'_>,
+    entities: &EntitySymbols,
+    function: &solid_facts::ast::FunctionFact,
+) -> OwnerNode {
+    let name = function_binding_name(file, function);
+    let symbol = name.and_then(|name| {
+        entities
+            .get(&location(file.path.shared(), name.span))
+            .cloned()
+    });
+    let exported = indexes
+        .typescript_file(file.path.as_str())
+        .is_some_and(|typescript_file| {
+            typescript_file.functions.iter().any(|candidate| {
+                candidate.exported
+                    && candidate.body.start_byte == u64::from(function.body.start)
+                    && candidate.body.end_byte == u64::from(function.body.end)
+            })
+        })
+        || file.ast.exports.iter().any(|export| {
+            export.span.contains(function.span)
+                && !file.ast.functions.iter().any(|candidate| {
+                    candidate.span != function.span
+                        && export.span.contains(candidate.span)
+                        && candidate.span.contains(function.span)
+                })
+        });
+    OwnerNode {
+        path: file.path.to_string(),
+        span: function.span,
+        body: function.body,
+        name: name.map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
+        symbol,
+        exported,
+    }
+}
+
+/// The context bits a node earns from its own name: an uppercase-led name is
+/// a component (owned by convention), an exported lowercase-led one runs for
+/// callers the analysis cannot see (unowned until proven otherwise).
+fn seed_name_contexts(nodes: &[OwnerNode]) -> Vec<u8> {
+    let mut contexts = vec![0_u8; nodes.len()];
+    for (index, node) in nodes.iter().enumerate() {
+        let uppercase = node
+            .name
+            .as_deref()
+            .and_then(|name| name.chars().next())
+            .is_some_and(char::is_uppercase);
+        if uppercase {
+            contexts[index] |= OWNER_CONTEXT_OWNED;
+        }
+        if node.exported && node.name.is_some() && !uppercase {
+            contexts[index] |= OWNER_CONTEXT_UNOWNED;
+        }
+    }
+    contexts
+}
+
+/// Worklist fixed point over the owner graph: every context bit flows along
+/// outgoing edges, transformed per edge kind, until nothing changes.
+fn propagate_owner_contexts(contexts: &mut [u8], outgoing: &[Vec<(usize, OwnerEdgeKind)>]) {
+    let mut queued = contexts
+        .iter()
+        .map(|context| *context != 0)
+        .collect::<Vec<_>>();
+    let mut worklist = queued
+        .iter()
+        .enumerate()
+        .filter_map(|(index, queued)| queued.then_some(index))
+        .collect::<VecDeque<_>>();
+    while let Some(source) = worklist.pop_front() {
+        queued[source] = false;
+        for (target, kind) in outgoing[source].iter().copied() {
+            let propagated = owner_edge_context(kind, contexts[source]);
+            let next = contexts[target] | propagated;
+            if next != contexts[target] {
+                contexts[target] = next;
+                if !queued[target] {
+                    queued[target] = true;
+                    worklist.push_back(target);
+                }
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 pub(crate) enum OwnerTarget {
     Symbol(SymbolId),
@@ -276,88 +421,12 @@ pub(crate) fn find_missing_owners(
     let owner_file_indexes = facts
         .files
         .iter()
-        .map(|file| {
-            let call_primitives = file
-                .ast
-                .calls
-                .iter()
-                .map(|call| {
-                    primitive_name(
-                        file.path.as_str(),
-                        call.callee,
-                        call.static_callee(&file.source),
-                        entities,
-                        symbol_names,
-                        lookup.dialect,
-                    )
-                })
-                .collect::<Vec<_>>();
-            let providing_regions = file
-                .ast
-                .calls
-                .iter()
-                .zip(&call_primitives)
-                .filter_map(|(call, primitive)| {
-                    let argument =
-                        owner_providing_argument(file, call, known_primitive(primitive), lookup)?;
-                    call.arguments.get(argument).and_then(|argument| {
-                        matches!(
-                            argument.value,
-                            solid_facts::ast::ArgumentValueKind::Identifier
-                                | solid_facts::ast::ArgumentValueKind::Function
-                                | solid_facts::ast::ArgumentValueKind::AsyncFunction
-                        )
-                        .then_some(argument.span)
-                    })
-                })
-                .collect();
-            OwnerFileIndex {
-                call_primitives,
-                providing_regions,
-            }
-        })
+        .map(|file| OwnerFileIndex::for_file(file, entities, symbol_names, lookup))
         .collect::<Vec<_>>();
     let mut nodes = Vec::new();
     for file in &facts.files {
         for function in &file.ast.functions {
-            // The binding-aware name, so an arrow bound to `const Foo = ...`
-            // carries the same identity as `function Foo()`: `symbol` is how
-            // call edges reach this node, `name` is how component casing and
-            // export status seed its context, and the two passes must derive
-            // both from the same lookup or fresh and incremental builds
-            // disagree on arrow-bound functions.
-            let name = function_binding_name(file, function);
-            let symbol = name.and_then(|name| {
-                entities
-                    .get(&location(file.path.shared(), name.span))
-                    .cloned()
-            });
-            let exported =
-                indexes
-                    .typescript_file(file.path.as_str())
-                    .is_some_and(|typescript_file| {
-                        typescript_file.functions.iter().any(|candidate| {
-                            candidate.exported
-                                && candidate.body.start_byte == u64::from(function.body.start)
-                                && candidate.body.end_byte == u64::from(function.body.end)
-                        })
-                    })
-                    || file.ast.exports.iter().any(|export| {
-                        export.span.contains(function.span)
-                            && !file.ast.functions.iter().any(|candidate| {
-                                candidate.span != function.span
-                                    && export.span.contains(candidate.span)
-                                    && candidate.span.contains(function.span)
-                            })
-                    });
-            nodes.push(OwnerNode {
-                path: file.path.to_string(),
-                span: function.span,
-                body: function.body,
-                name: name.map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
-                symbol,
-                exported,
-            });
+            nodes.push(owner_node(file, indexes, entities, function));
         }
     }
     let nodes_by_path = function_indices_by_path(&nodes);
@@ -366,28 +435,8 @@ pub(crate) fn find_missing_owners(
         .enumerate()
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
-    let mut contexts = vec![0_u8; nodes.len()];
+    let mut contexts = seed_name_contexts(&nodes);
     let mut edges = Vec::<(usize, usize, OwnerEdgeKind)>::new();
-    for (index, node) in nodes.iter().enumerate() {
-        if node
-            .name
-            .as_deref()
-            .and_then(|name| name.chars().next())
-            .is_some_and(char::is_uppercase)
-        {
-            contexts[index] |= OWNER_CONTEXT_OWNED;
-        }
-        if node.exported
-            && node.name.is_some()
-            && !node
-                .name
-                .as_deref()
-                .and_then(|name| name.chars().next())
-                .is_some_and(char::is_uppercase)
-        {
-            contexts[index] |= OWNER_CONTEXT_UNOWNED;
-        }
-    }
     for (file_index, file) in facts.files.iter().enumerate() {
         for (call_index, call) in file.ast.calls.iter().enumerate() {
             let owner =
@@ -459,29 +508,7 @@ pub(crate) fn find_missing_owners(
     for (source, target, kind) in edges {
         outgoing[source].push((target, kind));
     }
-    let mut queued = contexts
-        .iter()
-        .map(|context| *context != 0)
-        .collect::<Vec<_>>();
-    let mut worklist = queued
-        .iter()
-        .enumerate()
-        .filter_map(|(index, queued)| queued.then_some(index))
-        .collect::<VecDeque<_>>();
-    while let Some(source) = worklist.pop_front() {
-        queued[source] = false;
-        for (target, kind) in outgoing[source].iter().copied() {
-            let propagated = owner_edge_context(kind, contexts[source]);
-            let next = contexts[target] | propagated;
-            if next != contexts[target] {
-                contexts[target] = next;
-                if !queued[target] {
-                    queued[target] = true;
-                    worklist.push_back(target);
-                }
-            }
-        }
-    }
+    propagate_owner_contexts(&mut contexts, &outgoing);
 
     let mut requirements = Vec::new();
     let mut seen = HashSet::new();
@@ -645,81 +672,15 @@ pub(crate) fn discover_owner_file(
     lookup: &SemanticLookup<'_>,
 ) -> CachedOwnerFile {
     let dialect = lookup.dialect;
-    let call_primitives = file
-        .ast
-        .calls
-        .iter()
-        .map(|call| {
-            primitive_name(
-                file.path.as_str(),
-                call.callee,
-                call.static_callee(&file.source),
-                entities,
-                symbol_names,
-                dialect,
-            )
-        })
-        .collect::<Vec<_>>();
-    let providing_regions = file
-        .ast
-        .calls
-        .iter()
-        .zip(&call_primitives)
-        .filter_map(|(call, primitive)| {
-            let argument =
-                owner_providing_argument(file, call, known_primitive(primitive), lookup)?;
-            call.arguments.get(argument).and_then(|argument| {
-                matches!(
-                    argument.value,
-                    solid_facts::ast::ArgumentValueKind::Identifier
-                        | solid_facts::ast::ArgumentValueKind::Function
-                        | solid_facts::ast::ArgumentValueKind::AsyncFunction
-                )
-                .then_some(argument.span)
-            })
-        })
-        .collect::<Vec<_>>();
+    let OwnerFileIndex {
+        call_primitives,
+        providing_regions,
+    } = OwnerFileIndex::for_file(file, entities, symbol_names, lookup);
     let nodes = file
         .ast
         .functions
         .iter()
-        .map(|function| {
-            // The same binding-aware name the fresh pass uses; see
-            // `find_missing_owners`. Deriving `symbol` and `name` from one
-            // lookup keeps arrow-bound functions identical across passes.
-            let name = function_binding_name(file, function);
-            let symbol = name.and_then(|name| {
-                entities
-                    .get(&location(file.path.shared(), name.span))
-                    .cloned()
-            });
-            let exported =
-                indexes
-                    .typescript_file(file.path.as_str())
-                    .is_some_and(|typescript_file| {
-                        typescript_file.functions.iter().any(|candidate| {
-                            candidate.exported
-                                && candidate.body.start_byte == u64::from(function.body.start)
-                                && candidate.body.end_byte == u64::from(function.body.end)
-                        })
-                    })
-                    || file.ast.exports.iter().any(|export| {
-                        export.span.contains(function.span)
-                            && !file.ast.functions.iter().any(|candidate| {
-                                candidate.span != function.span
-                                    && export.span.contains(candidate.span)
-                                    && candidate.span.contains(function.span)
-                            })
-                    });
-            OwnerNode {
-                path: file.path.to_string(),
-                span: function.span,
-                body: function.body,
-                name: name.map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
-                symbol,
-                exported,
-            }
-        })
+        .map(|function| owner_node(file, indexes, entities, function))
         .collect::<Vec<_>>();
     let nodes_by_path = function_indices_by_path(&nodes);
     let owner_at = |span| {
@@ -946,27 +907,7 @@ pub(crate) fn find_missing_owners_incremental(
         .enumerate()
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
-    let mut contexts = vec![0_u8; nodes.len()];
-    for (index, node) in nodes.iter().enumerate() {
-        if node
-            .name
-            .as_deref()
-            .and_then(|name| name.chars().next())
-            .is_some_and(char::is_uppercase)
-        {
-            contexts[index] |= OWNER_CONTEXT_OWNED;
-        }
-        if node.exported
-            && node.name.is_some()
-            && !node
-                .name
-                .as_deref()
-                .and_then(|name| name.chars().next())
-                .is_some_and(char::is_uppercase)
-        {
-            contexts[index] |= OWNER_CONTEXT_UNOWNED;
-        }
-    }
+    let mut contexts = seed_name_contexts(&nodes);
     let mut outgoing = vec![Vec::<(usize, OwnerEdgeKind)>::new(); nodes.len()];
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {
@@ -993,29 +934,7 @@ pub(crate) fn find_missing_owners_incremental(
     let graph_assembly = graph_started.elapsed();
 
     let propagation_started = Instant::now();
-    let mut queued = contexts
-        .iter()
-        .map(|context| *context != 0)
-        .collect::<Vec<_>>();
-    let mut worklist = queued
-        .iter()
-        .enumerate()
-        .filter_map(|(index, queued)| queued.then_some(index))
-        .collect::<VecDeque<_>>();
-    while let Some(source) = worklist.pop_front() {
-        queued[source] = false;
-        for (target, kind) in outgoing[source].iter().copied() {
-            let propagated = owner_edge_context(kind, contexts[source]);
-            let next = contexts[target] | propagated;
-            if next != contexts[target] {
-                contexts[target] = next;
-                if !queued[target] {
-                    queued[target] = true;
-                    worklist.push_back(target);
-                }
-            }
-        }
-    }
+    propagate_owner_contexts(&mut contexts, &outgoing);
     let propagation = propagation_started.elapsed();
 
     let requirements_started = Instant::now();
