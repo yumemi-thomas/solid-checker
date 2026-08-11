@@ -214,6 +214,22 @@ pub fn build_with_contracts_measured(
     )
 }
 
+/// The staged incremental pipeline. One stage per clock span, in order:
+///
+/// 1. Project indexes, the late-stage cache gate, TypeScript indexes,
+///    symbol names, contract resolution, and the semantic lookup.
+/// 2. Source discovery and reachability, in two parallel lanes.
+/// 3. The static prepass ([`static_rules::static_prepass`]).
+/// 4. Local accesses and the interprocedural fixed point, two lanes again.
+/// 5. Returns-conditionally, the upstream-compat pass, and the leaf and
+///    cleanup tables.
+/// 6. Static API checks, directive discovery, and the owner fixed point.
+/// 7. Final ordering and assembly ([`ProgramDraft::into_program`]).
+///
+/// Stages read the shared [`AnalysisContext`], write the [`ProgramDraft`],
+/// and end their span on the [`StageClock`]; each late-stage cache sub-slot
+/// is handed to exactly one stage. See
+/// `docs/pipeline-orchestrator-redesign.md`.
 pub(crate) fn build_with_contracts_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
@@ -799,7 +815,6 @@ pub(crate) fn build_with_contracts_measured_incremental(
                 &symbol_names,
                 &retained_source_paths,
                 &mut cache.owner_files,
-                &mut build_timings,
             );
             draft.missing_owners.extend(requirements);
             build_timings.absorb_owner(&timings);

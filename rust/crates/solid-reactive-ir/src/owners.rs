@@ -409,6 +409,8 @@ pub(crate) struct OwnerIncrementalTimings {
     pub(crate) graph_assembly: Duration,
     pub(crate) propagation: Duration,
     pub(crate) requirement_emission: Duration,
+    pub(crate) reused_files: u64,
+    pub(crate) recomputed_files: u64,
 }
 
 pub(crate) fn find_missing_owners(
@@ -853,9 +855,9 @@ pub(crate) fn find_missing_owners_incremental(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     retained_source_paths: &HashSet<String>,
     cache: &mut HashMap<SourcePath, CachedOwnerFile>,
-    build_timings: &mut BuildTimings,
 ) -> (Vec<OwnerRequirement>, OwnerIncrementalTimings) {
     let entities = lookup.entities();
+    let mut timings = OwnerIncrementalTimings::default();
     let total_started = Instant::now();
     let current_paths = facts
         .files
@@ -872,11 +874,11 @@ pub(crate) fn find_missing_owners_incremental(
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
         {
-            build_timings.owner_reused_files += 1;
+            timings.reused_files += 1;
             continue;
         }
         recomputed.push(file);
-        build_timings.owner_recomputed_files += 1;
+        timings.recomputed_files += 1;
     }
     for (path, discovered) in parallel_slice_results(&recomputed, |file| {
         (
@@ -1009,6 +1011,7 @@ pub(crate) fn find_missing_owners_incremental(
             graph_assembly,
             propagation,
             requirement_emission,
+            ..timings
         },
     )
 }

@@ -625,6 +625,8 @@ impl BuildTimings {
         self.owner_graph_assembly = timings.graph_assembly;
         self.owner_propagation = timings.propagation;
         self.owner_requirement_emission = timings.requirement_emission;
+        self.owner_reused_files += timings.reused_files;
+        self.owner_recomputed_files += timings.recomputed_files;
     }
 }
 
