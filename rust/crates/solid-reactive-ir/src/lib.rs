@@ -14,6 +14,7 @@ mod reachability;
 mod runtime_semantics;
 mod source_discovery;
 mod static_api;
+mod static_rules;
 mod symbols;
 mod upstream_compat;
 
