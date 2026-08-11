@@ -14,6 +14,7 @@ mod reachability;
 mod runtime_semantics;
 mod source_discovery;
 mod static_api;
+mod static_rules;
 mod symbols;
 mod upstream_compat;
 
@@ -44,7 +45,7 @@ use execution_role::{
 };
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
 use indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
-use interproc::{SummaryNode, SummaryRead, SummaryReads};
+use interproc::{InterproceduralTimings, SummaryNode, SummaryRead, SummaryReads};
 use serde::{Deserialize, Serialize};
 use solid_dialect::{Dialect, Primitive};
 use solid_facts::core::{SourcePath, Span};
@@ -584,6 +585,51 @@ pub struct BuildTimings {
     pub final_ordering: Duration,
 }
 
+impl BuildTimings {
+    /// Copies the source-discovery lane's contribution out of the
+    /// [`BuildTimings`] it accumulated on its own thread.
+    pub(crate) fn absorb_source_discovery(&mut self, lane: &Self) {
+        self.source_discovery = lane.source_discovery;
+        self.source_discovery_reused_files = lane.source_discovery_reused_files;
+        self.source_discovery_recomputed_files = lane.source_discovery_recomputed_files;
+        self.typed_accessors_and_prop_roots = lane.typed_accessors_and_prop_roots;
+        self.prop_propagation_and_control_flow = lane.prop_propagation_and_control_flow;
+    }
+
+    /// Copies the interprocedural stage's own timing breakdown.
+    pub(crate) fn absorb_interprocedural(&mut self, timings: &InterproceduralTimings) {
+        self.interprocedural_graph = timings.graph;
+        self.interprocedural_direct_summaries = timings.direct_summaries;
+        self.interprocedural_direct_index = timings.direct_index;
+        self.interprocedural_direct_references = timings.direct_references;
+        self.interprocedural_typed_accessors = timings.typed_accessors;
+        self.interprocedural_propagation = timings.propagation;
+        self.interprocedural_returned_direct = timings.returned_direct;
+        self.interprocedural_returned_delta = timings.returned_delta;
+        self.interprocedural_call_summary_delta = timings.call_summary_delta;
+        self.interprocedural_factory_propagation = timings.factory_propagation;
+        self.interprocedural_results_and_exports = timings.results_and_exports;
+        self.interprocedural_result_reads = timings.result_reads;
+        self.interprocedural_export_summaries = timings.export_summaries;
+        self.typed_accessor_reused_files = timings.typed_accessor_reused_files;
+        self.typed_accessor_recomputed_files = timings.typed_accessor_recomputed_files;
+        self.interprocedural_graph_reused_files = timings.graph_reused_files;
+        self.interprocedural_graph_recomputed_files = timings.graph_recomputed_files;
+        self.interprocedural_result_reused_files = timings.result_reused_files;
+        self.interprocedural_result_recomputed_files = timings.result_recomputed_files;
+    }
+
+    /// Copies the owner stage's own timing breakdown.
+    pub(crate) fn absorb_owner(&mut self, timings: &OwnerIncrementalTimings) {
+        self.owner_fragment_build = timings.fragment_build;
+        self.owner_graph_assembly = timings.graph_assembly;
+        self.owner_propagation = timings.propagation;
+        self.owner_requirement_emission = timings.requirement_emission;
+        self.owner_reused_files += timings.reused_files;
+        self.owner_recomputed_files += timings.recomputed_files;
+    }
+}
+
 /// Retains the last coherent Reactive IR generation behind the same build
 /// interface used by fresh analysis. Cross-generation source discovery,
 /// typed-accessor discovery, the symbolic interprocedural graph, and
@@ -1120,6 +1166,16 @@ mod tests {
         symbol_names, symbols_by_root,
     };
     use super::*;
+
+    /// The `SOLID_CHECKER_TIMINGS` stage lines are read by the performance
+    /// tooling; their shape is a contract, not an implementation detail.
+    #[test]
+    fn stage_lines_keep_the_shape_the_performance_tooling_reads() {
+        assert_eq!(
+            pipeline::StageClock::stage_line("source-discovery", Duration::from_nanos(42)),
+            "{\"reactiveIrStage\":\"source-discovery\",\"elapsedNs\":42}"
+        );
+    }
 
     #[test]
     fn ordered_parallel_maps_respect_the_worker_budget() {

@@ -11,11 +11,7 @@ use std::{
 };
 
 use crate::cleanup::{cleanup_returns_for_file, leaf_owner_operations_for_file};
-use crate::contracts::resolve_contract_imports;
-use crate::directives::{
-    DirectiveCreationCollector, is_created_primitive, push_directive_creation,
-};
-use crate::execution_role::execution_role;
+use crate::contracts::{ResolvedContractBinding, resolve_contract_imports};
 use crate::identity::SymbolId;
 use crate::indexes::{CachedAstFileIndex, ProjectIndexes, SemanticLookup};
 use crate::interproc::{InterproceduralContext, InterproceduralTimings};
@@ -24,13 +20,173 @@ use crate::reachability::{
     reachable_call_multiplicity_incremental,
 };
 use crate::static_api::StaticApiContext;
-use crate::symbols::{
-    add_solid_import_names, async_symbol_root, patch_typescript_indexes, references_for_sources,
-};
+use crate::symbols::{add_solid_import_names, patch_typescript_indexes, references_for_sources};
 use solid_dialect::Dialect;
-use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::Location;
+
+/// Times the pipeline's stages and emits the `SOLID_CHECKER_TIMINGS` stage
+/// lines. Each build lane owns one clock; a stage ends with [`finish`],
+/// which records into the selected [`BuildTimings`] field, emits the stage
+/// line, and starts timing the next stage.
+///
+/// [`stage_line`] is the single place the emitted shape is produced — the
+/// names and JSON form are read by the performance tooling and must not
+/// drift.
+///
+/// [`finish`]: StageClock::finish
+/// [`stage_line`]: StageClock::stage_line
+pub(crate) struct StageClock {
+    started: Instant,
+    emit: bool,
+}
+
+impl StageClock {
+    pub(crate) fn new(emit: bool) -> Self {
+        Self {
+            started: Instant::now(),
+            emit,
+        }
+    }
+
+    pub(crate) fn finish(
+        &mut self,
+        timings: &mut BuildTimings,
+        field: fn(&mut BuildTimings) -> &mut Duration,
+        name: &str,
+    ) {
+        let elapsed = self.started.elapsed();
+        *field(timings) = elapsed;
+        self.record(name, elapsed);
+        self.started = Instant::now();
+    }
+
+    /// Emits a stage line for a duration measured outside the clock.
+    pub(crate) fn record(&self, name: &str, elapsed: Duration) {
+        if self.emit {
+            eprintln!("{}", Self::stage_line(name, elapsed));
+        }
+    }
+
+    /// The time since the current stage began, without ending it.
+    pub(crate) fn elapsed(&self) -> Duration {
+        self.started.elapsed()
+    }
+
+    /// Starts the next stage without recording the current one, for
+    /// boundaries whose time was already accounted through [`Self::record`].
+    pub(crate) fn restart(&mut self) {
+        self.started = Instant::now();
+    }
+
+    pub(crate) fn stage_line(name: &str, elapsed: Duration) -> String {
+        format!(
+            "{{\"reactiveIrStage\":\"{}\",\"elapsedNs\":{}}}",
+            name,
+            elapsed.as_nanos()
+        )
+    }
+}
+
+/// The program under assembly: every table and obligation counter the
+/// pipeline's stages fill, owned in one place so a stage's writes are part
+/// of its signature rather than ambient mutation of a shared function body.
+#[derive(Default)]
+pub(crate) struct ProgramDraft {
+    pub(crate) reads: Vec<ReactiveRead>,
+    pub(crate) writes: Vec<ReactiveWrite>,
+    pub(crate) action_invocations: Vec<ActionInvocation>,
+    pub(crate) async_reads: Vec<AsyncRead>,
+    pub(crate) static_violations: Vec<StaticViolation>,
+    pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
+    pub(crate) invalid_cleanup_returns: Vec<InvalidCleanupReturn>,
+    pub(crate) unresolved_cleanup_returns: Vec<UnresolvedCleanupReturn>,
+    pub(crate) directive_creations: Vec<PrimitiveCreation>,
+    pub(crate) missing_owners: Vec<OwnerRequirement>,
+    pub(crate) contract_exports: Arc<BTreeMap<String, ContractExport>>,
+    pub(crate) contract_generation_obligations: Vec<ContractGenerationObligation>,
+    pub(crate) strict_read_obligations: usize,
+    pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
+    /// One static violation per (rule, file, offset) identity, across the
+    /// stages that share an identity space.
+    pub(crate) seen_static: HashSet<(&'static str, Arc<str>, u64)>,
+}
+
+impl ProgramDraft {
+    /// Orders every table by location and assembles the final [`Program`].
+    pub(crate) fn into_program(mut self, factory_instances: usize) -> Program {
+        self.reads.sort_by(|left, right| {
+            (
+                &left.location.path,
+                left.location.start_byte,
+                left.location.end_byte,
+            )
+                .cmp(&(
+                    &right.location.path,
+                    right.location.start_byte,
+                    right.location.end_byte,
+                ))
+        });
+        self.writes
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        self.action_invocations
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        self.invalid_cleanup_returns
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        self.unresolved_cleanup_returns
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        self.static_violations
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        self.directive_creations
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        self.missing_owners
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        self.async_reads
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        self.contract_generation_obligations
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        Program {
+            reads: self.reads,
+            writes: self.writes,
+            actions: self.action_invocations,
+            leaf_operations: self.leaf_operations,
+            invalid_cleanup_returns: self.invalid_cleanup_returns,
+            unresolved_cleanup_returns: self.unresolved_cleanup_returns,
+            static_violations: self.static_violations,
+            directive_creations: self.directive_creations,
+            missing_owners: self.missing_owners,
+            async_reads: self.async_reads,
+            contract_exports: self.contract_exports,
+            contract_generation_obligations: self.contract_generation_obligations,
+            obligation_counts: ObligationCounts {
+                strict_reads: self.strict_read_obligations,
+                writes_and_actions: self.write_action_obligations.len(),
+                factory_instances,
+            },
+        }
+    }
+}
+
+/// The shared read-only environment for the stages that run after source
+/// discovery and reachability have settled: project facts, the dialect, and
+/// the discovery-derived lookup tables. Stages borrow it immutably; their
+/// outputs go to the [`ProgramDraft`].
+pub(crate) struct AnalysisContext<'a> {
+    pub(crate) facts: &'a ProjectFacts,
+    pub(crate) dialect: &'a dyn Dialect,
+    pub(crate) entities: &'a EntitySymbols,
+    pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolName>,
+    pub(crate) aliases: &'a HashMap<SymbolId, SymbolId>,
+    pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
+    pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    pub(crate) source_owned_write: &'a HashMap<SymbolId, bool>,
+    pub(crate) reachable_calls: &'a HashMap<Location, usize>,
+    pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
+    pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
+    pub(crate) rule_options: &'a RuleOptions,
+}
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
     build_with_contracts(facts, dialect, &[])
@@ -58,6 +214,22 @@ pub fn build_with_contracts_measured(
     )
 }
 
+/// The staged incremental pipeline. One stage per clock span, in order:
+///
+/// 1. Project indexes, the late-stage cache gate, TypeScript indexes,
+///    symbol names, contract resolution, and the semantic lookup.
+/// 2. Source discovery and reachability, in two parallel lanes.
+/// 3. The static prepass ([`static_rules::static_prepass`]).
+/// 4. Local accesses and the interprocedural fixed point, two lanes again.
+/// 5. Returns-conditionally, the upstream-compat pass, and the leaf and
+///    cleanup tables.
+/// 6. Static API checks, directive discovery, and the owner fixed point.
+/// 7. Final ordering and assembly ([`ProgramDraft::into_program`]).
+///
+/// Stages read the shared [`AnalysisContext`], write the [`ProgramDraft`],
+/// and end their span on the [`StageClock`]; each late-stage cache sub-slot
+/// is handed to exactly one stage. See
+/// `docs/pipeline-orchestrator-redesign.md`.
 pub(crate) fn build_with_contracts_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
@@ -77,22 +249,8 @@ pub(crate) fn build_with_contracts_measured_incremental(
     } = caches;
     let emit_timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
     let total_started = Instant::now();
-    let mut stage_started = Instant::now();
+    let mut clock = StageClock::new(emit_timings);
     let mut build_timings = BuildTimings::default();
-    macro_rules! finish_stage {
-        ($field:ident, $name:literal) => {{
-            let elapsed = stage_started.elapsed();
-            build_timings.$field = elapsed;
-            if emit_timings {
-                eprintln!(
-                    "{{\"reactiveIrStage\":\"{}\",\"elapsedNs\":{}}}",
-                    $name,
-                    elapsed.as_nanos()
-                );
-            }
-            stage_started = Instant::now();
-        }};
-    }
     let substage_started = Instant::now();
     let owned_ast_indexes;
     let ast_indexes = if let Some(cache) = ast_indexes_cache {
@@ -216,7 +374,10 @@ pub(crate) fn build_with_contracts_measured_incremental(
     let semantic_lookup = &semantic_lookup;
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
-    let mut static_violations = std::mem::take(&mut resolved_contracts.missing_exports);
+    let mut draft = ProgramDraft {
+        static_violations: std::mem::take(&mut resolved_contracts.missing_exports),
+        ..ProgramDraft::default()
+    };
     let mut owned_reachable_calls = None;
     let source_discovery = std::thread::scope(|scope| {
         let shared_worker_limit = analysis_worker_limit_for_lanes(2);
@@ -323,19 +484,15 @@ pub(crate) fn build_with_contracts_measured_incremental(
             build_timings.reachability = substage_started.elapsed();
         }
         drop(reachability_worker_limit);
-        finish_stage!(indexes_and_reachability, "indexes-and-reachability");
+        clock.finish(
+            &mut build_timings,
+            |timings| &mut timings.indexes_and_reachability,
+            "indexes-and-reachability",
+        );
         let (source_discovery, discovery_timings) = source_discovery_handle
             .join()
             .expect("parallel source discovery worker panicked");
-        build_timings.source_discovery = discovery_timings.source_discovery;
-        build_timings.source_discovery_reused_files =
-            discovery_timings.source_discovery_reused_files;
-        build_timings.source_discovery_recomputed_files =
-            discovery_timings.source_discovery_recomputed_files;
-        build_timings.typed_accessors_and_prop_roots =
-            discovery_timings.typed_accessors_and_prop_roots;
-        build_timings.prop_propagation_and_control_flow =
-            discovery_timings.prop_propagation_and_control_flow;
+        build_timings.absorb_source_discovery(&discovery_timings);
         source_discovery
     });
     let reachable_calls = if let Some(cache) = reachability_cache {
@@ -366,221 +523,32 @@ pub(crate) fn build_with_contracts_measured_incremental(
         retained_source_paths,
         changed_source_symbols,
     } = source_discovery;
-    // discover_sources owns its own stage timers; re-anchor this function's
-    // timer so finish_stage!(static_prepass) measures only the prepass loops.
-    // The read keeps the previous stage's macro reset from becoming a dead
-    // store.
-    let _ = stage_started;
-    stage_started = Instant::now();
+    // discover_sources owns its own stage clock; restart this function's so
+    // the static-prepass stage measures only the prepass loops.
+    clock.restart();
 
-    let mut leaf_operations = Vec::new();
-    let mut invalid_cleanup_returns = Vec::new();
-    let mut unresolved_cleanup_returns = Vec::new();
-    for file in &facts.files {
-        for span in file.compiler.uncovered_jsx_expressions() {
-            static_violations.push(StaticViolation {
-                id: "SC9004".into(),
-                rule: "execution-map-incomplete".into(),
-                message:
-                    "the Solid compiler did not classify this JSX expression as tracked, untracked, or a callback; without an execution role, solid-checker cannot certify any reactive read inside it"
-                        .into(),
-                hint: "Simplify the expression: hoist complex logic into a createMemo and interpolate the accessor. If this persists on plain JSX, re-run with fresh compiler facts and report the pattern as a solid-checker issue.".into(),
-                location: location(file.path.shared(), span),
-                analysis_context: String::new(),
-                fixes: vec![],
-            });
-        }
-    }
-    let mut directive_creations = Vec::new();
-    let mut missing_owners = Vec::new();
-    let mut seen_static = HashSet::new();
-    for file in &facts.files {
-        for function in &file.ast.functions {
-            if function_binding_name(file, function)
-                .and_then(|name| {
-                    file.source_text(name.span)
-                        .unwrap_or_default()
-                        .chars()
-                        .next()
-                })
-                .is_some_and(char::is_uppercase)
-                // Solid invokes components with one props object. A function
-                // requiring additional positional parameters is not a Solid
-                // component merely because its local name is capitalized.
-                && function.parameters.len() <= 1
-                && let Some(parameter) = function
-                    .parameters
-                    .first()
-                    .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Object)
-            {
-                let location = location(file.path.shared(), parameter.pattern);
-                if seen_static.insert((
-                    "component-props-destructure",
-                    location.path.clone(),
-                    location.start_byte,
-                )) {
-                    static_violations.push(StaticViolation {
-                        id: "SC1003".into(),
-                        rule: "component-props-destructure".into(),
-                        message: "destructuring props unwraps each property once at component setup; the bindings are frozen values, and the component never updates when the parent passes new props".into(),
-                        hint: {
-                            let helpers = dialect.props_helpers();
-                            format!(
-                                "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use {}(props, ...keys) and {}(defaults, props) instead of destructuring.",
-                                helpers.omit, helpers.merge
-                            )
-                        },
-                        location,
-                        analysis_context: function_binding_name(file, function)
-                            .map_or_else(String::new, |name| file.source_text(name.span).unwrap_or_default().to_owned()),
-                        fixes: component_props_parameter_fix(
-                            facts,
-                            file,
-                            function,
-                            parameter,
-                            entities,
-                        )
-                        .into_iter()
-                        .collect(),
-                    });
-                }
-            }
-        }
-        for binding in &file.ast.bindings {
-            if binding.shape != solid_facts::ast::BindingShape::Object {
-                continue;
-            }
-            let props = binding
-                .initializer_identifier
-                .as_ref()
-                .and_then(|identifier| entities.get(&location(file.path.shared(), identifier.span)))
-                .is_some_and(|symbol| prop_sources.contains_key(symbol));
-            if props {
-                let location = location(file.path.shared(), binding.pattern);
-                if seen_static.insert((
-                    "component-props-destructure",
-                    location.path.clone(),
-                    location.start_byte,
-                )) {
-                    static_violations.push(StaticViolation {
-                        id: "SC1003".into(),
-                        rule: "component-props-destructure".into(),
-                        message: "destructuring props unwraps each property once at component setup; the bindings are frozen values, and the component never updates when the parent passes new props".into(),
-                        hint: {
-                            let helpers = dialect.props_helpers();
-                            format!(
-                                "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use {}(props, ...keys) and {}(defaults, props) instead of destructuring.",
-                                helpers.omit, helpers.merge
-                            )
-                        },
-                        location,
-                        analysis_context: enclosing_function_label(file, binding.pattern),
-                        fixes: vec![],
-                    });
-                }
-            }
-        }
-    }
-    for typescript_file in facts.typescript.files() {
-        for function in typescript_file.async_functions.iter() {
-            for call in &function.calls_after_await {
-                let Some(symbol) = entities.get(call) else {
-                    continue;
-                };
-                let Some((name, _)) = accessors.get(symbol) else {
-                    continue;
-                };
-                let ast_call = facts
-                    .files
-                    .iter()
-                    .find(|file| *file.path.as_str() == *call.path)
-                    .and_then(|file| {
-                        file.ast
-                            .calls
-                            .iter()
-                            .find(|candidate| {
-                                u64::from(candidate.callee.start) == call.start_byte
-                                    && u64::from(candidate.callee.end) == call.end_byte
-                            })
-                            .map(|candidate| (file, candidate))
-                    });
-                let display = ast_call
-                    .and_then(|(file, candidate)| candidate.static_callee(&file.source))
-                    .unwrap_or(name);
-                let diagnostic_location = Location {
-                    path: call.path.clone(),
-                    start_byte: call.start_byte,
-                    end_byte: call.end_byte.saturating_add(1),
-                };
-                let function_symbol = async_symbol_root(
-                    aliases
-                        .get(function.symbol.as_ref())
-                        .map_or(function.symbol.as_ref(), SymbolId::as_str),
-                    &facts.typescript,
-                );
-                let Some(analysis_context) = facts.files.iter().find_map(|file| {
-                    file.ast.calls.iter().find_map(|candidate| {
-                        let argument = candidate.arguments.first()?;
-                        let lexical = *file.path.as_str() == *function.expression.path
-                            && argument.span.contains(Span::new(
-                                u32::try_from(function.expression.start_byte).ok()?,
-                                u32::try_from(function.expression.end_byte).ok()?,
-                            ));
-                        let semantic = entities
-                            .get(&location(file.path.shared(), argument.span))
-                            .is_some_and(|symbol| {
-                                async_symbol_root(symbol, &facts.typescript) == function_symbol
-                            });
-                        if !lexical && !semantic {
-                            return None;
-                        }
-                        let primitive = primitive_name(
-                            file.path.as_str(),
-                            candidate.callee,
-                            candidate.static_callee(&file.source),
-                            entities,
-                            &symbol_names,
-                            dialect,
-                        )?;
-                        // A tracked callback is what makes this a computation
-                        // whose reads matter after an await. The list this
-                        // replaced was 2.0's eight; under 1.x three of them
-                        // resolve to nothing and `createComputed` was absent.
-                        primitive
-                            .primitive()
-                            .is_some_and(|resolved| {
-                                dialect.callback_tracks_reads_at(
-                                    resolved,
-                                    0,
-                                    candidate.arguments.len(),
-                                )
-                            })
-                            .then(|| format!("{primitive} async computation"))
-                    })
-                }) else {
-                    continue;
-                };
-                if seen_static.insert((
-                    "reactive-read-after-await",
-                    call.path.clone(),
-                    call.start_byte,
-                )) {
-                    static_violations.push(StaticViolation {
-                        id: "SC1002".into(),
-                        rule: "reactive-read-after-await".into(),
-                        message: format!(
-                            "reactive accessor {display:?} is read after an await; dependency tracking ends at the first await, so this read registers no dependency and the computation never re-runs when {display:?} changes"
-                        ),
-                        hint: "Read reactive values before the first await and carry the results through the async work. If the value must stay live after the await, split the read into its own synchronous computation.".into(),
-                        location: diagnostic_location,
-                        analysis_context,
-                        fixes: vec![],
-                    });
-                }
-            }
-        }
-    }
-    finish_stage!(static_prepass, "static-prepass");
+    let analysis = AnalysisContext {
+        facts,
+        dialect,
+        entities,
+        symbol_names: &symbol_names,
+        aliases,
+        accessors: &accessors,
+        prop_sources: &prop_sources,
+        semantic_lookup,
+        source_kinds: &source_kinds,
+        source_owned_write: &source_owned_write,
+        reachable_calls,
+        symbols_by_root: &typescript_indexes.symbols_by_root,
+        contracted: &resolved_contracts.by_symbol,
+        rule_options,
+    };
+    static_rules::static_prepass(&analysis, &mut draft);
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.static_prepass,
+        "static-prepass",
+    );
     let local_access_context = LocalAccessContext {
         facts,
         lookup: semantic_lookup,
@@ -723,23 +691,15 @@ pub(crate) fn build_with_contracts_measured_incremental(
     build_timings.local_reads_and_writes = local_access_elapsed;
     build_timings.interprocedural_summaries = interprocedural_elapsed;
     build_timings.interprocedural_reused = reused;
-    let local_and_interprocedural_elapsed = stage_started.elapsed();
+    let local_and_interprocedural_elapsed = clock.elapsed();
     build_timings.local_and_interprocedural = local_and_interprocedural_elapsed;
-    if emit_timings {
-        eprintln!(
-            "{{\"reactiveIrStage\":\"local-reads-and-writes\",\"elapsedNs\":{}}}",
-            local_access_elapsed.as_nanos()
-        );
-        eprintln!(
-            "{{\"reactiveIrStage\":\"interprocedural-summaries\",\"elapsedNs\":{}}}",
-            interprocedural_elapsed.as_nanos()
-        );
-        eprintln!(
-            "{{\"reactiveIrStage\":\"local-and-interprocedural\",\"elapsedNs\":{}}}",
-            local_and_interprocedural_elapsed.as_nanos()
-        );
-    }
-    stage_started = Instant::now();
+    clock.record("local-reads-and-writes", local_access_elapsed);
+    clock.record("interprocedural-summaries", interprocedural_elapsed);
+    clock.record(
+        "local-and-interprocedural",
+        local_and_interprocedural_elapsed,
+    );
+    clock.restart();
     if !reused && let Some(cache) = late_stage_cache.as_deref_mut().and_then(Option::as_mut) {
         cache.interprocedural = Some(interprocedural.clone());
     }
@@ -751,171 +711,44 @@ pub(crate) fn build_with_contracts_measured_incremental(
         writes,
         action_invocations,
         async_reads,
-        mut strict_read_obligations,
-        mut write_action_obligations,
+        strict_read_obligations,
+        write_action_obligations,
     } = local_access.result;
-    let mut reads = reads
+    draft.reads = reads
         .into_iter()
         .map(|read| (*read).clone())
         .collect::<Vec<_>>();
-    let mut writes = writes
+    draft.writes = writes
         .into_iter()
         .map(|write| (*write).clone())
         .collect::<Vec<_>>();
-    let mut action_invocations = action_invocations
+    draft.action_invocations = action_invocations
         .into_iter()
         .map(|action| (*action).clone())
         .collect::<Vec<_>>();
-    let mut async_reads = async_reads
+    draft.async_reads = async_reads
         .into_iter()
         .map(|read| (*read).clone())
         .collect::<Vec<_>>();
-    build_timings.interprocedural_graph = interprocedural.timings.graph;
-    build_timings.interprocedural_direct_summaries = interprocedural.timings.direct_summaries;
-    build_timings.interprocedural_direct_index = interprocedural.timings.direct_index;
-    build_timings.interprocedural_direct_references = interprocedural.timings.direct_references;
-    build_timings.interprocedural_typed_accessors = interprocedural.timings.typed_accessors;
-    build_timings.interprocedural_propagation = interprocedural.timings.propagation;
-    build_timings.interprocedural_returned_direct = interprocedural.timings.returned_direct;
-    build_timings.interprocedural_returned_delta = interprocedural.timings.returned_delta;
-    build_timings.interprocedural_call_summary_delta = interprocedural.timings.call_summary_delta;
-    build_timings.interprocedural_factory_propagation = interprocedural.timings.factory_propagation;
-    build_timings.interprocedural_results_and_exports = interprocedural.timings.results_and_exports;
-    build_timings.interprocedural_result_reads = interprocedural.timings.result_reads;
-    build_timings.interprocedural_export_summaries = interprocedural.timings.export_summaries;
-    build_timings.typed_accessor_reused_files = interprocedural.timings.typed_accessor_reused_files;
-    build_timings.typed_accessor_recomputed_files =
-        interprocedural.timings.typed_accessor_recomputed_files;
-    build_timings.interprocedural_graph_reused_files = interprocedural.timings.graph_reused_files;
-    build_timings.interprocedural_graph_recomputed_files =
-        interprocedural.timings.graph_recomputed_files;
-    build_timings.interprocedural_result_reused_files = interprocedural.timings.result_reused_files;
-    build_timings.interprocedural_result_recomputed_files =
-        interprocedural.timings.result_recomputed_files;
-    strict_read_obligations += interprocedural.reads.len();
-    reads.extend(interprocedural.reads.iter().cloned());
-    for file in &facts.files {
-        for function in &file.ast.functions {
-            let Some(name) = function_binding_name(file, function).or(function.name.as_ref())
-            else {
-                continue;
-            };
-            if !file
-                .source_text(name.span)
-                .unwrap_or_default()
-                .chars()
-                .next()
-                .is_some_and(char::is_uppercase)
-            {
-                continue;
-            }
-            let mut direct_returns = file
-                .ast
-                .returns
-                .iter()
-                .filter(|returned| {
-                    function.body.contains(returned.span)
-                        && containing_ast_function(&file.ast, returned.span)
-                            .is_some_and(|owner| owner.span == function.span)
-                })
-                .collect::<Vec<_>>();
-            if let Some(returned) = &function.expression_return {
-                direct_returns.push(returned);
-            }
-            for test in file.ast.conditional_tests.iter().filter(|test| {
-                function.body.contains(**test)
-                    && containing_ast_function(&file.ast, **test)
-                        .is_some_and(|owner| owner.span == function.span)
-            }) {
-                let reactive = reads.iter().any(|read| {
-                    read.location.path == file.path.as_str().into()
-                        && u64::from(test.start) <= read.location.start_byte
-                        && read.location.end_byte <= u64::from(test.end)
-                });
-                let conditional_return = direct_returns.iter().any(|returned| {
-                    returned.control_tests.contains(test)
-                        || (returned.conditional
-                            && returned
-                                .argument
-                                .is_some_and(|argument| argument.contains(*test)))
-                });
-                if reactive && conditional_return {
-                    let location = location(file.path.shared(), *test);
-                    if seen_static.insert((
-                        "component-returns-conditionally",
-                        location.path.clone(),
-                        location.start_byte,
-                    )) {
-                        static_violations.push(StaticViolation {
-                            id: "SC1004".into(),
-                            rule: "component-returns-conditionally".into(),
-                            message: "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
-                            hint: "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
-                            location,
-                            analysis_context: file.source_text(name.span).unwrap_or_default().to_owned(),
-                            fixes: vec![],
-                        });
-                    }
-                }
-            }
-        }
-    }
-    let contract_exports = interprocedural.exports;
-    let mut contract_generation_obligations =
+    draft.strict_read_obligations = strict_read_obligations;
+    draft.write_action_obligations = write_action_obligations;
+    build_timings.absorb_interprocedural(&interprocedural.timings);
+    draft.strict_read_obligations += interprocedural.reads.len();
+    draft.reads.extend(interprocedural.reads.iter().cloned());
+    static_rules::component_returns_conditionally(&analysis, &mut draft);
+    draft.contract_exports = interprocedural.exports.clone();
+    draft.contract_generation_obligations =
         interprocedural.contract_generation_obligations.to_vec();
-    // The upstream-compat surface. Both dialects run it: the decomposed
-    // `reactivity` rules apply to both language versions, while the
-    // 1.x-only ESLint-era groups are gated inside
-    // `upstream_compat::check_file`, next to the catalogs' version table it
-    // mirrors.
-    {
-        // The location-keyed reference map is a pure function of the TypeScript
-        // table and the proven accessor set, and `late_stages_reusable` is
-        // exactly the condition under which both are unchanged (it is the same
-        // gate the interprocedural results are reused behind). Move the retained
-        // map through the compat context and back into the cache rather than
-        // cloning it: the context owns the field, and the rules only ever read
-        // it.
-        let retained_reference_locations = late_stage_cache
+    upstream_compat::check_project(
+        &analysis,
+        late_stage_cache
             .as_deref_mut()
             .and_then(Option::as_mut)
-            .and_then(|cache| {
-                if late_stages_reusable {
-                    cache.compat_reference_locations.take()
-                } else {
-                    cache.compat_reference_locations = None;
-                    None
-                }
-            });
-        let compat_context = upstream_compat::UpstreamCompatContext {
-            dialect,
-            lookup: semantic_lookup,
-            entities,
-            accessors: &accessors,
-            source_kinds: &source_kinds,
-            prop_sources: &prop_sources,
-            source_reference_index: retained_reference_locations.unwrap_or_else(|| {
-                symbols::source_reference_locations(
-                    &facts.typescript,
-                    &typescript_indexes.symbols_by_root,
-                    accessors.keys(),
-                )
-            }),
-            contracted: &resolved_contracts.by_symbol,
-            options: rule_options,
-        };
-        static_violations.extend(
-            parallel_file_results(&facts.files, |file| {
-                upstream_compat::check_file(file, &compat_context)
-            })
-            .into_iter()
-            .flatten(),
-        );
-        if let Some(cache) = late_stage_cache.as_deref_mut().and_then(Option::as_mut) {
-            cache.compat_reference_locations = Some(compat_context.source_reference_index);
-        }
-    }
-    leaf_operations.extend(
+            .map(|cache| &mut cache.compat_reference_locations),
+        late_stages_reusable,
+        &mut draft,
+    );
+    draft.leaf_operations.extend(
         parallel_file_results(&facts.files, |file| {
             leaf_owner_operations_for_file(file, &symbol_names, semantic_lookup)
         })
@@ -925,75 +758,41 @@ pub(crate) fn build_with_contracts_measured_incremental(
     for (invalid, unresolved) in parallel_file_results(&facts.files, |file| {
         cleanup_returns_for_file(semantic_lookup, file, &symbol_names)
     }) {
-        invalid_cleanup_returns.extend(invalid);
-        unresolved_cleanup_returns.extend(unresolved);
+        draft.invalid_cleanup_returns.extend(invalid);
+        draft.unresolved_cleanup_returns.extend(unresolved);
     }
-    finish_stage!(leaf_and_cleanup, "leaf-and-cleanup");
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.leaf_and_cleanup,
+        "leaf-and-cleanup",
+    );
     let static_api = StaticApiContext {
-        lookup: semantic_lookup,
-        entities,
-        symbol_names: &symbol_names,
-        source_kinds: &source_kinds,
-        source_owned_write: &source_owned_write,
-        accessors: &accessors,
-        reachable_calls,
+        lookup: analysis.semantic_lookup,
+        entities: analysis.entities,
+        symbol_names: analysis.symbol_names,
+        source_kinds: analysis.source_kinds,
+        source_owned_write: analysis.source_owned_write,
+        accessors: analysis.accessors,
+        reachable_calls: analysis.reachable_calls,
     };
     for result in parallel_file_results(&facts.files, |file| static_api.check_file(file)) {
-        static_violations.extend(result.violations);
-        writes.extend(result.writes);
-        write_action_obligations.extend(result.write_action_obligations);
+        draft.static_violations.extend(result.violations);
+        draft.writes.extend(result.writes);
+        draft
+            .write_action_obligations
+            .extend(result.write_action_obligations);
     }
-    finish_stage!(static_api, "static-api");
-    let mut seen_directive_creations = HashSet::new();
-    for file in &facts.files {
-        for call in &file.ast.calls {
-            let role = execution_role(&file.compiler, call.callee, &[]);
-            if role == ExecutionRole::DirectiveApply
-                && let Some(primitive) = primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    entities,
-                    &symbol_names,
-                    dialect,
-                )
-                .filter(|primitive| is_created_primitive(dialect, primitive))
-            {
-                push_directive_creation(
-                    &mut directive_creations,
-                    &mut seen_directive_creations,
-                    primitive.to_string(),
-                    file.path.as_str(),
-                    call.callee,
-                    false,
-                );
-            }
-        }
-        for callback in &file.compiler.callback_roles {
-            if callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply {
-                continue;
-            }
-            for call in file
-                .ast
-                .calls
-                .iter()
-                .filter(|call| callback.span.contains(call.span))
-            {
-                if let Some((target_file, target)) =
-                    semantic_lookup.function_called_at(file.path.as_str(), call.callee)
-                {
-                    DirectiveCreationCollector::new(
-                        semantic_lookup,
-                        &symbol_names,
-                        &mut directive_creations,
-                        &mut seen_directive_creations,
-                    )
-                    .collect_returned(target_file, target);
-                }
-            }
-        }
-    }
-    finish_stage!(directives, "directives");
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.static_api,
+        "static-api",
+    );
+    directives::discover_directive_creations(&analysis, &mut draft);
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.directives,
+        "directives",
+    );
     let cached_missing_owners = late_stages_reusable
         .then(|| {
             late_stage_cache
@@ -1004,7 +803,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         })
         .flatten();
     if let Some(cached) = cached_missing_owners {
-        missing_owners = cached;
+        draft.missing_owners = cached;
         build_timings.owner_fixed_point_reused = true;
         build_timings.owner_reused_files = u64::try_from(facts.files.len()).unwrap_or(u64::MAX);
     } else {
@@ -1016,16 +815,12 @@ pub(crate) fn build_with_contracts_measured_incremental(
                 &symbol_names,
                 &retained_source_paths,
                 &mut cache.owner_files,
-                &mut build_timings,
             );
-            missing_owners.extend(requirements);
-            build_timings.owner_fragment_build = timings.fragment_build;
-            build_timings.owner_graph_assembly = timings.graph_assembly;
-            build_timings.owner_propagation = timings.propagation;
-            build_timings.owner_requirement_emission = timings.requirement_emission;
-            cache.missing_owners = Some(missing_owners.clone());
+            draft.missing_owners.extend(requirements);
+            build_timings.absorb_owner(&timings);
+            cache.missing_owners = Some(draft.missing_owners.clone());
         } else {
-            missing_owners.extend(find_missing_owners(
+            draft.missing_owners.extend(find_missing_owners(
                 facts,
                 semantic_lookup,
                 &project_indexes,
@@ -1035,55 +830,19 @@ pub(crate) fn build_with_contracts_measured_incremental(
                 u64::try_from(facts.files.len()).unwrap_or(u64::MAX);
         }
     }
-    finish_stage!(owner_fixed_point, "owner-fixed-point");
-    reads.sort_by(|left, right| {
-        (
-            &left.location.path,
-            left.location.start_byte,
-            left.location.end_byte,
-        )
-            .cmp(&(
-                &right.location.path,
-                right.location.start_byte,
-                right.location.end_byte,
-            ))
-    });
-    writes.sort_by(|left, right| location_order(&left.location, &right.location));
-    action_invocations.sort_by(|left, right| location_order(&left.location, &right.location));
-    invalid_cleanup_returns.sort_by(|left, right| location_order(&left.location, &right.location));
-    unresolved_cleanup_returns
-        .sort_by(|left, right| location_order(&left.location, &right.location));
-    static_violations.sort_by(|left, right| location_order(&left.location, &right.location));
-    directive_creations.sort_by(|left, right| location_order(&left.location, &right.location));
-    missing_owners.sort_by(|left, right| location_order(&left.location, &right.location));
-    async_reads.sort_by(|left, right| location_order(&left.location, &right.location));
-    contract_generation_obligations
-        .sort_by(|left, right| location_order(&left.location, &right.location));
-    finish_stage!(final_ordering, "final-ordering");
-    let _ = stage_started;
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.owner_fixed_point,
+        "owner-fixed-point",
+    );
+    let program = draft.into_program(interprocedural.factory_instances);
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.final_ordering,
+        "final-ordering",
+    );
     build_timings.total = total_started.elapsed();
-    Ok((
-        Program {
-            reads,
-            writes,
-            actions: action_invocations,
-            leaf_operations,
-            invalid_cleanup_returns,
-            unresolved_cleanup_returns,
-            static_violations,
-            directive_creations,
-            missing_owners,
-            async_reads,
-            contract_exports,
-            contract_generation_obligations,
-            obligation_counts: ObligationCounts {
-                strict_reads: strict_read_obligations,
-                writes_and_actions: write_action_obligations.len(),
-                factory_instances: interprocedural.factory_instances,
-            },
-        },
-        build_timings,
-    ))
+    Ok((program, build_timings))
 }
 
 pub(crate) fn parallel_file_results<R, F>(files: &[FileFacts], analyze: F) -> Vec<R>

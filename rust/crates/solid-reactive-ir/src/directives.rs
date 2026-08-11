@@ -142,3 +142,61 @@ pub(super) fn push_directive_creation(
         });
     }
 }
+
+/// The directive-creation stage: primitives created in directive-apply
+/// positions, from direct calls and from functions returned into them.
+pub(crate) fn discover_directive_creations(
+    ctx: &crate::AnalysisContext<'_>,
+    draft: &mut crate::ProgramDraft,
+) {
+    let mut seen_directive_creations = HashSet::new();
+    for file in &ctx.facts.files {
+        for call in &file.ast.calls {
+            let role = execution_role(&file.compiler, call.callee, &[]);
+            if role == ExecutionRole::DirectiveApply
+                && let Some(primitive) = primitive_name(
+                    file.path.as_str(),
+                    call.callee,
+                    call.static_callee(&file.source),
+                    ctx.entities,
+                    ctx.symbol_names,
+                    ctx.dialect,
+                )
+                .filter(|primitive| is_created_primitive(ctx.dialect, primitive))
+            {
+                push_directive_creation(
+                    &mut draft.directive_creations,
+                    &mut seen_directive_creations,
+                    primitive.to_string(),
+                    file.path.as_str(),
+                    call.callee,
+                    false,
+                );
+            }
+        }
+        for callback in &file.compiler.callback_roles {
+            if callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply {
+                continue;
+            }
+            for call in file
+                .ast
+                .calls
+                .iter()
+                .filter(|call| callback.span.contains(call.span))
+            {
+                if let Some((target_file, target)) = ctx
+                    .semantic_lookup
+                    .function_called_at(file.path.as_str(), call.callee)
+                {
+                    DirectiveCreationCollector::new(
+                        ctx.semantic_lookup,
+                        ctx.symbol_names,
+                        &mut draft.directive_creations,
+                        &mut seen_directive_creations,
+                    )
+                    .collect_returned(target_file, target);
+                }
+            }
+        }
+    }
+}
