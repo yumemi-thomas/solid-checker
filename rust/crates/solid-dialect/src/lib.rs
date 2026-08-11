@@ -6,9 +6,9 @@
 //! tags open a boundary, which primitives may not be created under a leaf
 //! owner. The reactive engine asks; it does not know.
 //!
-//! See [ADR 0006](../../../docs/adr/0006-reopen-the-solid-version-seam.md). The
-//! decision this crate exists to make possible: one engine, two dialects,
-//! rather than one engine per branch.
+//! See ADR 0006, "Reopen the Solid version seam". The decision this crate
+//! exists to make possible: one engine, two dialects, rather than one engine
+//! per branch.
 //!
 //! # What does not belong here
 //!
