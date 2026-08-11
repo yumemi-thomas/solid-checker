@@ -150,10 +150,13 @@ jobs:
       - run: sh -n scripts/*.sh
       - run: node --test scripts/*.test.mjs
       - run: jq empty schema/*.json pkg/contracts/bundled/*.json
-      # The bundled 1.x contract is generated from the census and the
-      # reviewed semantics map; a stale artifact ships wrong semantics
-      # compiled into the backend. The drift gate against *real installed*
-      # packages (`make contracts-check`) runs in the rust-engine job, which
-      # installs the exact pins and regenerates all three artifacts.
-      - run: node scripts/generate-bundled-solid1-contract.mjs --check
+      # The bundled contracts ship semantics compiled into the backend, so a
+      # stale artifact ships wrong semantics. contract-conformance runs both
+      # gates: check-bundled-contracts.mjs probes the 2.0 contracts against
+      # the exact pinned packages, and generate-bundled-solid1-contract.mjs
+      # --check catches drift between the 1.x artifact and its inputs. The
+      # separate drift gate against *real installed* packages
+      # (`make contracts-check`) runs in the rust-engine job, which installs
+      # the exact pins and regenerates all three artifacts.
+      - run: make contract-conformance
       - run: make test-cli
