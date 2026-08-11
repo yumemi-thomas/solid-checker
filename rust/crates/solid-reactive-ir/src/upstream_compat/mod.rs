@@ -627,6 +627,58 @@ pub(super) fn check_file(
     violations
 }
 
+/// The whole-project compat pass. Both dialects run it: the decomposed
+/// `reactivity` rules apply to both language versions, while the 1.x-only
+/// ESLint-era groups are gated inside [`check_file`], next to the catalogs'
+/// version table it mirrors.
+///
+/// The location-keyed reference map is a pure function of the TypeScript
+/// table and the proven accessor set, and `reusable` is exactly the
+/// condition under which both are unchanged (the same gate the
+/// interprocedural results are reused behind). The retained map moves
+/// through the compat context and back into its slot rather than being
+/// cloned: the context owns the field, and the rules only ever read it.
+pub(crate) fn check_project(
+    ctx: &crate::AnalysisContext<'_>,
+    mut reference_slot: Option<&mut Option<crate::SourceReferenceLocations>>,
+    reusable: bool,
+    draft: &mut crate::ProgramDraft,
+) {
+    let retained = reference_slot.as_deref_mut().and_then(|slot| {
+        if reusable {
+            slot.take()
+        } else {
+            *slot = None;
+            None
+        }
+    });
+    let context = UpstreamCompatContext {
+        dialect: ctx.dialect,
+        lookup: ctx.semantic_lookup,
+        entities: ctx.entities,
+        accessors: ctx.accessors,
+        source_kinds: ctx.source_kinds,
+        prop_sources: ctx.prop_sources,
+        source_reference_index: retained.unwrap_or_else(|| {
+            crate::symbols::source_reference_locations(
+                &ctx.facts.typescript,
+                ctx.symbols_by_root,
+                ctx.accessors.keys(),
+            )
+        }),
+        contracted: ctx.contracted,
+        options: ctx.rule_options,
+    };
+    draft.static_violations.extend(
+        crate::parallel_file_results(&ctx.facts.files, |file| check_file(file, &context))
+            .into_iter()
+            .flatten(),
+    );
+    if let Some(slot) = reference_slot {
+        *slot = Some(context.source_reference_index);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

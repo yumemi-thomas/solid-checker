@@ -234,3 +234,75 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
         }
     }
 }
+
+/// SC1004: a component whose return value hinges on a reactive condition,
+/// evaluated once at setup and never again. Runs after the read tables are
+/// merged: "reactive condition" is answered by the draft's reads.
+pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    for file in &ctx.facts.files {
+        for function in &file.ast.functions {
+            let Some(name) = function_binding_name(file, function).or(function.name.as_ref())
+            else {
+                continue;
+            };
+            if !file
+                .source_text(name.span)
+                .unwrap_or_default()
+                .chars()
+                .next()
+                .is_some_and(char::is_uppercase)
+            {
+                continue;
+            }
+            let mut direct_returns = file
+                .ast
+                .returns
+                .iter()
+                .filter(|returned| {
+                    function.body.contains(returned.span)
+                        && containing_ast_function(&file.ast, returned.span)
+                            .is_some_and(|owner| owner.span == function.span)
+                })
+                .collect::<Vec<_>>();
+            if let Some(returned) = &function.expression_return {
+                direct_returns.push(returned);
+            }
+            for test in file.ast.conditional_tests.iter().filter(|test| {
+                function.body.contains(**test)
+                    && containing_ast_function(&file.ast, **test)
+                        .is_some_and(|owner| owner.span == function.span)
+            }) {
+                let reactive = draft.reads.iter().any(|read| {
+                    read.location.path == file.path.as_str().into()
+                        && u64::from(test.start) <= read.location.start_byte
+                        && read.location.end_byte <= u64::from(test.end)
+                });
+                let conditional_return = direct_returns.iter().any(|returned| {
+                    returned.control_tests.contains(test)
+                        || (returned.conditional
+                            && returned
+                                .argument
+                                .is_some_and(|argument| argument.contains(*test)))
+                });
+                if reactive && conditional_return {
+                    let location = location(file.path.shared(), *test);
+                    if draft.seen_static.insert((
+                        "component-returns-conditionally",
+                        location.path.clone(),
+                        location.start_byte,
+                    )) {
+                        draft.static_violations.push(StaticViolation {
+                            id: "SC1004".into(),
+                            rule: "component-returns-conditionally".into(),
+                            message: "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
+                            hint: "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
+                            location,
+                            analysis_context: file.source_text(name.span).unwrap_or_default().to_owned(),
+                            fixes: vec![],
+                        });
+                    }
+                }
+            }
+        }
+    }
+}

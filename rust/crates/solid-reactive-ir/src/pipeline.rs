@@ -11,11 +11,7 @@ use std::{
 };
 
 use crate::cleanup::{cleanup_returns_for_file, leaf_owner_operations_for_file};
-use crate::contracts::resolve_contract_imports;
-use crate::directives::{
-    DirectiveCreationCollector, is_created_primitive, push_directive_creation,
-};
-use crate::execution_role::execution_role;
+use crate::contracts::{ResolvedContractBinding, resolve_contract_imports};
 use crate::identity::SymbolId;
 use crate::indexes::{CachedAstFileIndex, ProjectIndexes, SemanticLookup};
 use crate::interproc::{InterproceduralContext, InterproceduralTimings};
@@ -183,6 +179,13 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) aliases: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
+    pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    pub(crate) source_owned_write: &'a HashMap<SymbolId, bool>,
+    pub(crate) reachable_calls: &'a HashMap<Location, usize>,
+    pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
+    pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
+    pub(crate) rule_options: &'a RuleOptions,
 }
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
@@ -508,18 +511,23 @@ pub(crate) fn build_with_contracts_measured_incremental(
     // the static-prepass stage measures only the prepass loops.
     clock.restart();
 
-    static_rules::static_prepass(
-        &AnalysisContext {
-            facts,
-            dialect,
-            entities,
-            symbol_names: &symbol_names,
-            aliases,
-            accessors: &accessors,
-            prop_sources: &prop_sources,
-        },
-        &mut draft,
-    );
+    let analysis = AnalysisContext {
+        facts,
+        dialect,
+        entities,
+        symbol_names: &symbol_names,
+        aliases,
+        accessors: &accessors,
+        prop_sources: &prop_sources,
+        semantic_lookup,
+        source_kinds: &source_kinds,
+        source_owned_write: &source_owned_write,
+        reachable_calls,
+        symbols_by_root: &typescript_indexes.symbols_by_root,
+        contracted: &resolved_contracts.by_symbol,
+        rule_options,
+    };
+    static_rules::static_prepass(&analysis, &mut draft);
     clock.finish(
         &mut build_timings,
         |timings| &mut timings.static_prepass,
@@ -711,127 +719,19 @@ pub(crate) fn build_with_contracts_measured_incremental(
     build_timings.absorb_interprocedural(&interprocedural.timings);
     draft.strict_read_obligations += interprocedural.reads.len();
     draft.reads.extend(interprocedural.reads.iter().cloned());
-    for file in &facts.files {
-        for function in &file.ast.functions {
-            let Some(name) = function_binding_name(file, function).or(function.name.as_ref())
-            else {
-                continue;
-            };
-            if !file
-                .source_text(name.span)
-                .unwrap_or_default()
-                .chars()
-                .next()
-                .is_some_and(char::is_uppercase)
-            {
-                continue;
-            }
-            let mut direct_returns = file
-                .ast
-                .returns
-                .iter()
-                .filter(|returned| {
-                    function.body.contains(returned.span)
-                        && containing_ast_function(&file.ast, returned.span)
-                            .is_some_and(|owner| owner.span == function.span)
-                })
-                .collect::<Vec<_>>();
-            if let Some(returned) = &function.expression_return {
-                direct_returns.push(returned);
-            }
-            for test in file.ast.conditional_tests.iter().filter(|test| {
-                function.body.contains(**test)
-                    && containing_ast_function(&file.ast, **test)
-                        .is_some_and(|owner| owner.span == function.span)
-            }) {
-                let reactive = draft.reads.iter().any(|read| {
-                    read.location.path == file.path.as_str().into()
-                        && u64::from(test.start) <= read.location.start_byte
-                        && read.location.end_byte <= u64::from(test.end)
-                });
-                let conditional_return = direct_returns.iter().any(|returned| {
-                    returned.control_tests.contains(test)
-                        || (returned.conditional
-                            && returned
-                                .argument
-                                .is_some_and(|argument| argument.contains(*test)))
-                });
-                if reactive && conditional_return {
-                    let location = location(file.path.shared(), *test);
-                    if draft.seen_static.insert((
-                        "component-returns-conditionally",
-                        location.path.clone(),
-                        location.start_byte,
-                    )) {
-                        draft.static_violations.push(StaticViolation {
-                            id: "SC1004".into(),
-                            rule: "component-returns-conditionally".into(),
-                            message: "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
-                            hint: "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
-                            location,
-                            analysis_context: file.source_text(name.span).unwrap_or_default().to_owned(),
-                            fixes: vec![],
-                        });
-                    }
-                }
-            }
-        }
-    }
+    static_rules::component_returns_conditionally(&analysis, &mut draft);
     draft.contract_exports = interprocedural.exports.clone();
     draft.contract_generation_obligations =
         interprocedural.contract_generation_obligations.to_vec();
-    // The upstream-compat surface. Both dialects run it: the decomposed
-    // `reactivity` rules apply to both language versions, while the
-    // 1.x-only ESLint-era groups are gated inside
-    // `upstream_compat::check_file`, next to the catalogs' version table it
-    // mirrors.
-    {
-        // The location-keyed reference map is a pure function of the TypeScript
-        // table and the proven accessor set, and `late_stages_reusable` is
-        // exactly the condition under which both are unchanged (it is the same
-        // gate the interprocedural results are reused behind). Move the retained
-        // map through the compat context and back into the cache rather than
-        // cloning it: the context owns the field, and the rules only ever read
-        // it.
-        let retained_reference_locations = late_stage_cache
+    upstream_compat::check_project(
+        &analysis,
+        late_stage_cache
             .as_deref_mut()
             .and_then(Option::as_mut)
-            .and_then(|cache| {
-                if late_stages_reusable {
-                    cache.compat_reference_locations.take()
-                } else {
-                    cache.compat_reference_locations = None;
-                    None
-                }
-            });
-        let compat_context = upstream_compat::UpstreamCompatContext {
-            dialect,
-            lookup: semantic_lookup,
-            entities,
-            accessors: &accessors,
-            source_kinds: &source_kinds,
-            prop_sources: &prop_sources,
-            source_reference_index: retained_reference_locations.unwrap_or_else(|| {
-                symbols::source_reference_locations(
-                    &facts.typescript,
-                    &typescript_indexes.symbols_by_root,
-                    accessors.keys(),
-                )
-            }),
-            contracted: &resolved_contracts.by_symbol,
-            options: rule_options,
-        };
-        draft.static_violations.extend(
-            parallel_file_results(&facts.files, |file| {
-                upstream_compat::check_file(file, &compat_context)
-            })
-            .into_iter()
-            .flatten(),
-        );
-        if let Some(cache) = late_stage_cache.as_deref_mut().and_then(Option::as_mut) {
-            cache.compat_reference_locations = Some(compat_context.source_reference_index);
-        }
-    }
+            .map(|cache| &mut cache.compat_reference_locations),
+        late_stages_reusable,
+        &mut draft,
+    );
     draft.leaf_operations.extend(
         parallel_file_results(&facts.files, |file| {
             leaf_owner_operations_for_file(file, &symbol_names, semantic_lookup)
@@ -851,13 +751,13 @@ pub(crate) fn build_with_contracts_measured_incremental(
         "leaf-and-cleanup",
     );
     let static_api = StaticApiContext {
-        lookup: semantic_lookup,
-        entities,
-        symbol_names: &symbol_names,
-        source_kinds: &source_kinds,
-        source_owned_write: &source_owned_write,
-        accessors: &accessors,
-        reachable_calls,
+        lookup: analysis.semantic_lookup,
+        entities: analysis.entities,
+        symbol_names: analysis.symbol_names,
+        source_kinds: analysis.source_kinds,
+        source_owned_write: analysis.source_owned_write,
+        accessors: analysis.accessors,
+        reachable_calls: analysis.reachable_calls,
     };
     for result in parallel_file_results(&facts.files, |file| static_api.check_file(file)) {
         draft.static_violations.extend(result.violations);
@@ -871,55 +771,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         |timings| &mut timings.static_api,
         "static-api",
     );
-    let mut seen_directive_creations = HashSet::new();
-    for file in &facts.files {
-        for call in &file.ast.calls {
-            let role = execution_role(&file.compiler, call.callee, &[]);
-            if role == ExecutionRole::DirectiveApply
-                && let Some(primitive) = primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    entities,
-                    &symbol_names,
-                    dialect,
-                )
-                .filter(|primitive| is_created_primitive(dialect, primitive))
-            {
-                push_directive_creation(
-                    &mut draft.directive_creations,
-                    &mut seen_directive_creations,
-                    primitive.to_string(),
-                    file.path.as_str(),
-                    call.callee,
-                    false,
-                );
-            }
-        }
-        for callback in &file.compiler.callback_roles {
-            if callback.role != solid_facts::compiler::CallbackRoleKind::DirectiveApply {
-                continue;
-            }
-            for call in file
-                .ast
-                .calls
-                .iter()
-                .filter(|call| callback.span.contains(call.span))
-            {
-                if let Some((target_file, target)) =
-                    semantic_lookup.function_called_at(file.path.as_str(), call.callee)
-                {
-                    DirectiveCreationCollector::new(
-                        semantic_lookup,
-                        &symbol_names,
-                        &mut draft.directive_creations,
-                        &mut seen_directive_creations,
-                    )
-                    .collect_returned(target_file, target);
-                }
-            }
-        }
-    }
+    directives::discover_directive_creations(&analysis, &mut draft);
     clock.finish(
         &mut build_timings,
         |timings| &mut timings.directives,
