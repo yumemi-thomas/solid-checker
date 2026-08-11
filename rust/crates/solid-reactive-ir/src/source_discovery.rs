@@ -3,10 +3,7 @@
 
 use crate::*;
 
-use std::{
-    collections::{HashMap, HashSet},
-    time::Instant,
-};
+use std::collections::{HashMap, HashSet};
 
 use crate::contracts::ResolvedContracts;
 use crate::identity::{SymbolId, symbol_id};
@@ -520,9 +517,6 @@ pub(crate) struct StageContext<'a> {
     pub(crate) contracts: &'a [PackageContract],
 }
 
-// The final `finish_stage!` resets the stage timer for symmetry; that last write
-// is intentionally unused because the stage ends here.
-#[allow(unused_assignments)]
 pub(crate) fn discover_sources(
     ctx: &StageContext<'_>,
     source_discovery_cache: Option<&mut HashMap<SourcePath, CachedSourceDiscovery>>,
@@ -541,21 +535,7 @@ pub(crate) fn discover_sources(
         resolved_contracts,
         contracts,
     } = *ctx;
-    let mut stage_started = Instant::now();
-    macro_rules! finish_stage {
-        ($field:ident, $name:literal) => {{
-            let elapsed = stage_started.elapsed();
-            build_timings.$field = elapsed;
-            if emit_timings {
-                eprintln!(
-                    "{{\"reactiveIrStage\":\"{}\",\"elapsedNs\":{}}}",
-                    $name,
-                    elapsed.as_nanos()
-                );
-            }
-            stage_started = Instant::now();
-        }};
-    }
+    let mut clock = StageClock::new(emit_timings);
     let mut accessors = HashMap::<SymbolId, (SymbolId, Location)>::new();
     let bundled_returns = contracts
         .iter()
@@ -768,7 +748,11 @@ pub(crate) fn discover_sources(
             }
         }
     }
-    finish_stage!(source_discovery, "source-discovery");
+    clock.finish(
+        build_timings,
+        |timings| &mut timings.source_discovery,
+        "source-discovery",
+    );
     for entity in facts.typescript.entities() {
         let Some(descriptor) = &entity.type_descriptor else {
             continue;
@@ -1098,9 +1082,10 @@ pub(crate) fn discover_sources(
             }
         }
     }
-    finish_stage!(
-        typed_accessors_and_prop_roots,
-        "typed-accessors-and-prop-roots"
+    clock.finish(
+        build_timings,
+        |timings| &mut timings.typed_accessors_and_prop_roots,
+        "typed-accessors-and-prop-roots",
     );
     loop {
         let mut changed = false;
@@ -1159,9 +1144,10 @@ pub(crate) fn discover_sources(
             break;
         }
     }
-    finish_stage!(
-        prop_propagation_and_control_flow,
-        "prop-propagation-and-control-flow"
+    clock.finish(
+        build_timings,
+        |timings| &mut timings.prop_propagation_and_control_flow,
+        "prop-propagation-and-control-flow",
     );
     SourceDiscovery {
         accessors,

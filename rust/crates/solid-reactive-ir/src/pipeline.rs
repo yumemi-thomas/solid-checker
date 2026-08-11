@@ -32,6 +32,69 @@ use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::Location;
 
+/// Times the pipeline's stages and emits the `SOLID_CHECKER_TIMINGS` stage
+/// lines. Each build lane owns one clock; a stage ends with [`finish`],
+/// which records into the selected [`BuildTimings`] field, emits the stage
+/// line, and starts timing the next stage.
+///
+/// [`stage_line`] is the single place the emitted shape is produced — the
+/// names and JSON form are read by the performance tooling and must not
+/// drift.
+///
+/// [`finish`]: StageClock::finish
+/// [`stage_line`]: StageClock::stage_line
+pub(crate) struct StageClock {
+    started: Instant,
+    emit: bool,
+}
+
+impl StageClock {
+    pub(crate) fn new(emit: bool) -> Self {
+        Self {
+            started: Instant::now(),
+            emit,
+        }
+    }
+
+    pub(crate) fn finish(
+        &mut self,
+        timings: &mut BuildTimings,
+        field: fn(&mut BuildTimings) -> &mut Duration,
+        name: &str,
+    ) {
+        let elapsed = self.started.elapsed();
+        *field(timings) = elapsed;
+        self.record(name, elapsed);
+        self.started = Instant::now();
+    }
+
+    /// Emits a stage line for a duration measured outside the clock.
+    pub(crate) fn record(&self, name: &str, elapsed: Duration) {
+        if self.emit {
+            eprintln!("{}", Self::stage_line(name, elapsed));
+        }
+    }
+
+    /// The time since the current stage began, without ending it.
+    pub(crate) fn elapsed(&self) -> Duration {
+        self.started.elapsed()
+    }
+
+    /// Starts the next stage without recording the current one, for
+    /// boundaries whose time was already accounted through [`Self::record`].
+    pub(crate) fn restart(&mut self) {
+        self.started = Instant::now();
+    }
+
+    pub(crate) fn stage_line(name: &str, elapsed: Duration) -> String {
+        format!(
+            "{{\"reactiveIrStage\":\"{}\",\"elapsedNs\":{}}}",
+            name,
+            elapsed.as_nanos()
+        )
+    }
+}
+
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
     build_with_contracts(facts, dialect, &[])
 }
@@ -77,22 +140,8 @@ pub(crate) fn build_with_contracts_measured_incremental(
     } = caches;
     let emit_timings = std::env::var_os("SOLID_CHECKER_TIMINGS").is_some();
     let total_started = Instant::now();
-    let mut stage_started = Instant::now();
+    let mut clock = StageClock::new(emit_timings);
     let mut build_timings = BuildTimings::default();
-    macro_rules! finish_stage {
-        ($field:ident, $name:literal) => {{
-            let elapsed = stage_started.elapsed();
-            build_timings.$field = elapsed;
-            if emit_timings {
-                eprintln!(
-                    "{{\"reactiveIrStage\":\"{}\",\"elapsedNs\":{}}}",
-                    $name,
-                    elapsed.as_nanos()
-                );
-            }
-            stage_started = Instant::now();
-        }};
-    }
     let substage_started = Instant::now();
     let owned_ast_indexes;
     let ast_indexes = if let Some(cache) = ast_indexes_cache {
@@ -323,19 +372,15 @@ pub(crate) fn build_with_contracts_measured_incremental(
             build_timings.reachability = substage_started.elapsed();
         }
         drop(reachability_worker_limit);
-        finish_stage!(indexes_and_reachability, "indexes-and-reachability");
+        clock.finish(
+            &mut build_timings,
+            |timings| &mut timings.indexes_and_reachability,
+            "indexes-and-reachability",
+        );
         let (source_discovery, discovery_timings) = source_discovery_handle
             .join()
             .expect("parallel source discovery worker panicked");
-        build_timings.source_discovery = discovery_timings.source_discovery;
-        build_timings.source_discovery_reused_files =
-            discovery_timings.source_discovery_reused_files;
-        build_timings.source_discovery_recomputed_files =
-            discovery_timings.source_discovery_recomputed_files;
-        build_timings.typed_accessors_and_prop_roots =
-            discovery_timings.typed_accessors_and_prop_roots;
-        build_timings.prop_propagation_and_control_flow =
-            discovery_timings.prop_propagation_and_control_flow;
+        build_timings.absorb_source_discovery(&discovery_timings);
         source_discovery
     });
     let reachable_calls = if let Some(cache) = reachability_cache {
@@ -366,12 +411,9 @@ pub(crate) fn build_with_contracts_measured_incremental(
         retained_source_paths,
         changed_source_symbols,
     } = source_discovery;
-    // discover_sources owns its own stage timers; re-anchor this function's
-    // timer so finish_stage!(static_prepass) measures only the prepass loops.
-    // The read keeps the previous stage's macro reset from becoming a dead
-    // store.
-    let _ = stage_started;
-    stage_started = Instant::now();
+    // discover_sources owns its own stage clock; restart this function's so
+    // the static-prepass stage measures only the prepass loops.
+    clock.restart();
 
     let mut leaf_operations = Vec::new();
     let mut invalid_cleanup_returns = Vec::new();
@@ -580,7 +622,11 @@ pub(crate) fn build_with_contracts_measured_incremental(
             }
         }
     }
-    finish_stage!(static_prepass, "static-prepass");
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.static_prepass,
+        "static-prepass",
+    );
     let local_access_context = LocalAccessContext {
         facts,
         lookup: semantic_lookup,
@@ -723,23 +769,15 @@ pub(crate) fn build_with_contracts_measured_incremental(
     build_timings.local_reads_and_writes = local_access_elapsed;
     build_timings.interprocedural_summaries = interprocedural_elapsed;
     build_timings.interprocedural_reused = reused;
-    let local_and_interprocedural_elapsed = stage_started.elapsed();
+    let local_and_interprocedural_elapsed = clock.elapsed();
     build_timings.local_and_interprocedural = local_and_interprocedural_elapsed;
-    if emit_timings {
-        eprintln!(
-            "{{\"reactiveIrStage\":\"local-reads-and-writes\",\"elapsedNs\":{}}}",
-            local_access_elapsed.as_nanos()
-        );
-        eprintln!(
-            "{{\"reactiveIrStage\":\"interprocedural-summaries\",\"elapsedNs\":{}}}",
-            interprocedural_elapsed.as_nanos()
-        );
-        eprintln!(
-            "{{\"reactiveIrStage\":\"local-and-interprocedural\",\"elapsedNs\":{}}}",
-            local_and_interprocedural_elapsed.as_nanos()
-        );
-    }
-    stage_started = Instant::now();
+    clock.record("local-reads-and-writes", local_access_elapsed);
+    clock.record("interprocedural-summaries", interprocedural_elapsed);
+    clock.record(
+        "local-and-interprocedural",
+        local_and_interprocedural_elapsed,
+    );
+    clock.restart();
     if !reused && let Some(cache) = late_stage_cache.as_deref_mut().and_then(Option::as_mut) {
         cache.interprocedural = Some(interprocedural.clone());
     }
@@ -770,28 +808,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         .into_iter()
         .map(|read| (*read).clone())
         .collect::<Vec<_>>();
-    build_timings.interprocedural_graph = interprocedural.timings.graph;
-    build_timings.interprocedural_direct_summaries = interprocedural.timings.direct_summaries;
-    build_timings.interprocedural_direct_index = interprocedural.timings.direct_index;
-    build_timings.interprocedural_direct_references = interprocedural.timings.direct_references;
-    build_timings.interprocedural_typed_accessors = interprocedural.timings.typed_accessors;
-    build_timings.interprocedural_propagation = interprocedural.timings.propagation;
-    build_timings.interprocedural_returned_direct = interprocedural.timings.returned_direct;
-    build_timings.interprocedural_returned_delta = interprocedural.timings.returned_delta;
-    build_timings.interprocedural_call_summary_delta = interprocedural.timings.call_summary_delta;
-    build_timings.interprocedural_factory_propagation = interprocedural.timings.factory_propagation;
-    build_timings.interprocedural_results_and_exports = interprocedural.timings.results_and_exports;
-    build_timings.interprocedural_result_reads = interprocedural.timings.result_reads;
-    build_timings.interprocedural_export_summaries = interprocedural.timings.export_summaries;
-    build_timings.typed_accessor_reused_files = interprocedural.timings.typed_accessor_reused_files;
-    build_timings.typed_accessor_recomputed_files =
-        interprocedural.timings.typed_accessor_recomputed_files;
-    build_timings.interprocedural_graph_reused_files = interprocedural.timings.graph_reused_files;
-    build_timings.interprocedural_graph_recomputed_files =
-        interprocedural.timings.graph_recomputed_files;
-    build_timings.interprocedural_result_reused_files = interprocedural.timings.result_reused_files;
-    build_timings.interprocedural_result_recomputed_files =
-        interprocedural.timings.result_recomputed_files;
+    build_timings.absorb_interprocedural(&interprocedural.timings);
     strict_read_obligations += interprocedural.reads.len();
     reads.extend(interprocedural.reads.iter().cloned());
     for file in &facts.files {
@@ -928,7 +945,11 @@ pub(crate) fn build_with_contracts_measured_incremental(
         invalid_cleanup_returns.extend(invalid);
         unresolved_cleanup_returns.extend(unresolved);
     }
-    finish_stage!(leaf_and_cleanup, "leaf-and-cleanup");
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.leaf_and_cleanup,
+        "leaf-and-cleanup",
+    );
     let static_api = StaticApiContext {
         lookup: semantic_lookup,
         entities,
@@ -943,7 +964,11 @@ pub(crate) fn build_with_contracts_measured_incremental(
         writes.extend(result.writes);
         write_action_obligations.extend(result.write_action_obligations);
     }
-    finish_stage!(static_api, "static-api");
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.static_api,
+        "static-api",
+    );
     let mut seen_directive_creations = HashSet::new();
     for file in &facts.files {
         for call in &file.ast.calls {
@@ -993,7 +1018,11 @@ pub(crate) fn build_with_contracts_measured_incremental(
             }
         }
     }
-    finish_stage!(directives, "directives");
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.directives,
+        "directives",
+    );
     let cached_missing_owners = late_stages_reusable
         .then(|| {
             late_stage_cache
@@ -1019,10 +1048,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
                 &mut build_timings,
             );
             missing_owners.extend(requirements);
-            build_timings.owner_fragment_build = timings.fragment_build;
-            build_timings.owner_graph_assembly = timings.graph_assembly;
-            build_timings.owner_propagation = timings.propagation;
-            build_timings.owner_requirement_emission = timings.requirement_emission;
+            build_timings.absorb_owner(&timings);
             cache.missing_owners = Some(missing_owners.clone());
         } else {
             missing_owners.extend(find_missing_owners(
@@ -1035,7 +1061,11 @@ pub(crate) fn build_with_contracts_measured_incremental(
                 u64::try_from(facts.files.len()).unwrap_or(u64::MAX);
         }
     }
-    finish_stage!(owner_fixed_point, "owner-fixed-point");
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.owner_fixed_point,
+        "owner-fixed-point",
+    );
     reads.sort_by(|left, right| {
         (
             &left.location.path,
@@ -1059,8 +1089,11 @@ pub(crate) fn build_with_contracts_measured_incremental(
     async_reads.sort_by(|left, right| location_order(&left.location, &right.location));
     contract_generation_obligations
         .sort_by(|left, right| location_order(&left.location, &right.location));
-    finish_stage!(final_ordering, "final-ordering");
-    let _ = stage_started;
+    clock.finish(
+        &mut build_timings,
+        |timings| &mut timings.final_ordering,
+        "final-ordering",
+    );
     build_timings.total = total_started.elapsed();
     Ok((
         Program {
