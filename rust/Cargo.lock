@@ -1083,7 +1083,6 @@ dependencies = [
  "serde_json",
  "solid-facts",
  "solid-facts-backend",
- "typefacts",
 ]
 
 [[package]]
@@ -1159,8 +1158,6 @@ dependencies = [
 name = "solid-v1-rules"
 version = "0.1.0"
 dependencies = [
- "serde",
- "solid-dialect",
  "solid-reactive-ir",
  "typefacts",
 ]
@@ -1177,7 +1174,6 @@ dependencies = [
 name = "solid-v2-rules"
 version = "0.1.0"
 dependencies = [
- "serde",
  "solid-reactive-ir",
  "typefacts",
 ]

@@ -75,6 +75,9 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.97
         with:
           targets: wasm32-wasip1-threads
+      # The action's targets input covers only the toolchain it installs;
+      # the build resolves its toolchain through rust-toolchain.toml, which
+      # needs its own copy of the target's std.
       - run: rustup target add wasm32-wasip1-threads --toolchain 1.97
       - uses: actions/setup-node@v4
         with:

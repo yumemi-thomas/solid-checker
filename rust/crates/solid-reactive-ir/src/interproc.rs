@@ -1358,15 +1358,7 @@ fn direct_reference_contributions(
                             .map(|returned| (primitive, returned))
                     });
             if let Some((primitive, returned)) = factory_return {
-                let contract_location = Location {
-                    path: format!(
-                        "bundled://{}#{primitive}",
-                        lookup.dialect.bundled_contract_label()
-                    )
-                    .into(),
-                    start_byte: 0,
-                    end_byte: 0,
-                };
+                let contract_location = crate::bundled_contract_location(lookup.dialect, primitive);
                 read.display = SymbolId::from(returned.label.as_str());
                 read.kind = Some(returned.kind.clone());
                 read.declaration.clone_from(&contract_location);
@@ -1903,15 +1895,10 @@ fn interprocedural_reads(
                                         |returned| {
                                             (
                                                 returned,
-                                                Location {
-                                                    path: format!(
-                                                        "bundled://{}#{primitive}",
-                                                        lookup.dialect.bundled_contract_label()
-                                                    )
-                                                    .into(),
-                                                    start_byte: 0,
-                                                    end_byte: 0,
-                                                },
+                                                crate::bundled_contract_location(
+                                                    lookup.dialect,
+                                                    &primitive,
+                                                ),
                                             )
                                         },
                                     )

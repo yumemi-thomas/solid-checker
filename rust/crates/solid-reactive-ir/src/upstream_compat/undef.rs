@@ -37,7 +37,7 @@ use solid_facts::ast::ImportKind;
 use solid_facts::core::Span;
 
 use super::{UpstreamCompatContext, is_lowercase_led};
-use crate::{Fix, StaticViolation, TextEdit, location};
+use crate::{Fix, StaticViolation, location};
 
 /// Control-flow components upstream auto-imports from `"solid-js"` instead
 /// of reporting undefined, on the theory that a bare `<For>`/`<Show>` used
@@ -290,14 +290,12 @@ fn insert_fix(file: &FileFacts, at: u32, new_text: String) -> Fix {
 }
 
 fn replace_fix(file: &FileFacts, span: Span, new_text: String) -> Fix {
-    Fix {
-        message: "Import Solid's control-flow components from 'solid-js'.".into(),
-        applicability: "safe".into(),
-        edits: vec![TextEdit {
-            location: location(file.path.shared(), span),
-            new_text,
-        }],
-    }
+    super::fix_replace(
+        file,
+        span,
+        "Import Solid's control-flow components from 'solid-js'.",
+        new_text,
+    )
 }
 
 #[cfg(test)]

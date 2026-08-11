@@ -12,8 +12,12 @@ Physical colocation does not merge the module interfaces:
 - `rust/crates/solid-facts-backend` orchestrates certification.
 - `rust/crates/solid-facts` owns the fact model, including compiler-fact
   integration behind the `CompilerFactsProvider` seam.
+- `rust/crates/solid-dialect` owns the Solid vocabulary seam both language
+  versions answer through.
 - `rust/dialects/solid-v2` owns Solid 2.0 specifics: the rule catalog and the
   dom-expressions compiler adapter.
+- `rust/dialects/solid-v1` owns Solid 1.x specifics: its rule catalog and the
+  adapter over the `solid-1x-compiler` fork.
 - The `typefacts` crate and its `solid-typefacts` producer own TypeScript-Go
   facts, in their own repository.
 - The `dom-expressions-compiler` crate owns JSX execution semantics.
@@ -32,6 +36,13 @@ To adopt new compiler work, move the `rev` of `dom-expressions-compiler` in
 `rust/Cargo.toml`, record the new revision in `THIRD_PARTY_NOTICES.md`, and run
 `make verify`. Pin by revision rather than branch so a build is reproducible
 and every upstream move is an explicit, reviewable commit here.
+
+The Solid 1.x compiler follows the same policy on its own fork,
+[solid-1x-compiler](https://github.com/yumemi-thomas/solid-1x-compiler) — the
+same crate name from a second repository, kept at differential parity with
+the Babel compiler Solid 1.x ships. Its `rev` moves in `rust/Cargo.toml` and
+`THIRD_PARTY_NOTICES.md` exactly like the dom-expressions pin; upstream's
+2.0-only codegen changes are deliberately not adopted there.
 
 The TypeFacts producer and its Rust client are pinned the same way, on
 [solid-ts-facts](https://github.com/yumemi-thomas/solid-ts-facts). They must

@@ -113,16 +113,12 @@ pub(super) fn expression_callability(
 // modules: these used to be duplicated per file with the doc comments on only
 // one of the copies.
 
-/// Whether `outer` fully contains `inner`, byte-range-wise. Containment is
-/// transitive — a node nested several levels down still satisfies it — so
-/// rules that must see only an object literal's *own* entries go through
-/// [`direct_object_literal_properties`] instead of filtering on this alone.
-pub(super) fn contains(outer: Span, inner: Span) -> bool {
-    outer.start <= inner.start && inner.end <= outer.end
-}
-
 /// The top-level properties of the object literal `expression` is, or `None`
 /// when the expression is not itself an object literal.
+///
+/// [`Span::contains`] alone cannot answer this: containment is transitive —
+/// a node nested several levels down still satisfies it — so rules that must
+/// see only an object literal's *own* entries go through this filter.
 ///
 /// Upstream reads `ObjectExpression.properties` — the node's own entries.
 /// The fact tables record every object property in the file flat, so "own"
@@ -144,7 +140,7 @@ pub(super) fn direct_object_literal_properties(
         .ast
         .object_properties
         .iter()
-        .filter(|property| contains(expression, property.span))
+        .filter(|property| expression.contains(property.span))
         .collect::<Vec<_>>();
     Some(
         inside
@@ -152,8 +148,8 @@ pub(super) fn direct_object_literal_properties(
             .filter(|property| {
                 !inside.iter().any(|other| {
                     other.span != property.span
-                        && (contains(other.value, property.span)
-                            || contains(other.key, property.span))
+                        && (other.value.contains(property.span)
+                            || other.key.contains(property.span))
                 })
             })
             .copied()

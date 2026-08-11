@@ -48,7 +48,6 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # babel-plugin-jsx-dom-expressions@0.40.7 exactly.
 solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "c26d204ff921c96a2309a783460de6a05c8f8b4a", default-features = false }
 typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "0b2d303d2f67c1ca9b108bd6886bab8882cd462e" }
-ciborium = "0.2"
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"
 oxc_ast = "0.118"

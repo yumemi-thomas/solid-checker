@@ -8,8 +8,8 @@ includes the whole `src` directory.
 Run the checker over the project to see every diagnostic:
 
 ```sh
-SOLID_COMPILER_FACTS_BIN=../../third_party/dom-expressions/packages/jsx-compiler/target/debug/solid-compiler-facts \
-  ../../bin/solid-checker --project tsconfig.json --format json
+SOLID_TYPEFACTS_BIN=../../bin/solid-typefacts \
+  ../../bin/solid-checker-rust --project tsconfig.json --format json
 ```
 
 | File | Diagnostic | Outcome | Why it needs solid-checker (not eslint) |

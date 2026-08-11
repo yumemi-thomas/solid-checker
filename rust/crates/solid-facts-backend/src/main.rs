@@ -681,15 +681,7 @@ fn dependency_export_summary(
     module: &str,
     name: &str,
 ) -> Option<solid_reactive_ir::ContractExport> {
-    dependency_contracts
-        .iter()
-        .filter(|contract| {
-            module == contract.package.name
-                || module
-                    .strip_prefix(&contract.package.name)
-                    .is_some_and(|suffix| suffix.starts_with('/'))
-        })
-        .max_by_key(|contract| contract.package.name.len())
+    solid_reactive_ir::PackageContract::for_module(dependency_contracts, module)
         .and_then(|contract| contract.exports_for_module(module))
         .and_then(|exports| exports.get(name))
         .cloned()
@@ -826,16 +818,11 @@ fn exported_names_for_file(
                 .as_deref()
                 .ok_or("export-all declaration has no module")?;
             if !module.starts_with('.') {
-                let contract = dependency_contracts
-                    .iter()
-                    .filter(|contract| {
-                        module == contract.package.name
-                            || module
-                                .strip_prefix(&contract.package.name)
-                                .is_some_and(|suffix| suffix.starts_with('/'))
-                    })
-                    .max_by_key(|contract| contract.package.name.len())
-                    .ok_or_else(|| {
+                let contract = solid_reactive_ir::PackageContract::for_module(
+                    dependency_contracts,
+                    module,
+                )
+                .ok_or_else(|| {
                         format!(
                             "emit package contract: cannot statically expand external export-all {module:?} from {}; generate and pass its dependency contract with --contract",
                             path.display()
@@ -875,14 +862,7 @@ fn exported_names_for_file(
                 .filter(|specifier| !specifier.type_only)
                 .map(|specifier| specifier.exported.to_string()),
         );
-        for binding in file.ast.bindings.iter().filter(|binding| {
-            binding.shape != solid_facts::ast::BindingShape::Array
-                && export.span.contains(binding.declaration)
-                && !file.ast.functions.iter().any(|function| {
-                    export.span.contains(function.span)
-                        && function.body.contains(binding.declaration)
-                })
-        }) {
+        for binding in file.ast.exported_bindings(export) {
             names.extend(binding.names.iter().filter_map(|name| {
                 file.source_text(name.span)
                     .filter(|name| !name.is_empty())

@@ -26,8 +26,8 @@ use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind};
 use solid_facts::core::Span;
 
 use super::{
-    UpstreamCompatContext, binding_initializer, contains, deletion_with_leading_comma,
-    is_import_reference, text,
+    UpstreamCompatContext, binding_initializer, deletion_with_leading_comma, is_import_reference,
+    text,
 };
 use crate::{Fix, StaticViolation, TextEdit, known_primitive, location};
 
@@ -118,15 +118,7 @@ fn no_proxy_apis(
 }
 
 fn proxy_violation(file: &FileFacts, message: &str, hint: &str, span: Span) -> StaticViolation {
-    StaticViolation {
-        id: "SC8009".into(),
-        rule: "no-proxy-apis".into(),
-        message: message.into(),
-        hint: hint.into(),
-        location: location(file.path.shared(), span),
-        analysis_context: String::new(),
-        fixes: vec![],
-    }
+    super::violation(file, "SC8009", "no-proxy-apis", message, hint, span, vec![])
 }
 
 /// `solid-js/store` builds its stores on ES2015 `Proxy`, unavailable on the
@@ -236,7 +228,7 @@ fn no_proxy_calls(
                 .ast
                 .members
                 .iter()
-                .filter(|member| contains(spread.argument, member.span))
+                .filter(|member| spread.argument.contains(member.span))
             {
                 violations.push(proxy_violation(
                     file,
@@ -249,7 +241,7 @@ fn no_proxy_calls(
                 .ast
                 .calls
                 .iter()
-                .filter(|call| contains(spread.argument, call.span))
+                .filter(|call| spread.argument.contains(call.span))
             {
                 violations.push(proxy_violation(
                     file,

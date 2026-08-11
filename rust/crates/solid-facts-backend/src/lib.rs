@@ -1259,11 +1259,7 @@ fn semantic_demand_groups_cached<'a>(
 }
 
 fn typefacts_location(path: &str, span: solid_facts::core::Span) -> typefacts::Location {
-    typefacts::Location {
-        path: path.into(),
-        start_byte: u64::from(span.start),
-        end_byte: u64::from(span.end),
-    }
+    span.location(path)
 }
 
 fn callee_property_location(source: &str, callee: &typefacts::Location) -> typefacts::Location {

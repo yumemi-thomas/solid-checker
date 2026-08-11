@@ -30,6 +30,17 @@ impl Span {
         self.start <= other.start && self.end >= other.end
     }
 
+    /// This span as a [`typefacts::Location`] in `path` — the one conversion
+    /// between the fact tables' u32 spans and typefacts' u64 byte offsets.
+    #[must_use]
+    pub fn location(self, path: impl Into<Arc<str>>) -> typefacts::Location {
+        typefacts::Location {
+            path: path.into(),
+            start_byte: u64::from(self.start),
+            end_byte: u64::from(self.end),
+        }
+    }
+
     pub fn validate(self, source_len: usize) -> Result<(), FactIdentityError> {
         if self.start > self.end || usize::try_from(self.end).unwrap_or(usize::MAX) > source_len {
             return Err(FactIdentityError::InvalidSpan {

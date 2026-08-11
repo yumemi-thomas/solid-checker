@@ -11,8 +11,8 @@ The point is to make "no finding moved" a checkable claim. Before this, the
 only assertions about rule behaviour were hand-maintained counts in
 `rust/crates/solid-facts-backend/tests/rule_quality_process.rs` — good at catching a
 rule that stops firing on a file someone remembered to list, useless for
-catching a finding that moved somewhere nobody listed. ADR 0002 verified a
-refactor as zero-diff across 56 fixture runs, but the method was never
+catching a finding that moved somewhere nobody listed. An earlier refactor was
+verified as zero-diff across 56 fixture runs, but the method was never
 committed, so the next refactor had to invent it again.
 
 ## What a snapshot holds
@@ -108,6 +108,6 @@ harnesses and are not snapshotted here. A snapshot whose project was deleted
 fails the gate as an orphan rather than silently dropping its findings.
 
 It does not cover: the corpus (`make corpus`, Solid Primitives, a separate and
-much larger body), compiler execution facts (`make conformance`), or anything
-about performance. It runs the release-shaped path through the CLI, so it also
+much larger body), compiler execution facts (conformance-tested in the
+`dom-expressions` repository), or anything about performance. It runs the release-shaped path through the CLI, so it also
 does not exercise the LSP or WASM entry points.

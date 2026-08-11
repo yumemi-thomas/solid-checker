@@ -16,11 +16,6 @@ pub use rules::{DOCS_BASE_URL, Rule, docs_url, manifest_json};
 pub use solid_reactive_ir::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
 
 #[must_use]
-pub fn solve(program: &Program) -> Vec<Finding> {
-    solve_measured(program).0
-}
-
-#[must_use]
 pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
     let total_started = Instant::now();
     let construction_started = Instant::now();
