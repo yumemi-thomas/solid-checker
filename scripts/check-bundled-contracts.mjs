@@ -88,9 +88,14 @@ const hiddenLockPath = join(install, "node_modules", ".package-lock.json");
 const hiddenLock = existsSync(hiddenLockPath)
   ? JSON.parse(readFileSync(hiddenLockPath, "utf8"))
   : null;
+// npm's hidden lockfile keys packages by path, but the path's shape varies:
+// a plain `node_modules/<name>` on Linux, and a relative traversal that ends
+// with `/node_modules/<name>` where the temp directory resolves through a
+// symlink (macOS's /var -> /private/var).
 const installedIntegrity = name =>
-  Object.entries(hiddenLock?.packages ?? {}).find(([path]) =>
-    path.endsWith(`/node_modules/${name}`),
+  Object.entries(hiddenLock?.packages ?? {}).find(
+    ([path]) =>
+      path === `node_modules/${name}` || path.endsWith(`/node_modules/${name}`),
   )?.[1]?.integrity;
 
 if (write) {
