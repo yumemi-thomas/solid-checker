@@ -29,6 +29,13 @@ eslint-plugin-solid's advisory level for existing 1.x codebases) and an
 the 2.0 catalog has no adoption legacy to accommodate. A suppression comment
 carried through a migration therefore lands on a stricter rule.
 
+`SC2003` is another deliberate adoption-policy exception: the proven dropped
+writes reported by [`v1/no-direct-mutation`](v1/no-direct-mutation.md) keep the
+**warning** tier of upstream's `reactivity` rule. The shared
+[`no-direct-mutation`](no-direct-mutation.md) rule keeps that tier as well, so
+the same defect does not change severity merely because a project migrates
+dialects. The warning is compatibility policy, not lower certainty.
+
 For the eslint-plugin-solid 0.14.5 surface, every rule enabled by upstream's
 base policy keeps that policy's severity. Four rules that upstream ships off
 are deliberately available and enabled here: `v1/no-array-handlers` and
@@ -55,10 +62,13 @@ Findings come in two kinds:
 - **uncertifiable** — the analyzer could not prove the code correct; the page for
   each `SC9xxx` rule explains how to make the code provable.
 
-Uncertifiable findings always carry **error** severity, including the ones the
-owner rules (`SC4001`–`SC4004`) emit for exported functions whose callers the
-analyzer cannot see. A rule's severity in the manifest describes its proven
-violation form.
+Uncertifiable findings normally carry **error** severity, including the ones
+the owner rules (`SC4001`–`SC4004`) emit for exported functions whose callers
+the analyzer cannot see. The sole exception is `SC9011`
+`reactive-source-uncaptured`: it has no proven-violation form and is
+advisory-by-design, warning that an undescribed package boundary prevents the
+analyzer from following a reactive source. A rule's severity in the manifest
+describes its proven violation form when one exists.
 
 ## Rule configuration
 

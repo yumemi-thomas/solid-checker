@@ -10,6 +10,8 @@
 - [Glossary](glossary.md) — canonical domain language
 - [Package contracts](package-contracts.md) — published reactivity summaries
 - [Monorepo policy](monorepo.md) — upstream and dependency policy
+- [Design-review remediation](design-review-remediation.md) — phased plan
+  from the 2026-08 full-catalog review
 
 Contribution and verification instructions are in
 [CONTRIBUTING.md](../CONTRIBUTING.md).

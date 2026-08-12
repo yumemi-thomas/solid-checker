@@ -11,6 +11,14 @@ Flags `affects()` calls where the argument count is not one or two, or where the
 target is a call result, wrapper function, literal, or other expression that is not
 an identifier bound to a proven Solid source.
 
+## Shared code
+
+SC7003 identifies the proven-invalid `refresh()`/`affects()` target family;
+the rule name identifies which API surface reported it. A suppression or
+filter by code therefore silences both `invalid-affects-target` and
+`invalid-refresh-target`. Project-wide enablement uses exact rule names, so
+either surface can be disabled without disabling the other.
+
 ## Why is this bad?
 
 `affects()` declares which Solid source a function invalidates, so tooling and the

@@ -288,6 +288,23 @@ mod tests {
         );
     }
 
+    #[test]
+    fn every_rule_page_contains_substantive_guidance() {
+        let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../docs/rules");
+        for rule in Rule::ALL {
+            let name = rule.metadata().name;
+            let page = docs.join(format!("{name}.md"));
+            let text = std::fs::read_to_string(&page)
+                .unwrap_or_else(|error| panic!("cannot read {}: {error}", page.display()));
+            assert!(
+                text.len() >= 400,
+                "{} is only {} bytes; every rule page must explain behavior, motivation, and remediation",
+                page.display(),
+                text.len()
+            );
+        }
+    }
+
     /// Every identity the reactive IR emits as a *static violation* under
     /// `Version::V1` (the upstream-compat surface plus
     /// `no-async-tracked-scope`) must resolve here — a miss panics in

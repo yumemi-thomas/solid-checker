@@ -10,7 +10,17 @@ than the original Solid source binding.
 Flags `refresh()` calls where the argument count is not exactly one, or where the
 target is a call result, wrapper function, literal, or other expression that is not
 an identifier bound to a proven Solid source (a derived signal, store, or
-projection).
+projection). The family name says “target,” but this rule also owns malformed
+`refresh()` arity because an absent or extra argument prevents a valid target
+from being identified.
+
+## Shared code
+
+SC7003 identifies the proven-invalid `refresh()`/`affects()` target family;
+the rule name identifies which API surface reported it. A suppression or
+filter by code therefore silences both `invalid-refresh-target` and
+`invalid-affects-target`. Project-wide enablement uses exact rule names, so
+either surface can be disabled without disabling the other.
 
 ## Why is this bad?
 

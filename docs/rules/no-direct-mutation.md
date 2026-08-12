@@ -13,6 +13,11 @@ its setter. Shared with the 1.x catalog as
 [v1/no-direct-mutation](v1/no-direct-mutation.md) under the same code, so a
 suppression comment survives a migration.
 
+The warning tier mirrors eslint-plugin-solid's `reactivity` policy for this
+defect and stays consistent across the two dialects. It does not mean the
+write is speculative: every finding is a proven mutation that bypasses the
+reactive setter.
+
 ## Why is this bad?
 
 Solid updates the graph only through setters: the setter is what notifies
