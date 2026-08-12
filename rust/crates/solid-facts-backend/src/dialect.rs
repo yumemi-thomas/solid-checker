@@ -33,6 +33,11 @@ pub struct Dialect {
     /// Documentation page for a rule, addressed by its externally visible
     /// name.
     pub docs_url: fn(&str) -> String,
+    /// Whether the catalog carries a rule with this externally visible name.
+    /// Lets shared backend code condition work on catalog capability
+    /// (for example, which type facts to demand) instead of naming a
+    /// version.
+    pub has_rule: fn(&str) -> bool,
     /// Identity of the finding reported when an imported package has no
     /// usable reactivity contract.
     pub contract_missing_rule: RuleMetadata,
@@ -132,6 +137,11 @@ static SOLID_V2: Dialect = Dialect {
     compiler: || Box::new(solid_v2_compiler::NativeCompilerFacts),
     solve_measured: solid_v2_rules::solve_measured,
     docs_url: solid_v2_rules::docs_url,
+    has_rule: |name| {
+        solid_v2_rules::Rule::ALL
+            .into_iter()
+            .any(|rule| rule.metadata().name == name)
+    },
     contract_missing_rule: solid_v2_rules::Rule::PackageContractMissing.metadata(),
     bundled_packages: &["solid-js", "@solidjs/web"],
     bundled_contract: crate::diagnostics::bundled_contract_v2,
@@ -144,6 +154,11 @@ static SOLID_V1: Dialect = Dialect {
     compiler: || Box::new(solid_v1_compiler::NativeCompilerFacts),
     solve_measured: solid_v1_rules::solve_measured,
     docs_url: solid_v1_rules::docs_url,
+    has_rule: |name| {
+        solid_v1_rules::Rule::ALL
+            .into_iter()
+            .any(|rule| rule.metadata().name == name)
+    },
     contract_missing_rule: solid_v1_rules::Rule::PackageContractMissing.metadata(),
     bundled_packages: &["solid-js"],
     bundled_contract: crate::diagnostics::bundled_contract_v1,
@@ -151,7 +166,153 @@ static SOLID_V1: Dialect = Dialect {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashSet;
+
+    use solid_reactive_ir::{
+        AsyncRead, DirectMutationTarget, ExecutionRole, OwnerRequirement, ReactiveRead,
+        ReactiveWrite, StaticDefect, StaticDefectKind,
+    };
+    use typefacts::Location;
+
     use super::*;
+
+    fn location(index: u64) -> Location {
+        Location {
+            path: "catalog-prose.tsx".into(),
+            start_byte: index,
+            end_byte: index + 1,
+        }
+    }
+
+    /// Materializes every shared static-defect wording branch plus the
+    /// catalog findings that consumed the old dialect prose helpers: a strict
+    /// read, an owned write, an ownerless cleanup (the owner arm whose hint
+    /// diverges most between the versions), and a pending async read (a table
+    /// only the 2.0 catalog projects). Dynamic subjects use a reserved prefix
+    /// so the API-name assertion below can distinguish user code quoted by a
+    /// finding from catalog-owned advice.
+    fn catalog_prose_program() -> Program {
+        let defect_kinds = [
+            StaticDefectKind::ExecutionMapIncomplete,
+            StaticDefectKind::ComponentPropsDestructure,
+            StaticDefectKind::ReactiveReadAfterAwait {
+                accessor: "sampleAccessor".into(),
+            },
+            StaticDefectKind::ComponentReturnsConditionally,
+            StaticDefectKind::PackageContractExportMissing {
+                module: "sample-package".into(),
+                export: "sampleExport".into(),
+                reexported: false,
+            },
+            StaticDefectKind::MissingEffectFunction,
+            StaticDefectKind::UntrackedDerivedFunction {
+                name: "sampleFunction".into(),
+            },
+            StaticDefectKind::ReactiveSourceUncaptured {
+                source: "sampleAccessor".into(),
+                callee: "sampleCallee".into(),
+            },
+            StaticDefectKind::ReactiveHandlerRead {
+                attribute: "onClick".into(),
+                expression: "sampleHandler".into(),
+            },
+            StaticDefectKind::HandlerCallResult {
+                attribute: "onClick".into(),
+                callee: "sampleHandler".into(),
+                call: "sampleHandler()".into(),
+            },
+            StaticDefectKind::UncalledAccessor {
+                name: "sampleAccessor".into(),
+                position: "sample expression".into(),
+            },
+            StaticDefectKind::DirectMutation {
+                name: "sampleAccessor".into(),
+                target: DirectMutationTarget::AccessorBinding,
+            },
+            StaticDefectKind::DirectMutation {
+                name: "sampleStore".into(),
+                target: DirectMutationTarget::Store,
+            },
+            StaticDefectKind::DirectMutation {
+                name: "sampleProps".into(),
+                target: DirectMutationTarget::Props,
+            },
+            StaticDefectKind::DirectMutation {
+                name: "sampleValue".into(),
+                target: DirectMutationTarget::ReactiveValue,
+            },
+        ];
+        Program {
+            reads: vec![ReactiveRead {
+                kind: "signal".into(),
+                accessor: "sampleAccessor".into(),
+                location: location(1),
+                declaration: location(2),
+                execution: ExecutionRole::UntrackedRendering,
+                context: "sample component".into(),
+                via: "".into(),
+                origin: None,
+                origin_context: "".into(),
+            }],
+            writes: vec![ReactiveWrite {
+                setter: "sampleSetter".into(),
+                location: location(3),
+                declaration: location(4),
+                execution: ExecutionRole::TrackedJsx,
+                allowed_by_option: false,
+                context: "sample computation".into(),
+            }],
+            missing_owners: vec![OwnerRequirement {
+                operation: "cleanup".into(),
+                location: location(5),
+                uncertain: false,
+                conditional_owner: false,
+                report: true,
+            }],
+            async_reads: vec![AsyncRead {
+                accessor: "sampleAsyncAccessor".into(),
+                location: location(6),
+                declaration: location(7),
+                execution: ExecutionRole::TrackedJsx,
+                leaf_owner: None,
+                under_loading: false,
+            }],
+            static_defects: defect_kinds
+                .into_iter()
+                .enumerate()
+                .map(|(index, kind)| StaticDefect {
+                    kind,
+                    location: location(index as u64 + 10),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                })
+                .collect(),
+            ..Program::default()
+        }
+    }
+
+    fn called_names(text: &str) -> impl Iterator<Item = String> + '_ {
+        text.match_indices('(').filter_map(|(index, _)| {
+            let name = text[..index]
+                .chars()
+                .rev()
+                .take_while(|character| {
+                    character.is_alphanumeric() || matches!(character, '_' | '$')
+                })
+                .collect::<Vec<_>>()
+                .into_iter()
+                .rev()
+                .collect::<String>();
+            (!name.is_empty()).then_some(name)
+        })
+    }
+
+    fn contains_identifier(text: &str, expected: &str) -> bool {
+        text.split(|character: char| {
+            !(character.is_alphanumeric() || matches!(character, '_' | '$'))
+        })
+        .any(|identifier| identifier == expected)
+    }
 
     #[test]
     fn dialect_ids_are_unique_and_resolvable() {
@@ -159,6 +320,159 @@ mod tests {
             assert_eq!(by_id(dialect.id).map(|found| found.id), Some(dialect.id));
         }
         assert!(by_id("solid-v3").is_none());
+    }
+
+    /// The documentation and suppression model both depend on this exact
+    /// ownership split. Keep it derived from the two catalogs rather than
+    /// maintaining an unaudited second list in prose.
+    #[test]
+    fn rule_catalogs_keep_the_shared_and_version_only_split() {
+        let v1 = solid_v1_rules::Rule::ALL
+            .into_iter()
+            .map(|rule| rule.metadata().code)
+            .collect::<HashSet<_>>();
+        let v2 = solid_v2_rules::Rule::ALL
+            .into_iter()
+            .map(|rule| rule.metadata().code)
+            .collect::<HashSet<_>>();
+        let shared = v1.intersection(&v2).copied().collect::<HashSet<_>>();
+        let expected = HashSet::from([
+            "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1006", "SC1007", "SC2001",
+            "SC2003", "SC3001", "SC3002", "SC4001", "SC4002", "SC4003", "SC6001", "SC7001",
+            "SC9001", "SC9004", "SC9005", "SC9011",
+        ]);
+        assert_eq!(shared, expected);
+        assert_eq!(
+            solid_v1_rules::Rule::ALL
+                .into_iter()
+                .filter(|rule| shared.contains(rule.metadata().code))
+                .count(),
+            20
+        );
+        assert_eq!(
+            solid_v2_rules::Rule::ALL
+                .into_iter()
+                .filter(|rule| shared.contains(rule.metadata().code))
+                .count(),
+            20
+        );
+        assert_eq!(
+            solid_v1_rules::Rule::ALL.len() - 20,
+            18,
+            "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
+        );
+        assert_eq!(
+            solid_v2_rules::Rule::ALL.len() - 20,
+            14,
+            "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
+        );
+    }
+
+    /// Catalogs own user-facing wording, but the generated export index still
+    /// owns the fact of which APIs exist. Exercise the real findings so moving
+    /// prose out of [`solid_dialect::Dialect`] cannot also remove the guard
+    /// that stopped 2.0 advice leaking into 1.x diagnostics (and vice versa).
+    #[test]
+    fn rule_catalog_prose_only_names_apis_exported_by_its_dialect() {
+        const NON_SOLID_CALLS: &[&str] =
+            &["dispose", "log", "queueMicrotask", "setStore", "setTimeout"];
+        let program = catalog_prose_program();
+        for (version, forbidden) in [
+            (
+                solid_dialect::Version::V1,
+                &["action", "actions", "onSettled", "ownedWrite"][..],
+            ),
+            (
+                solid_dialect::Version::V2,
+                &[
+                    "onMount",
+                    "mergeProps",
+                    "splitProps",
+                    "produce",
+                    "Suspense",
+                    "SuspenseList",
+                ][..],
+            ),
+        ] {
+            let dialect = by_version(version);
+            let findings = dialect.solve(&program);
+            // Beyond the defects: the strict read, the owned write, and the
+            // ownerless cleanup. The pending async read joins them only in
+            // 2.0 — the 1.x catalog deliberately never reads that table.
+            let catalog_findings = match version {
+                solid_dialect::Version::V1 => 3,
+                solid_dialect::Version::V2 => 4,
+            };
+            assert_eq!(
+                findings.len(),
+                program.static_defects.len() + catalog_findings
+            );
+
+            let mut checked_calls = 0;
+            let mut prose = String::new();
+            for finding in &findings {
+                for (field, text) in std::iter::once(("message", finding.message.as_str()))
+                    .chain(std::iter::once(("hint", finding.hint.as_str())))
+                    .chain(
+                        finding
+                            .evidence
+                            .iter()
+                            .map(|step| ("evidence", step.message.as_str())),
+                    )
+                {
+                    prose.push_str(text);
+                    prose.push('\n');
+                    for name in called_names(text) {
+                        if name.starts_with("sample") || NON_SOLID_CALLS.contains(&name.as_str()) {
+                            continue;
+                        }
+                        assert!(
+                            !dialect
+                                .vocabulary
+                                .export_modules(&name, solid_dialect::ExportPosition::Value)
+                                .is_empty(),
+                            "{version:?} catalog {field} names {name}(), which that dialect does not export: {text:?}"
+                        );
+                        checked_calls += 1;
+                    }
+                }
+            }
+            assert!(
+                checked_calls >= 5,
+                "{version:?}: only {checked_calls} API calls checked"
+            );
+            for name in forbidden {
+                assert!(
+                    !contains_identifier(&prose, name),
+                    "{version:?} catalog names the other dialect's {name}: {prose}"
+                );
+            }
+
+            match version {
+                solid_dialect::Version::V1 => {
+                    assert!(prose.contains("createEffect(fn, value?)"));
+                    assert!(prose.contains("splitProps(props"));
+                    assert!(prose.contains("mergeProps(defaults"));
+                    assert_eq!(
+                        dialect
+                            .vocabulary
+                            .callback_positions(solid_dialect::Primitive::CreateEffect),
+                        &[0]
+                    );
+                }
+                solid_dialect::Version::V2 => {
+                    assert!(prose.contains("createEffect(compute, apply)"));
+                    assert!(prose.contains("omit(props"));
+                    assert!(prose.contains("merge(defaults"));
+                    assert_eq!(
+                        dialect
+                            .vocabulary
+                            .callback_positions(solid_dialect::Primitive::CreateEffect),
+                        &[1]
+                    );
+                }
+            }
+        }
     }
 
     #[test]

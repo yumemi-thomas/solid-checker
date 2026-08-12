@@ -1821,6 +1821,7 @@ mod tests {
         compiler: || Box::new(RecordingStubCompiler),
         solve_measured: stub_solve,
         docs_url: |rule| format!("stub://docs/{rule}"),
+        has_rule: |_| false,
         contract_missing_rule: solid_reactive_ir::RuleMetadata {
             code: "ST9001",
             name: "stub-contract-missing",

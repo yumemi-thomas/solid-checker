@@ -88,8 +88,9 @@ fn plan_file(
         // `v1/jsx-no-undef` judges a dotted tag by its root identifier
         // alone (`Foo` in `<Foo.Bar/>`), so the root span needs its own
         // resolution — the combined span above answers a different
-        // question. Only the 1.x catalog reads this answer.
-        if dialect.vocabulary.version() == solid_dialect::Version::V1
+        // question. Demanded only when the catalog carries the rule that
+        // reads the answer.
+        if (dialect.has_rule)("v1/jsx-no-undef")
             && let Some(name) = file.source_text(element.name.span)
             && let Some(dot) = name.find('.')
         {
@@ -127,7 +128,8 @@ fn plan_file(
             // The 1.x catalog also recovers string values from literal
             // string *types*: `no-innerhtml`'s allowStatic acceptance, and
             // `jsx-no-script-url` for URL-carrying attributes.
-            let v1_string_recovered = dialect.vocabulary.version() == solid_dialect::Version::V1
+            let v1_string_recovered = ((dialect.has_rule)("v1/no-innerhtml")
+                || (dialect.has_rule)("v1/jsx-no-script-url"))
                 && matches!(
                     name,
                     "innerHTML"
@@ -172,7 +174,7 @@ fn plan_file(
     // `prefer-for` (1.x) rewrites `.map()` to `<For>` only when the
     // receiver's type proves an actual array; demand it at exactly the call
     // shape the rule fires on.
-    if dialect.vocabulary.version() == solid_dialect::Version::V1 {
+    if (dialect.has_rule)("v1/prefer-for") {
         for call in &file.ast.calls {
             let is_single_function_map = call.arguments.len() == 1
                 && matches!(

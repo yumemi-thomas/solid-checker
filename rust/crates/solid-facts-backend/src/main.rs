@@ -471,6 +471,20 @@ fn emit_package_contract(
         )
         .into());
     }
+    // The same SC9 class arrives as structured defects (missing contract
+    // exports, uncovered execution maps, uncaptured sources); a contract
+    // must not be emitted over those either.
+    if let Some(unresolved) = program
+        .static_defects
+        .iter()
+        .find(|defect| defect.kind.is_unresolved_obligation())
+    {
+        return Err(format!(
+            "emit package contract: unresolved obligation at {}:{}: {:?}",
+            unresolved.location.path, unresolved.location.start_byte, unresolved.kind
+        )
+        .into());
+    }
     // An unresolved cleanup value remains a project diagnostic, but it does
     // not change the exported reactive dependency/callback/return summary.
     // Contract generation must only fail on obligations that affect that
