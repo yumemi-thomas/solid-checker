@@ -3,8 +3,13 @@
 //! reactive stages behind them.
 
 use crate::identity::SymbolId;
+use crate::owners::{
+    component_binding_name, component_props_parameter_fix, containing_ast_function,
+    enclosing_function_label, function_binding_name,
+};
+use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::symbols::async_symbol_root;
-use crate::*;
+use crate::{StaticDefect, StaticDefectKind, location, primitive_name};
 use solid_facts::core::Span;
 use typefacts::Location;
 
@@ -19,17 +24,15 @@ pub(crate) fn static_prepass(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
 fn execution_map_incomplete(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for span in file.compiler.uncovered_jsx_expressions() {
-            draft.static_violations.push(StaticViolation {
-                id: "SC9004".into(),
-                rule: "execution-map-incomplete".into(),
-                message:
-                    "the Solid compiler did not classify this JSX expression as tracked, untracked, or a callback; without an execution role, solid-checker cannot certify any reactive read inside it"
-                        .into(),
-                hint: "Simplify the expression: hoist complex logic into a createMemo and interpolate the accessor. If this persists on plain JSX, re-run with fresh compiler facts and report the pattern as a solid-checker issue.".into(),
-                location: location(file.path.shared(), span),
-                analysis_context: String::new(),
-                fixes: vec![],
-            });
+            draft.push_defect(
+                "execution-map-incomplete",
+                StaticDefect {
+                    kind: StaticDefectKind::ExecutionMapIncomplete,
+                    location: location(file.path.shared(), span),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                },
+            );
         }
     }
 }
@@ -39,7 +42,7 @@ fn execution_map_incomplete(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
 fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for function in &file.ast.functions {
-            if function_binding_name(file, function)
+            if component_binding_name(file, function)
                 .and_then(|name| {
                     file.source_text(name.span)
                         .unwrap_or_default()
@@ -57,25 +60,15 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                     .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Object)
             {
                 let location = location(file.path.shared(), parameter.pattern);
-                if draft.seen_static.insert((
+                draft.push_defect(
                     "component-props-destructure",
-                    location.path.clone(),
-                    location.start_byte,
-                )) {
-                    draft.static_violations.push(StaticViolation {
-                        id: "SC1003".into(),
-                        rule: "component-props-destructure".into(),
-                        message: "destructuring props unwraps each property once at component setup; the bindings are frozen values, and the component never updates when the parent passes new props".into(),
-                        hint: {
-                            let helpers = ctx.dialect.props_helpers();
-                            format!(
-                                "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use {}(props, ...keys) and {}(defaults, props) instead of destructuring.",
-                                helpers.omit, helpers.merge
-                            )
-                        },
+                    StaticDefect {
+                        kind: StaticDefectKind::ComponentPropsDestructure,
                         location,
-                        analysis_context: function_binding_name(file, function)
-                            .map_or_else(String::new, |name| file.source_text(name.span).unwrap_or_default().to_owned()),
+                        analysis_context: component_binding_name(file, function)
+                            .map_or_else(String::new, |name| {
+                                file.source_text(name.span).unwrap_or_default().to_owned()
+                            }),
                         fixes: component_props_parameter_fix(
                             ctx.facts,
                             file,
@@ -85,8 +78,8 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                         )
                         .into_iter()
                         .collect(),
-                    });
-                }
+                    },
+                );
             }
         }
         for binding in &file.ast.bindings {
@@ -103,27 +96,15 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                 .is_some_and(|symbol| ctx.prop_sources.contains_key(symbol));
             if props {
                 let location = location(file.path.shared(), binding.pattern);
-                if draft.seen_static.insert((
+                draft.push_defect(
                     "component-props-destructure",
-                    location.path.clone(),
-                    location.start_byte,
-                )) {
-                    draft.static_violations.push(StaticViolation {
-                        id: "SC1003".into(),
-                        rule: "component-props-destructure".into(),
-                        message: "destructuring props unwraps each property once at component setup; the bindings are frozen values, and the component never updates when the parent passes new props".into(),
-                        hint: {
-                            let helpers = ctx.dialect.props_helpers();
-                            format!(
-                                "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use {}(props, ...keys) and {}(defaults, props) instead of destructuring.",
-                                helpers.omit, helpers.merge
-                            )
-                        },
+                    StaticDefect {
+                        kind: StaticDefectKind::ComponentPropsDestructure,
                         location,
                         analysis_context: enclosing_function_label(file, binding.pattern),
                         fixes: vec![],
-                    });
-                }
+                    },
+                );
             }
         }
     }
@@ -202,34 +183,26 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                         primitive
                             .primitive()
                             .is_some_and(|resolved| {
-                                ctx.dialect.callback_tracks_reads_at(
-                                    resolved,
-                                    0,
-                                    candidate.arguments.len(),
-                                )
+                                ctx.dialect
+                                    .callback_semantics_at(resolved, 0, candidate.arguments.len())
+                                    .tracks_reads
                             })
                             .then(|| format!("{primitive} async computation"))
                     })
                 }) else {
                     continue;
                 };
-                if draft.seen_static.insert((
+                draft.push_defect(
                     "reactive-read-after-await",
-                    call.path.clone(),
-                    call.start_byte,
-                )) {
-                    draft.static_violations.push(StaticViolation {
-                        id: "SC1002".into(),
-                        rule: "reactive-read-after-await".into(),
-                        message: format!(
-                            "reactive accessor {display:?} is read after an await; dependency tracking ends at the first await, so this read registers no dependency and the computation never re-runs when {display:?} changes"
-                        ),
-                        hint: "Read reactive values before the first await and carry the results through the async work. If the value must stay live after the await, split the read into its own synchronous computation.".into(),
+                    StaticDefect {
+                        kind: StaticDefectKind::ReactiveReadAfterAwait {
+                            accessor: display.to_string(),
+                        },
                         location: diagnostic_location,
                         analysis_context,
                         fixes: vec![],
-                    });
-                }
+                    },
+                );
             }
         }
     }
@@ -286,21 +259,18 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                 });
                 if reactive && conditional_return {
                     let location = location(file.path.shared(), *test);
-                    if draft.seen_static.insert((
+                    draft.push_defect(
                         "component-returns-conditionally",
-                        location.path.clone(),
-                        location.start_byte,
-                    )) {
-                        draft.static_violations.push(StaticViolation {
-                            id: "SC1004".into(),
-                            rule: "component-returns-conditionally".into(),
-                            message: "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
-                            hint: "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
+                        StaticDefect {
+                            kind: StaticDefectKind::ComponentReturnsConditionally,
                             location,
-                            analysis_context: file.source_text(name.span).unwrap_or_default().to_owned(),
+                            analysis_context: file
+                                .source_text(name.span)
+                                .unwrap_or_default()
+                                .to_owned(),
                             fixes: vec![],
-                        });
-                    }
+                        },
+                    );
                 }
             }
         }

@@ -1159,7 +1159,6 @@ name = "solid-v1-rules"
 version = "0.1.0"
 dependencies = [
  "solid-reactive-ir",
- "typefacts",
 ]
 
 [[package]]
@@ -1175,7 +1174,6 @@ name = "solid-v2-rules"
 version = "0.1.0"
 dependencies = [
  "solid-reactive-ir",
- "typefacts",
 ]
 
 [[package]]

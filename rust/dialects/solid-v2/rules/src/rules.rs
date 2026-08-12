@@ -50,8 +50,7 @@ pub enum Rule {
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/`.
-pub const DOCS_BASE_URL: &str =
-    "https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules";
+pub const DOCS_BASE_URL: &str = solid_reactive_ir::DOCS_BASE_URL;
 
 /// The documentation page for a diagnostic, addressed by its externally
 /// visible rule name so adapters that only carry the name (LSP, snapshots)
@@ -196,20 +195,7 @@ impl Rule {
 /// facts the catalog already owns.
 #[must_use]
 pub fn manifest_json() -> String {
-    let mut out = format!("{{\n  \"docsBaseUrl\": \"{DOCS_BASE_URL}\",\n  \"rules\": [\n");
-    for (index, rule) in Rule::ALL.into_iter().enumerate() {
-        let metadata = rule.metadata();
-        out.push_str(&format!(
-            "    {{ \"code\": \"{}\", \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {} }}{}\n",
-            metadata.code,
-            metadata.name,
-            metadata.severity,
-            metadata.uncertifiable,
-            if index + 1 == Rule::ALL.len() { "" } else { "," }
-        ));
-    }
-    out.push_str("  ]\n}\n");
-    out
+    solid_reactive_ir::rule_manifest_json(DOCS_BASE_URL, Rule::ALL.into_iter().map(Rule::metadata))
 }
 
 #[cfg(test)]
@@ -255,13 +241,27 @@ mod tests {
     #[test]
     fn every_rule_has_a_documentation_page() {
         let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../docs/rules");
-        for rule in Rule::ALL {
-            let page = docs.join(format!("{}.md", rule.metadata().name));
+        solid_reactive_ir::assert_rules_have_documentation(
+            &docs,
+            Rule::ALL.into_iter().map(|rule| rule.metadata().name),
+        );
+    }
+
+    /// Every identity the reactive IR emits as a *static violation* on the
+    /// 2.0 static-API surface must resolve here — a miss panics in `solve`.
+    #[test]
+    fn every_v2_static_violation_identity_resolves() {
+        for (code, name) in [
+            ("SC7002", "sync-node-received-async"),
+            ("SC7003", "invalid-refresh-target"),
+            ("SC7003", "invalid-affects-target"),
+            ("SC7004", "affects-keys-on-accessor"),
+            ("SC9003", "refresh-target-unresolved"),
+            ("SC9003", "affects-target-unresolved"),
+        ] {
             assert!(
-                page.is_file(),
-                "rule {} has no documentation page at {}",
-                rule.metadata().name,
-                page.display()
+                Rule::from_identity(code, name).is_some(),
+                "IR static-violation identity {code}/{name} does not resolve in the v2 catalog"
             );
         }
     }

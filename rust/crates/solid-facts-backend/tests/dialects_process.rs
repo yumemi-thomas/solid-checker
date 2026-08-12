@@ -28,9 +28,11 @@ fn dialect_snapshot_findings(fixture: &str) -> Vec<serde_json::Value> {
 }
 
 fn project_snapshot_findings(project: PathBuf, dialect: Option<&str>) -> Vec<serde_json::Value> {
-    let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {
-        return Vec::new();
-    };
+    // Callers skip when the harness is unarmed; reaching this helper without
+    // the producer is a test bug, and an empty result here would let every
+    // `all(...)`-shaped assertion pass vacuously.
+    let typefacts = env::var("SOLID_TYPEFACTS_BIN")
+        .expect("guard the calling test on SOLID_TYPEFACTS_BIN before requesting findings");
     let mut command = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"));
     command
         .arg("--typefacts")

@@ -71,8 +71,7 @@ pub enum Rule {
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/v1/`.
-pub const DOCS_BASE_URL: &str =
-    "https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules";
+pub const DOCS_BASE_URL: &str = solid_reactive_ir::DOCS_BASE_URL;
 
 /// The documentation page for a diagnostic, addressed by its externally
 /// visible rule name so adapters that only carry the name (snapshots, the
@@ -210,44 +209,19 @@ impl Rule {
     /// this catalog's identity.
     ///
     /// The IR names its diagnostics in its own vocabulary — the identity it
-    /// has carried since before dialects existed — and each dialect's catalog
-    /// projects that onto its external surface. `SC1003` is
-    /// `component-props-destructure` to the engine and `v1/no-destructure`
-    /// here, because eslint-plugin-solid users know the defect by that name.
+    /// has carried since before dialects existed. Every identity that
+    /// reaches this catalog as a *static violation* (the upstream-compat
+    /// surface plus `no-async-tracked-scope`) keeps its name here, so the
+    /// catalog scan below is the whole projection. Identities whose v1 rule
+    /// is renamed (`component-props-destructure` → `v1/no-destructure`)
+    /// arrive as static *defects* and are worded by `static_defect_finding`
+    /// instead, never through this path.
     #[must_use]
     pub fn from_identity(code: &str, name: &str) -> Option<Self> {
-        let rule = match (code, name) {
-            ("SC1002", "reactive-read-after-await") => Self::ReactiveReadAfterAwait,
-            ("SC1003", "component-props-destructure") => Self::NoDestructure,
-            ("SC1004", "component-returns-conditionally") => Self::ComponentsReturnOnce,
-            ("SC7001", "missing-effect-function") => Self::MissingEffectFunction,
-            ("SC1005", "uncalled-accessor") => Self::UncalledAccessor,
-            ("SC1006", "untracked-derived-function") => Self::UntrackedDerivedFunction,
-            ("SC1007", "expected-function-got-expression") => Self::ExpectedFunctionGotExpression,
-            ("SC2003", "no-direct-mutation") => Self::NoDirectMutation,
-            ("SC5004", "no-async-tracked-scope") => Self::NoAsyncTrackedScope,
-            ("SC9011", "reactive-source-uncaptured") => Self::ReactiveSourceUncaptured,
-            ("SC8001", "event-handlers") => Self::EventHandlers,
-            ("SC8002", "imports") => Self::Imports,
-            ("SC8003", "jsx-no-duplicate-props") => Self::JsxNoDuplicateProps,
-            ("SC8004", "jsx-no-script-url") => Self::JsxNoScriptUrl,
-            ("SC8005", "jsx-no-undef") => Self::JsxNoUndef,
-            ("SC8007", "no-array-handlers") => Self::NoArrayHandlers,
-            ("SC8008", "no-innerhtml") => Self::NoInnerhtml,
-            ("SC8009", "no-proxy-apis") => Self::NoProxyApis,
-            ("SC8010", "no-react-deps") => Self::NoReactDeps,
-            ("SC8011", "no-react-specific-props") => Self::NoReactSpecificProps,
-            ("SC8012", "no-unknown-namespaces") => Self::NoUnknownNamespaces,
-            ("SC8013", "prefer-classlist") => Self::PreferClasslist,
-            ("SC8014", "prefer-for") => Self::PreferFor,
-            ("SC8015", "prefer-show") => Self::PreferShow,
-            ("SC8016", "self-closing-comp") => Self::SelfClosingComp,
-            ("SC8017", "style-prop") => Self::StyleProp,
-            ("SC9001", "package-contract-export-missing") => Self::PackageContractExportMissing,
-            ("SC9004", "execution-map-incomplete") => Self::ExecutionMapIncomplete,
-            _ => return None,
-        };
-        Some(rule)
+        Self::ALL.into_iter().find(|rule| {
+            let metadata = rule.metadata();
+            metadata.code == code && metadata.name.strip_prefix("v1/") == Some(name)
+        })
     }
 }
 
@@ -258,20 +232,7 @@ impl Rule {
 /// facts the catalog already owns.
 #[must_use]
 pub fn manifest_json() -> String {
-    let mut out = format!("{{\n  \"docsBaseUrl\": \"{DOCS_BASE_URL}\",\n  \"rules\": [\n");
-    for (index, rule) in Rule::ALL.into_iter().enumerate() {
-        let metadata = rule.metadata();
-        out.push_str(&format!(
-            "    {{ \"code\": \"{}\", \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {} }}{}\n",
-            metadata.code,
-            metadata.name,
-            metadata.severity,
-            metadata.uncertifiable,
-            if index + 1 == Rule::ALL.len() { "" } else { "," }
-        ));
-    }
-    out.push_str("  ]\n}\n");
-    out
+    solid_reactive_ir::rule_manifest_json(DOCS_BASE_URL, Rule::ALL.into_iter().map(Rule::metadata))
 }
 
 #[cfg(test)]
@@ -321,13 +282,41 @@ mod tests {
     #[test]
     fn every_rule_has_a_documentation_page() {
         let docs = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../../docs/rules");
-        for rule in Rule::ALL {
-            let page = docs.join(format!("{}.md", rule.metadata().name));
+        solid_reactive_ir::assert_rules_have_documentation(
+            &docs,
+            Rule::ALL.into_iter().map(|rule| rule.metadata().name),
+        );
+    }
+
+    /// Every identity the reactive IR emits as a *static violation* under
+    /// `Version::V1` (the upstream-compat surface plus
+    /// `no-async-tracked-scope`) must resolve here — a miss panics in
+    /// `solve`. SC8006 (`jsx-uses-vars`) is catalogued but deliberately
+    /// never fires, so it is absent.
+    #[test]
+    fn every_v1_static_violation_identity_resolves() {
+        for (code, name) in [
+            ("SC5004", "no-async-tracked-scope"),
+            ("SC8001", "event-handlers"),
+            ("SC8002", "imports"),
+            ("SC8003", "jsx-no-duplicate-props"),
+            ("SC8004", "jsx-no-script-url"),
+            ("SC8005", "jsx-no-undef"),
+            ("SC8007", "no-array-handlers"),
+            ("SC8008", "no-innerhtml"),
+            ("SC8009", "no-proxy-apis"),
+            ("SC8010", "no-react-deps"),
+            ("SC8011", "no-react-specific-props"),
+            ("SC8012", "no-unknown-namespaces"),
+            ("SC8013", "prefer-classlist"),
+            ("SC8014", "prefer-for"),
+            ("SC8015", "prefer-show"),
+            ("SC8016", "self-closing-comp"),
+            ("SC8017", "style-prop"),
+        ] {
             assert!(
-                page.is_file(),
-                "rule {} has no documentation page at {}",
-                rule.metadata().name,
-                page.display()
+                Rule::from_identity(code, name).is_some(),
+                "IR static-violation identity {code}/{name} does not resolve in the v1 catalog"
             );
         }
     }

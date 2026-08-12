@@ -1,5 +1,6 @@
-//! `v1/jsx-no-undef` — a JSX tag name that resolves to no binding anywhere:
-//! not a local variable, not an import, not a global, not a JSX intrinsic.
+//! Solid 1.x `v1/jsx-no-undef` — a JSX tag name that resolves to no binding
+//! anywhere: not a local variable, not an import, not a global, not a JSX
+//! intrinsic.
 //!
 //! Upstream walks ESLint's scope graph by hand and ships a
 //! `typescriptEnabled` option that turns its undefined-tag report off,

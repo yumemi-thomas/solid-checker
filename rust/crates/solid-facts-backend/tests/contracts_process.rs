@@ -461,6 +461,40 @@ fn cli_refuses_to_emit_unknown_callback_execution() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+/// SC9-class obligations arrive as structured defects since the contract
+/// resolver moved missing exports off `static_violations`; a contract must
+/// not be written over them either. `package-unknown-export` reports SC9001,
+/// so emission over it has to refuse.
+#[test]
+fn cli_refuses_to_emit_over_unresolved_obligations() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let directory = temporary_directory("emit-unresolved-obligation");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--project"])
+        .arg(root.join("fixtures/reactive-ir/package-unknown-export/tsconfig.json"))
+        .args(["--emit-contract"])
+        .arg(&output)
+        .args([
+            "--package-name",
+            "unknown-export-package",
+            "--package-version",
+            "1.0.0",
+        ])
+        .output()
+        .unwrap();
+    assert!(!result.status.success(), "emission must refuse over SC9001");
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(stderr.contains("unresolved obligation"), "{stderr}");
+    assert!(!output.exists(), "no contract may be written over SC9001");
+    fs::remove_dir_all(directory).unwrap();
+}
+
 #[test]
 fn cli_does_not_treat_noncallback_parameters_as_callback_obligations() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {

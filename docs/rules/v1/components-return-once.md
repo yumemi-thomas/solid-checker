@@ -5,6 +5,12 @@
 A component's return value depends on a reactive condition, but a component body
 runs exactly once.
 
+> Severity deliberately differs from the Solid 2.0 catalog: this rule keeps
+> upstream eslint-plugin-solid's advisory **warning** for existing 1.x
+> codebases, while
+> [`component-returns-conditionally`](../component-returns-conditionally.md)
+> reports the same `SC1004` defect as an **error**.
+
 ## What it does
 
 Flags components whose `return` statement is controlled by a condition that reads a

@@ -1,9 +1,17 @@
 //! Interprocedural discovery of reactive primitives created during directive
 //! application.
 
-use solid_dialect::Dialect;
+use std::collections::{HashMap, HashSet};
 
-use super::*;
+use solid_dialect::Dialect;
+use solid_facts::core::Span;
+
+use super::{
+    ExecutionRole, PrimitiveCreation, PrimitiveName, SemanticLookup, SymbolId, execution_role,
+    location, primitive_name,
+};
+use crate::owners::containing_ast_function;
+use crate::pipeline::{AnalysisContext, ProgramDraft};
 
 pub(super) struct DirectiveCreationCollector<'a, 'c> {
     lookup: &'c SemanticLookup<'a>,
@@ -145,10 +153,7 @@ pub(super) fn push_directive_creation(
 
 /// The directive-creation stage: primitives created in directive-apply
 /// positions, from direct calls and from functions returned into them.
-pub(crate) fn discover_directive_creations(
-    ctx: &crate::AnalysisContext<'_>,
-    draft: &mut crate::ProgramDraft,
-) {
+pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     let mut seen_directive_creations = HashSet::new();
     for file in &ctx.facts.files {
         for call in &file.ast.calls {

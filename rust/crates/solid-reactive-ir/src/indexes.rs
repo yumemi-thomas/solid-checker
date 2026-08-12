@@ -14,6 +14,7 @@ use solid_facts::{FileFacts, ProjectFacts, TypeScriptSymbol, TypeScriptTable};
 use typefacts::{Callability, EntityFact, FileFact, Location, ResolvedCall, TypeDescriptor};
 
 use super::{SymbolId, SymbolName};
+use crate::owners::jsx_element_is_loading;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
@@ -336,23 +337,19 @@ impl<'a> SemanticLookup<'a> {
             let mut capabilities = DialectCallbackCapabilities::default();
             for primitive in self.project_primitives() {
                 for argument in 0..PROBED_ARGUMENTS {
-                    capabilities.returned_callbacks |= self
-                        .dialect
-                        .callback_requires_return_invocation(*primitive, argument);
-                    capabilities.stored_function_arguments |= self
-                        .dialect
-                        .stores_function_argument_as_value(*primitive, argument);
+                    let semantics =
+                        self.dialect
+                            .callback_semantics_at(*primitive, argument, PROBED_ARGUMENTS);
+                    capabilities.returned_callbacks |= semantics.requires_return_invocation;
+                    capabilities.stored_function_arguments |= semantics.stores_as_value;
                     for count in 0..PROBED_ARGUMENTS {
                         for slot in std::iter::once(None).chain((0..PROBED_RESULT_SLOTS).map(Some))
                         {
-                            capabilities.returned_callbacks |= self
+                            let returned = self
                                 .dialect
-                                .returned_callback_execution_at(*primitive, slot, argument, count)
-                                .is_some()
-                                || self
-                                    .dialect
-                                    .returned_callback_owner_at(*primitive, slot, argument, count)
-                                    .is_some();
+                                .returned_callback_semantics_at(*primitive, slot, argument, count);
+                            capabilities.returned_callbacks |=
+                                returned.execution.is_some() || returned.owner.is_some();
                         }
                     }
                 }
@@ -588,6 +585,44 @@ impl<'a> SemanticLookup<'a> {
             .get(symbol)
             .map(|candidate| candidate.references().cloned().collect())
             .unwrap_or_default()
+    }
+
+    /// Whether `symbol` — following alias links, as an import binding is an
+    /// alias of the export it names — is declared in one of the analyzed
+    /// source files. A tsconfig path alias (`@/utils/x`) is a bare specifier
+    /// at the syntax level, but TypeScript resolved it into the project, so
+    /// its declarations land in analyzed sources; a real package's live in
+    /// its own `.d.ts`, which is not an analyzed source.
+    pub(super) fn symbol_is_project_code(&self, symbol: &str) -> bool {
+        let symbols = self.symbols_by_id.get_or_init(|| {
+            self.facts
+                .typescript
+                .symbols()
+                .map(|candidate| (candidate.id(), candidate))
+                .collect()
+        });
+        let mut current = symbol;
+        // Alias chains are short (import of a re-export of an export); the
+        // bound only guards against a malformed cyclic fact set.
+        for _ in 0..8 {
+            let Some(entry) = symbols.get(current) else {
+                return false;
+            };
+            if entry.declarations().iter().any(|declaration| {
+                self.facts
+                    .files
+                    .iter()
+                    .any(|file| *file.path.as_str() == *declaration.location.path)
+            }) {
+                return true;
+            }
+            let target = entry.alias_target();
+            if target.is_empty() || target == current {
+                return false;
+            }
+            current = target;
+        }
+        false
     }
 
     /// The binding declaration named by an exact canonical symbol reference.
@@ -1003,7 +1038,7 @@ impl<'a> SemanticLookup<'a> {
                             caller_file.ast.jsx_elements.iter().any(|boundary| {
                                 boundary.span.contains(element.span)
                                     && boundary.span != element.span
-                                    && super::jsx_element_is_loading(
+                                    && jsx_element_is_loading(
                                         caller_file,
                                         boundary,
                                         self.entities,

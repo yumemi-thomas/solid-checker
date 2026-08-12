@@ -1,92 +1,32 @@
 //! Build entry points and the staged incremental pipeline that
 //! assembles a `Program`, plus the bounded-parallelism helpers.
 
-use crate::*;
-
 use std::{
     cell::Cell,
-    collections::{HashMap, HashSet},
+    collections::{BTreeMap, HashMap, HashSet},
     sync::Arc,
-    time::{Duration, Instant},
+    time::Instant,
 };
 
-use crate::cleanup::{cleanup_returns_for_file, leaf_owner_operations_for_file};
+use crate::cache::{BuildCaches, ReusePlan, build_typescript_indexes};
 use crate::contracts::{ResolvedContractBinding, resolve_contract_imports};
-use crate::identity::SymbolId;
-use crate::indexes::{CachedAstFileIndex, ProjectIndexes, SemanticLookup};
-use crate::interproc::{InterproceduralContext, InterproceduralTimings};
-use crate::reachability::{
-    ReachabilityInputs, ReachabilityState, reachable_call_multiplicity,
-    reachable_call_multiplicity_incremental,
+use crate::identity::{SymbolId, SymbolName};
+use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
+use crate::reachability::{ReachabilityInputs, reachability_stage};
+use crate::source_discovery::{StageContext, discover_sources};
+use crate::symbols::{add_solid_import_names, patch_typescript_indexes};
+use crate::timings::{ReactiveIrStage, StageClock};
+use crate::{
+    ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
+    ContractGenerationObligation, InvalidCleanupReturn, LeafOwnerOperation, ObligationCounts,
+    OwnerRequirement, PackageContract, PrimitiveCreation, Program, ReactiveRead,
+    ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect, StaticViolation,
+    UnresolvedCleanupReturn, location_order,
 };
-use crate::static_api::StaticApiContext;
-use crate::symbols::{add_solid_import_names, patch_typescript_indexes, references_for_sources};
+use crate::{cleanup, directives, owners, reactive_analysis, static_api, static_rules};
 use solid_dialect::Dialect;
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::Location;
-
-/// Times the pipeline's stages and emits the `SOLID_CHECKER_TIMINGS` stage
-/// lines. Each build lane owns one clock; a stage ends with [`finish`],
-/// which records into the selected [`BuildTimings`] field, emits the stage
-/// line, and starts timing the next stage.
-///
-/// [`stage_line`] is the single place the emitted shape is produced — the
-/// names and JSON form are read by the performance tooling and must not
-/// drift.
-///
-/// [`finish`]: StageClock::finish
-/// [`stage_line`]: StageClock::stage_line
-pub(crate) struct StageClock {
-    started: Instant,
-    emit: bool,
-}
-
-impl StageClock {
-    pub(crate) fn new(emit: bool) -> Self {
-        Self {
-            started: Instant::now(),
-            emit,
-        }
-    }
-
-    pub(crate) fn finish(
-        &mut self,
-        timings: &mut BuildTimings,
-        field: fn(&mut BuildTimings) -> &mut Duration,
-        name: &str,
-    ) {
-        let elapsed = self.started.elapsed();
-        *field(timings) = elapsed;
-        self.record(name, elapsed);
-        self.started = Instant::now();
-    }
-
-    /// Emits a stage line for a duration measured outside the clock.
-    pub(crate) fn record(&self, name: &str, elapsed: Duration) {
-        if self.emit {
-            eprintln!("{}", Self::stage_line(name, elapsed));
-        }
-    }
-
-    /// The time since the current stage began, without ending it.
-    pub(crate) fn elapsed(&self) -> Duration {
-        self.started.elapsed()
-    }
-
-    /// Starts the next stage without recording the current one, for
-    /// boundaries whose time was already accounted through [`Self::record`].
-    pub(crate) fn restart(&mut self) {
-        self.started = Instant::now();
-    }
-
-    pub(crate) fn stage_line(name: &str, elapsed: Duration) -> String {
-        format!(
-            "{{\"reactiveIrStage\":\"{}\",\"elapsedNs\":{}}}",
-            name,
-            elapsed.as_nanos()
-        )
-    }
-}
 
 /// The program under assembly: every table and obligation counter the
 /// pipeline's stages fill, owned in one place so a stage's writes are part
@@ -98,6 +38,7 @@ pub(crate) struct ProgramDraft {
     pub(crate) action_invocations: Vec<ActionInvocation>,
     pub(crate) async_reads: Vec<AsyncRead>,
     pub(crate) static_violations: Vec<StaticViolation>,
+    pub(crate) static_defects: Vec<StaticDefect>,
     pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
     pub(crate) invalid_cleanup_returns: Vec<InvalidCleanupReturn>,
     pub(crate) unresolved_cleanup_returns: Vec<UnresolvedCleanupReturn>,
@@ -107,26 +48,29 @@ pub(crate) struct ProgramDraft {
     pub(crate) contract_generation_obligations: Vec<ContractGenerationObligation>,
     pub(crate) strict_read_obligations: usize,
     pub(crate) write_action_obligations: HashSet<(&'static str, String, u64, u64)>,
-    /// One static violation per (rule, file, offset) identity, across the
+    /// One static diagnostic per (rule, file, offset) identity, across the
     /// stages that share an identity space.
-    pub(crate) seen_static: HashSet<(&'static str, Arc<str>, u64)>,
+    pub(crate) seen_diagnostics: HashSet<(&'static str, Arc<str>, u64)>,
 }
 
 impl ProgramDraft {
+    /// Adds a version-neutral static defect once per rule, path, and offset.
+    /// Several passes can discover the same fact through different semantic
+    /// routes, so the draft owns deduplication for all of them.
+    pub(crate) fn push_defect(&mut self, identity: &'static str, defect: StaticDefect) {
+        if self.seen_diagnostics.insert((
+            identity,
+            defect.location.path.clone(),
+            defect.location.start_byte,
+        )) {
+            self.static_defects.push(defect);
+        }
+    }
+
     /// Orders every table by location and assembles the final [`Program`].
     pub(crate) fn into_program(mut self, factory_instances: usize) -> Program {
-        self.reads.sort_by(|left, right| {
-            (
-                &left.location.path,
-                left.location.start_byte,
-                left.location.end_byte,
-            )
-                .cmp(&(
-                    &right.location.path,
-                    right.location.start_byte,
-                    right.location.end_byte,
-                ))
-        });
+        self.reads
+            .sort_by(|left, right| location_order(&left.location, &right.location));
         self.writes
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.action_invocations
@@ -136,6 +80,8 @@ impl ProgramDraft {
         self.unresolved_cleanup_returns
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.static_violations
+            .sort_by(|left, right| location_order(&left.location, &right.location));
+        self.static_defects
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.directive_creations
             .sort_by(|left, right| location_order(&left.location, &right.location));
@@ -153,6 +99,7 @@ impl ProgramDraft {
             invalid_cleanup_returns: self.invalid_cleanup_returns,
             unresolved_cleanup_returns: self.unresolved_cleanup_returns,
             static_violations: self.static_violations,
+            static_defects: self.static_defects,
             directive_creations: self.directive_creations,
             missing_owners: self.missing_owners,
             async_reads: self.async_reads,
@@ -280,44 +227,10 @@ pub(crate) fn build_with_contracts_measured_incremental(
     };
     let project_indexes = ProjectIndexes::new(facts, ast_indexes);
     build_timings.project_indexes = substage_started.elapsed();
-    let typescript_unchanged = facts
-        .typescript_changes
-        .as_ref()
-        .is_some_and(|changes| changes.unchanged);
-    let late_stages_reusable = typescript_unchanged
-        && late_stage_cache
-            .as_deref()
-            .and_then(Option::as_ref)
-            .is_some_and(|cache| late_stage_inputs_match(cache, facts));
-    if let Some(cache) = late_stage_cache.as_deref_mut() {
-        if late_stages_reusable {
-            if let Some(retained) = cache.as_mut() {
-                for file in &facts.files {
-                    if let Some(input) = retained.inputs.get_mut(file.path.as_str()) {
-                        input.source_hash.clone_from(&file.source_hash);
-                    }
-                }
-            }
-        } else if let Some(retained) = cache.as_mut() {
-            refresh_late_stage_inputs(&mut retained.inputs, facts);
-            retained.local_accesses.aggregate = None;
-            retained.interprocedural = None;
-            retained.missing_owners = None;
-            retained.compat_reference_locations = None;
-        } else {
-            *cache = Some(CachedLateStages {
-                inputs: current_late_stage_inputs(facts),
-                local_accesses: CachedLocalAccesses::default(),
-                interprocedural: None,
-                missing_owners: None,
-                owner_files: HashMap::new(),
-                compat_reference_locations: None,
-            });
-        }
-    }
+    let reuse = ReusePlan::prepare(facts, late_stage_cache.as_deref_mut());
     let owned_typescript_indexes;
     let typescript_indexes = if let Some(cache) = typescript_indexes_cache {
-        let patch_timings = (!typescript_unchanged)
+        let patch_timings = (!reuse.typescript_unchanged)
             .then(|| {
                 cache.as_mut().and_then(|cached| {
                     facts.typescript_changes.as_ref().and_then(|changes| {
@@ -338,7 +251,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
             build_timings.entity_symbols = entity_symbols;
             build_timings.alias_and_entity_indexes = alias_roots + entity_symbols;
         }
-        if (!typescript_unchanged && !indexes_patched) || cache.is_none() {
+        if (!reuse.typescript_unchanged && !indexes_patched) || cache.is_none() {
             let substage_started = Instant::now();
             let (indexes, alias_roots, entity_symbols) =
                 build_typescript_indexes(&facts.typescript, dialect, facts.files.len() >= 256);
@@ -375,7 +288,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
-        static_violations: std::mem::take(&mut resolved_contracts.missing_exports),
+        static_defects: std::mem::take(&mut resolved_contracts.missing_exports),
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;
@@ -398,97 +311,28 @@ pub(crate) fn build_with_contracts_measured_incremental(
             let sources = discover_sources(
                 &source_context,
                 source_discovery_cache,
-                typescript_unchanged,
+                reuse.typescript_unchanged,
                 &mut timings,
                 emit_timings,
             );
             (sources, timings)
         });
         let reachability_worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
-        if let Some(cache) = reachability_cache.as_deref_mut() {
-            let can_reuse = typescript_unchanged
-                && cache.as_ref().is_some_and(|cached| {
-                    cached.inputs.len() == facts.files.len()
-                        && facts.files.iter().all(|file| {
-                            cached.inputs.get(file.path.as_str()).is_some_and(
-                                |(source_hash, ast)| {
-                                    source_hash == &file.source_hash
-                                        || same_reachability_ast(ast, &file.ast)
-                                },
-                            )
-                        })
-                });
-            if can_reuse {
-                let cached = cache.as_mut().expect("checked retained reachability");
-                for file in &facts.files {
-                    if let Some((source_hash, _)) = cached.inputs.get_mut(file.path.as_str()) {
-                        source_hash.clone_from(&file.source_hash);
-                    }
-                    if let Some(retained_file) = cached.files.get_mut(file.path.as_str()) {
-                        retained_file
-                            .identity
-                            .source_hash
-                            .clone_from(&file.source_hash);
-                    }
-                }
-                build_timings.reachability_reused = true;
-            } else {
-                let substage_started = Instant::now();
-                let cached = cache.get_or_insert_with(|| CachedReachability {
-                    inputs: HashMap::new(),
-                    files: HashMap::new(),
-                    calls: HashMap::new(),
-                    multiplicity_by_path: HashMap::new(),
-                    function_symbols: HashSet::new(),
-                });
-                let (reused_files, recomputed_files) = reachable_call_multiplicity_incremental(
-                    ReachabilityInputs {
-                        facts,
-                        indexes: &project_indexes,
-                        entities,
-                        symbol_names: &symbol_names,
-                        lookup: semantic_lookup,
-                        typescript_unchanged,
-                        typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
-                    },
-                    ReachabilityState {
-                        files: &mut cached.files,
-                        multiplicity_by_path: &mut cached.multiplicity_by_path,
-                        calls: &mut cached.calls,
-                        function_symbols: &mut cached.function_symbols,
-                    },
-                );
-                build_timings.reachability = substage_started.elapsed();
-                build_timings.reachability_reused_files = reused_files;
-                build_timings.reachability_recomputed_files = recomputed_files;
-                cached.inputs = facts
-                    .files
-                    .iter()
-                    .map(|file| {
-                        (
-                            file.path.to_string(),
-                            (file.source_hash.clone(), file.ast.clone()),
-                        )
-                    })
-                    .collect();
-            }
-        } else {
-            let substage_started = Instant::now();
-            owned_reachable_calls = Some(reachable_call_multiplicity(
+        owned_reachable_calls = reachability_stage(
+            ReachabilityInputs {
                 facts,
-                &project_indexes,
+                indexes: &project_indexes,
                 entities,
-                &symbol_names,
-                semantic_lookup,
-            ));
-            build_timings.reachability = substage_started.elapsed();
-        }
-        drop(reachability_worker_limit);
-        clock.finish(
+                symbol_names: &symbol_names,
+                lookup: semantic_lookup,
+                typescript_unchanged: reuse.typescript_unchanged,
+                typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
+            },
+            reachability_cache.as_deref_mut(),
             &mut build_timings,
-            |timings| &mut timings.indexes_and_reachability,
-            "indexes-and-reachability",
         );
+        drop(reachability_worker_limit);
+        clock.finish(&mut build_timings, ReactiveIrStage::IndexesAndReachability);
         let (source_discovery, discovery_timings) = source_discovery_handle
             .join()
             .expect("parallel source discovery worker panicked");
@@ -502,27 +346,6 @@ pub(crate) fn build_with_contracts_measured_incremental(
             .as_ref()
             .expect("owned reachability initialized")
     };
-    let SourceDiscovery {
-        accessors,
-        accessor_origins,
-        setters,
-        actions,
-        source_kinds,
-        source_primitives,
-        source_phases,
-        returned_source_symbols,
-        summary_source_symbols,
-        source_owned_write,
-        async_sources,
-        contract_reads,
-        contract_callbacks,
-        contract_returns,
-        contracted_accessor_symbols,
-        prop_sources,
-        bundled_returns,
-        retained_source_paths,
-        changed_source_symbols,
-    } = source_discovery;
     // discover_sources owns its own stage clock; restart this function's so
     // the static-prepass stage measures only the prepass loops.
     clock.restart();
@@ -533,314 +356,55 @@ pub(crate) fn build_with_contracts_measured_incremental(
         entities,
         symbol_names: &symbol_names,
         aliases,
-        accessors: &accessors,
-        prop_sources: &prop_sources,
+        accessors: &source_discovery.accessors,
+        prop_sources: &source_discovery.prop_sources,
         semantic_lookup,
-        source_kinds: &source_kinds,
-        source_owned_write: &source_owned_write,
+        source_kinds: &source_discovery.source_kinds,
+        source_owned_write: &source_discovery.source_owned_write,
         reachable_calls,
         symbols_by_root: &typescript_indexes.symbols_by_root,
         contracted: &resolved_contracts.by_symbol,
         rule_options,
     };
     static_rules::static_prepass(&analysis, &mut draft);
-    clock.finish(
-        &mut build_timings,
-        |timings| &mut timings.static_prepass,
-        "static-prepass",
-    );
-    let local_access_context = LocalAccessContext {
-        facts,
-        lookup: semantic_lookup,
-        entities,
-        symbol_names: &symbol_names,
-        reachable_calls,
-        accessors: &accessors,
-        accessor_origins: &accessor_origins,
-        setters: &setters,
-        actions: &actions,
-        source_primitives: &source_primitives,
-        async_sources: &async_sources,
-        source_declarations,
-        contract_reads: &contract_reads,
-        contract_returns: &contract_returns,
-        bundled_returns: &bundled_returns,
-        source_kinds: &source_kinds,
-        prop_sources: &prop_sources,
-    };
-    let cached_interprocedural = late_stages_reusable
-        .then(|| {
-            late_stage_cache
-                .as_deref()
-                .and_then(Option::as_ref)
-                .and_then(|cache| cache.interprocedural.as_ref())
-                .cloned()
-        })
-        .flatten();
-    // Only the interprocedural pass consumes the ordered per-symbol reference
-    // lists, so a warm interprocedural cache means nobody asks for them. The
-    // upstream-compat surface needs the same references, but keyed by location
-    // rather than by symbol, and it gets that map from its own cached
-    // projection below.
-    let references_by_source = if cached_interprocedural.is_some() {
-        HashMap::new()
-    } else {
-        references_for_sources(
-            &facts.typescript,
-            &typescript_indexes.symbols_by_root,
-            accessors.keys(),
-        )
-    };
-    let local_access_cache = late_stage_cache
-        .as_deref_mut()
-        .and_then(Option::as_mut)
-        .map(|cache| &mut cache.local_accesses);
-    let overlap_late_stages = cached_interprocedural.is_none() && facts.files.len() >= 256;
-    let interprocedural_context = InterproceduralContext {
-        facts,
-        project_indexes: &project_indexes,
-        accessors: &accessors,
-        contracted_accessor_symbols: &contracted_accessor_symbols,
-        returned_source_symbols: &returned_source_symbols,
-        summary_source_symbols: &summary_source_symbols,
-        source_phases: &source_phases,
-        source_kinds: &source_kinds,
-        contract_reads: &contract_reads,
-        contract_callbacks: &contract_callbacks,
-        contract_returns: &contract_returns,
-        bundled_returns: &bundled_returns,
-        source_primitives: &source_primitives,
-        entities,
-        references_by_source: &references_by_source,
-        symbol_names: &symbol_names,
-        changed_semantic_symbols: typescript_indexes
-            .source_discovery_delta
-            .as_ref()
-            .map(|delta| &delta.semantic_symbol_ids),
-        retained_source_paths: &retained_source_paths,
-        lookup: semantic_lookup,
-    };
-    let run_local_access = || {
-        local_access_context.build(
-            local_access_cache,
-            LocalAccessReuse {
-                aggregate_reusable: late_stages_reusable,
-                typescript_unchanged,
-                source_discovery_delta: typescript_indexes.source_discovery_delta.as_ref(),
-                changed_source_symbols: &changed_source_symbols,
-                retained_source_paths: &retained_source_paths,
-                global_async_context_unchanged: late_stages_reusable,
-            },
-        )
-    };
-    let (local_access, interprocedural, local_access_elapsed, interprocedural_elapsed, reused) =
-        std::thread::scope(|scope| {
-            if let Some(mut cached) = cached_interprocedural {
-                let local_started = Instant::now();
-                let local_access = run_local_access();
-                let local_elapsed = local_started.elapsed();
-                cached.timings = InterproceduralTimings::default();
-                return (local_access, cached, local_elapsed, Duration::ZERO, true);
-            }
-            if overlap_late_stages {
-                let shared_worker_limit = analysis_worker_limit_for_lanes(2);
-                let interprocedural = scope.spawn(move || {
-                    let _worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
-                    let started = Instant::now();
-                    let result = interprocedural_context.build(
-                        typed_accessor_cache,
-                        interprocedural_graph_cache,
-                        interprocedural_result_cache,
-                    );
-                    (result, started.elapsed())
-                });
-                let local_worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
-                let local_started = Instant::now();
-                let local_access = run_local_access();
-                let local_elapsed = local_started.elapsed();
-                drop(local_worker_limit);
-                let (interprocedural, interprocedural_elapsed) = interprocedural
-                    .join()
-                    .expect("parallel interprocedural analysis worker panicked");
-                (
-                    local_access,
-                    interprocedural,
-                    local_elapsed,
-                    interprocedural_elapsed,
-                    false,
-                )
-            } else {
-                let local_started = Instant::now();
-                let local_access = run_local_access();
-                let local_elapsed = local_started.elapsed();
-                let interprocedural_started = Instant::now();
-                let interprocedural = interprocedural_context.build(
-                    typed_accessor_cache,
-                    interprocedural_graph_cache,
-                    interprocedural_result_cache,
-                );
-                (
-                    local_access,
-                    interprocedural,
-                    local_elapsed,
-                    interprocedural_started.elapsed(),
-                    false,
-                )
-            }
-        });
-    build_timings.local_reads_and_writes = local_access_elapsed;
-    build_timings.interprocedural_summaries = interprocedural_elapsed;
-    build_timings.interprocedural_reused = reused;
-    let local_and_interprocedural_elapsed = clock.elapsed();
-    build_timings.local_and_interprocedural = local_and_interprocedural_elapsed;
-    clock.record("local-reads-and-writes", local_access_elapsed);
-    clock.record("interprocedural-summaries", interprocedural_elapsed);
-    clock.record(
-        "local-and-interprocedural",
-        local_and_interprocedural_elapsed,
-    );
-    clock.restart();
-    if !reused && let Some(cache) = late_stage_cache.as_deref_mut().and_then(Option::as_mut) {
-        cache.interprocedural = Some(interprocedural.clone());
-    }
-    build_timings.local_accesses_reused = local_access.reused;
-    build_timings.local_access_reused_files = local_access.reused_files;
-    build_timings.local_access_recomputed_files = local_access.recomputed_files;
-    let LocalAccessResult {
-        reads,
-        writes,
-        action_invocations,
-        async_reads,
-        strict_read_obligations,
-        write_action_obligations,
-    } = local_access.result;
-    draft.reads = reads
-        .into_iter()
-        .map(|read| (*read).clone())
-        .collect::<Vec<_>>();
-    draft.writes = writes
-        .into_iter()
-        .map(|write| (*write).clone())
-        .collect::<Vec<_>>();
-    draft.action_invocations = action_invocations
-        .into_iter()
-        .map(|action| (*action).clone())
-        .collect::<Vec<_>>();
-    draft.async_reads = async_reads
-        .into_iter()
-        .map(|read| (*read).clone())
-        .collect::<Vec<_>>();
-    draft.strict_read_obligations = strict_read_obligations;
-    draft.write_action_obligations = write_action_obligations;
-    build_timings.absorb_interprocedural(&interprocedural.timings);
-    draft.strict_read_obligations += interprocedural.reads.len();
-    draft.reads.extend(interprocedural.reads.iter().cloned());
-    static_rules::component_returns_conditionally(&analysis, &mut draft);
-    draft.contract_exports = interprocedural.exports.clone();
-    draft.contract_generation_obligations =
-        interprocedural.contract_generation_obligations.to_vec();
-    upstream_compat::check_project(
-        &analysis,
-        late_stage_cache
-            .as_deref_mut()
-            .and_then(Option::as_mut)
-            .map(|cache| &mut cache.compat_reference_locations),
-        late_stages_reusable,
+    clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);
+    let factory_instances = reactive_analysis::collect_project(
+        reactive_analysis::ProjectInputs {
+            ctx: &analysis,
+            source: &source_discovery,
+            project_indexes: &project_indexes,
+            source_declarations,
+            typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
+        },
+        reactive_analysis::IncrementalCaches {
+            typed_accessors: typed_accessor_cache,
+            interprocedural_graph: interprocedural_graph_cache,
+            interprocedural_results: interprocedural_result_cache,
+            late_stages: late_stage_cache.as_deref_mut().and_then(Option::as_mut),
+        },
+        reuse,
         &mut draft,
-    );
-    draft.leaf_operations.extend(
-        parallel_file_results(&facts.files, |file| {
-            leaf_owner_operations_for_file(file, &symbol_names, semantic_lookup)
-        })
-        .into_iter()
-        .flatten(),
-    );
-    for (invalid, unresolved) in parallel_file_results(&facts.files, |file| {
-        cleanup_returns_for_file(semantic_lookup, file, &symbol_names)
-    }) {
-        draft.invalid_cleanup_returns.extend(invalid);
-        draft.unresolved_cleanup_returns.extend(unresolved);
-    }
-    clock.finish(
         &mut build_timings,
-        |timings| &mut timings.leaf_and_cleanup,
-        "leaf-and-cleanup",
+        &mut clock,
     );
-    let static_api = StaticApiContext {
-        lookup: analysis.semantic_lookup,
-        entities: analysis.entities,
-        symbol_names: analysis.symbol_names,
-        source_kinds: analysis.source_kinds,
-        source_owned_write: analysis.source_owned_write,
-        accessors: analysis.accessors,
-        reachable_calls: analysis.reachable_calls,
-    };
-    for result in parallel_file_results(&facts.files, |file| static_api.check_file(file)) {
-        draft.static_violations.extend(result.violations);
-        draft.writes.extend(result.writes);
-        draft
-            .write_action_obligations
-            .extend(result.write_action_obligations);
-    }
-    clock.finish(
-        &mut build_timings,
-        |timings| &mut timings.static_api,
-        "static-api",
-    );
+    cleanup::collect_project(&analysis, &mut draft);
+    clock.finish(&mut build_timings, ReactiveIrStage::LeafAndCleanup);
+    static_api::check_project(&analysis, &mut draft);
+    clock.finish(&mut build_timings, ReactiveIrStage::StaticApi);
     directives::discover_directive_creations(&analysis, &mut draft);
-    clock.finish(
+    clock.finish(&mut build_timings, ReactiveIrStage::Directives);
+    owners::collect_project(
+        &analysis,
+        &project_indexes,
+        &source_discovery.retained_source_paths,
+        late_stage_cache.and_then(Option::as_mut),
+        reuse.late_stages_reusable,
+        &mut draft,
         &mut build_timings,
-        |timings| &mut timings.directives,
-        "directives",
     );
-    let cached_missing_owners = late_stages_reusable
-        .then(|| {
-            late_stage_cache
-                .as_deref()
-                .and_then(Option::as_ref)
-                .and_then(|cache| cache.missing_owners.as_ref())
-                .cloned()
-        })
-        .flatten();
-    if let Some(cached) = cached_missing_owners {
-        draft.missing_owners = cached;
-        build_timings.owner_fixed_point_reused = true;
-        build_timings.owner_reused_files = u64::try_from(facts.files.len()).unwrap_or(u64::MAX);
-    } else {
-        if let Some(cache) = late_stage_cache.and_then(Option::as_mut) {
-            let (requirements, timings) = find_missing_owners_incremental(
-                facts,
-                semantic_lookup,
-                &project_indexes,
-                &symbol_names,
-                &retained_source_paths,
-                &mut cache.owner_files,
-            );
-            draft.missing_owners.extend(requirements);
-            build_timings.absorb_owner(&timings);
-            cache.missing_owners = Some(draft.missing_owners.clone());
-        } else {
-            draft.missing_owners.extend(find_missing_owners(
-                facts,
-                semantic_lookup,
-                &project_indexes,
-                &symbol_names,
-            ));
-            build_timings.owner_recomputed_files =
-                u64::try_from(facts.files.len()).unwrap_or(u64::MAX);
-        }
-    }
-    clock.finish(
-        &mut build_timings,
-        |timings| &mut timings.owner_fixed_point,
-        "owner-fixed-point",
-    );
-    let program = draft.into_program(interprocedural.factory_instances);
-    clock.finish(
-        &mut build_timings,
-        |timings| &mut timings.final_ordering,
-        "final-ordering",
-    );
+    clock.finish(&mut build_timings, ReactiveIrStage::OwnerFixedPoint);
+    let program = draft.into_program(factory_instances);
+    clock.finish(&mut build_timings, ReactiveIrStage::FinalOrdering);
     build_timings.total = total_started.elapsed();
     Ok((program, build_timings))
 }

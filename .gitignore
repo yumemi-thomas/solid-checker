@@ -19,6 +19,16 @@ fixtures/upstream-parity/.staging/
 # Dialect detection reads the installed solid-js version from these stubs.
 !fixtures/reactive-ir/dialect-solid-*/node_modules/
 !fixtures/reactive-ir/dialect-solid-*/node_modules/**
+!fixtures/reactive-ir/eslint-compat/node_modules/
+!fixtures/reactive-ir/eslint-compat/node_modules/**
+!fixtures/reactive-ir/store-subpath/node_modules/
+!fixtures/reactive-ir/store-subpath/node_modules/**
+!fixtures/reactive-ir/shared-reactivity-v2/node_modules/
+!fixtures/reactive-ir/shared-reactivity-v2/node_modules/**
+!fixtures/reactive-ir/no-owner-v1/node_modules/
+!fixtures/reactive-ir/no-owner-v1/node_modules/**
+!fixtures/reactive-ir/namespace-import-v2/node_modules/
+!fixtures/reactive-ir/namespace-import-v2/node_modules/**
 !fixtures/reactive-ir/import-location/node_modules/
 !fixtures/reactive-ir/import-location/node_modules/**
 !fixtures/engine/eslint-reactivity-v1/node_modules/

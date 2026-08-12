@@ -12,8 +12,7 @@
 //! export with nothing to say about reactivity, and it is not here.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, EffectSignature, Execution, Primitive,
-    PropsHelpers, Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, Version, lookup, reverse,
 };
 
 /// Solid 1.x.
@@ -152,13 +151,9 @@ impl Dialect for Solid1x {
     /// difference ADR 0001 led with, inverted: reading 1.x's seed as 2.0's
     /// apply callback is the highest-yield mistake available here.
     ///
-    /// It is also a mistake already present in the tree. The `1.x` branch
-    /// retargeted `callback_argument_index` to 0 but left
-    /// `allowed_callback_spans` at 1, so one site there reads the seed value
-    /// as the callback. Wiring the engine onto this table fixes that site and
-    /// will move findings on `createEffect(fn, seed)`; that is a correction,
-    /// not a regression, and it is the kind of divergence one vocabulary
-    /// exists to prevent.
+    /// The engine once made this exact mistake (a pre-vocabulary site read
+    /// the seed value as the callback); wiring it onto this table fixed
+    /// that, and this table is now the only place the answer lives.
     fn callback_positions(&self, primitive: Primitive) -> &'static [usize] {
         match primitive {
             Primitive::CreateEffect
@@ -601,6 +596,22 @@ impl Dialect for Solid1x {
             ) && argument == 1)
     }
 
+    /// `<Ctx.Provider value={...}>` — the value getter runs untracked.
+    fn context_provider_member(&self) -> Option<&'static str> {
+        Some("Provider")
+    }
+
+    /// The `v1/` catalog carries the SC8xxx ESLint-era surface.
+    fn carries_eslint_era_rules(&self) -> bool {
+        true
+    }
+
+    /// `v1/no-async-tracked-scope`; 2.0 models async computations as a
+    /// feature and omits the rule.
+    fn reports_async_tracked_scope(&self) -> bool {
+        true
+    }
+
     /// `Suspense`, not `Loading`; `ErrorBoundary`, not `Errored`. Source:
     /// `docs/solid-1x-api-surface.md`, the control-flow components.
     ///
@@ -611,32 +622,6 @@ impl Dialect for Solid1x {
         match boundary {
             Boundary::Async => "Suspense",
             Boundary::Error => "ErrorBoundary",
-        }
-    }
-
-    /// `createEffect<Next, Init>(fn, value?, options?)`. Source: the signature
-    /// quoted in `docs/solid-1x-api-surface.md`.
-    ///
-    /// One callback, at index 0. Index 1 is a seed value, not a second
-    /// callback -- see [`Solid1x::callback_positions`] for why reading it as
-    /// 2.0's apply is the highest-yield mistake available in this file.
-    /// 1.x's effect callback is one function, so there is no compute to name.
-    fn tracking_scopes(&self) -> &'static str {
-        "JSX, a createMemo, or the callback of createEffect(fn)"
-    }
-
-    /// Neither `action` nor `onSettled` exists in 1.x, and its effect callback
-    /// has no apply half. What 1.x does have is `onMount`, which runs once
-    /// after the initial render and outside the tracking scope.
-    fn imperative_write_scopes(&self) -> &'static str {
-        "an event handler, onMount, or a callback that runs after the current computation"
-    }
-
-    fn effect_signature(&self) -> EffectSignature {
-        EffectSignature {
-            signature: "createEffect(fn, value?)",
-            roles: "fn tracks dependencies and runs the side effect, and the optional value seeds the previous value passed to fn on its first run",
-            remedy: "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned.",
         }
     }
 
@@ -753,13 +738,6 @@ impl Dialect for Solid1x {
                 | Primitive::CreateResource
                 | Primitive::WebMemo
         )
-    }
-
-    fn props_helpers(&self) -> PropsHelpers {
-        PropsHelpers {
-            omit: "splitProps",
-            merge: "mergeProps",
-        }
     }
 
     /// Source: `docs/solid-1x-api-surface.md`, the `solid-js` and

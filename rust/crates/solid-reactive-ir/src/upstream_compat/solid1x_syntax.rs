@@ -14,11 +14,11 @@
 //!
 //! `no-unknown-namespaces { allowedNamespaces }` and `self-closing-comp
 //! { component, html }` are read from the project's
-//! `.solid-checker/rule-options.json` (see [`super::options`]), defaulting
-//! to upstream's defaults. `jsx-no-duplicate-props { ignoreCase }` is the
-//! one option upstream ships here that the checker does not carry: no
-//! upstream corpus case exercises a behaviour difference for it, and an
-//! option nothing proves is a knob that can silently rot.
+//! `.solid-checker/rule-options.json` (see [`super::solid1x_options`]),
+//! defaulting to upstream's defaults. `jsx-no-duplicate-props { ignoreCase }`
+//! is the one option upstream ships here that the checker does not carry: no
+//! upstream corpus case exercises a behaviour difference for it, and an option
+//! nothing proves is a knob that can silently rot.
 
 use std::collections::HashSet;
 
@@ -203,8 +203,13 @@ fn jsx_no_script_url(
 /// characters and interspersed tab/newline that a browser's URL parser
 /// ignores (and that an attacker can use to slip the literal string past a
 /// naive `.startsWith("javascript:")`).
+///
+/// The value is seen as source text, but a browser decodes character
+/// references in attribute values before URL parsing, so `java&#9;script:`
+/// and `javascript&colon;` are live URLs at runtime. Upstream's regex misses
+/// these; decoding first closes that gap.
 fn is_javascript_protocol(value: &str) -> bool {
-    let compact = value
+    let compact = decode_character_references(value)
         .trim_start_matches(|character: char| character <= ' ')
         .chars()
         .filter(|character| !matches!(character, '\r' | '\n' | '\t'))
@@ -212,6 +217,49 @@ fn is_javascript_protocol(value: &str) -> bool {
     compact
         .get(..11)
         .is_some_and(|prefix| prefix.eq_ignore_ascii_case("javascript:"))
+}
+
+/// Decodes the character references a `javascript:` URL can hide behind:
+/// numeric forms (`&#9;`, `&#x0A;`) and the named spellings of the
+/// characters the URL parser strips or the protocol needs (`&Tab;`,
+/// `&NewLine;`, `&colon;`). Everything else passes through unchanged.
+fn decode_character_references(value: &str) -> std::borrow::Cow<'_, str> {
+    if !value.contains('&') {
+        return std::borrow::Cow::Borrowed(value);
+    }
+    let mut decoded = String::with_capacity(value.len());
+    let mut rest = value;
+    while let Some(ampersand) = rest.find('&') {
+        decoded.push_str(&rest[..ampersand]);
+        rest = &rest[ampersand..];
+        let Some(semicolon) = rest.find(';') else {
+            break;
+        };
+        let reference = &rest[1..semicolon];
+        let replacement = match reference {
+            "Tab" => Some('\t'),
+            "NewLine" => Some('\n'),
+            "colon" => Some(':'),
+            _ => reference
+                .strip_prefix('#')
+                .and_then(|digits| {
+                    digits.strip_prefix(['x', 'X']).map_or_else(
+                        || digits.parse().ok(),
+                        |hex| u32::from_str_radix(hex, 16).ok(),
+                    )
+                })
+                .and_then(char::from_u32),
+        };
+        if let Some(replacement) = replacement {
+            decoded.push(replacement);
+            rest = &rest[semicolon + 1..];
+        } else {
+            decoded.push('&');
+            rest = &rest[1..];
+        }
+    }
+    decoded.push_str(rest);
+    std::borrow::Cow::Owned(decoded)
 }
 
 /// `v1/no-unknown-namespaces` (SC8012) — a JSX attribute using the
@@ -231,7 +279,10 @@ fn no_unknown_namespaces(
     // every 1.x namespace except `prop:`. Upstream's `allowedNamespaces`
     // option accepts extra prefixes on top.
     let known = context.dialect.jsx_attribute_namespaces();
-    let allowed = &context.options.no_unknown_namespaces.allowed_namespaces;
+    let allowed = &context
+        .solid1x_options
+        .no_unknown_namespaces
+        .allowed_namespaces;
     let component = !is_lowercase_led(text(file, element.name.span));
     for attribute in element
         .attributes
@@ -332,8 +383,8 @@ fn self_closing_comp(
     element: &JsxElementFact,
     violations: &mut Vec<StaticViolation>,
 ) {
-    use crate::upstream_compat::options::SelfClosePolicy;
-    let options = &context.options.self_closing_comp;
+    use crate::upstream_compat::solid1x_options::SelfClosePolicy;
+    let options = &context.solid1x_options.self_closing_comp;
     let name = text(file, element.name.span);
     let component = !is_lowercase_led(name);
     let policy = if component {
@@ -447,11 +498,25 @@ mod tests {
         assert!(is_javascript_protocol("j\ta\tv\ta\ts\tc\tr\ti\tp\tt:x"));
     }
 
+    /// Browsers decode character references in attribute values before URL
+    /// parsing, so these spellings are live `javascript:` URLs at runtime
+    /// even though upstream's source-text regex misses them.
+    #[test]
+    fn detects_javascript_urls_hidden_behind_character_references() {
+        assert!(is_javascript_protocol("java&#9;script:alert(1)"));
+        assert!(is_javascript_protocol("java&#x0A;script:alert(1)"));
+        assert!(is_javascript_protocol("java&Tab;script:alert(1)"));
+        assert!(is_javascript_protocol("java&NewLine;script:alert(1)"));
+        assert!(is_javascript_protocol("javascript&colon;alert(1)"));
+    }
+
     #[test]
     fn does_not_flag_ordinary_urls() {
         assert!(!is_javascript_protocol("https://example.com"));
         assert!(!is_javascript_protocol("/relative/path"));
         assert!(!is_javascript_protocol(""));
+        assert!(!is_javascript_protocol("https://example.com/?q=a&b=c"));
+        assert!(!is_javascript_protocol("/path?fish&chips"));
     }
 
     #[test]

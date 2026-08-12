@@ -4,23 +4,24 @@
 //! solver's `solid_1_rules.rs` onto this checker's fact tables.
 //!
 //! Five of these six are purely structural, like every rule in the sibling
-//! `syntax` module. `event-handlers` is the exception: telling an attribute
-//! value that Solid will treat as an inlined attribute (`onClick="doThing"`)
+//! `solid1x_syntax` module. `event-handlers` is the exception: telling an
+//! attribute value that Solid will treat as an inlined attribute
+//! (`onClick="doThing"`)
 //! apart from one Solid will treat as a listener needs the value's *type*,
 //! not just its syntax, when the value is neither a literal nor an
 //! obviously-static local (`const x = "..."; onClick={x}`). For that one
 //! case this reads the resolved TypeScript type through
 //! [`UpstreamCompatContext::lookup`] instead of guessing from source text —
 //! the same "ask what was proven, not what the syntax suggests" preference
-//! [`super::reactivity`] documents for its own rules.
+//! [`super::shared_reactivity`] documents for its own rules.
 //!
 //! # Options
 //!
 //! `no-innerhtml { allowStatic }`, `style-prop { styleProps, allowString }`,
 //! `event-handlers { ignoreCase, warnOnSpread }`, and `prefer-classlist
 //! { classnames }` are read from the project's
-//! `.solid-checker/rule-options.json` (see [`super::options`]), defaulting
-//! to upstream's defaults.
+//! `.solid-checker/rule-options.json` (see [`super::solid1x_options`]),
+//! defaulting to upstream's defaults.
 
 use std::collections::HashSet;
 
@@ -105,7 +106,7 @@ fn no_innerhtml(
         // reported injection surface, static or not — and the only report;
         // the conflict and not-HTML advice below exist solely on the
         // static-acceptance path.
-        if !context.options.no_innerhtml.allow_static {
+        if !context.solid1x_options.no_innerhtml.allow_static {
             violations.push(violation(
                 file,
                 "SC8008",
@@ -132,7 +133,7 @@ fn no_innerhtml(
             // A static value that is provably markup is accepted — unless
             // the element also has JSX children, in which case the two
             // content sources overwrite each other.
-            Some(value) if super::upstream_data::is_html(&value) => {
+            Some(value) if super::solid1x_upstream_data::is_html(&value) => {
                 if !element.children.is_empty() {
                     violations.push(violation(
                         file,
@@ -268,7 +269,7 @@ fn style_prop(
     // Which props carry styles is upstream's `styleProps` option (default
     // `["style"]`, and naming others *replaces* the default); `allowString`
     // accepts the string form instead of asking for an object.
-    let options = &context.options.style_prop;
+    let options = &context.solid1x_options.style_prop;
     for attribute in element.attributes.iter().filter(|attribute| {
         let name = text(file, attribute.name);
         options.style_props.iter().any(|prop| prop == name)
@@ -319,9 +320,9 @@ fn style_prop(
                 // Custom properties are CSS's own escape hatch; upstream
                 // skips `--` names entirely.
                 Some(name) if name.starts_with("--") => {}
-                Some(name) if !super::upstream_data::is_known_css_property(name) => {
+                Some(name) if !super::solid1x_upstream_data::is_known_css_property(name) => {
                     let kebab = to_kebab_case(name);
-                    if super::upstream_data::is_known_css_property(&kebab) {
+                    if super::solid1x_upstream_data::is_known_css_property(&kebab) {
                         let mut result = violation(
                             file,
                             "SC8017",
@@ -390,7 +391,7 @@ fn missing_unit(name: Option<&str>, value: &str) -> bool {
     let Some(name) = name else {
         return false;
     };
-    if name.starts_with("--") || !super::upstream_data::names_length_property(name) {
+    if name.starts_with("--") || !super::solid1x_upstream_data::names_length_property(name) {
         return false;
     }
     value
@@ -633,7 +634,7 @@ fn event_handlers(
         }
         // Upstream's `ignoreCase`: handler names are accepted as written, so
         // the canonical-spelling and ambiguous-name advice below is off.
-        if context.options.event_handlers.ignore_case {
+        if context.solid1x_options.event_handlers.ignore_case {
             continue;
         }
         let fixed = if name.eq_ignore_ascii_case("ondoubleclick") {
@@ -699,7 +700,7 @@ fn event_handlers(
     // own entries, and takes any plain `on*`-named identifier key (no
     // third-letter requirement: this judges the object's shape, not whether
     // the name could be a real event).
-    if context.options.event_handlers.warn_on_spread {
+    if context.solid1x_options.event_handlers.warn_on_spread {
         for spread in &element.spreads {
             for property in
                 super::direct_object_literal_properties(file, spread.argument).unwrap_or_default()
@@ -820,11 +821,14 @@ fn prefer_classlist(
 ) {
     // Which helper names count is upstream's `classnames` option; the
     // default is upstream's default list.
-    let helpers = &context.options.prefer_classlist.classnames;
+    let helpers = &context.solid1x_options.prefer_classlist.classnames;
+    // Upstream guards on its own lowercase `classlist` spelling only; the
+    // prop Solid's compiler special-cases is `classList`, so an element
+    // already written that way must count as "already using it" too.
     if element
         .attributes
         .iter()
-        .any(|attribute| text(file, attribute.name) == "classlist")
+        .any(|attribute| matches!(text(file, attribute.name), "classlist" | "classList"))
     {
         return;
     }
@@ -861,7 +865,7 @@ fn prefer_classlist(
             format!(
                 "The classlist prop should be used instead of {callee} to efficiently set classes based on an object."
             ),
-            "classlist takes the same { [name]: boolean } object and updates only the classes whose value actually changed, instead of recomputing and reassigning the whole class string.",
+            "classList takes the same { [name]: boolean } object and updates only the classes whose value actually changed, instead of recomputing and reassigning the whole class string.",
             attribute.span,
             vec![],
         );
@@ -878,11 +882,14 @@ fn prefer_classlist(
                     .any(|binding| text(file, binding.local.span) == callee)
         });
         if imported_helper {
+            // Upstream's fixer writes `classlist=`, a spelling the compiler
+            // does not special-case; `classList` is the prop Solid actually
+            // handles, so the working rewrite is the one worth offering.
             result.fixes.push(fix_replace(
                 file,
                 attribute.span,
-                "rewrite as classlist",
-                format!("classlist={{{}}}", text(file, call.arguments[0].span)),
+                "rewrite as classList",
+                format!("classList={{{}}}", text(file, call.arguments[0].span)),
             ));
         }
         violations.push(result);

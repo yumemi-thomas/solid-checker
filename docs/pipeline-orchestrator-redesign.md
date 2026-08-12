@@ -1,7 +1,18 @@
 # Pipeline orchestrator redesign
 
-`build_with_contracts_measured_incremental` in
-`rust/crates/solid-reactive-ir/src/pipeline.rs` is a ~1,000-line function
+## Status
+
+The implementation now has the shared `StageClock`, `ProgramDraft`,
+`AnalysisContext`, `ReusePlan`, and one `IncrementalCacheState`. Static,
+compatibility, directive, cleanup, static-API, owner, and the coupled
+local/interprocedural stages are owned by their respective modules. The build
+orchestrator is about 290 lines; the remaining bulk is the borrowing-sensitive
+index/source-discovery/reachability setup. The 120–150-line sketch below is
+still the desired end state, not a claim that every setup lifetime has already
+been hidden behind a stage object.
+
+Before this refactor, `build_with_contracts_measured_incremental` in
+`rust/crates/solid-reactive-ir/src/pipeline.rs` was a ~1,000-line function
 sequencing eleven analysis stages. The sequencing itself is sound; what makes
 the function hard to read and risky to edit is that three cross-cutting
 concerns are hand-rolled across every stage:
@@ -30,14 +41,14 @@ The orchestrator remains one function: the stage sequence, the two
 locals are genuinely orchestration and belong in one visible place. It
 shrinks to ~120–150 lines of stage calls over:
 
-**`StageClock` — one timing subsystem.** Owns the stage timer, the
-`&mut BuildTimings`, and the `SOLID_CHECKER_TIMINGS` emission flag, with a
-`finish(field, "stage-name")` method. Replaces both macro copies, the manual
-timer re-anchors, and the hand-rolled `eprintln!`s. Nested-timings copies
-become `BuildTimings::absorb_*` methods living next to the structs they copy
-from. The emitted JSON line format and stage names are observable output the
-performance tooling reads; they are preserved byte-for-byte and pinned by a
-unit test.
+**`StageClock` — one timing subsystem.** Owns the stage timer and the
+`SOLID_CHECKER_TIMINGS` emission flag. A typed `ReactiveIrStage` owns each
+stage's `BuildTimings` field and emitted name, so callers cannot pair the wrong
+field and label. This replaces both macro copies, the manual timer re-anchors,
+and the hand-rolled `eprintln!`s. Nested-timings copies live beside the clock as
+`BuildTimings::absorb_*` methods. The emitted JSON line format and complete
+stage vocabulary are observable output the performance tooling reads; both are
+preserved byte-for-byte and pinned by a unit test.
 
 **`ProgramDraft` — one owner for the accumulators.** Owns the output vectors
 and obligation counters that are loose `mut` locals today, plus the

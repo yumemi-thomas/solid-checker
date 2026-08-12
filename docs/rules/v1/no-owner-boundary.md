@@ -1,6 +1,6 @@
 # v1/no-owner-boundary
 
-`SC4003` · **warning** · violation (uncertifiable for exported functions)
+`SC4003` · **warning** · violation (uncertifiable, reported as an error, for exported functions)
 
 A boundary (`Suspense`, `ErrorBoundary`) is created without a reactive owner, so it
 can never be disposed.
@@ -13,7 +13,9 @@ outside any component tree.
 
 When the creation sits in an exported function whose call sites are outside the
 project, the finding is reported as **uncertifiable** instead: solid-checker cannot
-prove callers provide an owner.
+prove callers provide an owner. Like the SC9xxx rules, the uncertifiable form
+carries **error** severity; the catalog's **warning** applies to the proven
+violation form.
 
 ## Why is this bad?
 

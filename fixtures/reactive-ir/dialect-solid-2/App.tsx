@@ -50,7 +50,8 @@ function reader() {
 
 // createReaction is 1.x's leaf owner -- an owner whose callback ends the
 // ownership chain, so onCleanup inside it is dropped. 2.0 does not treat it as
-// one. Before the leaf set came from the dialect, the engine used 2.0's pair
+// one, but the invalidation callback is still unowned there: onCleanup inside
+// it reports no-owner-cleanup, matching the runtime's NO_OWNER_CLEANUP. Before the leaf set came from the dialect, the engine used 2.0's pair
 // for both dialects and 1.x's leaf rules could not fire at all.
 const [reactionDependency, setReactionDependency] = createSignal(0);
 const trackReaction = createReaction(() => {

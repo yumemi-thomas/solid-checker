@@ -1,13 +1,26 @@
 //! The source-discovery stage: finds reactive sources, accessors,
 //! setters, and contract-backed facts per file, with per-file reuse.
 
-use crate::*;
+use crate::cache::{
+    CachedSourceDiscovery, CachedTypeScriptIndexes, SourceDiscoveryContribution,
+    SourceDiscoveryIdentity, SourceDiscoveryTypeScriptDelta,
+};
+use crate::owners::{
+    computation_is_async, containing_ast_function, function_binding_name,
+    go_binding_pattern_accepts_call,
+};
+use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
+use crate::{
+    BuildTimings, ContractCallback, ContractReturn, PackageContract, PrimitiveName,
+    ReactiveSourceKind, jsx_primitive_name, known_primitive, location, primitive_name,
+};
 
 use std::collections::{HashMap, HashSet};
 
 use crate::contracts::ResolvedContracts;
 use crate::identity::{SymbolId, symbol_id};
 use crate::indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
+use crate::timings::{ReactiveIrStage, StageClock};
 use solid_dialect::{Dialect, Primitive};
 use solid_facts::core::{SourceHash, SourcePath};
 use solid_facts::{FileFacts, ProjectFacts};
@@ -748,11 +761,7 @@ pub(crate) fn discover_sources(
             }
         }
     }
-    clock.finish(
-        build_timings,
-        |timings| &mut timings.source_discovery,
-        "source-discovery",
-    );
+    clock.finish(build_timings, ReactiveIrStage::SourceDiscovery);
     for entity in facts.typescript.entities() {
         let Some(descriptor) = &entity.type_descriptor else {
             continue;
@@ -863,7 +872,8 @@ pub(crate) fn discover_sources(
             for (argument_index, argument) in call.arguments.iter().enumerate() {
                 let parameter_indices = semantic_lookup
                     .dialect
-                    .callback_accessor_parameters(primitive, argument_index);
+                    .callback_semantics_at(primitive, argument_index, call.arguments.len())
+                    .accessor_parameters;
                 if parameter_indices.is_empty() {
                     continue;
                 }
@@ -1082,11 +1092,7 @@ pub(crate) fn discover_sources(
             }
         }
     }
-    clock.finish(
-        build_timings,
-        |timings| &mut timings.typed_accessors_and_prop_roots,
-        "typed-accessors-and-prop-roots",
-    );
+    clock.finish(build_timings, ReactiveIrStage::TypedAccessorsAndPropRoots);
     loop {
         let mut changed = false;
         for file in &facts.files {
@@ -1146,8 +1152,7 @@ pub(crate) fn discover_sources(
     }
     clock.finish(
         build_timings,
-        |timings| &mut timings.prop_propagation_and_control_flow,
-        "prop-propagation-and-control-flow",
+        ReactiveIrStage::PropPropagationAndControlFlow,
     );
     SourceDiscovery {
         accessors,

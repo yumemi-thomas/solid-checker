@@ -76,16 +76,29 @@ downloads only the binary matching your platform.
 
 ## Solid compatibility
 
-The release is certified against two distinct runtime APIs:
+The release treats Solid 1.x and Solid 2.0 as separate dialects over one shared
+analysis engine:
 
-- Solid 1.x: `solid-js@1.9.14`.
-- Solid 2: `solid-js@2.0.0-beta.31` with `@solidjs/web@2.0.0-beta.31`.
+| | Solid 1.x | Solid 2.0 |
+| --- | --- | --- |
+| Audited runtime | `solid-js@1.9.14` | `solid-js@2.0.0-beta.31` and `@solidjs/web@2.0.0-beta.31` |
+| Dialect id | `solid-v1` | `solid-v2` |
+| Rule names | `v1/<rule>` | Unprefixed |
+| Effect model | `createEffect(fn, initialValue?, options?)` | `createEffect(compute, apply)` |
+| Async boundary | `Suspense` / `createResource` | `Loading` / async computations |
+| Lifecycle | `onMount`; cleanup via `onCleanup` | `onSettled`; leaf cleanup returned from callbacks |
+| Directives | `use:` | `ref` directive factories |
+| Props helpers | `mergeProps` / `splitProps` | `merge` / `omit` |
 
 The checker detects the installed `solid-js` major automatically. Use
 `--dialect solid-v1` or `--dialect solid-v2` only when a package manager or
-fixture prevents version discovery. Solid 2 is still a beta API, so its
+fixture prevents version discovery. Solid 2.0 is still a beta API, so its
 bundled contracts intentionally require the exact audited beta; a later beta
 must be reviewed before it can certify a project.
+
+See [the workspace architecture](rust/ARCHITECTURE.md#version-ownership-at-a-glance)
+for where version-specific code belongs and [the rule index](docs/rules/README.md)
+for the two catalogs.
 
 On macOS and Linux, optimized release checks retain one project actor for up
 to two idle minutes. It owns the TypeScript program and analysis caches,

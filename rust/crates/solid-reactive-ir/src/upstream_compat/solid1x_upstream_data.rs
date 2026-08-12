@@ -1,5 +1,5 @@
-//! Data tables vendored from upstream eslint-plugin-solid 0.14.5's own
-//! dependencies, so the ported rules judge the same names upstream judges.
+//! Solid 1.x data tables vendored from upstream eslint-plugin-solid 0.14.5's
+//! own dependencies, so the ported rules judge the same names upstream judges.
 //!
 //! - [`KNOWN_CSS_PROPERTIES`]: `known-css-properties@0.30.0` `data/all.json`
 //!   (MIT), the set upstream's `style-prop` consults to tell a kebab-case

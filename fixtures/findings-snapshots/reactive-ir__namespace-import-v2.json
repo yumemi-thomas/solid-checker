@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
+      "start": 594,
+      "end": 612,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-leaf-owner",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
+      "start": 905,
+      "end": 919,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
+      "start": 217,
+      "end": 229,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-leaf-owner",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
+      "start": 313,
+      "end": 321,
+      "fixes": 0
+    }
+  ]
+}

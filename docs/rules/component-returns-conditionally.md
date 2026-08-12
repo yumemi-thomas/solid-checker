@@ -5,6 +5,11 @@
 A component's return value depends on a reactive condition, but a component body
 runs exactly once.
 
+> Severity deliberately differs from the Solid 1.x catalog:
+> [`v1/components-return-once`](v1/components-return-once.md) keeps upstream
+> eslint-plugin-solid's advisory **warning** for existing codebases, while this
+> catalog has no adoption legacy and reports the defect as an **error**.
+
 ## What it does
 
 Flags components whose `return` statement is controlled by a condition that reads a

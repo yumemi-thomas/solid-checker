@@ -1,7 +1,15 @@
 //! Cached cross-generation state for the incremental build:
 //! per-file contributions, fingerprints, and reuse checks.
 
-use crate::*;
+use crate::indexes::CachedAstFileIndex;
+use crate::owners::{
+    CachedOwnerFile, go_binding_pattern_accepts_call, go_returned_arrow_pattern_accepts,
+};
+use crate::{
+    ActionInvocation, AsyncRead, CacheRetention, ContractCallback, ContractExport,
+    ContractGenerationObligation, FunctionNode, OwnerRequirement, Program, ReactiveRead,
+    ReactiveSourceKind, ReactiveWrite, RuleOptions,
+};
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet},
@@ -28,7 +36,7 @@ pub(crate) struct BuildIdentity {
     pub(crate) dialect: solid_dialect::Version,
     pub(crate) project_id: String,
     pub(crate) generation: u64,
-    pub(crate) contracts: Vec<String>,
+    pub(crate) contracts: Vec<[u8; 32]>,
     /// Per-rule options change what the static pass emits, so two runs with
     /// different options never share a retained program.
     pub(crate) rule_options: RuleOptions,
@@ -37,6 +45,112 @@ pub(crate) struct BuildIdentity {
 pub(crate) struct RetainedBuild {
     pub(crate) identity: BuildIdentity,
     pub(crate) program: Arc<Program>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+struct SourceDiscoveryDomain {
+    dialect: solid_dialect::Version,
+    project_id: String,
+    contracts: Vec<[u8; 32]>,
+}
+
+/// Owns every derived cache retained across Reactive IR generations.
+///
+/// The builder delegates domain invalidation, idle retention, and the narrow
+/// mutable view consumed by one build to this module, so adding a cache family
+/// has one policy owner rather than three reset lists to keep synchronized.
+#[derive(Default)]
+pub(crate) struct IncrementalCacheState {
+    ast_indexes: HashMap<SourcePath, CachedAstFileIndex>,
+    source_discovery: HashMap<SourcePath, CachedSourceDiscovery>,
+    typed_accessors: HashMap<SourcePath, CachedTypedAccessors>,
+    interprocedural_graph: HashMap<SourcePath, CachedInterproceduralGraph>,
+    interprocedural_results: CachedInterproceduralResults,
+    typescript_indexes: Option<CachedTypeScriptIndexes>,
+    reachability: Option<CachedReachability>,
+    late_stages: Option<CachedLateStages>,
+    domain: Option<SourceDiscoveryDomain>,
+}
+
+#[derive(Default)]
+pub(crate) struct BuildCaches<'a> {
+    pub(crate) ast_indexes: Option<&'a mut HashMap<SourcePath, CachedAstFileIndex>>,
+    pub(crate) source_discovery: Option<&'a mut HashMap<SourcePath, CachedSourceDiscovery>>,
+    pub(crate) typed_accessors: Option<&'a mut HashMap<SourcePath, CachedTypedAccessors>>,
+    pub(crate) interprocedural_graph:
+        Option<&'a mut HashMap<SourcePath, CachedInterproceduralGraph>>,
+    pub(crate) interprocedural_results: Option<&'a mut CachedInterproceduralResults>,
+    pub(crate) typescript_indexes: Option<&'a mut Option<CachedTypeScriptIndexes>>,
+    pub(crate) reachability: Option<&'a mut Option<CachedReachability>>,
+    pub(crate) late_stages: Option<&'a mut Option<CachedLateStages>>,
+}
+
+impl IncrementalCacheState {
+    /// Selects the source-discovery domain and clears derived state when it
+    /// changes. Returns whether invalidation occurred.
+    pub(crate) fn ensure_domain(
+        &mut self,
+        dialect: solid_dialect::Version,
+        project_id: &str,
+        contracts: &[[u8; 32]],
+    ) -> bool {
+        let next = SourceDiscoveryDomain {
+            dialect,
+            project_id: project_id.to_owned(),
+            contracts: contracts.to_vec(),
+        };
+        if self.domain.as_ref() == Some(&next) {
+            return false;
+        }
+        self.clear_derived();
+        self.domain = Some(next);
+        true
+    }
+
+    pub(crate) fn for_build(&mut self) -> BuildCaches<'_> {
+        BuildCaches {
+            ast_indexes: Some(&mut self.ast_indexes),
+            source_discovery: Some(&mut self.source_discovery),
+            typed_accessors: Some(&mut self.typed_accessors),
+            interprocedural_graph: Some(&mut self.interprocedural_graph),
+            interprocedural_results: Some(&mut self.interprocedural_results),
+            typescript_indexes: Some(&mut self.typescript_indexes),
+            reachability: Some(&mut self.reachability),
+            late_stages: Some(&mut self.late_stages),
+        }
+    }
+
+    pub(crate) fn clear(&mut self) {
+        self.clear_derived();
+        self.domain = None;
+    }
+
+    pub(crate) fn retain_for_idle(&mut self, retention: CacheRetention) {
+        if retention == CacheRetention::Performance {
+            return;
+        }
+        self.interprocedural_graph.clear();
+        self.interprocedural_results = CachedInterproceduralResults::default();
+        self.typescript_indexes = None;
+        self.reachability = None;
+        if retention == CacheRetention::Compact {
+            self.ast_indexes.clear();
+            self.source_discovery.clear();
+            self.typed_accessors.clear();
+            self.late_stages = None;
+        }
+    }
+
+    fn clear_derived(&mut self) {
+        self.ast_indexes.clear();
+        self.source_discovery.clear();
+        self.typed_accessors.clear();
+        self.interprocedural_graph.clear();
+        self.interprocedural_results = CachedInterproceduralResults::default();
+        self.typescript_indexes = None;
+        self.reachability = None;
+        self.late_stages = None;
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -557,5 +671,66 @@ pub(crate) fn refresh_late_stage_inputs(
                 source_fingerprint: late_stage_source_fingerprint(file),
             },
         );
+    }
+}
+
+/// One build's cross-generation reuse decisions.
+///
+/// The decision and the late-stage cache transition happen together, before
+/// any stage borrows an individual cache slot. Stages consume this value
+/// instead of re-deriving whether the TypeScript table or aggregate inputs
+/// are reusable.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) struct ReusePlan {
+    pub(crate) typescript_unchanged: bool,
+    pub(crate) late_stages_reusable: bool,
+}
+
+impl ReusePlan {
+    pub(crate) fn prepare(
+        facts: &ProjectFacts,
+        late_stages: Option<&mut Option<CachedLateStages>>,
+    ) -> Self {
+        let typescript_unchanged = facts
+            .typescript_changes
+            .as_ref()
+            .is_some_and(|changes| changes.unchanged);
+        let late_stages_reusable = typescript_unchanged
+            && late_stages
+                .as_deref()
+                .and_then(Option::as_ref)
+                .is_some_and(|cache| late_stage_inputs_match(cache, facts));
+
+        if let Some(slot) = late_stages {
+            if late_stages_reusable {
+                if let Some(retained) = slot.as_mut() {
+                    for file in &facts.files {
+                        if let Some(input) = retained.inputs.get_mut(file.path.as_str()) {
+                            input.source_hash.clone_from(&file.source_hash);
+                        }
+                    }
+                }
+            } else if let Some(retained) = slot.as_mut() {
+                refresh_late_stage_inputs(&mut retained.inputs, facts);
+                retained.local_accesses.aggregate = None;
+                retained.interprocedural = None;
+                retained.missing_owners = None;
+                retained.compat_reference_locations = None;
+            } else {
+                *slot = Some(CachedLateStages {
+                    inputs: current_late_stage_inputs(facts),
+                    local_accesses: CachedLocalAccesses::default(),
+                    interprocedural: None,
+                    missing_owners: None,
+                    owner_files: HashMap::new(),
+                    compat_reference_locations: None,
+                });
+            }
+        }
+
+        Self {
+            typescript_unchanged,
+            late_stages_reusable,
+        }
     }
 }

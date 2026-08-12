@@ -16,11 +16,40 @@ The dialect is chosen per analysed project from the `solid-js` version the
 project actually resolves, and `--dialect solid-v1` / `--dialect solid-v2`
 overrides that.
 
+## Version ownership at a glance
+
+The catalogs overlap by defect concept, not necessarily by API spelling. A
+shared `SCxxxx` code means the same class of bug exists in both versions; each
+catalog still owns its own rule name, signature checks, message, and fix hint —
+and, in one deliberate case, its own severity: `SC1004` is a **warning** as
+[`v1/components-return-once`](v1/components-return-once.md) (matching upstream
+eslint-plugin-solid's advisory level for existing 1.x codebases) and an
+**error** as
+[`component-returns-conditionally`](component-returns-conditionally.md), where
+the 2.0 catalog has no adoption legacy to accommodate. A suppression comment
+carried through a migration therefore lands on a stricter rule.
+
+| Category | Solid 1.x catalog | Solid 2.0 catalog |
+| --- | --- | --- |
+| Shared concepts (20 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
+| Version-only concepts | 18 rules: `v1/no-async-tracked-scope` plus the SC8001–SC8017 ESLint-era surface | 14 rules: actions, `flush`, returned cleanup, async computations, `refresh`/`affects`, and their proof obligations |
+| Catalog size | 38 rules | 34 rules |
+
+The analyzer beneath these catalogs is mostly shared. Version-specific
+primitive names, callback behavior, owners, and boundaries come from the
+selected dialect vocabulary; the catalog then decides whether the resulting
+IR table has a rule and how that rule speaks to its user.
+
 Findings come in two kinds:
 
 - **violation** — the analyzer proved the code misbehaves at runtime.
 - **uncertifiable** — the analyzer could not prove the code correct; the page for
   each `SC9xxx` rule explains how to make the code provable.
+
+Uncertifiable findings always carry **error** severity, including the ones the
+owner rules (`SC4001`–`SC4003`) emit for exported functions whose callers the
+analyzer cannot see. A rule's severity in the manifest describes its proven
+violation form.
 
 ## Rule options
 

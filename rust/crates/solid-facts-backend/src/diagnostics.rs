@@ -123,7 +123,7 @@ struct DiagnosticIdentity {
     dialect: &'static str,
     project_id: String,
     generation: u64,
-    contracts: Vec<String>,
+    contracts: Vec<[u8; 32]>,
     explicit_contract_paths: Vec<String>,
     /// Per-rule options are re-read from disk on every analysis, so an
     /// edited `.solid-checker/rule-options.json` invalidates a retained
@@ -195,7 +195,7 @@ impl DiagnosticSession {
             generation: facts.generation.get(),
             contracts: contracts
                 .iter()
-                .map(|contract| format!("{contract:?}"))
+                .map(PackageContract::analysis_fingerprint)
                 .collect(),
             explicit_contract_paths: explicit_contract_paths.to_vec(),
             rule_options: rule_options.clone(),
@@ -572,6 +572,11 @@ pub fn analysis_metrics(
         .iter()
         .filter(|violation| violation.id.starts_with("SC9"))
         .count()
+        + program
+            .static_defects
+            .iter()
+            .filter(|defect| defect.kind.is_unresolved_obligation())
+            .count()
         + program.unresolved_cleanup_returns.len();
     Metrics {
         files_analyzed: facts
@@ -595,7 +600,8 @@ pub fn analysis_metrics(
             + program.invalid_cleanup_returns.len()
             + program.unresolved_cleanup_returns.len()
             + program.directive_creations.len()
-            + program.static_violations.len(),
+            + program.static_violations.len()
+            + program.static_defects.len(),
         cached_summaries: 0,
         unresolved_obligations,
     }

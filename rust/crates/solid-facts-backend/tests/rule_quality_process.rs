@@ -117,6 +117,55 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         }
     }
 
+    // The corpus files are mechanically extracted from upstream test cases,
+    // so a `-valid.tsx` file is valid only for the one upstream rule it was
+    // extracted for. The extraction strips the owning component, leaving
+    // module-scope effects (real leaks: nothing ever disposes them),
+    // returned cleanups the analyzer cannot resolve, and setup-scope reads
+    // that register no dependency. Those incidental findings are deliberate;
+    // this pins them so a false-positive regression moves an assertion
+    // instead of hiding in an unasserted snapshot.
+    let incidental = HashMap::from([
+        (
+            "after-await-valid.tsx",
+            [("cleanup-return-unresolved", 1)].as_slice(),
+        ),
+        (
+            "component-return-valid.tsx",
+            [("strict-read-untracked", 1)].as_slice(),
+        ),
+        (
+            "effect-apply-valid.tsx",
+            [("no-owner-effect", 3), ("cleanup-return-unresolved", 2)].as_slice(),
+        ),
+        (
+            "effect-apply-extended-valid.tsx",
+            [("no-owner-effect", 4), ("cleanup-return-unresolved", 3)].as_slice(),
+        ),
+        ("leaf-valid.tsx", [("no-owner-effect", 2)].as_slice()),
+        (
+            "owned-leaf-extended-valid.tsx",
+            [("settled-cleanup-unowned", 1)].as_slice(),
+        ),
+        (
+            "owned-scope-valid.tsx",
+            [("no-owner-effect", 1), ("cleanup-return-unresolved", 2)].as_slice(),
+        ),
+    ]);
+    for (file, rules) in incidental {
+        for (rule, count) in rules {
+            let actual = findings_for_rule(&findings, rule)
+                .into_iter()
+                .filter(|finding| {
+                    finding["primaryLocation"]["path"]
+                        .as_str()
+                        .is_some_and(|path| path.ends_with(file))
+                })
+                .count();
+            assert_eq!(actual, *count, "incidental {file} / {rule}: {findings:#?}");
+        }
+    }
+
     for (file, rules) in [
         (
             "owned-scope-valid.tsx",

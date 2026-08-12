@@ -15,10 +15,13 @@ use solid_facts::{ProjectFacts, TypeScriptSymbol, TypeScriptTable};
 use typefacts::{Declaration, Location};
 
 use super::{
-    CachedTypeScriptIndexes, EntitySymbols, SourceDiscoverySymbolFingerprint,
-    SourceDiscoveryTypeScriptDelta, SymbolId, SymbolInterner, SymbolName, location, location_order,
-    source_discovery_declaration_semantic, source_discovery_symbol_fingerprint, symbol_id,
+    EntitySymbols, SymbolId, SymbolInterner, SymbolName, location, location_order, symbol_id,
     symbol_name,
+};
+use crate::cache::{
+    CachedTypeScriptIndexes, SourceDiscoverySymbolFingerprint, SourceDiscoveryTypeScriptDelta,
+    SourceReferenceLocations, source_discovery_declaration_semantic,
+    source_discovery_symbol_fingerprint,
 };
 
 pub(super) fn add_solid_import_names(
@@ -494,8 +497,8 @@ pub(super) fn source_reference_locations<'a>(
     table: &TypeScriptTable,
     symbols_by_root: &HashMap<SymbolId, Vec<SymbolId>>,
     sources: impl Iterator<Item = &'a SymbolId>,
-) -> super::SourceReferenceLocations {
-    let mut index = super::SourceReferenceLocations::new();
+) -> SourceReferenceLocations {
+    let mut index = SourceReferenceLocations::new();
     let mut record = |root: &SymbolId, reference: &Location| {
         let path = reference.path.as_ref();
         if !index.contains_key(path) {

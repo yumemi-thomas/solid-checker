@@ -11,23 +11,33 @@ mod local_access;
 mod owners;
 mod pipeline;
 mod reachability;
+mod reactive_analysis;
 mod runtime_semantics;
 mod source_discovery;
 mod static_api;
 mod static_rules;
 mod symbols;
+mod timings;
 mod upstream_compat;
 
-pub use pipeline::*;
+pub use pipeline::{build, build_with_contracts, build_with_contracts_measured};
 
-pub(crate) use cache::*;
-pub(crate) use local_access::*;
-pub(crate) use owners::*;
-pub(crate) use source_discovery::*;
+/// Project-level options for the Solid 1.x ESLint-compatibility rules.
+///
+/// Solid 2.0 rules currently have no configurable entries in this document;
+/// the generic type name is retained because it is already part of the
+/// checker/backend interface.
+pub use upstream_compat::solid1x_options::RuleOptions;
 
-pub use upstream_compat::options::RuleOptions;
+pub use findings::{
+    DOCS_BASE_URL, EvidenceStep, Finding, RuleMetadata, SolveTimings,
+    assert_rules_have_documentation, direct_mutation_wording, finish_findings, rule_manifest_json,
+    static_violation_finding, strict_read_evidence, strict_read_message,
+    strict_read_related_locations,
+};
 
-pub use findings::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
+use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};
+use pipeline::build_with_contracts_measured_incremental;
 
 use std::{
     collections::{BTreeMap, HashMap, HashSet, VecDeque},
@@ -44,12 +54,13 @@ use execution_role::{
     named_callback_roles, semantic_execution_role,
 };
 use identity::{SymbolId, SymbolInterner, SymbolName, symbol_id, symbol_name};
-use indexes::{CachedAstFileIndex, EntitySymbols, ProjectIndexes, SemanticLookup};
-use interproc::{InterproceduralTimings, SummaryNode, SummaryRead, SummaryReads};
+use indexes::{EntitySymbols, ProjectIndexes, SemanticLookup};
+use interproc::{SummaryNode, SummaryRead, SummaryReads};
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use solid_dialect::{Dialect, Primitive};
-use solid_facts::core::{SourcePath, Span};
-use solid_facts::{FileFacts, ProjectFacts};
+use solid_facts::ProjectFacts;
+use solid_facts::core::Span;
 use thiserror::Error;
 use typefacts::Location;
 
@@ -63,6 +74,32 @@ pub enum ExecutionRole {
     EventCallback,
     DirectiveApply,
     UntrackedRendering,
+}
+
+impl ExecutionRole {
+    /// Whether a reactive read in this role subscribes to nothing — the roles
+    /// the strict-read rule reports in every dialect.
+    #[must_use]
+    pub const fn reports_untracked_read(self) -> bool {
+        matches!(
+            self,
+            Self::UntrackedRendering | Self::UntrackedCallback | Self::EffectApply
+        )
+    }
+
+    /// Whether a reactive write (or an action invocation) is allowed in this
+    /// role: the imperative scopes that run outside the tracking phase.
+    #[must_use]
+    pub const fn permits_write(self) -> bool {
+        matches!(
+            self,
+            Self::EventCallback
+                | Self::DeferredCallback
+                | Self::UntrackedCallback
+                | Self::EffectApply
+                | Self::DirectiveApply
+        )
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -149,6 +186,89 @@ pub struct StaticViolation {
     pub location: Location,
     pub analysis_context: String,
     pub fixes: Vec<Fix>,
+}
+
+/// A version-independent defect proven by shared analysis.
+///
+/// Unlike [`StaticViolation`], this carries no external rule identity or
+/// user-facing prose. Each dialect catalog projects the structured defect
+/// into its own rule, message, and hint.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StaticDefect {
+    pub kind: StaticDefectKind,
+    pub location: Location,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub analysis_context: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fixes: Vec<Fix>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "kind")]
+pub enum StaticDefectKind {
+    ExecutionMapIncomplete,
+    ComponentPropsDestructure,
+    ReactiveReadAfterAwait {
+        accessor: String,
+    },
+    ComponentReturnsConditionally,
+    PackageContractExportMissing {
+        module: String,
+        export: String,
+        reexported: bool,
+    },
+    MissingEffectFunction,
+    UntrackedDerivedFunction {
+        name: String,
+    },
+    ReactiveSourceUncaptured {
+        source: String,
+        callee: String,
+    },
+    ReactiveHandlerRead {
+        attribute: String,
+        expression: String,
+    },
+    HandlerCallResult {
+        attribute: String,
+        callee: String,
+        call: String,
+    },
+    UncalledAccessor {
+        name: String,
+        position: String,
+    },
+    DirectMutation {
+        name: String,
+        target: DirectMutationTarget,
+    },
+}
+
+impl StaticDefectKind {
+    /// Whether this defect is an unresolved proof obligation — the `SC9xxx`
+    /// uncertifiable class — rather than a proven violation. Contract
+    /// emission refuses to describe a surface these are open against, and
+    /// the metrics count them as unresolved; both consult this so the
+    /// answer cannot drift between them.
+    #[must_use]
+    pub fn is_unresolved_obligation(&self) -> bool {
+        matches!(
+            self,
+            Self::ExecutionMapIncomplete
+                | Self::PackageContractExportMissing { .. }
+                | Self::ReactiveSourceUncaptured { .. }
+        )
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DirectMutationTarget {
+    Props,
+    Store,
+    ReactiveValue,
+    AccessorBinding,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -290,6 +410,31 @@ pub struct ContractArtifact {
 }
 
 impl PackageContract {
+    /// Stable identity for every contract input that can affect analysis or
+    /// diagnostics.
+    ///
+    /// Decoded contracts normally carry the hash of their source document;
+    /// programmatically constructed contracts do not, so the canonical
+    /// serialized model is included as a fallback. The source path remains
+    /// part of the identity because it is observable in evidence locations.
+    #[must_use]
+    pub fn analysis_fingerprint(&self) -> [u8; 32] {
+        fn field(hasher: &mut Sha256, value: &[u8]) {
+            hasher.update(u64::try_from(value.len()).unwrap_or(u64::MAX).to_le_bytes());
+            hasher.update(value);
+        }
+
+        let mut hasher = Sha256::new();
+        field(&mut hasher, self.source_path.as_bytes());
+        field(&mut hasher, self.contract_hash.as_bytes());
+        if self.contract_hash.is_empty() {
+            let encoded = serde_json::to_vec(self)
+                .expect("PackageContract contains only infallibly serializable fields");
+            field(&mut hasher, &encoded);
+        }
+        hasher.finalize().into()
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         if self.schema_version != 1 {
             return Err(format!(
@@ -505,6 +650,7 @@ pub struct Program {
     pub invalid_cleanup_returns: Vec<InvalidCleanupReturn>,
     pub unresolved_cleanup_returns: Vec<UnresolvedCleanupReturn>,
     pub static_violations: Vec<StaticViolation>,
+    pub static_defects: Vec<StaticDefect>,
     pub directive_creations: Vec<PrimitiveCreation>,
     pub missing_owners: Vec<OwnerRequirement>,
     pub async_reads: Vec<AsyncRead>,
@@ -585,51 +731,6 @@ pub struct BuildTimings {
     pub final_ordering: Duration,
 }
 
-impl BuildTimings {
-    /// Copies the source-discovery lane's contribution out of the
-    /// [`BuildTimings`] it accumulated on its own thread.
-    pub(crate) fn absorb_source_discovery(&mut self, lane: &Self) {
-        self.source_discovery = lane.source_discovery;
-        self.source_discovery_reused_files = lane.source_discovery_reused_files;
-        self.source_discovery_recomputed_files = lane.source_discovery_recomputed_files;
-        self.typed_accessors_and_prop_roots = lane.typed_accessors_and_prop_roots;
-        self.prop_propagation_and_control_flow = lane.prop_propagation_and_control_flow;
-    }
-
-    /// Copies the interprocedural stage's own timing breakdown.
-    pub(crate) fn absorb_interprocedural(&mut self, timings: &InterproceduralTimings) {
-        self.interprocedural_graph = timings.graph;
-        self.interprocedural_direct_summaries = timings.direct_summaries;
-        self.interprocedural_direct_index = timings.direct_index;
-        self.interprocedural_direct_references = timings.direct_references;
-        self.interprocedural_typed_accessors = timings.typed_accessors;
-        self.interprocedural_propagation = timings.propagation;
-        self.interprocedural_returned_direct = timings.returned_direct;
-        self.interprocedural_returned_delta = timings.returned_delta;
-        self.interprocedural_call_summary_delta = timings.call_summary_delta;
-        self.interprocedural_factory_propagation = timings.factory_propagation;
-        self.interprocedural_results_and_exports = timings.results_and_exports;
-        self.interprocedural_result_reads = timings.result_reads;
-        self.interprocedural_export_summaries = timings.export_summaries;
-        self.typed_accessor_reused_files = timings.typed_accessor_reused_files;
-        self.typed_accessor_recomputed_files = timings.typed_accessor_recomputed_files;
-        self.interprocedural_graph_reused_files = timings.graph_reused_files;
-        self.interprocedural_graph_recomputed_files = timings.graph_recomputed_files;
-        self.interprocedural_result_reused_files = timings.result_reused_files;
-        self.interprocedural_result_recomputed_files = timings.result_recomputed_files;
-    }
-
-    /// Copies the owner stage's own timing breakdown.
-    pub(crate) fn absorb_owner(&mut self, timings: &OwnerIncrementalTimings) {
-        self.owner_fragment_build = timings.fragment_build;
-        self.owner_graph_assembly = timings.graph_assembly;
-        self.owner_propagation = timings.propagation;
-        self.owner_requirement_emission = timings.requirement_emission;
-        self.owner_reused_files += timings.reused_files;
-        self.owner_recomputed_files += timings.recomputed_files;
-    }
-}
-
 /// Retains the last coherent Reactive IR generation behind the same build
 /// interface used by fresh analysis. Cross-generation source discovery,
 /// typed-accessor discovery, the symbolic interprocedural graph, and
@@ -639,15 +740,7 @@ impl BuildTimings {
 #[derive(Default)]
 pub struct IncrementalBuilder {
     retained: Option<RetainedBuild>,
-    ast_indexes: HashMap<SourcePath, CachedAstFileIndex>,
-    source_discovery: HashMap<SourcePath, CachedSourceDiscovery>,
-    typed_accessors: HashMap<SourcePath, CachedTypedAccessors>,
-    interprocedural_graph: HashMap<SourcePath, CachedInterproceduralGraph>,
-    interprocedural_results: CachedInterproceduralResults,
-    typescript_indexes: Option<CachedTypeScriptIndexes>,
-    reachability: Option<CachedReachability>,
-    late_stages: Option<CachedLateStages>,
-    source_discovery_domain: Option<(String, Vec<String>)>,
+    caches: IncrementalCacheState,
 }
 
 /// How much derived cross-generation state an idle retained session keeps.
@@ -665,18 +758,6 @@ pub enum CacheRetention {
     Balanced,
     /// Keep only the current coherent program.
     Compact,
-}
-
-#[derive(Default)]
-struct BuildCaches<'a> {
-    ast_indexes: Option<&'a mut HashMap<SourcePath, CachedAstFileIndex>>,
-    source_discovery: Option<&'a mut HashMap<SourcePath, CachedSourceDiscovery>>,
-    typed_accessors: Option<&'a mut HashMap<SourcePath, CachedTypedAccessors>>,
-    interprocedural_graph: Option<&'a mut HashMap<SourcePath, CachedInterproceduralGraph>>,
-    interprocedural_results: Option<&'a mut CachedInterproceduralResults>,
-    typescript_indexes: Option<&'a mut Option<CachedTypeScriptIndexes>>,
-    reachability: Option<&'a mut Option<CachedReachability>>,
-    late_stages: Option<&'a mut Option<CachedLateStages>>,
 }
 
 impl IncrementalBuilder {
@@ -725,24 +806,15 @@ impl IncrementalBuilder {
             generation: facts.generation.get(),
             contracts: contracts
                 .iter()
-                .map(|contract| format!("{contract:?}"))
+                .map(PackageContract::analysis_fingerprint)
                 .collect(),
             rule_options: rule_options.clone(),
         };
-        let source_discovery_domain = (
-            format!("{:?}::{}", identity.dialect, identity.project_id),
-            identity.contracts.clone(),
-        );
-        if self.source_discovery_domain.as_ref() != Some(&source_discovery_domain) {
-            self.ast_indexes.clear();
-            self.source_discovery.clear();
-            self.typed_accessors.clear();
-            self.interprocedural_graph.clear();
-            self.interprocedural_results = CachedInterproceduralResults::default();
-            self.typescript_indexes = None;
-            self.reachability = None;
-            self.late_stages = None;
-            self.source_discovery_domain = Some(source_discovery_domain);
+        if self
+            .caches
+            .ensure_domain(identity.dialect, &identity.project_id, &identity.contracts)
+        {
+            self.retained = None;
         }
         let cache_lookup = lookup_started.elapsed();
         if let Some(retained) = &self.retained
@@ -764,16 +836,7 @@ impl IncrementalBuilder {
             dialect,
             contracts,
             rule_options,
-            BuildCaches {
-                ast_indexes: Some(&mut self.ast_indexes),
-                source_discovery: Some(&mut self.source_discovery),
-                typed_accessors: Some(&mut self.typed_accessors),
-                interprocedural_graph: Some(&mut self.interprocedural_graph),
-                interprocedural_results: Some(&mut self.interprocedural_results),
-                typescript_indexes: Some(&mut self.typescript_indexes),
-                reachability: Some(&mut self.reachability),
-                late_stages: Some(&mut self.late_stages),
-            },
+            self.caches.for_build(),
         )?;
         let program = Arc::new(program);
         self.retained = Some(RetainedBuild {
@@ -787,15 +850,7 @@ impl IncrementalBuilder {
 
     pub fn clear(&mut self) {
         self.retained = None;
-        self.ast_indexes.clear();
-        self.source_discovery.clear();
-        self.typed_accessors.clear();
-        self.interprocedural_graph.clear();
-        self.interprocedural_results = CachedInterproceduralResults::default();
-        self.typescript_indexes = None;
-        self.reachability = None;
-        self.late_stages = None;
-        self.source_discovery_domain = None;
+        self.caches.clear();
     }
 
     /// Applies the idle-memory policy without invalidating the current result.
@@ -805,21 +860,7 @@ impl IncrementalBuilder {
     /// `Compact` releases every derived index while preserving the current
     /// generation and its source-discovery domain identity.
     pub fn retain_for_idle(&mut self, retention: CacheRetention) {
-        if retention == CacheRetention::Performance {
-            return;
-        }
-
-        self.interprocedural_graph.clear();
-        self.interprocedural_results = CachedInterproceduralResults::default();
-        self.typescript_indexes = None;
-        self.reachability = None;
-
-        if retention == CacheRetention::Compact {
-            self.ast_indexes.clear();
-            self.source_discovery.clear();
-            self.typed_accessors.clear();
-            self.late_stages = None;
-        }
+        self.caches.retain_for_idle(retention);
     }
 }
 
@@ -1155,27 +1196,24 @@ fn location(path: impl Into<Arc<str>>, span: Span) -> Location {
 
 #[cfg(test)]
 mod tests {
+    use super::cache::{
+        CachedTypeScriptIndexes, InterproceduralResultDependency,
+        InterproceduralResultDependencyState, SourceDiscoveryIdentity,
+        SourceDiscoveryTypeScriptDelta,
+    };
     use solid_facts::TypeScriptTable;
     use solid_facts::core::SourceHash;
     use typefacts::{Declaration, EntityFact, FileFact, SourceDigest, SymbolFact};
 
     use super::interproc::InterproceduralResultView;
+    use super::pipeline::{AnalysisWorkerLimit, parallel_slice_results};
+    use super::source_discovery::source_discovery_identity_matches;
     use super::symbols::{
         alias_roots_and_source_declarations, entity_symbols, patch_typescript_indexes,
         references_for_sources, source_discovery_symbol_semantics, symbol_alias_targets,
         symbol_names, symbols_by_root,
     };
     use super::*;
-
-    /// The `SOLID_CHECKER_TIMINGS` stage lines are read by the performance
-    /// tooling; their shape is a contract, not an implementation detail.
-    #[test]
-    fn stage_lines_keep_the_shape_the_performance_tooling_reads() {
-        assert_eq!(
-            pipeline::StageClock::stage_line("source-discovery", Duration::from_nanos(42)),
-            "{\"reactiveIrStage\":\"source-discovery\",\"elapsedNs\":42}"
-        );
-    }
 
     #[test]
     fn ordered_parallel_maps_respect_the_worker_budget() {

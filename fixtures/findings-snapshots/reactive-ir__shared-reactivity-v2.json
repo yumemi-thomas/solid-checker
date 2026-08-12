@@ -1,0 +1,55 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 607,
+      "end": 612,
+      "fixes": 0
+    },
+    {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 1150,
+      "end": 1157,
+      "fixes": 0
+    },
+    {
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 1390,
+      "end": 1400,
+      "fixes": 0
+    },
+    {
+      "rule": "expected-function-got-expression",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 2033,
+      "end": 2040,
+      "fixes": 0
+    },
+    {
+      "rule": "untracked-derived-function",
+      "code": "SC1006",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 2768,
+      "end": 2775,
+      "fixes": 0
+    }
+  ]
+}

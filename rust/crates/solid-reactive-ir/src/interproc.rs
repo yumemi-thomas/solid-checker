@@ -22,22 +22,28 @@ use super::runtime_semantics::{
     proven_array_method_argument_behavior, resolved_parameter, retains_argument_value,
 };
 use super::{
-    CachedInterproceduralGraph, CachedInterproceduralResultFile, CachedInterproceduralResults,
-    CachedReactiveSource, CachedTypedAccessors, ContractAnalysis, ContractCallback, ContractExport,
-    ContractGenerationObligation, ContractGraph, ContractReturn, ContractSemantics, EntitySymbols,
-    ExecutionRole, FunctionBoundary, InterproceduralGraphContribution, InterproceduralGraphTarget,
-    InterproceduralResultDependency, InterproceduralResultDependencyState, ProjectIndexes,
-    ReactiveRead, ReactiveSourceKind, SemanticLookup, SymbolId, TypedAccessorContribution,
-    allowed_callback_spans, assigned_member_function_contains, containing_ast_function,
-    containing_summary_function_indexed, contract_callback_execution, contract_export_summaries,
-    contract_export_summaries_incremental, enclosing_function_label, enclosing_render_function,
-    execution_role, function_binding_name, function_indices_by_path, functions_for_path,
-    go_returned_arrow_pattern_accepts, go_solid_accessor_descriptor, inside_effect_apply, location,
-    location_order, parallel_file_results, parallel_slice_results, primitive_name,
-    propagate_returned_summary_deltas, propagate_summary_deltas, push_contract_callback,
-    push_unique_summary_read, same_compiler_semantics, semantic_execution_role,
-    source_function_exported,
+    ContractAnalysis, ContractCallback, ContractExport, ContractGenerationObligation,
+    ContractGraph, ContractReturn, ContractSemantics, EntitySymbols, ExecutionRole,
+    FunctionBoundary, ProjectIndexes, ReactiveRead, ReactiveSourceKind, SemanticLookup, SymbolId,
+    allowed_callback_spans, assigned_member_function_contains, containing_summary_function_indexed,
+    contract_callback_execution, contract_export_summaries, contract_export_summaries_incremental,
+    execution_role, function_indices_by_path, functions_for_path, location, location_order,
+    primitive_name, propagate_returned_summary_deltas, propagate_summary_deltas,
+    push_contract_callback, push_unique_summary_read, semantic_execution_role,
 };
+use crate::cache::{
+    CachedInterproceduralGraph, CachedInterproceduralResultFile, CachedInterproceduralResults,
+    CachedReactiveSource, CachedTypedAccessors, InterproceduralGraphContribution,
+    InterproceduralGraphTarget, InterproceduralResultDependency,
+    InterproceduralResultDependencyState, TypedAccessorContribution, same_compiler_semantics,
+};
+use crate::owners::{
+    containing_ast_function, enclosing_function_label, enclosing_render_function,
+    function_binding_name, go_returned_arrow_pattern_accepts, go_solid_accessor_descriptor,
+    inside_effect_apply, source_function_exported,
+};
+use crate::pipeline::{parallel_file_results, parallel_slice_results};
+use crate::source_discovery::bundled_contract_location;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct SummaryRead {
@@ -1288,7 +1294,7 @@ fn retained_reactive_sources(
 
 fn direct_reference_contributions(
     source: &CachedReactiveSource,
-    context: &InterproceduralContext<'_>,
+    context: &InterproceduralContext<'_, '_>,
     nodes: &[SummaryNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
 ) -> Vec<DirectReferenceContribution> {
@@ -1358,7 +1364,7 @@ fn direct_reference_contributions(
                             .map(|returned| (primitive, returned))
                     });
             if let Some((primitive, returned)) = factory_return {
-                let contract_location = crate::bundled_contract_location(lookup.dialect, primitive);
+                let contract_location = bundled_contract_location(lookup.dialect, primitive);
                 read.display = SymbolId::from(returned.label.as_str());
                 read.kind = Some(returned.kind.clone());
                 read.declaration.clone_from(&contract_location);
@@ -1416,9 +1422,9 @@ fn direct_reference_contributions(
     contributions
 }
 
-pub(super) struct InterproceduralContext<'a> {
+pub(super) struct InterproceduralContext<'a, 'facts> {
     pub(super) facts: &'a ProjectFacts,
-    pub(super) project_indexes: &'a ProjectIndexes<'a>,
+    pub(super) project_indexes: &'a ProjectIndexes<'facts>,
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(super) contracted_accessor_symbols: &'a HashSet<SymbolId>,
     pub(super) returned_source_symbols: &'a HashSet<SymbolId>,
@@ -1435,10 +1441,10 @@ pub(super) struct InterproceduralContext<'a> {
     pub(super) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(super) changed_semantic_symbols: Option<&'a HashSet<SymbolId>>,
     pub(super) retained_source_paths: &'a HashSet<String>,
-    pub(super) lookup: &'a SemanticLookup<'a>,
+    pub(super) lookup: &'a SemanticLookup<'facts>,
 }
 
-impl InterproceduralContext<'_> {
+impl InterproceduralContext<'_, '_> {
     pub(super) fn build(
         &self,
         typed_accessor_cache: Option<
@@ -1467,7 +1473,7 @@ struct InterproceduralCaches<'a> {
 }
 
 fn interprocedural_reads(
-    context: &InterproceduralContext<'_>,
+    context: &InterproceduralContext<'_, '_>,
     caches: InterproceduralCaches<'_>,
 ) -> InterproceduralResult {
     let InterproceduralContext {
@@ -1895,7 +1901,7 @@ fn interprocedural_reads(
                                         |returned| {
                                             (
                                                 returned,
-                                                crate::bundled_contract_location(
+                                                bundled_contract_location(
                                                     lookup.dialect,
                                                     &primitive,
                                                 ),
@@ -2238,5 +2244,272 @@ fn interprocedural_reads(
             result_reused_files,
             result_recomputed_files,
         },
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::{HashMap, HashSet};
+    use std::sync::Arc;
+
+    use solid_dialect::Primitive;
+    use typefacts::Location;
+
+    use super::{
+        SummaryRead, SummaryReads, SymbolId, add_interprocedural_dependency_user,
+        cached_reactive_source, primitive_callback_execution, reactive_source_order,
+        remove_interprocedural_dependency_user, retained_reactive_sources,
+    };
+    use crate::cache::InterproceduralResultDependency;
+
+    fn location(start: u64) -> Location {
+        Location {
+            path: Arc::from("app.tsx"),
+            start_byte: start,
+            end_byte: start + 1,
+        }
+    }
+
+    fn read(symbol: &str, display: &str, origin: u64) -> SummaryRead {
+        SummaryRead {
+            symbol: SymbolId::from(symbol),
+            display: SymbolId::from(display),
+            kind: None,
+            declaration: location(0),
+            origin: location(origin),
+            origin_context: "test".to_owned(),
+        }
+    }
+
+    #[test]
+    fn summary_reads_dedupe_on_display_origin_and_declaration_only() {
+        let mut reads = SummaryReads::default();
+        assert!(reads.push_unique(read("sym-a", "count", 10)));
+        // A different underlying symbol with the same display, origin, and
+        // declaration is the same read for summary purposes.
+        assert!(!reads.push_unique(read("sym-b", "count", 10)));
+        // Any differing key component makes the read new again.
+        assert!(reads.push_unique(read("sym-a", "count", 11)));
+        assert!(reads.push_unique(read("sym-a", "other", 10)));
+        assert_eq!(reads.len(), 3);
+    }
+
+    #[test]
+    fn unconditional_push_appends_duplicates_but_still_records_the_key() {
+        let mut reads = SummaryReads::default();
+        reads.push(read("sym", "count", 10));
+        reads.push(read("sym", "count", 10));
+        // `push` never dedupes its own input...
+        assert_eq!(reads.len(), 2);
+        // ...but it seeds the key, so a later `push_unique` is refused.
+        assert!(!reads.push_unique(read("sym", "count", 10)));
+    }
+
+    #[test]
+    fn replacing_the_reads_resets_the_dedupe_state() {
+        let mut reads = SummaryReads::default();
+        reads.push(read("sym", "count", 10));
+        reads.replace(vec![read("sym", "name", 20)]);
+        // The old key is forgotten, the replacement's key is live.
+        assert!(reads.push_unique(read("sym", "count", 10)));
+        assert!(!reads.push_unique(read("sym", "name", 20)));
+        assert_eq!(
+            reads.to_vec(),
+            vec![read("sym", "name", 20), read("sym", "count", 10)]
+        );
+    }
+
+    #[test]
+    fn inserting_preserves_order_and_marks_the_key() {
+        let mut reads = SummaryReads::default();
+        reads.push(read("sym", "a", 1));
+        reads.push(read("sym", "c", 3));
+        reads.insert(1, read("sym", "b", 2));
+        assert_eq!(
+            reads
+                .iter()
+                .map(|read| read.display.as_ref())
+                .collect::<Vec<_>>(),
+            ["a", "b", "c"]
+        );
+        assert!(!reads.push_unique(read("sym", "b", 2)));
+    }
+
+    #[test]
+    fn effect_callback_executions_come_from_the_dialect() {
+        let solid2 = solid_dialect::Solid2;
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::CreateEffect), 0, &solid2),
+            Some("tracked")
+        );
+        // 2.0's second effect argument is the deferred apply callback.
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::CreateEffect), 1, &solid2),
+            Some("deferred")
+        );
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::CreateEffect), 2, &solid2),
+            None
+        );
+
+        let solid1x = solid_dialect::Solid1x;
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::CreateEffect), 0, &solid1x),
+            Some("tracked")
+        );
+        // 1.x's second argument is a seed value, not a callback.
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::CreateEffect), 1, &solid1x),
+            None
+        );
+    }
+
+    #[test]
+    fn non_effect_callback_executions_use_the_module_classification() {
+        let dialect = solid_dialect::Solid2;
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::CreateMemo), 0, &dialect),
+            Some("tracked")
+        );
+        // The module deliberately labels `untrack`/`flush` "deferred" (see
+        // the function's doc comment) even though the dialect vocabulary
+        // calls them inline.
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::Untrack), 0, &dialect),
+            Some("deferred")
+        );
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::Flush), 0, &dialect),
+            Some("deferred")
+        );
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::CreateRoot), 0, &dialect),
+            Some("inline")
+        );
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::RunWithOwner), 1, &dialect),
+            Some("inline")
+        );
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::RunWithOwner), 0, &dialect),
+            None
+        );
+        assert_eq!(primitive_callback_execution(None, 0, &dialect), None);
+    }
+
+    #[test]
+    fn reactive_sources_order_by_phase_before_location() {
+        let phases = HashMap::from([(SymbolId::from("late"), 2_u8)]);
+        let early = cached_reactive_source("early", "early", &location(90), &phases);
+        let late = cached_reactive_source("late", "late", &location(10), &phases);
+        // `late` sits at an earlier byte but a later phase.
+        assert_eq!(
+            reactive_source_order(&early, &late),
+            std::cmp::Ordering::Less
+        );
+        let sibling = cached_reactive_source("sibling", "sibling", &location(95), &phases);
+        assert_eq!(
+            reactive_source_order(&early, &sibling),
+            std::cmp::Ordering::Less
+        );
+    }
+
+    #[test]
+    fn retained_reactive_sources_build_sorted_and_reuse_the_cache() {
+        let accessors = HashMap::from([
+            (SymbolId::from("a"), (SymbolId::from("count"), location(50))),
+            (SymbolId::from("b"), (SymbolId::from("name"), location(10))),
+            (SymbolId::from("c"), (SymbolId::from("gone"), location(5))),
+        ]);
+        let contracted = HashSet::new();
+        // `c` never appears in the summaries, so it is ineligible.
+        let summary_sources = HashSet::from([SymbolId::from("a"), SymbolId::from("b")]);
+        let phases = HashMap::from([(SymbolId::from("a"), 2_u8)]);
+
+        let mut cache = None;
+        let first = retained_reactive_sources(
+            &mut cache,
+            &accessors,
+            &contracted,
+            &summary_sources,
+            &phases,
+        );
+        assert_eq!(
+            first
+                .iter()
+                .map(|source| (source.symbol.as_ref(), source.phase))
+                .collect::<Vec<_>>(),
+            [("b", 1), ("a", 2)]
+        );
+
+        let second = retained_reactive_sources(
+            &mut cache,
+            &accessors,
+            &contracted,
+            &summary_sources,
+            &phases,
+        );
+        assert!(Arc::ptr_eq(&first, &second));
+    }
+
+    #[test]
+    fn retained_reactive_sources_drop_stale_entries_and_insert_new_ones_in_order() {
+        let mut accessors = HashMap::from([
+            (SymbolId::from("a"), (SymbolId::from("count"), location(50))),
+            (SymbolId::from("b"), (SymbolId::from("name"), location(10))),
+        ]);
+        let contracted = HashSet::new();
+        let mut summary_sources = HashSet::from([SymbolId::from("a"), SymbolId::from("b")]);
+        let phases = HashMap::new();
+
+        let mut cache = None;
+        retained_reactive_sources(
+            &mut cache,
+            &accessors,
+            &contracted,
+            &summary_sources,
+            &phases,
+        );
+
+        // `b` stops being a summary source; `c` appears between the others.
+        summary_sources.remove("b");
+        summary_sources.insert(SymbolId::from("c"));
+        accessors.insert(SymbolId::from("c"), (SymbolId::from("mid"), location(30)));
+        let retained = retained_reactive_sources(
+            &mut cache,
+            &accessors,
+            &contracted,
+            &summary_sources,
+            &phases,
+        );
+        assert_eq!(
+            retained
+                .iter()
+                .map(|source| source.display.as_ref())
+                .collect::<Vec<_>>(),
+            ["mid", "count"]
+        );
+    }
+
+    #[test]
+    fn dependency_users_are_reference_counted() {
+        let dependency = InterproceduralResultDependency::Symbol(SymbolId::from("f"));
+        let mut users = HashMap::new();
+        let mut states = HashMap::new();
+        states.insert(
+            dependency.clone(),
+            crate::cache::InterproceduralResultDependencyState::Missing,
+        );
+        add_interprocedural_dependency_user(&mut users, &dependency);
+        add_interprocedural_dependency_user(&mut users, &dependency);
+
+        remove_interprocedural_dependency_user(&mut users, &mut states, &dependency);
+        // One user remains: both maps keep the dependency.
+        assert!(users.contains_key(&dependency));
+        assert!(states.contains_key(&dependency));
+
+        remove_interprocedural_dependency_user(&mut users, &mut states, &dependency);
+        assert!(users.is_empty());
+        assert!(states.is_empty());
     }
 }
