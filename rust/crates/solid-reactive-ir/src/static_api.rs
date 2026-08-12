@@ -1,13 +1,49 @@
-//! Static validation for Solid 2 API shapes and explicit refresh writes.
+//! Static validation for Solid 2.0 API shapes and explicit refresh writes.
+
+use std::collections::HashMap;
 
 use solid_dialect::Primitive;
+use solid_facts::FileFacts;
+use solid_facts::core::Span;
+use typefacts::Location;
 
-use super::*;
+use crate::execution_role::{allowed_callback_spans, semantic_execution_role};
+use crate::identity::SymbolId;
+use crate::indexes::{EntitySymbols, SemanticLookup};
+use crate::owners::{analysis_context, computation_is_async};
+use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
+use crate::{
+    ReactiveSourceKind, ReactiveWrite, StaticDefect, StaticDefectKind, StaticViolation, location,
+    primitive_name,
+};
 
 pub(super) struct StaticDirectiveFileResult {
+    pub(super) defects: Vec<StaticDefect>,
     pub(super) violations: Vec<StaticViolation>,
     pub(super) writes: Vec<ReactiveWrite>,
     pub(super) write_action_obligations: Vec<(&'static str, String, u64, u64)>,
+}
+
+/// Runs the project-level static API stage and merges its independent file
+/// results into the program draft.
+pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    let checker = StaticApiContext {
+        lookup: ctx.semantic_lookup,
+        entities: ctx.entities,
+        symbol_names: ctx.symbol_names,
+        source_kinds: ctx.source_kinds,
+        source_owned_write: ctx.source_owned_write,
+        accessors: ctx.accessors,
+        reachable_calls: ctx.reachable_calls,
+    };
+    for result in parallel_file_results(&ctx.facts.files, |file| checker.check_file(file)) {
+        draft.static_defects.extend(result.defects);
+        draft.static_violations.extend(result.violations);
+        draft.writes.extend(result.writes);
+        draft
+            .write_action_obligations
+            .extend(result.write_action_obligations);
+    }
 }
 
 pub(super) struct StaticApiContext<'a> {
@@ -23,6 +59,7 @@ pub(super) struct StaticApiContext<'a> {
 impl StaticApiContext<'_> {
     pub(super) fn check_file(&self, file: &FileFacts) -> StaticDirectiveFileResult {
         let mut result = StaticDirectiveFileResult {
+            defects: Vec::new(),
             violations: Vec::new(),
             writes: Vec::new(),
             write_action_obligations: Vec::new(),
@@ -55,15 +92,8 @@ impl StaticApiContext<'_> {
                     argument.value == solid_facts::ast::ArgumentValueKind::Undefined
                 })
             {
-                let signature = dialect.effect_signature();
-                result.violations.push(StaticViolation {
-                    id: "SC7001".into(),
-                    rule: "missing-effect-function".into(),
-                    message: format!(
-                        "createEffect is called without an effect function; the signature is {}, where {}",
-                        signature.signature, signature.roles
-                    ),
-                    hint: signature.remedy.into(),
+                result.defects.push(StaticDefect {
+                    kind: StaticDefectKind::MissingEffectFunction,
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],

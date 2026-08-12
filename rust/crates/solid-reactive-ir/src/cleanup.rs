@@ -14,9 +14,27 @@ use typefacts::{Callability, Location, ResolvedCallValidity};
 
 use super::{
     Fix, InvalidCleanupReturn, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId,
-    TextEdit, UnresolvedCleanupReturn, callback_owner_at_call, containing_ast_function, location,
-    primitive_name,
+    TextEdit, UnresolvedCleanupReturn, location, primitive_name,
 };
+use crate::owners::{callback_owner_at_call, containing_ast_function};
+use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
+
+/// Runs the project-level leaf-owner and cleanup-return stage.
+pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    draft.leaf_operations.extend(
+        parallel_file_results(&ctx.facts.files, |file| {
+            leaf_owner_operations_for_file(file, ctx.symbol_names, ctx.semantic_lookup)
+        })
+        .into_iter()
+        .flatten(),
+    );
+    for (invalid, unresolved) in parallel_file_results(&ctx.facts.files, |file| {
+        cleanup_returns_for_file(ctx.semantic_lookup, file, ctx.symbol_names)
+    }) {
+        draft.invalid_cleanup_returns.extend(invalid);
+        draft.unresolved_cleanup_returns.extend(unresolved);
+    }
+}
 
 pub(super) fn leaf_owner_operations_for_file(
     file: &FileFacts,

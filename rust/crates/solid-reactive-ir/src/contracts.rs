@@ -16,11 +16,12 @@ use solid_facts::ProjectFacts;
 use typefacts::{Callability, Location, ReferenceSpace};
 
 use super::{
-    CachedContractExports, ContractCallback, ContractExport, ContractExportFragment,
-    ContractNodeKey, ContractReactiveRead, ContractReturn, EntitySymbols, PackageContract,
-    ReactiveSourceKind, StaticViolation, SummaryNode, SummaryRead, SummaryReads, SymbolId,
-    location, location_order, parallel_slice_results,
+    ContractCallback, ContractExport, ContractReactiveRead, ContractReturn, EntitySymbols,
+    PackageContract, ReactiveSourceKind, StaticDefect, StaticDefectKind, SummaryNode, SummaryRead,
+    SummaryReads, SymbolId, location, location_order,
 };
+use crate::cache::{CachedContractExports, ContractExportFragment, ContractNodeKey};
+use crate::pipeline::parallel_slice_results;
 #[derive(Clone)]
 pub(super) struct ResolvedContractBinding {
     pub(super) local_name: String,
@@ -34,7 +35,7 @@ pub(super) struct ResolvedContractBinding {
 pub(super) struct ResolvedContracts {
     pub(super) bindings: Vec<ResolvedContractBinding>,
     pub(super) by_symbol: HashMap<SymbolId, ResolvedContractBinding>,
-    pub(super) missing_exports: Vec<StaticViolation>,
+    pub(super) missing_exports: Vec<StaticDefect>,
 }
 
 /// Whether the dialect's own vocabulary outranks a package contract for a name
@@ -103,16 +104,12 @@ pub(super) fn resolve_contract_imports(
                             .and_then(|exports| exports.get(imported.as_str()))
                             .cloned()
                         else {
-                            missing_exports.push(StaticViolation {
-                                id: "SC9001".into(),
-                                rule: "package-contract-export-missing".into(),
-                                message: format!(
-                                    "the reactivity contract for {} has no entrypoint/export summary for imported export {imported}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-                                    import.module
-                                ),
-                                hint: format!(
-                                    "Add an export summary for {imported} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
-                                ),
+                            missing_exports.push(StaticDefect {
+                                kind: StaticDefectKind::PackageContractExportMissing {
+                                    module: import.module.to_string(),
+                                    export: imported,
+                                    reexported: false,
+                                },
                                 location: location(file.path.shared(), member.property),
                                 analysis_context: String::new(),
                                 fixes: vec![],
@@ -179,16 +176,12 @@ pub(super) fn resolve_contract_imports(
                         // reactivity and therefore needs no export summary.
                         continue;
                     }
-                    missing_exports.push(StaticViolation {
-                        id: "SC9001".into(),
-                        rule: "package-contract-export-missing".into(),
-                        message: format!(
-                            "the reactivity contract for {} has no entrypoint/export summary for imported export {imported}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
-                            import.module
-                        ),
-                        hint: format!(
-                            "Add an export summary for {imported} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
-                        ),
+                    missing_exports.push(StaticDefect {
+                        kind: StaticDefectKind::PackageContractExportMissing {
+                            module: import.module.to_string(),
+                            export: imported.to_owned(),
+                            reexported: false,
+                        },
                         location: binding_location,
                         analysis_context: String::new(),
                         fixes: vec![],
@@ -245,15 +238,12 @@ pub(super) fn resolve_contract_imports(
                     .and_then(|exports| exports.get(imported))
                     .cloned()
                 else {
-                    missing_exports.push(StaticViolation {
-                        id: "SC9001".into(),
-                        rule: "package-contract-export-missing".into(),
-                        message: format!(
-                            "the reactivity contract for {module} has no entrypoint/export summary for re-exported export {imported}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified"
-                        ),
-                        hint: format!(
-                            "Add an export summary for {imported} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
-                        ),
+                    missing_exports.push(StaticDefect {
+                        kind: StaticDefectKind::PackageContractExportMissing {
+                            module: module.to_owned(),
+                            export: imported.to_owned(),
+                            reexported: true,
+                        },
                         location: specifier_location,
                         analysis_context: String::new(),
                         fixes: vec![],

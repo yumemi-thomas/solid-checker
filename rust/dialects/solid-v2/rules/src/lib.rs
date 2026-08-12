@@ -1,9 +1,23 @@
+//! The Solid 2.0 rule catalog: projects the shared reactive IR's [`Program`]
+//! onto 2.0 findings.
+//!
+//! Unprefixed external rule names belong to this catalog. Some defect concepts
+//! are shared with Solid 1.x and retain the same `SCxxxx` code across both
+//! catalogs; the messages and hints here always use 2.0 vocabulary such as
+//! `Loading`, `onSettled`, `flush`, actions, and split effects. The remaining
+//! rules cover 2.0-only runtime behavior: async computations, action/refresh
+//! writes, returned cleanup, and scheduler restrictions.
+
 mod rules;
 
-use solid_reactive_ir::{ExecutionRole, Program};
+use solid_reactive_ir::{
+    ExecutionRole, Program, StaticDefect, StaticDefectKind, direct_mutation_wording,
+    finish_findings, static_violation_finding, strict_read_evidence, strict_read_message,
+    strict_read_related_locations,
+};
 use std::time::Instant;
 
-pub use rules::{DOCS_BASE_URL, Rule, docs_url, manifest_json};
+pub use rules::{Rule, docs_url, manifest_json};
 pub use solid_reactive_ir::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
 
 #[must_use]
@@ -18,14 +32,7 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
     let mut findings = program
         .reads
         .iter()
-        .filter(|read| {
-            matches!(
-                read.execution,
-                ExecutionRole::UntrackedRendering
-                    | ExecutionRole::UntrackedCallback
-                    | ExecutionRole::EffectApply
-            )
-        })
+        .filter(|read| read.execution.reports_untracked_read())
         .map(|read| Finding {
             analysis_context: read.context.to_string(),
             subject_kind: read.kind.to_string(),
@@ -43,7 +50,7 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
         program
             .writes
             .iter()
-            .filter(|write| !write.allowed_by_option && !allowed_write_role(write.execution))
+            .filter(|write| !write.allowed_by_option && !write.execution.permits_write())
             .map(|write| {
                 let context = if write.context.is_empty() {
                     "owned scope"
@@ -187,36 +194,11 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
                 )
             }),
     );
+    findings.extend(program.static_defects.iter().map(static_defect_finding));
     findings.extend(program.static_violations.iter().map(|violation| {
-        let rule = Rule::from_identity(&violation.id, &violation.rule).unwrap_or_else(|| {
-            panic!(
-                "diagnostic identity is missing from the rule catalog: {} [{}]",
-                violation.id, violation.rule
-            )
-        });
-        Finding {
-            analysis_context: violation.analysis_context.clone(),
-            evidence: vec![EvidenceStep {
-                message: if violation.rule == "component-props-destructure" {
-                    "the destructuring pattern is bound to proven component props".into()
-                } else if violation.rule == "component-returns-conditionally" {
-                    "a proven reactive read controls the component's return shape".into()
-                } else if violation.rule == "package-contract-export-missing" {
-                    "the imported package has a contract, but this export has no effect summary"
-                        .into()
-                } else {
-                    "the invalid API shape is statically present at this call".into()
-                },
-                location: Some(violation.location.clone()),
-            }],
-            fixes: violation.fixes.clone(),
-            hint: violation.hint.clone(),
-            ..Finding::new(
-                rule.metadata(),
-                violation.message.clone(),
-                violation.location.clone(),
-            )
-        }
+        static_violation_finding(violation, "the rule catalog", |code, name| {
+            Rule::from_identity(code, name).map(Rule::metadata)
+        })
     }));
     findings.extend(program.directive_creations.iter().map(|creation| Finding {
         evidence: vec![EvidenceStep {
@@ -263,56 +245,12 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
                 "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle.",
             ),
         };
-        let uncertain = requirement.uncertain;
-        let conditional_owner = requirement.conditional_owner;
-        Some(Finding {
-            kind: if uncertain {
-                "uncertifiable".into()
-            } else {
-                "violation".into()
-            },
-            severity: if uncertain {
-                "error".into()
-            } else {
-                rule.metadata().severity.into()
-            },
-            evidence: vec![EvidenceStep {
-                message: if conditional_owner {
-                    "runWithOwner receives a nullable owner, so this operation may execute detached"
-                        .into()
-                } else {
-                    "no containing component, computation, or root owner dominates this operation"
-                        .into()
-                },
-                location: Some(requirement.location.clone()),
-            }],
-            hint: if conditional_owner {
-                format!(
-                    "{hint} Narrow the owner to a non-null value before runWithOwner, or handle the detached lifetime explicitly."
-                )
-            } else if uncertain {
-                format!(
-                    "{hint} If every caller runs this exported function under an owner, document that in the package's reactivity contract."
-                )
-            } else {
-                hint.into()
-            },
-            ..Finding::new(
-                rule.metadata(),
-                if conditional_owner {
-                    format!(
-                        "{message}; runWithOwner may receive null, so solid-checker cannot prove this execution has an owner"
-                    )
-                } else if uncertain {
-                    format!(
-                        "{message}; this function is exported, so solid-checker cannot prove its callers provide an owner"
-                    )
-                } else {
-                    message.into()
-                },
-                requirement.location.clone(),
-            )
-        })
+        Some(Finding::for_owner_requirement(
+            rule.metadata(),
+            requirement,
+            message,
+            hint,
+        ))
     }));
     findings.extend(program.async_reads.iter().filter_map(|read| {
         let (rule, message, hint) = if let Some(owner) = &read.leaf_owner {
@@ -367,7 +305,7 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
         program
             .actions
             .iter()
-            .filter(|action| !allowed_write_role(action.execution))
+            .filter(|action| !action.execution.permits_write())
             .map(|action| Finding {
                 evidence: vec![EvidenceStep {
                     message: "invoking an action starts a write transaction while an owner is active"
@@ -385,136 +323,133 @@ pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
                 )
             }),
     );
-    let finding_construction = construction_started.elapsed();
-    let ordering_started = Instant::now();
-    findings.sort_by(|left, right| {
-        (
-            &left.primary_location.path,
-            left.primary_location.start_byte,
-            &left.id,
-            &left.message,
-        )
-            .cmp(&(
-                &right.primary_location.path,
-                right.primary_location.start_byte,
-                &right.id,
-                &right.message,
-            ))
-    });
-    findings.dedup();
-    let final_ordering = ordering_started.elapsed();
-    (
-        findings,
-        SolveTimings {
-            total: total_started.elapsed(),
-            finding_construction,
-            final_ordering,
-        },
-    )
+    finish_findings(findings, total_started, construction_started)
 }
 
-const fn allowed_write_role(role: ExecutionRole) -> bool {
-    matches!(
-        role,
-        ExecutionRole::EventCallback
-            | ExecutionRole::DeferredCallback
-            | ExecutionRole::UntrackedCallback
-            | ExecutionRole::EffectApply
-            | ExecutionRole::DirectiveApply
-    )
-}
-
-fn strict_read_message(read: &solid_reactive_ir::ReactiveRead) -> String {
-    let context = if read.context.is_empty() {
-        "rendering function"
-    } else {
-        &read.context
-    };
-    if read.via.is_empty() {
-        format!(
-            "{} {:?} is read directly in {context}, which does not track; the read sees the current value once and never updates when {:?} changes",
-            reactive_value_label(&read.kind),
-            read.accessor,
-            read.accessor
-        )
-    } else {
-        format!(
-            "{} {:?} is read through {} in {context}, which does not track; the read sees the current value once and never updates when {:?} changes",
-            reactive_value_label(&read.kind),
-            read.accessor,
-            read.via,
-            read.accessor
-        )
-    }
-}
-
-fn reactive_value_label(kind: &str) -> &'static str {
-    match kind {
-        "store-path" => "reactive store path",
-        "component-props" => "component prop",
-        _ => "reactive accessor",
-    }
-}
-
-fn strict_read_evidence(read: &solid_reactive_ir::ReactiveRead) -> Vec<EvidenceStep> {
-    let mut evidence = vec![EvidenceStep {
-        message: format!(
-            "{:?} is a {}",
-            read.accessor,
-            reactive_value_label(&read.kind)
+fn static_defect_finding(defect: &StaticDefect) -> Finding {
+    let (rule, message, hint) = match &defect.kind {
+        StaticDefectKind::ExecutionMapIncomplete => (
+            Rule::ExecutionMapIncomplete,
+            "the Solid compiler did not classify this JSX expression as tracked, untracked, or a callback; without an execution role, solid-checker cannot certify any reactive read inside it".into(),
+            "Simplify the expression: hoist complex logic into a createMemo and interpolate the accessor. If this persists on plain JSX, re-run with fresh compiler facts and report the pattern as a solid-checker issue.".into(),
         ),
-        location: Some(read.declaration.clone()),
-    }];
-    if let Some(origin) = &read.origin {
-        let origin_context = if read.origin_context.is_empty() {
-            &read.via
-        } else {
-            &read.origin_context
-        };
-        evidence.push(EvidenceStep {
-            message: format!(
-                "{origin_context} reads the {}",
-                reactive_value_label(&read.kind)
+        StaticDefectKind::ComponentPropsDestructure => (
+            Rule::ComponentPropsDestructure,
+            "destructuring props unwraps each property once at component setup; the bindings are frozen values, and the component never updates when the parent passes new props".into(),
+            "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use omit(props, ...keys) and merge(defaults, props) instead of destructuring.".into(),
+        ),
+        StaticDefectKind::ReactiveReadAfterAwait { accessor } => (
+            Rule::ReactiveReadAfterAwait,
+            format!(
+                "reactive accessor {accessor:?} is read after an await; dependency tracking ends at the first await, so this read registers no dependency and the computation never re-runs when {accessor:?} changes"
             ),
-            location: Some(origin.clone()),
-        });
-        evidence.push(EvidenceStep {
-            message: format!(
-                "the call to {} propagates that read into {}",
-                read.via,
-                if read.context.is_empty() {
-                    "rendering function"
-                } else {
-                    &read.context
-                }
+            "Read reactive values before the first await and carry the results through the async work. If the value must stay live after the await, split the read into its own synchronous computation.".into(),
+        ),
+        StaticDefectKind::ComponentReturnsConditionally => (
+            Rule::ComponentReturnsConditionally,
+            "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
+            "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
+        ),
+        StaticDefectKind::PackageContractExportMissing {
+            module,
+            export,
+            reexported,
+        } => (
+            Rule::PackageContractExportMissing,
+            format!(
+                "the reactivity contract for {module} has no entrypoint/export summary for {} export {export}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
+                if *reexported { "re-exported" } else { "imported" }
             ),
-            location: Some(read.location.clone()),
-        });
-        evidence.push(EvidenceStep {
-            message: "the call is outside every compiler-tracked JSX region and deferred callback"
-                .into(),
-            location: Some(read.location.clone()),
-        });
-    } else {
-        evidence.push(EvidenceStep {
-            message: "the cross-file reference resolves to that accessor declaration".into(),
-            location: Some(read.location.clone()),
-        });
-        evidence.push(EvidenceStep {
-            message: "the read is outside every compiler-tracked JSX region and deferred callback"
-                .into(),
-            location: Some(read.location.clone()),
-        });
+            format!(
+                "Add an export summary for {export} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+            ),
+        ),
+        StaticDefectKind::MissingEffectFunction => (
+            Rule::MissingEffectFunction,
+            "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect".into(),
+            "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.".into(),
+        ),
+        StaticDefectKind::UntrackedDerivedFunction { name } => (
+            Rule::UntrackedDerivedFunction,
+            format!(
+                "{name} derives from reactive state but every call to it is untracked, so its reads subscribe to nothing and the derivation never updates"
+            ),
+            format!(
+                "Call {name} from a tracking scope — JSX, a createMemo, or the compute function of createEffect(compute, apply) — or inline the value if a one-off read at setup is what was meant."
+            ),
+        ),
+        StaticDefectKind::ReactiveSourceUncaptured { source, callee } => (
+            Rule::ReactiveSourceUncaptured,
+            format!(
+                "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
+            ),
+            format!(
+                "Describe {callee} in its package's solid-reactivity.json — which arguments it tracks and what it returns — or keep the function in the project so its body is analysed. See docs/package-contracts.md."
+            ),
+        ),
+        StaticDefectKind::ReactiveHandlerRead {
+            attribute,
+            expression,
+        } => (
+            Rule::ExpectedFunctionGotExpression,
+            format!(
+                "{attribute} reads {expression} once during DOM setup; later reactive updates cannot replace the installed listener"
+            ),
+            format!(
+                "Wrap the read so it happens when the event fires: {attribute}={{event => {expression}(event)}}."
+            ),
+        ),
+        StaticDefectKind::HandlerCallResult {
+            attribute,
+            callee,
+            call,
+        } => (
+            Rule::ExpectedFunctionGotExpression,
+            format!(
+                "{attribute} is given the result of calling {callee}, not a function; the call runs once during setup and its value is bound as the listener"
+            ),
+            format!("Wrap it: {attribute}={{() => {call}}}, or pass the function itself uncalled."),
+        ),
+        StaticDefectKind::UncalledAccessor { name, position } => (
+            Rule::UncalledAccessor,
+            format!(
+                "accessor {name:?} is used as a value in {position}; the expression receives the accessor function itself, not the value it holds, and never updates"
+            ),
+            format!(
+                "Call it: {name}(). Passing {name} uncalled is only correct where the receiver calls it later."
+            ),
+        ),
+        StaticDefectKind::DirectMutation { name, target } => {
+            // Only the store hint is dialect-specific: 2.0 writes through a
+            // draft mutation callback and `reconcile`.
+            let (message, hint) = direct_mutation_wording(name, *target, |name| {
+                format!(
+                    "Write through the store's setter: setStore(store => {{ store.key = value; }}) mutates the draft in place, and setStore(reconcile(next)) replaces it wholesale. Direct assignment to {name} does not notify subscribers."
+                )
+            });
+            (Rule::NoDirectMutation, message, hint)
+        }
+    };
+    let evidence = match &defect.kind {
+        StaticDefectKind::ComponentPropsDestructure => {
+            "the destructuring pattern is bound to proven component props"
+        }
+        StaticDefectKind::ComponentReturnsConditionally => {
+            "a proven reactive read controls the component's return shape"
+        }
+        StaticDefectKind::PackageContractExportMissing { .. } => {
+            "the imported package has a contract, but this export has no effect summary"
+        }
+        _ => "the invalid API shape is statically present at this call",
+    };
+    Finding {
+        analysis_context: defect.analysis_context.clone(),
+        evidence: vec![EvidenceStep {
+            message: evidence.into(),
+            location: Some(defect.location.clone()),
+        }],
+        fixes: defect.fixes.clone(),
+        hint,
+        ..Finding::new(rule.metadata(), message, defect.location.clone())
     }
-    evidence
-}
-
-fn strict_read_related_locations(
-    read: &solid_reactive_ir::ReactiveRead,
-) -> Vec<typefacts::Location> {
-    let mut locations = vec![read.declaration.clone()];
-    if let Some(origin) = &read.origin {
-        locations.push(origin.clone());
-    }
-    locations
 }

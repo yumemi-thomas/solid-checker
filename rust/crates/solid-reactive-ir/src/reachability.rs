@@ -8,12 +8,16 @@ use solid_facts::core::Span;
 use typefacts::Location;
 
 use super::{
-    CachedReachabilityFile, EntitySymbols, FunctionNode, ProjectIndexes, ReachabilityEdge,
-    ReachabilityTarget, SemanticLookup, SourceDiscoveryTypeScriptDelta, SymbolId,
-    containing_function_indexed, function_indices_by_path, function_is_solid_callback, location,
-    parallel_slice_results, primitive_name, returned_callback_execution_at_call,
-    same_compiler_semantics, source_discovery_identity, source_discovery_identity_matches,
+    EntitySymbols, FunctionNode, ProjectIndexes, SemanticLookup, SymbolId,
+    containing_function_indexed, function_indices_by_path, location, primitive_name,
 };
+use crate::cache::{
+    CachedReachabilityFile, ReachabilityEdge, ReachabilityTarget, SourceDiscoveryTypeScriptDelta,
+    same_compiler_semantics,
+};
+use crate::owners::{function_is_solid_callback, returned_callback_execution_at_call};
+use crate::pipeline::parallel_slice_results;
+use crate::source_discovery::{source_discovery_identity, source_discovery_identity_matches};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 enum ReachabilityTopologyTarget {
@@ -333,6 +337,91 @@ pub(super) struct ReachabilityState<'a> {
     pub(super) multiplicity_by_path: &'a mut HashMap<String, Vec<usize>>,
     pub(super) calls: &'a mut HashMap<Location, usize>,
     pub(super) function_symbols: &'a mut HashSet<SymbolId>,
+}
+
+/// The reachability stage as the pipeline runs it: decides reuse against the
+/// retained cache (patching retained identities on a hit), recomputes
+/// incrementally on a miss, and computes fresh when no cache is retained.
+/// Returns the owned call table only in the cache-less case; with a cache,
+/// the calls live in the slot the caller handed in.
+pub(super) fn reachability_stage(
+    inputs: ReachabilityInputs<'_>,
+    cache: Option<&mut Option<crate::cache::CachedReachability>>,
+    build_timings: &mut crate::BuildTimings,
+) -> Option<HashMap<Location, usize>> {
+    let facts = inputs.facts;
+    let Some(cache) = cache else {
+        let substage_started = std::time::Instant::now();
+        let calls = reachable_call_multiplicity(
+            facts,
+            inputs.indexes,
+            inputs.entities,
+            inputs.symbol_names,
+            inputs.lookup,
+        );
+        build_timings.reachability = substage_started.elapsed();
+        return Some(calls);
+    };
+    let can_reuse = inputs.typescript_unchanged
+        && cache.as_ref().is_some_and(|cached| {
+            cached.inputs.len() == facts.files.len()
+                && facts.files.iter().all(|file| {
+                    cached
+                        .inputs
+                        .get(file.path.as_str())
+                        .is_some_and(|(source_hash, ast)| {
+                            source_hash == &file.source_hash
+                                || crate::cache::same_reachability_ast(ast, &file.ast)
+                        })
+                })
+        });
+    if can_reuse {
+        let cached = cache.as_mut().expect("checked retained reachability");
+        for file in &facts.files {
+            if let Some((source_hash, _)) = cached.inputs.get_mut(file.path.as_str()) {
+                source_hash.clone_from(&file.source_hash);
+            }
+            if let Some(retained_file) = cached.files.get_mut(file.path.as_str()) {
+                retained_file
+                    .identity
+                    .source_hash
+                    .clone_from(&file.source_hash);
+            }
+        }
+        build_timings.reachability_reused = true;
+    } else {
+        let substage_started = std::time::Instant::now();
+        let cached = cache.get_or_insert_with(|| crate::cache::CachedReachability {
+            inputs: HashMap::new(),
+            files: HashMap::new(),
+            calls: HashMap::new(),
+            multiplicity_by_path: HashMap::new(),
+            function_symbols: HashSet::new(),
+        });
+        let (reused_files, recomputed_files) = reachable_call_multiplicity_incremental(
+            inputs,
+            ReachabilityState {
+                files: &mut cached.files,
+                multiplicity_by_path: &mut cached.multiplicity_by_path,
+                calls: &mut cached.calls,
+                function_symbols: &mut cached.function_symbols,
+            },
+        );
+        build_timings.reachability = substage_started.elapsed();
+        build_timings.reachability_reused_files = reused_files;
+        build_timings.reachability_recomputed_files = recomputed_files;
+        cached.inputs = facts
+            .files
+            .iter()
+            .map(|file| {
+                (
+                    file.path.to_string(),
+                    (file.source_hash.clone(), file.ast.clone()),
+                )
+            })
+            .collect();
+    }
+    None
 }
 
 pub(super) fn reachable_call_multiplicity_incremental(

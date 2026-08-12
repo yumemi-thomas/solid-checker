@@ -10,28 +10,29 @@
 //!
 //! # Which dialect runs which group
 //!
-//! [`check_file`] gates each submodule on the dialect version, mirroring
-//! what the two catalogs declare: the ESLint-era surface (`syntax`,
-//! `attributes`, `structure`, `imports`, `undef`) is 1.x vocabulary and runs
-//! only there, while the decomposed `reactivity` rules describe defects in
-//! both language versions and run for both (minus the one 1.x-only rule its
-//! own gate documents). The version match here and the catalogs above cannot
-//! drift silently: each dialect's solver panics on an emitted identity its
-//! catalog does not resolve, and both rule crates' fixture suites execute
-//! this pass.
+//! [`check_file`] gates each submodule on the dialect version, mirroring what
+//! the two catalogs declare. The module names make that ownership explicit:
+//! every `solid1x_*` group implements the 1.x ESLint-era surface, while
+//! `shared_reactivity` contains defect classes carried by both catalogs
+//! (minus the one 1.x-only rule its own gate documents). The version match
+//! here and the catalogs above cannot drift silently: each dialect's solver
+//! panics on an emitted identity its catalog does not resolve, and both rule
+//! crates' fixture suites execute this pass.
 
-mod attributes;
-mod imports;
-pub mod options;
-mod reactivity;
-mod structure;
-mod syntax;
-mod undef;
-mod upstream_data;
+mod shared_reactivity;
+mod solid1x_attributes;
+mod solid1x_imports;
+pub mod solid1x_options;
+mod solid1x_structure;
+mod solid1x_syntax;
+mod solid1x_undef;
+mod solid1x_upstream_data;
 
 use std::collections::{HashMap, HashSet};
 
+use crate::cache::SourceReferenceLocations;
 use crate::indexes::SemanticLookup;
+use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 use crate::{
     EntitySymbols, Fix, ReactiveSourceKind, StaticViolation, SymbolId, TextEdit, location,
 };
@@ -605,26 +606,33 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// reactive behaviour nothing in the analysis knows.
     pub(super) contracted: &'a HashMap<SymbolId, crate::contracts::ResolvedContractBinding>,
     /// Per-rule options, defaulted to upstream's defaults when the project
-    /// carries no `.solid-checker/rule-options.json`. See [`options`].
-    pub(super) options: &'a options::RuleOptions,
+    /// carries no `.solid-checker/rule-options.json`. See
+    /// [`solid1x_options`].
+    pub(super) solid1x_options: &'a solid1x_options::RuleOptions,
 }
 
 /// Runs every upstream-compat rule the dialect's catalog declares over one
 /// file. See the module doc for the version/group table.
-pub(super) fn check_file(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-) -> Vec<StaticViolation> {
+fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiagnostics {
     let mut violations = Vec::new();
-    if context.dialect.version() == solid_dialect::Version::V1 {
-        syntax::check_file(file, context, &mut violations);
-        attributes::check_file(file, context, &mut violations);
-        structure::check_file(file, context, &mut violations);
-        imports::check_file(file, context, &mut violations);
-        undef::check_file(file, context, &mut violations);
+    let mut defects = Vec::new();
+    if context.dialect.carries_eslint_era_rules() {
+        solid1x_syntax::check_file(file, context, &mut violations);
+        solid1x_attributes::check_file(file, context, &mut violations);
+        solid1x_structure::check_file(file, context, &mut violations);
+        solid1x_imports::check_file(file, context, &mut violations);
+        solid1x_undef::check_file(file, context, &mut violations);
     }
-    reactivity::check_file(file, context, &mut violations);
-    violations
+    shared_reactivity::check_file(file, context, &mut violations, &mut defects);
+    FileDiagnostics {
+        violations,
+        defects,
+    }
+}
+
+struct FileDiagnostics {
+    violations: Vec<StaticViolation>,
+    defects: Vec<crate::StaticDefect>,
 }
 
 /// The whole-project compat pass. Both dialects run it: the decomposed
@@ -639,10 +647,10 @@ pub(super) fn check_file(
 /// through the compat context and back into its slot rather than being
 /// cloned: the context owns the field, and the rules only ever read it.
 pub(crate) fn check_project(
-    ctx: &crate::AnalysisContext<'_>,
-    mut reference_slot: Option<&mut Option<crate::SourceReferenceLocations>>,
+    ctx: &AnalysisContext<'_>,
+    mut reference_slot: Option<&mut Option<SourceReferenceLocations>>,
     reusable: bool,
-    draft: &mut crate::ProgramDraft,
+    draft: &mut ProgramDraft,
 ) {
     let retained = reference_slot.as_deref_mut().and_then(|slot| {
         if reusable {
@@ -667,13 +675,12 @@ pub(crate) fn check_project(
             )
         }),
         contracted: ctx.contracted,
-        options: ctx.rule_options,
+        solid1x_options: ctx.rule_options,
     };
-    draft.static_violations.extend(
-        crate::parallel_file_results(&ctx.facts.files, |file| check_file(file, &context))
-            .into_iter()
-            .flatten(),
-    );
+    for diagnostics in parallel_file_results(&ctx.facts.files, |file| check_file(file, &context)) {
+        draft.static_violations.extend(diagnostics.violations);
+        draft.static_defects.extend(diagnostics.defects);
+    }
     if let Some(slot) = reference_slot {
         *slot = Some(context.source_reference_index);
     }

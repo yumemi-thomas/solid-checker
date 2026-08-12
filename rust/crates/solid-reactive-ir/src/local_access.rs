@@ -1,7 +1,21 @@
 //! The local-access stage: per-file reads and writes of reactive
 //! sources, classified by execution role, with per-file reuse.
 
-use crate::*;
+use crate::cache::{
+    CachedLocalAccessFile, CachedLocalAccesses, LocalAccessBuild, LocalAccessResult,
+    LocalAccessSymbolState, SourceDiscoveryTypeScriptDelta, same_compiler_semantics,
+};
+use crate::owners::{
+    analysis_context, containing_leaf_owner, counts_as_strict_read_root, enclosing_render_function,
+    inside_known_value_function_argument, inside_lowercase_named_function,
+    inside_unclassified_callback, read_is_under_loading, typed_accessor_descriptor_at,
+};
+use crate::pipeline::parallel_file_chunk_results;
+use crate::source_discovery::bundled_contract_location;
+use crate::{
+    ActionInvocation, AsyncRead, ContractReturn, ExecutionRole, ReactiveRead, ReactiveSourceKind,
+    ReactiveWrite, location, primitive_name,
+};
 
 use std::{
     collections::{HashMap, HashSet},
@@ -17,9 +31,9 @@ use crate::indexes::{EntitySymbols, SemanticLookup};
 use solid_facts::ProjectFacts;
 use typefacts::{Declaration, Location};
 
-pub(crate) struct LocalAccessContext<'a> {
+pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) facts: &'a ProjectFacts,
-    pub(crate) lookup: &'a SemanticLookup<'a>,
+    pub(crate) lookup: &'a SemanticLookup<'facts>,
     pub(crate) entities: &'a EntitySymbols,
     pub(crate) symbol_names: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
@@ -46,7 +60,7 @@ pub(crate) struct LocalAccessReuse<'a> {
     pub(crate) global_async_context_unchanged: bool,
 }
 
-impl LocalAccessContext<'_> {
+impl LocalAccessContext<'_, '_> {
     pub(crate) fn build(
         &self,
         cache: Option<&mut CachedLocalAccesses>,

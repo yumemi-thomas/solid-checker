@@ -12,5 +12,7 @@ pub mod core;
 
 mod project;
 
-pub use project::*;
+pub use project::{
+    FileFacts, JoinError, ProjectFacts, TypeScriptChanges, TypeScriptSymbol, TypeScriptTable,
+};
 pub use typefacts;

@@ -10,6 +10,16 @@
       "start": 239,
       "end": 247,
       "fixes": 1
+    },
+    {
+      "rule": "component-props-destructure",
+      "code": "SC1003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/wrapped-components/wrapped-invalid.tsx",
+      "start": 560,
+      "end": 568,
+      "fixes": 1
     }
   ]
 }

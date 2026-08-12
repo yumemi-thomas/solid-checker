@@ -1,4 +1,4 @@
-//! Per-rule options for the 1.x ESLint-surface rules.
+//! Per-rule options for the Solid 1.x ESLint-surface rules.
 //!
 //! eslint-plugin-solid ships user-configurable options on several of the
 //! rules this pass reproduces. The checker carries exactly the options whose

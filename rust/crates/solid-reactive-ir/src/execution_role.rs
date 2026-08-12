@@ -11,10 +11,12 @@ use solid_dialect::{Dialect, Execution, Primitive};
 use solid_facts::core::Span;
 
 use super::{
-    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId,
+    EntitySymbols, ExecutionRole, PrimitiveName, SemanticLookup, SymbolId, jsx_primitive_name,
+    known_primitive, location, primitive_name,
+};
+use crate::owners::{
     callback_execution_at_call, containing_ast_function, enclosing_function_label,
-    function_binding_name, jsx_primitive_name, known_primitive, location, primitive_name,
-    returned_callback_invocation_sites, returned_primitive_invocation,
+    function_binding_name, returned_callback_invocation_sites, returned_primitive_invocation,
 };
 
 /// The effect primitives: the ones 2.0 spells `(compute, apply)`.
@@ -41,7 +43,9 @@ fn effect_apply_argument(
         return None;
     }
     (0..argument_count).find(|index| {
-        dialect.callback_execution_at(primitive, *index, argument_count)
+        dialect
+            .callback_semantics_at(primitive, *index, argument_count)
+            .execution
             == Some(Execution::Deferred)
     })
 }
@@ -52,13 +56,12 @@ fn callback_runs_outside_tracking(
     argument: usize,
     argument_count: usize,
 ) -> bool {
-    match dialect.callback_execution_at(primitive, argument, argument_count) {
+    let semantics = dialect.callback_semantics_at(primitive, argument, argument_count);
+    match semantics.execution {
         None => false,
         // A tracked callback creates its own observer unless the primitive's
         // exact runtime contract explicitly overrides that classification.
-        Some(Execution::Tracked) => {
-            !dialect.callback_tracks_reads_at(primitive, argument, argument_count)
-        }
+        Some(Execution::Tracked) => !semantics.tracks_reads,
         // Deferred callbacks execute after/outside the current tracking pass.
         Some(Execution::Deferred) => true,
         // Inline means the callback inherits the caller's Listener. Only
@@ -241,7 +244,9 @@ fn semantic_execution_role_within(
         .and_then(PrimitiveName::primitive)
         .is_some_and(|primitive| {
             callback_execution_at_call(file, call, primitive, index, lookup).is_some()
-                && dialect.callback_tracks_reads_at(primitive, index, call.arguments.len())
+                && dialect
+                    .callback_semantics_at(primitive, index, call.arguments.len())
+                    .tracks_reads
         })
     }) {
         return ExecutionRole::TrackedJsx;
@@ -272,14 +277,13 @@ fn returned_factory_callback_execution_role(
                 return None;
             }
             let primitive = lookup.primitive_at_call(file, factory_call.span)?;
-            if !lookup
-                .dialect
-                .callback_requires_return_invocation(primitive, index)
-                || lookup.dialect.callback_execution_at(
-                    primitive,
-                    index,
-                    factory_call.arguments.len(),
-                ) != Some(Execution::Inline)
+            let semantics = lookup.dialect.callback_semantics_at(
+                primitive,
+                index,
+                factory_call.arguments.len(),
+            );
+            if !semantics.requires_return_invocation
+                || semantics.execution != Some(Execution::Inline)
             {
                 return None;
             }
@@ -347,12 +351,11 @@ fn returned_callback_execution_role(
                 return None;
             }
             let (primitive, result_slot) = returned_primitive_invocation(file, call, lookup)?;
-            match lookup.dialect.returned_callback_execution_at(
-                primitive,
-                result_slot,
-                index,
-                call.arguments.len(),
-            )? {
+            match lookup
+                .dialect
+                .returned_callback_semantics_at(primitive, result_slot, index, call.arguments.len())
+                .execution?
+            {
                 Execution::Tracked => Some(ExecutionRole::TrackedJsx),
                 Execution::Deferred => Some(ExecutionRole::DeferredCallback),
                 // The returned function restores/inherits its caller's execution
@@ -392,9 +395,7 @@ fn context_provider_value_role(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> Option<ExecutionRole> {
-    if lookup.dialect.version() != solid_dialect::Version::V1 {
-        return None;
-    }
+    let provider_member = lookup.dialect.context_provider_member()?;
     let element = file
         .ast
         .jsx_elements
@@ -411,7 +412,7 @@ fn context_provider_value_role(
     let (Some(object), Some(property)) = (element.member_object, element.member_property) else {
         return None;
     };
-    if file.source_text(property) != Some("Provider") {
+    if file.source_text(property) != Some(provider_member) {
         return None;
     }
     if !lookup.is_context_reference(file.path.as_str(), object) {
@@ -696,7 +697,9 @@ pub(super) fn named_callback_roles(
             let effect_apply =
                 effect_apply_argument(dialect, primitive, count) == Some(argument_index);
             let tracked = !is_effect(primitive)
-                && dialect.callback_tracks_reads_at(primitive, argument_index, count);
+                && dialect
+                    .callback_semantics_at(primitive, argument_index, count)
+                    .tracks_reads;
             let deferred =
                 callback_runs_outside_tracking(dialect, primitive, argument_index, count);
             for candidate in &named {

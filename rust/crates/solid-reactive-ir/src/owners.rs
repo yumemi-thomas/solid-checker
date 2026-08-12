@@ -1,7 +1,13 @@
 //! Owner analysis: which computations need a reactive owner, where
 //! owners are provided, and the requirement/fix emission around them.
 
-use crate::*;
+use crate::cache::{CachedLateStages, same_compiler_semantics};
+use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_slice_results};
+use crate::{
+    BuildTimings, ExecutionRole, Fix, FunctionBoundary, OwnerRequirement, PrimitiveName, TextEdit,
+    containing_function_indexed, function_indices_by_path, jsx_primitive_name, known_primitive,
+    location, primitive_name,
+};
 
 use std::{
     collections::{HashMap, HashSet, VecDeque},
@@ -16,6 +22,53 @@ use crate::indexes::{CrossFileProofDigest, EntitySymbols, ProjectIndexes, Semant
 use solid_dialect::{Dialect, Primitive};
 use solid_facts::ProjectFacts;
 use solid_facts::core::{SourceHash, SourcePath, Span};
+
+/// Runs the project-level owner fixed point, including its retained-cache
+/// policy, and appends the resulting requirements to the draft.
+pub(crate) fn collect_project(
+    ctx: &AnalysisContext<'_>,
+    project_indexes: &ProjectIndexes<'_>,
+    retained_source_paths: &HashSet<String>,
+    cache: Option<&mut CachedLateStages>,
+    reusable: bool,
+    draft: &mut ProgramDraft,
+    timings: &mut BuildTimings,
+) {
+    let cached = reusable
+        .then(|| {
+            cache
+                .as_ref()
+                .and_then(|cache| cache.missing_owners.clone())
+        })
+        .flatten();
+    if let Some(cached) = cached {
+        draft.missing_owners = cached;
+        timings.owner_fixed_point_reused = true;
+        timings.owner_reused_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
+        return;
+    }
+    if let Some(cache) = cache {
+        let (requirements, owner_timings) = find_missing_owners_incremental(
+            ctx.facts,
+            ctx.semantic_lookup,
+            project_indexes,
+            ctx.symbol_names,
+            retained_source_paths,
+            &mut cache.owner_files,
+        );
+        draft.missing_owners.extend(requirements);
+        timings.absorb_owner(&owner_timings);
+        cache.missing_owners = Some(draft.missing_owners.clone());
+    } else {
+        draft.missing_owners.extend(find_missing_owners(
+            ctx.facts,
+            ctx.semantic_lookup,
+            project_indexes,
+            ctx.symbol_names,
+        ));
+        timings.owner_recomputed_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
+    }
+}
 
 pub(crate) fn component_props_parameter_fix(
     facts: &ProjectFacts,
@@ -1120,12 +1173,13 @@ pub(crate) fn owner_callback_edges(
             .filter_map(|argument| {
                 lookup
                     .dialect
-                    .returned_callback_owner_at(
+                    .returned_callback_semantics_at(
                         returned,
                         result_slot,
                         argument,
                         call.arguments.len(),
                     )
+                    .owner
                     .map(|owner| OwnerCallbackEdge {
                         argument,
                         kind: callback_owner_edge_kind(owner),
@@ -1143,7 +1197,8 @@ pub(crate) fn owner_callback_edges(
         let kind = callback_owner_edge_kind(owner);
         if lookup
             .dialect
-            .callback_requires_return_invocation(primitive, argument)
+            .callback_semantics_at(primitive, argument, call.arguments.len())
+            .requires_return_invocation
         {
             edges.extend(
                 returned_callback_invocation_sites(file, call, lookup)
@@ -1357,7 +1412,8 @@ pub(crate) fn inside_lowercase_named_function(
                 .and_then(|name| dialect.primitive(name))
                 .is_some_and(|primitive| {
                     dialect
-                        .callback_execution_at(primitive, index, call.arguments.len())
+                        .callback_semantics_at(primitive, index, call.arguments.len())
+                        .execution
                         .is_some()
                 })
         })
@@ -1425,15 +1481,23 @@ pub(crate) fn inside_known_value_function_argument(
                 argument.value,
                 solid_facts::ast::ArgumentValueKind::Function
                     | solid_facts::ast::ArgumentValueKind::AsyncFunction
-            ) && (lookup
-                .dialect
-                .stores_function_argument_as_value(primitive, argument_index)
-                || (lookup
-                    .dialect
-                    .callback_execution_at(primitive, argument_index, call.arguments.len())
-                    .is_some()
-                    && callback_execution_at_call(file, call, primitive, argument_index, lookup)
-                        .is_none()))
+            ) && ({
+                let semantics = lookup.dialect.callback_semantics_at(
+                    primitive,
+                    argument_index,
+                    call.arguments.len(),
+                );
+                semantics.stores_as_value
+                    || (semantics.execution.is_some()
+                        && callback_execution_at_call(
+                            file,
+                            call,
+                            primitive,
+                            argument_index,
+                            lookup,
+                        )
+                        .is_none())
+            })
         })
 }
 
@@ -1451,16 +1515,15 @@ pub(crate) fn callback_execution_at_call(
     argument: usize,
     lookup: &SemanticLookup<'_>,
 ) -> Option<solid_dialect::Execution> {
-    if lookup
+    let semantics = lookup
         .dialect
-        .callback_requires_return_invocation(primitive, argument)
+        .callback_semantics_at(primitive, argument, call.arguments.len());
+    if semantics.requires_return_invocation
         && !returned_callback_result_is_invoked(file, call, lookup)
     {
         return None;
     }
-    lookup
-        .dialect
-        .callback_execution_at(primitive, argument, call.arguments.len())
+    semantics.execution
 }
 
 /// The callback-owner fact for one concrete primitive call, after proving
@@ -1476,9 +1539,10 @@ pub(crate) fn callback_owner_at_call(
     argument: usize,
     lookup: &SemanticLookup<'_>,
 ) -> Option<solid_dialect::CallbackOwner> {
-    if lookup
+    let semantics = lookup
         .dialect
-        .callback_requires_return_invocation(primitive, argument)
+        .callback_semantics_at(primitive, argument, call.arguments.len());
+    if semantics.requires_return_invocation
         && !returned_callback_result_is_invoked(file, call, lookup)
     {
         return None;
@@ -1486,9 +1550,7 @@ pub(crate) fn callback_owner_at_call(
     if primitive == Primitive::RunWithOwner && argument == 1 {
         return run_with_owner_callback_owner(file, call, lookup);
     }
-    lookup
-        .dialect
-        .callback_owner_at(primitive, argument, call.arguments.len())
+    semantics.owner
 }
 
 /// `runWithOwner` is the one ownership primitive whose owner is data. Both
@@ -1594,12 +1656,10 @@ pub(crate) fn returned_callback_execution_at_call(
         return None;
     }
     let (primitive, result_slot) = returned_primitive_invocation(file, call, lookup)?;
-    lookup.dialect.returned_callback_execution_at(
-        primitive,
-        result_slot,
-        argument,
-        call.arguments.len(),
-    )
+    lookup
+        .dialect
+        .returned_callback_semantics_at(primitive, result_slot, argument, call.arguments.len())
+        .execution
 }
 
 pub(crate) fn returned_callback_result_is_invoked(
@@ -1660,7 +1720,8 @@ pub(crate) fn returned_callback_invocation_sites(
             && primitive.is_some_and(|primitive| {
                 lookup
                     .dialect
-                    .callback_execution_at(primitive, index, outer.arguments.len())
+                    .callback_semantics_at(primitive, index, outer.arguments.len())
+                    .execution
                     .is_some()
             })
         {
@@ -1673,7 +1734,8 @@ pub(crate) fn returned_callback_invocation_sites(
                 inherited_execution: primitive.and_then(|primitive| {
                     lookup
                         .dialect
-                        .callback_execution_at(primitive, index, outer.arguments.len())
+                        .callback_semantics_at(primitive, index, outer.arguments.len())
+                        .execution
                 }),
                 inherited_owner,
             });
@@ -1763,7 +1825,8 @@ pub(crate) fn returned_callback_invocation_sites(
                 ) && primitive.is_some_and(|primitive| {
                     lookup
                         .dialect
-                        .callback_execution_at(primitive, index, outer.arguments.len())
+                        .callback_semantics_at(primitive, index, outer.arguments.len())
+                        .execution
                         .is_some()
                 }) {
                     let inherited_owner = primitive
@@ -1775,11 +1838,10 @@ pub(crate) fn returned_callback_invocation_sites(
                         path: use_file.path.to_string(),
                         span: outer.span,
                         inherited_execution: primitive.and_then(|primitive| {
-                            lookup.dialect.callback_execution_at(
-                                primitive,
-                                index,
-                                outer.arguments.len(),
-                            )
+                            lookup
+                                .dialect
+                                .callback_semantics_at(primitive, index, outer.arguments.len())
+                                .execution
                         }),
                         inherited_owner,
                     });
@@ -1875,6 +1937,31 @@ pub(crate) fn function_binding_name<'a>(
             .bindings_initializer_containing(function.span)
             .find(|binding| {
                 binding.initializer_function
+                    && binding.initializer.is_some_and(|initializer| {
+                        file.ast
+                            .functions_within(initializer)
+                            .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+                            .is_some_and(|candidate| candidate.span == function.span)
+                    })
+            })
+            .and_then(|binding| binding.names.first())
+    })
+}
+
+/// Like [`function_binding_name`], but also sees through a call initializer:
+/// `const Wrapped = withTheme(({ name }) => ...)` names the arrow `Wrapped`,
+/// so a wrapped component is classified like an unwrapped one. Object and
+/// array initializers stay excluded — they merely *contain* functions, and
+/// naming those would mint components out of data.
+pub(crate) fn component_binding_name<'a>(
+    file: &'a solid_facts::FileFacts,
+    function: &'a solid_facts::ast::FunctionFact,
+) -> Option<&'a solid_facts::ast::NamedSpan> {
+    function_binding_name(file, function).or_else(|| {
+        file.ast
+            .bindings_initializer_containing(function.span)
+            .find(|binding| {
+                binding.call_initializer.is_some()
                     && binding.initializer.is_some_and(|initializer| {
                         file.ast
                             .functions_within(initializer)
@@ -2000,7 +2087,9 @@ pub(crate) fn inside_effect_apply(
             matches!(
                 primitive,
                 Primitive::CreateEffect | Primitive::CreateRenderEffect
-            ) && dialect.callback_execution_at(primitive, index, call.arguments.len())
+            ) && dialect
+                .callback_semantics_at(primitive, index, call.arguments.len())
+                .execution
                 == Some(solid_dialect::Execution::Deferred)
         })
     })
@@ -2100,7 +2189,8 @@ pub(crate) fn function_is_solid_callback(
             call.arguments.iter().enumerate().any(|(index, argument)| {
                 lookup
                     .dialect
-                    .callback_tracks_reads_at(primitive, index, call.arguments.len())
+                    .callback_semantics_at(primitive, index, call.arguments.len())
+                    .tracks_reads
                     && argument_references_callback_symbol(
                         file,
                         argument,
@@ -2197,38 +2287,350 @@ pub(crate) fn analysis_context(
         // value threaded to the next run as `prev`, so a read in it would be
         // described as living in an "apply callback" that 1.x does not have.
         let phase = primitive.primitive().and_then(|resolved| {
-            dialect
-                .callback_execution_at(resolved, argument, call.arguments.len())
-                .and_then(|execution| match execution {
-                    // "compute" only where reads actually subscribe: an
-                    // `onSettled` callback is contract-tracked (the graph
-                    // schedules it) but imperative to its reads, and calling
-                    // it a compute would describe the wrong phase.
-                    solid_dialect::Execution::Tracked
-                        if dialect.callback_tracks_reads_at(
-                            resolved,
-                            argument,
-                            call.arguments.len(),
-                        ) =>
-                    {
-                        Some("compute")
-                    }
-                    // Only an effect's deferred argument is an apply phase; a
-                    // deferred executor's callback keeps its enclosing label.
-                    solid_dialect::Execution::Deferred
-                        if matches!(
-                            resolved,
-                            Primitive::CreateEffect | Primitive::CreateRenderEffect
-                        ) =>
-                    {
-                        Some("apply callback")
-                    }
-                    _ => None,
-                })
+            let semantics = dialect.callback_semantics_at(resolved, argument, call.arguments.len());
+            semantics.execution.and_then(|execution| match execution {
+                // "compute" only where reads actually subscribe: an
+                // `onSettled` callback is contract-tracked (the graph
+                // schedules it) but imperative to its reads, and calling
+                // it a compute would describe the wrong phase.
+                solid_dialect::Execution::Tracked if semantics.tracks_reads => Some("compute"),
+                // Only an effect's deferred argument is an apply phase; a
+                // deferred executor's callback keeps its enclosing label.
+                solid_dialect::Execution::Deferred
+                    if matches!(
+                        resolved,
+                        Primitive::CreateEffect | Primitive::CreateRenderEffect
+                    ) =>
+                {
+                    Some("apply callback")
+                }
+                _ => None,
+            })
         });
         if let Some(phase) = phase {
             return format!("{primitive} {phase}");
         }
     }
     enclosing
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        OWNER_CONTEXT_LEAF, OWNER_CONTEXT_OWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
+        callback_owner_edge_kind, compose_owner_edge, go_binding_pattern_accepts_call,
+        go_returned_arrow_pattern_accepts, inside_owner_providing_region, owner_edge_context,
+        propagate_owner_contexts, seed_name_contexts,
+    };
+    use solid_facts::ast::{BindingFact, BindingShape, CallFact, NamedSpan};
+    use solid_facts::core::Span;
+
+    /// Whether [`go_returned_arrow_pattern_accepts`] accepts the entire
+    /// string as the candidate initializer span.
+    fn arrow(source: &str) -> bool {
+        go_returned_arrow_pattern_accepts(source, Span::new(0, source.len() as u32))
+    }
+
+    #[test]
+    fn arrow_pattern_accepts_parenthesized_parameter_lists() {
+        assert!(arrow("() => go()"));
+        assert!(arrow("(a, b) => a + b"));
+        assert!(arrow("  ( value )  =>  value"));
+        assert!(arrow("async () => go()"));
+    }
+
+    #[test]
+    fn arrow_pattern_accepts_a_bare_identifier_parameter() {
+        assert!(arrow("value => value"));
+        assert!(arrow("async value => value"));
+        assert!(arrow("$ok_1 => $ok_1"));
+    }
+
+    #[test]
+    fn arrow_pattern_rejects_non_arrows() {
+        assert!(!arrow("function () { return 1; }"));
+        assert!(!arrow("go()"));
+        assert!(!arrow("42"));
+        assert!(!arrow(""));
+    }
+
+    #[test]
+    fn arrow_pattern_rejects_a_span_outside_the_source() {
+        assert!(!go_returned_arrow_pattern_accepts(
+            "() => 1",
+            Span::new(0, 999)
+        ));
+    }
+
+    /// Documents a known limitation: the parameter-list skip stops at the
+    /// first `)`, so a parenthesized default value ends the scan early and a
+    /// real arrow is rejected.
+    #[test]
+    fn arrow_pattern_currently_rejects_parenthesized_default_parameters() {
+        assert!(!arrow("(a = (0)) => a"));
+    }
+
+    /// Documents a known limitation: comments are not skipped, so a comment
+    /// between the parameter list and `=>` hides the arrow.
+    #[test]
+    fn arrow_pattern_currently_rejects_a_comment_before_the_arrow() {
+        assert!(!arrow("() /* run */ => 1"));
+    }
+
+    /// Documents a known limitation: the `async` strip is unconditional, so a
+    /// parameter actually named `async` loses its identifier and the arrow is
+    /// rejected.
+    #[test]
+    fn arrow_pattern_currently_rejects_a_parameter_named_async() {
+        assert!(!arrow("async => 1"));
+    }
+
+    /// Runs [`go_binding_pattern_accepts_call`] over `source`, deriving the
+    /// spans from the first occurrences of `slot` (the first array-slot name)
+    /// and `callee`; the call is taken to end at the last `)`.
+    fn binding_accepts(source: &str, slot: Option<&str>, callee: &str) -> bool {
+        let named = |text: &str| {
+            let start = source.find(text).expect("marker text in source") as u32;
+            NamedSpan {
+                span: Span::new(start, start + text.len() as u32),
+            }
+        };
+        let slot = slot.map(named);
+        let callee = named(callee).span;
+        let call_end = source.rfind(')').expect("a call to end the source") as u32 + 1;
+        let binding = BindingFact {
+            declaration: Span::new(0, call_end),
+            pattern: slot.as_ref().map_or_else(
+                || Span::new(0, 0),
+                |named| Span::new(named.span.start - 1, named.span.end + 1),
+            ),
+            shape: BindingShape::Array,
+            names: slot.clone().into_iter().collect(),
+            array_slots: vec![slot],
+            initializer: Some(Span::new(callee.start, call_end)),
+            call_initializer: Some(Span::new(callee.start, call_end)),
+            initializer_function: false,
+            initializer_identifier: None,
+        };
+        let call = CallFact {
+            span: Span::new(callee.start, call_end),
+            callee,
+            direct_callee: true,
+            type_arguments: false,
+            arguments: Vec::new(),
+            static_callee: true,
+            owned_write_option: false,
+        };
+        go_binding_pattern_accepts_call(source, &binding, &call)
+    }
+
+    #[test]
+    fn binding_pattern_accepts_a_const_array_destructure_of_a_call() {
+        assert!(binding_accepts(
+            "const [go] = makeGate();",
+            Some("go"),
+            "makeGate"
+        ));
+        assert!(binding_accepts(
+            "const [ go ] = makeGate ();",
+            Some("go"),
+            "makeGate"
+        ));
+    }
+
+    #[test]
+    fn binding_pattern_accepts_a_simple_generic_call() {
+        assert!(binding_accepts(
+            "const [go] = makeGate<T>();",
+            Some("go"),
+            "makeGate"
+        ));
+    }
+
+    #[test]
+    fn binding_pattern_requires_the_const_keyword() {
+        assert!(!binding_accepts(
+            "let [go] = makeGate();",
+            Some("go"),
+            "makeGate"
+        ));
+        assert!(!binding_accepts(
+            "var [go] = makeGate();",
+            Some("go"),
+            "makeGate"
+        ));
+    }
+
+    #[test]
+    fn binding_pattern_requires_a_named_first_array_slot() {
+        assert!(!binding_accepts(
+            "const [, go] = makeGate();",
+            None,
+            "makeGate"
+        ));
+    }
+
+    /// Documents a known limitation: the type-argument skip stops at the
+    /// first `>`, so a nested generic like `Foo<Bar<T>>` leaves the scan on
+    /// the second `>` and the call is rejected.
+    #[test]
+    fn binding_pattern_currently_rejects_nested_generic_arguments() {
+        assert!(!binding_accepts(
+            "const [go] = makeGate<Array<T>>();",
+            Some("go"),
+            "makeGate"
+        ));
+    }
+
+    /// Documents a known limitation: comments are not skipped, so a comment
+    /// between `=` and the callee breaks the `] =` tail check.
+    #[test]
+    fn binding_pattern_currently_rejects_a_comment_before_the_initializer() {
+        assert!(!binding_accepts(
+            "const [go] = /* gate */ makeGate();",
+            Some("go"),
+            "makeGate"
+        ));
+    }
+
+    #[test]
+    fn owner_edge_context_transforms_the_source_bits_per_edge_kind() {
+        assert_eq!(
+            owner_edge_context(OwnerEdgeKind::Preserve, OWNER_CONTEXT_OWNED),
+            OWNER_CONTEXT_OWNED
+        );
+        assert_eq!(
+            owner_edge_context(OwnerEdgeKind::Owned, OWNER_CONTEXT_UNOWNED),
+            OWNER_CONTEXT_OWNED
+        );
+        assert_eq!(
+            owner_edge_context(OwnerEdgeKind::Unowned, OWNER_CONTEXT_OWNED),
+            OWNER_CONTEXT_UNOWNED
+        );
+        assert_eq!(
+            owner_edge_context(OwnerEdgeKind::Conditional, 0),
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED
+        );
+        assert_eq!(
+            owner_edge_context(OwnerEdgeKind::Leaf, OWNER_CONTEXT_OWNED),
+            OWNER_CONTEXT_LEAF
+        );
+    }
+
+    #[test]
+    fn callback_owner_edge_kinds_map_one_to_one() {
+        use solid_dialect::CallbackOwner;
+        assert_eq!(
+            callback_owner_edge_kind(CallbackOwner::Creates),
+            OwnerEdgeKind::Owned
+        );
+        assert_eq!(
+            callback_owner_edge_kind(CallbackOwner::Conditional),
+            OwnerEdgeKind::Conditional
+        );
+        assert_eq!(
+            callback_owner_edge_kind(CallbackOwner::Inherits),
+            OwnerEdgeKind::Preserve
+        );
+        assert_eq!(
+            callback_owner_edge_kind(CallbackOwner::None),
+            OwnerEdgeKind::Unowned
+        );
+        assert_eq!(
+            callback_owner_edge_kind(CallbackOwner::Leaf),
+            OwnerEdgeKind::Leaf
+        );
+    }
+
+    #[test]
+    fn composing_owner_edges_lets_an_explicit_callback_owner_dominate() {
+        assert_eq!(
+            compose_owner_edge(OwnerEdgeKind::Unowned, OwnerEdgeKind::Preserve),
+            OwnerEdgeKind::Unowned
+        );
+        assert_eq!(
+            compose_owner_edge(OwnerEdgeKind::Unowned, OwnerEdgeKind::Owned),
+            OwnerEdgeKind::Owned
+        );
+        assert_eq!(
+            compose_owner_edge(OwnerEdgeKind::Owned, OwnerEdgeKind::Leaf),
+            OwnerEdgeKind::Leaf
+        );
+    }
+
+    fn node(name: Option<&str>, exported: bool) -> OwnerNode {
+        OwnerNode {
+            path: "app.tsx".to_owned(),
+            span: Span::new(0, 10),
+            body: Span::new(0, 10),
+            name: name.map(str::to_owned),
+            symbol: None,
+            exported,
+        }
+    }
+
+    #[test]
+    fn name_seeds_mark_components_owned_and_exported_helpers_unowned() {
+        let nodes = [
+            node(Some("Widget"), false),
+            node(Some("useThing"), true),
+            node(Some("useThing"), false),
+            node(Some("Widget"), true),
+            node(None, true),
+        ];
+        assert_eq!(
+            seed_name_contexts(&nodes),
+            vec![
+                OWNER_CONTEXT_OWNED,
+                OWNER_CONTEXT_UNOWNED,
+                0,
+                OWNER_CONTEXT_OWNED,
+                0,
+            ]
+        );
+    }
+
+    #[test]
+    fn propagation_reaches_a_fixed_point_and_accumulates_bits() {
+        // 0 --preserve--> 1 --conditional--> 2, plus a cycle 1 <-> 0.
+        let mut contexts = vec![OWNER_CONTEXT_OWNED, 0, OWNER_CONTEXT_LEAF];
+        let outgoing = vec![
+            vec![(1, OwnerEdgeKind::Preserve)],
+            vec![
+                (0, OwnerEdgeKind::Preserve),
+                (2, OwnerEdgeKind::Conditional),
+            ],
+            vec![],
+        ];
+        propagate_owner_contexts(&mut contexts, &outgoing);
+        assert_eq!(
+            contexts,
+            vec![
+                OWNER_CONTEXT_OWNED,
+                OWNER_CONTEXT_OWNED,
+                OWNER_CONTEXT_LEAF | OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
+            ]
+        );
+    }
+
+    /// Documents current behavior: only nodes whose seeded context is nonzero
+    /// enter the worklist, so even an `Owned` edge (whose contribution does
+    /// not depend on the source's bits) stays dormant when its source has no
+    /// context of its own.
+    #[test]
+    fn propagation_does_not_walk_edges_out_of_context_free_nodes() {
+        let mut contexts = vec![0, 0];
+        let outgoing = vec![vec![(1, OwnerEdgeKind::Owned)], vec![]];
+        propagate_owner_contexts(&mut contexts, &outgoing);
+        assert_eq!(contexts, vec![0, 0]);
+    }
+
+    #[test]
+    fn owner_providing_regions_contain_spans_inclusively() {
+        let regions = [Span::new(10, 20), Span::new(40, 50)];
+        assert!(inside_owner_providing_region(&regions, Span::new(12, 18)));
+        assert!(inside_owner_providing_region(&regions, Span::new(40, 50)));
+        assert!(!inside_owner_providing_region(&regions, Span::new(19, 21)));
+        assert!(!inside_owner_providing_region(&[], Span::new(0, 0)));
+    }
 }

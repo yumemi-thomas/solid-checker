@@ -1,4 +1,5 @@
-//! `v1/prefer-for`, `v1/prefer-show`, `v1/no-react-deps`, `v1/no-proxy-apis` —
+//! Solid 1.x `v1/prefer-for`, `v1/prefer-show`, `v1/no-react-deps`, and
+//! `v1/no-proxy-apis` —
 //! four of eslint-plugin-solid's structural-preference rules, each judging a
 //! JavaScript-legal but Solid-unidiomatic shape.
 //!

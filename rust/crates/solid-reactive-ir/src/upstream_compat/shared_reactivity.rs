@@ -1,4 +1,4 @@
-//! The fine-grained rules decomposed out of upstream's `reactivity`.
+//! Shared fine-grained rules decomposed out of upstream's `reactivity`.
 //!
 //! Upstream ships one rule reporting eight unrelated defects behind eight
 //! message ids, so a project that disagrees with one of them has to silence
@@ -37,24 +37,29 @@ use solid_facts::core::Span;
 use typefacts::Callability;
 
 use super::{UpstreamCompatContext, is_lowercase_led, text};
-use crate::{ReactiveSourceKind, StaticViolation, known_primitive, location};
+use crate::owners::containing_ast_function;
+use crate::{
+    DirectMutationTarget, ReactiveSourceKind, StaticDefect, StaticDefectKind, StaticViolation,
+    known_primitive, location,
+};
 
 pub(super) fn check_file(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
+    defects: &mut Vec<StaticDefect>,
 ) {
-    uncalled_accessor(file, context, violations);
-    no_direct_mutation(file, context, violations);
+    uncalled_accessor(file, context, defects);
+    no_direct_mutation(file, context, defects);
     // The one rule in this module whose defect is version-specific: Solid
     // 2.0 models async computations as a feature (see the rule's doc), so
     // only the 1.x catalog carries it.
-    if context.dialect.version() == solid_dialect::Version::V1 {
+    if context.dialect.reports_async_tracked_scope() {
         no_async_tracked_scope(file, context, violations);
     }
-    expected_function_got_expression(file, context, violations);
-    reactive_source_uncaptured(file, context, violations);
-    untracked_derived_function(file, context, violations);
+    expected_function_got_expression(file, context, defects);
+    reactive_source_uncaptured(file, context, defects);
+    untracked_derived_function(file, context, defects);
 }
 
 /// `v1/untracked-derived-function` — upstream's `untrackedReactive`.
@@ -103,7 +108,7 @@ pub(super) fn check_file(
 fn untracked_derived_function(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
+    defects: &mut Vec<StaticDefect>,
 ) {
     let candidates = file
         .ast
@@ -120,7 +125,7 @@ fn untracked_derived_function(
             let function = function_at(file, initializer)?;
             // Bound inside another function: references cannot escape the
             // file except by being passed or returned, both refused below.
-            let enclosing = crate::containing_ast_function(&file.ast, binding.declaration)?;
+            let enclosing = containing_ast_function(&file.ast, binding.declaration)?;
             let symbol = context
                 .entities
                 .at(file.path.as_str(), declared.span)?
@@ -142,7 +147,7 @@ fn untracked_derived_function(
             let direct_source = file.ast.identifiers.iter().any(|identifier| {
                 identifier.role == IdentifierRole::Reference
                     && function.body.contains(identifier.span)
-                    && crate::containing_ast_function(&file.ast, identifier.span)
+                    && containing_ast_function(&file.ast, identifier.span)
                         .is_some_and(|owner| owner.span == function.span)
                     && context
                         .entities
@@ -155,7 +160,7 @@ fn untracked_derived_function(
             });
             let derived_call = file.ast.calls.iter().any(|call| {
                 function.body.contains(call.span)
-                    && crate::containing_ast_function(&file.ast, call.span)
+                    && containing_ast_function(&file.ast, call.span)
                         .is_some_and(|owner| owner.span == function.span)
                     && context
                         .entities
@@ -193,7 +198,7 @@ fn untracked_derived_function(
                 else {
                     return false; // referenced without being called
                 };
-                let directly_enclosed = crate::containing_ast_function(&file.ast, call.span)
+                let directly_enclosed = containing_ast_function(&file.ast, call.span)
                     .is_some_and(|owner| owner.span == enclosing.span);
                 if !directly_enclosed || within_jsx(file, call.span) {
                     return false;
@@ -205,19 +210,10 @@ fn untracked_derived_function(
             continue;
         }
         let name = text(file, declared.span);
-        let effect_scope = match context.dialect.version() {
-            solid_dialect::Version::V1 => "a createEffect callback",
-            solid_dialect::Version::V2 => "the compute function of createEffect(compute, apply)",
-        };
-        violations.push(StaticViolation {
-            id: "SC1006".into(),
-            rule: "untracked-derived-function".into(),
-            message: format!(
-                "{name} derives from reactive state but every call to it is untracked, so its reads subscribe to nothing and the derivation never updates"
-            ),
-            hint: format!(
-                "Call {name} from a tracking scope — JSX, a createMemo, or {effect_scope} — or inline the value if a one-off read at setup is what was meant."
-            ),
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::UntrackedDerivedFunction {
+                name: name.to_owned(),
+            },
             location: location(file.path.shared(), declared.span),
             analysis_context: String::new(),
             fixes: vec![],
@@ -271,10 +267,14 @@ fn within_jsx(file: &FileFacts, span: Span) -> bool {
 fn reactive_source_uncaptured(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
+    defects: &mut Vec<StaticDefect>,
 ) {
     // Symbols bound by value imports from bare specifiers — the only callees
-    // whose reactive behaviour a package contract could ever describe.
+    // whose reactive behaviour a package contract could ever describe. A
+    // bare specifier is necessary but not sufficient: a tsconfig path alias
+    // (`@/utils/x`) is spelled bare too, so anything TypeScript resolved
+    // into the project's own sources is excluded — no contract can describe
+    // project code, and the engine walks it directly.
     let package_imported: std::collections::HashSet<&crate::SymbolId> = file
         .ast
         .imports
@@ -283,6 +283,7 @@ fn reactive_source_uncaptured(
         .flat_map(|import| &import.bindings)
         .filter(|binding| !binding.type_only)
         .filter_map(|binding| context.entities.at(file.path.as_str(), binding.local.span))
+        .filter(|symbol| !context.lookup.symbol_is_project_code(symbol.as_str()))
         .collect();
     if package_imported.is_empty() {
         return;
@@ -323,15 +324,11 @@ fn reactive_source_uncaptured(
                 continue;
             }
             let name = name.as_str();
-            violations.push(StaticViolation {
-                id: "SC9011".into(),
-                rule: "reactive-source-uncaptured".into(),
-                message: format!(
-                    "the reactive source {name:?} is passed to {callee_text}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
-                ),
-                hint: format!(
-                    "Describe {callee_text} in its package's solid-reactivity.json — which arguments it tracks and what it returns — or keep the function in the project so its body is analysed. See docs/package-contracts.md."
-                ),
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::ReactiveSourceUncaptured {
+                    source: name.to_owned(),
+                    callee: callee_text.to_owned(),
+                },
                 location: location(file.path.shared(), argument.span),
                 analysis_context: String::new(),
                 fixes: vec![],
@@ -364,7 +361,7 @@ fn reactive_source_uncaptured(
 /// - **Package contracts.** A contract's `ContractCallback` carries an
 ///   `execution` of `"tracked"`, but that means "the graph schedules it" —
 ///   an `onSettled`-style callback is contract-tracked while its reads do
-///   not subscribe (see `Dialect::callback_tracks_reads_at`). Flagging every
+///   not subscribe (see `Dialect::callback_semantics_at`). Flagging every
 ///   async literal handed to a contract-tracked slot would therefore report
 ///   correct code. The engine already threads contract callbacks through its
 ///   interprocedural graph, so an actual read-after-await inside one still
@@ -397,7 +394,8 @@ fn no_async_tracked_scope(
         for slot in 0..call.arguments.len() {
             if !context
                 .dialect
-                .callback_tracks_reads_at(primitive, slot, call.arguments.len())
+                .callback_semantics_at(primitive, slot, call.arguments.len())
+                .tracks_reads
             {
                 continue;
             }
@@ -442,7 +440,7 @@ fn no_async_tracked_scope(
 fn expected_function_got_expression(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
+    defects: &mut Vec<StaticDefect>,
 ) {
     for element in &file.ast.jsx_elements {
         let element_name = text(file, element.name.span);
@@ -481,17 +479,11 @@ fn expected_function_got_expression(
                         || context.prop_sources.contains_key(symbol)
                 });
             if reactive_member {
-                violations.push(StaticViolation {
-                    id: "SC1007".into(),
-                    rule: "expected-function-got-expression".into(),
-                    message: format!(
-                        "{name} reads {} once during DOM setup; later reactive updates cannot replace the installed listener",
-                        text(file, expression)
-                    ),
-                    hint: format!(
-                        "Wrap the read so it happens when the event fires: {name}={{event => {}(event)}}.",
-                        text(file, expression)
-                    ),
+                defects.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveHandlerRead {
+                        attribute: name.to_owned(),
+                        expression: text(file, expression).to_owned(),
+                    },
                     location: location(file.path.shared(), expression),
                     analysis_context: String::new(),
                     fixes: vec![],
@@ -517,17 +509,12 @@ fn expected_function_got_expression(
             if !proven_accessor && !proven_not_callable(context, file, expression) {
                 continue;
             }
-            violations.push(StaticViolation {
-                id: "SC1007".into(),
-                rule: "expected-function-got-expression".into(),
-                message: format!(
-                    "{name} is given the result of calling {}, not a function; the call runs once during setup and its value is bound as the listener",
-                    text(file, call.callee)
-                ),
-                hint: format!(
-                    "Wrap it: {name}={{() => {}}}, or pass the function itself uncalled.",
-                    text(file, call.span)
-                ),
+            defects.push(StaticDefect {
+                kind: StaticDefectKind::HandlerCallResult {
+                    attribute: name.to_owned(),
+                    callee: text(file, call.callee).to_owned(),
+                    call: text(file, call.span).to_owned(),
+                },
                 location: location(file.path.shared(), expression),
                 analysis_context: String::new(),
                 fixes: vec![],
@@ -627,7 +614,7 @@ fn function_at(file: &FileFacts, span: Span) -> Option<&FunctionFact> {
 fn uncalled_accessor(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
+    defects: &mut Vec<StaticDefect>,
 ) {
     for identifier in &file.ast.identifiers {
         if identifier.role != IdentifierRole::Reference {
@@ -659,13 +646,11 @@ fn uncalled_accessor(
         let Some(position) = value_position(file, identifier.span) else {
             continue;
         };
-        violations.push(StaticViolation {
-            id: "SC1005".into(),
-            rule: "uncalled-accessor".into(),
-            message: format!(
-                "accessor {name:?} is used as a value in {position}; the expression receives the accessor function itself, not the value it holds, and never updates"
-            ),
-            hint: format!("Call it: {name}(). Passing {name} uncalled is only correct where the receiver calls it later."),
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::UncalledAccessor {
+                name: name.to_owned(),
+                position: position.to_owned(),
+            },
             location: location(file.path.shared(), identifier.span),
             analysis_context: String::new(),
             fixes: vec![],
@@ -694,7 +679,7 @@ fn source_symbol_at<'a>(
 fn no_direct_mutation(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
+    defects: &mut Vec<StaticDefect>,
 ) {
     for assignment in &file.ast.assignments {
         // The assignment target is either the reactive binding itself or the
@@ -728,57 +713,26 @@ fn no_direct_mutation(
         if props && !through_member {
             continue;
         }
-        let (message, hint) = if through_member {
-            (
-                format!(
-                    "{name:?} is a reactive {} and is written through directly; Solid hands out a readonly proxy, so the write is dropped and nothing re-runs",
-                    if props {
-                        "props object"
-                    } else {
-                        match kind {
-                            Some(ReactiveSourceKind::Store) => "store",
-                            _ => "value",
-                        }
-                    }
-                ),
-                if !props && kind == Some(ReactiveSourceKind::Store) {
-                    store_write_hint(context, name)
-                } else {
-                    format!(
-                        "Props are readonly by design: the parent owns the value. Lift the state to the parent and pass a callback down, rather than assigning to {name}."
-                    )
-                },
-            )
+        let target = if through_member {
+            if props {
+                DirectMutationTarget::Props
+            } else if kind == Some(ReactiveSourceKind::Store) {
+                DirectMutationTarget::Store
+            } else {
+                DirectMutationTarget::ReactiveValue
+            }
         } else {
-            (
-                format!(
-                    "reactive accessor {name:?} is reassigned; the binding is replaced and every subscriber keeps reading the old accessor"
-                ),
-                format!("Call the setter returned beside it instead of rebinding {name}."),
-            )
+            DirectMutationTarget::AccessorBinding
         };
-        violations.push(StaticViolation {
-            id: "SC2003".into(),
-            rule: "no-direct-mutation".into(),
-            message,
-            hint,
+        defects.push(StaticDefect {
+            kind: StaticDefectKind::DirectMutation {
+                name: name.to_owned(),
+                target,
+            },
             location: location(file.path.shared(), assignment.target),
             analysis_context: String::new(),
             fixes: vec![],
         });
-    }
-}
-
-/// The store-write hint, phrased in the dialect's own API: 1.x spells an
-/// in-place update `produce`, which 2.0 removed.
-fn store_write_hint(context: &UpstreamCompatContext<'_>, name: &str) -> String {
-    match context.dialect.version() {
-        solid_dialect::Version::V1 => format!(
-            "Write through the store's setter: setStore(\"key\", value), or produce(draft => ...) for an in-place update. Direct assignment to {name} does not notify subscribers."
-        ),
-        solid_dialect::Version::V2 => format!(
-            "Write through the store's setter instead. Direct assignment to {name} does not notify subscribers."
-        ),
     }
 }
 

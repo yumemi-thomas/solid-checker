@@ -1,4 +1,5 @@
-//! `v1/imports` — a Solid name imported from a module that does not export it.
+//! Solid 1.x `v1/imports` — a Solid name imported from a module that does not
+//! export it.
 //!
 //! Upstream's rule carries a hand-written map of name → canonical module. This
 //! one asks the dialect's generated export index instead, which is extracted

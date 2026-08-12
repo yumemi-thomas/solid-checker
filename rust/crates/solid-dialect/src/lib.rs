@@ -232,34 +232,6 @@ pub enum CleanupRule {
     Never,
 }
 
-/// The dialect's names for the props helpers a fix hint should suggest.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct PropsHelpers {
-    /// Takes a subset of props away: `omit` in 2.0, `splitProps` in 1.x.
-    pub omit: &'static str,
-    /// Merges defaults into props: `merge` in 2.0, `mergeProps` in 1.x.
-    pub merge: &'static str,
-}
-
-/// How a dialect spells `createEffect`, for the diagnostics that quote it
-/// back at the reader.
-///
-/// Prose in a vocabulary crate is a compromise, and a deliberate one. The
-/// wording belongs to the rule; *which* wording is correct is a fact about the
-/// dialect. The alternative -- a rule that switches on [`Version`] -- puts
-/// that fact somewhere it cannot be checked against the table it describes,
-/// and the 1.x/2.0 `createEffect` difference is the single most consequential
-/// thing to get wrong here.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct EffectSignature {
-    /// The call as this dialect spells it, e.g. `createEffect(compute, apply)`.
-    pub signature: &'static str,
-    /// What the arguments do, phrased to follow "where".
-    pub roles: &'static str,
-    /// What to do about a call that is missing its effect function.
-    pub remedy: &'static str,
-}
-
 /// Which owner a primitive's callback argument runs under.
 ///
 /// Distinct from [`Dialect::callback_positions`], which answers *where* a
@@ -330,6 +302,27 @@ pub enum Execution {
     Deferred,
     /// Runs immediately, in the caller's scope, and does not re-run.
     Inline,
+}
+
+/// The complete callback contract for one argument of one concrete primitive
+/// call. Consumers ask one question and receive the execution, ownership,
+/// reachability, dormancy, tracking, and callback-parameter source semantics
+/// as one coherent answer.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct CallbackSemantics {
+    pub execution: Option<Execution>,
+    pub owner: Option<CallbackOwner>,
+    pub tracks_reads: bool,
+    pub requires_return_invocation: bool,
+    pub stores_as_value: bool,
+    pub accessor_parameters: &'static [usize],
+}
+
+/// The callback contract of a function returned by a primitive.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ReturnedCallbackSemantics {
+    pub execution: Option<Execution>,
+    pub owner: Option<CallbackOwner>,
 }
 
 /// One Solid language version's vocabulary.
@@ -443,9 +436,6 @@ pub trait Dialect: Sync {
     /// `Suspense`, 2.0 says `Loading`.
     fn boundary_name(&self, boundary: Boundary) -> &'static str;
 
-    /// How this dialect spells `createEffect`.
-    fn effect_signature(&self) -> EffectSignature;
-
     /// Whether this primitive may be created inside a leaf owner.
     fn cleanup_rule(&self, primitive: Primitive) -> CleanupRule;
 
@@ -495,32 +485,6 @@ pub trait Dialect: Sync {
 
     /// Whether creating this primitive registers a directive-applied owner.
     fn creates_directive_owner(&self, primitive: Primitive) -> bool;
-
-    /// The props-helper names to name in fix hints.
-    fn props_helpers(&self) -> PropsHelpers;
-
-    /// The scopes a hint may tell a reader to move a *read* into so it tracks.
-    ///
-    /// Prose, like [`Dialect::effect_signature`], and here for the same
-    /// reason: the sentence names an API and the API differs. Every rule that
-    /// says "move this into a tracking scope" was quoting 2.0's
-    /// `createEffect(compute, apply)` at 1.x projects, which have no compute
-    /// and no apply.
-    fn tracking_scopes(&self) -> &'static str;
-
-    /// The scopes a hint may tell a reader to move an imperative *write* into.
-    ///
-    /// Wider divergence than the read side: `action` and `onSettled` are
-    /// 2.0-only names, so naming them to a 1.x reader is advice they cannot
-    /// take.
-    fn imperative_write_scopes(&self) -> &'static str;
-
-    /// How to opt a signal out of the owned-write rule, if the dialect has a
-    /// way. `None` for 1.x, which has no `ownedWrite` option — the sentence
-    /// suggesting it was 2.0's and had no 1.x meaning.
-    fn owned_write_opt_in(&self) -> Option<&'static str> {
-        None
-    }
 
     /// Which parameters of a control-flow component's children callback are
     /// reactive accessors rather than plain values.
@@ -659,6 +623,30 @@ pub trait Dialect: Sync {
         None
     }
 
+    /// The complete callback contract of one argument to a returned function.
+    fn returned_callback_semantics_at(
+        &self,
+        primitive: Primitive,
+        result_slot: Option<usize>,
+        argument: usize,
+        argument_count: usize,
+    ) -> ReturnedCallbackSemantics {
+        ReturnedCallbackSemantics {
+            execution: self.returned_callback_execution_at(
+                primitive,
+                result_slot,
+                argument,
+                argument_count,
+            ),
+            owner: self.returned_callback_owner_at(
+                primitive,
+                result_slot,
+                argument,
+                argument_count,
+            ),
+        }
+    }
+
     /// How one argument of one concrete call executes.
     ///
     /// This is the call-site form of [`Dialect::callback_executions`]. The
@@ -696,21 +684,24 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// Whether reads in this concrete callback argument subscribe.
-    ///
-    /// Package-contract execution and the checker's local tracking role are
-    /// close but not identical. A callback can be reachable yet deliberately
-    /// untracked, such as `onSettled` or a `clientOnly` loader. The legacy
-    /// primitive-level column preserves that runtime fact; overload-sensitive
-    /// execution comes from [`Dialect::callback_execution_at`].
-    fn callback_tracks_reads_at(
+    /// The complete callback contract for one concrete call argument.
+    fn callback_semantics_at(
         &self,
         primitive: Primitive,
         argument: usize,
         argument_count: usize,
-    ) -> bool {
-        self.callback_execution_at(primitive, argument, argument_count) == Some(Execution::Tracked)
-            && !self.runs_callback_deferred(primitive)
+    ) -> CallbackSemantics {
+        let execution = self.callback_execution_at(primitive, argument, argument_count);
+        CallbackSemantics {
+            execution,
+            owner: self.callback_owner_at(primitive, argument, argument_count),
+            tracks_reads: execution == Some(Execution::Tracked)
+                && !self.runs_callback_deferred(primitive),
+            requires_return_invocation: self
+                .callback_requires_return_invocation(primitive, argument),
+            stores_as_value: self.stores_function_argument_as_value(primitive, argument),
+            accessor_parameters: self.callback_accessor_parameters(primitive, argument),
+        }
     }
 
     /// Whether an untracked read in this callback is a likely dependency bug.
@@ -727,6 +718,29 @@ pub trait Dialect: Sync {
         argument_count: usize,
     ) -> bool {
         let _ = (primitive, argument, argument_count);
+        false
+    }
+
+    /// The member a context must be accessed through to act as a provider,
+    /// if this dialect has one. Solid 1.x exposes `.Provider`, whose value
+    /// getter runs untracked; Solid 2.0 makes the context itself the
+    /// provider, so there is no member to name.
+    fn context_provider_member(&self) -> Option<&'static str> {
+        None
+    }
+
+    /// Whether this dialect's catalog carries the file-local ESLint-era rule
+    /// surface (the `SC8xxx` identities ported from eslint-plugin-solid).
+    /// Only the 1.x catalog does; the engine gates those passes on this
+    /// answer instead of naming a version.
+    fn carries_eslint_era_rules(&self) -> bool {
+        false
+    }
+
+    /// Whether this dialect reports an async function handed to a tracked
+    /// scope (`no-async-tracked-scope`). 1.x does; Solid 2.0 models async
+    /// computations as a feature, so its catalog omits the rule.
+    fn reports_async_tracked_scope(&self) -> bool {
         false
     }
 
@@ -1146,39 +1160,6 @@ mod tests {
         );
     }
 
-    /// The 1.x/2.0 `createEffect` split is the difference ADR 0001 led with,
-    /// and quoting the wrong signature back at a reader who is already
-    /// confused about it is the worst available failure. Both halves have to
-    /// agree with `callback_positions`, which is what the rule branches on.
-    #[test]
-    fn the_effect_signature_agrees_with_the_callback_position() {
-        let one = Version::V1.dialect();
-        assert_eq!(one.callback_positions(Primitive::CreateEffect), &[0]);
-        assert!(
-            one.effect_signature()
-                .signature
-                .starts_with("createEffect(fn")
-        );
-
-        let two = Version::V2.dialect();
-        assert_eq!(two.callback_positions(Primitive::CreateEffect), &[1]);
-        assert_eq!(
-            two.effect_signature().signature,
-            "createEffect(compute, apply)"
-        );
-
-        // Neither may name the other's shape, in any of the three fields.
-        for (version, forbidden) in [(Version::V1, "compute"), (Version::V2, "(fn,")] {
-            let signature = version.dialect().effect_signature();
-            for field in [signature.signature, signature.roles, signature.remedy] {
-                assert!(
-                    !field.contains(forbidden),
-                    "{version:?} names the other dialect's shape: {field}"
-                );
-            }
-        }
-    }
-
     /// Every name a dialect knows is a real export of a module it owns.
     ///
     /// This is the cross-check the vocabulary never had. The tables are
@@ -1331,74 +1312,6 @@ mod tests {
         }
     }
 
-    /// Every API a dialect's prose names is an API that dialect has.
-    ///
-    /// These strings are hints, and a hint that names a function the reader's
-    /// Solid does not export is advice they cannot take. Three of them quoted
-    /// 2.0 -- `createEffect(compute, apply)`, `action`, `ownedWrite` -- at 1.x
-    /// projects before they came from here.
-    ///
-    /// Matches `name(` rather than every word, because a call is the shape
-    /// that makes a claim about the API. Checked against the generated export
-    /// index, not the vocabulary: `console.log` is not a Solid primitive and
-    /// `onMount` is a real 1.x export the vocabulary happens to model.
-    #[test]
-    fn dialect_prose_names_only_apis_that_dialect_has() {
-        const NOT_SOLID: &[&str] = &["log", "setTimeout", "queueMicrotask", "dispose"];
-        for version in [Version::V1, Version::V2] {
-            let dialect = version.dialect();
-            let signature = dialect.effect_signature();
-            let helpers = dialect.props_helpers();
-            let prose = [
-                dialect.tracking_scopes(),
-                dialect.imperative_write_scopes(),
-                dialect.owned_write_opt_in().unwrap_or(""),
-                signature.signature,
-                signature.roles,
-                signature.remedy,
-            ];
-            // The props helpers are bare names rather than prose, and they are
-            // the pair most likely to be copied from the wrong dialect:
-            // `omit`/`merge` in 2.0, `splitProps`/`mergeProps` in 1.x.
-            let mut checked = 0;
-            for helper in [helpers.omit, helpers.merge] {
-                assert!(
-                    !dialect
-                        .export_modules(helper, ExportPosition::Value)
-                        .is_empty(),
-                    "{version:?} names the props helper {helper}, which it does not export"
-                );
-                checked += 1;
-            }
-            for text in prose {
-                for (index, _) in text.match_indices('(') {
-                    let name: String = text[..index]
-                        .chars()
-                        .rev()
-                        .take_while(|c| c.is_alphanumeric() || *c == '$')
-                        .collect::<Vec<_>>()
-                        .into_iter()
-                        .rev()
-                        .collect();
-                    if name.is_empty() || NOT_SOLID.contains(&name.as_str()) {
-                        continue;
-                    }
-                    assert!(
-                        !dialect
-                            .export_modules(&name, ExportPosition::Value)
-                            .is_empty(),
-                        "{version:?} prose names {name}(), which {version:?} does not export: {text:?}"
-                    );
-                    checked += 1;
-                }
-            }
-            assert!(
-                checked >= 4,
-                "{version:?}: only {checked} API names checked"
-            );
-        }
-    }
-
     /// The generated tables are binary-searched, so their order is load
     /// bearing. A generator that stopped sorting would not fail to compile —
     /// it would silently start missing names.
@@ -1505,14 +1418,15 @@ mod tests {
             }
         }
 
-        // The namespace set stays deliberately narrower -- it answers which
-        // names `import * as solid` exposes, which is not the same question.
+        // The namespace set follows the census invariant on both dialects
+        // now (see `every_modelled_export_resolves_through_its_namespace_module`
+        // in each module); the `namespace-import-v2` fixture pins the
+        // behavioural half of the widening.
         let two = Version::V2.dialect();
         assert!(two.declares_primitive("latest"));
         assert!(
-            !two.namespace_import_primitives("solid-js")
-                .contains(&"latest"),
-            "widening the namespace set is a separate change with its own fixture"
+            two.namespace_import_primitives("solid-js")
+                .contains(&"latest")
         );
     }
 
@@ -1688,24 +1602,6 @@ mod tests {
     }
 
     #[test]
-    fn props_helpers_name_the_dialects_own_api() {
-        assert_eq!(
-            Version::V1.dialect().props_helpers(),
-            PropsHelpers {
-                omit: "splitProps",
-                merge: "mergeProps"
-            }
-        );
-        assert_eq!(
-            Version::V2.dialect().props_helpers(),
-            PropsHelpers {
-                omit: "omit",
-                merge: "merge"
-            }
-        );
-    }
-
-    #[test]
     fn conditional_cleanup_rules_survive_the_extraction() {
         let two = Version::V2.dialect();
         // Always forbidden.
@@ -1760,6 +1656,92 @@ mod tests {
         match dialect.version() {
             Version::V1 => solid_1x::names(),
             Version::V2 => solid_2::names(),
+        }
+    }
+
+    /// For every name both vocabularies resolve, the callback-shape answers
+    /// the engine asks beyond `callback_executions` must agree — or the
+    /// difference must be exempted here with its reason. These methods have
+    /// defaults, so a missing override on one side is a silent behavioural
+    /// asymmetry rather than a compile error; this test is what turns that
+    /// silence into a failure.
+    #[test]
+    fn shared_primitive_callback_shapes_agree_or_are_exempted() {
+        let one = Version::V1.dialect();
+        let two = Version::V2.dialect();
+        // (name, question) pairs where the runtimes genuinely differ.
+        let exempted = |name: &str, question: &str| {
+            matches!(
+                (name, question),
+                // 1.x runs map callbacks untracked (dependencies come from
+                // the list argument); the 2.0 runtime tracks them — see the
+                // bundled contract rows for `mapArray`.
+                ("mapArray", "reports-untracked-reads")
+                // The beta.31 runtime emits STRICT_READ_UNTRACKED for a
+                // reactive read in the invalidation callback; the 1.x
+                // runtime has no such warning and models the callback as a
+                // leaf owner instead (see the `dialect-solid-*` fixture
+                // pair).
+                | ("createReaction", "reports-untracked-reads")
+            )
+        };
+        for name in dialect_names(one) {
+            let Some(primitive_one) = one.primitive(name) else {
+                continue;
+            };
+            let Some(primitive_two) = two.primitive(name) else {
+                continue;
+            };
+            for argument in 0..3 {
+                for argument_count in 1..4 {
+                    assert!(
+                        one.reports_untracked_reads_at(primitive_one, argument, argument_count)
+                            == two.reports_untracked_reads_at(
+                                primitive_two,
+                                argument,
+                                argument_count
+                            )
+                            || exempted(name, "reports-untracked-reads"),
+                        "{name}: reports_untracked_reads_at({argument}, {argument_count}) differs between dialects and is not exempted"
+                    );
+                    for result_slot in [None, Some(0), Some(1)] {
+                        assert!(
+                            one.returned_callback_execution_at(
+                                primitive_one,
+                                result_slot,
+                                argument,
+                                argument_count
+                            ) == two.returned_callback_execution_at(
+                                primitive_two,
+                                result_slot,
+                                argument,
+                                argument_count
+                            ) || exempted(name, "returned-callback-execution"),
+                            "{name}: returned_callback_execution_at({result_slot:?}, {argument}, {argument_count}) differs between dialects and is not exempted"
+                        );
+                        assert!(
+                            one.returned_callback_owner_at(
+                                primitive_one,
+                                result_slot,
+                                argument,
+                                argument_count
+                            ) == two.returned_callback_owner_at(
+                                primitive_two,
+                                result_slot,
+                                argument,
+                                argument_count
+                            ) || exempted(name, "returned-callback-owner"),
+                            "{name}: returned_callback_owner_at({result_slot:?}, {argument}, {argument_count}) differs between dialects and is not exempted"
+                        );
+                    }
+                }
+                assert!(
+                    one.callback_requires_return_invocation(primitive_one, argument)
+                        == two.callback_requires_return_invocation(primitive_two, argument)
+                        || exempted(name, "requires-return-invocation"),
+                    "{name}: callback_requires_return_invocation({argument}) differs between dialects and is not exempted"
+                );
+            }
         }
     }
 }

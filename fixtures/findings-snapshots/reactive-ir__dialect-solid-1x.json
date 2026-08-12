@@ -55,8 +55,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 2515,
-      "end": 2524,
+      "start": 2659,
+      "end": 2668,
       "fixes": 0,
       "message": "onCleanup is called inside createReaction, whose callback runs as a leaf with no owner to register cleanup on; the cleanup function will never run",
       "hint": "Register the cleanup in the computation that owns the createReaction instead, or create the surrounding scope with createRoot so disposal exists."
@@ -67,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 2515,
-      "end": 2524,
+      "start": 2659,
+      "end": 2668,
       "fixes": 0,
       "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists."
@@ -79,8 +79,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 5286,
-      "end": 5299,
+      "start": 5430,
+      "end": 5443,
       "fixes": 0,
       "message": "this createMemo scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing",
       "hint": "Keep the createMemo scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."

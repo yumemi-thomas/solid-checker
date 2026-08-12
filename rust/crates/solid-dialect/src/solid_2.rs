@@ -1,27 +1,28 @@
 //! Solid 2.0.
 //!
 //! Every table here started as an extraction of what `solid-reactive-ir`
-//! hardcoded before ADR 0006, not a fresh reading of the 2.0 docs. Provenance
-//! is recorded per table so that wiring the engine onto this crate can be held
-//! to a no-behaviour-change bar.
+//! hardcoded before ADR 0006, not a fresh reading of the 2.0 docs; the
+//! engine has since been wired onto this crate, so these tables are now the
+//! only place the answers live. Provenance stays recorded per table so a
+//! change is checked against the runtime it describes, not against memory.
 //!
 //! Entries added after the original extraction come from the exact published
 //! packages (see [`TABLE`]); each needs the same treatment -- a cited source
 //! and a fixture or focused regression test.
 
 use crate::{
-    Boundary, CallbackOwner, CleanupRule, Dialect, EffectSignature, Execution, Primitive,
-    PropsHelpers, Version, lookup, reverse,
+    Boundary, CallbackOwner, CleanupRule, Dialect, Execution, Primitive, Version, lookup, reverse,
 };
 
 /// Solid 2.0.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Solid2;
 
-/// Source: `solid-reactive-ir/src/lib.rs` `PrimitiveName::as_str` (26 names),
-/// plus the four the namespace-import expansion adds in
+/// Source: the pre-ADR-0006 hardcoded name list `solid-reactive-ir` used to
+/// carry (26 names), plus the four the namespace-import expansion adds in
 /// `solid-reactive-ir/src/symbols.rs` — `merge`, `refresh`, `affects` from
-/// `solid-js`, and `dynamic` from `@solidjs/*`.
+/// `solid-js`, and `dynamic` from `@solidjs/*`. The engine now asks this
+/// table; the old list no longer exists.
 ///
 /// `runWithOwner` is the one name here that came from neither. It is extracted
 /// from `solid-js@2.0.0-beta.31`, which re-exports it from `@solidjs/signals`
@@ -268,7 +269,18 @@ impl Dialect for Solid2 {
             Primitive::CreateEffect | Primitive::CreateRenderEffect => {
                 &[(0, CallbackOwner::Creates), (1, CallbackOwner::None)]
             }
+            // `createReaction` is deliberately absent from this arm: 1.x
+            // runs its invalidation callback as a leaf owner, but the
+            // beta.31 runtime allocates the reaction a computation like
+            // `createEffect` does, so 2.0 does not end the ownership chain
+            // there. The `dialect-solid-1x` / `dialect-solid-2` fixture
+            // pair pins the difference.
             Primitive::CreateTrackedEffect | Primitive::OnSettled => &[(0, CallbackOwner::Leaf)],
+            // Not a leaf (1.x's model — the `dialect-solid-2` fixture pins
+            // that difference), but not owned either: the beta.31 runtime
+            // invokes the invalidation callback with no owner, and
+            // `onCleanup` inside it emits `NO_OWNER_CLEANUP`.
+            Primitive::CreateReaction => &[(0, CallbackOwner::None)],
             // Client builds either call the loader at declaration time or on
             // first render; server builds never call it.
             Primitive::ClientOnly => &[(0, CallbackOwner::Conditional)],
@@ -394,12 +406,11 @@ impl Dialect for Solid2 {
     /// scope and never re-run on their own. `Tracked` here would mean "this
     /// primitive re-runs it", which neither does.
     ///
-    /// `flush` is `Inline` too, and since the engine's call graph now follows
-    /// these execution contracts, a callback handed to `flush` is reachable —
-    /// superseding the old `invokes_its_callbacks` column, which excluded it
-    /// while this row said the opposite. `flushSync(fn)` does invoke `fn`, so
-    /// the row is the truthful one; its callbacks are deferred scopes, so the
-    /// added reachability changes no read or owner diagnostic.
+    /// `flush` is `Inline` too, and since the engine's call graph follows
+    /// these execution contracts, a callback handed to `flush` is reachable.
+    /// `flushSync(fn)` does invoke `fn`, so the row is the truthful one; its
+    /// callbacks are deferred scopes, so that reachability changes no read
+    /// or owner diagnostic.
     fn callback_executions(&self, primitive: Primitive) -> &'static [(usize, Execution)] {
         match primitive {
             Primitive::CreateMemo
@@ -440,35 +451,77 @@ impl Dialect for Solid2 {
         }
     }
 
+    /// `render`/`hydrate` run their code callback once and never again, and
+    /// `lazy`'s loader runs once from the wrapper component body, so a
+    /// reactive read in any of them is a likely dependency bug — the same
+    /// three entry points 1.x reports. `runWithOwner` swaps the owner while
+    /// `@solidjs/signals` sets `tracking = false` around the call (see
+    /// [`Solid2::runs_callback_deferred`]), so reads inside it register
+    /// nothing either. `mapArray`/`repeat` are deliberately absent: unlike
+    /// 1.x, their map callbacks run tracked (see the bundled contract rows).
+    fn reports_untracked_reads_at(
+        &self,
+        primitive: Primitive,
+        argument: usize,
+        argument_count: usize,
+    ) -> bool {
+        let _ = argument_count;
+        // `createReaction`'s invalidation callback runs untracked and
+        // one-shot; the beta.31 runtime emits `STRICT_READ_UNTRACKED` for a
+        // reactive read inside it, so the checker reports the same.
+        (matches!(
+            primitive,
+            Primitive::Hydrate | Primitive::Lazy | Primitive::Render | Primitive::CreateReaction
+        ) && argument == 0)
+            || (primitive == Primitive::RunWithOwner && argument == 1)
+    }
+
+    /// The callbacks nothing runs until the returned value is used:
+    /// `createReaction`'s invalidation callback arms only once the returned
+    /// tracker is called, `lazy`'s loader waits for the wrapper component to
+    /// render, and `mapArray(list, mapFn)`/`repeat(count, mapFn)` pull both
+    /// their source and their map function through the returned accessor.
+    fn callback_requires_return_invocation(&self, primitive: Primitive, argument: usize) -> bool {
+        (argument == 0 && matches!(primitive, Primitive::CreateReaction | Primitive::Lazy))
+            || (argument <= 1 && primitive == Primitive::MapArray)
+            || (argument == 1 && primitive == Primitive::RepeatMap)
+    }
+
+    /// `const track = createReaction(onInvalidate); track(() => read())` —
+    /// the tracker argument is a tracked computation, the same two-stage
+    /// shape as 1.x. Source: the 2.0 cheatsheet's "one-shot tracked
+    /// callback" entry and the beta.31 runtime.
+    fn returned_callback_execution_at(
+        &self,
+        primitive: Primitive,
+        result_slot: Option<usize>,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<Execution> {
+        match (primitive, result_slot, argument, argument_count) {
+            (Primitive::CreateReaction, None, 0, 1..) => Some(Execution::Tracked),
+            _ => None,
+        }
+    }
+
+    fn returned_callback_owner_at(
+        &self,
+        primitive: Primitive,
+        result_slot: Option<usize>,
+        argument: usize,
+        argument_count: usize,
+    ) -> Option<CallbackOwner> {
+        match (primitive, result_slot, argument, argument_count) {
+            (Primitive::CreateReaction, None, 0, 1..) => Some(CallbackOwner::Creates),
+            _ => None,
+        }
+    }
+
     /// async boundary `Loading` and the error boundary `Errored`.
     fn boundary_name(&self, boundary: Boundary) -> &'static str {
         match boundary {
             Boundary::Async => "Loading",
             Boundary::Error => "Errored",
-        }
-    }
-
-    /// Source: `createEffect<T>(compute: ComputeFunction<T>, effect:
-    /// EffectFunction<T>, ...)` in `@solidjs/signals`. The split is 2.0's
-    /// headline reactivity change and the reason `callback_positions` answers
-    /// `[1]` for it.
-    fn tracking_scopes(&self) -> &'static str {
-        "JSX, a createMemo, or the compute function of createEffect(compute, apply)"
-    }
-
-    fn imperative_write_scopes(&self) -> &'static str {
-        "an event handler, an action, onSettled, or the apply function of createEffect(compute, apply)"
-    }
-
-    fn owned_write_opt_in(&self) -> Option<&'static str> {
-        Some("For internal signals only, opt in with createSignal(value, { ownedWrite: true }).")
-    }
-
-    fn effect_signature(&self) -> EffectSignature {
-        EffectSignature {
-            signature: "createEffect(compute, apply)",
-            roles: "compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
-            remedy: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
         }
     }
 
@@ -521,8 +574,9 @@ impl Dialect for Solid2 {
         )
     }
 
-    /// Source: the `is_control_flow` and `control_flow_component` lists in
-    /// `solid-reactive-ir`, extracted unchanged.
+    /// Source: the control-flow component lists `solid-reactive-ir`
+    /// hardcoded before ADR 0006, extracted unchanged; this table is now the
+    /// only place they live.
     fn renders_children_through_callback(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
@@ -571,15 +625,6 @@ impl Dialect for Solid2 {
         )
     }
 
-    /// Source: the `component-props-destructure` hint in
-    /// `solid-reactive-ir/src/lib.rs`.
-    fn props_helpers(&self) -> PropsHelpers {
-        PropsHelpers {
-            omit: "omit",
-            merge: "merge",
-        }
-    }
-
     /// Source: `solid-js@2.0.0-beta.31`'s `types/index.d.ts`, which re-exports
     /// the whole vocabulary from the package root. 2.0 folded the store API
     /// into core, so there is no `solid-js/store`; the one primitive that
@@ -617,7 +662,7 @@ impl Dialect for Solid2 {
         if module == "solid-js" {
             NAMESPACE_SOLID_JS
         } else if module == "@solidjs/web" {
-            &["clientOnly", "dynamic", "useHead"]
+            NAMESPACE_SOLIDJS_WEB
         } else {
             &[]
         }
@@ -626,40 +671,81 @@ impl Dialect for Solid2 {
 
 /// The names a `solid-js` namespace import exposes.
 ///
-/// Deliberately narrower than [`TABLE`]: `children`, `For` and `Repeat` are
-/// primitives this dialect models, reachable through a direct import or a JSX
-/// tag, but the engine has never resolved them through a namespace import or a
-/// declaration site. Whether that is a considered exclusion or an oversight is
-/// not established, so this preserves it rather than quietly widening the
-/// vocabulary. Widening it is a behaviour change and belongs in its own commit
-/// with its own fixture.
+/// The invariant is the one `solid_1x.rs` enforces: every modelled primitive
+/// the module exports must keep its namespace spelling, so a primitive
+/// cannot be reachable as `import { x }` but invisible as `Solid.x`. The
+/// list used to stop short of that (19 names, `children`/`For`/`Repeat`
+/// among them, resolved as nothing through a namespace import — the
+/// `namespace-import-v2` fixture pins the difference); the
+/// `every_modelled_export_resolves_through_its_namespace_module` test below
+/// now derives the expectation from [`TABLE`] and the export census, exactly
+/// as the 1.x dialect does.
 const NAMESPACE_SOLID_JS: &[&str] = &[
-    "createSignal",
+    "Errored",
+    "For",
+    "Loading",
+    "Match",
+    "Repeat",
+    "Show",
+    "Switch",
+    "action",
+    "affects",
+    "children",
+    "createContext",
+    "createEffect",
+    "createErrorBoundary",
+    "createLoadingBoundary",
     "createMemo",
-    "mapArray",
-    "createStore",
-    "createProjection",
     "createOptimistic",
     "createOptimisticStore",
-    "createEffect",
-    "createRenderEffect",
-    "createTrackedEffect",
-    "createReaction",
-    "createRoot",
     "createOwner",
-    "runWithOwner",
-    "untrack",
-    "onSettled",
-    "onCleanup",
+    "createProjection",
+    "createReaction",
+    "createRenderEffect",
+    "createRevealOrder",
+    "createRoot",
+    "createSignal",
+    "createStore",
+    "createTrackedEffect",
+    "deep",
     "flush",
-    "Loading",
-    "Show",
-    "Match",
-    "Switch",
+    "getOwner",
+    "isPending",
+    "latest",
+    "lazy",
+    "mapArray",
     "merge",
+    "omit",
+    "onCleanup",
+    "onSettled",
+    "reconcile",
     "refresh",
-    "affects",
-    "action",
+    "repeat",
+    "resolve",
+    "runWithOwner",
+    "snapshot",
+    "untrack",
+    "useContext",
+];
+
+/// The names an `@solidjs/web` namespace import exposes, under the same
+/// census-derived invariant as [`NAMESPACE_SOLID_JS`]: the entry points plus
+/// the control-flow and owner helpers the package re-exports.
+const NAMESPACE_SOLIDJS_WEB: &[&str] = &[
+    "Errored",
+    "For",
+    "Loading",
+    "Match",
+    "Repeat",
+    "Show",
+    "Switch",
+    "clientOnly",
+    "dynamic",
+    "getOwner",
+    "hydrate",
+    "render",
+    "untrack",
+    "useHead",
 ];
 
 #[cfg(test)]
@@ -751,6 +837,32 @@ mod tests {
                 reverse(TABLE, *primitive),
                 Some(*name),
                 "{name} maps to a primitive another name already claims"
+            );
+        }
+    }
+
+    /// The same invariant `solid_1x.rs` enforces: a namespace import must
+    /// retain every modelled runtime obligation the module exports, so a
+    /// primitive cannot be reachable as `import { x }` but invisible as
+    /// `Solid.x`.
+    #[test]
+    fn every_modelled_export_resolves_through_its_namespace_module() {
+        for module in Solid2.modules() {
+            let mut expected = TABLE
+                .iter()
+                .filter_map(|(name, _)| {
+                    Solid2
+                        .export_modules(name, crate::ExportPosition::Value)
+                        .contains(module)
+                        .then_some(*name)
+                })
+                .collect::<Vec<_>>();
+            expected.sort_unstable();
+            let mut actual = Solid2.namespace_import_primitives(module).to_vec();
+            actual.sort_unstable();
+            assert_eq!(
+                actual, expected,
+                "namespace imports from {module} must retain every modelled runtime obligation"
             );
         }
     }

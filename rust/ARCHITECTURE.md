@@ -26,6 +26,26 @@ rust/
         └── compiler/            # solid-v2-compiler: dom-expressions adapter
 ```
 
+## Version ownership at a glance
+
+“Shared” means the algorithm is common, not that the two runtimes behave the
+same. Shared code asks the selected vocabulary and receives the 1.x or 2.0
+answer; it must not switch on an API spelling itself.
+
+| Concern | Shared module / seam | Solid 1.x ownership | Solid 2.0 ownership |
+| --- | --- | --- | --- |
+| Syntax, TypeScript facts, reactive IR, caches | `crates/solid-facts`, `crates/solid-reactive-ir`, backend infrastructure | No separate implementation | No separate implementation |
+| Primitive names, callback semantics, ownership, boundaries, import modules | `crates/solid-dialect::Dialect`; consumers read one `CallbackSemantics` descriptor per call argument | `solid-dialect/src/solid_1x.rs` (`Solid1x`, `Version::V1`) | `solid-dialect/src/solid_2.rs` (`Solid2`, `Version::V2`) |
+| JSX compiler facts | `CompilerFactsProvider` | `dialects/solid-v1/compiler` | `dialects/solid-v2/compiler` |
+| Rule identity, severity, message, hint | dialect-neutral `Finding` | `dialects/solid-v1/rules`; external names are `v1/<rule>` | `dialects/solid-v2/rules`; external names are unprefixed |
+| ESLint-era file-local checks | fact helpers live in `solid-reactive-ir::upstream_compat` | `solid1x_*` modules; executed only for `Version::V1` | Not executed |
+| Shared static and fine-grained defects | `StaticDefectKind`, populated by static analysis and `upstream_compat::shared_reactivity`; contains no rule prose | Projected and worded by the 1.x catalog | Projected and worded by the 2.0 catalog; the async-tracked-scope check is omitted |
+| Bundled runtime contracts | shared contract schema and resolver | `solid-js-v1.json` / `solid-js-1x.json`, package `solid-js@1.9.14` | `solid-js.json` + `solidjs-web.json`, packages `solid-js` and `@solidjs/web` at `2.0.0-beta.31` |
+
+At runtime the stable dialect ids are `solid-v1` and `solid-v2`. In Rust,
+`Version::V1` always means Solid 1.x and `Version::V2` always means Solid 2.0;
+other protocol/schema versions are unrelated.
+
 ## The three dialect seams
 
 **Vocabulary.** `solid-dialect` owns everything version-specific about
@@ -102,5 +122,8 @@ now the shipped layout, and the plan's items resolved as follows:
   exception: `solid-facts-backend` (the composition root) and
   `solid-checker-wasm` (an entry point) wire in the current dialect.
 - Dialect crates depend only on `solid-facts` and `solid-reactive-ir`.
-- New Solid-version-specific behavior goes under `dialects/`, never into
-  `crates/`.
+- New version-specific compiler adapters, vocabulary, rule identities, and
+  wording go under `dialects/`. An analyzer that requires private
+  `solid-reactive-ir` facts may remain in that crate only when its version
+  ownership is explicit in the module name and it is gated by the selected
+  `Version`; the dialect catalog still owns the external finding.
