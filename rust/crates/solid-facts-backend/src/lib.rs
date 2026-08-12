@@ -6,17 +6,22 @@ mod contract_document;
 mod demand_plan;
 mod diagnostics;
 pub mod dialect;
+mod wire;
 
 pub use cache::{CacheStats, FactsCache};
 pub use contract_document::encode as encode_package_contract;
+pub use diagnostics::bundled_solid_js_contract;
 pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
     PackageSummary, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit,
     SourceLocation, analysis_metrics, analyze_project, analyze_project_measured,
-    analyze_project_measured_with, bundled_solid_js_contract, discovered_contract_paths,
-    discovered_rule_options_path, imported_package_roots, load_package_contracts,
-    load_package_contracts_with, package_contract_statuses, package_contract_statuses_with,
-    read_package_contract, snapshot, source_location,
+    analyze_project_measured_with, discovered_contract_paths, discovered_rule_options_path,
+    imported_package_roots, load_package_contracts, load_package_contracts_with,
+    package_contract_statuses, package_contract_statuses_with, read_package_contract, snapshot,
+    source_location,
+};
+pub use wire::{
+    SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,
 };
 
 #[must_use]
@@ -48,73 +53,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use serde::{Deserialize, Serialize};
 use solid_facts::compiler::{AnalysisRequest, CompilerOptions, ExecutionMap};
 use solid_facts::core::{Generation, Span};
 
 use crate::dialect::Dialect;
 use solid_facts::{FileFacts, ProjectFacts, TypeScriptChanges, TypeScriptTable};
 use thiserror::Error;
-use typefacts::v3::EntityDemand;
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct SourceFile {
-    pub path: String,
-    pub source: Arc<str>,
-    #[serde(default)]
-    pub compiler_options: CompilerOptions,
-}
 
 pub use solid_facts::compiler::{CompilerFactsProvider, CompilerProviderError};
-pub use solid_v2_compiler::NativeCompilerFacts;
-
-pub struct SemanticDemandGroup<'a> {
-    pub path: &'a str,
-    pub demands: &'a [EntityDemand],
-    pub shared_demands: Option<&'a Arc<[EntityDemand]>>,
-}
-
-/// The checker's view of a TypeFacts producer.
-///
-/// The retained session — process lifecycle, framing, handshake, request
-/// correlation, retained demands and delta application — belongs to the
-/// `typefacts` crate. What is left here is the one question the analysis
-/// pipeline asks: given this generation's demands, what is the fact table?
-pub trait TypeFactsProvider {
-    /// Analyses the current generation from demands already grouped by path.
-    ///
-    /// A group equal to the retained state is neither cloned nor transmitted,
-    /// so an unchanged generation costs a lookup rather than a round trip.
-    fn semantic_grouped(
-        &mut self,
-        groups: &[SemanticDemandGroup<'_>],
-    ) -> Result<TypeScriptTable, BackendError>;
-
-    /// Analyses from a flat demand list, grouping it first. A convenience for
-    /// callers that do not already keep demands grouped.
-    fn semantic(&mut self, demands: Vec<EntityDemand>) -> Result<TypeScriptTable, BackendError> {
-        let grouped = group_demands(&demands);
-        let groups = grouped
-            .iter()
-            .filter(|run| !run.is_empty())
-            .map(|run| SemanticDemandGroup {
-                path: run[0].location.path.as_ref(),
-                demands: run,
-                shared_demands: None,
-            })
-            .collect::<Vec<_>>();
-        self.semantic_grouped(&groups)
-    }
-
-    fn take_last_exchange_timings(&mut self) -> Option<TypeFactsExchangeTimings> {
-        None
-    }
-
-    fn take_last_table_changes(&mut self) -> Option<TypeScriptChanges> {
-        None
-    }
-}
 
 #[derive(Debug, Error)]
 pub enum BackendError {
@@ -176,30 +122,7 @@ impl From<CompilerProviderError> for BackendError {
     }
 }
 
-#[derive(Clone, Debug)]
-pub struct SourceChange {
-    pub path: String,
-    pub version: u64,
-    pub source: Option<String>,
-    pub compiler_options: CompilerOptions,
-}
-
 const TYPEFACTS_RECOVERY_ATTEMPTS: u32 = 3;
-
-/// Splits a demand list into per-path runs.
-///
-/// Demands arrive sorted by location, so equal paths are already adjacent and
-/// grouping is a single scan.
-fn group_demands(demands: &[EntityDemand]) -> Vec<Vec<EntityDemand>> {
-    let mut runs: Vec<Vec<EntityDemand>> = Vec::new();
-    for demand in demands {
-        match runs.last_mut() {
-            Some(run) if run[0].location.path == demand.location.path => run.push(demand.clone()),
-            _ => runs.push(vec![demand.clone()]),
-        }
-    }
-    runs
-}
 
 /// The checker's handle on one retained TypeFacts producer process.
 ///
@@ -709,38 +632,6 @@ pub struct NativeBuildTimings {
     pub exchange: TypeFactsExchangeTimings,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
-pub struct TypeFactsExchangeTimings {
-    pub roundtrip: Duration,
-    pub request_send: Duration,
-    pub request_bytes: u64,
-    pub response_decode: Duration,
-    pub response_bytes: u64,
-    pub server_request_decode: Duration,
-    pub server_analyze: Duration,
-    pub server_async: Duration,
-    pub server_demand: Duration,
-    pub server_assembly: Duration,
-    pub server_sort: Duration,
-    pub server_close_symbols: Duration,
-    pub server_materialized: bool,
-    pub server_retained_files: u64,
-    pub server_recomputed_files: u64,
-    pub server_non_durable_files: u64,
-}
-
-impl TypeFactsExchangeTimings {
-    #[must_use]
-    pub fn encode_and_transport(self) -> Duration {
-        self.roundtrip.saturating_sub(
-            self.request_send
-                .saturating_add(self.response_decode)
-                .saturating_add(self.server_request_decode)
-                .saturating_add(self.server_analyze),
-        )
-    }
-}
-
 pub fn build_project_native_measured(
     dialect: &'static Dialect,
     project_id: impl Into<String>,
@@ -1123,11 +1014,12 @@ fn semantic_demands(
     demand_plan::plan(dialect, files)
 }
 
-fn structural_accessor_spans(file: &FileFacts) -> HashSet<Span> {
-    let mut named_imports = HashMap::<&str, &str>::new();
-    let mut namespace_imports = HashSet::<&str>::new();
+fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> HashSet<Span> {
+    let vocabulary = dialect.vocabulary;
+    let mut named_imports = HashMap::<&str, solid_dialect::Primitive>::new();
+    let mut namespace_imports = HashMap::<&str, &str>::new();
     for import in &file.ast.imports {
-        if !import.module.starts_with("solid-js") {
+        if !vocabulary.owns_module(&import.module) {
             continue;
         }
         for binding in &import.bindings {
@@ -1136,11 +1028,20 @@ fn structural_accessor_spans(file: &FileFacts) -> HashSet<Span> {
                     let Some(local) = file.source_text(binding.local.span) else {
                         continue;
                     };
-                    named_imports.insert(local, binding.imported.as_deref().unwrap_or(local));
+                    let imported = binding.imported.as_deref().unwrap_or(local);
+                    let Some(primitive) = vocabulary.primitive(imported) else {
+                        continue;
+                    };
+                    if vocabulary
+                        .export_modules(imported, solid_dialect::ExportPosition::Value)
+                        .contains(&import.module.as_str())
+                    {
+                        named_imports.insert(local, primitive);
+                    }
                 }
                 solid_facts::ast::ImportKind::Namespace => {
                     if let Some(local) = file.source_text(binding.local.span) {
-                        namespace_imports.insert(local);
+                        namespace_imports.insert(local, &import.module);
                     }
                 }
                 _ => {}
@@ -1158,26 +1059,21 @@ fn structural_accessor_spans(file: &FileFacts) -> HashSet<Span> {
         let Some(static_callee) = call.static_callee(&file.source) else {
             continue;
         };
-        let primitive = if let Some(imported) = named_imports.get(static_callee) {
-            Some(*imported)
+        let primitive = if let Some(primitive) = named_imports.get(static_callee) {
+            Some(*primitive)
         } else if let Some((namespace, property)) = static_callee.split_once('.')
-            && namespace_imports.contains(namespace)
+            && let Some(module) = namespace_imports.get(namespace)
         {
-            Some(property.rsplit('.').next().unwrap_or(property))
+            let name = property.rsplit('.').next().unwrap_or(property);
+            vocabulary
+                .namespace_import_primitives(module)
+                .contains(&name)
+                .then(|| vocabulary.primitive(name))
+                .flatten()
         } else {
             None
         };
-        if !matches!(
-            primitive,
-            Some(
-                "createSignal"
-                    | "createMemo"
-                    | "createStore"
-                    | "createProjection"
-                    | "createOptimistic"
-                    | "createOptimisticStore"
-            )
-        ) {
+        if !primitive.is_some_and(|primitive| vocabulary.creates_reactive_source(primitive)) {
             continue;
         }
         let source = if binding.shape == solid_facts::ast::BindingShape::Array {
@@ -1714,6 +1610,35 @@ mod tests {
     }
 
     #[test]
+    fn structural_accessors_follow_the_selected_vocabulary_and_export_modules() {
+        let file = test_file_facts(
+            "src/sources.ts",
+            r#"
+                import { createResource, createProjection } from "solid-js";
+                import { createStore } from "solid-js/store";
+                const [resource] = createResource(fetcher);
+                const projection = createProjection(() => state);
+                const [store] = createStore({ count: 0 });
+            "#,
+        );
+        let names = |selected| {
+            structural_accessor_spans(selected, &file)
+                .into_iter()
+                .filter_map(|span| file.source_text(span).map(str::to_owned))
+                .collect::<HashSet<_>>()
+        };
+
+        assert_eq!(
+            names(dialect::by_version(solid_dialect::Version::V1)),
+            HashSet::from(["resource".to_owned(), "store".to_owned()])
+        );
+        assert_eq!(
+            names(dialect::by_version(solid_dialect::Version::V2)),
+            HashSet::from(["projection".to_owned()])
+        );
+    }
+
+    #[test]
     fn returned_member_calls_combine_symbol_and_resolved_call_demands() {
         let file = test_file_facts(
             "src/cleanup.ts",
@@ -1801,16 +1726,6 @@ mod tests {
         uncertifiable: true,
     };
 
-    fn stub_package_contract_finding(
-        issue: &solid_reactive_ir::PackageContractIssue,
-    ) -> solid_reactive_ir::Finding {
-        solid_reactive_ir::Finding::new(
-            STUB_CONTRACT_RULE,
-            "the stub dialect's package contract is unavailable".into(),
-            issue.location.clone(),
-        )
-    }
-
     fn stub_solve(
         _program: &solid_reactive_ir::Program,
     ) -> (
@@ -1828,6 +1743,16 @@ mod tests {
                 },
             )],
             solid_reactive_ir::SolveTimings::default(),
+        )
+    }
+
+    fn stub_package_contract_finding(
+        issue: &solid_reactive_ir::PackageContractIssue,
+    ) -> solid_reactive_ir::Finding {
+        solid_reactive_ir::Finding::new(
+            STUB_CONTRACT_RULE,
+            "the stub dialect's package contract is unavailable".into(),
+            issue.location.clone(),
         )
     }
 

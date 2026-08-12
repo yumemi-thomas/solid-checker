@@ -30,7 +30,7 @@ fn plan_file(
     demands: &mut Vec<EntityDemand>,
 ) -> Result<(), BackendError> {
     let path = file.path.to_string();
-    let structural_accessors = structural_accessor_spans(file);
+    let structural_accessors = structural_accessor_spans(dialect, file);
     let mut symbol_spans = HashMap::new();
     let mut type_descriptor_spans = HashSet::new();
     let mut async_symbol_spans = HashSet::new();
