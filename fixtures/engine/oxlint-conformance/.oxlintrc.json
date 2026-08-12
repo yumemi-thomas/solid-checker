@@ -1,9 +1,8 @@
 {
-  "$schema": "../../../../../node_modules/oxlint/configuration_schema.json",
   "jsPlugins": [
     {
       "name": "solid-checker",
-      "specifier": "../../../../packages/eslint-plugin-solid-checker/index.cjs"
+      "specifier": "../../../packages/cli/eslint.cjs"
     }
   ],
   "rules": {
