@@ -189,13 +189,21 @@ impl Rule {
 }
 
 /// The catalog as the npm plugin consumes it: one JSON entry per rule, in
-/// catalog order. Generated into `packages/cli/lib/rules-v2.json` by the test
+/// catalog order. Generated into `packages/cli/lib/rules-solid-v2.json` by the test
 /// below; `SOLID_RULES_UPDATE=1 cargo test -p solid-v2-rules` rewrites it, a plain
 /// test run fails on drift. The JS surface must never hand-maintain rule
 /// facts the catalog already owns.
 #[must_use]
 pub fn manifest_json() -> String {
-    solid_reactive_ir::rule_manifest_json(DOCS_BASE_URL, Rule::ALL.into_iter().map(Rule::metadata))
+    solid_reactive_ir::rule_manifest_json(
+        solid_reactive_ir::RuleManifestIdentity {
+            dialect: "solid-v2",
+            config: "v2",
+            namespace: "",
+        },
+        DOCS_BASE_URL,
+        Rule::ALL.into_iter().map(Rule::metadata),
+    )
 }
 
 #[cfg(test)]
@@ -205,7 +213,7 @@ mod tests {
     #[test]
     fn the_shipped_manifest_is_the_catalog() {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../../../packages/cli/lib/rules-v2.json");
+            .join("../../../../packages/cli/lib/rules-solid-v2.json");
         let expected = super::manifest_json();
         if std::env::var_os("SOLID_RULES_UPDATE").is_some() {
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -215,7 +223,7 @@ mod tests {
         let shipped = std::fs::read_to_string(&path).unwrap_or_default();
         assert_eq!(
             shipped, expected,
-            "packages/cli/lib/rules-v2.json has drifted from the catalog; run SOLID_RULES_UPDATE=1 cargo test -p solid-v2-rules to rewrite it"
+            "packages/cli/lib/rules-solid-v2.json has drifted from the catalog; run SOLID_RULES_UPDATE=1 cargo test -p solid-v2-rules to rewrite it"
         );
     }
 

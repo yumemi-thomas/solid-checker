@@ -23,7 +23,7 @@
 //! contract. Pointed at solid-js it finds nothing to trace to.
 //!
 //! ```text
-//! solid-contract-gen --package <dir> --dialect <solid-js-1x|solid-js|solidjs-web> \
+//! solid-contract-gen --package <dir> --dialect <solid-v1/solid-js|solid-v2/solid-js|solid-v2/solidjs-web> \
 //!     --out <path> [--check]
 //! ```
 
@@ -101,9 +101,9 @@ const fn internal(path: &'static str) -> Entry {
 /// One contract artifact this generator can produce: a package at a pinned
 /// major, with its declaration entry points and reviewed semantics.
 ///
-/// Not a `dialect::Dialect` — those name Solid language versions
-/// (`solid-v1`/`solid-v2`), while these ids name packages and their generated
-/// artifacts (`solid-js-1x`, `solidjs-web`); one dialect can bundle several.
+/// The target id starts with its stable dialect id and ends with a package
+/// slug. One dialect can own several package artifacts without inventing a
+/// second, unrelated identifier namespace.
 struct ContractTarget {
     /// Contract file stem, and the `--dialect` name.
     id: &'static str,
@@ -128,7 +128,7 @@ struct ContractTarget {
 /// Solid 2.0. Sourced by reading `solid-js@2.0.0-beta.31` and its bundled
 /// `@solidjs/signals` implementation, not the signatures — see the module docs.
 static SOLID_2: ContractTarget = ContractTarget {
-    id: "solid-js",
+    id: "solid-v2/solid-js",
     package: "solid-js",
     major: "2.",
     // `solid-js@2` publishes its runtime root and the development refresh
@@ -243,7 +243,7 @@ static SOLID_2: ContractTarget = ContractTarget {
 /// Returning a cleanup is a 2.0 idea: 1.x threads an effect callback's return
 /// value to the next run as `prev`.
 static SOLID_1X: ContractTarget = ContractTarget {
-    id: "solid-js-1x",
+    id: "solid-v1/solid-js",
     package: "solid-js",
     major: "1.",
     entries: &[
@@ -343,7 +343,7 @@ static SOLID_1X: ContractTarget = ContractTarget {
 
 /// `@solidjs/web`, 2.0's DOM package.
 static SOLIDJS_WEB: ContractTarget = ContractTarget {
-    id: "solidjs-web",
+    id: "solid-v2/solidjs-web",
     package: "@solidjs/web",
     major: "2.",
     // Every subpath the package's `exports` map publishes, `jsx-runtime`

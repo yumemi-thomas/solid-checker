@@ -6,6 +6,11 @@ license.workspace = true
 publish.workspace = true
 rust-version.workspace = true
 
+[features]
+default = ["dialect-v1", "dialect-v2"]
+dialect-v1 = ["solid-facts-backend/dialect-v1"]
+dialect-v2 = ["solid-facts-backend/dialect-v2"]
+
 [lib]
 crate-type = ["cdylib", "lib"]
 test = false
@@ -17,7 +22,7 @@ napi-derive.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 solid-facts = { path = "../solid-facts" }
-solid-facts-backend = { path = "../solid-facts-backend" }
+solid-facts-backend = { path = "../solid-facts-backend", default-features = false }
 
 [build-dependencies]
 napi-build = "2"

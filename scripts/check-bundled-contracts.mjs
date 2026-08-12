@@ -9,18 +9,17 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { fileURLToPath } from "node:url";
 
 import {
   expandContract,
   normalizeContract,
 } from "../packages/cli/scripts/contract-document.mjs";
+import { loadDialectManifests, root } from "./dialect-manifests.mjs";
 
-const root = fileURLToPath(new URL("..", import.meta.url));
-const definitions = [
-  { file: "pkg/contracts/bundled/solid-js.json", name: "solid-js" },
-  { file: "pkg/contracts/bundled/solidjs-web.json", name: "@solidjs/web" },
-];
+const definitions = loadDialectManifests({ requireArtifacts: true })
+  .flatMap(manifest => manifest.contracts)
+  .filter(contract => contract.probeRuntime)
+  .map(contract => ({ file: contract.bundledContract, name: contract.package }));
 const write = process.argv.includes("--write");
 let failures = 0;
 const fail = message => {

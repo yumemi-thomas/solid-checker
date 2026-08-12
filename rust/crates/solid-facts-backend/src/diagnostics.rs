@@ -287,7 +287,7 @@ pub fn analyze_project_measured(
 }
 
 /// As [`analyze_project_measured`], but reuses a bundled solid-js contract the
-/// caller already decoded (see [`bundled_solid_js_contract`]) instead of
+/// caller already decoded (with the Solid 2 bundled-contract decoder) instead of
 /// decoding the compile-time-embedded JSON on the analysis path. The cold
 /// path decodes it while the service builds the program; the preloaded value
 /// is ignored when the project does not import solid-js.
@@ -625,23 +625,26 @@ pub fn source_location(location: &typefacts::Location, sources: &[SourceFile]) -
 /// facts-independent, so a cold-start caller can decode it while the TypeFacts
 /// service builds its program, then hand it to [`load_package_contracts_with`]
 /// or [`analyze_project_measured_with`].
+#[cfg(feature = "dialect-v2")]
 pub fn bundled_solid_js_contract() -> Result<PackageContract, BackendError> {
     let mut bundled = decode_package_contract(include_bytes!(
-        "../../../../pkg/contracts/bundled/solid-js.json"
+        "../../../../pkg/contracts/bundled/solid-v2/solid-js.json"
     ))?;
-    bundled.source_path = "bundled://solid-js.json".into();
+    bundled.source_path = "bundled://solid-v2/solid-js.json".into();
     Ok(bundled)
 }
 
+#[cfg(feature = "dialect-v2")]
 fn bundled_solidjs_web_contract() -> Result<PackageContract, BackendError> {
     let mut bundled = decode_package_contract(include_bytes!(
-        "../../../../pkg/contracts/bundled/solidjs-web.json"
+        "../../../../pkg/contracts/bundled/solid-v2/solidjs-web.json"
     ))?;
-    bundled.source_path = "bundled://solidjs-web.json".into();
+    bundled.source_path = "bundled://solid-v2/solidjs-web.json".into();
     Ok(bundled)
 }
 
 /// The Solid 2.0 dialect's bundled contract set, keyed by package root.
+#[cfg(feature = "dialect-v2")]
 pub(crate) fn bundled_contract_v2(package: &str) -> Result<Option<PackageContract>, BackendError> {
     Ok(match package {
         "solid-js" => Some(bundled_solid_js_contract()?),
@@ -653,13 +656,14 @@ pub(crate) fn bundled_contract_v2(package: &str) -> Result<Option<PackageContrac
 /// The Solid 1.x dialect's bundled contract for `solid-js@1.x`, covering the
 /// `.`, `./store` and `./web` entrypoints of the package that version
 /// actually ships.
+#[cfg(feature = "dialect-v1")]
 pub(crate) fn bundled_contract_v1(package: &str) -> Result<Option<PackageContract>, BackendError> {
     Ok(match package {
         "solid-js" => {
             let mut bundled = decode_package_contract(include_bytes!(
-                "../../../../pkg/contracts/bundled/solid-js-v1.json"
+                "../../../../pkg/contracts/bundled/solid-v1/solid-js.json"
             ))?;
-            bundled.source_path = "bundled://solid-js-v1.json".into();
+            bundled.source_path = "bundled://solid-v1/solid-js.json".into();
             Some(bundled)
         }
         _ => None,

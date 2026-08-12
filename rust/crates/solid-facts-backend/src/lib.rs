@@ -1,6 +1,9 @@
 //! Rust-led orchestration of Oxc AST facts, Solid execution facts, and
 //! TypeScript-Go semantic facts.
 
+#[cfg(not(any(feature = "dialect-v1", feature = "dialect-v2")))]
+compile_error!("solid-facts-backend requires at least one dialect feature");
+
 mod cache;
 mod contract_document;
 mod demand_plan;
@@ -10,6 +13,7 @@ mod wire;
 
 pub use cache::{CacheStats, FactsCache};
 pub use contract_document::encode as encode_package_contract;
+#[cfg(feature = "dialect-v2")]
 pub use diagnostics::bundled_solid_js_contract;
 pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
@@ -1629,11 +1633,17 @@ mod tests {
         };
 
         assert_eq!(
-            names(dialect::by_version(solid_dialect::Version::V1)),
+            names(
+                dialect::by_version(solid_dialect::Version::V1)
+                    .expect("default build includes solid-v1"),
+            ),
             HashSet::from(["resource".to_owned(), "store".to_owned()])
         );
         assert_eq!(
-            names(dialect::by_version(solid_dialect::Version::V2)),
+            names(
+                dialect::by_version(solid_dialect::Version::V2)
+                    .expect("default build includes solid-v2"),
+            ),
             HashSet::from(["projection".to_owned()])
         );
     }

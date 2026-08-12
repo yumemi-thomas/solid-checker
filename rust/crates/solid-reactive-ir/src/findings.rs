@@ -40,12 +40,26 @@ pub const DOCS_BASE_URL: &str =
 /// Serializes a rule catalog into the stable manifest consumed by the npm
 /// adapter. Catalogs remain responsible for ordering and metadata; this owns
 /// the shared wire shape and formatting.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RuleManifestIdentity {
+    /// Stable checker dialect id (`solid-v1`, `solid-v2`).
+    pub dialect: &'static str,
+    /// Backward-compatible ESLint flat-config name (`v1`, `v2`).
+    pub config: &'static str,
+    /// Rule-name namespace without the slash, or empty for the default surface.
+    pub namespace: &'static str,
+}
+
 #[must_use]
 pub fn rule_manifest_json(
+    identity: RuleManifestIdentity,
     docs_base_url: &str,
     rules: impl ExactSizeIterator<Item = RuleMetadata>,
 ) -> String {
-    let mut out = format!("{{\n  \"docsBaseUrl\": \"{docs_base_url}\",\n  \"rules\": [\n");
+    let mut out = format!(
+        "{{\n  \"schemaVersion\": 1,\n  \"dialect\": \"{}\",\n  \"config\": \"{}\",\n  \"namespace\": \"{}\",\n  \"docsBaseUrl\": \"{docs_base_url}\",\n  \"rules\": [\n",
+        identity.dialect, identity.config, identity.namespace
+    );
     let count = rules.len();
     for (index, metadata) in rules.enumerate() {
         out.push_str(&format!(

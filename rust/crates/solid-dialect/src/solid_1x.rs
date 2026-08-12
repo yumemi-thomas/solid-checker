@@ -104,12 +104,12 @@ impl Dialect for Solid1x {
         ]
     }
 
-    /// `pkg/contracts/bundled/solid-js-v1.json`, the artifact
+    /// `pkg/contracts/bundled/solid-v1/solid-js.json`, the artifact
     /// `solid-facts-backend` compiles in for this dialect — not the reviewed
-    /// semantics source (`contracts/solid-js-1x.json` in this crate), which
+    /// semantics source (`contracts/solid-v1/solid-js.json` in this crate), which
     /// no diagnostic reads at runtime.
     fn bundled_contract_label(&self) -> &'static str {
-        "solid-js-v1.json"
+        "solid-v1/solid-js.json"
     }
 
     /// The 1.x dom-expressions `reservedNameSpaces` (`class`, `on`,
@@ -747,8 +747,8 @@ impl Dialect for Solid1x {
     /// subpaths, so one table answers for all of them.
     fn export_modules(&self, name: &str, position: crate::ExportPosition) -> Vec<&'static str> {
         crate::exports::modules(
-            crate::exports::solid_js_1x::VALUES,
-            crate::exports::solid_js_1x::TYPES,
+            crate::exports::solid_v1_solid_js::VALUES,
+            crate::exports::solid_v1_solid_js::TYPES,
             name,
             position,
         )
@@ -1047,7 +1047,7 @@ mod tests {
 
     #[test]
     fn every_callback_taking_export_is_modelled_or_excluded() {
-        let contract = include_str!("../contracts/solid-js-1x.json");
+        let contract = include_str!("../contracts/solid-v1/solid-js.json");
         let exports = serde_json::from_str::<serde_json::Value>(contract).unwrap()["exports"]
             .as_object()
             .unwrap()

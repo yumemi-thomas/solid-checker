@@ -898,8 +898,11 @@ mod tests {
         let contracts = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("contracts");
         let mut checked = 0;
         for (version, files) in [
-            (Version::V1, vec!["solid-js-1x.json"]),
-            (Version::V2, vec!["solid-js.json", "solidjs-web.json"]),
+            (Version::V1, vec!["solid-v1/solid-js.json"]),
+            (
+                Version::V2,
+                vec!["solid-v2/solid-js.json", "solid-v2/solidjs-web.json"],
+            ),
         ] {
             let dialect = version.dialect();
             // name -> union of (parameter, execution) rows across the
@@ -1318,12 +1321,12 @@ mod tests {
     #[test]
     fn the_generated_export_index_is_sorted() {
         for (label, table) in [
-            ("1.x values", exports::solid_js_1x::VALUES),
-            ("1.x types", exports::solid_js_1x::TYPES),
-            ("2.0 values", exports::solid_js_2::VALUES),
-            ("2.0 types", exports::solid_js_2::TYPES),
-            ("web values", exports::solidjs_web::VALUES),
-            ("web types", exports::solidjs_web::TYPES),
+            ("1.x values", exports::solid_v1_solid_js::VALUES),
+            ("1.x types", exports::solid_v1_solid_js::TYPES),
+            ("2.0 values", exports::solid_v2_solid_js::VALUES),
+            ("2.0 types", exports::solid_v2_solid_js::TYPES),
+            ("web values", exports::solid_v2_solidjs_web::VALUES),
+            ("web types", exports::solid_v2_solidjs_web::TYPES),
         ] {
             assert!(!table.is_empty(), "{label} is empty");
             assert!(

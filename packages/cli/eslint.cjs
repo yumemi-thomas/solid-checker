@@ -1,6 +1,6 @@
 "use strict";
 
-const { existsSync, readFileSync } = require("node:fs");
+const { existsSync, readFileSync, readdirSync } = require("node:fs");
 const { dirname, isAbsolute, join, parse, resolve } = require("node:path");
 const { spawnSync } = require("node:child_process");
 
@@ -285,14 +285,14 @@ const certification = {
  * traversal event fires, which is how `certification` knows to leave these
  * findings alone whichever config order enabled both surfaces.
  */
-function reportingRule(entry, dialect) {
+function reportingRule(entry, catalog) {
   return {
     meta: {
       type: "problem",
       docs: {
         description: `solid-checker ${entry.code} ${entry.name}`,
         recommended: !entry.uncertifiable,
-        url: `${manifest(dialect).docsBaseUrl}/${entry.name}.md`
+        url: `${catalog.docsBaseUrl}/${entry.name}.md`
       },
       fixable: "code",
       schema: adapterSchema,
@@ -303,12 +303,12 @@ function reportingRule(entry, dialect) {
       registerOwnedRule(filename, entry.name);
       return {
         Program(program) {
-          // A v1/-namespaced rule analyzes with the v1 dialect unless the
-          // config already chose one; unprefixed rules leave selection to the
-          // config or the binary's own project detection.
+          // A namespaced compatibility rule analyzes with its manifest's
+          // dialect unless the config already chose one. The default,
+          // unprefixed surface leaves selection to project detection.
           const forced =
-            dialect === "v1" && !configuration(context).dialect
-              ? contextWithDialect(context, "solid-v1")
+            catalog.namespace && !configuration(context).dialect
+              ? contextWithDialect(context, catalog.dialect)
               : context;
           const snapshot = loadSnapshot(forced);
           const findings = (snapshot.findings ?? []).filter(
@@ -332,13 +332,27 @@ function contextWithDialect(context, dialect) {
   });
 }
 
-const manifests = {
-  v1: require("./lib/rules-v1.json"),
-  v2: require("./lib/rules-v2.json")
-};
-
-function manifest(dialect) {
-  return manifests[dialect];
+const discoveredCatalogs = readdirSync(join(__dirname, "lib"))
+  .filter(file => /^rules-solid-v\d+\.json$/.test(file))
+  .sort()
+  .map(file => {
+    const catalog = require(join(__dirname, "lib", file));
+    if (
+      catalog.schemaVersion !== 1 ||
+      typeof catalog.dialect !== "string" ||
+      typeof catalog.config !== "string" ||
+      typeof catalog.namespace !== "string" ||
+      !Array.isArray(catalog.rules)
+    ) {
+      throw new Error(`invalid solid-checker rule manifest ${file}`);
+    }
+    return catalog;
+  });
+const manifests = Object.fromEntries(
+  discoveredCatalogs.map(catalog => [catalog.dialect, catalog]),
+);
+if (Object.keys(manifests).length !== discoveredCatalogs.length) {
+  throw new Error("duplicate dialect in solid-checker rule manifests");
 }
 
 const plugin = {
@@ -347,11 +361,9 @@ const plugin = {
   configs: {}
 };
 
-for (const [dialect, catalog] of Object.entries(manifests)) {
+for (const catalog of Object.values(manifests)) {
   for (const entry of catalog.rules) {
-    // v1 identities already carry their namespace ("v1/no-destructure");
-    // v2 stays unprefixed — the checker's own names are the default surface.
-    plugin.rules[entry.name] = reportingRule(entry, dialect);
+    plugin.rules[entry.name] = reportingRule(entry, catalog);
   }
 }
 
@@ -359,8 +371,8 @@ plugin.configs.recommended = {
   plugins: { "solid-checker": plugin },
   rules: { "solid-checker/certification": "error" }
 };
-for (const [dialect, catalog] of Object.entries(manifests)) {
-  plugin.configs[dialect] = {
+for (const catalog of Object.values(manifests)) {
+  plugin.configs[catalog.config] = {
     plugins: { "solid-checker": plugin },
     rules: {
       // Turning certification off keeps a `[recommended, dialect]` listing
@@ -384,6 +396,7 @@ module.exports._testing = {
   configuredProject,
   findProject,
   loadSnapshot,
+  manifests,
   ownedRules,
   snapshotCache
 };

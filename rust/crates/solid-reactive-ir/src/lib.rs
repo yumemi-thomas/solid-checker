@@ -31,7 +31,7 @@ pub use pipeline::{build, build_with_contracts, build_with_contracts_measured};
 pub use upstream_compat::solid1x_options::Solid1xRuleOptions;
 
 pub use findings::{
-    DOCS_BASE_URL, EvidenceStep, Finding, RuleMetadata, SolveTimings,
+    DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,
     assert_rules_have_documentation, direct_mutation_wording, finish_findings, rule_manifest_json,
     strict_read_evidence, strict_read_message, strict_read_related_locations,
 };
