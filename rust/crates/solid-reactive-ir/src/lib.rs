@@ -10,6 +10,7 @@ mod interproc;
 mod local_access;
 mod owners;
 mod pipeline;
+mod projection;
 mod reachability;
 mod reactive_analysis;
 mod runtime_semantics;
@@ -24,16 +25,20 @@ pub use pipeline::{build, build_with_contracts, build_with_contracts_measured};
 
 /// Project-level options for the Solid 1.x ESLint-compatibility rules.
 ///
-/// Solid 2.0 rules currently have no configurable entries in this document;
-/// the generic type name is retained because it is already part of the
-/// checker/backend interface.
-pub use upstream_compat::solid1x_options::RuleOptions;
+/// The scoped name is intentional: Solid 2.0 has no entries in this document,
+/// and callers should not mistake an upstream-compatibility configuration for
+/// a dialect-neutral engine option set.
+pub use upstream_compat::solid1x_options::Solid1xRuleOptions;
 
 pub use findings::{
     DOCS_BASE_URL, EvidenceStep, Finding, RuleMetadata, SolveTimings,
     assert_rules_have_documentation, direct_mutation_wording, finish_findings, rule_manifest_json,
-    static_violation_finding, strict_read_evidence, strict_read_message,
-    strict_read_related_locations,
+    strict_read_evidence, strict_read_message, strict_read_related_locations,
+};
+pub use projection::{
+    CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, PackageContractIssue,
+    PackageContractIssueKind, StaticDefectTerms, StaticDefectText, project_finding,
+    project_findings, static_defect_text,
 };
 
 use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};
@@ -120,11 +125,22 @@ pub struct ReactiveRead {
 #[serde(rename_all = "camelCase")]
 pub struct ReactiveWrite {
     pub setter: Arc<str>,
+    #[serde(default)]
+    pub operation: ReactiveWriteOperation,
+    pub source_kind: ReactiveSourceKind,
     pub location: Location,
     pub declaration: Location,
     pub execution: ExecutionRole,
     pub allowed_by_option: bool,
     pub context: Arc<str>,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReactiveWriteOperation {
+    #[default]
+    Setter,
+    Refresh,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -155,10 +171,29 @@ pub struct Fix {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LeafOwnerOperation {
-    pub primitive: String,
+    pub kind: LeafOwnerOperationKind,
     pub owner: String,
     pub location: Location,
     pub fix: Option<Fix>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case", tag = "kind", content = "primitive")]
+pub enum LeafOwnerOperationKind {
+    Cleanup,
+    Flush,
+    Primitive(String),
+}
+
+impl LeafOwnerOperationKind {
+    #[must_use]
+    pub fn primitive(&self) -> &str {
+        match self {
+            Self::Cleanup => "onCleanup",
+            Self::Flush => "flush",
+            Self::Primitive(primitive) => primitive,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -282,7 +317,7 @@ pub struct PrimitiveCreation {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OwnerRequirement {
-    pub operation: String,
+    pub operation: OwnerRequirementOperation,
     pub location: Location,
     pub uncertain: bool,
     /// The uncertainty specifically comes from a nullable owner supplied to
@@ -290,6 +325,28 @@ pub struct OwnerRequirement {
     #[serde(default, skip_serializing_if = "is_false")]
     pub conditional_owner: bool,
     pub report: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OwnerRequirementOperation {
+    Effect,
+    Cleanup,
+    Boundary,
+    SettledCleanup,
+}
+
+impl OwnerRequirementOperation {
+    #[must_use]
+    pub(crate) fn from_internal(operation: &str) -> Self {
+        match operation {
+            "effect" => Self::Effect,
+            "cleanup" => Self::Cleanup,
+            "boundary" => Self::Boundary,
+            "settled-cleanup" => Self::SettledCleanup,
+            _ => panic!("owner analysis emitted unknown operation {operation:?}"),
+        }
+    }
 }
 
 const fn is_false(value: &bool) -> bool {
@@ -777,7 +834,7 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, dialect, &[], &RuleOptions::default())
+        self.build_with_contracts_shared(facts, dialect, &[], &Solid1xRuleOptions::default())
     }
 
     pub fn build_with_contracts(
@@ -786,7 +843,7 @@ impl IncrementalBuilder {
         dialect: &dyn Dialect,
         contracts: &[PackageContract],
     ) -> Result<(Program, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, dialect, contracts, &RuleOptions::default())
+        self.build_with_contracts_shared(facts, dialect, contracts, &Solid1xRuleOptions::default())
             .map(|(program, timings)| ((*program).clone(), timings))
     }
 
@@ -796,7 +853,7 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
         contracts: &[PackageContract],
-        rule_options: &RuleOptions,
+        rule_options: &Solid1xRuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
         let total_started = Instant::now();
         let lookup_started = Instant::now();
@@ -872,8 +929,9 @@ pub struct ObligationCounts {
     pub factory_instances: usize,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ReactiveSourceKind {
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ReactiveSourceKind {
     Accessor,
     Store,
 }

@@ -70,7 +70,7 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 ("no-owner-effect", 7),
                 ("no-owner-cleanup", 2),
                 ("no-owner-boundary", 3),
-                ("settled-cleanup-unowned", 2),
+                ("no-owner-settled-cleanup", 2),
             ],
         ),
         (
@@ -89,6 +89,35 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
             assert_rule_findings(&findings, rule, *expected);
         }
     }
+}
+
+#[test]
+fn static_violation_evidence_describes_the_actual_proof() {
+    let Some(static_api) = diagnostic_fixture("static-api") else {
+        return;
+    };
+    assert!(
+        findings_for_rule(&static_api, "invalid-affects-target")
+            .into_iter()
+            .all(|finding| {
+                finding["evidence"][0]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("affects call"))
+            })
+    );
+
+    let Some(stylistic) = diagnostic_fixture("upstream-divergences") else {
+        return;
+    };
+    assert!(
+        findings_for_rule(&stylistic, "v1/prefer-show")
+            .into_iter()
+            .all(|finding| {
+                finding["evidence"][0]["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("conditional JSX expression"))
+            })
+    );
 }
 
 #[test]

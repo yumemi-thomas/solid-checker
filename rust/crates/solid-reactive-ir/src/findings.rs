@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::time::{Duration, Instant};
 use typefacts::Location;
 
-use crate::{DirectMutationTarget, Fix, OwnerRequirement, ReactiveRead, StaticViolation};
+use crate::{DirectMutationTarget, Fix, OwnerRequirement, ReactiveRead};
 
 /// Where a catalog run spent its time.
 #[derive(Clone, Copy, Debug, Default)]
@@ -214,38 +214,6 @@ pub fn finish_findings(
             final_ordering,
         },
     )
-}
-
-/// Projects one [`StaticViolation`] — a defect the IR raised under its own
-/// stable identity — onto the catalog whose `resolve` maps that identity to
-/// rule metadata. `catalog` names the catalog in the panic an unmapped
-/// identity raises.
-#[must_use]
-pub fn static_violation_finding(
-    violation: &StaticViolation,
-    catalog: &str,
-    resolve: impl FnOnce(&str, &str) -> Option<RuleMetadata>,
-) -> Finding {
-    let metadata = resolve(&violation.id, &violation.rule).unwrap_or_else(|| {
-        panic!(
-            "diagnostic identity is missing from {catalog}: {} [{}]",
-            violation.id, violation.rule
-        )
-    });
-    Finding {
-        analysis_context: violation.analysis_context.clone(),
-        evidence: vec![EvidenceStep {
-            message: "the invalid API shape is statically present at this call".into(),
-            location: Some(violation.location.clone()),
-        }],
-        fixes: violation.fixes.clone(),
-        hint: violation.hint.clone(),
-        ..Finding::new(
-            metadata,
-            violation.message.clone(),
-            violation.location.clone(),
-        )
-    }
 }
 
 /// The strict-read message: how an untracked read of a reactive value is

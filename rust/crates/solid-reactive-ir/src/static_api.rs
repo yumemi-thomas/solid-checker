@@ -238,6 +238,8 @@ impl StaticApiContext<'_> {
             for _ in 0..multiplicity {
                 result.writes.push(ReactiveWrite {
                     setter: format!("refresh({name})").into(),
+                    operation: crate::ReactiveWriteOperation::Refresh,
+                    source_kind: kind,
                     location: location(
                         file.path.as_str(),
                         Span::new(

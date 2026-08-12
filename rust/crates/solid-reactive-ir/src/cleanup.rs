@@ -130,8 +130,13 @@ pub(super) fn leaf_owner_operations_for_file(
                         .is_some_and(|owner| dialect.accepts_cleanup_return(owner)))
                 .then(|| terminal_cleanup_fix(file, region, call))
                 .flatten();
+                let kind = match primitive.primitive() {
+                    Some(Primitive::OnCleanup) => crate::LeafOwnerOperationKind::Cleanup,
+                    Some(Primitive::Flush) => crate::LeafOwnerOperationKind::Flush,
+                    _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
+                };
                 operations.push(LeafOwnerOperation {
-                    primitive: primitive.to_string(),
+                    kind,
                     owner: owner.to_string(),
                     location: location(file.path.shared(), call.callee),
                     fix,

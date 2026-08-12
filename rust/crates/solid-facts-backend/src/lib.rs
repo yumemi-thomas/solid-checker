@@ -1794,6 +1794,23 @@ mod tests {
         uncertifiable: false,
     };
 
+    const STUB_CONTRACT_RULE: solid_reactive_ir::RuleMetadata = solid_reactive_ir::RuleMetadata {
+        code: "ST9001",
+        name: "stub-contract-missing",
+        severity: "error",
+        uncertifiable: true,
+    };
+
+    fn stub_package_contract_finding(
+        issue: &solid_reactive_ir::PackageContractIssue,
+    ) -> solid_reactive_ir::Finding {
+        solid_reactive_ir::Finding::new(
+            STUB_CONTRACT_RULE,
+            "the stub dialect's package contract is unavailable".into(),
+            issue.location.clone(),
+        )
+    }
+
     fn stub_solve(
         _program: &solid_reactive_ir::Program,
     ) -> (
@@ -1822,12 +1839,7 @@ mod tests {
         solve_measured: stub_solve,
         docs_url: |rule| format!("stub://docs/{rule}"),
         has_rule: |_| false,
-        contract_missing_rule: solid_reactive_ir::RuleMetadata {
-            code: "ST9001",
-            name: "stub-contract-missing",
-            severity: "error",
-            uncertifiable: true,
-        },
+        package_contract_finding: stub_package_contract_finding,
         bundled_packages: &[],
         bundled_contract: |_| Ok(None),
     };

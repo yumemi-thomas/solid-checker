@@ -62,6 +62,55 @@ fn project_snapshot_findings(project: PathBuf, dialect: Option<&str>) -> Vec<ser
 }
 
 #[test]
+fn solid_two_write_wording_follows_source_provenance() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let findings = project_snapshot_findings(
+        root.join("fixtures/reactive-ir/write-scope/tsconfig.json"),
+        Some("solid-v2"),
+    );
+    let store = findings
+        .iter()
+        .find(|finding| {
+            finding["id"] == "SC2001"
+                && finding["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("setState"))
+        })
+        .expect("the store setter should report in the component body");
+    assert!(
+        store["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with("store setter")),
+        "store provenance was described as another source kind: {store:#?}"
+    );
+    assert!(
+        store["evidence"][0]["message"]
+            .as_str()
+            .is_some_and(|message| message.ends_with("Solid store")),
+        "store evidence lost its provenance: {store:#?}"
+    );
+
+    let accessor = findings
+        .iter()
+        .find(|finding| {
+            finding["id"] == "SC2001"
+                && finding["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("setCount"))
+        })
+        .expect("the accessor setter should report in the component body");
+    assert!(
+        accessor["message"]
+            .as_str()
+            .is_some_and(|message| message.starts_with("accessor setter")),
+        "accessor provenance was described as another source kind: {accessor:#?}"
+    );
+}
+
+#[test]
 fn solid_one_function_signal_values_are_not_analyzed_as_callbacks() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;

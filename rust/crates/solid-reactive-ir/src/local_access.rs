@@ -39,7 +39,7 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) accessor_origins: &'a HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool)>,
+    pub(crate) setters: &'a HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) async_sources: &'a HashSet<SymbolId>,
@@ -522,10 +522,14 @@ impl LocalAccessContext<'_, '_> {
                     }
                 }
             }
-            if let Some((name, declaration, allowed_by_option)) = self.setters.get(symbol) {
+            if let Some((name, declaration, allowed_by_option, source_kind)) =
+                self.setters.get(symbol)
+            {
                 for _ in 0..multiplicity {
                     result.writes.push(Arc::new(ReactiveWrite {
                         setter: name.to_string().into(),
+                        operation: crate::ReactiveWriteOperation::Setter,
+                        source_kind: *source_kind,
                         location: location(file.path.shared(), call.span),
                         declaration: declaration.clone(),
                         execution,

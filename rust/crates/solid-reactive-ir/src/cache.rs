@@ -8,7 +8,7 @@ use crate::owners::{
 use crate::{
     ActionInvocation, AsyncRead, CacheRetention, ContractCallback, ContractExport,
     ContractGenerationObligation, FunctionNode, OwnerRequirement, Program, ReactiveRead,
-    ReactiveSourceKind, ReactiveWrite, RuleOptions,
+    ReactiveSourceKind, ReactiveWrite, Solid1xRuleOptions,
 };
 
 use std::{
@@ -39,7 +39,7 @@ pub(crate) struct BuildIdentity {
     pub(crate) contracts: Vec<[u8; 32]>,
     /// Per-rule options change what the static pass emits, so two runs with
     /// different options never share a retained program.
-    pub(crate) rule_options: RuleOptions,
+    pub(crate) rule_options: Solid1xRuleOptions,
 }
 
 pub(crate) struct RetainedBuild {
@@ -163,7 +163,7 @@ pub(crate) struct SourceDiscoveryIdentity {
 pub(crate) struct SourceDiscoveryContribution {
     pub(crate) accessors: Vec<(SymbolId, (SymbolId, Location))>,
     pub(crate) accessor_origins: Vec<(SymbolId, (SymbolId, SymbolId, Location))>,
-    pub(crate) setters: Vec<(SymbolId, (SymbolId, Location, bool))>,
+    pub(crate) setters: Vec<(SymbolId, (SymbolId, Location, bool, ReactiveSourceKind))>,
     pub(crate) actions: Vec<(SymbolId, (SymbolId, Location))>,
     pub(crate) source_kinds: Vec<(SymbolId, ReactiveSourceKind)>,
     pub(crate) source_primitives: Vec<(SymbolId, SymbolName)>,
@@ -471,7 +471,7 @@ pub(crate) struct LocalAccessBuild {
 pub(crate) struct LocalAccessSymbolState {
     pub(crate) accessor: Option<(SymbolId, Location)>,
     pub(crate) accessor_origin: Option<(SymbolId, SymbolId, Location)>,
-    pub(crate) setter: Option<(SymbolId, Location, bool)>,
+    pub(crate) setter: Option<(SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) action: Option<(SymbolId, Location)>,
     pub(crate) source_primitive: Option<SymbolId>,
     pub(crate) async_source: bool,

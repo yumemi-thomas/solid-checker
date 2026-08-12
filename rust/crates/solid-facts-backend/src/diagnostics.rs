@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
-    CacheRetention, Finding, IncrementalBuilder, PackageContract, Program, RuleOptions,
+    CacheRetention, Finding, IncrementalBuilder, PackageContract, PackageContractIssue,
+    PackageContractIssueKind, Program, Solid1xRuleOptions,
 };
 
 use crate::dialect::{self, Dialect};
@@ -128,7 +129,7 @@ struct DiagnosticIdentity {
     /// Per-rule options are re-read from disk on every analysis, so an
     /// edited `.solid-checker/rule-options.json` invalidates a retained
     /// diagnostic even within one generation.
-    rule_options: RuleOptions,
+    rule_options: Solid1xRuleOptions,
 }
 
 struct RetainedDiagnostic {
@@ -347,31 +348,16 @@ fn finish_analysis(
                 start_byte: 0,
                 end_byte: 0,
             });
-        Finding {
-            analysis_context: "package contract completeness".into(),
-            subject_kind: "package".into(),
-            hint: if status.status == "unverified" {
-                "Verify the generated contract against the exact package artifacts and behavioral probes, then record verified, reviewed, or attested evidence.".into()
+        (dialect.package_contract_finding)(&PackageContractIssue {
+            package: status.name.clone(),
+            contract_path: status.contract_path.clone(),
+            status: if status.status == "unverified" {
+                PackageContractIssueKind::Unverified
             } else {
-                format!(
-                    "Create a local contract at {}, or pass one explicitly with --contract <PATH>. If you maintain {}, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format.",
-                    status.contract_path, status.name
-                )
+                PackageContractIssueKind::Missing
             },
-            ..Finding::new(
-                dialect.contract_missing_rule,
-                format!(
-                    "imported Solid package {:?} {}; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
-                    status.name,
-                    if status.status == "unverified" {
-                        "has only an unverified generated reactivity contract"
-                    } else {
-                        "has no reactivity contract"
-                    }
-                ),
-                location,
-            )
-        }
+            location,
+        })
     }));
     let snapshot = snapshot(sources, &contracts, metrics, findings);
     Ok(DiagnosticAnalysis {
@@ -1087,7 +1073,7 @@ fn discover_package_directory(
 /// contract discovery does. A project without one gets upstream's defaults;
 /// a file that fails to parse fails the analysis rather than silently
 /// meaning "defaults".
-pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError> {
+pub fn discover_rule_options(project: &Path) -> Result<Solid1xRuleOptions, BackendError> {
     let directory = if project.is_dir() {
         project
     } else {
@@ -1097,7 +1083,10 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse(&encoded).map_err(|error| {
+                return Solid1xRuleOptions::parse(&encoded, |rule| {
+                    dialect::ALL.iter().any(|dialect| (dialect.has_rule)(rule))
+                })
+                .map_err(|error| {
                     BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
                 });
             }
@@ -1105,7 +1094,7 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
             Err(error) => return Err(error.into()),
         }
     }
-    Ok(RuleOptions::default())
+    Ok(Solid1xRuleOptions::default())
 }
 
 /// The rule-options document [`discover_rule_options`] would load for this

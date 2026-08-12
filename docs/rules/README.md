@@ -47,7 +47,7 @@ Findings come in two kinds:
   each `SC9xxx` rule explains how to make the code provable.
 
 Uncertifiable findings always carry **error** severity, including the ones the
-owner rules (`SC4001`–`SC4003`) emit for exported functions whose callers the
+owner rules (`SC4001`–`SC4004`) emit for exported functions whose callers the
 analyzer cannot see. A rule's severity in the manifest describes its proven
 violation form.
 
@@ -108,7 +108,6 @@ Each rule's page documents its options and defaults.
 | SC3002 | [primitive-in-leaf-owner](primitive-in-leaf-owner.md) | error |
 | SC3003 | [flush-in-forbidden-scope](flush-in-forbidden-scope.md) | error |
 | SC3004 | [invalid-cleanup-return](invalid-cleanup-return.md) | error |
-| SC3005 | [settled-cleanup-unowned](settled-cleanup-unowned.md) | error |
 
 ## Ownership
 
@@ -117,6 +116,7 @@ Each rule's page documents its options and defaults.
 | SC4001 | [no-owner-effect](no-owner-effect.md) | warning |
 | SC4002 | [no-owner-cleanup](no-owner-cleanup.md) | warning |
 | SC4003 | [no-owner-boundary](no-owner-boundary.md) | warning |
+| SC4004 | [no-owner-settled-cleanup](no-owner-settled-cleanup.md) | warning |
 
 ## Async
 

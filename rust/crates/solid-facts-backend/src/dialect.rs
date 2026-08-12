@@ -12,7 +12,7 @@
 use std::path::Path;
 
 use solid_facts::compiler::CompilerFactsProvider;
-use solid_reactive_ir::{Finding, PackageContract, Program, RuleMetadata, SolveTimings};
+use solid_reactive_ir::{Finding, PackageContract, PackageContractIssue, Program, SolveTimings};
 
 use crate::BackendError;
 
@@ -38,9 +38,9 @@ pub struct Dialect {
     /// (for example, which type facts to demand) instead of naming a
     /// version.
     pub has_rule: fn(&str) -> bool,
-    /// Identity of the finding reported when an imported package has no
-    /// usable reactivity contract.
-    pub contract_missing_rule: RuleMetadata,
+    /// Projects a package-contract issue through this dialect's catalog so
+    /// SC9005 identity and every sentence remain catalog-owned.
+    pub package_contract_finding: fn(&PackageContractIssue) -> Finding,
     /// Package roots the dialect ships a bundled contract for; answers the
     /// cheap membership question without decoding any contract.
     pub bundled_packages: &'static [&'static str],
@@ -142,7 +142,7 @@ static SOLID_V2: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
-    contract_missing_rule: solid_v2_rules::Rule::PackageContractMissing.metadata(),
+    package_contract_finding: solid_v2_rules::package_contract_finding,
     bundled_packages: &["solid-js", "@solidjs/web"],
     bundled_contract: crate::diagnostics::bundled_contract_v2,
 };
@@ -159,7 +159,7 @@ static SOLID_V1: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
-    contract_missing_rule: solid_v1_rules::Rule::PackageContractMissing.metadata(),
+    package_contract_finding: solid_v1_rules::package_contract_finding,
     bundled_packages: &["solid-js"],
     bundled_contract: crate::diagnostics::bundled_contract_v1,
 };
@@ -169,8 +169,9 @@ mod tests {
     use std::collections::HashSet;
 
     use solid_reactive_ir::{
-        AsyncRead, DirectMutationTarget, ExecutionRole, OwnerRequirement, ReactiveRead,
-        ReactiveWrite, StaticDefect, StaticDefectKind,
+        AsyncRead, DirectMutationTarget, ExecutionRole, OwnerRequirement,
+        OwnerRequirementOperation, ReactiveRead, ReactiveWrite, ReactiveWriteOperation,
+        StaticDefect, StaticDefectKind,
     };
     use typefacts::Location;
 
@@ -256,6 +257,8 @@ mod tests {
             }],
             writes: vec![ReactiveWrite {
                 setter: "sampleSetter".into(),
+                operation: ReactiveWriteOperation::Setter,
+                source_kind: solid_reactive_ir::ReactiveSourceKind::Accessor,
                 location: location(3),
                 declaration: location(4),
                 execution: ExecutionRole::TrackedJsx,
@@ -263,7 +266,7 @@ mod tests {
                 context: "sample computation".into(),
             }],
             missing_owners: vec![OwnerRequirement {
-                operation: "cleanup".into(),
+                operation: OwnerRequirementOperation::Cleanup,
                 location: location(5),
                 uncertain: false,
                 conditional_owner: false,
