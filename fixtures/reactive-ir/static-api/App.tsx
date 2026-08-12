@@ -20,7 +20,9 @@ refresh(target);
 refresh(() => target());
 refresh({});
 affects(signal, "value");
+affects(target, ["value"]);
 affects(store, "value", "extra");
+affects(signal());
 
 export function App() {
   refresh(target);

@@ -20,6 +20,26 @@
       "start": 713,
       "end": 718,
       "fixes": 0
+    },
+    {
+      "rule": "refresh-target-unresolved",
+      "code": "SC9003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
+      "start": 1185,
+      "end": 1191,
+      "fixes": 0
+    },
+    {
+      "rule": "affects-target-unresolved",
+      "code": "SC9003",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
+      "start": 1204,
+      "end": 1210,
+      "fixes": 0
     }
   ]
 }

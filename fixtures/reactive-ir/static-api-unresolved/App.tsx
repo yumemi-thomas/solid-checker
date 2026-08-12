@@ -20,6 +20,13 @@ refresh(doubled);
 const [count] = createSignal(0);
 affects(count);
 
+// A local parameter has a symbol, but no provenance tying it to a Solid
+// source. These exercise the non-local SC9003 branch for both API names.
+export function invalidateUnknown(target: unknown) {
+  refresh(target);
+  affects(target);
+}
+
 export function App() {
   return <div>{doubled()}{count()}</div>;
 }

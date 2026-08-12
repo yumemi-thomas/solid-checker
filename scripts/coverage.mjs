@@ -78,6 +78,7 @@ const KEEPS_WORDING = new Set([
   "reactive-ir/dialect-solid-1x",
   "reactive-ir/dialect-solid-2",
   "reactive-ir/import-location",
+  "reactive-ir/no-owner-v1",
   "reactive-ir/solid-1x-leftovers"
 ]);
 
@@ -103,6 +104,8 @@ const IDENTICAL_SOURCES = [
  */
 function comparable(finding, keepWording) {
   const location = finding.primaryLocation ?? {};
+  const portable = (value) =>
+    typeof value === "string" ? value.split(root).join("<ROOT>") : value;
   return {
     rule: finding.rule,
     code: finding.id,
@@ -112,7 +115,9 @@ function comparable(finding, keepWording) {
     start: location.startByte ?? null,
     end: location.endByte ?? null,
     fixes: Array.isArray(finding.fixes) ? finding.fixes.length : 0,
-    ...(keepWording ? { message: finding.message, hint: finding.hint } : {})
+    ...(keepWording
+      ? { message: portable(finding.message), hint: portable(finding.hint) }
+      : {})
   };
 }
 

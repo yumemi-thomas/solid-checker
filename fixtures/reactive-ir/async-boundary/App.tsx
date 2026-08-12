@@ -1,6 +1,6 @@
 import * as Solid from "solid-js";
 import * as Web from "@solidjs/web";
-import { createMemo, createProjection, createSignal as derivedSignal, createStore, Loading, Loading as Await, onSettled } from "solid-js";
+import { createMemo, createProjection, createSignal as derivedSignal, createStore, Loading, Loading as Await, onSettled, refresh } from "solid-js";
 import { dynamic } from "@solidjs/web";
 
 const user = createMemo(async () => ({ name: "Ada" }));
@@ -19,8 +19,25 @@ export function BadDirect() {
   return <div>{name}</div>;
 }
 
+// The same invalid execution through an async createSignal result exercises
+// SC5001 independently of createMemo's result accessor.
+export function BadSignalDirect() {
+  const name = signalUser().name;
+  return <div>{name}</div>;
+}
+
 export function BadLeaf() {
   onSettled(() => void user().name);
+  return <div />;
+}
+
+// A refresh can put a previously settled source back in flight. The read
+// immediately after it still occurs in onSettled's forbidden leaf owner.
+export function BadRefetchInLeaf() {
+  onSettled(() => {
+    refresh(user);
+    void user().name;
+  });
   return <div />;
 }
 

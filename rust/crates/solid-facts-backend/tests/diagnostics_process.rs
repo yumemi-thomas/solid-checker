@@ -53,7 +53,8 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 ("missing-effect-function", 2),
                 ("sync-node-received-async", 6),
                 ("invalid-refresh-target", 2),
-                ("invalid-affects-target", 1),
+                ("invalid-affects-target", 2),
+                ("affects-keys-on-accessor", 2),
                 ("reactive-write-in-owned-scope", 1),
             ],
         ),
@@ -76,8 +77,8 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         (
             "async-boundary",
             &[
-                ("pending-async-untracked-read", 1),
-                ("pending-async-forbidden-scope", 1),
+                ("pending-async-untracked-read", 2),
+                ("pending-async-forbidden-scope", 2),
                 ("async-outside-loading-boundary", 11),
             ],
         ),
@@ -89,6 +90,58 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
             assert_rule_findings(&findings, rule, *expected);
         }
     }
+}
+
+#[test]
+fn solid_one_missing_wording_paths_are_end_to_end() {
+    let Some(findings) = diagnostic_fixture("no-owner-v1") else {
+        return;
+    };
+
+    for (rule, expected) in [
+        ("v1/no-owner-effect", 1),
+        ("v1/no-owner-boundary", 1),
+        ("v1/primitive-in-directive-application", 1),
+    ] {
+        assert_rule_findings(&findings, rule, expected);
+    }
+    assert_eq!(
+        findings_for_rule(&findings, "v1/package-contract-missing").len(),
+        1,
+        "v1 package-contract wording path must run end to end: {findings:#?}"
+    );
+}
+
+#[test]
+fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
+    let Some(async_findings) = diagnostic_fixture("async-boundary") else {
+        return;
+    };
+    assert!(
+        async_findings.iter().all(|finding| {
+            !finding["primaryLocation"]["path"]
+                .as_str()
+                .is_some_and(|path| path.ends_with("Good.tsx"))
+        }),
+        "nested Loading and inline pending observers must stay clean: {async_findings:#?}"
+    );
+
+    let Some(reactivity_findings) = diagnostic_fixture("shared-reactivity-v2") else {
+        return;
+    };
+    for (rule, expected) in [
+        ("uncalled-accessor", 3),
+        ("expected-function-got-expression", 2),
+        ("untracked-derived-function", 2),
+    ] {
+        assert_rule_findings(&reactivity_findings, rule, expected);
+    }
+
+    let Some(unresolved_findings) = diagnostic_fixture("static-api-unresolved") else {
+        return;
+    };
+    assert_rule_findings(&unresolved_findings, "refresh-target-unresolved", 2);
+    assert_rule_findings(&unresolved_findings, "affects-target-unresolved", 2);
 }
 
 #[test]

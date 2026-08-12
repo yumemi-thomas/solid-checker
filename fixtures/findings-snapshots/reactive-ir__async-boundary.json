@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 935,
-      "end": 941,
+      "start": 944,
+      "end": 950,
       "fixes": 0
     },
     {
@@ -17,8 +17,28 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 935,
-      "end": 941,
+      "start": 944,
+      "end": 950,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-boundary/App.tsx",
+      "start": 1173,
+      "end": 1185,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-untracked-read",
+      "code": "SC5001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/async-boundary/App.tsx",
+      "start": 1173,
+      "end": 1185,
       "fixes": 0
     },
     {
@@ -27,8 +47,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1030,
-      "end": 1036,
+      "start": 1274,
+      "end": 1280,
+      "fixes": 0
+    },
+    {
+      "rule": "pending-async-forbidden-scope",
+      "code": "SC5002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/async-boundary/App.tsx",
+      "start": 1542,
+      "end": 1548,
       "fixes": 0
     },
     {
@@ -37,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1110,
-      "end": 1116,
+      "start": 1627,
+      "end": 1633,
       "fixes": 0
     },
     {
@@ -47,8 +77,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1123,
-      "end": 1136,
+      "start": 1640,
+      "end": 1653,
       "fixes": 0
     },
     {
@@ -57,8 +87,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1143,
-      "end": 1157,
+      "start": 1660,
+      "end": 1674,
       "fixes": 0
     },
     {
@@ -67,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1164,
-      "end": 1178,
+      "start": 1681,
+      "end": 1695,
       "fixes": 0
     },
     {
@@ -77,8 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1185,
-      "end": 1204,
+      "start": 1702,
+      "end": 1721,
       "fixes": 0
     },
     {
@@ -87,8 +117,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1211,
-      "end": 1223,
+      "start": 1728,
+      "end": 1740,
       "fixes": 0
     },
     {
@@ -97,8 +127,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1230,
-      "end": 1244,
+      "start": 1747,
+      "end": 1761,
       "fixes": 0
     },
     {
@@ -107,8 +137,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1246,
-      "end": 1264,
+      "start": 1763,
+      "end": 1781,
       "fixes": 0
     },
     {
@@ -117,8 +147,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1819,
-      "end": 1835,
+      "start": 2336,
+      "end": 2352,
       "fixes": 0
     },
     {
@@ -127,8 +157,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 2007,
-      "end": 2032,
+      "start": 2524,
+      "end": 2549,
       "fixes": 0
     },
     {
@@ -137,8 +167,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 2865,
-      "end": 2871,
+      "start": 3382,
+      "end": 3388,
       "fixes": 0
     }
   ]
