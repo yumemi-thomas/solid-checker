@@ -1,6 +1,6 @@
 # v1/no-owner-cleanup
 
-`SC4002` · **warning** · violation (uncertifiable for exported functions)
+`SC4002` · **warning** · violation (uncertifiable, reported as an error, for exported functions)
 
 `onCleanup` is called without a reactive owner, so the cleanup function will never
 run.
@@ -10,7 +10,9 @@ run.
 Flags `onCleanup` calls that no component, computation, or root owner dominates.
 When the call sits in an exported function whose call sites are outside the
 project, the finding is reported as **uncertifiable** instead: solid-checker cannot
-prove callers provide an owner.
+prove callers provide an owner. Like the SC9xxx rules, the uncertifiable form
+carries **error** severity; the catalog's **warning** applies to the proven
+violation form.
 
 ## Why is this bad?
 

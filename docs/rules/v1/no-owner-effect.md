@@ -1,6 +1,6 @@
 # v1/no-owner-effect
 
-`SC4001` · **warning** · violation (uncertifiable for exported functions)
+`SC4001` · **warning** · violation (uncertifiable, reported as an error, for exported functions)
 
 An effect is created without a reactive owner, so nothing will ever dispose it.
 
@@ -12,7 +12,9 @@ detached callbacks.
 
 When the unowned creation sits in an exported function whose call sites are outside
 the project, the finding is reported as **uncertifiable** instead: solid-checker
-cannot prove callers provide an owner.
+cannot prove callers provide an owner. Like the SC9xxx rules, the uncertifiable form
+carries **error** severity; the catalog's **warning** applies to the proven
+violation form.
 
 ## Why is this bad?
 

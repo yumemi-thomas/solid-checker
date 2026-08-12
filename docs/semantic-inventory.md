@@ -1,4 +1,4 @@
-# Solid 2 semantic inventory
+# Solid 2.0 semantic inventory
 
 This inventory was re-audited against the Solid `2.0.0-beta.31` public exports,
 diagnostic union, and runtime call sites. “Conditional” means static certification
