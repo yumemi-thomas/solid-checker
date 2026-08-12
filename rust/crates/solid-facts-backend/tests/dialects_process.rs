@@ -62,6 +62,30 @@ fn project_snapshot_findings(project: PathBuf, dialect: Option<&str>) -> Vec<ser
 }
 
 #[test]
+fn project_rule_options_disable_one_exact_catalog_rule() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let findings = project_snapshot_findings(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/rule-options-enablement/tsconfig.json"),
+        Some("solid-v1"),
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["rule"] == "v1/no-owner-effect"),
+        "the enabled control rule should still report: {findings:#?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .all(|finding| finding["rule"] != "v1/reactive-write-in-owned-scope"),
+        "the exact disabled rule still reported: {findings:#?}"
+    );
+}
+
+#[test]
 fn solid_two_write_wording_follows_source_provenance() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;

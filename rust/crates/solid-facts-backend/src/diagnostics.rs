@@ -227,9 +227,9 @@ impl DiagnosticSession {
             project,
             sources,
             facts,
-            explicit_contract_paths,
             contracts,
             program,
+            &identity,
         )?);
         let solve_and_snapshot = solve_started.elapsed();
         self.retained = Some(RetainedDiagnostic {
@@ -313,15 +313,15 @@ fn finish_analysis(
     project: &Path,
     sources: &[SourceFile],
     facts: &ProjectFacts,
-    explicit_contract_paths: &[String],
     contracts: Vec<PackageContract>,
     program: Arc<Program>,
+    identity: &DiagnosticIdentity,
 ) -> Result<DiagnosticAnalysis, BackendError> {
     let statuses = package_contract_statuses_with(
         dialect,
         project,
         facts,
-        explicit_contract_paths,
+        &identity.explicit_contract_paths,
         &contracts,
     )?;
     let missing_contracts = statuses
@@ -359,6 +359,7 @@ fn finish_analysis(
             location,
         })
     }));
+    findings.retain(|finding| identity.rule_options.is_enabled(&finding.rule));
     let snapshot = snapshot(sources, &contracts, metrics, findings);
     Ok(DiagnosticAnalysis {
         program,

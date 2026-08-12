@@ -29,6 +29,15 @@ eslint-plugin-solid's advisory level for existing 1.x codebases) and an
 the 2.0 catalog has no adoption legacy to accommodate. A suppression comment
 carried through a migration therefore lands on a stricter rule.
 
+For the eslint-plugin-solid 0.14.5 surface, every rule enabled by upstream's
+base policy keeps that policy's severity. Four rules that upstream ships off
+are deliberately available and enabled here: `v1/no-array-handlers` and
+`v1/no-proxy-apis` are **errors** because they enforce, respectively, a
+type-safe event boundary and a target-runtime compatibility constraint;
+`v1/prefer-classlist` and `v1/prefer-show` are **warnings** because they are
+stylistic preferences. Projects that accept one of those tradeoffs can disable
+that exact rule in the shared project configuration described below.
+
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
 | Shared concepts (20 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
@@ -51,34 +60,41 @@ owner rules (`SC4001`–`SC4004`) emit for exported functions whose callers the
 analyzer cannot see. A rule's severity in the manifest describes its proven
 violation form.
 
-## Rule options
+## Rule configuration
 
-Six of the 1.x ESLint-surface rules carry the upstream options their behaviour
-depends on: [v1/event-handlers](v1/event-handlers.md),
+Every rule in either catalog accepts an `enabled` boolean in the project-level
+`.solid-checker/rule-options.json` document. Rules default to enabled. The
+document is discovered by the same ancestor walk as
+`.solid-checker/contracts/`, so the CLI, daemon, LSP, and ESLint snapshots all
+apply the same policy.
+
+Six of the 1.x ESLint-surface rules also carry the upstream options their
+behaviour depends on: [v1/event-handlers](v1/event-handlers.md),
 [v1/no-innerhtml](v1/no-innerhtml.md),
 [v1/self-closing-comp](v1/self-closing-comp.md),
 [v1/prefer-classlist](v1/prefer-classlist.md),
 [v1/style-prop](v1/style-prop.md), and
-[v1/no-unknown-namespaces](v1/no-unknown-namespaces.md). They are configured
-in one project-level document, `.solid-checker/rule-options.json`, discovered
-by the same ancestor walk as `.solid-checker/contracts/`:
+[v1/no-unknown-namespaces](v1/no-unknown-namespaces.md):
 
 ```json
 {
   "schemaVersion": 1,
   "rules": {
-    "v1/no-innerhtml": { "allowStatic": false },
+    "v1/no-proxy-apis": { "enabled": false },
+    "v1/no-innerhtml": { "enabled": true, "allowStatic": false },
     "v1/style-prop": { "styleProps": ["style", "css"] }
   }
 }
 ```
 
-An absent file means upstream's defaults; a file naming an unknown rule or
-option key fails the analysis rather than silently meaning "defaults". There
-is deliberately no per-ESLint-config channel: the npm adapter runs one
-analysis per project, so a single discovered file is what keeps the CLI, the
-daemon, ESLint, and every editor integration reading the same configuration.
-Each rule's page documents its options and defaults.
+An absent file means every catalog rule is enabled with its normal defaults.
+A file naming an unknown rule, an unknown option key, or a non-boolean
+`enabled` value fails the analysis rather than silently changing policy. Rule
+names are exact identities: for example, disabling `invalid-refresh-target`
+does not disable `invalid-affects-target`, even though both findings share the
+portable code SC7003. There is deliberately no separate per-ESLint-options
+channel; the npm adapter runs one analysis per project. Each configurable
+rule's page documents its additional options and defaults.
 
 ## Tracking & component semantics
 

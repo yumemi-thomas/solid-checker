@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "rules": {
+    "v1/reactive-write-in-owned-scope": { "enabled": false }
+  }
+}
