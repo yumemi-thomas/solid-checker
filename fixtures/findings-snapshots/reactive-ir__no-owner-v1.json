@@ -1,0 +1,15 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
+      "start": 700,
+      "end": 712,
+      "fixes": 0
+    }
+  ]
+}
