@@ -42,10 +42,10 @@
       "fixes": 0
     },
     {
-      "rule": "settled-cleanup-unowned",
-      "code": "SC3005",
+      "rule": "no-owner-settled-cleanup",
+      "code": "SC4004",
       "kind": "violation",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/owner-presence/App.tsx",
       "start": 332,
       "end": 346,
@@ -112,10 +112,10 @@
       "fixes": 0
     },
     {
-      "rule": "settled-cleanup-unowned",
-      "code": "SC3005",
+      "rule": "no-owner-settled-cleanup",
+      "code": "SC4004",
       "kind": "violation",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/owner-presence/App.tsx",
       "start": 1617,
       "end": 1631,

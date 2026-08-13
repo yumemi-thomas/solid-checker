@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
 import test from "node:test";
 
@@ -7,11 +8,16 @@ const { checkSync } = require("../node.cjs");
 
 test("checks an in-memory project through WASI", () => {
   const projectId = "/workspace/example/tsconfig.json";
+  const path = "/workspace/example/src/App.tsx";
+  const source = "export default function App() { return <main />; }\n";
   const typeFacts = {
     schema: 2,
     generation: 1,
     projectId,
-    sources: [],
+    sources: [{
+      path,
+      sha256: `sha256:${createHash("sha256").update(source).digest("hex")}`
+    }],
     entities: [],
     symbols: [],
     files: []
@@ -19,7 +25,20 @@ test("checks an in-memory project through WASI", () => {
   const snapshot = JSON.parse(checkSync(JSON.stringify({
     projectId,
     generation: 1,
-    sources: [],
+    sources: [{
+      path,
+      source,
+      compilerOptions: {
+        moduleName: "dom",
+        generate: "dom",
+        hydratable: false,
+        dev: false,
+        effectWrapper: "",
+        wrapConditionals: true,
+        staticMarker: "_$",
+        builtIns: []
+      }
+    }],
     typeFacts
   })));
 

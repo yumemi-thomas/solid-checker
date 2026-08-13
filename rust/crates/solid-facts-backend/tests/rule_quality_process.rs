@@ -145,7 +145,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ("leaf-valid.tsx", [("no-owner-effect", 2)].as_slice()),
         (
             "owned-leaf-extended-valid.tsx",
-            [("settled-cleanup-unowned", 1)].as_slice(),
+            [("no-owner-settled-cleanup", 1)].as_slice(),
         ),
         (
             "owned-scope-valid.tsx",

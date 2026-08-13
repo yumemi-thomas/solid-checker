@@ -57,5 +57,5 @@ Solid 2.0 shape.
 ## Related
 
 - [cleanup-in-forbidden-scope](cleanup-in-forbidden-scope.md) — `onCleanup` inside leaf owners
-- [settled-cleanup-unowned](settled-cleanup-unowned.md) — the `onSettled` analogue
+- [no-owner-settled-cleanup](no-owner-settled-cleanup.md) — the `onSettled` analogue
 - [no-owner-effect](no-owner-effect.md) — unowned effects

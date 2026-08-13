@@ -1002,10 +1002,10 @@
       "fixes": 0
     },
     {
-      "rule": "settled-cleanup-unowned",
-      "code": "SC3005",
+      "rule": "no-owner-settled-cleanup",
+      "code": "SC4004",
       "kind": "violation",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-valid.tsx",
       "start": 326,
       "end": 390,

@@ -12,6 +12,10 @@ or mutating state a signal or store holds without going through `setSignal`/
 `setStore`. Part of the fine-grained decomposition of eslint-plugin-solid's
 monolithic `reactivity` rule.
 
+The warning tier deliberately mirrors that upstream rule's advisory policy.
+It does not mean the write is speculative: every finding is a proven mutation
+that bypasses the reactive setter.
+
 ## Why is this bad?
 
 Solid updates the graph only through setters: the setter is what notifies

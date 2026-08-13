@@ -6,8 +6,8 @@ use std::{env, fs, path::PathBuf};
 
 use solid_facts::compiler::CompilerOptions;
 use solid_facts_backend::{
-    CacheStats, NativeCompilerFacts, NativeIncrementalSession, SourceChange, SourceFile,
-    TypeFactsSession, build_project, dialect,
+    CacheStats, NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession,
+    build_project, dialect,
 };
 use support::{decode_findings, temporary_directory};
 
@@ -424,15 +424,16 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
             compiler_options: CompilerOptions::default(),
         })
         .collect();
-    let mut compiler = NativeCompilerFacts;
+    let selected = dialect::default_dialect();
+    let mut compiler = (selected.compiler)();
     let mut typescript = TypeFactsSession::open(&typefacts, &project.to_string_lossy(), &[])
         .expect("open the TypeFacts session");
     let facts = build_project(
-        dialect::default_dialect(),
+        selected,
         project.to_string_lossy(),
         1,
         sources,
-        &mut compiler,
+        compiler.as_mut(),
         &mut typescript,
     )
     .expect("join real facts");
@@ -473,9 +474,15 @@ fn joins_real_oxc_compiler_and_tsgo_facts() {
     );
     assert_eq!(incremental_timings.source_discovery_recomputed_files, 2);
     assert_eq!(incremental_timings.typed_accessor_recomputed_files, 2);
-    let findings = solid_v2_rules::solve(&program);
+    let findings = selected.solve(&program);
     assert_eq!(findings.len(), 1, "findings = {findings:#?}");
-    assert_eq!(findings[0].rule, "strict-read-untracked");
+    // Catalog-relative name: unprefixed in 2.0, `v1/`-prefixed in a
+    // dialect-v1-only build.
+    assert!(
+        findings[0].rule.ends_with("strict-read-untracked"),
+        "rule = {}",
+        findings[0].rule
+    );
     assert!(findings[0].primary_location.path.ends_with("App.tsx"));
 }
 /// Opens the producer, absorbing the Linux `ETXTBSY` race: exec'ing a

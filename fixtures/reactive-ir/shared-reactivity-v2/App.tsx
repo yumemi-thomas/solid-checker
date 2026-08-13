@@ -26,6 +26,13 @@ export function TemplatedMemo() {
   return <div>{`doubled is ${doubled}`}</div>;
 }
 
+// A native value attribute receives the function object eagerly. This is a
+// second SC1005 position, independent of template-literal coercion.
+export function NativeAttributeAccessor() {
+  const [count] = createSignal(0);
+  return <div title={count}>count</div>;
+}
+
 // no-direct-mutation (SC2003): a store is a readonly proxy in 2.0 exactly as
 // in 1.x, so the write is dropped.
 export function Mutates() {
@@ -62,6 +69,13 @@ export function FactoryHandler() {
   return <button onClick={makeHandler()}>ok</button>;
 }
 
+// Reading a handler through reactive props during native element setup
+// freezes the initial function. This exercises SC1007's member-read branch,
+// distinct from calling an accessor and binding its returned value.
+export function ReactiveMemberHandler(props: { onSave: () => void }) {
+  return <button onClick={props.onSave}>save</button>;
+}
+
 // untracked-derived-function (SC1006): doubled derives from count, and the
 // only call to it is a plain statement in the component body, so the
 // derivation reads once and subscribes to nothing.
@@ -69,6 +83,17 @@ export function DerivedButDiscarded() {
   const [count] = createSignal(0);
   const doubled = () => count() * 2;
   console.log(doubled());
+  return <div>static</div>;
+}
+
+// Derivation is transitive: labelled reads doubled, which reads count. Only
+// labelled is invoked in the untracked component body, so SC1006 must follow
+// the dependency chain rather than relying on a direct signal read.
+export function TransitivelyDerivedButDiscarded() {
+  const [count] = createSignal(0);
+  const doubled = () => count() * 2;
+  const labelled = () => String(doubled());
+  console.log(labelled());
   return <div>static</div>;
 }
 

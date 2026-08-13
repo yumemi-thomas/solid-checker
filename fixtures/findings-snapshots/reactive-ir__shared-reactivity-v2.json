@@ -22,13 +22,23 @@
       "fixes": 0
     },
     {
+      "rule": "uncalled-accessor",
+      "code": "SC1005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 1416,
+      "end": 1421,
+      "fixes": 0
+    },
+    {
       "rule": "no-direct-mutation",
       "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 1390,
-      "end": 1400,
+      "start": 1658,
+      "end": 1668,
       "fixes": 0
     },
     {
@@ -37,8 +47,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 2033,
-      "end": 2040,
+      "start": 2301,
+      "end": 2308,
+      "fixes": 0
+    },
+    {
+      "rule": "expected-function-got-expression",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 3070,
+      "end": 3082,
       "fixes": 0
     },
     {
@@ -47,8 +67,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 2768,
-      "end": 2775,
+      "start": 3383,
+      "end": 3390,
+      "fixes": 0
+    },
+    {
+      "rule": "untracked-derived-function",
+      "code": "SC1006",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 3825,
+      "end": 3833,
       "fixes": 0
     }
   ]

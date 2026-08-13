@@ -12,7 +12,7 @@
 use std::path::Path;
 
 use solid_facts::compiler::CompilerFactsProvider;
-use solid_reactive_ir::{Finding, PackageContract, Program, RuleMetadata, SolveTimings};
+use solid_reactive_ir::{Finding, PackageContract, PackageContractIssue, Program, SolveTimings};
 
 use crate::BackendError;
 
@@ -38,9 +38,9 @@ pub struct Dialect {
     /// (for example, which type facts to demand) instead of naming a
     /// version.
     pub has_rule: fn(&str) -> bool,
-    /// Identity of the finding reported when an imported package has no
-    /// usable reactivity contract.
-    pub contract_missing_rule: RuleMetadata,
+    /// Projects a package-contract issue through this dialect's catalog so
+    /// SC9005 identity and every sentence remain catalog-owned.
+    pub package_contract_finding: fn(&PackageContractIssue) -> Finding,
     /// Package roots the dialect ships a bundled contract for; answers the
     /// cheap membership question without decoding any contract.
     pub bundled_packages: &'static [&'static str],
@@ -56,7 +56,12 @@ impl Dialect {
 
 /// Every dialect the checker can run with. A new dialect registers here and
 /// becomes selectable by id everywhere a dialect can be named.
-pub static ALL: [&Dialect; 2] = [&SOLID_V2, &SOLID_V1];
+pub static ALL: &[&Dialect] = &[
+    #[cfg(feature = "dialect-v2")]
+    &SOLID_V2,
+    #[cfg(feature = "dialect-v1")]
+    &SOLID_V1,
+];
 
 /// Resolves a dialect by its stable id.
 #[must_use]
@@ -68,16 +73,22 @@ pub fn by_id(id: &str) -> Option<&'static Dialect> {
 /// nothing resolves.
 #[must_use]
 pub fn default_dialect() -> &'static Dialect {
-    &SOLID_V2
+    #[cfg(feature = "dialect-v2")]
+    {
+        &SOLID_V2
+    }
+    #[cfg(all(not(feature = "dialect-v2"), feature = "dialect-v1"))]
+    {
+        &SOLID_V1
+    }
 }
 
-/// The dialect for a Solid language version.
+/// The dialect for a Solid language version, if this build includes it.
 #[must_use]
-pub fn by_version(version: solid_dialect::Version) -> &'static Dialect {
-    match version {
-        solid_dialect::Version::V1 => &SOLID_V1,
-        solid_dialect::Version::V2 => &SOLID_V2,
-    }
+pub fn by_version(version: solid_dialect::Version) -> Option<&'static Dialect> {
+    ALL.iter()
+        .copied()
+        .find(|dialect| dialect.vocabulary.version() == version)
 }
 
 /// Resolves the dialect a project speaks from the `solid-js` it would
@@ -92,7 +103,9 @@ pub fn by_version(version: solid_dialect::Version) -> &'static Dialect {
 /// existed.
 #[must_use]
 pub fn detect(project: &Path) -> &'static Dialect {
-    resolved_solid_version(project).map_or_else(default_dialect, by_version)
+    resolved_solid_version(project)
+        .and_then(by_version)
+        .unwrap_or_else(default_dialect)
 }
 
 fn resolved_solid_version(project: &Path) -> Option<solid_dialect::Version> {
@@ -130,6 +143,7 @@ fn resolved_solid_version(project: &Path) -> Option<solid_dialect::Version> {
     None
 }
 
+#[cfg(feature = "dialect-v2")]
 static SOLID_V2: Dialect = Dialect {
     id: "solid-v2",
     vocabulary: &solid_dialect::Solid2,
@@ -142,11 +156,12 @@ static SOLID_V2: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
-    contract_missing_rule: solid_v2_rules::Rule::PackageContractMissing.metadata(),
+    package_contract_finding: solid_v2_rules::package_contract_finding,
     bundled_packages: &["solid-js", "@solidjs/web"],
     bundled_contract: crate::diagnostics::bundled_contract_v2,
 };
 
+#[cfg(feature = "dialect-v1")]
 static SOLID_V1: Dialect = Dialect {
     id: "solid-v1",
     vocabulary: &solid_dialect::Solid1x,
@@ -159,18 +174,20 @@ static SOLID_V1: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
-    contract_missing_rule: solid_v1_rules::Rule::PackageContractMissing.metadata(),
+    package_contract_finding: solid_v1_rules::package_contract_finding,
     bundled_packages: &["solid-js"],
     bundled_contract: crate::diagnostics::bundled_contract_v1,
 };
 
 #[cfg(test)]
 mod tests {
+    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
     use std::collections::HashSet;
 
     use solid_reactive_ir::{
-        AsyncRead, DirectMutationTarget, ExecutionRole, OwnerRequirement, ReactiveRead,
-        ReactiveWrite, StaticDefect, StaticDefectKind,
+        AsyncRead, DirectMutationTarget, ExecutionRole, OwnerRequirement,
+        OwnerRequirementOperation, ReactiveRead, ReactiveWrite, ReactiveWriteOperation,
+        StaticDefect, StaticDefectKind,
     };
     use typefacts::Location;
 
@@ -256,6 +273,8 @@ mod tests {
             }],
             writes: vec![ReactiveWrite {
                 setter: "sampleSetter".into(),
+                operation: ReactiveWriteOperation::Setter,
+                source_kind: solid_reactive_ir::ReactiveSourceKind::Accessor,
                 location: location(3),
                 declaration: location(4),
                 execution: ExecutionRole::TrackedJsx,
@@ -263,7 +282,7 @@ mod tests {
                 context: "sample computation".into(),
             }],
             missing_owners: vec![OwnerRequirement {
-                operation: "cleanup".into(),
+                operation: OwnerRequirementOperation::Cleanup,
                 location: location(5),
                 uncertain: false,
                 conditional_owner: false,
@@ -324,7 +343,10 @@ mod tests {
 
     /// The documentation and suppression model both depend on this exact
     /// ownership split. Keep it derived from the two catalogs rather than
-    /// maintaining an unaudited second list in prose.
+    /// maintaining an unaudited second list in prose. The one test that must
+    /// see both catalogs at once; every other test asks the registry, so
+    /// single-dialect feature builds still compile the suite.
+    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
     #[test]
     fn rule_catalogs_keep_the_shared_and_version_only_split() {
         let v1 = solid_v1_rules::Rule::ALL
@@ -394,7 +416,11 @@ mod tests {
                 ][..],
             ),
         ] {
-            let dialect = by_version(version);
+            // A single-dialect feature build simply has nothing to check for
+            // the absent version.
+            let Some(dialect) = by_version(version) else {
+                continue;
+            };
             let findings = dialect.solve(&program);
             // Beyond the defects: the strict read, the owned write, and the
             // ownerless cleanup. The pending async read joins them only in

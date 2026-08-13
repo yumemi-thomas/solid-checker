@@ -1,4 +1,8 @@
 {
+  "schemaVersion": 1,
+  "dialect": "solid-v1",
+  "config": "v1",
+  "namespace": "v1",
   "docsBaseUrl": "https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules",
   "rules": [
     { "code": "SC1001", "name": "v1/strict-read-untracked", "severity": "warning", "uncertifiable": false },

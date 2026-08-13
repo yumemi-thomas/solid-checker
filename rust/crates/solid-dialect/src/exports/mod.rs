@@ -12,9 +12,9 @@
 //! defect that motivated the generator was seven exports that existed only in a
 //! hand-maintained list.
 
-pub mod solid_js_1x;
-pub mod solid_js_2;
-pub mod solidjs_web;
+pub mod solid_v1_solid_js;
+pub mod solid_v2_solid_js;
+pub mod solid_v2_solidjs_web;
 
 /// Which side of the erasure boundary a name is imported on.
 ///

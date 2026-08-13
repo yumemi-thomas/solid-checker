@@ -19,6 +19,16 @@ The checker must know whether a JSX value reruns reactively, runs eagerly, is
 invoked in the caller's context, runs later as a callback, or is removed by the
 compiler. Guessing would create either false warnings or missed errors.
 
+## Coverage boundary
+
+The controlled 1.x compiler producer currently classifies every supported JSX
+site or rejects malformed facts before rule analysis starts. An ordinary fresh
+1.x project using the bundled producer should therefore not reach `SC9004`.
+
+The rule remains fail-closed for custom, stale, or future fact producers. Its
+catalog wording is exercised by the synthetic catalog-prose program, and the
+execution-map validation tests inject incomplete and conflicting maps directly.
+
 ## How to fix
 
 Re-run analysis with the matching controlled compiler. If fresh analysis still

@@ -10,8 +10,8 @@ component body or a computation's tracking phase.
 Flags calls to setters returned by `createSignal`/`createStore` and to `refresh()`
 when they execute inside a component body, a memo, or an effect's compute function.
 Writes are allowed in event handlers, actions, `onSettled`, effect apply callbacks,
-directive apply callbacks, and `untrack` blocks. Signals created with
-`{ ownedWrite: true }` are exempt.
+directive apply callbacks, and `untrack` blocks. Internal reactive sources created
+with `{ ownedWrite: true }` in their source-creation options are exempt.
 
 This is the static counterpart of Solid's dev-mode `SIGNAL_WRITE_IN_OWNED_SCOPE`
 error.
@@ -48,7 +48,7 @@ const doubled = createMemo(() => count() * 2);
 // Imperative writes belong in imperative scopes:
 <button onClick={() => setCount((c) => c + 1)}>+1</button>;
 
-// Internal signals that must be written from owned scope opt in narrowly:
+// Internal reactive sources that must be written from owned scope opt in narrowly:
 const [element, setElement] = createSignal(null, { ownedWrite: true });
 ```
 
@@ -57,9 +57,9 @@ const [element, setElement] = createSignal(null, { ownedWrite: true });
 First ask whether the write is a derivation in disguise — if the new value is
 computed from other reactive values, replace compute-then-set with a `createMemo`.
 Genuinely imperative writes move to an event handler, an `action`, `onSettled`, or
-the apply function of `createEffect(compute, apply)`. Reserve
-`createSignal(value, { ownedWrite: true })` for internal signals such as element
-refs; using it on app state reintroduces the feedback loops this rule prevents.
+the apply function of `createEffect(compute, apply)`. Reserve the source creation
+option `{ ownedWrite: true }` for internal reactive sources such as element refs;
+using it on application state reintroduces the feedback loops this rule prevents.
 
 ## Related
 

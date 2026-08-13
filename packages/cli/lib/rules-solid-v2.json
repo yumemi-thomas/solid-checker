@@ -1,4 +1,8 @@
 {
+  "schemaVersion": 1,
+  "dialect": "solid-v2",
+  "config": "v2",
+  "namespace": "",
   "docsBaseUrl": "https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules",
   "rules": [
     { "code": "SC1001", "name": "strict-read-untracked", "severity": "warning", "uncertifiable": false },
@@ -16,10 +20,10 @@
     { "code": "SC3002", "name": "primitive-in-leaf-owner", "severity": "error", "uncertifiable": false },
     { "code": "SC3003", "name": "flush-in-forbidden-scope", "severity": "error", "uncertifiable": false },
     { "code": "SC3004", "name": "invalid-cleanup-return", "severity": "error", "uncertifiable": false },
-    { "code": "SC3005", "name": "settled-cleanup-unowned", "severity": "error", "uncertifiable": false },
     { "code": "SC4001", "name": "no-owner-effect", "severity": "warning", "uncertifiable": false },
     { "code": "SC4002", "name": "no-owner-cleanup", "severity": "warning", "uncertifiable": false },
     { "code": "SC4003", "name": "no-owner-boundary", "severity": "warning", "uncertifiable": false },
+    { "code": "SC4004", "name": "no-owner-settled-cleanup", "severity": "warning", "uncertifiable": false },
     { "code": "SC5001", "name": "pending-async-untracked-read", "severity": "error", "uncertifiable": false },
     { "code": "SC5002", "name": "pending-async-forbidden-scope", "severity": "warning", "uncertifiable": false },
     { "code": "SC5003", "name": "async-outside-loading-boundary", "severity": "warning", "uncertifiable": false },

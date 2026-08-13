@@ -9,7 +9,10 @@
 - [Semantic inventory](semantic-inventory.md) — diagnostics and proof boundaries
 - [Glossary](glossary.md) — canonical domain language
 - [Package contracts](package-contracts.md) — published reactivity summaries
+- [Adding a dialect](adding-a-dialect.md) — forward checklist and assembly manifest
 - [Monorepo policy](monorepo.md) — upstream and dependency policy
+- [Design-review remediation](design-review-remediation.md) — phased plan
+  from the 2026-08 full-catalog review
 
 Contribution and verification instructions are in
 [CONTRIBUTING.md](../CONTRIBUTING.md).

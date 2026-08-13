@@ -10,7 +10,8 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
-    CacheRetention, Finding, IncrementalBuilder, PackageContract, Program, RuleOptions,
+    CacheRetention, Finding, IncrementalBuilder, PackageContract, PackageContractIssue,
+    PackageContractIssueKind, Program, Solid1xRuleOptions,
 };
 
 use crate::dialect::{self, Dialect};
@@ -128,7 +129,7 @@ struct DiagnosticIdentity {
     /// Per-rule options are re-read from disk on every analysis, so an
     /// edited `.solid-checker/rule-options.json` invalidates a retained
     /// diagnostic even within one generation.
-    rule_options: RuleOptions,
+    rule_options: Solid1xRuleOptions,
 }
 
 struct RetainedDiagnostic {
@@ -226,9 +227,9 @@ impl DiagnosticSession {
             project,
             sources,
             facts,
-            explicit_contract_paths,
             contracts,
             program,
+            &identity,
         )?);
         let solve_and_snapshot = solve_started.elapsed();
         self.retained = Some(RetainedDiagnostic {
@@ -286,7 +287,7 @@ pub fn analyze_project_measured(
 }
 
 /// As [`analyze_project_measured`], but reuses a bundled solid-js contract the
-/// caller already decoded (see [`bundled_solid_js_contract`]) instead of
+/// caller already decoded (with the Solid 2 bundled-contract decoder) instead of
 /// decoding the compile-time-embedded JSON on the analysis path. The cold
 /// path decodes it while the service builds the program; the preloaded value
 /// is ignored when the project does not import solid-js.
@@ -312,15 +313,15 @@ fn finish_analysis(
     project: &Path,
     sources: &[SourceFile],
     facts: &ProjectFacts,
-    explicit_contract_paths: &[String],
     contracts: Vec<PackageContract>,
     program: Arc<Program>,
+    identity: &DiagnosticIdentity,
 ) -> Result<DiagnosticAnalysis, BackendError> {
     let statuses = package_contract_statuses_with(
         dialect,
         project,
         facts,
-        explicit_contract_paths,
+        &identity.explicit_contract_paths,
         &contracts,
     )?;
     let missing_contracts = statuses
@@ -347,32 +348,18 @@ fn finish_analysis(
                 start_byte: 0,
                 end_byte: 0,
             });
-        Finding {
-            analysis_context: "package contract completeness".into(),
-            subject_kind: "package".into(),
-            hint: if status.status == "unverified" {
-                "Verify the generated contract against the exact package artifacts and behavioral probes, then record verified, reviewed, or attested evidence.".into()
+        (dialect.package_contract_finding)(&PackageContractIssue {
+            package: status.name.clone(),
+            contract_path: status.contract_path.clone(),
+            status: if status.status == "unverified" {
+                PackageContractIssueKind::Unverified
             } else {
-                format!(
-                    "Create a local contract at {}, or pass one explicitly with --contract <PATH>. If you maintain {}, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format.",
-                    status.contract_path, status.name
-                )
+                PackageContractIssueKind::Missing
             },
-            ..Finding::new(
-                dialect.contract_missing_rule,
-                format!(
-                    "imported Solid package {:?} {}; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
-                    status.name,
-                    if status.status == "unverified" {
-                        "has only an unverified generated reactivity contract"
-                    } else {
-                        "has no reactivity contract"
-                    }
-                ),
-                location,
-            )
-        }
+            location,
+        })
     }));
+    findings.retain(|finding| identity.rule_options.is_enabled(&finding.rule));
     let snapshot = snapshot(sources, &contracts, metrics, findings);
     Ok(DiagnosticAnalysis {
         program,
@@ -638,23 +625,26 @@ pub fn source_location(location: &typefacts::Location, sources: &[SourceFile]) -
 /// facts-independent, so a cold-start caller can decode it while the TypeFacts
 /// service builds its program, then hand it to [`load_package_contracts_with`]
 /// or [`analyze_project_measured_with`].
+#[cfg(feature = "dialect-v2")]
 pub fn bundled_solid_js_contract() -> Result<PackageContract, BackendError> {
     let mut bundled = decode_package_contract(include_bytes!(
-        "../../../../pkg/contracts/bundled/solid-js.json"
+        "../../../../pkg/contracts/bundled/solid-v2/solid-js.json"
     ))?;
-    bundled.source_path = "bundled://solid-js.json".into();
+    bundled.source_path = "bundled://solid-v2/solid-js.json".into();
     Ok(bundled)
 }
 
+#[cfg(feature = "dialect-v2")]
 fn bundled_solidjs_web_contract() -> Result<PackageContract, BackendError> {
     let mut bundled = decode_package_contract(include_bytes!(
-        "../../../../pkg/contracts/bundled/solidjs-web.json"
+        "../../../../pkg/contracts/bundled/solid-v2/solidjs-web.json"
     ))?;
-    bundled.source_path = "bundled://solidjs-web.json".into();
+    bundled.source_path = "bundled://solid-v2/solidjs-web.json".into();
     Ok(bundled)
 }
 
 /// The Solid 2.0 dialect's bundled contract set, keyed by package root.
+#[cfg(feature = "dialect-v2")]
 pub(crate) fn bundled_contract_v2(package: &str) -> Result<Option<PackageContract>, BackendError> {
     Ok(match package {
         "solid-js" => Some(bundled_solid_js_contract()?),
@@ -666,13 +656,14 @@ pub(crate) fn bundled_contract_v2(package: &str) -> Result<Option<PackageContrac
 /// The Solid 1.x dialect's bundled contract for `solid-js@1.x`, covering the
 /// `.`, `./store` and `./web` entrypoints of the package that version
 /// actually ships.
+#[cfg(feature = "dialect-v1")]
 pub(crate) fn bundled_contract_v1(package: &str) -> Result<Option<PackageContract>, BackendError> {
     Ok(match package {
         "solid-js" => {
             let mut bundled = decode_package_contract(include_bytes!(
-                "../../../../pkg/contracts/bundled/solid-js-v1.json"
+                "../../../../pkg/contracts/bundled/solid-v1/solid-js.json"
             ))?;
-            bundled.source_path = "bundled://solid-js-v1.json".into();
+            bundled.source_path = "bundled://solid-v1/solid-js.json".into();
             Some(bundled)
         }
         _ => None,
@@ -1087,7 +1078,7 @@ fn discover_package_directory(
 /// contract discovery does. A project without one gets upstream's defaults;
 /// a file that fails to parse fails the analysis rather than silently
 /// meaning "defaults".
-pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError> {
+pub fn discover_rule_options(project: &Path) -> Result<Solid1xRuleOptions, BackendError> {
     let directory = if project.is_dir() {
         project
     } else {
@@ -1097,7 +1088,10 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse(&encoded).map_err(|error| {
+                return Solid1xRuleOptions::parse(&encoded, |rule| {
+                    dialect::ALL.iter().any(|dialect| (dialect.has_rule)(rule))
+                })
+                .map_err(|error| {
                     BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
                 });
             }
@@ -1105,7 +1099,7 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
             Err(error) => return Err(error.into()),
         }
     }
-    Ok(RuleOptions::default())
+    Ok(Solid1xRuleOptions::default())
 }
 
 /// The rule-options document [`discover_rule_options`] would load for this

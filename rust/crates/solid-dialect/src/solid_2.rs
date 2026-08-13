@@ -117,10 +117,10 @@ impl Dialect for Solid2 {
         ]
     }
 
-    /// `pkg/contracts/bundled/solid-js.json`, the artifact
+    /// `pkg/contracts/bundled/solid-v2/solid-js.json`, the artifact
     /// `solid-facts-backend` compiles in for this dialect.
     fn bundled_contract_label(&self) -> &'static str {
-        "solid-js.json"
+        "solid-v2/solid-js.json"
     }
 
     /// dom-expressions 0.50 (`shared/constants.rs`): `reserved_namespace`
@@ -635,14 +635,14 @@ impl Dialect for Solid2 {
     /// resolves.
     fn export_modules(&self, name: &str, position: crate::ExportPosition) -> Vec<&'static str> {
         let mut found = crate::exports::modules(
-            crate::exports::solid_js_2::VALUES,
-            crate::exports::solid_js_2::TYPES,
+            crate::exports::solid_v2_solid_js::VALUES,
+            crate::exports::solid_v2_solid_js::TYPES,
             name,
             position,
         );
         for module in crate::exports::modules(
-            crate::exports::solidjs_web::VALUES,
-            crate::exports::solidjs_web::TYPES,
+            crate::exports::solid_v2_solidjs_web::VALUES,
+            crate::exports::solid_v2_solidjs_web::TYPES,
             name,
             position,
         ) {
@@ -956,8 +956,8 @@ mod tests {
         // and reading only the core contract is exactly how an unmodelled
         // mount entry point went unnoticed.
         let exports: std::collections::BTreeMap<String, serde_json::Value> = [
-            include_str!("../contracts/solid-js.json"),
-            include_str!("../contracts/solidjs-web.json"),
+            include_str!("../contracts/solid-v2/solid-js.json"),
+            include_str!("../contracts/solid-v2/solidjs-web.json"),
         ]
         .iter()
         .flat_map(|contract| {

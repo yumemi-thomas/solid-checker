@@ -209,9 +209,14 @@ test("reuses an ESLint parser project before filesystem discovery", () => {
   );
 });
 
-test("per-rule surface: every catalog identity is an ESLint rule", () => {
-  const v1 = JSON.parse(readFileSync(new URL("../lib/rules-v1.json", import.meta.url)));
-  const v2 = JSON.parse(readFileSync(new URL("../lib/rules-v2.json", import.meta.url)));
+test("per-rule surface: every discovered catalog identity is an ESLint rule", () => {
+  const catalogs = Object.values(plugin._testing.manifests);
+  const v1 = catalogs.find(catalog => catalog.dialect === "solid-v1");
+  const v2 = catalogs.find(catalog => catalog.dialect === "solid-v2");
+  assert.deepEqual(
+    catalogs.map(catalog => catalog.dialect).sort(),
+    ["solid-v1", "solid-v2"]
+  );
   for (const entry of [...v1.rules, ...v2.rules]) {
     assert.ok(plugin.rules[entry.name], `missing rule ${entry.name}`);
   }
@@ -221,6 +226,8 @@ test("per-rule surface: every catalog identity is an ESLint rule", () => {
   for (const entry of v2.rules) {
     assert.ok(!entry.name.includes("/"), `v2 stays unprefixed: ${entry.name}`);
   }
+  assert.equal(v1.namespace, "v1");
+  assert.equal(v2.namespace, "");
   // The two dialect configs enable exactly their own catalog, plus the
   // certification switch-off that keeps them composable with `recommended`.
   assert.equal(Object.keys(plugin.configs.v1.rules).length, v1.rules.length + 1);

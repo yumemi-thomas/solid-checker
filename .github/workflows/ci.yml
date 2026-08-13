@@ -25,6 +25,12 @@ jobs:
           workspaces: rust
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
+      - name: Check single-dialect composition builds
+        run: |
+          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-facts-backend --all-targets --no-default-features --features dialect-v1
+          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-facts-backend --all-targets --no-default-features --features dialect-v2
+          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v1
+          cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v2
       - run: make test-rust
       # The two fixture gates: "no finding moved" over every fixture
       # project, and eslint-plugin-solid's own 465 cases with every
@@ -46,10 +52,10 @@ jobs:
             @solidjs/web@2.0.0-beta.31
       - name: Check the contracts against the installed packages
         run: |
-          make contracts-check \
-            SOLID_1_PACKAGE=/tmp/contract-packages/node_modules/solid-js-1x \
-            SOLID_2_PACKAGE=/tmp/contract-packages/node_modules/solid-js \
-            SOLIDJS_WEB_PACKAGE=/tmp/contract-packages/node_modules/@solidjs/web
+          SOLID_V1_SOLID_JS_PACKAGE=/tmp/contract-packages/node_modules/solid-js-1x \
+          SOLID_V2_SOLID_JS_PACKAGE=/tmp/contract-packages/node_modules/solid-js \
+          SOLID_V2_SOLIDJS_WEB_PACKAGE=/tmp/contract-packages/node_modules/@solidjs/web \
+            make contracts-check
 
   rust-package:
     strategy:
@@ -153,7 +159,8 @@ jobs:
           node-version: 24
       - run: sh -n scripts/*.sh
       - run: node --test scripts/*.test.mjs
-      - run: jq empty schema/*.json pkg/contracts/bundled/*.json
+      - run: jq empty schema/*.json
+      - run: find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
       # The bundled contracts ship semantics compiled into the backend, so a
       # stale artifact ships wrong semantics. contract-conformance runs both
       # gates: check-bundled-contracts.mjs probes the 2.0 contracts against

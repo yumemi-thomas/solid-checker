@@ -1,23 +1,23 @@
-// Generates pkg/contracts/bundled/solid-js-v1.json, the bundled Solid 1.x
+// Generates pkg/contracts/bundled/solid-v1/solid-js.json, the bundled Solid 1.x
 // (solid-js@1.9.14) package contract in the normalized schemaVersion-1
 // document shape decoded by rust/crates/solid-facts-backend/src/contract_document.rs
 // (shared summaries + per-entrypoint export groups, mirroring the layout of
-// pkg/contracts/bundled/solid-js.json for Solid 2).
+// pkg/contracts/bundled/solid-v2/solid-js.json for Solid 2).
 //
 // Inputs (both checked in, read-only):
 //
-// 1. pkg/contracts/bundled/solid-js-v1-census.json — the per-subpath export
+// 1. pkg/contracts/bundled/solid-v1/solid-js-census.json — the per-subpath export
 //    census: a JSON array of wire-v2 contract units, one per
 //    (moduleSubpath, exportName) of solid-js@1.9.14, materialized from the
 //    1.x branch with:
 //        git show 1.x:fixtures/bundled-contracts/bundled/solid-js.json \
-//          > pkg/contracts/bundled/solid-js-v1-census.json
+//          > pkg/contracts/bundled/solid-v1/solid-js-census.json
 //    It decides WHICH exports exist under WHICH entrypoint (".", "./store",
 //    "./web"), plus whether a name is a value (reactive-value-flow role
 //    "ordinary") or a function (role "callable"). Its other facets use a
 //    different vocabulary and are intentionally ignored here.
 //
-// 2. rust/crates/solid-dialect/contracts/solid-js-1x.json — the reviewed flat
+// 2. rust/crates/solid-dialect/contracts/solid-v1/solid-js.json — the reviewed flat
 //    semantics map (export name -> {kind, callbacks, returns}). It supplies
 //    the callback/return summaries. Exports present in the census but absent
 //    from this map fall back to the plain "function" / "value" summary.
@@ -25,16 +25,21 @@
 // Run from anywhere: node scripts/generate-bundled-solid1-contract.mjs
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
 import { join } from "node:path";
+import { loadDialectManifests, root } from "./dialect-manifests.mjs";
 
-const root = fileURLToPath(new URL("..", import.meta.url));
-const censusPath = join(root, "pkg/contracts/bundled/solid-js-v1-census.json");
-const semanticsPath = join(
-  root,
-  "rust/crates/solid-dialect/contracts/solid-js-1x.json",
+const dialect = loadDialectManifests({ requireArtifacts: true }).find(
+  manifest => manifest.id === "solid-v1",
 );
-const outputPath = join(root, "pkg/contracts/bundled/solid-js-v1.json");
+const contract = dialect?.contracts.find(
+  item => item.composeScript === "scripts/generate-bundled-solid1-contract.mjs",
+);
+if (!contract || contract.composeInputs?.length !== 1) {
+  throw new Error("solid-v1 manifest must declare this composer and one census input");
+}
+const censusPath = join(root, contract.composeInputs[0]);
+const semanticsPath = join(root, contract.reviewContract);
+const outputPath = join(root, contract.bundledContract);
 
 const census = JSON.parse(readFileSync(censusPath, "utf8"));
 const semantics = JSON.parse(readFileSync(semanticsPath, "utf8")).exports;
@@ -133,7 +138,7 @@ for (const canonical of [...unique.keys()].sort()) {
 }
 
 // Emit numbered summaries first, then the plain ones, matching the visual
-// layout of pkg/contracts/bundled/solid-js.json.
+// layout of pkg/contracts/bundled/solid-v2/solid-js.json.
 const orderedSummaries = {};
 for (const [id, summary] of [...summaries].sort(([a], [b]) => {
   const plainA = !a.includes("-");

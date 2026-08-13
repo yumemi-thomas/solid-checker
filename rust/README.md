@@ -89,7 +89,7 @@ Implemented rule slices are:
   application callbacks and closures returned through forwarded directive
   factories;
 - `no-owner-effect`, `no-owner-cleanup`, `no-owner-boundary`, and
-  `settled-cleanup-unowned`, using a fixed-point owner-context graph across
+  `no-owner-settled-cleanup`, using a fixed-point owner-context graph across
   components, roots, helpers, effect phases, events, and leaf owners;
 - `pending-async-untracked-read`, `pending-async-forbidden-scope`, and
   `async-outside-loading-boundary`, with TS-Go async-result provenance and Oxc

@@ -226,6 +226,18 @@ pub(crate) fn discover_file_sources(
         {
             continue;
         }
+        let source_kind = if primitive
+            .as_deref()
+            .and_then(|primitive| bundled_returns.get(primitive))
+            .is_some_and(|returned| returned.kind == "store-path")
+            || matches!(
+                resolved,
+                Some(primitive) if lookup.dialect.returns_store(primitive)
+            ) {
+            ReactiveSourceKind::Store
+        } else {
+            ReactiveSourceKind::Accessor
+        };
         let source_name = if binding.shape == solid_facts::ast::BindingShape::Array {
             binding.array_slots.first().and_then(Option::as_ref)
         } else {
@@ -280,22 +292,7 @@ pub(crate) fn discover_file_sources(
                         ),
                     ));
                 }
-                result.source_kinds.push((
-                    symbol.clone(),
-                    if primitive
-                        .as_deref()
-                        .and_then(|primitive| bundled_returns.get(primitive))
-                        .is_some_and(|returned| returned.kind == "store-path")
-                        || matches!(
-                            resolved,
-                            Some(primitive) if lookup.dialect.returns_store(primitive)
-                        )
-                    {
-                        ReactiveSourceKind::Store
-                    } else {
-                        ReactiveSourceKind::Accessor
-                    },
-                ));
+                result.source_kinds.push((symbol.clone(), source_kind));
                 if let Some(primitive) = primitive.as_deref() {
                     result
                         .source_primitives
@@ -328,6 +325,7 @@ pub(crate) fn discover_file_sources(
                         symbol_id(file.source_text(name.span).unwrap_or_default()),
                         declaration,
                         call.owned_write_option,
+                        source_kind,
                     ),
                 ));
             }
@@ -339,7 +337,7 @@ pub(crate) fn discover_file_sources(
 pub(crate) struct SourceDiscoveryMergeTarget<'a> {
     pub(crate) accessors: &'a mut HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) accessor_origins: &'a mut HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: &'a mut HashMap<SymbolId, (SymbolId, Location, bool)>,
+    pub(crate) setters: &'a mut HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) actions: &'a mut HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_kinds: &'a mut HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) source_primitives: &'a mut HashMap<SymbolId, SymbolId>,
@@ -355,7 +353,7 @@ pub(crate) struct SourceDiscoveryMergeTarget<'a> {
 pub(crate) struct SourceDiscoveryAggregate {
     pub(crate) accessors: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool)>,
+    pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) actions: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) source_primitives: HashMap<SymbolId, SymbolId>,
@@ -496,7 +494,7 @@ pub(crate) fn extend_source_discovery_symbols(
 pub(crate) struct SourceDiscovery {
     pub(crate) accessors: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) accessor_origins: HashMap<SymbolId, (SymbolId, SymbolId, Location)>,
-    pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool)>,
+    pub(crate) setters: HashMap<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>,
     pub(crate) actions: HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_kinds: HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) source_primitives: HashMap<SymbolId, SymbolId>,
@@ -570,7 +568,7 @@ pub(crate) fn discover_sources(
         })
         .unwrap_or_default();
     let mut accessor_origins = HashMap::<SymbolId, (SymbolId, SymbolId, Location)>::new();
-    let mut setters = HashMap::<SymbolId, (SymbolId, Location, bool)>::new();
+    let mut setters = HashMap::<SymbolId, (SymbolId, Location, bool, ReactiveSourceKind)>::new();
     let mut actions = HashMap::<SymbolId, (SymbolId, Location)>::new();
     let mut source_kinds = HashMap::<SymbolId, ReactiveSourceKind>::new();
     let mut source_primitives = HashMap::<SymbolId, SymbolId>::new();
@@ -1026,7 +1024,7 @@ pub(crate) fn discover_sources(
                     let Some(symbol) = entities.get(&declaration) else {
                         continue;
                     };
-                    if let Some((_, source, owned_write)) = &setter
+                    if let Some((_, source, owned_write, source_kind)) = &setter
                         && !setters.contains_key(symbol)
                     {
                         setter_aliases.push((
@@ -1035,6 +1033,7 @@ pub(crate) fn discover_sources(
                                 symbol_id(file.source_text(name.span).unwrap_or_default()),
                                 source.clone(),
                                 *owned_write,
+                                *source_kind,
                             ),
                         ));
                     }

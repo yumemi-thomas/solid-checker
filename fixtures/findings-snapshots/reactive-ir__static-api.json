@@ -162,8 +162,8 @@
       "fixes": 0
     },
     {
-      "rule": "invalid-affects-target",
-      "code": "SC7003",
+      "rule": "affects-keys-on-accessor",
+      "code": "SC7004",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
@@ -172,13 +172,33 @@
       "fixes": 0
     },
     {
+      "rule": "invalid-affects-target",
+      "code": "SC7003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 875,
+      "end": 882,
+      "fixes": 0
+    },
+    {
+      "rule": "invalid-affects-target",
+      "code": "SC7003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 917,
+      "end": 925,
+      "fixes": 0
+    },
+    {
       "rule": "reactive-write-in-owned-scope",
       "code": "SC2001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 908,
-      "end": 922,
+      "start": 955,
+      "end": 969,
       "fixes": 0
     }
   ]

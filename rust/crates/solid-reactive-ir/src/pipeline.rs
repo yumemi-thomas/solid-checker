@@ -20,7 +20,7 @@ use crate::{
     ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
     ContractGenerationObligation, InvalidCleanupReturn, LeafOwnerOperation, ObligationCounts,
     OwnerRequirement, PackageContract, PrimitiveCreation, Program, ReactiveRead,
-    ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect, StaticViolation,
+    ReactiveSourceKind, ReactiveWrite, Solid1xRuleOptions, StaticDefect, StaticViolation,
     UnresolvedCleanupReturn, location_order,
 };
 use crate::{cleanup, directives, owners, reactive_analysis, static_api, static_rules};
@@ -132,7 +132,7 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
-    pub(crate) rule_options: &'a RuleOptions,
+    pub(crate) rule_options: &'a Solid1xRuleOptions,
 }
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
@@ -156,7 +156,7 @@ pub fn build_with_contracts_measured(
         facts,
         dialect,
         contracts,
-        &RuleOptions::default(),
+        &Solid1xRuleOptions::default(),
         BuildCaches::default(),
     )
 }
@@ -181,7 +181,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
     contracts: &[PackageContract],
-    rule_options: &RuleOptions,
+    rule_options: &Solid1xRuleOptions,
     caches: BuildCaches<'_>,
 ) -> Result<(Program, BuildTimings), BuildError> {
     let BuildCaches {

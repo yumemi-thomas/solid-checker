@@ -1139,7 +1139,7 @@ pub(crate) fn push_owner_requirement(
         operation.into(),
     )) {
         requirements.push(OwnerRequirement {
-            operation: operation.into(),
+            operation: crate::OwnerRequirementOperation::from_internal(operation),
             location,
             uncertain: status.uncertain,
             conditional_owner: status.conditional_owner,

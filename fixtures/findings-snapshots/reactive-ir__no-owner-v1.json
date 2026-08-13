@@ -2,14 +2,52 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "v1/package-contract-missing",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
+      "start": 527,
+      "end": 576,
+      "fixes": 0,
+      "message": "imported Solid package \"uncontracted-package\" has no reactivity contract; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
+      "hint": "Create a local contract at <ROOT>/fixtures/reactive-ir/no-owner-v1/.solid-checker/contracts/uncontracted-package/solid-reactivity.json, or pass one explicitly with --contract <PATH>. If you maintain uncontracted-package, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format."
+    },
+    {
       "rule": "v1/no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
-      "start": 700,
-      "end": 712,
-      "fixes": 0
+      "start": 760,
+      "end": 772,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
+    },
+    {
+      "rule": "v1/no-owner-boundary",
+      "code": "SC4003",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
+      "start": 1303,
+      "end": 1312,
+      "fixes": 0,
+      "message": "boundary is created without a reactive owner; it can never be disposed, and the subtree it manages will leak",
+      "hint": "Render boundaries inside a component tree rooted by render() or hydrate(), or under an explicit createRoot; a boundary created in a bare helper function has no owner to attach to."
+    },
+    {
+      "rule": "v1/primitive-in-directive-application",
+      "code": "SC6001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
+      "start": 1931,
+      "end": 1943,
+      "fixes": 0,
+      "message": "reactive primitive createSignal is created in a directive application callback; the apply phase runs per element as an unowned leaf, so primitives created here are never tracked or disposed",
+      "hint": "Use the two-phase directive factory: create primitives and subscriptions in the setup phase (the factory body, which runs in an owned scope) and keep the returned ref callback to DOM work only."
     }
   ]
 }

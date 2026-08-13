@@ -9,7 +9,10 @@ declare module "solid-js" {
   export function createSignal<T>(compute: () => Promise<T>): [() => T, (value: T) => void];
   export function createStore<T extends object>(compute: () => Promise<T>, seed: T): [T, (value: T) => void];
   export function createProjection<T extends object>(compute: () => Promise<T>, seed: T): T;
+  export function latest<T>(read: () => T): T | undefined;
+  export function isPending(read: () => unknown): boolean;
   export function onSettled(callback: () => void): void;
+  export function refresh(target: unknown): void;
   export function Loading(props: { fallback: JSX.Element; children: JSX.Element }): JSX.Element;
 }
 

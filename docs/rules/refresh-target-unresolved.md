@@ -11,6 +11,14 @@ binding the analyzer knows to be a branded Solid source (a derived signal, store
 or projection) — typically values that crossed a file or package boundary the
 analysis cannot see through.
 
+## Shared code
+
+SC9003 identifies the uncertifiable `refresh()`/`affects()` target-provenance
+family; the rule name identifies which API surface reported it. A suppression
+or filter by code therefore silences both `refresh-target-unresolved` and
+`affects-target-unresolved`. Project-wide enablement uses exact rule names, so
+either surface can be disabled without disabling the other.
+
 ## Why is this analysis-limiting?
 
 `refresh()` requires a branded source; an unbranded value throws at runtime

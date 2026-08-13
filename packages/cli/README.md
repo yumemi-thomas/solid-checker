@@ -98,8 +98,14 @@ config resolves each rule from the later entry), certification skips every
 finding an enabled per-rule rule owns for the linted file and reports only
 the rest.
 
-Per-rule options (for example `v1/no-innerhtml`'s `allowStatic`) live in the
-project's `.solid-checker/rule-options.json`, which the native analysis
+The adapter discovers shipped dialect catalogs by enumerating
+`lib/rules-solid-vN.json`. Each generated catalog carries its stable `dialect`
+id, compatibility `config` key, and optional rule `namespace`; adding a catalog
+does not require a JavaScript registry or version branch.
+
+Project-wide rule enablement and per-rule options (for example
+`v1/no-innerhtml`'s `allowStatic`) live in the project's
+`.solid-checker/rule-options.json`, which the native analysis
 discovers itself — not in ESLint rule configuration. The adapter runs one
 analysis per project, so a single discovered file is what keeps ESLint, the
 standalone CLI, and every editor integration reading the same options. See

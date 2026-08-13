@@ -608,7 +608,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// Per-rule options, defaulted to upstream's defaults when the project
     /// carries no `.solid-checker/rule-options.json`. See
     /// [`solid1x_options`].
-    pub(super) solid1x_options: &'a solid1x_options::RuleOptions,
+    pub(super) solid1x_options: &'a solid1x_options::Solid1xRuleOptions,
 }
 
 /// Runs every upstream-compat rule the dialect's catalog declares over one
