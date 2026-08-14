@@ -19,8 +19,10 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
   cargo +1.97 test --manifest-path "$rust_manifest" --workspace
 
 cargo +1.97 build --manifest-path "$rust_manifest" --workspace
-SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/coverage.mjs
-SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/parity.mjs
+SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/coverage.mjs
+SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/parity.mjs
 
 cargo +1.97 build --release --manifest-path "$rust_manifest" \
   -p solid-facts-backend --bin solid-checker-session-bench
