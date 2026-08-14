@@ -31,7 +31,7 @@ function run(command, arguments_) {
 }
 
 function measure(files, options = {}) {
-  const corpus = join(directory, String(files));
+  const corpus = join(directory, options.corpus ?? String(files));
   run(process.execPath, [
     "benchmarks/generate-bench-corpus.mjs",
     String(files),
@@ -59,9 +59,17 @@ function measure(files, options = {}) {
   );
 }
 
+function median(values) {
+  const sorted = values.toSorted((left, right) => left - right);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
 try {
   const small = measure(500);
-  const large = measure(1000);
+  const largeSamples = Array.from({ length: 3 }, (_, index) =>
+    measure(1000, { corpus: `large-${index}` })
+  );
+  const large = largeSamples[0];
   const incremental = measure(1000, {
     iterations: 10,
     warmups: 2,
@@ -85,14 +93,19 @@ try {
     );
   }
 
-  const firstIrPerSource =
-    large.firstRustPipelineBreakdown.reactiveIrTotal.medianNs /
-    large.sourceCount;
+  const firstIrPerSource = median(
+    largeSamples.map(
+      report =>
+        report.firstRustPipelineBreakdown.reactiveIrTotal.medianNs /
+        report.sourceCount
+    )
+  );
   // GitHub's shared ubuntu-24.04 runners have measured this cold path at
   // 158us/source while the same revision is about 55us/source locally. Keep
-  // enough runner headroom to reject a real regression without failing on a
-  // single-digit scheduling swing; compare-performance.mjs races the merge
-  // base on the same runner for the relative PR comparison.
+  // enough runner headroom to reject a real regression. Use three independent
+  // cold processes so a single scheduling interruption cannot fail the gate;
+  // compare-performance.mjs races the merge base on the same runner for the
+  // relative PR comparison.
   const maximumFirstIrPerSource = Number(
     process.env.SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE ?? 175_000
   );
