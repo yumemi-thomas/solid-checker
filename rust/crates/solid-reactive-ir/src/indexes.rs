@@ -297,6 +297,8 @@ pub(super) struct SemanticLookup<'a> {
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
     declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
     function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
+    direct_value_aliases: OnceLock<HashSet<SymbolId>>,
+    bindings_by_symbol: OnceLock<HashMap<SymbolId, BindingResolution>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
     file_primitives: OnceLock<Vec<OnceLock<FilePrimitives>>>,
@@ -304,6 +306,7 @@ pub(super) struct SemanticLookup<'a> {
     project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
     callback_capabilities: OnceLock<DialectCallbackCapabilities>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
+    project_has_component_type: OnceLock<bool>,
     component_functions: OnceLock<HashSet<(&'a str, Span)>>,
     cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
 }
@@ -381,6 +384,8 @@ impl<'a> SemanticLookup<'a> {
             jsx_call_sites: OnceLock::new(),
             declaration_symbols: OnceLock::new(),
             function_call_sites: OnceLock::new(),
+            direct_value_aliases: OnceLock::new(),
+            bindings_by_symbol: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),
             file_primitives: OnceLock::new(),
@@ -388,6 +393,7 @@ impl<'a> SemanticLookup<'a> {
             project_primitives: OnceLock::new(),
             callback_capabilities: OnceLock::new(),
             returned_callback_proof_digest: OnceLock::new(),
+            project_has_component_type: OnceLock::new(),
             component_functions: OnceLock::new(),
             cross_file_proof_digest: OnceLock::new(),
         }
@@ -1024,6 +1030,9 @@ impl<'a> SemanticLookup<'a> {
         if member_property.is_none()
             && let Some(symbol) = self.entities.at(file.path.as_str(), callee)
         {
+            if !self.direct_value_aliases().contains(symbol) {
+                return vec![symbol.clone()];
+            }
             let mut visited = HashSet::new();
             let aliases = self.direct_value_symbols(file, callee, &mut visited);
             if !aliases.is_empty() {
@@ -1256,15 +1265,14 @@ impl<'a> SemanticLookup<'a> {
             return;
         }
 
-        let identifier_reference = file.ast.identifiers.iter().any(|identifier| {
-            identifier.span == object
-                && identifier.role == solid_facts::ast::IdentifierRole::Reference
-        });
-        let binding = self
-            .entities
-            .at(file.path.as_str(), object)
-            .and_then(|symbol| self.binding_for_symbol(file, symbol))
-            .map(|binding| (file, binding))
+        let direct_symbol = self.entities.at(file.path.as_str(), object);
+        let identifier_reference = direct_symbol.is_none()
+            && file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == object
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            });
+        let binding = direct_symbol
+            .and_then(|symbol| self.binding_for_symbol(symbol))
             .or_else(|| {
                 identifier_reference.then(|| {
                     self.binding_at_reference(file.path.as_str(), object)
@@ -1353,17 +1361,68 @@ impl<'a> SemanticLookup<'a> {
         }
     }
 
-    fn binding_for_symbol<'b>(
+    fn binding_for_symbol(
         &self,
-        file: &'b FileFacts,
         symbol: &str,
-    ) -> Option<&'b solid_facts::ast::BindingFact> {
-        file.ast.bindings.iter().find(|binding| {
-            binding.names.iter().any(|name| {
-                self.entities
-                    .at(file.path.as_str(), name.span)
-                    .is_some_and(|candidate| candidate == symbol)
-            })
+    ) -> Option<(&'a FileFacts, &'a solid_facts::ast::BindingFact)> {
+        let resolution = self.bindings_by_symbol().get(symbol)?;
+        let file = &self.facts.files[resolution.file];
+        Some((file, &file.ast.bindings[resolution.binding]))
+    }
+
+    /// Bindings whose initializer can replace the binding's callable identity.
+    ///
+    /// Most call sites name an import, a function, a signal tuple slot, or the
+    /// direct result of another call. Their entity symbol is already the exact
+    /// runtime identity. Only identifier aliases, object destructures, and
+    /// conditional initializers need the recursive value proof.
+    fn direct_value_aliases(&self) -> &HashSet<SymbolId> {
+        self.direct_value_aliases.get_or_init(|| {
+            let mut aliases = HashSet::new();
+            for file in &self.facts.files {
+                for binding in &file.ast.bindings {
+                    let conditional_initializer = binding.initializer.is_some_and(|initializer| {
+                        let initializer = file.ast.peel_ts_sugar_span(initializer);
+                        file.ast
+                            .conditional_expressions
+                            .iter()
+                            .any(|conditional| conditional.span == initializer)
+                    });
+                    if binding.initializer_identifier.is_none()
+                        && binding.shape != solid_facts::ast::BindingShape::Object
+                        && !conditional_initializer
+                    {
+                        continue;
+                    }
+                    for name in &binding.names {
+                        if let Some(symbol) = self.entities.at(file.path.as_str(), name.span) {
+                            aliases.insert(symbol.clone());
+                        }
+                    }
+                }
+            }
+            aliases
+        })
+    }
+
+    fn bindings_by_symbol(&self) -> &HashMap<SymbolId, BindingResolution> {
+        self.bindings_by_symbol.get_or_init(|| {
+            let mut bindings = HashMap::new();
+            for (file_index, file) in self.facts.files.iter().enumerate() {
+                for (binding_index, binding) in file.ast.bindings.iter().enumerate() {
+                    for name in &binding.names {
+                        let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
+                            continue;
+                        };
+                        bindings.entry(symbol.clone()).or_insert(BindingResolution {
+                            file: file_index,
+                            binding: binding_index,
+                            symbol: symbol.clone(),
+                        });
+                    }
+                }
+            }
+            bindings
         })
     }
 
@@ -1389,28 +1448,22 @@ impl<'a> SemanticLookup<'a> {
             symbols.dedup();
             return symbols;
         }
-        let identifier_reference = file.ast.identifiers.iter().any(|identifier| {
-            identifier.span == value
-                && identifier.role == solid_facts::ast::IdentifierRole::Reference
-        });
-        let Some(symbol) = self
-            .entities
-            .at(file.path.as_str(), value)
-            .cloned()
-            .or_else(|| {
-                identifier_reference.then(|| {
-                    self.binding_at_reference(file.path.as_str(), value)
-                        .map(|(_, _, symbol)| symbol)
-                })?
-            })
-        else {
+        let direct_symbol = self.entities.at(file.path.as_str(), value);
+        let identifier_reference = direct_symbol.is_none()
+            && file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == value
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            });
+        let Some(symbol) = direct_symbol.cloned().or_else(|| {
+            identifier_reference.then(|| {
+                self.binding_at_reference(file.path.as_str(), value)
+                    .map(|(_, _, symbol)| symbol)
+            })?
+        }) else {
             return Vec::new();
         };
-        let Some((binding_file, binding)) = self
-            .entities
-            .at(file.path.as_str(), value)
-            .and_then(|symbol| self.binding_for_symbol(file, symbol))
-            .map(|binding| (file, binding))
+        let Some((binding_file, binding)) = direct_symbol
+            .and_then(|symbol| self.binding_for_symbol(symbol))
             .or_else(|| {
                 identifier_reference.then(|| {
                     self.binding_at_reference(file.path.as_str(), value)
@@ -1559,6 +1612,29 @@ impl<'a> SemanticLookup<'a> {
                     && crate::owners::containing_ast_function(&file.ast, returned.span)
                         .is_some_and(|owner| owner.span == function.span)
             });
+        // Every remaining runtime proof below only decides whether a direct
+        // JSX return is used as a component value or as an ordinary callback.
+        // Without such a return, only an exact compiler-resolved Component
+        // type can still establish component identity. Avoid building the
+        // project-wide reference and call-site indexes for ordinary helpers.
+        if !directly_returns_jsx {
+            if !self.project_has_component_type() {
+                return false;
+            }
+            let Some(name) = binding_name else {
+                return false;
+            };
+            let Some(descriptor) =
+                self.smallest_contained_descriptor(file.path.as_str(), name.span)
+            else {
+                return false;
+            };
+            return descriptor.alias_declarations.iter().any(|declaration| {
+                self.dialect
+                    .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
+                    == Some(solid_dialect::TypeRole::Component)
+            });
+        }
         // Component identity is about the function value itself, not anything
         // lexically nested below a callback expression. The largest function
         // inside a callback/argument is the direct value; nested declarations
@@ -1712,6 +1788,20 @@ impl<'a> SemanticLookup<'a> {
             self.dialect
                 .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
                 == Some(solid_dialect::TypeRole::Component)
+        })
+    }
+
+    fn project_has_component_type(&self) -> bool {
+        *self.project_has_component_type.get_or_init(|| {
+            self.facts.typescript.entities().any(|entity| {
+                entity.type_descriptor.as_deref().is_some_and(|descriptor| {
+                    descriptor.alias_declarations.iter().any(|declaration| {
+                        self.dialect
+                            .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
+                            == Some(solid_dialect::TypeRole::Component)
+                    })
+                })
+            })
         })
     }
 

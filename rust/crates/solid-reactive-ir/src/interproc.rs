@@ -3953,33 +3953,50 @@ fn interprocedural_reads(
         entities,
     };
     let mut structured_returns = vec![None; nodes.len()];
-    for _ in 0..=nodes.len() {
-        let discovered = discover_structured_returns(&StructuredReturnDiscovery {
-            facts,
-            nodes: &nodes,
-            indexes: &indexes,
-            by_symbol: &by_symbol,
-            summaries: &summaries,
-            returned: &returned,
-            structured_returns: &structured_returns,
-            accessors,
-            source_kinds,
-            source_primitives,
-            bundled_returns,
-            contract_returns,
-            entities,
-            symbol_names,
-            lookup,
-        });
-        let mut changed = false;
-        for (target, returned) in structured_returns.iter_mut().zip(discovered) {
-            if *target != returned {
-                *target = returned;
-                changed = true;
+    let has_structured_return_seed = facts.files.iter().any(|file| {
+        !file.ast.object_properties.is_empty()
+            || file
+                .ast
+                .functions
+                .iter()
+                .filter_map(|function| function.expression_return.as_ref())
+                .chain(file.ast.returns.iter())
+                .any(|returned| {
+                    !returned.elements().is_empty() || !returned.properties().is_empty()
+                })
+    }) || bundled_returns
+        .values()
+        .chain(contract_returns.values().map(|(returned, _)| returned))
+        .any(|returned| matches!(returned.kind.as_str(), "tuple" | "object"));
+    if has_structured_return_seed {
+        for _ in 0..=nodes.len() {
+            let discovered = discover_structured_returns(&StructuredReturnDiscovery {
+                facts,
+                nodes: &nodes,
+                indexes: &indexes,
+                by_symbol: &by_symbol,
+                summaries: &summaries,
+                returned: &returned,
+                structured_returns: &structured_returns,
+                accessors,
+                source_kinds,
+                source_primitives,
+                bundled_returns,
+                contract_returns,
+                entities,
+                symbol_names,
+                lookup,
+            });
+            let mut changed = false;
+            for (target, returned) in structured_returns.iter_mut().zip(discovered) {
+                if *target != returned {
+                    *target = returned;
+                    changed = true;
+                }
             }
-        }
-        if !changed {
-            break;
+            if !changed {
+                break;
+            }
         }
     }
     let contract_analysis = ContractAnalysis {

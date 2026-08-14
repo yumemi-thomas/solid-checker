@@ -312,15 +312,15 @@ fn execution_map_incomplete(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
 fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for function in &file.ast.functions {
-            if ctx.semantic_lookup.function_is_component(file, function)
-                // Solid invokes components with one props object. A function
-                // requiring additional positional parameters is not a Solid
-                // component merely because its local name is capitalized.
-                && function.parameters.len() <= 1
+            // Solid invokes components with one props object. Reject the
+            // overwhelmingly common non-destructured functions before the
+            // whole-project component-identity lookup.
+            if function.parameters.len() <= 1
                 && let Some(parameter) = function
                     .parameters
                     .first()
                     .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Object)
+                && ctx.semantic_lookup.function_is_component(file, function)
             {
                 let location = location(file.path.shared(), parameter.pattern);
                 draft.push_defect(
@@ -347,6 +347,14 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                     },
                 );
             }
+        }
+        if !file
+            .ast
+            .bindings
+            .iter()
+            .any(|binding| binding.shape == solid_facts::ast::BindingShape::Object)
+        {
+            continue;
         }
         let allowed = allowed_callback_spans(file, ctx.semantic_lookup);
         for binding in &file.ast.bindings {
