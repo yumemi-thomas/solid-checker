@@ -22,6 +22,9 @@ pub enum Rule {
     ReactiveSourceUncaptured,
     ComponentPropsDestructure,
     ComponentReturnsConditionally,
+    PreferComponentSyntax,
+    NoImplicitDraggable,
+    ValidJsxNesting,
     ReactiveWriteInOwnedScope,
     ActionCalledInOwnedScope,
     CleanupInForbiddenScope,
@@ -47,6 +50,7 @@ pub enum Rule {
     RefreshTargetUnresolved,
     AffectsTargetUnresolved,
     ExecutionMapIncomplete,
+    PackageContractCallbackMissing,
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/`.
@@ -61,7 +65,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 38] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -71,6 +75,9 @@ impl Rule {
         Self::ReactiveSourceUncaptured,
         Self::ComponentPropsDestructure,
         Self::ComponentReturnsConditionally,
+        Self::PreferComponentSyntax,
+        Self::NoImplicitDraggable,
+        Self::ValidJsxNesting,
         Self::ReactiveWriteInOwnedScope,
         Self::ActionCalledInOwnedScope,
         Self::CleanupInForbiddenScope,
@@ -96,6 +103,7 @@ impl Rule {
         Self::RefreshTargetUnresolved,
         Self::AffectsTargetUnresolved,
         Self::ExecutionMapIncomplete,
+        Self::PackageContractCallbackMissing,
     ];
 
     #[must_use]
@@ -123,6 +131,9 @@ impl Rule {
             Self::ComponentReturnsConditionally => {
                 ("SC1004", "component-returns-conditionally", "error", false)
             }
+            Self::PreferComponentSyntax => ("SC8018", "prefer-component-syntax", "warning", false),
+            Self::NoImplicitDraggable => ("SC8019", "no-implicit-draggable", "error", false),
+            Self::ValidJsxNesting => ("SC8020", "valid-jsx-nesting", "error", false),
             Self::ReactiveWriteInOwnedScope => {
                 ("SC2001", "reactive-write-in-owned-scope", "error", false)
             }
@@ -171,6 +182,9 @@ impl Rule {
             Self::RefreshTargetUnresolved => ("SC9003", "refresh-target-unresolved", "error", true),
             Self::AffectsTargetUnresolved => ("SC9003", "affects-target-unresolved", "error", true),
             Self::ExecutionMapIncomplete => ("SC9004", "execution-map-incomplete", "error", true),
+            Self::PackageContractCallbackMissing => {
+                ("SC9006", "package-contract-callback-missing", "error", true)
+            }
         };
         RuleMetadata {
             code,

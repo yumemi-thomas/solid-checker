@@ -1,4 +1,4 @@
-import { createEffect, onCleanup } from "solid-js";
+import { createEffect, onCleanup, type Component } from "solid-js";
 
 const installOrphans = () => {
   createEffect(() => 1, () => {});
@@ -6,7 +6,7 @@ const installOrphans = () => {
 };
 installOrphans();
 
-export const Widget = () => {
+export const Widget: Component = () => {
   createEffect(() => 2, () => {});
   onCleanup(() => {});
   return null;

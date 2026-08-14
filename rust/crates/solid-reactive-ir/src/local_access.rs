@@ -7,8 +7,9 @@ use crate::cache::{
 };
 use crate::owners::{
     analysis_context, containing_leaf_owner, counts_as_strict_read_root, enclosing_render_function,
-    inside_known_value_function_argument, inside_lowercase_named_function,
-    inside_unclassified_callback, read_is_under_loading, typed_accessor_descriptor_at,
+    inside_known_value_function_argument, inside_non_component_function,
+    inside_unclassified_callback, read_is_under_loading, solid_accessor_declaration,
+    typed_accessor_descriptor_at,
 };
 use crate::pipeline::parallel_file_chunk_results;
 use crate::source_discovery::bundled_contract_location;
@@ -25,6 +26,7 @@ use std::{
 use crate::execution_role::{
     allowed_callback_spans, async_execution_role, control_flow_execution_role,
     named_callback_execution_role, read_analysis_context, semantic_execution_role,
+    semantic_write_execution_role,
 };
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -141,7 +143,7 @@ impl LocalAccessContext<'_, '_> {
                     file.path.clone(),
                     CachedLocalAccessFile {
                         source_hash: file.source_hash.clone(),
-                        cross_file_proofs: self.lookup.returned_callback_proof_digest(),
+                        cross_file_proofs: self.lookup.cross_file_proof_digest(),
                         compiler: file.compiler.clone(),
                         dependencies: self.dependencies(file),
                         call_multiplicities: self.call_multiplicities(file),
@@ -265,7 +267,7 @@ impl LocalAccessContext<'_, '_> {
     ) -> bool {
         retained_source_path
             && cached.source_hash == file.source_hash
-            && cached.cross_file_proofs == self.lookup.returned_callback_proof_digest()
+            && cached.cross_file_proofs == self.lookup.cross_file_proof_digest()
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
             && (global_async_context_unchanged || cached.contribution.async_reads.is_empty())
@@ -331,7 +333,7 @@ impl LocalAccessContext<'_, '_> {
                     self.lookup,
                 );
                 let reachable = self.reachable_calls.get(&callee).is_some()
-                    || enclosing_render_function(file, call.callee);
+                    || enclosing_render_function(file, call.callee, self.lookup);
                 let key = (callee.path.clone(), callee.start_byte, callee.end_byte);
                 if reachable && seen.insert(key) {
                     result.reads.push(Arc::new(ReactiveRead {
@@ -349,7 +351,7 @@ impl LocalAccessContext<'_, '_> {
                         origin: Some(declaration.clone()),
                         origin_context: Arc::from("package return contract"),
                     }));
-                    if counts_as_strict_read_root(file, call.span, execution) {
+                    if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                         result.strict_read_obligations += 1;
                     }
                 }
@@ -403,14 +405,14 @@ impl LocalAccessContext<'_, '_> {
                             .is_some()
                             || named_callback_execution_role(file, call.callee, self.lookup)
                                 .is_some()
-                            || enclosing_render_function(file, call.callee))))
+                            || enclosing_render_function(file, call.callee, self.lookup))))
                 .then_some(1)
             }) else {
                 continue;
             };
             let key = (callee.path.clone(), callee.start_byte, callee.end_byte);
             if let Some((name, declaration)) = self.accessors.get(symbol)
-                && (!inside_lowercase_named_function(file, call.callee, self.lookup.dialect)
+                && (!inside_non_component_function(file, call.callee, self.lookup)
                     || named_callback_execution_role(file, call.callee, self.lookup).is_some())
                 && seen.insert(key.clone())
             {
@@ -435,7 +437,7 @@ impl LocalAccessContext<'_, '_> {
                 if !matches!(
                     self.source_primitives.get(symbol).map(SymbolId::as_str),
                     Some("createOptimistic" | "createOptimisticStore")
-                ) && counts_as_strict_read_root(file, call.span, execution)
+                ) && counts_as_strict_read_root(file, call.span, execution, self.lookup)
                 {
                     result.strict_read_obligations += 1;
                 }
@@ -476,10 +478,11 @@ impl LocalAccessContext<'_, '_> {
                     .and_then(|(start, end)| file.source.get(start..end))
                     .unwrap_or("accessor")
                     .to_string();
-                let declaration = descriptor.alias_declarations.first().map_or_else(
-                    || callee.clone(),
-                    |declaration| declaration.location.clone(),
-                );
+                let declaration = solid_accessor_declaration(descriptor, self.lookup.dialect)
+                    .map_or_else(
+                        || callee.clone(),
+                        |declaration| declaration.location.clone(),
+                    );
                 result.reads.push(Arc::new(ReactiveRead {
                     kind: "accessor".into(),
                     accessor: display.into(),
@@ -494,7 +497,7 @@ impl LocalAccessContext<'_, '_> {
                 result.strict_read_obligations += 1;
             }
             if let Some(contracted) = self.contract_reads.get(symbol)
-                && !inside_lowercase_named_function(file, call.callee, self.lookup.dialect)
+                && !inside_non_component_function(file, call.callee, self.lookup)
             {
                 for (index, (name, via, declaration, kind)) in contracted.iter().enumerate() {
                     let contract_key = (
@@ -516,7 +519,7 @@ impl LocalAccessContext<'_, '_> {
                             origin: Some(declaration.clone()),
                             origin_context: via.clone().into(),
                         }));
-                        if counts_as_strict_read_root(file, call.span, execution) {
+                        if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                             result.strict_read_obligations += 1;
                         }
                     }
@@ -525,6 +528,14 @@ impl LocalAccessContext<'_, '_> {
             if let Some((name, declaration, allowed_by_option, source_kind)) =
                 self.setters.get(symbol)
             {
+                let write_execution = semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    &allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
                 for _ in 0..multiplicity {
                     result.writes.push(Arc::new(ReactiveWrite {
                         setter: name.to_string().into(),
@@ -532,7 +543,7 @@ impl LocalAccessContext<'_, '_> {
                         source_kind: *source_kind,
                         location: location(file.path.shared(), call.span),
                         declaration: declaration.clone(),
-                        execution,
+                        execution: write_execution,
                         allowed_by_option: *allowed_by_option,
                         context: analysis_context(
                             file,
@@ -540,24 +551,34 @@ impl LocalAccessContext<'_, '_> {
                             self.entities,
                             self.symbol_names,
                             self.lookup.dialect,
+                            self.lookup,
                         )
                         .into(),
                     }));
                 }
             }
             if let Some((name, declaration)) = self.actions.get(symbol) {
+                let action_execution = semantic_write_execution_role(
+                    file,
+                    call.callee,
+                    &allowed,
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup,
+                );
                 for _ in 0..multiplicity {
                     result.action_invocations.push(Arc::new(ActionInvocation {
                         action: name.to_string().into(),
                         location: location(file.path.shared(), call.span),
                         declaration: declaration.clone(),
-                        execution,
+                        execution: action_execution,
                         context: analysis_context(
                             file,
                             call.span,
                             self.entities,
                             self.symbol_names,
                             self.lookup.dialect,
+                            self.lookup,
                         )
                         .into(),
                     }));
@@ -585,7 +606,7 @@ impl LocalAccessContext<'_, '_> {
                 self.symbol_names,
                 self.lookup,
             );
-            if (inside_lowercase_named_function(file, member.span, self.lookup.dialect)
+            if (inside_non_component_function(file, member.span, self.lookup)
                 || inside_unclassified_callback(file, member.span))
                 && named_callback_execution_role(file, member.span, self.lookup).is_none()
                 && !matches!(
@@ -603,6 +624,17 @@ impl LocalAccessContext<'_, '_> {
             let Some((name, declaration)) = source else {
                 continue;
             };
+            // A component's `ref` prop is an imperative output channel: the
+            // child calls it once to publish its handle. This is not a
+            // reactive read, but only when the complete member expression is
+            // the direct callee. Reading or aliasing `props.ref` still flows
+            // through strict-read analysis like every other prop.
+            if self.prop_sources.contains_key(symbol)
+                && file.source_text(member.property) == Some("ref")
+                && file.ast.calls.iter().any(|call| call.callee == member.span)
+            {
+                continue;
+            }
             let key = (object.path.clone(), object.start_byte, object.end_byte);
             if !seen.insert(key) {
                 continue;
@@ -639,7 +671,7 @@ impl LocalAccessContext<'_, '_> {
             if !matches!(
                 self.source_primitives.get(symbol).map(SymbolId::as_str),
                 Some("createOptimistic" | "createOptimisticStore")
-            ) && counts_as_strict_read_root(file, member.span, execution)
+            ) && counts_as_strict_read_root(file, member.span, execution, self.lookup)
             {
                 result.strict_read_obligations += 1;
             }
@@ -686,7 +718,7 @@ impl LocalAccessContext<'_, '_> {
                 self.symbol_names,
                 self.lookup,
             );
-            if (inside_lowercase_named_function(file, spread.span, self.lookup.dialect)
+            if (inside_non_component_function(file, spread.span, self.lookup)
                 || inside_unclassified_callback(file, spread.span))
                 && named_callback_execution_role(file, spread.span, self.lookup).is_none()
                 && !matches!(
@@ -722,7 +754,7 @@ impl LocalAccessContext<'_, '_> {
             if !matches!(
                 self.source_primitives.get(symbol).map(SymbolId::as_str),
                 Some("createOptimistic" | "createOptimisticStore")
-            ) && counts_as_strict_read_root(file, spread.span, execution)
+            ) && counts_as_strict_read_root(file, spread.span, execution, self.lookup)
             {
                 result.strict_read_obligations += 1;
             }

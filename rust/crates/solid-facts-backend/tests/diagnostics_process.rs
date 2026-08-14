@@ -61,7 +61,10 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         (
             "directive-phases",
             &[
-                ("reactive-write-in-owned-scope", 1),
+                // Building a directive value happens while the component
+                // renders; only invoking the returned directive is in the
+                // compiler's directive-application phase.
+                ("reactive-write-in-owned-scope", 2),
                 ("primitive-in-directive-application", 3),
             ],
         ),
@@ -182,6 +185,10 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
         ("recursive", 1, "readA"),
         ("returned-closure", 1, "readCount"),
         ("store-flow", 1, "\"state.count\""),
+        // Four: the class, object, and generic-function calls, plus
+        // `invoke(objectReader, …)` whose receiver is exactly one object at
+        // that site. The sibling `invoke(cond ? a : b, …)` stays silent.
+        ("interprocedural-methods-v2", 4, "count"),
     ] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             return;
@@ -203,6 +210,37 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
                 .is_some_and(|path| path.ends_with("App.tsx"))
         }));
     }
+}
+
+#[test]
+fn unknown_callback_diagnostic_contains_actionable_contract_stub() {
+    let Some(findings) = diagnostic_fixture("package-unknown-callback-producer") else {
+        return;
+    };
+    let callback_findings = findings_for_rule(&findings, "package-contract-callback-missing");
+    assert_eq!(callback_findings.len(), 1, "{findings:#?}");
+    let finding = &callback_findings[0];
+    let message = finding["message"].as_str().unwrap_or_default();
+    let hint = finding["hint"].as_str().unwrap_or_default();
+    assert!(message.contains("current project.:schedule"), "{message}");
+    assert!(message.contains("parameter 0 (() => void)"), "{message}");
+    assert!(hint.contains("schemaVersion\":1"), "{hint}");
+    assert!(hint.contains("choose exactly one audited mode"), "{hint}");
+    assert!(hint.contains("solid-checker contract generate"), "{hint}");
+}
+
+#[test]
+fn prefer_component_syntax_follows_conditional_cross_file_returns() {
+    let Some(findings) = diagnostic_fixture("prefer-component-syntax-v2") else {
+        return;
+    };
+    let preferred = findings_for_rule(&findings, "prefer-component-syntax");
+    assert_eq!(preferred.len(), 1, "{findings:#?}");
+    assert!(
+        preferred[0]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("renderCard"))
+    );
 }
 
 #[test]

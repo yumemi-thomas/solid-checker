@@ -70,6 +70,7 @@ const TABLE: &[(&str, Primitive)] = &[
     ("Switch", Primitive::Switch),
     ("untrack", Primitive::Untrack),
     ("unwrap", Primitive::Unwrap),
+    ("useContext", Primitive::UseContext),
     ("useTransition", Primitive::UseTransition),
 ];
 
@@ -90,6 +91,12 @@ pub(crate) fn names() -> Vec<&'static str> {
 impl Dialect for Solid1x {
     fn version(&self) -> Version {
         Version::V1
+    }
+
+    fn component_name_is_compat_component(&self, name: &str) -> bool {
+        name.as_bytes()
+            .first()
+            .is_some_and(|byte| !byte.is_ascii_lowercase())
     }
 
     /// 1.x ships four user-facing subpaths, and the distinction is load
@@ -317,6 +324,12 @@ impl Dialect for Solid1x {
         argument: usize,
         argument_count: usize,
     ) -> Option<CallbackOwner> {
+        // Every function-valued mergeProps source is wrapped in createMemo.
+        // This is variadic and therefore cannot be represented by the static
+        // callback_owners table's finite argument indices.
+        if primitive == Primitive::MergeProps && argument < argument_count {
+            return Some(CallbackOwner::Creates);
+        }
         if primitive == Primitive::CreateResource {
             return match (argument_count, argument) {
                 (1, 0) => Some(CallbackOwner::Conditional),
@@ -564,6 +577,12 @@ impl Dialect for Solid1x {
         argument: usize,
         argument_count: usize,
     ) -> Option<Execution> {
+        // `mergeProps(...sources)` checks every source and wraps each function
+        // in `createMemo`. Keep this call-shape fact native: schema v1 package
+        // contracts only support fixed callback parameters, not variadics.
+        if primitive == Primitive::MergeProps && argument < argument_count {
+            return Some(Execution::Tracked);
+        }
         if primitive == Primitive::CreateResource {
             return match (argument_count, argument) {
                 (1, 0) => Some(Execution::Deferred),
@@ -807,6 +826,7 @@ const NAMESPACE_CORE: &[&str] = &[
     "splitProps",
     "startTransition",
     "untrack",
+    "useContext",
     "useTransition",
 ];
 
@@ -843,6 +863,16 @@ mod tests {
     use super::*;
 
     #[test]
+    fn compatibility_component_names_match_upstreams_ascii_lowercase_test() {
+        for component in ["App", "_App", "$App", "画面"] {
+            assert!(Solid1x.component_name_is_compat_component(component));
+        }
+        for helper in ["app", "zView"] {
+            assert!(!Solid1x.component_name_is_compat_component(helper));
+        }
+    }
+
+    #[test]
     fn function_values_are_not_callbacks_or_owned_computations() {
         let dialect = Solid1x;
         for primitive in [
@@ -870,6 +900,25 @@ mod tests {
             None,
             "the handler may run immediately under the catch owner or later under the runtime's synthetic error effect"
         );
+    }
+
+    #[test]
+    fn merge_props_function_sources_are_variadic_tracked_computations() {
+        for argument in 0..3 {
+            assert_eq!(
+                Solid1x.callback_execution_at(Primitive::MergeProps, argument, 3),
+                Some(Execution::Tracked)
+            );
+            assert_eq!(
+                Solid1x.callback_owner_at(Primitive::MergeProps, argument, 3),
+                Some(CallbackOwner::Creates)
+            );
+        }
+        assert_eq!(
+            Solid1x.callback_execution_at(Primitive::MergeProps, 3, 3),
+            None
+        );
+        assert_eq!(Solid1x.callback_owner_at(Primitive::MergeProps, 3, 3), None);
     }
 
     #[test]

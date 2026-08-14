@@ -68,6 +68,15 @@ fn plan_file(
     for function in &file.ast.functions {
         if let Some(name) = &function.name {
             add_symbol(name.span, true);
+            type_descriptor_spans.insert(name.span);
+        }
+        // Class and object-literal methods do not have a lexical binding, but
+        // their property symbol is the exact identity needed to dispatch a
+        // structural member call. Demand the property itself so the
+        // TypeScript fact table can retain that identity even when the first
+        // call is through an alias or a spread object.
+        if let Some(method_name) = &function.method_name {
+            add_symbol(method_name.span, true);
         }
         for name in function
             .parameters
@@ -75,6 +84,28 @@ fn plan_file(
             .flat_map(|parameter| &parameter.names)
         {
             add_symbol(name.span, true);
+        }
+    }
+    // Object properties have no lexical binding. Demand each static key so
+    // a later exact-value walk can distinguish a function implementation from
+    // an unrelated property without falling back to the key spelling.
+    for property in &file.ast.object_properties {
+        if !property.computed {
+            add_symbol(property.key, true);
+        }
+    }
+    // Component identity is a semantic type/usage question. Demand the type
+    // of every function-valued binding (including a wrapper call that contains
+    // the function) so the IR never has to infer component status from case.
+    for binding in &file.ast.bindings {
+        let contains_function = binding.initializer_function
+            || binding
+                .initializer
+                .is_some_and(|initializer| file.ast.functions_within(initializer).next().is_some());
+        if contains_function {
+            for name in &binding.names {
+                type_descriptor_spans.insert(name.span);
+            }
         }
     }
     for export in &file.ast.exports {
@@ -85,12 +116,12 @@ fn plan_file(
     }
     for element in &file.ast.jsx_elements {
         add_symbol(element.name.span, false);
-        // `v1/jsx-no-undef` judges a dotted tag by its root identifier
+        // Some catalogs judge a dotted tag by its root identifier
         // alone (`Foo` in `<Foo.Bar/>`), so the root span needs its own
         // resolution — the combined span above answers a different
         // question. Demanded only when the catalog carries the rule that
         // reads the answer.
-        if (dialect.has_rule)("v1/jsx-no-undef")
+        if dialect.semantic_demands.jsx_member_root_symbols
             && let Some(name) = file.source_text(element.name.span)
             && let Some(dot) = name.find('.')
         {
@@ -105,6 +136,9 @@ fn plan_file(
                 );
             }
         }
+        // This is intrinsic-element syntax, not component identity. The case
+        // check only decides whether DOM event-handler type facts are useful;
+        // component classification remains semantic in the reactive IR.
         let native = file
             .source_text(element.name.span)
             .is_some_and(|name| name.starts_with(|c: char| c.is_ascii_lowercase()));
@@ -113,6 +147,18 @@ fn plan_file(
                 continue;
             };
             let name = file.source_text(attribute.name).unwrap_or_default();
+            // Context values are cross-file return-flow evidence. Demand an
+            // identifier value even when it is not otherwise a handler or a
+            // literal-bearing attribute, so contract generation can connect
+            // `useContext(Context)` to the value supplied by its provider.
+            if name == "value"
+                && file.ast.identifiers.iter().any(|identifier| {
+                    identifier.span == expression
+                        && identifier.role == solid_facts::ast::IdentifierRole::Reference
+                })
+            {
+                add_symbol(expression, false);
+            }
             // A native event-handler value is judged by its resolved type:
             // `expected-function-got-expression` (both catalogs) proves the
             // value non-callable, `event-handlers` and `no-array-handlers`
@@ -128,8 +174,7 @@ fn plan_file(
             // The 1.x catalog also recovers string values from literal
             // string *types*: `no-innerhtml`'s allowStatic acceptance, and
             // `jsx-no-script-url` for URL-carrying attributes.
-            let v1_string_recovered = ((dialect.has_rule)("v1/no-innerhtml")
-                || (dialect.has_rule)("v1/jsx-no-script-url"))
+            let static_value_type_required = dialect.semantic_demands.jsx_static_value_types
                 && matches!(
                     name,
                     "innerHTML"
@@ -143,10 +188,30 @@ fn plan_file(
                         | "to"
                         | "xlink:href"
                 );
-            if handler || v1_string_recovered {
+            if handler || static_value_type_required {
                 add_symbol(expression, false);
                 type_descriptor_spans.insert(expression);
             }
+        }
+    }
+    // JSX compilation lowers a context provider to a component call whose
+    // props object contains `value`. Preserve the value binding's identity so
+    // contract generation can connect the lowered form just as precisely as
+    // source JSX.
+    for property in &file.ast.object_properties {
+        let is_call_property = file.ast.calls.iter().any(|call| {
+            call.arguments
+                .iter()
+                .any(|argument| argument.span.contains(property.span))
+        });
+        if is_call_property
+            && file.source_text(property.key) == Some("value")
+            && file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == property.value
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            })
+        {
+            add_symbol(property.value, false);
         }
     }
     // Value positions that coerce whatever they receive: an untagged template
@@ -174,7 +239,7 @@ fn plan_file(
     // `prefer-for` (1.x) rewrites `.map()` to `<For>` only when the
     // receiver's type proves an actual array; demand it at exactly the call
     // shape the rule fires on.
-    if (dialect.has_rule)("v1/prefer-for") {
+    if dialect.semantic_demands.array_map_receiver_types {
         for call in &file.ast.calls {
             let is_single_function_map = call.arguments.len() == 1
                 && matches!(
@@ -208,12 +273,36 @@ fn plan_file(
         if returned.value == solid_facts::ast::ReturnValueKind::Identifier {
             add_symbol(returned.span, false);
         }
+        for value in returned
+            .elements()
+            .iter()
+            .flatten()
+            .copied()
+            .chain(returned.properties().iter().map(|property| property.value))
+        {
+            if file.ast.identifiers.iter().any(|identifier| {
+                identifier.span == value
+                    && identifier.role == solid_facts::ast::IdentifierRole::Reference
+            }) {
+                add_symbol(value, false);
+                if let Some(spelling) = file.source_text(value) {
+                    for name in file.ast.bindings.iter().flat_map(|binding| &binding.names) {
+                        if file.source_text(name.span) == Some(spelling) {
+                            add_symbol(name.span, true);
+                        }
+                    }
+                }
+            }
+        }
     }
     for call in &file.ast.calls {
         for argument in &call.arguments {
             match argument.value {
                 solid_facts::ast::ArgumentValueKind::Identifier => {
-                    add_symbol(argument.span, false);
+                    // Interprocedural value flow follows imported aliases and
+                    // destructured bindings from callback arguments, so keep
+                    // the exact symbol's reference space at this use.
+                    add_symbol(argument.span, true);
                     // A non-callable descriptor discharges unknown callback
                     // escape obligations; callability alone is not enough for
                     // structurally typed object and primitive arguments.
@@ -234,12 +323,18 @@ fn plan_file(
     // loses that provenance.
     for member in &file.ast.members {
         add_symbol(member.object, false);
+        if file.ast.calls.iter().any(|call| call.span == member.object) {
+            add_symbol(member.property, false);
+        }
     }
     for spread in &file.ast.spreads {
         add_symbol(spread.argument, false);
     }
     for assignment in &file.ast.assignments {
         add_symbol(assignment.target, false);
+        for slot in assignment.array_slots.iter().flatten() {
+            add_symbol(*slot, true);
+        }
     }
     for (span, references) in symbol_spans {
         let mut planned = demand(typefacts_location(&path, span)).symbol(references);
@@ -308,6 +403,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         r#async: false,
         structural_accessor: false,
         callability: false,
+        runtime_value_domain: false,
         reference_space: false,
         runtime_identity: false,
     }
@@ -364,6 +460,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.r#async |= demand.r#async;
             current.structural_accessor |= demand.structural_accessor;
             current.callability |= demand.callability;
+            current.runtime_value_domain |= demand.runtime_value_domain;
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
         } else {

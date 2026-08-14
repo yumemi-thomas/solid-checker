@@ -72,7 +72,11 @@ same crate name from the pinned `solid-1x-compiler` fork; no other crate
 speaks a compiler's own types. The analysis pipeline in `solid-facts-backend`
 is generic over the trait. Callers obtain the selected adapter from the
 composition bundle's compiler factory; the backend root does not re-export a
-preferred dialect's concrete compiler.
+preferred dialect's concrete compiler. Their traces report execution sites
+totally and compiler-established ownership regions conservatively. Component
+identity composes compiler JSX call/use facts, TypeFacts aliases, AST return
+shape, and an explicit 1.x compatibility convention; runtime callback
+ownership remains contract-driven.
 
 **Rules.** `solid-reactive-ir` builds a `Program` and defines the
 dialect-neutral diagnostic model (`Finding`, `EvidenceStep`, `RuleMetadata`).
@@ -81,7 +85,7 @@ rows, turns them into a closed `FindingSeed` vocabulary, and assembles the
 final `Finding`. Each rules crate is a `CatalogWording` adapter that declares
 which optional tables it supports and exhaustively maps supported seeds to
 rule identity, severity, message, hint, and evidence. `solid-v2-rules` owns
-the 34-rule Solid 2.0 catalog; `solid-v1-rules` owns the 38-rule 1.x catalog
+the 38-rule Solid 2.0 catalog; `solid-v1-rules` owns the 42-rule 1.x catalog
 (`v1/<rule>` names, spanning the engine slices under 1.x vocabulary plus the
 eslint-plugin-solid file-local surface). The wording duplication between
 them is deliberate: a 1.x diagnostic never tells its reader to call an API
@@ -166,5 +170,6 @@ now the shipped layout, and the plan's items resolved as follows:
   `solid-reactive-ir` facts may remain in that crate only when its version
   ownership is explicit in the module name and it is gated by the selected
   `Version`; the dialect catalog still owns the external finding.
-- Solid 1.x compatibility configuration is named `Solid1xRuleOptions`; it is
-  not a dialect-neutral rule-options interface.
+- Dialect-neutral enablement lives in `RuleOptions`; the Solid 1.x
+  compatibility shapes are nested under its `Solid1xRuleOptions` member so
+  the shared pipeline does not learn version-specific rule names.

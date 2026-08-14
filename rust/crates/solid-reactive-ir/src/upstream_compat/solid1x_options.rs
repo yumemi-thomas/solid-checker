@@ -21,7 +21,7 @@
 //!
 //! # Fail-closed parsing
 //!
-//! [`Solid1xRuleOptions::parse`] rejects unknown rule names, unknown option keys,
+//! [`RuleOptions::parse`] rejects unknown rule names, unknown option keys,
 //! and unsupported schema versions rather than ignoring them: a typo in a
 //! config must not silently mean "defaults".
 
@@ -133,20 +133,64 @@ pub struct NoUnknownNamespacesOptions {
     pub allowed_namespaces: Vec<String>,
 }
 
-/// Project-wide rule enablement plus the per-rule options the checker carries.
-///
-/// Constructed from `.solid-checker/rule-options.json` by [`Self::parse`],
-/// or defaulted when the project has none. Part of the build identity: two
-/// runs with different options never share a retained program.
+/// Options owned specifically by the Solid 1.x compatibility implementation.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Solid1xRuleOptions {
-    disabled: BTreeSet<String>,
     pub event_handlers: EventHandlersOptions,
     pub no_innerhtml: NoInnerhtmlOptions,
     pub self_closing_comp: SelfClosingCompOptions,
     pub prefer_classlist: PreferClasslistOptions,
     pub style_prop: StylePropOptions,
     pub no_unknown_namespaces: NoUnknownNamespacesOptions,
+}
+
+impl Solid1xRuleOptions {
+    const CONFIGURABLE_RULES: [&'static str; 6] = [
+        "event-handlers",
+        "no-innerhtml",
+        "self-closing-comp",
+        "prefer-classlist",
+        "style-prop",
+        "no-unknown-namespaces",
+    ];
+
+    /// Applies an option object owned by the Solid 1.x compatibility layer.
+    ///
+    /// `None` means this is a catalog rule without dialect-specific options;
+    /// the shared project parser therefore never needs to know these names.
+    fn parse_rule(&mut self, rule: &str, value: &serde_json::Value) -> Option<Result<(), String>> {
+        let parsed =
+            match rule {
+                "event-handlers" => {
+                    serde_json::from_value(value.clone()).map(|parsed| self.event_handlers = parsed)
+                }
+                "no-innerhtml" => {
+                    serde_json::from_value(value.clone()).map(|parsed| self.no_innerhtml = parsed)
+                }
+                "self-closing-comp" => serde_json::from_value(value.clone())
+                    .map(|parsed| self.self_closing_comp = parsed),
+                "prefer-classlist" => serde_json::from_value(value.clone())
+                    .map(|parsed| self.prefer_classlist = parsed),
+                "style-prop" => {
+                    serde_json::from_value(value.clone()).map(|parsed| self.style_prop = parsed)
+                }
+                "no-unknown-namespaces" => serde_json::from_value(value.clone())
+                    .map(|parsed| self.no_unknown_namespaces = parsed),
+                _ => return None,
+            };
+        Some(parsed.map_err(|error| error.to_string()))
+    }
+}
+
+/// Dialect-neutral project rule configuration.
+///
+/// Enablement belongs here because every catalog uses it. Dialect-specific
+/// option shapes remain nested in their owning implementation instead of
+/// becoming the shared pipeline's interface.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct RuleOptions {
+    disabled: BTreeSet<String>,
+    pub solid1x: Solid1xRuleOptions,
 }
 
 /// The document shape of `.solid-checker/rule-options.json`: a schema
@@ -159,11 +203,15 @@ struct Document {
     rules: BTreeMap<String, serde_json::Value>,
 }
 
-impl Solid1xRuleOptions {
+impl RuleOptions {
     /// Parses a rule-options document, failing closed on anything it does
     /// not understand. `has_rule` keeps the dialect catalogs as the source of
     /// truth for names instead of duplicating their identity tables here.
-    pub fn parse(encoded: &str, has_rule: impl Fn(&str) -> bool) -> Result<Self, String> {
+    pub fn parse(
+        encoded: &str,
+        has_rule: impl Fn(&str) -> bool,
+        owns_solid1x_options: impl Fn(&str) -> bool,
+    ) -> Result<Self, String> {
         let document: Document = serde_json::from_str(encoded)
             .map_err(|error| format!("rule options are not a valid document: {error}"))?;
         if document.schema_version != 1 {
@@ -194,33 +242,20 @@ impl Solid1xRuleOptions {
             // namespace. Match the final, stable upstream rule key after the
             // catalog has validated the full external name.
             let local_rule = rule.rsplit('/').next().unwrap_or(&rule);
-            let result = match local_rule {
-                "event-handlers" => serde_json::from_value(value)
-                    .map(|parsed| options.event_handlers = parsed)
-                    .map_err(|error| error.to_string()),
-                "no-innerhtml" => serde_json::from_value(value)
-                    .map(|parsed| options.no_innerhtml = parsed)
-                    .map_err(|error| error.to_string()),
-                "self-closing-comp" => serde_json::from_value(value)
-                    .map(|parsed| options.self_closing_comp = parsed)
-                    .map_err(|error| error.to_string()),
-                "prefer-classlist" => serde_json::from_value(value)
-                    .map(|parsed| options.prefer_classlist = parsed)
-                    .map_err(|error| error.to_string()),
-                "style-prop" => serde_json::from_value(value)
-                    .map(|parsed| options.style_prop = parsed)
-                    .map_err(|error| error.to_string()),
-                "no-unknown-namespaces" => serde_json::from_value(value)
-                    .map(|parsed| options.no_unknown_namespaces = parsed)
-                    .map_err(|error| error.to_string()),
-                _ if value.as_object().is_some_and(serde_json::Map::is_empty) => Ok(()),
-                _ => Err(
-                    "this rule takes only `enabled`; the rules with additional options are \
-                     event-handlers, no-innerhtml, self-closing-comp, prefer-classlist, \
-                     style-prop, and no-unknown-namespaces"
-                        .into(),
-                ),
-            };
+            let result = owns_solid1x_options(&rule)
+                .then(|| options.solid1x.parse_rule(local_rule, &value))
+                .flatten()
+                .unwrap_or_else(|| {
+                    if value.as_object().is_some_and(serde_json::Map::is_empty) {
+                        Ok(())
+                    } else {
+                        Err(format!(
+                            "this rule takes only `enabled`; the rules with additional options \
+                             are {}",
+                            Solid1xRuleOptions::CONFIGURABLE_RULES.join(", ")
+                        ))
+                    }
+                });
             result.map_err(|error| format!("rule options for {rule:?}: {error}"))?;
         }
         Ok(options)
@@ -237,7 +272,7 @@ impl Solid1xRuleOptions {
 
 #[cfg(test)]
 mod tests {
-    use super::{SelfClosePolicy, Solid1xRuleOptions};
+    use super::{RuleOptions, SelfClosePolicy};
 
     fn known_rule(rule: &str) -> bool {
         matches!(
@@ -256,10 +291,16 @@ mod tests {
         )
     }
 
+    fn solid1x_rule(rule: &str) -> bool {
+        rule.starts_with("v1/") || rule.starts_with("legacy/")
+    }
+
     #[test]
     fn an_empty_document_is_upstreams_defaults() {
-        let options = Solid1xRuleOptions::parse(r#"{ "schemaVersion": 1 }"#, known_rule).unwrap();
-        assert_eq!(options, Solid1xRuleOptions::default());
+        let options =
+            RuleOptions::parse(r#"{ "schemaVersion": 1 }"#, known_rule, solid1x_rule).unwrap();
+        assert_eq!(options, RuleOptions::default());
+        let options = options.solid1x;
         assert!(options.no_innerhtml.allow_static);
         assert!(!options.event_handlers.ignore_case);
         assert!(!options.event_handlers.warn_on_spread);
@@ -275,7 +316,7 @@ mod tests {
 
     #[test]
     fn parses_every_configurable_rule() {
-        let options = Solid1xRuleOptions::parse(
+        let options = RuleOptions::parse(
             r#"{
               "schemaVersion": 1,
               "rules": {
@@ -288,8 +329,10 @@ mod tests {
               }
             }"#,
             known_rule,
+            solid1x_rule,
         )
         .unwrap();
+        let options = options.solid1x;
         assert!(options.event_handlers.ignore_case);
         assert!(options.event_handlers.warn_on_spread);
         assert!(!options.no_innerhtml.allow_static);
@@ -303,7 +346,7 @@ mod tests {
 
     #[test]
     fn configurable_shapes_do_not_own_the_catalog_namespace() {
-        let options = Solid1xRuleOptions::parse(
+        let options = RuleOptions::parse(
             r#"{
               "schemaVersion": 1,
               "rules": {
@@ -311,15 +354,31 @@ mod tests {
               }
             }"#,
             |rule| rule == "legacy/no-innerhtml",
+            solid1x_rule,
         )
         .unwrap();
 
-        assert!(!options.no_innerhtml.allow_static);
+        assert!(!options.solid1x.no_innerhtml.allow_static);
+    }
+
+    #[test]
+    fn a_same_named_non_v1_rule_does_not_receive_v1_options() {
+        assert!(
+            RuleOptions::parse(
+                r#"{
+                  "schemaVersion": 1,
+                  "rules": { "v2/no-innerhtml": { "allowStatic": false } }
+                }"#,
+                |rule| rule == "v2/no-innerhtml",
+                |rule| rule == "v1/no-innerhtml",
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn parses_enablement_for_rules_with_and_without_options() {
-        let options = Solid1xRuleOptions::parse(
+        let options = RuleOptions::parse(
             r#"{
               "schemaVersion": 1,
               "rules": {
@@ -330,6 +389,7 @@ mod tests {
               }
             }"#,
             known_rule,
+            solid1x_rule,
         )
         .unwrap();
         assert!(!options.is_enabled("v1/no-array-handlers"));
@@ -338,37 +398,41 @@ mod tests {
         assert!(options.is_enabled("v1/no-destructure"));
         assert!(!options.is_enabled("invalid-refresh-target"));
         assert!(options.is_enabled("invalid-affects-target"));
-        assert!(!options.no_innerhtml.allow_static);
+        assert!(!options.solid1x.no_innerhtml.allow_static);
     }
 
     #[test]
     fn rejects_unknown_rules_keys_and_schema_versions() {
-        assert!(Solid1xRuleOptions::parse(r#"{ "schemaVersion": 2 }"#, known_rule).is_err());
+        assert!(RuleOptions::parse(r#"{ "schemaVersion": 2 }"#, known_rule, solid1x_rule).is_err());
         assert!(
-            Solid1xRuleOptions::parse(
+            RuleOptions::parse(
                 r#"{ "schemaVersion": 1, "rules": { "v1/not-a-rule": {} } }"#,
                 known_rule,
+                solid1x_rule,
             )
             .is_err()
         );
         assert!(
-            Solid1xRuleOptions::parse(
+            RuleOptions::parse(
                 r#"{ "schemaVersion": 1, "rules": { "v1/no-innerhtml": { "allowStatick": false } } }"#,
                 known_rule,
+                solid1x_rule,
             )
             .is_err()
         );
         assert!(
-            Solid1xRuleOptions::parse(
+            RuleOptions::parse(
                 r#"{ "schemaVersion": 1, "rules": { "v1/no-destructure": { "severity": "off" } } }"#,
                 known_rule,
+                solid1x_rule,
             )
             .is_err()
         );
         assert!(
-            Solid1xRuleOptions::parse(
+            RuleOptions::parse(
                 r#"{ "schemaVersion": 1, "rules": { "v1/no-destructure": { "enabled": "no" } } }"#,
                 known_rule,
+                solid1x_rule,
             )
             .is_err()
         );

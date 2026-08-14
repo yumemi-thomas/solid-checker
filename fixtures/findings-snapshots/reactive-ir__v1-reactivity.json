@@ -62,6 +62,16 @@
       "fixes": 0
     },
     {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 2024,
+      "end": 2031,
+      "fixes": 0
+    },
+    {
       "rule": "v1/expected-function-got-expression",
       "code": "SC1007",
       "kind": "violation",

@@ -15,7 +15,7 @@ use std::{
 use solid_dialect::Primitive;
 use solid_facts::ProjectFacts;
 use solid_facts::core::Span;
-use typefacts::Location;
+use typefacts::{CallKind, Location};
 
 use super::runtime_semantics::{
     RuntimeArgumentBehavior, argument_behavior, potentially_callable,
@@ -27,9 +27,9 @@ use super::{
     FunctionBoundary, ProjectIndexes, ReactiveRead, ReactiveSourceKind, SemanticLookup, SymbolId,
     allowed_callback_spans, assigned_member_function_contains, containing_summary_function_indexed,
     contract_callback_execution, contract_export_summaries, contract_export_summaries_incremental,
-    execution_role, function_indices_by_path, functions_for_path, location, location_order,
-    primitive_name, propagate_returned_summary_deltas, propagate_summary_deltas,
-    push_contract_callback, push_unique_summary_read, semantic_execution_role,
+    function_indices_by_path, functions_for_path, location, location_order, primitive_name,
+    propagate_returned_summary_deltas, propagate_summary_deltas, push_contract_callback,
+    push_unique_summary_read, semantic_execution_role,
 };
 use crate::cache::{
     CachedInterproceduralGraph, CachedInterproceduralResultFile, CachedInterproceduralResults,
@@ -37,10 +37,11 @@ use crate::cache::{
     InterproceduralGraphTarget, InterproceduralResultDependency,
     InterproceduralResultDependencyState, TypedAccessorContribution, same_compiler_semantics,
 };
+use crate::execution_role::direct_callback_contains;
 use crate::owners::{
     containing_ast_function, enclosing_function_label, enclosing_render_function,
-    function_binding_name, go_returned_arrow_pattern_accepts, go_solid_accessor_descriptor,
-    inside_effect_apply, source_function_exported,
+    function_binding_name, inside_effect_apply, solid_accessor_declaration,
+    source_function_exported,
 };
 use crate::pipeline::{parallel_file_results, parallel_slice_results};
 use crate::source_discovery::bundled_contract_location;
@@ -61,7 +62,7 @@ struct DirectReferenceContribution {
     unique: bool,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, Eq, PartialEq)]
 pub(super) struct SummaryReads {
     pub(super) ordered: Vec<SummaryRead>,
     seen: HashSet<(SymbolId, Location, Location)>,
@@ -109,6 +110,48 @@ impl SummaryReads {
     }
 }
 
+/// Compare the semantic effect of two implementations without treating their
+/// source locations as behavior. Equivalent structural methods often read the
+/// same accessor from different lines; those origins remain useful for a
+/// diagnostic, but must not make dispatch fail closed.
+///
+/// The comparison is over the *set* of distinct reads. Reading one accessor
+/// twice is the same effect as reading it once, so a differing repeat count
+/// must not fail the gate — but a read only one candidate performs must,
+/// which a same-length containment test does not catch: `[a, a]` and
+/// `[a, b]` are the same length and every member of the first appears in the
+/// second. The caller unions every candidate's reads once this returns true,
+/// so anything short of set equality would attribute an unproven read.
+fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
+    fn effect(reads: &SummaryReads) -> HashSet<(&SymbolId, &SymbolId, Option<&str>, &Location)> {
+        reads
+            .iter()
+            .map(|read| {
+                (
+                    &read.symbol,
+                    &read.display,
+                    read.kind.as_deref(),
+                    &read.declaration,
+                )
+            })
+            .collect()
+    }
+    effect(left) == effect(right)
+}
+
+/// Set equality over callback timing, for the same reason as
+/// [`equivalent_summary_reads`]: repeating one parameter's timing is not a
+/// different effect, but a parameter only one candidate defers is.
+fn equivalent_callbacks(left: &[ContractCallback], right: &[ContractCallback]) -> bool {
+    fn effect(callbacks: &[ContractCallback]) -> HashSet<(usize, &str)> {
+        callbacks
+            .iter()
+            .map(|callback| (callback.parameter, callback.execution.as_str()))
+            .collect()
+    }
+    effect(left) == effect(right)
+}
+
 impl std::ops::Deref for SummaryReads {
     type Target = [SummaryRead];
 
@@ -124,6 +167,7 @@ pub(super) struct SummaryNode {
     pub(super) body: Span,
     pub(super) name: Option<String>,
     pub(super) symbol: Option<SymbolId>,
+    pub(super) runtime_identity: String,
     pub(super) parameters: Vec<SymbolId>,
     pub(super) exported: bool,
     pub(super) r#async: bool,
@@ -178,8 +222,9 @@ fn discover_typed_accessors(
     project_indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-    dialect: &dyn solid_dialect::Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> Vec<TypedAccessorContribution> {
+    let dialect = lookup.dialect;
     let path_entities = project_indexes.entities_for_path(file.path.as_str());
     let mut contributions = Vec::new();
     for call in &file.ast.calls {
@@ -191,8 +236,8 @@ fn discover_typed_accessors(
                     && entity.location.end_byte == callee_location.end_byte
             })
             .and_then(|entity| entity.type_descriptor.as_ref());
-        let Some(descriptor) =
-            descriptor.filter(|descriptor| go_solid_accessor_descriptor(descriptor, dialect))
+        let Some(accessor_declaration) =
+            descriptor.and_then(|descriptor| solid_accessor_declaration(descriptor, dialect))
         else {
             continue;
         };
@@ -205,7 +250,7 @@ fn discover_typed_accessors(
             continue;
         };
         if inside_effect_apply(file, call.callee, entities, symbol_names, dialect)
-            || enclosing_render_function(file, call.callee)
+            || enclosing_render_function(file, call.callee, lookup)
         {
             continue;
         }
@@ -216,10 +261,7 @@ fn discover_typed_accessors(
             .and_then(|(start, end)| file.source.get(start..end))
             .map(SymbolId::from)
             .unwrap_or_else(|| "accessor".into());
-        let declaration = descriptor.alias_declarations.first().map_or_else(
-            || callee_location.clone(),
-            |declaration| declaration.location.clone(),
-        );
+        let declaration = accessor_declaration.location.clone();
         contributions.push(TypedAccessorContribution {
             owner: nodes[owner].span,
             read: SummaryRead {
@@ -289,7 +331,10 @@ fn discover_summary_nodes(
             // function facts cover named/assigned expressions and
             // expression-bodied arrows, so a missing fact is genuinely outside
             // the project function universe.
-            if typescript_file.is_some() && source_function.is_none() {
+            if typescript_file.is_some()
+                && source_function.is_none()
+                && function.method_name.is_none()
+            {
                 continue;
             }
             let is_arrow = source_function.map_or(
@@ -299,11 +344,30 @@ fn discover_summary_nodes(
             if is_arrow != arrow {
                 continue;
             }
-            let symbol = binding_name.as_ref().and_then(|name| {
-                entities
-                    .get(&location(file.path.shared(), name.span))
-                    .cloned()
-            });
+            let symbol = binding_name
+                .as_ref()
+                .and_then(|name| {
+                    entities
+                        .get(&location(file.path.shared(), name.span))
+                        .cloned()
+                })
+                .or_else(|| {
+                    function.method_name.as_ref().and_then(|name| {
+                        project_indexes.method_symbol(file.path.as_str(), name.span)
+                    })
+                });
+            let runtime_identity = binding_name
+                .as_ref()
+                .and_then(|name| {
+                    project_indexes
+                        .entities_for_path(file.path.as_str())
+                        .iter()
+                        .find(|entity| {
+                            entity.location.start_byte == u64::from(name.span.start)
+                                && entity.location.end_byte == u64::from(name.span.end)
+                        })
+                })
+                .map_or_else(String::new, |entity| entity.runtime_identity.to_string());
             let parameters = function
                 .parameters
                 .iter()
@@ -323,6 +387,7 @@ fn discover_summary_nodes(
                     .as_ref()
                     .map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
                 symbol,
+                runtime_identity,
                 parameters,
                 exported: source_function.map_or_else(
                     || source_function_exported(project_indexes, file, function),
@@ -335,17 +400,150 @@ fn discover_summary_nodes(
     nodes
 }
 
+struct InterproceduralContracts<'a> {
+    reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
+    callbacks: &'a HashMap<SymbolId, Vec<ContractCallback>>,
+}
+
+fn unknown_callback_execution_message(
+    file: &solid_facts::FileFacts,
+    callee: Span,
+    parameter: usize,
+    lookup: &SemanticLookup<'_>,
+) -> String {
+    let target = file.source_text(callee).unwrap_or("<unknown>");
+    let Some(resolved) = lookup.resolved_callee_call(file, callee) else {
+        return format!(
+            "parameter {parameter} is passed to {target}, but no resolved call fact or package contract proves when it executes"
+        );
+    };
+    let declaration = resolved.declaration.as_ref();
+    let callable_type = resolved_parameter(resolved, parameter)
+        .and_then(|parameter| parameter.type_descriptor.as_ref())
+        .map(|descriptor| descriptor.text.as_ref())
+        .filter(|text| !text.is_empty())
+        .unwrap_or("callable value");
+    let qualified = declaration
+        .and_then(|declaration| {
+            (!declaration.qualified_name.is_empty()).then_some(declaration.qualified_name.as_ref())
+        })
+        .or_else(|| {
+            declaration.and_then(|declaration| {
+                (!declaration.name.is_empty()).then_some(declaration.name.as_ref())
+            })
+        })
+        .unwrap_or(target);
+    let package = declaration
+        .and_then(|declaration| {
+            (!declaration.origin_module.is_empty()).then_some(declaration.origin_module.as_ref())
+        })
+        .or_else(|| {
+            declaration.and_then(|declaration| {
+                (!declaration.source_file.is_empty()).then_some(declaration.source_file.as_ref())
+            })
+        })
+        .unwrap_or("the current project");
+    format!(
+        "parameter {parameter} ({callable_type}) is passed to resolved {qualified} from {package}, but no package contract proves when it executes"
+    )
+}
+
+fn package_entrypoint(module: &str) -> (String, String) {
+    let mut parts = module.split('/');
+    let first = parts.next().filter(|part| !part.is_empty());
+    let Some(first) = first else {
+        return ("current project".into(), ".".into());
+    };
+    let package = if first.starts_with('@') {
+        let Some(scope_package) = parts.next() else {
+            return (module.into(), ".".into());
+        };
+        format!("{first}/{scope_package}")
+    } else {
+        first.to_owned()
+    };
+    let entrypoint = parts.collect::<Vec<_>>().join("/");
+    if entrypoint.is_empty() {
+        (package, ".".into())
+    } else {
+        (package, format!("./{entrypoint}"))
+    }
+}
+
+fn unknown_callback_obligation(
+    file: &solid_facts::FileFacts,
+    node: &SummaryNode,
+    callee: Span,
+    parameter: usize,
+    location: Location,
+    lookup: &SemanticLookup<'_>,
+) -> ContractGenerationObligation {
+    let resolved = lookup.resolved_callee_call(file, callee);
+    let declaration = resolved.and_then(|call| call.declaration.as_ref());
+    let module = declaration
+        .and_then(|declaration| {
+            (!declaration.origin_module.is_empty()).then_some(declaration.origin_module.as_ref())
+        })
+        .unwrap_or_default();
+    let (package, entrypoint) = package_entrypoint(module);
+    let parameter_type = resolved
+        .and_then(|call| resolved_parameter(call, parameter))
+        .and_then(|parameter| parameter.type_descriptor.as_ref())
+        .map(|descriptor| descriptor.text.to_string())
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| "callable value".into());
+    let function = node.name.clone().unwrap_or_else(|| "<anonymous>".into());
+    let contract_stub = serde_json::json!({
+        "schemaVersion": 1,
+        "package": { "name": package, "version": "<exact-installed-version>" },
+        "compilerFactsProtocol": 1,
+        "summaries": {
+            "callback-stub": {
+                "kind": "function",
+                "callbacks": [{
+                    "parameter": parameter,
+                    "execution": "<choose: inline | tracked | deferred>"
+                }]
+            }
+        },
+        "entrypoints": {
+            entrypoint.clone(): { "exports": { "callback-stub": [function.clone()] } }
+        },
+        "evidence": {
+            "kind": "<set reviewed after auditing runtime behavior>",
+            "generator": "solid-checker unknown-callback"
+        }
+    })
+    .to_string();
+    ContractGenerationObligation {
+        function,
+        function_identity: node.runtime_identity.clone(),
+        parameter,
+        package,
+        entrypoint,
+        parameter_type,
+        required_execution: "choose exactly one audited mode: inline, tracked, or deferred".into(),
+        contract_stub,
+        location,
+        message: format!(
+            "{}; generate or add the exact package entrypoint/export contract before this callback can be certified",
+            unknown_callback_execution_message(file, callee, parameter, lookup)
+        ),
+    }
+}
+
 fn discover_interprocedural_graph(
     file: &solid_facts::FileFacts,
     nodes: &[SummaryNode],
     nodes_by_path: &HashMap<String, Vec<usize>>,
     entities: &EntitySymbols,
-    contract_reads: &HashMap<SymbolId, Vec<(String, String, Location, String)>>,
-    contract_callbacks: &HashMap<SymbolId, Vec<ContractCallback>>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    contracts: InterproceduralContracts<'_>,
     lookup: &SemanticLookup<'_>,
 ) -> InterproceduralGraphContribution {
     let mut contribution = InterproceduralGraphContribution::default();
     let primitives = lookup.primitives(file);
+    let allowed = allowed_callback_spans(file, lookup);
     for (call_index, call) in file.ast.calls.iter().enumerate() {
         let Some(owner) = containing_summary_function_indexed(
             nodes,
@@ -356,17 +554,54 @@ fn discover_interprocedural_graph(
             continue;
         };
         let owner_span = nodes[owner].span;
-        let Some(symbol) = lookup.callee_symbol(file, call.callee) else {
+        // `reader.read(value)` where `reader` is this function's parameter.
+        // Which implementation runs is a property of the *call site*, not of
+        // this function, so record the obligation and let each site resolve
+        // its own argument. Pooling every site into one summary here is what
+        // makes an unambiguous site uncertifiable because a sibling site is
+        // not.
+        if let Some((receiver, property)) = lookup.member_callee_receiver(file, call.callee)
+            && let Some(parameter) = nodes[owner]
+                .parameters
+                .iter()
+                .position(|candidate| *candidate == receiver)
+        {
+            let entry = (owner_span, parameter, property);
+            if !contribution.invoked_parameter_members.contains(&entry) {
+                contribution.invoked_parameter_members.push(entry);
+            }
+        }
+        let candidate_symbols = lookup.callee_symbols(file, call.callee);
+        // Dispatch candidates answer "which analyzed implementation could
+        // run"; the callee symbol answers "which declaration is called". A
+        // member call whose receiver has no inspectable value -- a DOM
+        // method, or a structural parameter with no in-project call site --
+        // has no candidates, but it still has an exact identity, and its
+        // arguments still have to be classified. Falling back keeps that
+        // call in the analysis instead of dropping it silently.
+        let Some(symbol) = candidate_symbols
+            .first()
+            .map(SymbolId::as_str)
+            .or_else(|| lookup.callee_symbol(file, call.callee))
+        else {
             continue;
         };
-        if call.direct_callee {
+        let ambiguous_dispatch = candidate_symbols.len() > 1;
+        if ambiguous_dispatch {
+            // Keep the exact candidate identities, but do not let any one of
+            // them contribute reads or callback timing until the fixed point
+            // can prove that all candidates have equivalent summaries.
+            contribution
+                .dispatches
+                .push((owner_span, candidate_symbols.clone()));
+        }
+        let project_function = lookup.function_for_symbol(symbol).is_some();
+        if call.direct_callee && !ambiguous_dispatch {
             contribution
                 .factory_calls
                 .push((owner_span, SymbolId::from(symbol)));
         }
-        if !call.type_arguments
-            && let Some(contracted) = contract_reads.get(symbol)
-        {
+        if !ambiguous_dispatch && let Some(contracted) = contracts.reads.get(symbol) {
             for (display, _, declaration, kind) in contracted {
                 contribution.direct_reads.push((
                     owner_span,
@@ -381,13 +616,24 @@ fn discover_interprocedural_graph(
                 ));
             }
         }
-        if !contract_reads.contains_key(symbol) && call.direct_callee && !call.type_arguments {
-            contribution.edges.push((
-                owner_span,
-                InterproceduralGraphTarget::Symbol(SymbolId::from(symbol)),
-            ));
+        if !ambiguous_dispatch && !contracts.reads.contains_key(symbol) {
+            if call.direct_callee
+                && let Some(target) =
+                    returned_function_target(file, nodes, nodes_by_path, entities, symbol)
+            {
+                contribution.edges.push((
+                    owner_span,
+                    InterproceduralGraphTarget::LocalSpan(nodes[target].span),
+                ));
+            } else if call.direct_callee || project_function {
+                contribution.edges.push((
+                    owner_span,
+                    InterproceduralGraphTarget::Symbol(SymbolId::from(symbol)),
+                ));
+            }
         }
         if call.direct_callee
+            && !ambiguous_dispatch
             && let Some((callback_owner, parameter)) =
                 functions_for_path(nodes, nodes_by_path, file.path.as_str())
                     .filter_map(|(index, node)| {
@@ -398,23 +644,115 @@ fn discover_interprocedural_graph(
                     })
                     .next()
         {
+            let invocation_owner = functions_for_path(nodes, nodes_by_path, file.path.as_str())
+                .filter(|(_, function)| function.body.contains(call.span))
+                .min_by_key(|(_, function)| function.body.end - function.body.start)
+                .map_or(owner, |(index, _)| index);
             contribution
                 .invoked_parameters
                 .push((owner_span, parameter));
-            contribution.callbacks.push((
-                nodes[callback_owner].span,
-                ContractCallback {
+            let mut forwarded_to_local_scheduler = false;
+            for (scheduler, scheduler_parameter) in file
+                .ast
+                .arguments_containing(call.callee)
+                .filter(|(scheduler, index)| {
+                    direct_callback_contains(file, scheduler.arguments[*index].span, call.callee)
+                })
+            {
+                let Some(scheduler_symbol) = lookup.callee_symbol(file, scheduler.callee) else {
+                    continue;
+                };
+                let Some(target) = nodes
+                    .iter()
+                    .find(|node| node.symbol.as_deref() == Some(scheduler_symbol))
+                else {
+                    continue;
+                };
+                contribution.callback_forwardings.push((
+                    nodes[callback_owner].span,
+                    target.symbol.clone().map_or(
+                        InterproceduralGraphTarget::LocalSpan(target.span),
+                        InterproceduralGraphTarget::Symbol,
+                    ),
+                    scheduler_parameter,
                     parameter,
-                    execution: contract_callback_execution(execution_role(
-                        &file.compiler,
+                    None,
+                ));
+                forwarded_to_local_scheduler = true;
+            }
+            if forwarded_to_local_scheduler {
+                continue;
+            }
+            // `parameter()` is synchronous relative to its immediate
+            // containing function, but that function may itself be a returned
+            // adapter or a timer/Promise callback. Classify the complete
+            // execution context before falling back to inline; otherwise a
+            // debouncer contract incorrectly promises to invoke its callback
+            // before the debouncer factory returns.
+            let runtime_execution = file
+                .ast
+                .arguments_containing(call.callee)
+                .filter(|(scheduler, index)| {
+                    direct_callback_contains(file, scheduler.arguments[*index].span, call.callee)
+                })
+                .filter_map(|(scheduler, index)| {
+                    let resolved = lookup.resolved_callee_call(file, scheduler.callee)?;
+                    let callability = lookup.smallest_contained_callability(
+                        file.path.as_str(),
+                        scheduler.arguments[index].span,
+                    );
+                    argument_behavior(resolved, callability, index)
+                })
+                .fold(None, |observed, behavior| match behavior {
+                    RuntimeArgumentBehavior::DeferredCallback => Some("deferred"),
+                    RuntimeArgumentBehavior::InlineCallback if observed.is_none() => Some("inline"),
+                    RuntimeArgumentBehavior::InlineCallback
+                    | RuntimeArgumentBehavior::ValueOnly => observed,
+                });
+            let semantic = semantic_execution_role(
+                file,
+                call.callee,
+                &allowed,
+                entities,
+                symbol_names,
+                lookup,
+            );
+            let execution = runtime_execution
+                .or_else(|| contract_callback_execution(semantic))
+                .or_else(|| {
+                    function_escapes_through_return(
+                        file,
+                        &nodes[invocation_owner],
+                        &nodes[callback_owner],
+                        entities,
+                        lookup,
+                    )
+                    .then_some("deferred")
+                })
+                .or(call.direct_callee.then_some("inline"));
+            if let Some(execution) = execution {
+                contribution.callbacks.push((
+                    nodes[callback_owner].span,
+                    ContractCallback {
+                        parameter,
+                        execution: execution.into(),
+                    },
+                ));
+            } else {
+                contribution.contract_generation_obligations.push((
+                    nodes[callback_owner].span,
+                    unknown_callback_obligation(
+                        file,
+                        &nodes[callback_owner],
                         call.callee,
-                        &[],
-                    ))
-                    .into(),
-                },
-            ));
+                        parameter,
+                        location(file.path.shared(), call.callee),
+                        lookup,
+                    ),
+                ));
+            }
         }
-        if let Some(callbacks) = contract_callbacks.get(symbol) {
+        if !ambiguous_dispatch && let Some(callbacks) = contracts.callbacks.get(symbol) {
             for callback in callbacks {
                 let Some(argument) = call.arguments.get(callback.parameter) else {
                     continue;
@@ -483,10 +821,13 @@ fn discover_interprocedural_graph(
             else {
                 continue;
             };
-            if let Some(target) = nodes
-                .iter()
-                .position(|node| node.symbol.as_deref() == Some(symbol))
-                .or_else(|| returned_function_target(file, nodes, nodes_by_path, entities, symbol))
+            if !ambiguous_dispatch
+                && let Some(target) = nodes
+                    .iter()
+                    .position(|node| node.symbol.as_deref() == Some(symbol))
+                    .or_else(|| {
+                        returned_function_target(file, nodes, nodes_by_path, entities, symbol)
+                    })
             {
                 // Local calls are summarized transitively. If the parameter
                 // later reaches an unknown external call, that call creates
@@ -499,12 +840,15 @@ fn discover_interprocedural_graph(
                     ),
                     argument_index,
                     parameter,
+                    enclosing_callback_execution(file, call.span, &contracts, lookup),
                 ));
                 continue;
             }
+            let primitive = super::known_primitive(&primitives.calls[call_index]);
             if let Some(execution) = primitive_callback_execution(
-                super::known_primitive(&primitives.calls[call_index]),
+                primitive,
                 argument_index,
+                call.arguments.len(),
                 lookup.dialect,
             ) {
                 contribution.callbacks.push((
@@ -514,6 +858,12 @@ fn discover_interprocedural_graph(
                         execution: execution.into(),
                     },
                 ));
+                continue;
+            }
+            // `splitProps` only creates property views. Its source and key
+            // lists are values even when erased JavaScript types leave their
+            // callability unknown.
+            if primitive == Some(Primitive::SplitProps) {
                 continue;
             }
             let resolved_call = lookup.resolved_callee_call(file, call.callee);
@@ -570,7 +920,7 @@ fn discover_interprocedural_graph(
                 }
                 continue;
             }
-            if contract_callbacks.contains_key(symbol) {
+            if contracts.callbacks.contains_key(symbol) {
                 continue;
             }
             if !potentially_callable(runtime_argument_callability) {
@@ -595,18 +945,14 @@ fn discover_interprocedural_graph(
             }
             contribution.contract_generation_obligations.push((
                 nodes[callback_owner].span,
-                ContractGenerationObligation {
-                    function: nodes[callback_owner]
-                        .name
-                        .clone()
-                        .unwrap_or_else(|| "<anonymous>".into()),
+                unknown_callback_obligation(
+                    file,
+                    &nodes[callback_owner],
+                    call.callee,
                     parameter,
-                    location: location(file.path.shared(), argument.span),
-                    message: format!(
-                        "parameter {parameter} escapes through call to {}; its execution semantics are unknown",
-                        file.source_text(call.callee).unwrap_or("<unknown>")
-                    ),
-                },
+                    location(file.path.shared(), argument.span),
+                    lookup,
+                ),
             ));
         }
     }
@@ -629,6 +975,260 @@ fn discover_interprocedural_graph(
         }
     }
     contribution
+}
+
+/// Whether `nested` is returned as a callable value from `owner`.
+///
+/// This covers direct returned arrows/identifiers and identity-preserving
+/// standard helpers such as `Object.assign(wrapper, { clear })`. A nested
+/// function that is merely called while computing the return value is not an
+/// escape: its callback execution stays inline with the exported call.
+fn function_escapes_through_return(
+    file: &solid_facts::FileFacts,
+    nested: &SummaryNode,
+    owner: &SummaryNode,
+    entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    if nested.span == owner.span {
+        return false;
+    }
+    if function_value_escapes_through_return(
+        file,
+        nested.span,
+        nested.symbol.as_ref(),
+        nested.name.as_deref(),
+        owner,
+        entities,
+        lookup,
+    ) {
+        return true;
+    }
+    // A callback can be invoked by a helper nested inside the callable that
+    // escapes: `factory(cb) { function returned() { const run = () => cb(); }
+    // return identity(returned); }`. Check every intervening function, not
+    // only the leaf that contains the invocation.
+    file.ast
+        .functions
+        .iter()
+        .filter(|candidate| {
+            candidate.span != nested.span
+                && candidate.span != owner.span
+                && candidate.body.contains(nested.span)
+                && owner.body.contains(candidate.span)
+        })
+        .any(|candidate| {
+            let name = function_binding_name(file, candidate);
+            let symbol = name.and_then(|name| entities.at(file.path.as_str(), name.span));
+            function_value_escapes_through_return(
+                file,
+                candidate.span,
+                symbol,
+                name.and_then(|name| file.source_text(name.span)),
+                owner,
+                entities,
+                lookup,
+            )
+        })
+}
+
+#[allow(clippy::too_many_arguments)]
+fn function_value_escapes_through_return(
+    file: &solid_facts::FileFacts,
+    nested_span: Span,
+    nested_symbol: Option<&SymbolId>,
+    nested_name: Option<&str>,
+    owner: &SummaryNode,
+    entities: &EntitySymbols,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    let Some(owner_function) = file
+        .ast
+        .functions
+        .iter()
+        .find(|function| function.span == owner.span)
+    else {
+        return false;
+    };
+    owner_function
+        .expression_return
+        .iter()
+        .chain(file.ast.returns.iter().filter(|returned| {
+            containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|candidate| candidate.span == owner.span)
+        }))
+        .any(|returned| {
+            // ReturnValueKind describes the semantic value, so a call such as
+            // Object.assign(wrapper, ...) is `Function`, not `Call`, when its
+            // result retains wrapper's callable type. Inspect syntax first.
+            if let Some(returned_call) = returned
+                .argument
+                .and_then(|argument| file.ast.call_at(argument))
+            {
+                return returned_call
+                    .arguments
+                    .iter()
+                    .enumerate()
+                    .any(|(index, argument)| {
+                        let names_nested = nested_symbol.is_some_and(|symbol| {
+                            entities.at(file.path.as_str(), argument.span).map_or_else(
+                                || file.source_text(argument.span) == nested_name,
+                                |argument_symbol| argument_symbol == symbol,
+                            )
+                        });
+                        if !names_nested {
+                            return false;
+                        }
+                        let callability = lookup
+                            .smallest_contained_callability(file.path.as_str(), argument.span);
+                        lookup
+                            .resolved_callee_call(file, returned_call.callee)
+                            .and_then(|resolved| argument_behavior(resolved, callability, index))
+                            == Some(RuntimeArgumentBehavior::ValueOnly)
+                            || local_function_returns_argument(file, returned_call, index, entities)
+                    });
+            }
+            if returned.value == solid_facts::ast::ReturnValueKind::Function {
+                return returned
+                    .argument
+                    .is_some_and(|argument| argument.contains(nested_span));
+            }
+            if returned.value == solid_facts::ast::ReturnValueKind::Identifier {
+                if nested_symbol.is_some_and(|symbol| {
+                    entities.at(file.path.as_str(), returned.span).map_or_else(
+                        || file.source_text(returned.span) == nested_name,
+                        |returned_symbol| returned_symbol == symbol,
+                    )
+                }) {
+                    return true;
+                }
+                // Follow one local binding hop: `const wrapped =
+                // identity(callable); return wrapped`. Bundled JavaScript
+                // commonly introduces this shape to decorate the wrapper
+                // before returning it.
+                let returned_span = returned.argument.unwrap_or(returned.span);
+                let returned_symbol = entities.at(file.path.as_str(), returned_span);
+                if let Some(initializer) = file.ast.bindings.iter().find_map(|binding| {
+                    binding
+                        .names
+                        .iter()
+                        .any(|name| {
+                            returned_symbol.is_some_and(|returned_symbol| {
+                                entities.at(file.path.as_str(), name.span) == Some(returned_symbol)
+                            })
+                        })
+                        .then_some(binding.call_initializer)
+                        .flatten()
+                }) && let Some(returned_call) = file.ast.call_at(initializer)
+                {
+                    return returned_call
+                        .arguments
+                        .iter()
+                        .enumerate()
+                        .any(|(index, argument)| {
+                            nested_symbol.is_some_and(|nested_symbol| {
+                                entities.at(file.path.as_str(), argument.span)
+                                    == Some(nested_symbol)
+                            }) && local_function_returns_argument(
+                                file,
+                                returned_call,
+                                index,
+                                entities,
+                            )
+                        });
+                }
+            }
+            false
+        })
+}
+
+fn local_function_returns_argument(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+    entities: &EntitySymbols,
+) -> bool {
+    let Some(callee_symbol) = entities.at(file.path.as_str(), call.callee) else {
+        return false;
+    };
+    let Some(function) = file.ast.functions.iter().find(|function| {
+        function_binding_name(file, function)
+            .and_then(|name| entities.at(file.path.as_str(), name.span))
+            .is_some_and(|symbol| symbol == callee_symbol)
+    }) else {
+        return false;
+    };
+    let Some(parameter) = function.parameters.get(argument) else {
+        return false;
+    };
+    let Some(parameter_name) = parameter.names.first() else {
+        return false;
+    };
+    let parameter_symbol = entities.at(file.path.as_str(), parameter_name.span);
+    let parameter_text = file.source_text(parameter_name.span);
+    let returns = function
+        .expression_return
+        .iter()
+        .chain(file.ast.returns.iter().filter(|returned| {
+            containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|owner| owner.span == function.span)
+        }))
+        .collect::<Vec<_>>();
+    if returns
+        .iter()
+        .filter(|returned| returned.value == solid_facts::ast::ReturnValueKind::Identifier)
+        .any(|returned| {
+            let span = returned.argument.unwrap_or(returned.span);
+            parameter_symbol.is_some_and(|parameter_symbol| {
+                entities.at(file.path.as_str(), span).map_or_else(
+                    || file.source_text(span) == parameter_text,
+                    |returned_symbol| returned_symbol == parameter_symbol,
+                )
+            })
+        })
+    {
+        return true;
+    }
+
+    // An identity-preserving wrapper may capture and invoke the parameter in
+    // the callable it returns (`return (...args) => callback(...args)`). Such
+    // an argument is not returned literally, but its execution is still
+    // deferred until the wrapper is called.
+    let returned_functions = returns
+        .iter()
+        .flat_map(|returned| {
+            file.ast.functions.iter().filter(move |candidate| {
+                returned.argument.is_some_and(|argument| {
+                    (returned.value == solid_facts::ast::ReturnValueKind::Function
+                        && argument.contains(candidate.span))
+                        || (returned.value == solid_facts::ast::ReturnValueKind::Identifier
+                            && function_binding_name(file, candidate)
+                                .and_then(|name| entities.at(file.path.as_str(), name.span))
+                                .is_some_and(|candidate_symbol| {
+                                    entities.at(file.path.as_str(), argument)
+                                        == Some(candidate_symbol)
+                                }))
+                })
+            })
+        })
+        .collect::<Vec<_>>();
+    parameter_symbol.is_some_and(|parameter_symbol| {
+        returned_functions.iter().any(|returned_function| {
+            file.ast.calls.iter().any(|candidate_call| {
+                if !returned_function.body.contains(candidate_call.span) {
+                    return false;
+                }
+                if entities.at(file.path.as_str(), candidate_call.callee) == Some(parameter_symbol)
+                {
+                    return true;
+                }
+                file.ast.members.iter().any(|member| {
+                    member.span == candidate_call.callee
+                        && entities.at(file.path.as_str(), member.object) == Some(parameter_symbol)
+                })
+            })
+        })
+    })
 }
 
 fn returned_function_target(
@@ -659,19 +1259,163 @@ fn returned_function_target(
         .functions
         .iter()
         .find(|function| function.span == factory.span)?;
-    function
+    let returned_values = function
         .expression_return
         .iter()
-        .chain(file.ast.returns.iter().filter(|returned| {
-            containing_ast_function(&file.ast, returned.span)
-                .is_some_and(|owner| owner.span == function.span)
-        }))
-        .filter(|returned| returned.value == solid_facts::ast::ReturnValueKind::Function)
-        .find_map(|returned| {
+        .filter_map(|returned| returned.argument)
+        .chain(file.ast.returns.iter().filter_map(|returned| {
+            (containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|owner| owner.span == function.span))
+            .then_some(returned.argument)
+            .flatten()
+        }));
+    returned_values
+        .flat_map(|value| returned_function_spans(file, value, entities))
+        .find_map(|span| {
             functions_for_path(nodes, nodes_by_path, file.path.as_str())
-                .find(|(_, node)| node.span == returned.span)
+                .find(|(_, node)| node.span == span)
                 .map(|(index, _)| index)
         })
+}
+
+/// Return the exact function values reachable from a return expression.
+///
+/// This deliberately follows only facts that preserve a value identity:
+/// transparent wrappers, conditional branches, identifier aliases, and an
+/// exact destructured property of an object literal/spread. It does not walk
+/// arbitrary nested functions in an object, because doing so would turn a
+/// returned data object into a callable value by containment alone.
+fn returned_function_spans(
+    file: &solid_facts::FileFacts,
+    value: Span,
+    entities: &EntitySymbols,
+) -> Vec<Span> {
+    fn collect(
+        file: &solid_facts::FileFacts,
+        value: Span,
+        entities: &EntitySymbols,
+        visited: &mut HashSet<Span>,
+        result: &mut Vec<Span>,
+    ) {
+        let value = file.ast.peel_ts_sugar_span(value);
+        if !visited.insert(value) {
+            return;
+        }
+        if file
+            .ast
+            .functions
+            .iter()
+            .any(|function| function.span == value)
+        {
+            result.push(value);
+            return;
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == value)
+        {
+            collect(file, conditional.consequent, entities, visited, result);
+            collect(file, conditional.alternate, entities, visited, result);
+            return;
+        }
+        let Some(symbol) = entities.at(file.path.as_str(), value) else {
+            return;
+        };
+        let Some(binding) = file.ast.bindings.iter().find(|binding| {
+            binding.names.iter().any(|name| {
+                entities
+                    .at(file.path.as_str(), name.span)
+                    .is_some_and(|candidate| candidate == symbol)
+            })
+        }) else {
+            return;
+        };
+        if let Some(alias) = &binding.initializer_identifier {
+            collect(file, alias.span, entities, visited, result);
+            if !result.is_empty() {
+                return;
+            }
+        }
+        if binding.shape != solid_facts::ast::BindingShape::Object {
+            if let Some(initializer) = binding.initializer
+                && binding.call_initializer.is_none()
+            {
+                collect(file, initializer, entities, visited, result);
+            }
+            return;
+        }
+        let Some(initializer) = binding.initializer else {
+            return;
+        };
+        let Some(slot) = binding.object_slots.iter().find(|slot| {
+            entities
+                .at(file.path.as_str(), slot.local.span)
+                .is_some_and(|candidate| candidate == symbol)
+        }) else {
+            return;
+        };
+        collect_object_property(file, initializer, &slot.property, entities, visited, result);
+    }
+
+    fn collect_object_property(
+        file: &solid_facts::FileFacts,
+        object: Span,
+        property_name: &str,
+        entities: &EntitySymbols,
+        visited: &mut HashSet<Span>,
+        result: &mut Vec<Span>,
+    ) {
+        let object = file.ast.peel_ts_sugar_span(object);
+        let property = file
+            .ast
+            .object_properties
+            .iter()
+            .filter(|property| {
+                object.contains(property.span)
+                    && !property.computed
+                    && file.source_text(property.key) == Some(property_name)
+            })
+            .max_by_key(|property| property.span.start);
+        if let Some(property) = property {
+            let method = file.ast.functions.iter().find(|function| {
+                property.span.contains(function.span)
+                    && function
+                        .method_name
+                        .as_ref()
+                        .is_some_and(|name| name.span == property.key)
+            });
+            if let Some(method) = method {
+                result.push(method.span);
+            } else {
+                collect(file, property.value, entities, visited, result);
+            }
+            return;
+        }
+        for spread in file
+            .ast
+            .spreads
+            .iter()
+            .filter(|spread| object.contains(spread.span))
+        {
+            collect_object_property(
+                file,
+                spread.argument,
+                property_name,
+                entities,
+                visited,
+                result,
+            );
+        }
+    }
+
+    let mut visited = HashSet::new();
+    let mut result = Vec::new();
+    collect(file, value, entities, &mut visited, &mut result);
+    result.sort_unstable();
+    result.dedup();
+    result
 }
 
 fn proven_array_method<'a>(
@@ -764,6 +1508,44 @@ fn same_runtime_value(
         .is_some_and(|(left, right)| left == right)
 }
 
+fn enclosing_callback_execution(
+    file: &solid_facts::FileFacts,
+    nested: Span,
+    contracts: &InterproceduralContracts<'_>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<String> {
+    let primitives = lookup.primitives(file);
+    let mut enclosing = file
+        .ast
+        .arguments_containing(nested)
+        .filter(|(call, argument)| {
+            direct_callback_contains(file, call.arguments[*argument].span, nested)
+        })
+        .collect::<Vec<_>>();
+    enclosing.sort_by_key(|(call, argument)| {
+        let span = call.arguments[*argument].span;
+        span.end - span.start
+    });
+    enclosing.into_iter().find_map(|(call, parameter)| {
+        let call_index = lookup.call_index(file, call.span)?;
+        if let Some(execution) = primitive_callback_execution(
+            super::known_primitive(&primitives.calls[call_index]),
+            parameter,
+            call.arguments.len(),
+            lookup.dialect,
+        ) {
+            return Some(execution.to_owned());
+        }
+        let symbol = lookup.callee_symbol(file, call.callee)?;
+        contracts
+            .callbacks
+            .get(symbol)?
+            .iter()
+            .find(|callback| callback.parameter == parameter)
+            .map(|callback| callback.execution.clone())
+    })
+}
+
 /// The execution recorded for a callback forwarded into a primitive, in the
 /// package contracts' vocabulary.
 ///
@@ -778,22 +1560,35 @@ fn same_runtime_value(
 fn primitive_callback_execution(
     primitive: Option<Primitive>,
     parameter: usize,
+    argument_count: usize,
     dialect: &dyn solid_dialect::Dialect,
 ) -> Option<&'static str> {
     use Primitive as P;
     let primitive = primitive?;
-    if matches!(primitive, P::CreateEffect | P::CreateRenderEffect) {
+    if matches!(
+        primitive,
+        P::CreateEffect | P::CreateRenderEffect | P::CreateResource
+    ) {
         return dialect
-            .callback_executions(primitive)
-            .iter()
-            .find(|(index, _)| *index == parameter)
-            .map(|(_, execution)| match execution {
+            .callback_execution_at(primitive, parameter, argument_count)
+            .map(|execution| match execution {
                 solid_dialect::Execution::Tracked => "tracked",
                 solid_dialect::Execution::Deferred => "deferred",
                 solid_dialect::Execution::Inline => "inline",
             });
     }
     match (primitive, parameter) {
+        // `on` returns an adapter; neither the dependency callback nor the
+        // user callback runs during the call that creates that adapter. The
+        // dialect labels the dependency callback `Inline` for the checker so
+        // its role can be derived from the eventual invocation site, but a
+        // package contract must describe the exported wrapper's call itself.
+        (P::On, 0 | 1) => Some("deferred"),
+        // Solid 1 wraps every function-valued merge source in a memo. JavaScript
+        // distributions do not retain the declaration type that proves an
+        // ordinary props object is non-callable, so preserve the primitive's
+        // conservative callable semantics instead of rejecting the export.
+        (P::MergeProps, _) => Some("tracked"),
         (
             P::CreateMemo
             | P::CreateTrackedEffect
@@ -814,16 +1609,843 @@ fn primitive_callback_execution(
     }
 }
 
+struct StructuredReturnDiscovery<'a, 'facts> {
+    facts: &'a ProjectFacts,
+    nodes: &'a [SummaryNode],
+    indexes: &'a HashMap<(String, Span), usize>,
+    by_symbol: &'a HashMap<SymbolId, usize>,
+    summaries: &'a [SummaryReads],
+    returned: &'a [SummaryReads],
+    structured_returns: &'a [Option<ContractReturn>],
+    accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    source_primitives: &'a HashMap<SymbolId, SymbolId>,
+    bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
+    contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
+    entities: &'a EntitySymbols,
+    symbol_names: &'a HashMap<SymbolId, SymbolId>,
+    lookup: &'a SemanticLookup<'facts>,
+}
+
+impl StructuredReturnDiscovery<'_, '_> {
+    fn parameter_return(
+        &self,
+        file: &solid_facts::FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+        span: Span,
+        depth: usize,
+    ) -> Option<ContractReturn> {
+        if depth == 0 {
+            return None;
+        }
+        let symbol = self.entities.at(file.path.as_str(), span)?;
+        if let Some(parameter) = function.parameters.iter().position(|parameter| {
+            parameter
+                .names
+                .iter()
+                .any(|name| self.entities.at(file.path.as_str(), name.span) == Some(symbol))
+        }) {
+            return Some(ContractReturn {
+                kind: "argument".into(),
+                parameter: Some(parameter),
+                ..ContractReturn::default()
+            });
+        }
+        let initializer = self.binding_initializer(file, span)?;
+        (initializer != span)
+            .then(|| self.parameter_return(file, function, initializer, depth - 1))
+            .flatten()
+    }
+
+    fn instantiate_return(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        returned: &ContractReturn,
+        fallback_label: &str,
+        depth: usize,
+    ) -> Option<ContractReturn> {
+        if depth == 0 {
+            return None;
+        }
+        match returned.kind.as_str() {
+            "argument" => call
+                .arguments
+                .get(returned.parameter?)
+                .and_then(|argument| {
+                    self.leaf_with_depth(file, argument.span, fallback_label, depth - 1)
+                }),
+            "tuple" => Some(ContractReturn {
+                elements: returned
+                    .elements
+                    .iter()
+                    .map(|element| {
+                        element.as_ref().and_then(|element| {
+                            self.instantiate_return(file, call, element, fallback_label, depth - 1)
+                        })
+                    })
+                    .collect(),
+                ..returned.clone()
+            }),
+            "object" => Some(ContractReturn {
+                properties: returned
+                    .properties
+                    .iter()
+                    .filter_map(|(name, property)| {
+                        self.instantiate_return(file, call, property, name, depth - 1)
+                            .map(|property| (name.clone(), property))
+                    })
+                    .collect(),
+                ..returned.clone()
+            }),
+            _ => Some(returned.clone()),
+        }
+    }
+
+    fn context_return(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        fallback_label: &str,
+        depth: usize,
+    ) -> Option<ContractReturn> {
+        if depth == 0 {
+            return None;
+        }
+        let context = call
+            .arguments
+            .first()
+            .and_then(|argument| self.entities.at(file.path.as_str(), argument.span))?;
+        self.facts.files.iter().find_map(|provider_file| {
+            let jsx_value = provider_file.ast.jsx_elements.iter().find_map(|element| {
+                let provider_span =
+                    if let Some(provider_member) = self.lookup.dialect.context_provider_member() {
+                        (element
+                            .member_property
+                            .and_then(|property| provider_file.source_text(property))
+                            == Some(provider_member))
+                        .then_some(element.member_object)
+                        .flatten()
+                    } else {
+                        Some(element.name.span)
+                    }?;
+                (self.entities.at(provider_file.path.as_str(), provider_span) == Some(context))
+                    .then_some(())?;
+                let value = element.attributes.iter().find_map(|attribute| {
+                    (provider_file.source_text(attribute.local_name) == Some("value"))
+                        .then_some(attribute.expression)
+                        .flatten()
+                })?;
+                self.leaf_with_depth(provider_file, value, fallback_label, depth - 1)
+            });
+            jsx_value.or_else(|| {
+                provider_file.ast.calls.iter().find_map(|provider| {
+                    let component = provider.arguments.first()?.span;
+                    let properties = provider.arguments.get(1)?.span;
+                    let provider_context = if let Some(provider_member) =
+                        self.lookup.dialect.context_provider_member()
+                    {
+                        let member = provider_file
+                            .ast
+                            .members
+                            .iter()
+                            .find(|member| member.span == component)?;
+                        (provider_file.source_text(member.property) == Some(provider_member))
+                            .then_some(member.object)?
+                    } else {
+                        component
+                    };
+                    (self
+                        .entities
+                        .at(provider_file.path.as_str(), provider_context)
+                        == Some(context))
+                    .then_some(())?;
+                    let value =
+                        provider_file
+                            .ast
+                            .object_properties
+                            .iter()
+                            .find_map(|property| {
+                                (properties.contains(property.span)
+                                    && provider_file.source_text(property.key) == Some("value"))
+                                .then_some(property.value)
+                            })?;
+                    self.leaf_with_depth(provider_file, value, fallback_label, depth - 1)
+                })
+            })
+        })
+    }
+
+    fn reactive_proxy_return(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        fallback_label: &str,
+    ) -> Option<ContractReturn> {
+        let resolved = self.lookup.resolved_callee_call(file, call.callee)?;
+        let declaration = resolved.declaration.as_ref()?;
+        if resolved.kind != CallKind::Construct
+            || !declaration.standard_library
+            || declaration.qualified_name.as_ref() != "ProxyConstructor.construct"
+        {
+            return None;
+        }
+        let handler = call.arguments.get(1)?.span;
+        let reactive = file.ast.calls.iter().any(|nested| {
+            handler.contains(nested.span)
+                && super::known_primitive(&primitive_name(
+                    file.path.as_str(),
+                    nested.callee,
+                    nested.static_callee(&file.source),
+                    self.entities,
+                    self.symbol_names,
+                    self.lookup.dialect,
+                ))
+                .is_some_and(|primitive| self.lookup.dialect.creates_reactive_source(primitive))
+        });
+        reactive.then(|| ContractReturn {
+            kind: "store-path".into(),
+            label: fallback_label.into(),
+            ..ContractReturn::default()
+        })
+    }
+
+    fn callable_value_return(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        span: Span,
+        fallback_label: &str,
+        depth: usize,
+    ) -> Option<ContractReturn> {
+        if depth == 0 {
+            return None;
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == span)
+        {
+            let consequent = self.callable_value_return(
+                file,
+                call,
+                conditional.consequent,
+                fallback_label,
+                depth - 1,
+            );
+            let alternate = self.callable_value_return(
+                file,
+                call,
+                conditional.alternate,
+                fallback_label,
+                depth - 1,
+            );
+            return match (consequent, alternate) {
+                (Some(left), Some(right)) if left.kind == right.kind => {
+                    let mut merged = Some(left);
+                    merge_structured_return(&mut merged, right);
+                    merged
+                }
+                (Some(returned), None) | (None, Some(returned)) => Some(returned),
+                _ => None,
+            };
+        }
+        let function = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == span)?;
+        let index = self.indexes.get(&(file.path.to_string(), function.span))?;
+        self.structured_returns[*index]
+            .as_ref()
+            .and_then(|returned| {
+                self.instantiate_return(file, call, returned, fallback_label, depth - 1)
+            })
+    }
+
+    fn call_return(
+        &self,
+        file: &solid_facts::FileFacts,
+        call: &solid_facts::ast::CallFact,
+        fallback_label: &str,
+        depth: usize,
+    ) -> Option<ContractReturn> {
+        if depth == 0 {
+            return None;
+        }
+        let symbol = self.entities.at(file.path.as_str(), call.callee);
+        let primitive = primitive_name(
+            file.path.as_str(),
+            call.callee,
+            call.static_callee(&file.source),
+            self.entities,
+            self.symbol_names,
+            self.lookup.dialect,
+        );
+        if super::known_primitive(&primitive) == Some(Primitive::UseContext)
+            && let Some(returned) = self.context_return(file, call, fallback_label, depth - 1)
+        {
+            return Some(returned);
+        }
+        if let Some(returned) = symbol
+            .and_then(|symbol| self.contract_returns.get(symbol))
+            .map(|(returned, _)| returned)
+            .or_else(|| {
+                primitive
+                    .as_ref()
+                    .and_then(|primitive| self.bundled_returns.get(primitive.as_str()))
+            })
+            .or_else(|| {
+                call.static_callee(&file.source)
+                    .and_then(|callee| self.imported_primitive_return(file, callee))
+            })
+        {
+            return self.instantiate_return(file, call, returned, fallback_label, depth - 1);
+        }
+        if let Some(primitive) = super::known_primitive(&primitive)
+            && self.lookup.dialect.creates_reactive_source(primitive)
+        {
+            return Some(ContractReturn {
+                kind: if self.lookup.dialect.returns_store(primitive) {
+                    "store-path".into()
+                } else {
+                    "accessor".into()
+                },
+                label: fallback_label.into(),
+                ..ContractReturn::default()
+            });
+        }
+        if let Some(returned) = self.reactive_proxy_return(file, call, fallback_label) {
+            return Some(returned);
+        }
+        if file.ast.members.iter().any(|member| {
+            member.span == call.callee
+                && file
+                    .ast
+                    .calls
+                    .iter()
+                    .any(|receiver| receiver.span == member.object)
+        }) {
+            return None;
+        }
+        if let Some(initializer) = self.binding_initializer(file, call.callee)
+            && let Some(returned) =
+                self.callable_value_return(file, call, initializer, fallback_label, depth - 1)
+        {
+            return Some(returned);
+        }
+        let index = symbol.and_then(|symbol| self.by_symbol.get(symbol))?;
+        if let Some(returned) = self.structured_returns[*index].as_ref() {
+            return self.instantiate_return(file, call, returned, fallback_label, depth - 1);
+        }
+        self.returned[*index]
+            .first()
+            .map(|read| self.contract_return_from_read(read, fallback_label))
+    }
+
+    fn binding_initializer(&self, file: &solid_facts::FileFacts, span: Span) -> Option<Span> {
+        if let Some((binding_file, binding, _)) =
+            self.lookup.binding_at_reference(file.path.as_str(), span)
+            && binding_file.path == file.path
+            && let Some(initializer) = binding.initializer
+        {
+            return Some(initializer);
+        }
+        if let Some(symbol) = self.entities.at(file.path.as_str(), span)
+            && let Some(initializer) = file.ast.bindings.iter().find_map(|binding| {
+                binding.names.iter().find_map(|name| {
+                    (self.entities.at(file.path.as_str(), name.span) == Some(symbol))
+                        .then_some(binding.initializer)
+                        .flatten()
+                })
+            })
+        {
+            return Some(initializer);
+        }
+        // TypeScript exposes a shorthand property's own property symbol at
+        // `{ value }`, not the referenced value symbol, so neither lookup
+        // above names the value. The binder that built these AST facts did
+        // resolve that exact reference, so its declaration is the evidence
+        // here -- exact, and block-scope aware.
+        let declaration = self.shorthand_value_declaration(file, span)?;
+        file.ast
+            .bindings
+            .iter()
+            .find(|binding| binding.names.iter().any(|name| name.span == declaration))
+            .and_then(|binding| binding.initializer)
+    }
+
+    /// The declaration a shorthand property's value refers to, when `span` is
+    /// that shorthand.
+    ///
+    /// `None` for every other span, and for a shorthand the binder resolved
+    /// to no declaration in this file -- a global, or an import namespace
+    /// member. Callers treat that as a missing fact, not as proof.
+    fn shorthand_value_declaration(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+    ) -> Option<Span> {
+        file.ast
+            .object_properties
+            .iter()
+            .find(|property| property.value == span)
+            .and_then(|property| property.shorthand_binding)
+    }
+
+    fn projection(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+        fallback_label: &str,
+        depth: usize,
+    ) -> Option<ContractReturn> {
+        if depth == 0 {
+            return None;
+        }
+        let member = file.ast.members.iter().find(|member| member.span == span)?;
+        let base = if let Some(call) = file
+            .ast
+            .calls
+            .iter()
+            .find(|call| call.span == member.object)
+        {
+            self.call_return(file, call, fallback_label, depth - 1)
+        } else if file
+            .ast
+            .members
+            .iter()
+            .any(|candidate| candidate.span == member.object)
+        {
+            self.projection(file, member.object, fallback_label, depth - 1)
+        } else if let Some(initializer) = self.binding_initializer(file, member.object) {
+            self.leaf_with_depth(file, initializer, fallback_label, depth - 1)
+        } else {
+            self.entities
+                .at(file.path.as_str(), member.object)
+                .filter(|symbol| self.source_kinds.get(*symbol) == Some(&ReactiveSourceKind::Store))
+                .map(|_| ContractReturn {
+                    kind: "store-path".into(),
+                    label: fallback_label.into(),
+                    ..ContractReturn::default()
+                })
+        }?;
+        let property = file.source_text(member.property).unwrap_or_default();
+        match base.kind.as_str() {
+            "object" => base.properties.get(property).cloned(),
+            "tuple" => property
+                .parse::<usize>()
+                .ok()
+                .and_then(|index| base.elements.get(index))
+                .and_then(Clone::clone),
+            "store-path" => Some(ContractReturn {
+                kind: "store-path".into(),
+                label: fallback_label.into(),
+                ..ContractReturn::default()
+            }),
+            _ => None,
+        }
+    }
+
+    fn imported_primitive_return<'a>(
+        &'a self,
+        file: &solid_facts::FileFacts,
+        callee: &str,
+    ) -> Option<&'a ContractReturn> {
+        file.ast.imports.iter().find_map(|import| {
+            let primitives = self
+                .lookup
+                .dialect
+                .namespace_import_primitives(import.module.as_str());
+            import.bindings.iter().find_map(|binding| {
+                let local = file.source_text(binding.local.span)?;
+                let imported = match binding.kind {
+                    solid_facts::ast::ImportKind::Named if local == callee => binding
+                        .imported
+                        .as_deref()
+                        .or_else(|| file.source_text(binding.local.span)),
+                    solid_facts::ast::ImportKind::Namespace => callee
+                        .strip_prefix(local)
+                        .and_then(|property| property.strip_prefix('.')),
+                    _ => None,
+                }?;
+                primitives
+                    .contains(&imported)
+                    .then(|| self.bundled_returns.get(imported))
+                    .flatten()
+            })
+        })
+    }
+
+    /// The discovered accessor a shorthand property's value names.
+    ///
+    /// TypeScript projects a shorthand property's *own* symbol at
+    /// `{ pathname }`, never the value binding's, so the entity table cannot
+    /// answer here. The binder's resolution of that reference can, and it
+    /// identifies the declaration exactly: a same-spelled binding in a
+    /// sibling block declares a different symbol at a different span and
+    /// cannot be mistaken for this one.
+    fn named_accessor(&self, file: &solid_facts::FileFacts, span: Span) -> Option<&SymbolId> {
+        let declaration = self.shorthand_value_declaration(file, span)?;
+        self.accessors.iter().find_map(|(symbol, (_, location))| {
+            (location.path.as_ref() == file.path.as_str()
+                && u32::try_from(location.start_byte).ok()? == declaration.start
+                && u32::try_from(location.end_byte).ok()? == declaration.end)
+                .then_some(symbol)
+        })
+    }
+
+    fn leaf(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+        fallback_label: &str,
+    ) -> Option<ContractReturn> {
+        self.leaf_with_depth(file, span, fallback_label, 16)
+    }
+
+    fn leaf_with_depth(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+        fallback_label: &str,
+        depth: usize,
+    ) -> Option<ContractReturn> {
+        if depth == 0 {
+            return None;
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == span)
+        {
+            let consequent =
+                self.leaf_with_depth(file, conditional.consequent, fallback_label, depth - 1);
+            let alternate =
+                self.leaf_with_depth(file, conditional.alternate, fallback_label, depth - 1);
+            return match (consequent, alternate) {
+                (Some(left), Some(right)) if left.kind == right.kind => {
+                    let mut merged = Some(left);
+                    merge_structured_return(&mut merged, right);
+                    merged
+                }
+                (Some(returned), None) | (None, Some(returned)) => Some(returned),
+                _ => None,
+            };
+        }
+        if let Some(logical) = file
+            .ast
+            .logical_expressions
+            .iter()
+            .find(|logical| logical.span == span)
+        {
+            let left = self.leaf_with_depth(file, logical.left, fallback_label, depth - 1);
+            let right = self.leaf_with_depth(file, logical.right, fallback_label, depth - 1);
+            return match (left, right) {
+                (Some(left), Some(right)) if left.kind == right.kind => {
+                    let mut merged = Some(left);
+                    merge_structured_return(&mut merged, right);
+                    merged
+                }
+                (Some(returned), None) | (None, Some(returned)) => Some(returned),
+                _ => None,
+            };
+        }
+        let source = file.source_text(span).unwrap_or_default().trim();
+        if source.starts_with('{') && source.ends_with('}') {
+            let properties = file
+                .ast
+                .object_properties
+                .iter()
+                .filter(|property| {
+                    span.contains(property.span)
+                        && !file.ast.object_properties.iter().any(|parent| {
+                            parent.span != property.span
+                                && span.contains(parent.span)
+                                && parent.span.contains(property.span)
+                        })
+                })
+                .filter_map(|property| {
+                    let name = file.source_text(property.key)?.trim_matches(['\'', '"']);
+                    self.leaf_with_depth(file, property.value, name, depth - 1)
+                        .map(|returned| (name.to_owned(), returned))
+                })
+                .collect::<BTreeMap<_, _>>();
+            if !properties.is_empty() {
+                return Some(ContractReturn {
+                    kind: "object".into(),
+                    properties,
+                    ..ContractReturn::default()
+                });
+            }
+        }
+        if file.ast.members.iter().any(|member| member.span == span) {
+            return self.projection(file, span, fallback_label, depth - 1);
+        }
+        if let Some(function) = file
+            .ast
+            .functions_within(span)
+            .filter(|function| function.span == span)
+            .min_by_key(|function| function.span.end - function.span.start)
+        {
+            let summarized = self
+                .indexes
+                .get(&(file.path.to_string(), function.span))
+                .is_some_and(|index| !self.summaries[*index].is_empty());
+            let calls_accessor = file.ast.calls.iter().any(|call| {
+                function.body.contains(call.span)
+                    && self
+                        .entities
+                        .at(file.path.as_str(), call.callee)
+                        .or_else(|| self.named_accessor(file, call.callee))
+                        .is_some_and(|symbol| self.accessors.contains_key(symbol))
+            });
+            if summarized || calls_accessor {
+                return Some(ContractReturn {
+                    kind: "accessor".into(),
+                    label: fallback_label.into(),
+                    ..ContractReturn::default()
+                });
+            }
+        }
+        if let Some(call) = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| {
+                call.span == span || (span.contains(call.span) && call.span.start == span.start)
+            })
+            .max_by_key(|call| call.span.end - call.span.start)
+            && let Some(returned) = self.call_return(file, call, fallback_label, depth - 1)
+        {
+            return Some(returned);
+        }
+        if let Some(callee) = file.source_text(span)
+            && let Some(returned) = self.imported_primitive_return(file, callee)
+        {
+            return Some(returned.clone());
+        }
+        if let Some(symbol) = self
+            .entities
+            .at(file.path.as_str(), span)
+            .or_else(|| self.named_accessor(file, span))
+        {
+            if self.accessors.contains_key(symbol) {
+                return Some(ContractReturn {
+                    kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+                        "store-path".into()
+                    } else {
+                        "accessor".into()
+                    },
+                    label: fallback_label.into(),
+                    ..ContractReturn::default()
+                });
+            }
+            if let Some(index) = self.by_symbol.get(symbol)
+                && !self.summaries[*index].is_empty()
+            {
+                return Some(ContractReturn {
+                    kind: "accessor".into(),
+                    label: fallback_label.into(),
+                    ..ContractReturn::default()
+                });
+            }
+        }
+        if let Some(initializer) = self.binding_initializer(file, span)
+            && initializer != span
+        {
+            // A shorthand property (`{ pathname }`) carries the property's own
+            // symbol at this span, not the value binding's, so the lookup above
+            // cannot see that the value is a discovered source. The binding that
+            // owns the initializer we just followed can: match it by initializer
+            // span, then ask for that binding's own symbol. Without this the
+            // leaf falls through to the initializing call and inherits the
+            // primitive's generic label ("memo result") instead of the
+            // structural position the consumer actually reads.
+            if let Some(symbol) = file
+                .ast
+                .bindings
+                .iter()
+                .find(|binding| binding.initializer == Some(initializer))
+                .and_then(|binding| binding.names.first())
+                .and_then(|name| self.entities.at(file.path.as_str(), name.span))
+                && self.accessors.contains_key(symbol)
+            {
+                return Some(ContractReturn {
+                    kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+                        "store-path".into()
+                    } else {
+                        "accessor".into()
+                    },
+                    label: fallback_label.into(),
+                    ..ContractReturn::default()
+                });
+            }
+            if let Some(returned) =
+                self.leaf_with_depth(file, initializer, fallback_label, depth - 1)
+            {
+                return Some(returned);
+            }
+        }
+        if let Some(member) = file.ast.members.iter().find(|member| member.span == span)
+            && let Some(symbol) = self.entities.at(file.path.as_str(), member.object)
+            && self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+        {
+            return Some(ContractReturn {
+                kind: "store-path".into(),
+                label: fallback_label.into(),
+                ..ContractReturn::default()
+            });
+        }
+        None
+    }
+
+    fn contract_return_from_read(
+        &self,
+        read: &SummaryRead,
+        fallback_label: &str,
+    ) -> ContractReturn {
+        let label = self
+            .source_primitives
+            .get(&read.symbol)
+            .and_then(|primitive| self.bundled_returns.get(primitive))
+            .map_or_else(
+                || fallback_label.to_owned(),
+                |returned| returned.label.clone(),
+            );
+        ContractReturn {
+            kind: if self.source_kinds.get(&read.symbol) == Some(&ReactiveSourceKind::Store) {
+                "store-path".into()
+            } else {
+                "accessor".into()
+            },
+            label,
+            ..ContractReturn::default()
+        }
+    }
+}
+
+fn discover_structured_returns(
+    discovery: &StructuredReturnDiscovery<'_, '_>,
+) -> Vec<Option<ContractReturn>> {
+    parallel_slice_results(discovery.nodes, |node| {
+        let file = discovery.lookup.file_by_path(node.path.as_str())?;
+        let function = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == node.span)?;
+        function
+            .expression_return
+            .iter()
+            .chain(file.ast.returns.iter().filter(|returned| {
+                containing_ast_function(&file.ast, returned.span)
+                    .is_some_and(|owner| owner.span == function.span)
+            }))
+            .find_map(|returned| {
+                if !returned.elements().is_empty() {
+                    let elements = returned
+                        .elements()
+                        .iter()
+                        .enumerate()
+                        .map(|(index, element)| {
+                            element.and_then(|span| {
+                                discovery.leaf(file, span, &format!("result[{index}]"))
+                            })
+                        })
+                        .collect::<Vec<_>>();
+                    if elements.iter().any(Option::is_some) {
+                        return Some(ContractReturn {
+                            kind: "tuple".into(),
+                            elements,
+                            ..ContractReturn::default()
+                        });
+                    }
+                }
+                if !returned.properties().is_empty() {
+                    let properties = returned
+                        .properties()
+                        .iter()
+                        .filter_map(|property| {
+                            discovery
+                                .leaf(file, property.value, property.name.as_str())
+                                .map(|returned| (property.name.to_string(), returned))
+                        })
+                        .collect::<BTreeMap<_, _>>();
+                    if !properties.is_empty() {
+                        return Some(ContractReturn {
+                            kind: "object".into(),
+                            properties,
+                            ..ContractReturn::default()
+                        });
+                    }
+                }
+                if let Some(argument) =
+                    discovery.parameter_return(file, function, returned.span, 16)
+                {
+                    return Some(argument);
+                }
+                discovery.leaf(file, returned.span, "result")
+            })
+    })
+}
+
+fn merge_structured_return(target: &mut Option<ContractReturn>, incoming: ContractReturn) -> bool {
+    let Some(current) = target.as_mut() else {
+        *target = Some(incoming);
+        return true;
+    };
+    if current.kind != incoming.kind {
+        return false;
+    }
+    match current.kind.as_str() {
+        "tuple" => {
+            if current.elements.len() < incoming.elements.len() {
+                current.elements.resize(incoming.elements.len(), None);
+            }
+            incoming
+                .elements
+                .into_iter()
+                .enumerate()
+                .fold(false, |changed, (index, returned)| {
+                    changed
+                        | returned.is_some_and(|returned| {
+                            merge_structured_return(&mut current.elements[index], returned)
+                        })
+                })
+        }
+        "object" => incoming
+            .properties
+            .into_iter()
+            .fold(false, |changed, (property, returned)| {
+                if let Some(existing) = current.properties.get_mut(&property) {
+                    let mut slot = Some(existing.clone());
+                    let property_changed = merge_structured_return(&mut slot, returned);
+                    *existing = slot.expect("an occupied property remains occupied");
+                    changed | property_changed
+                } else {
+                    current.properties.insert(property, returned);
+                    true
+                }
+            }),
+        _ => false,
+    }
+}
+
 struct InterproceduralGraphAssembly<'a> {
     nodes: &'a [SummaryNode],
     nodes_by_path: &'a HashMap<String, Vec<usize>>,
     by_symbol: &'a HashMap<SymbolId, usize>,
     summaries: &'a mut [SummaryReads],
     callback_summaries: &'a mut [Vec<ContractCallback>],
-    callback_forwardings: &'a mut Vec<(usize, usize, usize, usize)>,
+    callback_forwardings: &'a mut Vec<(usize, usize, usize, usize, Option<String>)>,
+    dispatches: &'a mut Vec<(usize, Vec<usize>)>,
     contract_generation_obligations: &'a mut [Vec<ContractGenerationObligation>],
     edges: &'a mut [Vec<usize>],
     invoked_parameters: &'a mut [Vec<usize>],
+    invoked_parameter_members: &'a mut [Vec<(usize, String)>],
     returned_bindings: &'a mut Vec<(SymbolId, SymbolId)>,
     factory_calls: &'a mut Vec<(usize, SymbolId)>,
 }
@@ -861,12 +2483,21 @@ impl InterproceduralGraphAssembly<'_> {
                 self.invoked_parameters[owner].push(*parameter);
             }
         }
+        for (owner, parameter, property) in &contribution.invoked_parameter_members {
+            if let Some(owner) = node_index(*owner) {
+                let entry = (*parameter, property.clone());
+                if !self.invoked_parameter_members[owner].contains(&entry) {
+                    self.invoked_parameter_members[owner].push(entry);
+                }
+            }
+        }
         for (owner, callback) in &contribution.callbacks {
             if let Some(owner) = node_index(*owner) {
                 push_contract_callback(&mut self.callback_summaries[owner], callback.clone());
             }
         }
-        for (owner, target, target_parameter, owner_parameter) in &contribution.callback_forwardings
+        for (owner, target, target_parameter, owner_parameter, ambient_execution) in
+            &contribution.callback_forwardings
         {
             let target = match target {
                 InterproceduralGraphTarget::Symbol(symbol) => self.by_symbol.get(symbol).copied(),
@@ -878,7 +2509,32 @@ impl InterproceduralGraphAssembly<'_> {
                     target,
                     *target_parameter,
                     *owner_parameter,
+                    ambient_execution.clone(),
                 ));
+            }
+        }
+        for (owner, candidates) in &contribution.dispatches {
+            let Some(owner) = node_index(*owner) else {
+                continue;
+            };
+            let mut resolved = Vec::with_capacity(candidates.len());
+            let mut complete = true;
+            for symbol in candidates {
+                if let Some(candidate) = self.by_symbol.get(symbol).copied() {
+                    resolved.push(candidate);
+                } else {
+                    // A candidate omitted from the project graph is not
+                    // equivalent to the candidates we did resolve. Keep the
+                    // dispatch unresolved instead of silently narrowing the
+                    // runtime set.
+                    complete = false;
+                    break;
+                }
+            }
+            resolved.sort_unstable();
+            resolved.dedup();
+            if complete && !resolved.is_empty() && resolved.len() == candidates.len() {
+                self.dispatches.push((owner, resolved));
             }
         }
         for (owner, obligation) in &contribution.contract_generation_obligations {
@@ -905,6 +2561,7 @@ pub(super) struct InterproceduralResultView<'a> {
     pub(super) by_symbol: &'a HashMap<SymbolId, usize>,
     pub(super) summaries: &'a [SummaryReads],
     pub(super) invoked_parameters: &'a [Vec<usize>],
+    pub(super) invoked_parameter_members: &'a [Vec<(usize, String)>],
     pub(super) returned_bindings: &'a HashMap<SymbolId, Vec<SummaryRead>>,
 }
 
@@ -920,6 +2577,7 @@ impl InterproceduralResultView<'_> {
                         name: self.nodes[*index].name.clone(),
                         summary: self.summaries[*index].to_vec(),
                         invoked_parameters: self.invoked_parameters[*index].clone(),
+                        invoked_parameter_members: self.invoked_parameter_members[*index].clone(),
                     }
                 } else if let Some(summary) = self.returned_bindings.get(symbol) {
                     InterproceduralResultDependencyState::Returned(summary.clone())
@@ -950,9 +2608,11 @@ impl InterproceduralResultView<'_> {
                             name,
                             summary,
                             invoked_parameters: previous_parameters,
+                            invoked_parameter_members: previous_members,
                         } if name == &self.nodes[*index].name
                             && summary.as_slice() == &self.summaries[*index][..]
                             && previous_parameters == &self.invoked_parameters[*index]
+                            && previous_members == &self.invoked_parameter_members[*index]
                     )
                 } else if let Some(summary) = self.returned_bindings.get(symbol) {
                     matches!(
@@ -1021,6 +2681,7 @@ fn interprocedural_result_reads_for_file(
                 by_symbol,
                 summaries,
                 invoked_parameters,
+                invoked_parameter_members,
                 returned_bindings,
                 ..
             },
@@ -1034,7 +2695,7 @@ fn interprocedural_result_reads_for_file(
     let mut seen = HashSet::new();
     let allowed = allowed_callback_spans(file, lookup);
     for call in &file.ast.calls {
-        if !enclosing_render_function(file, call.span) {
+        if !enclosing_render_function(file, call.span, lookup) {
             continue;
         }
         let callee = location(file.path.shared(), call.callee);
@@ -1094,6 +2755,34 @@ fn interprocedural_result_reads_for_file(
                     for read in argument_summary {
                         push_unique_summary_read(&mut effective, read.clone());
                     }
+                }
+            }
+            // The callee invokes a member of one of its parameters. Which
+            // implementation that is belongs to this call site, not to the
+            // callee: resolve it from the argument actually passed here. An
+            // argument that is exactly one object proves what runs; anything
+            // else -- unresolved, or a conditional over two objects -- proves
+            // nothing and contributes no read.
+            for (parameter, property) in &invoked_parameter_members[target] {
+                let Some(argument) = call.arguments.get(*parameter) else {
+                    continue;
+                };
+                let Some(implementation) =
+                    lookup.member_value_symbol_at(file, argument.span, property)
+                else {
+                    continue;
+                };
+                dependencies.insert(InterproceduralResultDependency::Symbol(
+                    implementation.clone(),
+                ));
+                let Some(member_summary) = by_symbol
+                    .get(&implementation)
+                    .map(|index| &summaries[*index][..])
+                else {
+                    continue;
+                };
+                for read in member_summary {
+                    push_unique_summary_read(&mut effective, read.clone());
                 }
             }
         }
@@ -1375,8 +3064,9 @@ fn direct_reference_contributions(
                     entities,
                     symbol_names,
                     context.lookup,
-                ) == ExecutionRole::UntrackedRendering
-                    && !enclosing_render_function(file, call.span)
+                )
+                .reports_untracked_read()
+                    && !enclosing_render_function(file, call.span, context.lookup)
                 {
                     read.origin = contract_location;
                 }
@@ -1568,10 +3258,12 @@ fn interprocedural_reads(
     let mut summaries = vec![SummaryReads::default(); nodes.len()];
     let mut callback_summaries = vec![Vec::<ContractCallback>::new(); nodes.len()];
     let mut callback_forwardings = Vec::new();
+    let mut dispatches = Vec::<(usize, Vec<usize>)>::new();
     let mut contract_generation_obligations =
         vec![Vec::<ContractGenerationObligation>::new(); nodes.len()];
     let mut edges = vec![Vec::<usize>::new(); nodes.len()];
     let mut invoked_parameters = vec![Vec::<usize>::new(); nodes.len()];
+    let mut invoked_parameter_members = vec![Vec::<(usize, String)>::new(); nodes.len()];
     let mut returned_binding_candidates = Vec::new();
     let mut factory_call_candidates = Vec::new();
     let mut graph_reused_files = 0;
@@ -1584,9 +3276,11 @@ fn interprocedural_reads(
             summaries: &mut summaries,
             callback_summaries: &mut callback_summaries,
             callback_forwardings: &mut callback_forwardings,
+            dispatches: &mut dispatches,
             contract_generation_obligations: &mut contract_generation_obligations,
             edges: &mut edges,
             invoked_parameters: &mut invoked_parameters,
+            invoked_parameter_members: &mut invoked_parameter_members,
             returned_bindings: &mut returned_binding_candidates,
             factory_calls: &mut factory_call_candidates,
         };
@@ -1598,8 +3292,11 @@ fn interprocedural_reads(
                         &nodes,
                         &nodes_by_path,
                         entities,
-                        contract_reads,
-                        contract_callbacks,
+                        symbol_names,
+                        InterproceduralContracts {
+                            reads: contract_reads,
+                            callbacks: contract_callbacks,
+                        },
                         lookup,
                     )
                 });
@@ -1616,8 +3313,11 @@ fn interprocedural_reads(
                             &nodes,
                             &nodes_by_path,
                             entities,
-                            contract_reads,
-                            contract_callbacks,
+                            symbol_names,
+                            InterproceduralContracts {
+                                reads: contract_reads,
+                                callbacks: contract_callbacks,
+                            },
                             lookup,
                         )
                     })
@@ -1662,44 +3362,56 @@ fn interprocedural_reads(
         .collect::<Vec<_>>();
     loop {
         let mut changed = false;
-        for &(owner, target, target_parameter, owner_parameter) in &callback_forwardings {
-            for callback in callback_summaries[target]
+        for (owner, target, target_parameter, owner_parameter, ambient_execution) in
+            &callback_forwardings
+        {
+            for callback in callback_summaries[*target]
                 .iter()
-                .filter(|callback| callback.parameter == target_parameter)
+                .filter(|callback| callback.parameter == *target_parameter)
                 .cloned()
                 .collect::<Vec<_>>()
             {
                 let forwarded = ContractCallback {
-                    parameter: owner_parameter,
-                    execution: callback.execution,
+                    parameter: *owner_parameter,
+                    execution: if callback.execution == "inline" {
+                        ambient_execution.clone().unwrap_or(callback.execution)
+                    } else {
+                        callback.execution
+                    },
                 };
-                if !callback_summaries[owner].contains(&forwarded) {
-                    callback_summaries[owner].push(forwarded);
+                if !callback_summaries[*owner].contains(&forwarded) {
+                    callback_summaries[*owner].push(forwarded);
                     changed = true;
                 }
             }
-            for obligation in contract_generation_obligations[target]
+            for obligation in contract_generation_obligations[*target]
                 .iter()
-                .filter(|obligation| obligation.parameter == target_parameter)
+                .filter(|obligation| obligation.parameter == *target_parameter)
                 .cloned()
                 .collect::<Vec<_>>()
             {
                 let forwarded = ContractGenerationObligation {
-                    function: nodes[owner]
+                    function: nodes[*owner]
                         .name
                         .clone()
                         .unwrap_or_else(|| "<anonymous>".into()),
-                    parameter: owner_parameter,
+                    function_identity: nodes[*owner].runtime_identity.clone(),
+                    parameter: *owner_parameter,
+                    package: obligation.package.clone(),
+                    entrypoint: obligation.entrypoint.clone(),
+                    parameter_type: obligation.parameter_type.clone(),
+                    required_execution: obligation.required_execution.clone(),
+                    contract_stub: obligation.contract_stub.clone(),
                     location: obligation.location,
                     message: format!(
                         "parameter {owner_parameter} reaches unresolved behavior through {}; {}",
-                        nodes[target].name.as_deref().unwrap_or("<anonymous>"),
+                        nodes[*target].name.as_deref().unwrap_or("<anonymous>"),
                         obligation.message
                     ),
                 };
                 let key = (forwarded.parameter, forwarded.location.clone());
-                if contract_generation_obligation_keys[owner].insert(key) {
-                    contract_generation_obligations[owner].push(forwarded);
+                if contract_generation_obligation_keys[*owner].insert(key) {
+                    contract_generation_obligations[*owner].push(forwarded);
                     changed = true;
                 }
             }
@@ -1708,12 +3420,6 @@ fn interprocedural_reads(
             break;
         }
     }
-    let contract_generation_obligations = contract_generation_obligations
-        .into_iter()
-        .enumerate()
-        .filter(|(index, _)| nodes[*index].exported)
-        .flat_map(|(_, obligations)| obligations)
-        .collect::<Vec<_>>();
     let graph = phase_started.elapsed();
     phase_started = Instant::now();
     let owned_reactive_sources;
@@ -1768,7 +3474,7 @@ fn interprocedural_reads(
                     project_indexes,
                     entities,
                     symbol_names,
-                    lookup.dialect,
+                    lookup,
                 );
                 merge_typed_accessors(file.path.as_str(), &contributions, &indexes, &mut summaries);
             }
@@ -1795,7 +3501,7 @@ fn interprocedural_reads(
                         project_indexes,
                         entities,
                         symbol_names,
-                        lookup.dialect,
+                        lookup,
                     );
                     cache.insert(
                         file.path.clone(),
@@ -1823,19 +3529,25 @@ fn interprocedural_reads(
             .returns
             .iter()
             .filter(|returned| {
-                returned.value == solid_facts::ast::ReturnValueKind::Function
-                    && returned.argument.is_some_and(|argument| {
-                        go_returned_arrow_pattern_accepts(file.source.as_ref(), argument)
-                    })
-                    && containing_summary_function_indexed(
-                        &nodes,
-                        &nodes_by_path,
-                        file.path.as_str(),
-                        returned.span,
-                    ) == Some(index)
+                containing_summary_function_indexed(
+                    &nodes,
+                    &nodes_by_path,
+                    file.path.as_str(),
+                    returned.span,
+                ) == Some(index)
             })
-            .filter_map(|returned| returned.argument)
+            .flat_map(|returned| {
+                returned
+                    .argument
+                    .into_iter()
+                    .flat_map(|argument| returned_function_spans(file, argument, entities))
+            })
             .collect::<Vec<_>>();
+        for closure in &returned_closures {
+            if let Some(target) = indexes.get(&(node.path.clone(), *closure)) {
+                returned_edges.push((index, *target));
+            }
+        }
         for returned_value in file.ast.returns.iter().filter(|returned| {
             containing_summary_function_indexed(
                 &nodes,
@@ -1847,24 +3559,31 @@ fn interprocedural_reads(
             match returned_value.value {
                 solid_facts::ast::ReturnValueKind::Identifier => {
                     let returned_location = location(file.path.shared(), returned_value.span);
-                    if let Some(symbol) = entities.get(&returned_location)
-                        && returned_source_symbols.contains(symbol)
-                        && let Some((display, declaration)) = accessors.get(symbol)
-                    {
-                        returned[index].push_unique(SummaryRead {
-                            symbol: symbol.clone(),
-                            display: display.clone(),
-                            kind: Some(
-                                match source_kinds.get(symbol.as_str()) {
-                                    Some(ReactiveSourceKind::Store) => "store-path",
-                                    Some(ReactiveSourceKind::Accessor) | None => "accessor",
-                                }
-                                .into(),
-                            ),
-                            declaration: declaration.clone(),
-                            origin: returned_location,
-                            origin_context: node.name.clone().unwrap_or_default(),
-                        });
+                    if let Some(symbol) = entities.get(&returned_location) {
+                        if returned_source_symbols.contains(symbol)
+                            && let Some((display, declaration)) = accessors.get(symbol)
+                        {
+                            returned[index].push_unique(SummaryRead {
+                                symbol: symbol.clone(),
+                                display: display.clone(),
+                                kind: Some(
+                                    match source_kinds.get(symbol.as_str()) {
+                                        Some(ReactiveSourceKind::Store) => "store-path",
+                                        Some(ReactiveSourceKind::Accessor) | None => "accessor",
+                                    }
+                                    .into(),
+                                ),
+                                declaration: declaration.clone(),
+                                origin: returned_location,
+                                origin_context: node.name.clone().unwrap_or_default(),
+                            });
+                        } else if let Some(target) = by_symbol.get(symbol).copied()
+                            && target != index
+                        {
+                            for read in summaries[target].iter() {
+                                returned[index].push_unique(read.clone());
+                            }
+                        }
                     }
                 }
                 solid_facts::ast::ReturnValueKind::Call => {
@@ -1877,7 +3596,9 @@ fn interprocedural_reads(
                         .into_iter()
                         .flat_map(|index| index.calls_by_callee(callee))
                         .find(|call| {
-                            !call.type_arguments && returned_value.argument == Some(call.span)
+                            returned_value.argument.is_some_and(|argument| {
+                                file.ast.peel_ts_sugar_span(argument) == call.span
+                            })
                         })
                     else {
                         continue;
@@ -1937,11 +3658,7 @@ fn interprocedural_reads(
                     && read.origin.end_byte <= u64::from(closure.end)
             });
             if in_returned_closure {
-                if returned_source_symbols.contains(&read.symbol) {
-                    returned[index].push(read);
-                } else {
-                    direct.push(read);
-                }
+                returned[index].push(read);
             } else {
                 direct.push(read);
             }
@@ -1963,6 +3680,51 @@ fn interprocedural_reads(
     }
     let mut propagated_lengths = vec![0; summaries.len()];
     propagate_summary_deltas(&mut summaries, &reverse_edges, &mut propagated_lengths);
+
+    // Composite structural dispatch is intentionally a second phase. The
+    // first propagation computes each exact implementation's own summary;
+    // only an equal set of summaries may then be attached to the caller. If
+    // one candidate is missing or differs in reads, callbacks, or async
+    // shape, the call remains uncertifiable and contributes no edge.
+    let mut dispatch_edges_added = false;
+    for (owner, candidates) in &dispatches {
+        let Some(first) = candidates.first().copied() else {
+            continue;
+        };
+        let equivalent = candidates.iter().all(|candidate| {
+            contract_generation_obligations[*candidate].is_empty()
+                && equivalent_summary_reads(&summaries[*candidate], &summaries[first])
+                && equivalent_callbacks(&callback_summaries[*candidate], &callback_summaries[first])
+                && invoked_parameters[*candidate] == invoked_parameters[first]
+                && invoked_parameter_members[*candidate] == invoked_parameter_members[first]
+                && nodes[*candidate].r#async == nodes[first].r#async
+        });
+        if !equivalent {
+            continue;
+        }
+        for target in candidates.iter().copied() {
+            if !edges[*owner].contains(&target) {
+                edges[*owner].push(target);
+                reverse_edges[target].push(*owner);
+                let target_reads = summaries[target].to_vec();
+                for read in target_reads {
+                    if summaries[*owner].push_unique(read) {
+                        dispatch_edges_added = true;
+                    }
+                }
+            }
+        }
+    }
+    if dispatch_edges_added {
+        propagate_summary_deltas(&mut summaries, &reverse_edges, &mut propagated_lengths);
+    }
+
+    let contract_generation_obligations = contract_generation_obligations
+        .into_iter()
+        .enumerate()
+        .filter(|(index, _)| nodes[*index].exported)
+        .flat_map(|(_, obligations)| obligations)
+        .collect::<Vec<_>>();
 
     for (index, node) in nodes.iter().enumerate() {
         let Some(&file) = project_indexes.files_by_path.get(node.path.as_str()) else {
@@ -2044,6 +3806,7 @@ fn interprocedural_reads(
         by_symbol: &by_symbol,
         summaries: &summaries,
         invoked_parameters: &invoked_parameters,
+        invoked_parameter_members: &invoked_parameter_members,
         returned_bindings: &returned_bindings,
     };
     let result_read_context = InterproceduralResultReadContext {
@@ -2189,9 +3952,40 @@ fn interprocedural_reads(
         by_symbol: &by_symbol,
         entities,
     };
+    let mut structured_returns = vec![None; nodes.len()];
+    for _ in 0..=nodes.len() {
+        let discovered = discover_structured_returns(&StructuredReturnDiscovery {
+            facts,
+            nodes: &nodes,
+            indexes: &indexes,
+            by_symbol: &by_symbol,
+            summaries: &summaries,
+            returned: &returned,
+            structured_returns: &structured_returns,
+            accessors,
+            source_kinds,
+            source_primitives,
+            bundled_returns,
+            contract_returns,
+            entities,
+            symbol_names,
+            lookup,
+        });
+        let mut changed = false;
+        for (target, returned) in structured_returns.iter_mut().zip(discovered) {
+            if *target != returned {
+                *target = returned;
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
     let contract_analysis = ContractAnalysis {
         summaries: &summaries,
         returned: &returned,
+        structured_returns: &structured_returns,
         callbacks: &callback_summaries,
         semantics: ContractSemantics {
             bundled_returns,
@@ -2256,8 +4050,9 @@ mod tests {
     use typefacts::Location;
 
     use super::{
-        SummaryRead, SummaryReads, SymbolId, add_interprocedural_dependency_user,
-        cached_reactive_source, primitive_callback_execution, reactive_source_order,
+        ContractCallback, SummaryRead, SummaryReads, SymbolId, add_interprocedural_dependency_user,
+        cached_reactive_source, equivalent_callbacks, equivalent_summary_reads,
+        primitive_callback_execution, reactive_source_order,
         remove_interprocedural_dependency_user, retained_reactive_sources,
     };
     use crate::cache::InterproceduralResultDependency;
@@ -2279,6 +4074,59 @@ mod tests {
             origin: location(origin),
             origin_context: "test".to_owned(),
         }
+    }
+
+    fn reads(entries: &[SummaryRead]) -> SummaryReads {
+        let mut summary = SummaryReads::default();
+        for entry in entries {
+            summary.push(entry.clone());
+        }
+        summary
+    }
+
+    /// The dispatch gate unions every candidate's reads once it returns true,
+    /// so a read only one candidate performs must fail it. Same-length
+    /// containment does not catch that: `[count, count]` and `[count, other]`
+    /// are the same length and every member of the first is in the second.
+    #[test]
+    fn dispatch_equivalence_rejects_a_read_only_one_candidate_performs() {
+        let repeated = reads(&[read("sym-a", "count", 10), read("sym-a", "count", 11)]);
+        let distinct = reads(&[read("sym-a", "count", 12), read("sym-b", "other", 13)]);
+        assert!(!equivalent_summary_reads(&repeated, &distinct));
+        assert!(!equivalent_summary_reads(&distinct, &repeated));
+    }
+
+    /// Reading one accessor twice is the same effect as reading it once, so a
+    /// differing repeat count -- or a differing origin line -- must not make
+    /// the dispatch fail closed.
+    #[test]
+    fn dispatch_equivalence_ignores_repeat_count_and_origin() {
+        let twice = reads(&[read("sym-a", "count", 10), read("sym-a", "count", 11)]);
+        let once = reads(&[read("sym-a", "count", 99)]);
+        assert!(equivalent_summary_reads(&twice, &once));
+        assert!(equivalent_summary_reads(&once, &twice));
+    }
+
+    #[test]
+    fn dispatch_equivalence_accepts_the_same_read_set() {
+        let left = reads(&[read("sym-a", "count", 10), read("sym-b", "other", 11)]);
+        let right = reads(&[read("sym-b", "other", 20), read("sym-a", "count", 21)]);
+        assert!(equivalent_summary_reads(&left, &right));
+    }
+
+    #[test]
+    fn callback_equivalence_rejects_timing_only_one_candidate_declares() {
+        let callback = |parameter, execution: &str| ContractCallback {
+            parameter,
+            execution: execution.to_owned(),
+        };
+        let repeated = [callback(0, "deferred"), callback(0, "deferred")];
+        let distinct = [callback(0, "deferred"), callback(1, "inline")];
+        assert!(!equivalent_callbacks(&repeated, &distinct));
+        assert!(!equivalent_callbacks(&distinct, &repeated));
+        // The same timing set in a different order stays equivalent.
+        let reordered = [callback(1, "inline"), callback(0, "deferred")];
+        assert!(equivalent_callbacks(&distinct, &reordered));
     }
 
     #[test]
@@ -2339,27 +4187,27 @@ mod tests {
     fn effect_callback_executions_come_from_the_dialect() {
         let solid2 = solid_dialect::Solid2;
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateEffect), 0, &solid2),
+            primitive_callback_execution(Some(Primitive::CreateEffect), 0, 2, &solid2),
             Some("tracked")
         );
         // 2.0's second effect argument is the deferred apply callback.
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateEffect), 1, &solid2),
+            primitive_callback_execution(Some(Primitive::CreateEffect), 1, 2, &solid2),
             Some("deferred")
         );
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateEffect), 2, &solid2),
+            primitive_callback_execution(Some(Primitive::CreateEffect), 2, 2, &solid2),
             None
         );
 
         let solid1x = solid_dialect::Solid1x;
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateEffect), 0, &solid1x),
+            primitive_callback_execution(Some(Primitive::CreateEffect), 0, 2, &solid1x),
             Some("tracked")
         );
         // 1.x's second argument is a seed value, not a callback.
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateEffect), 1, &solid1x),
+            primitive_callback_execution(Some(Primitive::CreateEffect), 1, 2, &solid1x),
             None
         );
     }
@@ -2368,33 +4216,47 @@ mod tests {
     fn non_effect_callback_executions_use_the_module_classification() {
         let dialect = solid_dialect::Solid2;
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateMemo), 0, &dialect),
+            primitive_callback_execution(Some(Primitive::CreateMemo), 0, 1, &dialect),
             Some("tracked")
         );
         // The module deliberately labels `untrack`/`flush` "deferred" (see
         // the function's doc comment) even though the dialect vocabulary
         // calls them inline.
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::Untrack), 0, &dialect),
+            primitive_callback_execution(Some(Primitive::Untrack), 0, 1, &dialect),
             Some("deferred")
         );
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::Flush), 0, &dialect),
+            primitive_callback_execution(Some(Primitive::Flush), 0, 1, &dialect),
             Some("deferred")
         );
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::CreateRoot), 0, &dialect),
+            primitive_callback_execution(Some(Primitive::CreateRoot), 0, 1, &dialect),
             Some("inline")
         );
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::RunWithOwner), 1, &dialect),
+            primitive_callback_execution(Some(Primitive::RunWithOwner), 1, 2, &dialect),
             Some("inline")
         );
         assert_eq!(
-            primitive_callback_execution(Some(Primitive::RunWithOwner), 0, &dialect),
+            primitive_callback_execution(Some(Primitive::RunWithOwner), 0, 2, &dialect),
             None
         );
-        assert_eq!(primitive_callback_execution(None, 0, &dialect), None);
+        assert_eq!(primitive_callback_execution(None, 0, 0, &dialect), None);
+
+        let solid1x = solid_dialect::Solid1x;
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::On), 0, 2, &solid1x),
+            Some("deferred")
+        );
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::On), 1, 2, &solid1x),
+            Some("deferred")
+        );
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::MergeProps), 3, 4, &solid1x),
+            Some("tracked")
+        );
     }
 
     #[test]

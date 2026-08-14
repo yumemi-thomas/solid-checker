@@ -18,6 +18,7 @@ use crate::{
 /// The few phrases where shared static-defect concepts use dialect APIs.
 pub struct StaticDefectTerms {
     pub props_destructure_hint: &'static str,
+    pub reactive_object_destructure_hint: &'static str,
     pub missing_effect_message: &'static str,
     pub missing_effect_hint: &'static str,
     pub tracked_derived_scope: &'static str,
@@ -40,10 +41,24 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             "the Solid compiler did not classify this JSX expression as tracked, untracked, or a callback; without an execution role, solid-checker cannot certify any reactive read inside it".into(),
             "Simplify the expression: hoist complex logic into a createMemo and interpolate the accessor. If this persists on plain JSX, re-run with fresh compiler facts and report the pattern as a solid-checker issue.".into(),
         ),
-        StaticDefectKind::ComponentPropsDestructure => (
-            "destructuring props unwraps each property once at component setup; the bindings are frozen values, and the component never updates when the parent passes new props".into(),
-            terms.props_destructure_hint.into(),
-        ),
+        StaticDefectKind::ReactiveObjectDestructure {
+            source,
+            component_props,
+        } => {
+            if *component_props {
+                (
+                    "destructuring props unwraps each property once outside tracking; the bindings are frozen values, and the component never updates when the parent passes new props".into(),
+                    terms.props_destructure_hint.into(),
+                )
+            } else {
+                (
+                    format!(
+                        "destructuring reactive object {source:?} reads its properties once outside tracking; the bindings are frozen values and do not update when the reactive object changes"
+                    ),
+                    terms.reactive_object_destructure_hint.into(),
+                )
+            }
+        }
         StaticDefectKind::ReactiveReadAfterAwait { accessor } => (
             format!(
                 "reactive accessor {accessor:?} is read after an await; dependency tracking ends at the first await, so this read registers no dependency and the computation never re-runs when {accessor:?} changes"
@@ -53,6 +68,32 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ComponentReturnsConditionally => (
             "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
             "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
+        ),
+        StaticDefectKind::PreferComponentSyntax { name } => (
+            format!(
+                "JSX-returning function {name:?} is called imperatively inside JSX; this hides component identity and can evaluate setup logic in the caller's reactive expression"
+            ),
+            format!(
+                "Rename it with an uppercase component name and render it as <{} />. If this is intentionally a value helper, return data rather than JSX.",
+                uppercase_first(name)
+            ),
+        ),
+        StaticDefectKind::ImplicitDraggableBoolean => (
+            "the draggable attribute uses JSX boolean shorthand, which emits an empty attribute value; HTML treats that as the invalid/default state rather than draggable=true".into(),
+            "Write draggable=\"true\" for a static attribute, or draggable={condition} for a dynamic boolean value.".into(),
+        ),
+        StaticDefectKind::InvalidJsxNesting {
+            parent,
+            child,
+            ancestor,
+        } => (
+            format!(
+                "HTML parsing changes <{child}> nested {} <{parent}>, so the browser DOM differs from the authored JSX and can fail hydration",
+                if *ancestor { "inside" } else { "directly under" }
+            ),
+            format!(
+                "Move <{child}> outside <{parent}> or add the HTML-required wrapper so the server and browser construct the same tree."
+            ),
         ),
         StaticDefectKind::PackageContractExportMissing {
             module,
@@ -65,6 +106,22 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             ),
             format!(
                 "Add an export summary for {export} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+            ),
+        ),
+        StaticDefectKind::UnknownCallbackExecution {
+            package,
+            entrypoint,
+            function,
+            parameter,
+            parameter_type,
+            required_execution,
+            contract_stub,
+        } => (
+            format!(
+                "callback parameter {parameter} ({parameter_type}) of {package}{entrypoint}:{function} reaches a call whose execution timing is unknown; this callback cannot be certified"
+            ),
+            format!(
+                "Audit the implementation and add an explicit contract for {package}{entrypoint} export {function} with callback parameter {parameter}. Required behavior: {required_execution}. Generate from package source with `solid-checker contract generate --package-root <package-root> --entrypoint {entrypoint}`, or edit this JSON stub (then replace its placeholders and review the evidence): {contract_stub}"
             ),
         ),
         StaticDefectKind::MissingEffectFunction => (
@@ -122,14 +179,35 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
     };
     let evidence = match &defect.kind {
-        StaticDefectKind::ComponentPropsDestructure => {
-            "the destructuring pattern is bound to proven component props"
+        StaticDefectKind::ReactiveObjectDestructure {
+            component_props: true,
+            ..
+        } => {
+            "the destructuring pattern is bound to proven component props and executes outside tracking"
+        }
+        StaticDefectKind::ReactiveObjectDestructure {
+            component_props: false,
+            ..
+        } => {
+            "the destructuring initializer is proven to return a reactive object and executes outside tracking"
         }
         StaticDefectKind::ComponentReturnsConditionally => {
             "a proven reactive read controls the component's return shape"
         }
+        StaticDefectKind::PreferComponentSyntax { .. } => {
+            "the resolved local function directly returns JSX and this call is inside JSX"
+        }
+        StaticDefectKind::ImplicitDraggableBoolean => {
+            "the intrinsic draggable attribute has no explicit value"
+        }
+        StaticDefectKind::InvalidJsxNesting { .. } => {
+            "the intrinsic JSX ancestor chain is statically known and HTML parsing changes this nesting"
+        }
         StaticDefectKind::PackageContractExportMissing { .. } => {
             "the imported package has a contract, but this export has no effect summary"
+        }
+        StaticDefectKind::UnknownCallbackExecution { .. } => {
+            "TypeScript resolved the callable parameter, but no exact runtime contract proves when the external helper invokes it"
         }
         StaticDefectKind::ExecutionMapIncomplete
         | StaticDefectKind::ReactiveReadAfterAwait { .. }
@@ -148,6 +226,13 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         hint,
         evidence,
     }
+}
+
+fn uppercase_first(value: &str) -> String {
+    let mut characters = value.chars();
+    characters.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(characters).collect()
+    })
 }
 
 /// The program tables a dialect catalog intentionally projects.
@@ -264,7 +349,7 @@ pub fn project_findings(
         program
             .writes
             .iter()
-            .filter(|write| !write.allowed_by_option && !write.execution.permits_write())
+            .filter(|write| !write.allowed_by_option && write.execution.reports_disallowed_write())
             .map(|write| project_finding(FindingSeed::OwnedWrite(write), catalog)),
     );
     findings.extend(
@@ -317,6 +402,7 @@ pub fn project_findings(
                 .iter()
                 .filter(|read| {
                     read.leaf_owner.is_some()
+                        || read.execution == crate::ExecutionRole::ModuleInitialization
                         || read.execution == crate::ExecutionRole::UntrackedRendering
                         || read.execution == crate::ExecutionRole::TrackedJsx && !read.under_loading
                 })
@@ -328,7 +414,7 @@ pub fn project_findings(
             program
                 .actions
                 .iter()
-                .filter(|action| !action.execution.permits_write())
+                .filter(|action| action.execution.reports_disallowed_write())
                 .map(|action| project_finding(FindingSeed::Action(action), catalog)),
         );
     }

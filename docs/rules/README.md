@@ -47,9 +47,9 @@ that exact rule in the shared project configuration described below.
 
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
-| Shared concepts (20 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
+| Shared concepts (24 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
 | Version-only concepts | 18 rules: `v1/no-async-tracked-scope` plus the SC8001–SC8017 ESLint-era surface | 14 rules: actions, `flush`, returned cleanup, async computations, `refresh`/`affects`, and their proof obligations |
-| Catalog size | 38 rules | 34 rules |
+| Catalog size | 42 rules | 38 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -118,6 +118,14 @@ rule's page documents its additional options and defaults.
 | SC1006 | [untracked-derived-function](untracked-derived-function.md) | warning |
 | SC1007 | [expected-function-got-expression](expected-function-got-expression.md) | warning |
 
+## JSX correctness
+
+| Code | Rule | Severity |
+| --- | --- | --- |
+| SC8018 | [prefer-component-syntax](prefer-component-syntax.md) | warning |
+| SC8019 | [no-implicit-draggable](no-implicit-draggable.md) | error |
+| SC8020 | [valid-jsx-nesting](valid-jsx-nesting.md) | error |
+
 ## Writes & actions
 
 | Code | Rule | Severity |
@@ -177,6 +185,7 @@ rule's page documents its additional options and defaults.
 | SC9003 | [refresh-target-unresolved](refresh-target-unresolved.md) | error |
 | SC9003 | [affects-target-unresolved](affects-target-unresolved.md) | error |
 | SC9004 | [execution-map-incomplete](execution-map-incomplete.md) | error |
+| SC9006 | [package-contract-callback-missing](package-contract-callback-missing.md) | error |
 | SC9005 | [package-contract-missing](package-contract-missing.md) | error |
 | SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning |
 
@@ -234,6 +243,7 @@ plugin keeps its rule names under the `v1/` namespace.
 | SC8017 | [v1/style-prop](v1/style-prop.md) | warning |
 | SC9001 | [v1/package-contract-export-missing](v1/package-contract-export-missing.md) | error |
 | SC9004 | [v1/execution-map-incomplete](v1/execution-map-incomplete.md) | error |
+| SC9006 | [v1/package-contract-callback-missing](v1/package-contract-callback-missing.md) | error |
 | SC9005 | [v1/package-contract-missing](v1/package-contract-missing.md) | error |
 | SC9011 | [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) | warning |
 

@@ -20,8 +20,8 @@ use crate::{
     ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
     ContractGenerationObligation, InvalidCleanupReturn, LeafOwnerOperation, ObligationCounts,
     OwnerRequirement, PackageContract, PrimitiveCreation, Program, ReactiveRead,
-    ReactiveSourceKind, ReactiveWrite, Solid1xRuleOptions, StaticDefect, StaticViolation,
-    UnresolvedCleanupReturn, location_order,
+    ReactiveSourceKind, ReactiveWrite, RuleOptions, Solid1xRuleOptions, StaticDefect,
+    StaticViolation, UnresolvedCleanupReturn, location_order,
 };
 use crate::{cleanup, directives, owners, reactive_analysis, static_api, static_rules};
 use solid_dialect::Dialect;
@@ -128,11 +128,12 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) source_owned_write: &'a HashMap<SymbolId, bool>,
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
-    pub(crate) rule_options: &'a Solid1xRuleOptions,
+    pub(crate) solid1x_rule_options: &'a Solid1xRuleOptions,
 }
 
 pub fn build(facts: &ProjectFacts, dialect: &dyn Dialect) -> Result<Program, BuildError> {
@@ -156,7 +157,7 @@ pub fn build_with_contracts_measured(
         facts,
         dialect,
         contracts,
-        &Solid1xRuleOptions::default(),
+        &RuleOptions::default(),
         BuildCaches::default(),
     )
 }
@@ -181,7 +182,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
     facts: &ProjectFacts,
     dialect: &dyn Dialect,
     contracts: &[PackageContract],
-    rule_options: &Solid1xRuleOptions,
+    rule_options: &RuleOptions,
     caches: BuildCaches<'_>,
 ) -> Result<(Program, BuildTimings), BuildError> {
     let BuildCaches {
@@ -227,10 +228,13 @@ pub(crate) fn build_with_contracts_measured_incremental(
     };
     let project_indexes = ProjectIndexes::new(facts, ast_indexes);
     build_timings.project_indexes = substage_started.elapsed();
-    let reuse = ReusePlan::prepare(facts, late_stage_cache.as_deref_mut());
+    let typescript_unchanged = facts
+        .typescript_changes
+        .as_ref()
+        .is_some_and(|changes| changes.unchanged);
     let owned_typescript_indexes;
     let typescript_indexes = if let Some(cache) = typescript_indexes_cache {
-        let patch_timings = (!reuse.typescript_unchanged)
+        let patch_timings = (!typescript_unchanged)
             .then(|| {
                 cache.as_mut().and_then(|cached| {
                     facts.typescript_changes.as_ref().and_then(|changes| {
@@ -251,7 +255,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
             build_timings.entity_symbols = entity_symbols;
             build_timings.alias_and_entity_indexes = alias_roots + entity_symbols;
         }
-        if (!reuse.typescript_unchanged && !indexes_patched) || cache.is_none() {
+        if (!typescript_unchanged && !indexes_patched) || cache.is_none() {
             let substage_started = Instant::now();
             let (indexes, alias_roots, entity_symbols) =
                 build_typescript_indexes(&facts.typescript, dialect, facts.files.len() >= 256);
@@ -283,12 +287,25 @@ pub(crate) fn build_with_contracts_measured_incremental(
     let substage_started = Instant::now();
     let mut resolved_contracts = resolve_contract_imports(facts, contracts, entities, dialect);
     build_timings.contract_resolution = substage_started.elapsed();
-    let semantic_lookup = SemanticLookup::new(facts, ast_indexes, entities, &symbol_names, dialect);
+    let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
+    let semantic_lookup = SemanticLookup::new(
+        facts,
+        ast_indexes,
+        entities,
+        &symbol_names,
+        dialect,
+        &resolved_contracts,
+    );
     let semantic_lookup = &semantic_lookup;
+    let reuse = ReusePlan::prepare(
+        facts,
+        late_stage_cache.as_deref_mut(),
+        semantic_lookup.cross_file_proof_digest(),
+    );
     // Source discovery does not inspect missing exports, and the static prepass
     // owns them after the two independent index passes complete.
     let mut draft = ProgramDraft {
-        static_defects: std::mem::take(&mut resolved_contracts.missing_exports),
+        static_defects: missing_contract_exports,
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;
@@ -360,11 +377,12 @@ pub(crate) fn build_with_contracts_measured_incremental(
         prop_sources: &source_discovery.prop_sources,
         semantic_lookup,
         source_kinds: &source_discovery.source_kinds,
+        source_primitives: &source_discovery.source_primitives,
         source_owned_write: &source_discovery.source_owned_write,
         reachable_calls,
         symbols_by_root: &typescript_indexes.symbols_by_root,
         contracted: &resolved_contracts.by_symbol,
-        rule_options,
+        solid1x_rule_options: &rule_options.solid1x,
     };
     static_rules::static_prepass(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::StaticPrepass);

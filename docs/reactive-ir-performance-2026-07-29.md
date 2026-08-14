@@ -327,3 +327,25 @@ and directive work. This was telemetry-only and did not change analysis.
    by allocation profiles. Do not revive the rejected dense graph
    representation unchanged; it improved shape but regressed the complete
    pipeline.
+
+## Structured-return scaling follow-up — 2026-08-14
+
+The structured package-return analysis initially resolved every summary
+node's source file with a linear scan of the project on every fixed-point
+pass. The performance certification reproduced the resulting regression five
+times: doubling the corpus from 500 to 1,000 files scaled contract-export
+analysis by 2.95x to 3.07x, above the 2.8x ceiling.
+
+Structured-return discovery now uses `SemanticLookup`'s exact path index and
+maps its read-only per-node pass through the existing ordered Reactive IR
+worker budget. Five fresh certifications measured 1.85x to 1.99x export
+scaling, 64,854 to 67,465 ns/source first Reactive IR, 1,250 to 1,417 ns cached
+Reactive IR, 33.7 to 34.5 ms one-file incremental analysis, and 705 Type Facts
+bytes/source.
+
+A clean committed Solid 2 RC control, measured against the same corpus and
+Type Facts producer, used 52,668 to 53,894 ns/source first Reactive IR and
+24.2 to 25.0 ms incremental analysis. Type Facts server time differed by only
+0.4% in the direct 1,000-file comparison. The remaining end-to-end overhead
+comes from the broader in-progress interprocedural semantics, not the Solid 2
+compiler update or Type Facts.

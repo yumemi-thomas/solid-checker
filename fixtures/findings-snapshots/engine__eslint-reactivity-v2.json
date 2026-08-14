@@ -92,23 +92,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-write-in-owned-scope",
-      "code": "SC2001",
-      "kind": "violation",
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/cleanup-thunk-write.tsx",
-      "start": 403,
-      "end": 424,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v2/cleanup-thunk-write.tsx",
-      "start": 412,
-      "end": 419,
+      "start": 387,
+      "end": 396,
       "fixes": 0
     },
     {
@@ -309,6 +299,16 @@
       "path": "fixtures/engine/eslint-reactivity-v2/effect-apply-structural-store.tsx",
       "start": 134,
       "end": 146,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v2/effect-named-compute.tsx",
+      "start": 479,
+      "end": 491,
       "fixes": 0
     },
     {

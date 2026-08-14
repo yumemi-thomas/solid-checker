@@ -6,8 +6,7 @@ use crate::cache::{
     SourceDiscoveryIdentity, SourceDiscoveryTypeScriptDelta,
 };
 use crate::owners::{
-    computation_is_async, containing_ast_function, function_binding_name,
-    go_binding_pattern_accepts_call,
+    binding_returns_reactive_source, computation_is_async_with_contracts, containing_ast_function,
 };
 use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
 use crate::{
@@ -121,6 +120,126 @@ pub(crate) fn source_discovery_identity_matches(
     false
 }
 
+fn push_contracted_return_source(
+    result: &mut SourceDiscoveryContribution,
+    symbol: &SymbolId,
+    display: SymbolId,
+    returned: &ContractReturn,
+    export_name: &str,
+    contract_location: &Location,
+) {
+    if !matches!(returned.kind.as_str(), "accessor" | "store-path") {
+        return;
+    }
+    result
+        .accessors
+        .push((symbol.clone(), (display, contract_location.clone())));
+    result.contracted_accessor_symbols.push(symbol.clone());
+    result.accessor_origins.push((
+        symbol.clone(),
+        (
+            symbol_id(&returned.label),
+            symbol_id(export_name),
+            contract_location.clone(),
+        ),
+    ));
+    result.source_kinds.push((
+        symbol.clone(),
+        if returned.kind == "store-path" {
+            ReactiveSourceKind::Store
+        } else {
+            ReactiveSourceKind::Accessor
+        },
+    ));
+}
+
+struct EffectiveReturnContext<'a> {
+    file: &'a FileFacts,
+    ast_index: &'a CachedAstFileIndex,
+    entities: &'a EntitySymbols,
+    symbol_names: &'a HashMap<SymbolId, SymbolId>,
+    resolved_contracts: &'a ResolvedContracts,
+    bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
+    dialect: &'a dyn Dialect,
+}
+
+fn effective_call_return(
+    returned: &ContractReturn,
+    call: &solid_facts::ast::CallFact,
+    context: &EffectiveReturnContext<'_>,
+    depth: usize,
+) -> Option<ContractReturn> {
+    if returned.kind != "argument" {
+        return Some(returned.clone());
+    }
+    if depth == 0 {
+        return None;
+    }
+    let argument = call.arguments.get(returned.parameter?)?;
+    let inner = context.ast_index.call_by_span(argument.span).or_else(|| {
+        context
+            .file
+            .ast
+            .calls
+            .iter()
+            .filter(|candidate| argument.span.contains(candidate.span))
+            .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+    })?;
+    if let Some(contracted) = context
+        .entities
+        .at(context.file.path.as_str(), inner.callee)
+        .and_then(|symbol| context.resolved_contracts.by_symbol.get(symbol))
+        .and_then(|contracted| contracted.summary.returns.as_ref())
+    {
+        return effective_call_return(contracted, inner, context, depth - 1);
+    }
+    let primitive = primitive_name(
+        context.file.path.as_str(),
+        inner.callee,
+        inner.static_callee(&context.file.source),
+        context.entities,
+        context.symbol_names,
+        context.dialect,
+    );
+    if let Some(returned) = primitive
+        .as_deref()
+        .and_then(|primitive| context.bundled_returns.get(primitive))
+    {
+        return Some(returned.clone());
+    }
+    let primitive = known_primitive(&primitive)?;
+    let kind = if context.dialect.returns_store(primitive) {
+        "store-path"
+    } else {
+        "accessor"
+    };
+    if matches!(
+        primitive,
+        Primitive::CreateSignal | Primitive::CreateStore | Primitive::CreateResource
+    ) {
+        return Some(ContractReturn {
+            kind: "tuple".into(),
+            elements: vec![
+                Some(ContractReturn {
+                    kind: kind.into(),
+                    label: "wrapped reactive value".into(),
+                    ..ContractReturn::default()
+                }),
+                None,
+            ],
+            ..ContractReturn::default()
+        });
+    }
+    context
+        .dialect
+        .creates_reactive_source(primitive)
+        .then(|| ContractReturn {
+            kind: kind.into(),
+            label: "wrapped reactive value".into(),
+            ..ContractReturn::default()
+        })
+}
+
 pub(crate) fn discover_file_sources(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
@@ -144,34 +263,112 @@ pub(crate) fn discover_file_sources(
         if let Some(contracted) = contracted
             && let Some(contracted_return) = contracted.summary.returns.as_ref()
         {
-            if let Some(name) = binding.names.first() {
-                let declaration = location(file.path.shared(), name.span);
-                if let Some(symbol) = entities.get(&declaration) {
-                    result.accessors.push((
-                        symbol.clone(),
-                        (
-                            symbol_id(file.source_text(name.span).unwrap_or_default()),
-                            contracted.contract_location.clone(),
-                        ),
-                    ));
-                    result.contracted_accessor_symbols.push(symbol.clone());
-                    result.accessor_origins.push((
-                        symbol.clone(),
-                        (
-                            symbol_id(&contracted_return.label),
-                            symbol_id(&contracted.local_name),
-                            contracted.contract_location.clone(),
-                        ),
-                    ));
-                    result.source_kinds.push((
-                        symbol.clone(),
-                        if contracted_return.kind == "store-path" {
-                            ReactiveSourceKind::Store
-                        } else {
-                            ReactiveSourceKind::Accessor
-                        },
-                    ));
+            let context = EffectiveReturnContext {
+                file,
+                ast_index,
+                entities,
+                symbol_names,
+                resolved_contracts,
+                bundled_returns,
+                dialect: lookup.dialect,
+            };
+            let effective_return = effective_call_return(contracted_return, call, &context, 16);
+            let Some(contracted_return) = effective_return.as_ref() else {
+                continue;
+            };
+            match contracted_return.kind.as_str() {
+                "accessor" | "store-path" => {
+                    if let Some(name) = binding.names.first() {
+                        let declaration = location(file.path.shared(), name.span);
+                        if let Some(symbol) = entities.get(&declaration) {
+                            push_contracted_return_source(
+                                &mut result,
+                                symbol,
+                                symbol_id(file.source_text(name.span).unwrap_or_default()),
+                                contracted_return,
+                                &contracted.local_name,
+                                &contracted.contract_location,
+                            );
+                        }
+                    }
                 }
+                "tuple" if binding.shape == solid_facts::ast::BindingShape::Array => {
+                    for (name, returned) in binding
+                        .array_slots
+                        .iter()
+                        .zip(&contracted_return.elements)
+                        .filter_map(|(name, returned)| name.as_ref().zip(returned.as_ref()))
+                    {
+                        let declaration = location(file.path.shared(), name.span);
+                        if let Some(symbol) = entities.get(&declaration) {
+                            push_contracted_return_source(
+                                &mut result,
+                                symbol,
+                                symbol_id(file.source_text(name.span).unwrap_or_default()),
+                                returned,
+                                &contracted.local_name,
+                                &contracted.contract_location,
+                            );
+                        }
+                    }
+                }
+                "object" if binding.shape == solid_facts::ast::BindingShape::Object => {
+                    for slot in &binding.object_slots {
+                        let Some(returned) =
+                            contracted_return.properties.get(slot.property.as_str())
+                        else {
+                            continue;
+                        };
+                        let declaration = location(file.path.shared(), slot.local.span);
+                        if let Some(symbol) = entities.get(&declaration) {
+                            push_contracted_return_source(
+                                &mut result,
+                                symbol,
+                                symbol_id(file.source_text(slot.local.span).unwrap_or_default()),
+                                returned,
+                                &contracted.local_name,
+                                &contracted.contract_location,
+                            );
+                        }
+                    }
+                }
+                "object" => {
+                    let root = binding
+                        .names
+                        .first()
+                        .and_then(|name| entities.at(file.path.as_str(), name.span));
+                    if let Some(root_symbol) = root {
+                        for member in &file.ast.members {
+                            // Exact receiver identity only. A same-spelled
+                            // member elsewhere in the file -- a shadowing
+                            // local, an unrelated object -- is not this
+                            // contracted root, and registering its property
+                            // as a reactive source would invent a source the
+                            // contract never described.
+                            let same_root = entities
+                                .at(file.path.as_str(), member.object)
+                                .is_some_and(|symbol| symbol == root_symbol);
+                            if !same_root {
+                                continue;
+                            }
+                            let property = file.source_text(member.property).unwrap_or_default();
+                            let Some(returned) = contracted_return.properties.get(property) else {
+                                continue;
+                            };
+                            if let Some(symbol) = entities.at(file.path.as_str(), member.property) {
+                                push_contracted_return_source(
+                                    &mut result,
+                                    symbol,
+                                    symbol_id(property),
+                                    returned,
+                                    &contracted.local_name,
+                                    &contracted.contract_location,
+                                );
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
             continue;
         }
@@ -206,11 +403,14 @@ pub(crate) fn discover_file_sources(
                     result
                         .source_primitives
                         .push((symbol.clone(), "dynamic".into()));
-                    if call
-                        .arguments
-                        .first()
-                        .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
-                    {
+                    if call.arguments.first().is_some_and(|argument| {
+                        computation_is_async_with_contracts(
+                            lookup,
+                            file,
+                            argument.span,
+                            &resolved_contracts.by_symbol,
+                        )
+                    }) {
                         result.async_sources.push(symbol.clone());
                     }
                 }
@@ -256,9 +456,13 @@ pub(crate) fn discover_file_sources(
                 let go_returned_source = binding.shape == solid_facts::ast::BindingShape::Array
                     && matches!(
                         resolved,
-                        Some(Primitive::CreateSignal | Primitive::CreateStore)
+                        Some(
+                            Primitive::CreateSignal
+                                | Primitive::CreateStore
+                                | Primitive::CreateResource
+                        )
                     )
-                    && go_binding_pattern_accepts_call(file.source.as_ref(), binding, call);
+                    && binding_returns_reactive_source(binding, call);
                 result.source_phases.push((
                     symbol.clone(),
                     if go_returned_source && resolved == Some(Primitive::CreateStore) {
@@ -301,11 +505,14 @@ pub(crate) fn discover_file_sources(
                 result
                     .source_owned_write
                     .push((symbol.clone(), call.owned_write_option));
-                if call
-                    .arguments
-                    .first()
-                    .is_some_and(|argument| computation_is_async(lookup, file, argument.span))
-                {
+                if call.arguments.first().is_some_and(|argument| {
+                    computation_is_async_with_contracts(
+                        lookup,
+                        file,
+                        argument.span,
+                        &resolved_contracts.by_symbol,
+                    )
+                }) {
                     result.async_sources.push(symbol.clone());
                 }
             }
@@ -330,6 +537,144 @@ pub(crate) fn discover_file_sources(
                 ));
             }
         }
+    }
+    for assignment in &file.ast.assignments {
+        let (Some(initializer), Some(name)) = (
+            assignment.call_initializer,
+            assignment.array_slots.first().and_then(|slot| *slot),
+        ) else {
+            continue;
+        };
+        let Some(call) = ast_index.call_by_span(initializer) else {
+            continue;
+        };
+        let symbol = entities.at(file.path.as_str(), name);
+        let contracted = entities
+            .at(file.path.as_str(), call.callee)
+            .and_then(|callee| resolved_contracts.by_symbol.get(callee));
+        if let Some((symbol, (contracted_return, contracted))) = symbol.zip(
+            contracted
+                .and_then(|contracted| contracted.summary.returns.as_ref())
+                .and_then(|returned| returned.elements.first())
+                .and_then(Option::as_ref)
+                .zip(contracted),
+        ) {
+            push_contracted_return_source(
+                &mut result,
+                symbol,
+                symbol_id(file.source_text(name).unwrap_or_default()),
+                contracted_return,
+                &contracted.local_name,
+                &contracted.contract_location,
+            );
+            continue;
+        }
+        let primitive = primitive_name(
+            file.path.as_str(),
+            call.callee,
+            call.static_callee(&file.source),
+            entities,
+            symbol_names,
+            lookup.dialect,
+        );
+        let resolved = known_primitive(&primitive);
+        if !matches!(
+            resolved,
+            Some(Primitive::CreateSignal | Primitive::CreateStore | Primitive::CreateResource)
+        ) {
+            continue;
+        }
+        let Some(symbol) = symbol else {
+            continue;
+        };
+        let declaration = location(file.path.shared(), name);
+        let source_kind = if resolved == Some(Primitive::CreateStore) {
+            ReactiveSourceKind::Store
+        } else {
+            ReactiveSourceKind::Accessor
+        };
+        result.accessors.push((
+            symbol.clone(),
+            (
+                symbol_id(file.source_text(name).unwrap_or_default()),
+                declaration.clone(),
+            ),
+        ));
+        result.source_kinds.push((symbol.clone(), source_kind));
+        result.source_phases.push((
+            symbol.clone(),
+            if source_kind == ReactiveSourceKind::Store {
+                2
+            } else {
+                0
+            },
+        ));
+        result.returned_source_symbols.push(symbol.clone());
+        result.summary_source_symbols.push(symbol.clone());
+        if let Some(primitive) = primitive.as_deref() {
+            result
+                .source_primitives
+                .push((symbol.clone(), primitive.into()));
+            if let Some(returned) = bundled_returns.get(primitive) {
+                result.accessor_origins.push((
+                    symbol.clone(),
+                    (
+                        symbol_id(&returned.label),
+                        primitive.into(),
+                        bundled_contract_location(lookup.dialect, primitive),
+                    ),
+                ));
+            }
+        }
+        result
+            .source_owned_write
+            .push((symbol.clone(), call.owned_write_option));
+        if let Some(setter) = assignment.array_slots.get(1).and_then(|slot| *slot)
+            && let Some(setter_symbol) = entities.at(file.path.as_str(), setter)
+        {
+            result.setters.push((
+                setter_symbol.clone(),
+                (
+                    symbol_id(file.source_text(setter).unwrap_or_default()),
+                    location(file.path.shared(), setter),
+                    call.owned_write_option,
+                    source_kind,
+                ),
+            ));
+        }
+    }
+    for member in &file.ast.members {
+        let Some(call) = ast_index.call_by_span(member.object) else {
+            continue;
+        };
+        let Some(contracted) = entities
+            .at(file.path.as_str(), call.callee)
+            .and_then(|symbol| resolved_contracts.by_symbol.get(symbol))
+        else {
+            continue;
+        };
+        let Some(contracted_return) = contracted.summary.returns.as_ref() else {
+            continue;
+        };
+        let property = file.source_text(member.property).unwrap_or_default();
+        let returned = match contracted_return.kind.as_str() {
+            "object" => contracted_return.properties.get(property),
+            "store-path" => Some(contracted_return),
+            _ => None,
+        };
+        let Some((returned, symbol)) =
+            returned.zip(entities.at(file.path.as_str(), member.property))
+        else {
+            continue;
+        };
+        push_contracted_return_source(
+            &mut result,
+            symbol,
+            symbol_id(property),
+            returned,
+            &contracted.local_name,
+            &contracted.contract_location,
+        );
     }
     result
 }
@@ -678,7 +1023,8 @@ pub(crate) fn discover_sources(
                                 &file.source_hash,
                                 typescript_unchanged,
                                 typescript_indexes.source_discovery_delta.as_ref(),
-                            )
+                            ) && cached.cross_file_proofs
+                                == semantic_lookup.cross_file_proof_digest()
                         })
                         .then_some(file.path.as_str())
                 })
@@ -727,6 +1073,7 @@ pub(crate) fn discover_sources(
                     file.path.clone(),
                     CachedSourceDiscovery {
                         identity,
+                        cross_file_proofs: semantic_lookup.cross_file_proof_digest(),
                         contribution,
                     },
                 );
@@ -776,20 +1123,66 @@ pub(crate) fn discover_sources(
         if resolved_contracts.by_symbol.contains_key(symbol) {
             continue;
         }
+        let Some((role, type_declaration)) =
+            descriptor
+                .alias_declarations
+                .iter()
+                .find_map(|declaration| {
+                    semantic_lookup
+                        .dialect
+                        .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
+                        .map(|role| (role, declaration.location.clone()))
+                })
+        else {
+            continue;
+        };
+        if role == solid_dialect::TypeRole::Component {
+            continue;
+        }
         let declaration = source_declarations.get(symbol);
         let (name, local_location) = declaration.map_or_else(
             || ("accessor".into(), entity.location.clone()),
             |declaration| (declaration.name.clone(), declaration.location.clone()),
         );
-        let declaration_location = descriptor
-            .alias_declarations
-            .iter()
-            .find(|declaration| matches!(declaration.name.as_ref(), "Accessor" | "Setter"))
-            .map_or(local_location, |declaration| declaration.location.clone());
-        accessors
-            .entry(symbol.clone())
-            .or_insert((symbol_id(name.as_ref()), declaration_location));
-        source_phases.entry(symbol.clone()).or_insert(1);
+        let declaration_location = if type_declaration.path.is_empty() {
+            local_location
+        } else {
+            type_declaration
+        };
+        match role {
+            solid_dialect::TypeRole::Accessor | solid_dialect::TypeRole::Signal => {
+                accessors
+                    .entry(symbol.clone())
+                    .or_insert((symbol_id(name.as_ref()), declaration_location));
+                source_kinds
+                    .entry(symbol.clone())
+                    .or_insert(ReactiveSourceKind::Accessor);
+                source_phases.entry(symbol.clone()).or_insert(1);
+            }
+            solid_dialect::TypeRole::Store => {
+                accessors
+                    .entry(symbol.clone())
+                    .or_insert((symbol_id(name.as_ref()), declaration_location));
+                source_kinds
+                    .entry(symbol.clone())
+                    .or_insert(ReactiveSourceKind::Store);
+                source_phases.entry(symbol.clone()).or_insert(1);
+            }
+            solid_dialect::TypeRole::Setter | solid_dialect::TypeRole::StoreSetter => {
+                let kind = if role == solid_dialect::TypeRole::StoreSetter {
+                    ReactiveSourceKind::Store
+                } else {
+                    ReactiveSourceKind::Accessor
+                };
+                setters.entry(symbol.clone()).or_insert((
+                    symbol_id(name.as_ref()),
+                    declaration_location,
+                    false,
+                    kind,
+                ));
+            }
+            solid_dialect::TypeRole::Component => unreachable!(),
+        }
     }
     for file in &facts.files {
         for element in &file.ast.jsx_elements {
@@ -875,11 +1268,10 @@ pub(crate) fn discover_sources(
                 if parameter_indices.is_empty() {
                     continue;
                 }
-                let Some(function) = file
-                    .ast
-                    .functions
-                    .iter()
-                    .find(|function| function.span == argument.span)
+                let Some(function) =
+                    file.ast.functions.iter().find(|function| {
+                        function.span == file.ast.peel_ts_sugar_span(argument.span)
+                    })
                 else {
                     continue;
                 };
@@ -1060,15 +1452,7 @@ pub(crate) fn discover_sources(
     let mut prop_sources = HashMap::<SymbolId, (SymbolId, Location)>::new();
     for file in &facts.files {
         for function in &file.ast.functions {
-            if !function_binding_name(file, function)
-                .and_then(|name| {
-                    file.source_text(name.span)
-                        .unwrap_or_default()
-                        .chars()
-                        .next()
-                })
-                .is_some_and(char::is_uppercase)
-            {
+            if !semantic_lookup.function_is_component(file, function) {
                 continue;
             }
             let Some(parameter) = function

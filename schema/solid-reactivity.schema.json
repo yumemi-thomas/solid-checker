@@ -100,15 +100,7 @@
       "required": ["kind"],
       "properties": {
         "kind": { "enum": ["function", "value"] },
-        "returns": {
-          "type": "object",
-          "additionalProperties": false,
-          "required": ["kind", "label"],
-          "properties": {
-            "kind": { "enum": ["accessor", "store-path"] },
-            "label": { "type": "string", "minLength": 1 }
-          }
-        },
+        "returns": { "$ref": "#/$defs/return" },
         "callbacks": {
           "type": "array",
           "uniqueItems": true,
@@ -136,6 +128,60 @@
           }
         }
       }
+    },
+    "return": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "label"],
+          "properties": {
+            "kind": { "enum": ["accessor", "store-path"] },
+            "label": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "elements"],
+          "properties": {
+            "kind": { "const": "tuple" },
+            "elements": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "anyOf": [
+                  { "$ref": "#/$defs/return" },
+                  { "type": "null" }
+                ]
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "properties"],
+          "properties": {
+            "kind": { "const": "object" },
+            "properties": {
+              "type": "object",
+              "minProperties": 1,
+              "propertyNames": { "minLength": 1 },
+              "additionalProperties": { "$ref": "#/$defs/return" }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "parameter"],
+          "properties": {
+            "kind": { "const": "argument" },
+            "parameter": { "type": "integer", "minimum": 0 }
+          }
+        }
+      ]
     },
     "artifact": {
       "type": "object",

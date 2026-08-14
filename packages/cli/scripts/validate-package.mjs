@@ -15,11 +15,16 @@ for (const command of ["solid-checker"]) {
     throw new Error(`launcher for ${command} is missing`);
   }
 }
-if (packageJson.exports?.["./eslint"] !== "./eslint.cjs") {
+if (
+  packageJson.exports?.["./eslint"]?.types !== "./eslint.d.ts" ||
+  packageJson.exports?.["./eslint"]?.default !== "./eslint.cjs"
+) {
   throw new Error("solid-checker/eslint export is missing");
 }
-if (!existsSync(join(root, "eslint.cjs"))) {
-  throw new Error("ESLint and Oxlint adapter is missing");
+for (const file of ["eslint.cjs", "eslint.d.ts"]) {
+  if (!existsSync(join(root, file))) {
+    throw new Error(`ESLint and Oxlint adapter file is missing: ${file}`);
+  }
 }
 if (packageJson.optionalDependencies) {
   const expected = `^${packageJson.version}`;

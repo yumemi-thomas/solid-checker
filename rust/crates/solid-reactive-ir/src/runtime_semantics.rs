@@ -29,10 +29,47 @@ pub(super) fn argument_behavior(
         return None;
     }
     let parameter = resolved_parameter(call, argument)?;
+    let declaration = call.declaration.as_ref()?;
+    let argument_callable = potentially_callable(actual_callability);
+    if declaration.standard_library {
+        let known_callback = match declaration.name.as_ref() {
+            "queueMicrotask" if argument == 0 && argument_callable => {
+                Some(RuntimeArgumentBehavior::DeferredCallback)
+            }
+            "setTimeout" | "setInterval" | "requestAnimationFrame" | "requestIdleCallback"
+                if argument == 0 && argument_callable =>
+            {
+                Some(RuntimeArgumentBehavior::DeferredCallback)
+            }
+            "addEventListener" if argument == 1 && argument_callable => {
+                Some(RuntimeArgumentBehavior::DeferredCallback)
+            }
+            "then" if promise_member(declaration) && argument <= 1 && argument_callable => {
+                Some(RuntimeArgumentBehavior::DeferredCallback)
+            }
+            "catch" | "finally"
+                if promise_member(declaration) && argument == 0 && argument_callable =>
+            {
+                Some(RuntimeArgumentBehavior::DeferredCallback)
+            }
+            "forEach" | "map" | "flatMap" | "filter" | "some" | "every" | "find" | "findIndex"
+            | "findLast" | "findLastIndex"
+                if argument == 0 && argument_callable =>
+            {
+                Some(RuntimeArgumentBehavior::InlineCallback)
+            }
+            "reduce" | "reduceRight" | "sort" if argument == 0 && argument_callable => {
+                Some(RuntimeArgumentBehavior::InlineCallback)
+            }
+            _ => None,
+        };
+        if known_callback.is_some() {
+            return known_callback;
+        }
+    }
     if parameter.callability == Callability::NonCallable {
         return Some(RuntimeArgumentBehavior::ValueOnly);
     }
-    let declaration = call.declaration.as_ref()?;
     if !declaration.standard_library {
         return None;
     }
@@ -44,27 +81,7 @@ pub(super) fn argument_behavior(
         // standard-library declarations. The selected declaration carries its
         // canonical symbol and complete owner chain; custom same-name methods
         // never enter this table.
-        "queueMicrotask" if argument == 0 => Some(RuntimeArgumentBehavior::DeferredCallback),
-        "setTimeout" | "setInterval" | "requestAnimationFrame" if argument == 0 => {
-            Some(RuntimeArgumentBehavior::DeferredCallback)
-        }
-        "addEventListener" if argument == 1 => Some(RuntimeArgumentBehavior::DeferredCallback),
         "removeEventListener" => Some(RuntimeArgumentBehavior::ValueOnly),
-        "then" if promise_member(declaration) && argument <= 1 => {
-            Some(RuntimeArgumentBehavior::DeferredCallback)
-        }
-        "catch" | "finally" if promise_member(declaration) && argument == 0 => {
-            Some(RuntimeArgumentBehavior::DeferredCallback)
-        }
-        "forEach" | "map" | "flatMap" | "filter" | "some" | "every" | "find" | "findIndex"
-        | "findLast" | "findLastIndex"
-            if argument == 0 =>
-        {
-            Some(RuntimeArgumentBehavior::InlineCallback)
-        }
-        "reduce" | "reduceRight" | "sort" if argument == 0 => {
-            Some(RuntimeArgumentBehavior::InlineCallback)
-        }
         "call" | "bind" if function_member(declaration) && argument == 0 => {
             Some(RuntimeArgumentBehavior::ValueOnly)
         }
@@ -314,6 +331,30 @@ mod tests {
             ),
             Some(RuntimeArgumentBehavior::DeferredCallback)
         );
+    }
+
+    #[test]
+    fn recognizes_window_timer_and_idle_callbacks_as_deferred() {
+        for name in ["setTimeout", "requestIdleCallback"] {
+            assert_eq!(
+                argument_behavior(
+                    // lib.dom's TimerHandler union is not definitely callable,
+                    // but the actual arrow argument is.
+                    &resolved_call(name, Some("Window"), true, Callability::NonCallable),
+                    callability(Callability::Callable),
+                    0,
+                ),
+                Some(RuntimeArgumentBehavior::DeferredCallback)
+            );
+            assert_eq!(
+                argument_behavior(
+                    &resolved_call(name, Some("Window"), true, Callability::NonCallable),
+                    callability(Callability::NonCallable),
+                    0,
+                ),
+                Some(RuntimeArgumentBehavior::ValueOnly)
+            );
+        }
     }
 
     #[test]

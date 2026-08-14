@@ -248,6 +248,25 @@ pub(crate) fn collect_project<'facts>(
     draft.contract_exports = interprocedural.exports.clone();
     draft.contract_generation_obligations =
         interprocedural.contract_generation_obligations.to_vec();
+    for obligation in interprocedural.contract_generation_obligations.iter() {
+        draft.push_defect(
+            "unknown-callback-execution",
+            crate::StaticDefect {
+                kind: crate::StaticDefectKind::UnknownCallbackExecution {
+                    package: obligation.package.clone(),
+                    entrypoint: obligation.entrypoint.clone(),
+                    function: obligation.function.clone(),
+                    parameter: obligation.parameter,
+                    parameter_type: obligation.parameter_type.clone(),
+                    required_execution: obligation.required_execution.clone(),
+                    contract_stub: obligation.contract_stub.clone(),
+                },
+                location: obligation.location.clone(),
+                analysis_context: obligation.message.clone(),
+                fixes: vec![],
+            },
+        );
+    }
     upstream_compat::check_project(
         ctx,
         caches

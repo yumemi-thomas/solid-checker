@@ -109,7 +109,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     .join(", ")
             )
         })?,
-        None => dialect::detect(Path::new(&request.project_id)),
+        None => dialect::detect(if request.contract_package_root.is_empty() {
+            Path::new(&request.project_id)
+        } else {
+            Path::new(&request.contract_package_root)
+        }),
     };
     if !request.validate_contract_paths.is_empty() {
         for path in &request.validate_contract_paths {
@@ -228,7 +232,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             preloaded_bundled,
         )?;
         if !request.emit_contract.is_empty() {
-            emit_package_contract(&request, &analysis.program, &facts)?;
+            emit_package_contract(dialect, &request, &analysis.program, &facts)?;
             return Ok(0);
         }
         let snapshot = &analysis.snapshot;
@@ -439,6 +443,7 @@ fn print_help() {
 }
 
 fn emit_package_contract(
+    dialect: &'static dialect::Dialect,
     request: &Request,
     program: &solid_reactive_ir::Program,
     facts: &solid_facts::ProjectFacts,
@@ -448,17 +453,6 @@ fn emit_package_contract(
     }
     if request.package_version.is_empty() {
         return Err("--package-version is required with --emit-contract".into());
-    }
-    if let Some(unresolved) = program.contract_generation_obligations.first() {
-        return Err(format!(
-            "emit package contract: unresolved parameter behavior in {} parameter {} at {}:{}: {}",
-            unresolved.function,
-            unresolved.parameter,
-            unresolved.location.path,
-            unresolved.location.start_byte,
-            unresolved.message
-        )
-        .into());
     }
     if let Some(unresolved) = program
         .static_violations
@@ -473,12 +467,13 @@ fn emit_package_contract(
     }
     // The same SC9 class arrives as structured defects (missing contract
     // exports, uncovered execution maps, uncaptured sources); a contract
-    // must not be emitted over those either.
-    if let Some(unresolved) = program
-        .static_defects
-        .iter()
-        .find(|defect| defect.kind.is_unresolved_obligation())
-    {
+    // must not be emitted over those either. Unknown callback execution is
+    // excluded: it is refused below, from the obligation list that knows the
+    // requested entrypoint's exported surface.
+    if let Some(unresolved) = program.static_defects.iter().find(|defect| {
+        defect.kind.is_unresolved_obligation()
+            && !defect.kind.refused_through_generation_obligations()
+    }) {
         return Err(format!(
             "emit package contract: unresolved obligation at {}:{}: {:?}",
             unresolved.location.path, unresolved.location.start_byte, unresolved.kind
@@ -499,11 +494,22 @@ fn emit_package_contract(
             .then(|| artifact_for_file(output, Path::new(&request.implementation_artifact)))
             .transpose()?,
     };
-    let dependency_contracts = request
+    let mut dependency_contracts = request
         .contract_paths
         .iter()
         .map(|path| read_package_contract(Path::new(path)))
         .collect::<Result<Vec<_>, _>>()?;
+    for package in dialect.bundled_packages {
+        if dependency_contracts
+            .iter()
+            .any(|contract| contract.package.name == *package)
+        {
+            continue;
+        }
+        if let Some(contract) = (dialect.bundled_contract)(package)? {
+            dependency_contracts.push(contract);
+        }
+    }
     let exports = if request.contract_entry_file.is_empty() {
         (*program.contract_exports).clone()
     } else {
@@ -514,6 +520,42 @@ fn emit_package_contract(
             &dependency_contracts,
         )?
     };
+    let exported_identities = if request.contract_entry_file.is_empty() {
+        HashSet::new()
+    } else {
+        let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
+        exports
+            .keys()
+            .filter_map(|name| entry_export_entity(facts, &entry_file, name))
+            .filter(|entity| !entity.runtime_identity.is_empty())
+            .map(|entity| entity.runtime_identity.to_string())
+            .collect()
+    };
+    if let Some(unresolved) = program
+        .contract_generation_obligations
+        .iter()
+        .find(|unresolved| {
+            request.contract_entry_file.is_empty()
+                || if unresolved.function_identity.is_empty() {
+                    exports.contains_key(&unresolved.function)
+                } else {
+                    exported_identities.contains(&unresolved.function_identity)
+                }
+        })
+    {
+        return Err(format!(
+            "emit package contract: unresolved parameter behavior in {} parameter {} ({}) at {}:{}: {}; required behavior: {}; edit this schema-v1 stub and review its evidence: {}",
+            unresolved.function,
+            unresolved.parameter,
+            unresolved.parameter_type,
+            unresolved.location.path,
+            unresolved.location.start_byte,
+            unresolved.message,
+            unresolved.required_execution,
+            unresolved.contract_stub
+        )
+        .into());
+    }
     let contract = solid_reactive_ir::PackageContract {
         schema_version: 1,
         package: solid_reactive_ir::ContractPackage {
@@ -608,28 +650,67 @@ fn entry_export_entity<'a>(
     entry_file: &Path,
     name: &str,
 ) -> Option<&'a typefacts::EntityFact> {
+    entry_export_entity_with_visiting(facts, entry_file, name, &mut HashSet::new())
+}
+
+fn entry_export_entity_with_visiting<'a>(
+    facts: &'a solid_facts::ProjectFacts,
+    entry_file: &Path,
+    name: &str,
+    visiting: &mut HashSet<(PathBuf, String)>,
+) -> Option<&'a typefacts::EntityFact> {
+    let entry_file = entry_file.canonicalize().ok()?;
+    if !visiting.insert((entry_file.clone(), name.to_owned())) {
+        return None;
+    }
     let file = facts
         .files
         .iter()
-        .find(|file| Path::new(file.path.as_str()) == entry_file)?;
-    let span = file.ast.exports.iter().find_map(|export| {
-        export
+        .find(|file| same_canonical_path(Path::new(file.path.as_str()), &entry_file))?;
+    for export in file.ast.exports.iter().filter(|export| !export.type_only) {
+        if let Some(specifier) = export
             .specifiers
             .iter()
             .chain(&export.declarations)
             .find(|specifier| !specifier.type_only && specifier.exported == name)
-            .map(|specifier| specifier.local.span)
-    })?;
-    let location = typefacts::Location {
-        path: file.path.to_string().into(),
-        start_byte: u64::from(span.start),
-        end_byte: u64::from(span.end),
-    };
-    facts.typescript.entities().find(|entity| {
-        entity.location.path == location.path
-            && entity.location.start_byte == location.start_byte
-            && entity.location.end_byte == location.end_byte
-    })
+        {
+            let span = specifier.local.span;
+            let location = typefacts::Location {
+                path: file.path.to_string().into(),
+                start_byte: u64::from(span.start),
+                end_byte: u64::from(span.end),
+            };
+            if let Some(entity) = facts.typescript.entities().find(|entity| {
+                entity.location.path == location.path
+                    && entity.location.start_byte == location.start_byte
+                    && entity.location.end_byte == location.end_byte
+            }) {
+                return Some(entity);
+            }
+            if let Some(module) = export.module.as_deref()
+                && module.starts_with('.')
+            {
+                let target = resolve_relative_export(facts, &entry_file, module).ok()?;
+                let local_name = file.source_text(specifier.local.span).unwrap_or(name);
+                if let Some(entity) =
+                    entry_export_entity_with_visiting(facts, &target, local_name, visiting)
+                {
+                    return Some(entity);
+                }
+            }
+        }
+        if export.kind == solid_facts::ast::ExportKind::All
+            && let Some(module) = export.module.as_deref()
+            && module.starts_with('.')
+        {
+            let target = resolve_relative_export(facts, &entry_file, module).ok()?;
+            if let Some(entity) = entry_export_entity_with_visiting(facts, &target, name, visiting)
+            {
+                return Some(entity);
+            }
+        }
+    }
+    None
 }
 
 fn unify_runtime_alias_summaries(

@@ -32,13 +32,23 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/directive-phases/App.tsx",
+      "start": 361,
+      "end": 372,
+      "fixes": 0
+    },
+    {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/directive-phases/App.tsx",
-      "start": 450,
-      "end": 462,
+      "start": 520,
+      "end": 532,
       "fixes": 0
     }
   ]

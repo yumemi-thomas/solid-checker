@@ -16,7 +16,8 @@ use super::{
 };
 use crate::owners::{
     callback_execution_at_call, containing_ast_function, enclosing_function_label,
-    function_binding_name, returned_callback_invocation_sites, returned_primitive_invocation,
+    function_binding_name, returned_callback_execution_at_call, returned_callback_invocation_sites,
+    returned_primitive_invocation,
 };
 
 /// The effect primitives: the ones 2.0 spells `(compute, apply)`.
@@ -95,19 +96,34 @@ pub(super) fn execution_role(
     span: Span,
     allowed: &[Span],
 ) -> ExecutionRole {
+    execution_role_where(facts, span, allowed, |_| true)
+}
+
+fn execution_role_where(
+    facts: &solid_facts::compiler::ExecutionMap,
+    span: Span,
+    allowed: &[Span],
+    callback_applies: impl Fn(&solid_facts::compiler::CallbackRole) -> bool,
+) -> ExecutionRole {
     if allowed.iter().any(|region| region.contains(span)) {
         return ExecutionRole::DeferredCallback;
     }
-    if facts
-        .tracked_regions
-        .iter()
-        .any(|region| region.span.contains(span))
-    {
-        return ExecutionRole::TrackedJsx;
-    }
-    for callback in &facts.callback_roles {
-        if callback.span.contains(span) {
-            return match callback.role {
+    let tracked = facts.tracked_regions.iter().filter_map(|region| {
+        region
+            .span
+            .contains(span)
+            .then_some((region.span, ExecutionRole::TrackedJsx, 2_u8))
+    });
+    let untracked = facts.untracked_regions.iter().filter_map(|region| {
+        region
+            .span
+            .contains(span)
+            .then_some((region.span, ExecutionRole::UntrackedRendering, 1_u8))
+    });
+    let callbacks = facts.callback_roles.iter().filter_map(|callback| {
+        (callback.span.contains(span) && callback_applies(callback)).then_some((
+            callback.span,
+            match callback.role {
                 solid_facts::compiler::CallbackRoleKind::EventHandler => {
                     ExecutionRole::EventCallback
                 }
@@ -120,10 +136,43 @@ pub(super) fn execution_role(
                 solid_facts::compiler::CallbackRoleKind::Render => {
                     ExecutionRole::UntrackedRendering
                 }
-            };
-        }
+            },
+            0_u8,
+        ))
+    });
+    if let Some((_, role, _)) = tracked
+        .chain(untracked)
+        .chain(callbacks)
+        .min_by_key(|(region, _, tie_break)| (region.end - region.start, *tie_break))
+    {
+        return role;
     }
-    ExecutionRole::UntrackedRendering
+    ExecutionRole::Unknown
+}
+
+/// Compiler execution role for code that actually runs at `span`.
+///
+/// A callback-role span covers the complete JSX value expression handed to
+/// the compiler. Only a function value inside that expression executes in the
+/// callback phase; eager subexpressions such as `onClick={makeHandler()}` or
+/// `ref={[makeDirective()]}` execute while rendering and must fall through to
+/// their tracked/untracked region or enclosing component.
+fn source_execution_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+) -> ExecutionRole {
+    execution_role_where(&file.compiler, span, allowed, |callback| {
+        matches!(
+            callback.role,
+            solid_facts::compiler::CallbackRoleKind::Deferred
+                | solid_facts::compiler::CallbackRoleKind::Render
+        ) || file
+            .ast
+            .functions_within(callback.span)
+            .max_by_key(|function| function.span.end - function.span.start)
+            .is_some_and(|function| function.body.contains(span))
+    })
 }
 
 pub(super) fn semantic_execution_role(
@@ -143,6 +192,75 @@ pub(super) fn semantic_execution_role(
         lookup,
         &mut HashSet::new(),
     )
+}
+
+/// Classifies a write or action through resolved project call sites when its
+/// own source span has no compiler execution fact.
+///
+/// Any proven tracking-phase invocation makes the operation unsafe. Otherwise
+/// a proven imperative role is retained, while cycles with no independently
+/// classified call site remain `Unknown`.
+pub(super) fn semantic_write_execution_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+) -> ExecutionRole {
+    semantic_write_execution_role_within(
+        file,
+        span,
+        allowed,
+        entities,
+        symbol_names,
+        lookup,
+        &mut HashSet::new(),
+    )
+}
+
+fn semantic_write_execution_role_within(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    entities: &EntitySymbols,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    lookup: &SemanticLookup<'_>,
+    visiting: &mut HashSet<(String, Span)>,
+) -> ExecutionRole {
+    let direct = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
+    if direct != ExecutionRole::Unknown {
+        return direct;
+    }
+    let Some(function) = crate::owners::containing_ast_function(&file.ast, span) else {
+        return ExecutionRole::Unknown;
+    };
+    let key = (file.path.to_string(), function.span);
+    if !visiting.insert(key.clone()) {
+        return ExecutionRole::Unknown;
+    }
+    let mut imperative = None;
+    for (caller_file, callee) in lookup.function_call_sites(file.path.as_str(), function.span) {
+        let caller_allowed = allowed_callback_spans(caller_file, lookup);
+        let role = semantic_write_execution_role_within(
+            caller_file,
+            callee,
+            &caller_allowed,
+            entities,
+            symbol_names,
+            lookup,
+            visiting,
+        );
+        if role.reports_disallowed_write() {
+            visiting.remove(&key);
+            return role;
+        }
+        if role != ExecutionRole::Unknown {
+            imperative.get_or_insert(role);
+        }
+    }
+    visiting.remove(&key);
+    imperative.unwrap_or(ExecutionRole::Unknown)
 }
 
 /// `classifying` is the stack of spans whose role is currently being derived
@@ -173,6 +291,9 @@ fn semantic_execution_role_within(
         return role;
     }
     if let Some(role) = returned_factory_callback_execution_role(file, span, lookup, classifying) {
+        return role;
+    }
+    if let Some(role) = inline_callback_execution_role(file, span, allowed, lookup, classifying) {
         return role;
     }
     let dialect = lookup.dialect;
@@ -251,7 +372,67 @@ fn semantic_execution_role_within(
     }) {
         return ExecutionRole::TrackedJsx;
     }
-    execution_role(&file.compiler, span, allowed)
+    let compiler_role = source_execution_role(file, span, allowed);
+    if compiler_role != ExecutionRole::Unknown {
+        return compiler_role;
+    }
+    if lookup.inside_component(file, span) {
+        return ExecutionRole::UntrackedRendering;
+    }
+    // Module initialization is an AST-proven one-shot execution context. It
+    // is not a compiler-fact gap: no reactive owner or subscriber can be
+    // active before a containing function is invoked.
+    if !file.ast.any_function_body_containing(span) {
+        return ExecutionRole::ModuleInitialization;
+    }
+    ExecutionRole::Unknown
+}
+
+/// Inline callbacks that do not clear the reactive listener inherit the
+/// caller's execution role. This covers wrappers such as `batch`,
+/// `catchError`'s protected body, and `modifyMutable`; `untrack` and other
+/// explicit untracked callbacks are classified by the later dialect branch.
+fn inline_callback_execution_role(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    allowed: &[Span],
+    lookup: &SemanticLookup<'_>,
+    classifying: &mut HashSet<(String, Span)>,
+) -> Option<ExecutionRole> {
+    file.ast
+        .arguments_containing(span)
+        .find_map(|(call, index)| {
+            if !direct_callback_contains(file, call.arguments[index].span, span) {
+                return None;
+            }
+            let primitive = lookup.primitive_at_call(file, call.span)?;
+            if callback_execution_at_call(file, call, primitive, index, lookup)?
+                != Execution::Inline
+                || callback_runs_outside_tracking(
+                    lookup.dialect,
+                    primitive,
+                    index,
+                    call.arguments.len(),
+                )
+            {
+                return None;
+            }
+            let key = (file.path.to_string(), call.span);
+            if !classifying.insert(key.clone()) {
+                return None;
+            }
+            let role = semantic_execution_role_within(
+                file,
+                call.span,
+                allowed,
+                lookup.entities(),
+                lookup.symbol_names(),
+                lookup,
+                classifying,
+            );
+            classifying.remove(&key);
+            Some(role)
+        })
 }
 
 /// Compose an inline callback of a higher-order factory with the proven use of
@@ -672,9 +853,14 @@ pub(super) fn named_callback_roles(
     let primitives = lookup.primitives(file);
     let mut named = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
-        let Some(primitive) = known_primitive(&primitives.calls[call_index]) else {
+        let direct_primitive = known_primitive(&primitives.calls[call_index]);
+        let returned_primitive = direct_primitive
+            .is_none()
+            .then(|| returned_primitive_invocation(file, call, lookup))
+            .flatten();
+        if direct_primitive.is_none() && returned_primitive.is_none() {
             continue;
-        };
+        }
         let count = call.arguments.len();
         for (argument_index, argument) in call.arguments.iter().enumerate() {
             // The argument itself, plus the callbacks an options object names
@@ -689,6 +875,26 @@ pub(super) fn named_callback_roles(
             if named.is_empty() {
                 continue;
             }
+            if let Some((_primitive, _result_slot)) = returned_primitive {
+                let execution =
+                    returned_callback_execution_at_call(file, call, argument_index, lookup);
+                let tracked = execution == Some(Execution::Tracked);
+                let deferred = execution == Some(Execution::Deferred);
+                // Returned-function contracts describe the argument itself,
+                // never a callback named inside an options object. Require
+                // exact TypeScript identity for the admitted function. Inline
+                // returned callbacks inherit the individual call site's role
+                // and therefore cannot be collapsed into this per-function
+                // index.
+                for candidate in index.identity_at(file, entities, argument.span) {
+                    let entry = roles.entry(index.functions[*candidate]);
+                    entry.admitted |= tracked || deferred;
+                    entry.tracked |= tracked;
+                    entry.deferred |= deferred;
+                }
+                continue;
+            }
+            let primitive = direct_primitive.expect("one primitive kind is proven above");
             let proven =
                 callback_execution_at_call(file, call, primitive, argument_index, lookup).is_some();
             let untracked = dialect.reports_untracked_reads_at(primitive, argument_index, count);
@@ -813,7 +1019,11 @@ pub(super) fn argument_references_callback_symbol(
         })
 }
 
-fn direct_callback_contains(file: &solid_facts::FileFacts, argument: Span, span: Span) -> bool {
+pub(super) fn direct_callback_contains(
+    file: &solid_facts::FileFacts,
+    argument: Span,
+    span: Span,
+) -> bool {
     if !argument.contains(span) {
         return false;
     }
@@ -874,7 +1084,7 @@ pub(super) fn allowed_callback_spans(
     let primitives = lookup.primitives(file);
     let mut spans = Vec::new();
     for (call_index, call) in file.ast.calls.iter().enumerate() {
-        let indices =
+        let mut indices =
             known_primitive(&primitives.calls[call_index]).map_or_else(Vec::new, |primitive| {
                 deferred_callback_positions(dialect, primitive, call.arguments.len())
                     .into_iter()
@@ -883,6 +1093,21 @@ pub(super) fn allowed_callback_spans(
                     })
                     .collect()
             });
+        if let Some(symbol) = lookup.callee_symbol(file, call.callee)
+            && let Some(callbacks) = lookup.contract_callbacks(symbol)
+        {
+            for callback in callbacks {
+                let exclusively_deferred = callbacks.iter().all(|candidate| {
+                    candidate.parameter != callback.parameter || candidate.execution == "deferred"
+                });
+                if callback.execution == "deferred"
+                    && exclusively_deferred
+                    && !indices.contains(&callback.parameter)
+                {
+                    indices.push(callback.parameter);
+                }
+            }
+        }
         for index in indices {
             if let Some(argument) = call.arguments.get(index) {
                 spans.push(argument.span);
@@ -894,7 +1119,63 @@ pub(super) fn allowed_callback_spans(
 
 #[cfg(test)]
 mod tests {
-    use super::format_read_context;
+    use solid_facts::{
+        compiler::{
+            COMPILER_FACTS_PROTOCOL, CallbackRole, CallbackRoleKind, ExecutionMap, ExecutionRegion,
+            RegionReason,
+        },
+        core::{SourceHash, Span},
+    };
+
+    use super::{execution_role, format_read_context};
+    use crate::ExecutionRole;
+
+    fn execution_map() -> ExecutionMap {
+        ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: SourceHash::of("value"),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            ownership_regions: vec![],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        }
+    }
+
+    #[test]
+    fn compiler_execution_distinguishes_explicit_untracked_from_unknown() {
+        let mut facts = execution_map();
+        assert_eq!(
+            execution_role(&facts, Span::new(0, 5), &[]),
+            ExecutionRole::Unknown
+        );
+        facts.untracked_regions.push(ExecutionRegion {
+            span: Span::new(0, 5),
+            reason: RegionReason::JsxChild,
+        });
+        assert_eq!(
+            execution_role(&facts, Span::new(0, 5), &[]),
+            ExecutionRole::UntrackedRendering
+        );
+    }
+
+    #[test]
+    fn smallest_compiler_region_wins_across_execution_fact_categories() {
+        let mut facts = execution_map();
+        facts.untracked_regions.push(ExecutionRegion {
+            span: Span::new(0, 100),
+            reason: RegionReason::JsxChild,
+        });
+        facts.callback_roles.push(CallbackRole {
+            span: Span::new(40, 60),
+            role: CallbackRoleKind::EventHandler,
+        });
+
+        assert_eq!(
+            execution_role(&facts, Span::new(50, 51), &[]),
+            ExecutionRole::EventCallback
+        );
+    }
 
     #[test]
     fn conditional_context_does_not_repeat_the_function_name_as_a_return_kind() {

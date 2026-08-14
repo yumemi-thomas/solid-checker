@@ -97,6 +97,10 @@ impl Dialect for Solid2 {
         Version::V2
     }
 
+    fn direct_jsx_return_is_component(&self) -> bool {
+        true
+    }
+
     /// 2.0 folds the store APIs into core and moves the DOM package out.
     /// The web subpaths are owned too: `export_modules` answers with them
     /// for the generated export tables' rows, and a module this dialect

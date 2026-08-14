@@ -16,6 +16,31 @@ use solid_reactive_ir::{Finding, PackageContract, PackageContractIssue, Program,
 
 use crate::BackendError;
 
+/// Semantic evidence a dialect's catalog needs Type Facts to acquire.
+///
+/// These are analysis capabilities, not external rule identities. Renaming a
+/// rule therefore cannot silently change the fact plan.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SemanticDemandCapabilities {
+    pub jsx_member_root_symbols: bool,
+    pub jsx_static_value_types: bool,
+    pub array_map_receiver_types: bool,
+}
+
+impl SemanticDemandCapabilities {
+    pub const NONE: Self = Self {
+        jsx_member_root_symbols: false,
+        jsx_static_value_types: false,
+        array_map_receiver_types: false,
+    };
+    #[cfg(feature = "dialect-v1")]
+    const SOLID_1: Self = Self {
+        jsx_member_root_symbols: true,
+        jsx_static_value_types: true,
+        array_map_receiver_types: true,
+    };
+}
+
 pub struct Dialect {
     /// Stable identity, folded into every cache key and retained session
     /// identity so artifacts from different dialects can never collide.
@@ -38,6 +63,8 @@ pub struct Dialect {
     /// (for example, which type facts to demand) instead of naming a
     /// version.
     pub has_rule: fn(&str) -> bool,
+    /// Typed fact-acquisition requirements of the catalog.
+    pub semantic_demands: SemanticDemandCapabilities,
     /// Projects a package-contract issue through this dialect's catalog so
     /// SC9005 identity and every sentence remain catalog-owned.
     pub package_contract_finding: fn(&PackageContractIssue) -> Finding,
@@ -156,6 +183,7 @@ static SOLID_V2: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
+    semantic_demands: SemanticDemandCapabilities::NONE,
     package_contract_finding: solid_v2_rules::package_contract_finding,
     bundled_packages: &["solid-js", "@solidjs/web"],
     bundled_contract: crate::diagnostics::bundled_contract_v2,
@@ -174,8 +202,9 @@ static SOLID_V1: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
+    semantic_demands: SemanticDemandCapabilities::SOLID_1,
     package_contract_finding: solid_v1_rules::package_contract_finding,
-    bundled_packages: &["solid-js"],
+    bundled_packages: &["solid-js", "@solid-primitives/scheduled"],
     bundled_contract: crate::diagnostics::bundled_contract_v1,
 };
 
@@ -211,7 +240,10 @@ mod tests {
     fn catalog_prose_program() -> Program {
         let defect_kinds = [
             StaticDefectKind::ExecutionMapIncomplete,
-            StaticDefectKind::ComponentPropsDestructure,
+            StaticDefectKind::ReactiveObjectDestructure {
+                source: "props".into(),
+                component_props: true,
+            },
             StaticDefectKind::ReactiveReadAfterAwait {
                 accessor: "sampleAccessor".into(),
             },
@@ -361,7 +393,7 @@ mod tests {
         let expected = HashSet::from([
             "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1006", "SC1007", "SC2001",
             "SC2003", "SC3001", "SC3002", "SC4001", "SC4002", "SC4003", "SC6001", "SC7001",
-            "SC9001", "SC9004", "SC9005", "SC9011",
+            "SC8018", "SC8019", "SC8020", "SC9001", "SC9004", "SC9005", "SC9006", "SC9011",
         ]);
         assert_eq!(shared, expected);
         assert_eq!(
@@ -369,22 +401,22 @@ mod tests {
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            20
+            24
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            20
+            24
         );
         assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 20,
+            solid_v1_rules::Rule::ALL.len() - 24,
             18,
             "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
         assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 20,
+            solid_v2_rules::Rule::ALL.len() - 24,
             14,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );

@@ -18,6 +18,7 @@ export function Reads() {
   const deferred = createDeferred(() => count());
   const selected = createSelector(count);
   const mutable = createMutable({ a: 1 });
+  mutable.a = 2;
 
   console.log(count(), memo(), data(), deferred(), selected(1), mutable.a);
   return <div />;

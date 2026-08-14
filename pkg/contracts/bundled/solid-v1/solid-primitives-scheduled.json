@@ -1,0 +1,48 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@solid-primitives/scheduled",
+    "version": "1.5.3",
+    "integrity": "sha512-oNwLE6E6lxJAWrc8QXuwM0k2oU1BnANnkChwMw82aK1j3+mWGJkG1IFe5gCwbV+afYmjI76t9JJV3md/8tLw+g=="
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "scheduled": {
+      "kind": "function",
+      "callbacks": [
+        { "parameter": 0, "execution": "deferred" }
+      ]
+    },
+    "leading": {
+      "kind": "function",
+      "callbacks": [
+        { "parameter": 0, "execution": "inline" },
+        { "parameter": 1, "execution": "deferred" }
+      ]
+    },
+    "create-scheduled": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "scheduled invalidation"
+      },
+      "callbacks": [
+        { "parameter": 0, "execution": "inline" }
+      ]
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "scheduled": ["debounce", "scheduleIdle", "throttle"],
+        "leading": ["leading", "leadingAndTrailing"],
+        "create-scheduled": ["createScheduled"]
+      },
+      "conditions": ["import"]
+    }
+  },
+  "evidence": {
+    "kind": "reviewed",
+    "generator": "solid-checker review of @solid-primitives/scheduled 1.5.3"
+  }
+}

@@ -1,16 +1,15 @@
-//! Solid 1.x `v1/jsx-no-undef` — a JSX tag name that resolves to no binding
-//! anywhere: not a local variable, not an import, not a global, not a JSX
-//! intrinsic.
+//! Solid 1.x `v1/jsx-no-undef` — report only a JSX name whose semantic facts
+//! explicitly prove that no binding exists.
 //!
 //! Upstream walks ESLint's scope graph by hand and ships a
 //! `typescriptEnabled` option that turns its undefined-tag report off,
 //! because its own scope walk and TypeScript's binder can disagree, and a
 //! project already running `tsc` does not want two different answers for
-//! the same identifier. This port never had that disagreement to begin
-//! with: it asks `context.entities`, the same demand-driven TypeScript
-//! resolution the rest of the checker already asks, keyed by the exact byte
-//! spans the fact-extraction demand plan requested — there is no separate
-//! scope walk here to turn off.
+//! the same identifier. A missing entity is not that proof: the producer may
+//! have omitted a demand, or the semantic backend may not certify the name.
+//! This rule therefore fails closed for unresolved JSX tags. Directive names
+//! use the structural lexical binding fact because that fact is an explicit
+//! positive/negative result, not an absence from the TypeScript entity table.
 //!
 //! A dotted JSX tag name (`<Foo.Bar />`) is handled the way upstream handles
 //! it: only the root identifier's own resolution is judged, from a demand the
@@ -26,31 +25,22 @@
 //! hoisting, nested scopes, and shadowing without a text-based declaration
 //! scan.
 //!
-//! What remains — a plain (non-dotted) JSX tag name — is exactly what the
-//! demand plan always asks about, for every JSX element, dotted or not, so
-//! an unresolved entity there reliably means the compiler looked and found
-//! nothing.
-
-use std::collections::BTreeSet;
-
 use solid_facts::FileFacts;
+#[cfg(test)]
 use solid_facts::ast::ImportKind;
+#[cfg(test)]
 use solid_facts::core::Span;
 
 use super::{UpstreamCompatContext, is_lowercase_led};
-use crate::{Fix, StaticViolation, location};
-
-/// Control-flow components upstream auto-imports from `"solid-js"` instead
-/// of reporting undefined, on the theory that a bare `<For>`/`<Show>` used
-/// without an import is a forgotten import rather than a typo.
-const AUTO_IMPORT_COMPONENTS: [&str; 5] = ["Show", "For", "Index", "Switch", "Match"];
+#[cfg(test)]
+use crate::Fix;
+use crate::{StaticViolation, location};
 
 pub(super) fn check_file(
     file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
+    _context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
-    let path = file.path.as_str();
     for element in &file.ast.jsx_elements {
         for attribute in &element.attributes {
             if attribute
@@ -75,40 +65,19 @@ pub(super) fn check_file(
             });
         }
     }
-    let mut missing_auto_imports = BTreeSet::new();
     for element in &file.ast.jsx_elements {
         let name = file.source_text(element.name.span).unwrap_or_default();
         if name.is_empty() {
             continue;
         }
         if let Some(dot) = name.find('.') {
-            // A dotted tag name: upstream walks to the root identifier and
-            // checks that alone — `<Foo.Bar/>` reports 'Foo' when `Foo` is
-            // unbound, and never speculates about the `Bar` member. The
-            // demand plan asks TypeScript about exactly this root span, so
-            // an unresolved entity here means the compiler looked and found
-            // nothing. No DOM exemption (upstream applies it to plain tags
-            // only) and no auto-import; `this` is never a binding.
+            // A dotted tag is certifiable only when the semantic layer
+            // provides an explicit unresolved result for its root. An absent
+            // root entity is merely missing evidence, so fail closed.
             let root = name[..dot].trim_end();
-            let root_span = Span::new(
-                element.name.span.start,
-                element.name.span.start + u32::try_from(root.len()).unwrap_or_default(),
-            );
             if root == "this" || root.is_empty() {
                 continue;
             }
-            if context.entities.at(path, root_span).is_some() {
-                continue;
-            }
-            violations.push(StaticViolation {
-                id: "SC8005".into(),
-                rule: "jsx-no-undef".into(),
-                message: format!("'{root}' is not defined."),
-                hint: "Import it, declare it, or check the spelling — TypeScript could not resolve this tag's object to any binding.".into(),
-                location: location(file.path.shared(), root_span),
-                analysis_context: String::new(),
-                fixes: vec![],
-            });
             continue;
         }
         // Upstream's `isDOMElementName` plus its separate `this` guard:
@@ -117,30 +86,16 @@ pub(super) fn check_file(
         if is_lowercase_led(name) {
             continue;
         }
-        if context.entities.at(path, element.name.span).is_some() {
-            continue;
-        }
-        if AUTO_IMPORT_COMPONENTS.contains(&name) {
-            missing_auto_imports.insert(name);
-            continue;
-        }
-        violations.push(StaticViolation {
-            id: "SC8005".into(),
-            rule: "jsx-no-undef".into(),
-            message: format!("'{name}' is not defined."),
-            hint: "Import it, declare it, or check the spelling — TypeScript could not resolve this tag to any binding.".into(),
-            location: location(file.path.shared(), element.name.span),
-            analysis_context: String::new(),
-            fixes: vec![],
-        });
-    }
-    if !missing_auto_imports.is_empty() {
-        report_missing_auto_imports(file, &missing_auto_imports, violations);
+        // `EntitySymbols` contains only proven semantic bindings. Its absence
+        // is deliberately uncertifiable, not proof that this JSX name is
+        // undefined.
+        let _ = name;
     }
 }
 
 /// Upstream's `formatList`: a sentence-cased, Oxford-comma-joined name list
 /// (`'Show'`, `'Show' and 'For'`, `'Show', 'For', and 'Index'`).
+#[cfg(test)]
 fn format_names(names: &[&str]) -> String {
     match names {
         [] => String::new(),
@@ -156,48 +111,9 @@ fn format_names(names: &[&str]) -> String {
     }
 }
 
-fn report_missing_auto_imports(
-    file: &FileFacts,
-    missing: &BTreeSet<&str>,
-    violations: &mut Vec<StaticViolation>,
-) {
-    let names = missing.iter().copied().collect::<Vec<_>>();
-    let joined = names.join(", ");
-    let solid_import = file
-        .ast
-        .imports
-        .iter()
-        .find(|import| import.module.as_str() == "solid-js" && !import.type_only);
-    let (report_span, fix) = match solid_import {
-        Some(import) => (import.span, auto_import_fix(file, import, &joined)),
-        None => {
-            let insertion = leading_insertion_point(&file.source);
-            (
-                Span::new(insertion, insertion),
-                Some(insert_fix(
-                    file,
-                    insertion,
-                    format!("import {{ {joined} }} from \"solid-js\";\n"),
-                )),
-            )
-        }
-    };
-    violations.push(StaticViolation {
-        id: "SC8005".into(),
-        rule: "jsx-no-undef".into(),
-        message: format!(
-            "{} should be imported from 'solid-js'.",
-            format_names(&names)
-        ),
-        hint: "Solid's control-flow components are ordinary named exports of 'solid-js'.".into(),
-        location: location(file.path.shared(), report_span),
-        analysis_context: String::new(),
-        fixes: fix.into_iter().collect(),
-    });
-}
-
 /// Where a brand-new `import` statement belongs: right after a leading
 /// shebang, otherwise the top of the file.
+#[cfg(test)]
 fn leading_insertion_point(source: &str) -> u32 {
     if source.starts_with("#!") {
         source
@@ -218,6 +134,7 @@ fn leading_insertion_point(source: &str) -> u32 {
 /// author put inside the braces stays where it is. An empty clause
 /// (`import {}`) has no binding to append to, so the brace itself is the
 /// insertion point and no separator is needed.
+#[cfg(test)]
 fn named_clause_insertion(source: &str) -> Option<(usize, &'static str)> {
     let brace = source.rfind('}')?;
     let trimmed = source[..brace].trim_end();
@@ -231,6 +148,8 @@ fn named_clause_insertion(source: &str) -> Option<(usize, &'static str)> {
 /// A same-file fix appending the missing names to an existing `"solid-js"`
 /// import, or `None` when the existing import shape has no unambiguous
 /// same-file rewrite.
+#[cfg(test)]
+#[allow(dead_code)]
 fn auto_import_fix(
     file: &FileFacts,
     import: &solid_facts::ast::ImportFact,
@@ -279,6 +198,7 @@ fn auto_import_fix(
 /// quote there; the space *before* the keyword is mandatory (it separates
 /// `from` from the default binding's name), so ` from` anchors the search.
 /// `None` when no such keyword is found.
+#[cfg(test)]
 fn from_keyword_offset(source: &str) -> Option<usize> {
     source.match_indices(" from").find_map(|(index, keyword)| {
         let after = source[index + keyword.len()..].chars().next()?;
@@ -286,10 +206,14 @@ fn from_keyword_offset(source: &str) -> Option<usize> {
     })
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 fn insert_fix(file: &FileFacts, at: u32, new_text: String) -> Fix {
     replace_fix(file, Span::new(at, at), new_text)
 }
 
+#[cfg(test)]
+#[allow(dead_code)]
 fn replace_fix(file: &FileFacts, span: Span, new_text: String) -> Fix {
     super::fix_replace(
         file,

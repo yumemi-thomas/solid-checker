@@ -23,12 +23,7 @@ mod upstream_compat;
 
 pub use pipeline::{build, build_with_contracts, build_with_contracts_measured};
 
-/// Project-level options for the Solid 1.x ESLint-compatibility rules.
-///
-/// The scoped name is intentional: Solid 2.0 has no entries in this document,
-/// and callers should not mistake an upstream-compatibility configuration for
-/// a dialect-neutral engine option set.
-pub use upstream_compat::solid1x_options::Solid1xRuleOptions;
+pub use upstream_compat::solid1x_options::{RuleOptions, Solid1xRuleOptions};
 
 pub use findings::{
     DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,
@@ -72,6 +67,13 @@ use typefacts::Location;
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum ExecutionRole {
+    /// Neither compiler facts nor semantic facts classify this span. Unknown
+    /// is not a violation: projection suppresses it instead of converting a
+    /// missing fact into a user-facing claim.
+    Unknown,
+    /// One-shot module evaluation: reads are untracked, but writes do not run
+    /// inside an owned tracking computation.
+    ModuleInitialization,
     TrackedJsx,
     DeferredCallback,
     UntrackedCallback,
@@ -88,22 +90,18 @@ impl ExecutionRole {
     pub const fn reports_untracked_read(self) -> bool {
         matches!(
             self,
-            Self::UntrackedRendering | Self::UntrackedCallback | Self::EffectApply
+            Self::ModuleInitialization
+                | Self::UntrackedRendering
+                | Self::UntrackedCallback
+                | Self::EffectApply
         )
     }
 
     /// Whether a reactive write (or an action invocation) is allowed in this
     /// role: the imperative scopes that run outside the tracking phase.
     #[must_use]
-    pub const fn permits_write(self) -> bool {
-        matches!(
-            self,
-            Self::EventCallback
-                | Self::DeferredCallback
-                | Self::UntrackedCallback
-                | Self::EffectApply
-                | Self::DirectiveApply
-        )
+    pub const fn reports_disallowed_write(self) -> bool {
+        matches!(self, Self::TrackedJsx | Self::UntrackedRendering)
     }
 }
 
@@ -243,15 +241,40 @@ pub struct StaticDefect {
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
     ExecutionMapIncomplete,
-    ComponentPropsDestructure,
+    ReactiveObjectDestructure {
+        source: String,
+        component_props: bool,
+    },
     ReactiveReadAfterAwait {
         accessor: String,
     },
     ComponentReturnsConditionally,
+    PreferComponentSyntax {
+        name: String,
+    },
+    ImplicitDraggableBoolean,
+    InvalidJsxNesting {
+        parent: String,
+        child: String,
+        ancestor: bool,
+    },
     PackageContractExportMissing {
         module: String,
         export: String,
         reexported: bool,
+    },
+    /// An exported callback reached an external call whose execution timing
+    /// is not certified. The fields are deliberately data, not a guessed
+    /// contract: the diagnostic can produce an editable stub while analysis
+    /// remains blocked until the package author chooses the audited timing.
+    UnknownCallbackExecution {
+        package: String,
+        entrypoint: String,
+        function: String,
+        parameter: usize,
+        parameter_type: String,
+        required_execution: String,
+        contract_stub: String,
     },
     MissingEffectFunction,
     UntrackedDerivedFunction {
@@ -292,8 +315,24 @@ impl StaticDefectKind {
             self,
             Self::ExecutionMapIncomplete
                 | Self::PackageContractExportMissing { .. }
+                | Self::UnknownCallbackExecution { .. }
                 | Self::ReactiveSourceUncaptured { .. }
         )
+    }
+
+    /// Whether contract emission refuses this obligation through
+    /// [`Program::contract_generation_obligations`] rather than through the
+    /// project-wide defect list.
+    ///
+    /// Those obligations carry the exported surface identity and the callee
+    /// whose timing a contract author has to describe, so emission consults
+    /// them only after resolving the requested entrypoint's exports.
+    /// Refusing from the defect list first would ignore that filter and block
+    /// every entrypoint over an obligation in an unrelated file. The metrics
+    /// still count this class through [`Self::is_unresolved_obligation`].
+    #[must_use]
+    pub fn refused_through_generation_obligations(&self) -> bool {
+        matches!(self, Self::UnknownCallbackExecution { .. })
     }
 }
 
@@ -351,6 +390,55 @@ impl OwnerRequirementOperation {
 
 const fn is_false(value: &bool) -> bool {
     !*value
+}
+
+fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static str> {
+    match returned.kind.as_str() {
+        "accessor" | "store-path" => {
+            if returned.label.is_empty() || returned.parameter.is_some() {
+                return Err("a reactive leaf requires a label");
+            }
+            if !returned.elements.is_empty() || !returned.properties.is_empty() {
+                return Err("a reactive leaf cannot contain elements or properties");
+            }
+        }
+        "tuple" => {
+            if !returned.label.is_empty()
+                || returned.parameter.is_some()
+                || returned.elements.is_empty()
+                || !returned.properties.is_empty()
+            {
+                return Err("a tuple requires elements only");
+            }
+            for element in returned.elements.iter().flatten() {
+                validate_contract_return(element)?;
+            }
+        }
+        "object" => {
+            if !returned.label.is_empty()
+                || returned.parameter.is_some()
+                || returned.properties.is_empty()
+                || !returned.elements.is_empty()
+                || returned.properties.keys().any(String::is_empty)
+            {
+                return Err("an object requires named properties only");
+            }
+            for property in returned.properties.values() {
+                validate_contract_return(property)?;
+            }
+        }
+        "argument" => {
+            if returned.parameter.is_none()
+                || !returned.label.is_empty()
+                || !returned.elements.is_empty()
+                || !returned.properties.is_empty()
+            {
+                return Err("an argument return requires a parameter only");
+            }
+        }
+        _ => return Err("the return kind is unsupported"),
+    }
+    Ok(())
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -442,12 +530,18 @@ pub struct ContractCallback {
     pub execution: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractReturn {
     pub kind: String,
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub parameter: Option<usize>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements: Vec<Option<ContractReturn>>,
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub properties: BTreeMap<String, ContractReturn>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
@@ -582,13 +676,12 @@ impl PackageContract {
                 ));
             }
         }
-        if let Some(returned) = &summary.returns
-            && (!matches!(returned.kind.as_str(), "accessor" | "store-path")
-                || returned.label.is_empty())
-        {
-            return Err(format!(
-                "package contract export {entrypoint}:{name} has an invalid reactive return"
-            ));
+        if let Some(returned) = &summary.returns {
+            validate_contract_return(returned).map_err(|reason| {
+                format!(
+                    "package contract export {entrypoint}:{name} has an invalid reactive return: {reason}"
+                )
+            })?;
         }
         if summary.callbacks.iter().any(|callback| {
             !matches!(
@@ -720,7 +813,19 @@ pub struct Program {
 #[serde(rename_all = "camelCase")]
 pub struct ContractGenerationObligation {
     pub function: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub function_identity: String,
     pub parameter: usize,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub package: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub entrypoint: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub parameter_type: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub required_execution: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub contract_stub: String,
     pub location: Location,
     pub message: String,
 }
@@ -834,7 +939,7 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, dialect, &[], &Solid1xRuleOptions::default())
+        self.build_with_contracts_shared(facts, dialect, &[], &RuleOptions::default())
     }
 
     pub fn build_with_contracts(
@@ -843,7 +948,7 @@ impl IncrementalBuilder {
         dialect: &dyn Dialect,
         contracts: &[PackageContract],
     ) -> Result<(Program, BuildTimings), BuildError> {
-        self.build_with_contracts_shared(facts, dialect, contracts, &Solid1xRuleOptions::default())
+        self.build_with_contracts_shared(facts, dialect, contracts, &RuleOptions::default())
             .map(|(program, timings)| ((*program).clone(), timings))
     }
 
@@ -853,7 +958,7 @@ impl IncrementalBuilder {
         facts: &ProjectFacts,
         dialect: &dyn Dialect,
         contracts: &[PackageContract],
-        rule_options: &Solid1xRuleOptions,
+        rule_options: &RuleOptions,
     ) -> Result<(Arc<Program>, BuildTimings), BuildError> {
         let total_started = Instant::now();
         let lookup_started = Instant::now();
@@ -1022,14 +1127,19 @@ fn propagate_summary_deltas(
     }
 }
 
-fn contract_callback_execution(execution: ExecutionRole) -> &'static str {
+fn contract_callback_execution(execution: ExecutionRole) -> Option<&'static str> {
     match execution {
-        ExecutionRole::TrackedJsx => "tracked",
-        ExecutionRole::DeferredCallback | ExecutionRole::UntrackedCallback => "deferred",
+        // Unknown timing is a contract-generation obligation, never an inline
+        // promise. A consumer must not execute user code eagerly because the
+        // producer lacked an execution proof.
+        ExecutionRole::Unknown => None,
+        ExecutionRole::ModuleInitialization => Some("inline"),
+        ExecutionRole::TrackedJsx => Some("tracked"),
+        ExecutionRole::DeferredCallback | ExecutionRole::UntrackedCallback => Some("deferred"),
         ExecutionRole::EffectApply
         | ExecutionRole::EventCallback
         | ExecutionRole::DirectiveApply
-        | ExecutionRole::UntrackedRendering => "inline",
+        | ExecutionRole::UntrackedRendering => Some("inline"),
     }
 }
 
@@ -1233,6 +1343,28 @@ fn jsx_primitive_name(
         dialect,
     )
     .or_else(|| {
+        let object = element.member_object?;
+        let property = element.member_property?;
+        let property_name = file.source_text(property)?;
+        let object_symbol = entities.at(file.path.as_str(), object)?;
+        let namespace_import = file.ast.imports.iter().any(|import| {
+            dialect.owns_module(&import.module)
+                && dialect
+                    .namespace_import_primitives(&import.module)
+                    .contains(&property_name)
+                && import.bindings.iter().any(|binding| {
+                    binding.kind == solid_facts::ast::ImportKind::Namespace
+                        && entities.at(file.path.as_str(), binding.local.span)
+                            == Some(object_symbol)
+                })
+        });
+        namespace_import.then(|| {
+            symbol_names
+                .get(format!("{object_symbol}::{property_name}").as_str())
+                .map(|name| PrimitiveName::new(name, dialect))
+        })?
+    })
+    .or_else(|| {
         file.ast
             .imports
             .iter()
@@ -1375,6 +1507,47 @@ mod tests {
         assert!(malformed_hash.validate().is_err());
     }
 
+    #[test]
+    fn schema_one_accepts_structured_returns_and_rejects_mixed_shapes() {
+        let leaf = ContractReturn {
+            kind: "accessor".into(),
+            label: "active".into(),
+            ..ContractReturn::default()
+        };
+        let structured = ContractReturn {
+            kind: "tuple".into(),
+            elements: vec![
+                Some(ContractReturn {
+                    kind: "store-path".into(),
+                    label: "query".into(),
+                    ..ContractReturn::default()
+                }),
+                Some(ContractReturn {
+                    kind: "object".into(),
+                    properties: BTreeMap::from([("active".into(), leaf.clone())]),
+                    ..ContractReturn::default()
+                }),
+            ],
+            ..ContractReturn::default()
+        };
+        assert!(validate_contract_return(&structured).is_ok());
+
+        let argument = ContractReturn {
+            kind: "argument".into(),
+            parameter: Some(0),
+            ..ContractReturn::default()
+        };
+        assert!(validate_contract_return(&argument).is_ok());
+
+        let mixed = ContractReturn {
+            kind: "object".into(),
+            label: "invalid".into(),
+            properties: BTreeMap::from([("active".into(), leaf)]),
+            ..ContractReturn::default()
+        };
+        assert!(validate_contract_return(&mixed).is_err());
+    }
+
     fn summary_node(path: &str, span: Span, body: Span) -> SummaryNode {
         SummaryNode {
             path: path.into(),
@@ -1382,6 +1555,7 @@ mod tests {
             body,
             name: None,
             symbol: None,
+            runtime_identity: String::new(),
             parameters: Vec::new(),
             exported: false,
             r#async: false,
@@ -1687,6 +1861,7 @@ mod tests {
             type_descriptor: None,
             resolved_call: None,
             callability: None,
+            runtime_value_domain: None,
             reference_space: None,
             runtime_identity: "".into(),
         };
@@ -2174,6 +2349,7 @@ mod tests {
         let indexes = HashMap::from([(("fixture.tsx".into(), nodes[0].span), 0)]);
         let summaries = vec![SummaryReads::default()];
         let invoked_parameters = vec![Vec::new()];
+        let invoked_parameter_members = vec![Vec::new()];
         let returned_bindings = HashMap::new();
         let missing = InterproceduralResultDependencyState::Missing;
 
@@ -2184,6 +2360,7 @@ mod tests {
             by_symbol: &missing_by_symbol,
             summaries: &summaries,
             invoked_parameters: &invoked_parameters,
+            invoked_parameter_members: &invoked_parameter_members,
             returned_bindings: &returned_bindings,
         };
         assert!(missing_view.dependency_matches(&missing, &dependency));

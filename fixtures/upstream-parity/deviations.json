@@ -41,9 +41,53 @@
       "status": "evidence-backed",
       "reason": "TypeScript proves 'string' + some_func() is a string ('+' with a string operand always yields one), so the onLy value is provably never a listener; upstream's constant folder cannot fold past the call and stays silent."
     },
-    "jsx-no-undef__valid__05": {
+    "jsx-no-undef__invalid__00": {
+      "status": "fact-unavailable",
+      "reason": "Upstream's own scope walk decides a plain JSX tag is undefined; this checker asks TypeScript, and a span with no entity is missing evidence rather than proof that no binding exists. The rule therefore fails closed on an unresolved tag and stays silent. `use:` directive names still report, because the structural binder returns an explicit negative there rather than an absence."
+    },
+    "jsx-no-undef__invalid__05": {
       "status": "policy",
-      "reason": "Upstream's typescriptEnabled tells the rule to stay silent because tsc will report TS2304 for the undefined component itself. This checker's certification must not depend on a separate tsc invocation being run and read, so it reports the undefined component regardless; the option is deliberately not carried."
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__06": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__07": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__08": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__09": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__10": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__11": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__12": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__13": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__14": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
+    },
+    "jsx-no-undef__invalid__15": {
+      "status": "policy",
+      "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
     },
     "no-array-handlers__valid__10": {
       "status": "evidence-backed",
@@ -159,6 +203,12 @@
       "status": "per-site",
       "reason": "Two nested derived functions: `d` calls `e`, `e` reads `signal()`, and every call site of both is untracked. The checker names the derivation that will not update, and there are two of them, so `d` and `e` each get an SC1006. Upstream anchors its one report on the reactive read at the bottom of the chain."
     },
+    "reactivity__invalid__23": {
+      "ours": 2,
+      "theirs": 1,
+      "status": "rule-split",
+      "reason": "Upstream's single `expectedFunctionGotExpression` report covers a component prop read installed directly as an event listener; the checker preserves both semantic consequences. SC1001 (v1/strict-read-untracked) reports that `props.onClick` is read outside tracking, while SC1007 (v1/expected-function-got-expression) reports that DOM setup installs only that current value. Both rules map to upstream's one `reactivity` rule, so both count against its expected 1."
+    },
     "reactivity__invalid__30": {
       "ours": 2,
       "theirs": 1,
@@ -196,26 +246,6 @@
       "ours": "import { createEffect } from \"solid-js\";\nimport { render } from \"solid-js/web\";",
       "status": "different-strategy",
       "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Both declarations are wrong in this case -- `createEffect` from \"solid-js/web\" and `render` from \"solid-js\" -- and the checker corrects both in one pass. ESLint applies one pass and skips the second fix because it overlaps the first's insertion into the same declaration, so upstream's recorded output still imports `render` from \"solid-js\", where it is not exported. Upstream's output is an intermediate state a second lint pass would carry further; ours is the finished program."
-    },
-    "jsx-no-undef__invalid__07": {
-      "ours": "import { Match, Switch } from \"solid-js\";\n\nrender(\n  <Switch fallback={<div>Not Found</div>}>\n    <Match when={state.route === \"home\"} />\n  </Switch>\n)",
-      "status": "cosmetic",
-      "reason": "The file has no imports at all, so both insert a new `import { … } from \"solid-js\";` at the top; only the order of names inside the braces differs. The checker collects the missing components in a sorted set, so the diagnostic message and the fix agree on one order no matter which tag the walk met first; upstream lists them in first-appearance order (`Switch, Match`)."
-    },
-    "jsx-no-undef__invalid__08": {
-      "ours": "import { For } from \"solid-js\";\n\nimport X from \"x\";\nlet el = <For each={items}>{item => item.name}</For>",
-      "status": "cosmetic",
-      "reason": "The file already has an unrelated `import X from \"x\";` and no \"solid-js\" declaration to extend, so both insert a new one. The checker inserts at the top of the file (past a shebang only); upstream inserts immediately before the first existing statement, which here is after the case source's leading blank line. Byte-identical declaration, one blank line's difference in where it lands."
-    },
-    "jsx-no-undef__invalid__14": {
-      "ours": "import { For } from \"solid-js\";\n\n// attached comment\nimport X from \"x\";\nlet el = <For each={items}>{item => item.name}</For>",
-      "status": "cosmetic",
-      "reason": "As jsx-no-undef__invalid__08, with a comment on the line before the first import. The checker's top-of-file insertion puts the new declaration above the blank line, leaving the comment adjacent to the import it was written for; upstream's lands between the blank line and the comment, which separates them. Same program either way."
-    },
-    "jsx-no-undef__invalid__15": {
-      "ours": "import { For } from \"solid-js\";\n\nimport X from \"x\"; // attached comment\nlet el = <For each={items}>{item => item.name}</For>",
-      "status": "cosmetic",
-      "reason": "As jsx-no-undef__invalid__08. The trailing `// attached comment` on the existing import is inside neither fix's range, so the whole difference is again whether the new declaration goes above or below the leading blank line."
     },
     "no-react-deps__invalid__00": {
       "ours": "createEffect(() => {\n        console.log(signal());\n      });",

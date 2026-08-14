@@ -86,6 +86,186 @@ fn project_rule_options_disable_one_exact_catalog_rule() {
 }
 
 #[test]
+fn solid_one_merge_props_function_sources_are_tracked() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let findings = project_snapshot_findings(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/merge-props-function-v1/tsconfig.json"),
+        Some("solid-v1"),
+    );
+    assert!(
+        findings.iter().all(|finding| {
+            !matches!(
+                finding["rule"].as_str(),
+                Some("v1/strict-read-untracked" | "v1/untracked-derived-function")
+            )
+        }),
+        "mergeProps wraps every function source in a tracked createMemo: {findings:#?}"
+    );
+}
+
+#[test]
+fn component_ref_callbacks_are_setup_time_outputs_in_both_dialects() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/component-ref/tsconfig.json");
+    for dialect in ["solid-v1", "solid-v2"] {
+        let findings = project_snapshot_findings(project.clone(), Some(dialect));
+        assert!(
+            findings
+                .iter()
+                .all(|finding| finding["rule"] != "strict-read-untracked"
+                    && finding["rule"] != "v1/strict-read-untracked"),
+            "calling a component ref installs an imperative handle in {dialect}: {findings:#?}"
+        );
+    }
+}
+
+#[test]
+fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/jsx-correctness/tsconfig.json");
+    for (dialect, expected) in [
+        (
+            "solid-v1",
+            ["v1/prefer-component-syntax", "v1/no-implicit-draggable"],
+        ),
+        (
+            "solid-v2",
+            ["prefer-component-syntax", "no-implicit-draggable"],
+        ),
+    ] {
+        let findings = project_snapshot_findings(project.clone(), Some(dialect));
+        let rules = findings
+            .iter()
+            .map(|finding| finding["rule"].as_str().unwrap())
+            .collect::<Vec<_>>();
+        for rule in expected {
+            assert_eq!(
+                rules.iter().filter(|candidate| **candidate == rule).count(),
+                1,
+                "{dialect} should report exactly one {rule}: {findings:#?}"
+            );
+        }
+        assert_eq!(
+            rules.len(),
+            2,
+            "unexpected {dialect} findings: {findings:#?}"
+        );
+    }
+}
+
+#[test]
+fn valid_jsx_nesting_reports_only_parser_tree_changes() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let project =
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/jsx-nesting/tsconfig.json");
+    for (dialect, rule) in [
+        ("solid-v1", "v1/valid-jsx-nesting"),
+        ("solid-v2", "valid-jsx-nesting"),
+    ] {
+        let findings = project_snapshot_findings(project.clone(), Some(dialect));
+        let nesting = findings
+            .iter()
+            .filter(|finding| finding["rule"] == rule)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            nesting.len(),
+            6,
+            "{dialect} should report each parser-changing nesting once (the standalone <tr><div> has two) and cross no component boundary: {findings:#?}"
+        );
+    }
+}
+
+#[test]
+fn returned_event_handler_factories_preserve_deferred_execution() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/returned-handler-factory/tsconfig.json");
+    for dialect in ["solid-v1", "solid-v2"] {
+        let findings = project_snapshot_findings(project.clone(), Some(dialect));
+        assert!(
+            findings.is_empty(),
+            "{dialect} should trace the returned inner handler to the JSX event: {findings:#?}"
+        );
+    }
+}
+
+#[test]
+fn component_identity_combines_type_facts_with_dialect_compatibility() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures/semantic-component-identity");
+    let source = std::fs::read_to_string(fixture.join("App.tsx")).unwrap();
+    let typed_offset = u64::try_from(source.find("setCount(1)").unwrap()).unwrap();
+    let compat_offset = u64::try_from(source.find("setCount(2)").unwrap()).unwrap();
+    let mut component_prop_patterns = ["{ homeName }", "{ nestedName }", "{ spreadName }"]
+        .map(|pattern| u64::try_from(source.find(pattern).unwrap()).unwrap())
+        .to_vec();
+    component_prop_patterns.sort_unstable();
+    for (dialect, expected) in [
+        ("solid-v2", vec![typed_offset]),
+        ("solid-v1", vec![typed_offset, compat_offset]),
+    ] {
+        let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some(dialect));
+        let mut writes = findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC2001")
+            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+            .collect::<Vec<_>>();
+        writes.sort_unstable();
+        assert_eq!(writes, expected, "wrong component identity in {dialect}");
+        let mut destructures = findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC1003")
+            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+            .collect::<Vec<_>>();
+        destructures.sort_unstable();
+        assert_eq!(
+            destructures, component_prop_patterns,
+            "callback containment or a JSX render helper distorted component identity in {dialect}"
+        );
+        assert!(
+            findings.iter().all(|finding| {
+                finding["message"]
+                    .as_str()
+                    .is_none_or(|message| !message.contains("localSameName"))
+            }),
+            "a user-local type alias became a Solid accessor: {findings:#?}"
+        );
+    }
+}
+
+#[test]
+fn package_contract_async_behavior_reaches_async_sensitive_rules() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let findings = project_snapshot_findings(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/contract-async/tsconfig.json"),
+        Some("solid-v2"),
+    );
+    assert!(
+        findings.iter().any(|finding| finding["id"] == "SC7002"),
+        "the dependency contract's asyncBehavior did not classify the computation: {findings:#?}"
+    );
+}
+
+#[test]
 fn solid_two_write_wording_follows_source_provenance() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
@@ -504,6 +684,27 @@ fn solid_one_native_tuple_contracts_discover_their_accessor_slot() {
 }
 
 #[test]
+fn solid_one_create_mutable_allows_direct_proxy_writes() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let findings = project_snapshot_findings(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../fixtures/reactive-ir/solid-1x-sources/tsconfig.json"),
+        Some("solid-v1"),
+    );
+    assert!(
+        findings.iter().all(|finding| {
+            finding["rule"] != "v1/no-direct-mutation"
+                || !finding["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("mutable"))
+        }),
+        "createMutable is a writable proxy in Solid 1.x: {findings:#?}"
+    );
+}
+
+#[test]
 fn solid_one_transition_starter_restores_the_callers_tracking_and_owner() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
@@ -611,7 +812,7 @@ fn solid_one_from_producer_inherits_its_callers_owner() {
         })
         .expect("top-level from cleanup") as u64;
     let valid_cleanup = source
-        .find("export function FromProducerInheritsComponentOwner")
+        .find("FromProducerInheritsComponentOwner")
         .and_then(|start| {
             source[start..]
                 .find("onCleanup")

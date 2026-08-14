@@ -321,7 +321,7 @@ fn prefer_for(
             .ast
             .functions
             .iter()
-            .find(|function| function.span == argument.span)
+            .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
             .is_some_and(|function| function.parameters.len() == 1);
         let (message, fixes) = if one_parameter {
             let fixes = if receiver_is_array {

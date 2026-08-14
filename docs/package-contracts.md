@@ -199,6 +199,7 @@ The schema records:
 
 - direct reactive accessor and store-path reads;
 - accessor and store returns, including factory-to-factory propagation;
+- tuple slots and named object properties containing reactive returns;
 - inline, tracked, and deferred callback parameters;
 - Promise and async-iterable behavior;
 - inert exported values; and
@@ -209,6 +210,26 @@ generics, async functions, multiple const declarations, classes, re-exports,
 aliases, and subpath imports. Consumers support named imports and local aliases.
 Calls in compiler-tracked JSX retain their tracked status; calls in ordinary
 function bodies produce `strict-read-untracked` findings.
+
+Structured returns are an additive part of `schemaVersion: 1`. A tuple uses an
+`elements` array (with `null` for an uncontracted slot), while an object uses a
+`properties` map. Leaves retain the existing `accessor` or `store-path` shape.
+Consumers recognize those leaves through array/object destructuring and direct
+object member access. An `argument` return identifies a parameter whose actual
+value is returned unchanged; consumers instantiate it at each call, so generic
+identity and invariant wrappers preserve nested tuple/object reactivity without
+inventing a new schema version.
+
+A shorthand property (`{ pathname }`) writes one identifier where a key and a
+value both stand, and TypeScript answers a symbol query at that span with the
+*property's* symbol, never the value binding's. The value is identified instead
+by the binder's resolution of that exact reference, carried on the object
+property fact as `shorthandBinding`. That is scope-exact: a same-spelled
+binding in a sibling block declares a different symbol at a different span, so
+it can neither be chosen nor make the visible declaration ambiguous. A
+shorthand the binder resolves to no declaration in this file -- a global, or an
+import specifier, including one for an accessor declared in another file --
+carries no fact and yields no structured property.
 
 Generation fails closed when an exported parameter escapes through an
 uncontracted external call whose execution semantics are unknown. This includes
@@ -257,6 +278,13 @@ supplies the callback and return summaries. The same
 `make contract-conformance` target runs the generator with `--check`, which
 fails when the checked-in artifact is stale relative to either input instead
 of shipping a drifted contract.
+
+Solid 1.x also embeds a narrow reviewed contract for
+`@solid-primitives/scheduled@1.5.3`. It distinguishes deferred `debounce`,
+`throttle`, and `scheduleIdle` callbacks from the inline scheduler factory
+arguments used by `leading`, `leadingAndTrailing`, and `createScheduled`. The
+contract is exact-version matched; other releases must ship or generate their
+own contract rather than inheriting guessed timing.
 
 The pinned Solid Primitives `next` corpus contains 98 packages. Its contracts
 are generated from complete package export maps, including subpaths and

@@ -16,4 +16,8 @@ declare module "solid-js" {
     count: number;
     children: (index: number) => unknown;
   }): unknown;
+  export function Show(props: {
+    when: unknown;
+    children: (value: unknown) => unknown;
+  }): unknown;
 }

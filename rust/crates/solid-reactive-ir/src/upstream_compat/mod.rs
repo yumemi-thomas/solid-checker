@@ -585,6 +585,10 @@ pub(super) struct UpstreamCompatContext<'a> {
     pub(super) accessors: &'a HashMap<SymbolId, (SymbolId, Location)>,
     /// Whether each proven source is an accessor or a store path.
     pub(super) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
+    /// The exact dialect primitive that created a source, when it was created
+    /// locally. This distinguishes source kinds with different write
+    /// semantics, notably Solid 1.x's mutable proxy from readonly stores.
+    pub(super) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     /// Component props roots proven by component shape and propagated type
     /// facts. Member names may be unresolved (for example an inferred `any`),
     /// but the props object itself remains a reactive proxy.
@@ -666,6 +670,7 @@ pub(crate) fn check_project(
         entities: ctx.entities,
         accessors: ctx.accessors,
         source_kinds: ctx.source_kinds,
+        source_primitives: ctx.source_primitives,
         prop_sources: ctx.prop_sources,
         source_reference_index: retained.unwrap_or_else(|| {
             crate::symbols::source_reference_locations(
@@ -675,7 +680,7 @@ pub(crate) fn check_project(
             )
         }),
         contracted: ctx.contracted,
-        solid1x_options: ctx.rule_options,
+        solid1x_options: ctx.solid1x_rule_options,
     };
     for diagnostics in parallel_file_results(&ctx.facts.files, |file| check_file(file, &context)) {
         draft.static_violations.extend(diagnostics.violations);

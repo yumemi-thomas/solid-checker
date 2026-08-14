@@ -10,6 +10,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { Linter } from "eslint";
 
 const require = createRequire(import.meta.url);
 const plugin = require("../eslint.cjs");
@@ -50,6 +51,20 @@ test("exports an Oxlint-compatible certification plugin", () => {
   );
 });
 
+test("runs as a flat-config plugin on ESLint 10", () => {
+  const linter = new Linter();
+  const messages = linter.verify(
+    "const answer = 42;",
+    [{
+      plugins: { "solid-checker": plugin },
+      settings: { solidChecker: { snapshot: { status: "certified", findings: [] } } },
+      rules: { "solid-checker/certification": "error" }
+    }],
+    { filename: "App.js" }
+  );
+  assert.deepEqual(messages, []);
+});
+
 test("reports canonical diagnostic content for findings belonging to the linted file", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-"));
   const filename = join(root, "App.tsx");
@@ -82,12 +97,25 @@ test("reports canonical diagnostic content for findings belonging to the linted 
   assert.equal(reports.length, 1);
   assert.equal(
     reports[0].data.message,
-    "[SC1001] reactive read outside tracking\n\nMove the read into a tracking scope."
+    "[SC1001] reactive read outside tracking\n\nMove the read into a tracking scope." +
+      "\n\nDocs: https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules/strict-read-untracked.md"
   );
   assert.deepEqual(reports[0].loc, {
     start: { line: 1, column: 6 },
     end: { line: 1, column: 11 }
   });
+});
+
+test("certification diagnostics link directly to their rule documentation", () => {
+  assert.equal(
+    plugin._testing.findingMessage({
+      id: "SC1003",
+      rule: "v1/no-destructure",
+      message: "do not destructure reactive objects"
+    }),
+    "[SC1003] do not destructure reactive objects\n\n" +
+      "Docs: https://github.com/yumemi-thomas/solid-checker/blob/main/docs/rules/v1/no-destructure.md"
+  );
 });
 
 test("projects safe same-file fixes and UTF-8 byte ranges", () => {

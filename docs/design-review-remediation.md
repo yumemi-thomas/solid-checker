@@ -1,7 +1,7 @@
 # Design-review remediation plan
 
 Source: full-catalog design review of main @ fdd9c045 (2026-08-12), three passes —
-Solid 1.x catalog (38 rules), Solid 2.0 catalog (34 rules), and repo
+Solid 1.x catalog (41 rules), Solid 2.0 catalog (37 rules), and repo
 composability. Verdict: 29/38 v1 rules and 28/34 v2 rules clean; the failures
 are peripheral (docs, severity policy, coverage, dispatch typing), not core
 logic. The architecture's seams hold in the actual dependency graph; the gap
@@ -98,7 +98,7 @@ mirror upstream 0.14.5 base policy exactly; the four upstream-off rules are
 enabled at &lt;severity&gt; because &lt;reason&gt;" — or change their tiers in 2.5.
 
 ### 2.4 SC2001 store-setter wording
-Message hardcodes "signal setter … SIGNAL_WRITE_IN_OWNED_SCOPE"
+Message uses the RC diagnostic name `REACTIVE_WRITE_IN_OWNED_SCOPE`
 (`rust/dialects/solid-v2/rules/src/lib.rs:71`) while provenance admits store
 setters, and the hint offers `ownedWrite` only via `createSignal` though the
 implementation honors it on any source-creating call

@@ -20,7 +20,8 @@ Physical colocation does not merge the module interfaces:
   adapter over the `solid-1x-compiler` fork.
 - The `typefacts` crate and its `solid-typefacts` producer own TypeScript-Go
   facts, in their own repository.
-- The `dom-expressions-compiler` crate owns JSX execution semantics.
+- Each `dom-expressions-compiler` fork owns its JSX execution and
+  compiler-established ownership semantics.
 - `rust/crates/solid-facts-backend` owns package contracts.
 
 Oxc and compiler facts stay in-process.

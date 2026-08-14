@@ -26,17 +26,26 @@ export function Leaf() {
   return null;
 }
 
-// Pinned limitation, not an assertion of correctness: JSX member tags are
-// not resolved against the namespace vocabulary, so `<Solid.For>` and
-// `<Solid.Repeat>` produce no control-flow classification today — silently,
-// on both import styles (a direct `<For>` in `direct.tsx` is recognised).
-// If member-tag resolution lands, this snapshot is where it shows up.
+// JSX member tags are resolved against the namespace vocabulary, so these
+// callbacks exercise the same control-flow and children-parameter paths as
+// the named-import twin in `direct.tsx`.
 export function Rows() {
-  return <Solid.For each={items()}>{(item) => <div>{item}</div>}</Solid.For>;
+  return (
+    <Solid.For each={items()}>
+      {(item, index) => {
+        const current = index();
+        return <div>{current}</div>;
+      }}
+    </Solid.For>
+  );
 }
 
 export function Cells(props: { total: number }) {
   return (
     <Solid.Repeat count={props.total}>{(index) => <div>{index}</div>}</Solid.Repeat>
   );
+}
+
+export function Conditional() {
+  return <Solid.Show when={items()}>{() => <div>{items()}</div>}</Solid.Show>;
 }

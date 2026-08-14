@@ -87,8 +87,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
-      "start": 1117,
-      "end": 1124,
+      "start": 1134,
+      "end": 1141,
       "fixes": 0
     },
     {
@@ -97,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
-      "start": 1126,
-      "end": 1132,
+      "start": 1143,
+      "end": 1149,
       "fixes": 0
     },
     {
@@ -107,8 +107,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
-      "start": 1740,
-      "end": 1747,
+      "start": 1757,
+      "end": 1764,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 2309,
+      "end": 2321,
       "fixes": 0
     },
     {
@@ -117,8 +127,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
-      "start": 2339,
-      "end": 2340,
+      "start": 2356,
+      "end": 2357,
       "fixes": 0
     },
     {
@@ -127,18 +137,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
-      "start": 2945,
-      "end": 2952,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
-      "start": 3676,
-      "end": 3683,
+      "start": 3693,
+      "end": 3700,
       "fixes": 0
     }
   ]

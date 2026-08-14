@@ -159,7 +159,22 @@ pub enum RegionReason {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OwnershipRegion {
     pub span: Span,
-    pub kind: String,
+    pub kind: OwnershipRegionKind,
+}
+
+/// The owner state the compiler proves for a source region.
+///
+/// Known states are closed and typed. An older or newer protocol-1 adapter may
+/// still send an unfamiliar string; it is retained as `Unknown` and supplies
+/// no owner proof rather than making the whole fact payload unreadable.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OwnershipRegionKind {
+    Owned,
+    Unowned,
+    Leaf,
+    #[serde(other)]
+    Unknown,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -208,8 +223,6 @@ pub enum CompilerFactsError {
         category: &'static str,
         index: usize,
     },
-    #[error("ownership region kind is empty at index {0}")]
-    EmptyOwnershipKind(usize),
     #[error("JSX operation kind is empty at index {0}")]
     EmptyOperationKind(usize),
 }
@@ -263,13 +276,6 @@ impl ExecutionMap {
             |value| value.span,
         )?;
         if let Some(index) = self
-            .ownership_regions
-            .iter()
-            .position(|region| region.kind.trim().is_empty())
-        {
-            return Err(CompilerFactsError::EmptyOwnershipKind(index));
-        }
-        if let Some(index) = self
             .jsx_operations
             .iter()
             .position(|operation| operation.kind.trim().is_empty())
@@ -292,10 +298,12 @@ impl ExecutionMap {
                 .callback_roles
                 .iter()
                 .any(|fact| fact.span.contains(candidate))
-            || self
-                .jsx_operations
-                .iter()
-                .any(|fact| fact.kind == "component-property" && fact.span.contains(candidate))
+            || self.jsx_operations.iter().any(|fact| {
+                matches!(
+                    fact.kind.as_str(),
+                    "component-property" | "component-spread" | "component-child"
+                ) && fact.span.contains(candidate)
+            })
     }
 
     #[must_use]
@@ -370,6 +378,31 @@ mod tests {
         facts.tracked_regions.clear();
         facts.validate(source).unwrap();
         assert_eq!(facts.uncovered_jsx_expressions(), vec![Span::new(0, 5)]);
+    }
+
+    #[test]
+    fn all_component_value_operations_cover_jsx_expressions() {
+        for kind in ["component-property", "component-spread", "component-child"] {
+            let source = "value";
+            let encoded = encoded(source).replace("jsx-expression", kind);
+            let mut facts = ExecutionMap::from_json(&encoded, source).unwrap();
+            facts.tracked_regions.clear();
+            assert!(facts.classifies(Span::new(1, 2)), "kind {kind}");
+        }
+    }
+
+    #[test]
+    fn unfamiliar_protocol_one_ownership_kinds_remain_non_proofs() {
+        let source = "value";
+        let encoded = encoded(source).replace(
+            r#""ownershipRegions":[]"#,
+            r#""ownershipRegions":[{"span":{"start":0,"end":5},"kind":"future-state"}]"#,
+        );
+        let facts = ExecutionMap::from_json(&encoded, source).unwrap();
+        assert_eq!(
+            facts.ownership_regions[0].kind,
+            OwnershipRegionKind::Unknown
+        );
     }
 
     #[test]

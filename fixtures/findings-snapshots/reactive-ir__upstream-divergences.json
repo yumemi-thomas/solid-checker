@@ -142,13 +142,23 @@
       "fixes": 0
     },
     {
-      "rule": "v1/jsx-no-undef",
-      "code": "SC8005",
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/upstream-divergences/tag-cases.tsx",
-      "start": 527,
-      "end": 534,
+      "start": 582,
+      "end": 592,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/upstream-divergences/tag-cases.tsx",
+      "start": 595,
+      "end": 607,
       "fixes": 0
     }
   ]

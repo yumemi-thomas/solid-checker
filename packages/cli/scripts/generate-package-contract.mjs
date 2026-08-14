@@ -148,6 +148,15 @@ function walkFiles(directory, root = directory, files = []) {
   return files;
 }
 
+function hasRelativeModuleReference(path) {
+  const source = readFileSync(path, "utf8")
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .split("\n")
+    .filter(line => !line.trimStart().startsWith("//"))
+    .join("\n");
+  return /(?:\bfrom\s*|\bimport\s*\(\s*|\bimport\s*)["']\.\.?\//.test(source);
+}
+
 function patternCapture(pattern, candidate) {
   const star = pattern.indexOf("*");
   if (star === -1) return pattern === candidate ? "" : undefined;
@@ -384,10 +393,12 @@ function analyzeTarget({
   const excludedFiles = new Set(
     excludedTargets.map(target => packageLocalTarget(packageRoot, target))
   );
-  const implementationFiles = walkFiles(implementationRoot)
-    .filter(runtimeLeaf)
-    .map(file => resolve(implementationRoot, file))
-    .filter(file => file === entryFile || !excludedFiles.has(file));
+  const implementationFiles = hasRelativeModuleReference(entryFile)
+    ? walkFiles(implementationRoot)
+        .filter(runtimeLeaf)
+        .map(file => resolve(implementationRoot, file))
+        .filter(file => file === entryFile || !excludedFiles.has(file))
+    : [entryFile];
   const project = join(temporaryDirectory, `${identifier}-tsconfig.json`);
   const output = join(temporaryDirectory, `${identifier}.json`);
   writeFileSync(
@@ -403,6 +414,11 @@ function analyzeTarget({
           skipLibCheck: true,
           target: "ES2022"
         },
+        // Runtime files are explicit roots because a published ESM barrel's
+        // `.js` specifiers often resolve to adjacent `.d.ts` files when only
+        // the entrypoint is seeded. The native emitter filters unresolved
+        // behavior by this entrypoint's exact runtime identities, so private
+        // siblings cannot poison its public contract.
         files: implementationFiles
       },
       null,

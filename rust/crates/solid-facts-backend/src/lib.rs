@@ -1774,6 +1774,7 @@ mod tests {
         solve_measured: stub_solve,
         docs_url: |rule| format!("stub://docs/{rule}"),
         has_rule: |_| false,
+        semantic_demands: dialect::SemanticDemandCapabilities::NONE,
         package_contract_finding: stub_package_contract_finding,
         bundled_packages: &[],
         bundled_contract: |_| Ok(None),

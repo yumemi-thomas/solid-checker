@@ -216,6 +216,22 @@ pub enum Boundary {
     Error,
 }
 
+/// Semantic identities of public Solid types used by shared analysis.
+///
+/// The engine asks for a role only after Type Facts has proved both the alias
+/// declaration and its origin module. This keeps exported spellings in the
+/// dialect vocabulary and prevents a same-named user alias from becoming a
+/// reactive source or component.
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub enum TypeRole {
+    Component,
+    Accessor,
+    Signal,
+    Store,
+    Setter,
+    StoreSetter,
+}
+
 /// Whether creating a primitive inside a leaf owner is forbidden.
 ///
 /// The conditional case is real and load-bearing in Solid 2.0:
@@ -332,6 +348,27 @@ pub struct ReturnedCallbackSemantics {
 pub trait Dialect: Sync {
     /// Which version this adapter speaks.
     fn version(&self) -> Version;
+
+    /// Whether this dialect's compatibility surface treats a binding name as
+    /// a component without a semantic JSX call-site or type proof.
+    ///
+    /// Solid 1.x retains the ESLint-era uppercase convention for parity with
+    /// the upstream rules. The reactive core asks the dialect instead of
+    /// embedding that source convention in its component model; Solid 2 has
+    /// no such fallback.
+    fn component_name_is_compat_component(&self, name: &str) -> bool {
+        let _ = name;
+        false
+    }
+
+    /// Whether a direct JSX return is sufficient component evidence.
+    ///
+    /// Solid 2 treats JSX-producing functions as components. Solid 1's
+    /// upstream-compatible rules instead use their historical binding-name
+    /// convention, so a lowercase JSX helper remains a non-component there.
+    fn direct_jsx_return_is_component(&self) -> bool {
+        false
+    }
 
     /// The modules whose exports this dialect owns.
     ///
@@ -770,6 +807,34 @@ pub trait Dialect: Sync {
     /// different answer from "from the package root" and must stay silent.
     fn export_modules(&self, name: &str, position: ExportPosition) -> Vec<&'static str>;
 
+    /// The semantic role of one compiler-resolved exported type.
+    ///
+    /// Both the alias name and the module must agree with the generated type
+    /// export index. A textual type name by itself is never evidence.
+    fn type_role(&self, origin_module: &str, name: &str) -> Option<TypeRole> {
+        if !self
+            .export_modules(name, ExportPosition::Type)
+            .contains(&origin_module)
+        {
+            return None;
+        }
+        match name {
+            "Accessor" | "SourceAccessor" | "Resource" | "InitializedResource" => {
+                Some(TypeRole::Accessor)
+            }
+            "Signal" => Some(TypeRole::Signal),
+            "Store" => Some(TypeRole::Store),
+            "Setter" => Some(TypeRole::Setter),
+            "StoreSetter" => Some(TypeRole::StoreSetter),
+            "Component"
+            | "ContextProviderComponent"
+            | "FlowComponent"
+            | "ParentComponent"
+            | "VoidComponent" => Some(TypeRole::Component),
+            _ => None,
+        }
+    }
+
     /// The primitives a namespace import of `module` makes reachable, as in
     /// `import * as solid from "solid-js"` then `solid.createSignal(...)`.
     ///
@@ -851,6 +916,34 @@ mod tests {
 
     fn dialects() -> [&'static dyn Dialect; 2] {
         [Version::V1.dialect(), Version::V2.dialect()]
+    }
+
+    #[test]
+    fn semantic_type_roles_require_an_exact_export_and_module() {
+        for dialect in dialects() {
+            assert_eq!(
+                dialect.type_role("solid-js", "Accessor"),
+                Some(TypeRole::Accessor)
+            );
+            assert_eq!(
+                dialect.type_role("solid-js", "Component"),
+                Some(TypeRole::Component)
+            );
+            assert_eq!(dialect.type_role("user-module", "Accessor"), None);
+            assert_eq!(dialect.type_role("solid-js", "ComponentProps"), None);
+        }
+        assert_eq!(
+            Version::V1.dialect().type_role("solid-js", "Resource"),
+            Some(TypeRole::Accessor)
+        );
+        assert_eq!(
+            Version::V1.dialect().type_role("solid-js/store", "Store"),
+            Some(TypeRole::Store)
+        );
+        assert_eq!(
+            Version::V2.dialect().type_role("solid-js", "Signal"),
+            Some(TypeRole::Signal)
+        );
     }
 
     /// [`Dialect::callback_executions`] is a transcription of the reviewed

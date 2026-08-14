@@ -2,13 +2,15 @@
 
 `SC1003` · **error** · violation · 🛠️ safe fix available
 
-Component props are destructured, which unwraps each property once and severs
-reactivity.
+Component props or another proven reactive object are destructured outside a
+tracking scope, which unwraps each property once and severs reactivity.
 
 ## What it does
 
 Flags object destructuring of a component's props — both in the parameter list
-(`function Card({ title })`) and in later bindings (`const { title } = props`).
+(`function Card({ title })`) and in later bindings (`const { title } = props`) —
+and of objects proven reactive by native APIs or reviewed package contracts.
+It does not guess from hook names such as `useParams`.
 
 When every destructured property is only read (never reassigned), solid-checker
 offers a safe fix that restores the `props` parameter and rewrites the body to
@@ -40,6 +42,8 @@ function Avatar(props) {
   const { src } = props; // Same problem, one statement later.
   return <img src={src} />;
 }
+
+const { id } = useParams(); // Flagged when the package contract says this is a store.
 ```
 
 Examples of **correct** code for this rule:
@@ -60,14 +64,20 @@ function Field(props) {
   const merged = merge({ type: "text" }, rest);
   return <input {...merged} aria-label={props.label} />;
 }
+
+// Destructuring inside a tracking computation reads the latest values.
+const selection = createMemo(() => {
+  const { id } = useParams();
+  return id;
+});
 ```
 
 ## How to fix
 
-Keep the `props` object intact and read `props.<name>` inside JSX or a tracked
+Keep a reactive object intact and read `object.<name>` inside JSX or a tracked
 computation. To split props use `omit(props, ...keys)`; to default them use
-`merge(defaults, props)`. Never destructure — not in the parameter list, not in the
-body, and not in control-flow callbacks.
+`merge(defaults, props)`. Parameter destructuring is always setup-time;
+destructuring inside a tracked memo or effect is safe.
 
 ## Related
 

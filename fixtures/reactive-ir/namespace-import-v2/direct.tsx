@@ -1,6 +1,7 @@
 import {
   For,
   Repeat,
+  Show,
   children,
   createEffect,
   createSignal,
@@ -24,9 +25,20 @@ export function Leaf() {
 }
 
 export function Rows() {
-  return <For each={items()}>{(item) => <div>{item}</div>}</For>;
+  return (
+    <For each={items()}>
+      {(item, index) => {
+        const current = index();
+        return <div>{current}</div>;
+      }}
+    </For>
+  );
 }
 
 export function Cells(props: { total: number }) {
   return <Repeat count={props.total}>{(index) => <div>{index}</div>}</Repeat>;
+}
+
+export function Conditional() {
+  return <Show when={items()}>{() => <div>{items()}</div>}</Show>;
 }

@@ -9,7 +9,10 @@
       "import": "./wasm.mjs",
       "default": "./wasm.mjs"
     },
-    "./eslint": "./eslint.cjs"
+    "./eslint": {
+      "types": "./eslint.d.ts",
+      "default": "./eslint.cjs"
+    }
   },
   "bin": {
     "solid-checker": "bin/solid-checker.mjs"
@@ -17,6 +20,7 @@
   "files": [
     "bin",
     "eslint.cjs",
+    "eslint.d.ts",
     "lib",
     "wasm.d.ts",
     "wasm.mjs",
@@ -26,10 +30,23 @@
   ],
   "scripts": {
     "prepack": "node scripts/validate-package.mjs",
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs && npm run test:types",
+    "test:types": "tsc -p test/types/tsconfig.json"
   },
   "engines": {
     "node": ">=20"
+  },
+  "peerDependencies": {
+    "eslint": ">=9.0.0"
+  },
+  "peerDependenciesMeta": {
+    "eslint": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "eslint": "10.8.0",
+    "typescript": "5.9.3"
   },
   "license": "MIT",
   "repository": {

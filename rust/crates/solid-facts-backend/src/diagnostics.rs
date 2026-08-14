@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
     CacheRetention, Finding, IncrementalBuilder, PackageContract, PackageContractIssue,
-    PackageContractIssueKind, Program, Solid1xRuleOptions,
+    PackageContractIssueKind, Program, RuleOptions,
 };
 
 use crate::dialect::{self, Dialect};
@@ -129,7 +129,7 @@ struct DiagnosticIdentity {
     /// Per-rule options are re-read from disk on every analysis, so an
     /// edited `.solid-checker/rule-options.json` invalidates a retained
     /// diagnostic even within one generation.
-    rule_options: Solid1xRuleOptions,
+    rule_options: RuleOptions,
 }
 
 struct RetainedDiagnostic {
@@ -666,6 +666,13 @@ pub(crate) fn bundled_contract_v1(package: &str) -> Result<Option<PackageContrac
             bundled.source_path = "bundled://solid-v1/solid-js.json".into();
             Some(bundled)
         }
+        "@solid-primitives/scheduled" => {
+            let mut bundled = decode_package_contract(include_bytes!(
+                "../../../../pkg/contracts/bundled/solid-v1/solid-primitives-scheduled.json"
+            ))?;
+            bundled.source_path = "bundled://solid-v1/solid-primitives-scheduled.json".into();
+            Some(bundled)
+        }
         _ => None,
     })
 }
@@ -1078,7 +1085,19 @@ fn discover_package_directory(
 /// contract discovery does. A project without one gets upstream's defaults;
 /// a file that fails to parse fails the analysis rather than silently
 /// meaning "defaults".
-pub fn discover_rule_options(project: &Path) -> Result<Solid1xRuleOptions, BackendError> {
+pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError> {
+    discover_rule_options_with(
+        project,
+        |rule| dialect::ALL.iter().any(|dialect| (dialect.has_rule)(rule)),
+        |rule| dialect::by_id("solid-v1").is_some_and(|dialect| (dialect.has_rule)(rule)),
+    )
+}
+
+fn discover_rule_options_with(
+    project: &Path,
+    has_rule: impl Fn(&str) -> bool,
+    owns_solid1x_options: impl Fn(&str) -> bool,
+) -> Result<RuleOptions, BackendError> {
     let directory = if project.is_dir() {
         project
     } else {
@@ -1088,18 +1107,15 @@ pub fn discover_rule_options(project: &Path) -> Result<Solid1xRuleOptions, Backe
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return Solid1xRuleOptions::parse(&encoded, |rule| {
-                    dialect::ALL.iter().any(|dialect| (dialect.has_rule)(rule))
-                })
-                .map_err(|error| {
-                    BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
-                });
+                return RuleOptions::parse(&encoded, &has_rule, &owns_solid1x_options).map_err(
+                    |error| BackendError::RuleOptions(format!("{}: {error}", candidate.display())),
+                );
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
         }
     }
-    Ok(Solid1xRuleOptions::default())
+    Ok(RuleOptions::default())
 }
 
 /// The rule-options document [`discover_rule_options`] would load for this

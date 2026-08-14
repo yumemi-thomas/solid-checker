@@ -243,9 +243,10 @@ pub(crate) struct OwnerNode {
     pub(crate) path: String,
     pub(crate) span: Span,
     pub(crate) body: Span,
-    pub(crate) name: Option<String>,
     pub(crate) symbol: Option<SymbolId>,
     pub(crate) exported: bool,
+    pub(crate) component: bool,
+    pub(crate) seed_context: u8,
 }
 
 impl FunctionBoundary for OwnerNode {
@@ -306,6 +307,10 @@ impl OwnerFileIndex {
                     .then_some(argument.span)
                 })
             })
+            .chain(file.compiler.ownership_regions.iter().filter_map(|region| {
+                (region.kind == solid_facts::compiler::OwnershipRegionKind::Owned)
+                    .then_some(region.span)
+            }))
             .collect();
         Self {
             call_primitives,
@@ -316,15 +321,16 @@ impl OwnerFileIndex {
 
 /// One owner-graph node per function, from the binding-aware name: an arrow
 /// bound to `const Foo = ...` carries the same identity as `function Foo()`.
-/// `symbol` is how call edges reach the node, `name` is how component casing
-/// and export status seed its context, and both passes must derive both from
-/// this one lookup or fresh and incremental builds disagree on arrow-bound
-/// functions.
+/// `symbol` is how call edges reach the node, while the semantic component
+/// model and named-export status seed its context. Both passes must derive
+/// binding identity from this one lookup or fresh and incremental builds
+/// disagree on arrow-bound functions.
 fn owner_node(
     file: &solid_facts::FileFacts,
     indexes: &ProjectIndexes<'_>,
     entities: &EntitySymbols,
     function: &solid_facts::ast::FunctionFact,
+    lookup: &SemanticLookup<'_>,
 ) -> OwnerNode {
     let name = function_binding_name(file, function);
     let symbol = name.and_then(|name| {
@@ -349,35 +355,43 @@ fn owner_node(
                         && candidate.span.contains(function.span)
                 })
         });
+    let component = lookup.function_is_component(file, function);
+    let mut seed_context = compiler_owner_context(&file.compiler, function.body);
+    if component {
+        seed_context |= OWNER_CONTEXT_OWNED;
+    } else if exported && name.is_some() {
+        seed_context |= OWNER_CONTEXT_UNOWNED;
+    }
     OwnerNode {
         path: file.path.to_string(),
         span: function.span,
         body: function.body,
-        name: name.map(|name| file.source_text(name.span).unwrap_or_default().to_owned()),
         symbol,
         exported,
+        component,
+        seed_context,
     }
 }
 
-/// The context bits a node earns from its own name: an uppercase-led name is
-/// a component (owned by convention), an exported lowercase-led one runs for
-/// callers the analysis cannot see (unowned until proven otherwise).
-fn seed_name_contexts(nodes: &[OwnerNode]) -> Vec<u8> {
-    let mut contexts = vec![0_u8; nodes.len()];
-    for (index, node) in nodes.iter().enumerate() {
-        let uppercase = node
-            .name
-            .as_deref()
-            .and_then(|name| name.chars().next())
-            .is_some_and(char::is_uppercase);
-        if uppercase {
-            contexts[index] |= OWNER_CONTEXT_OWNED;
-        }
-        if node.exported && node.name.is_some() && !uppercase {
-            contexts[index] |= OWNER_CONTEXT_UNOWNED;
-        }
-    }
-    contexts
+fn compiler_owner_context(facts: &solid_facts::compiler::ExecutionMap, body: Span) -> u8 {
+    facts
+        .ownership_regions
+        .iter()
+        .filter(|region| region.span.contains(body))
+        .fold(0, |context, region| {
+            context
+                | match region.kind {
+                    solid_facts::compiler::OwnershipRegionKind::Owned => OWNER_CONTEXT_OWNED,
+                    solid_facts::compiler::OwnershipRegionKind::Unowned => OWNER_CONTEXT_UNOWNED,
+                    solid_facts::compiler::OwnershipRegionKind::Leaf => OWNER_CONTEXT_LEAF,
+                    solid_facts::compiler::OwnershipRegionKind::Unknown => 0,
+                }
+        })
+}
+
+/// The context bits proved at the facts seam before graph propagation.
+fn seed_contexts(nodes: &[OwnerNode]) -> Vec<u8> {
+    nodes.iter().map(|node| node.seed_context).collect()
 }
 
 /// Worklist fixed point over the owner graph: every context bit flows along
@@ -446,9 +460,8 @@ pub(crate) struct OwnerRequirementStatus {
 
 pub(crate) struct CachedOwnerFile {
     pub(crate) source_hash: SourceHash,
-    /// See [`SemanticLookup::returned_callback_proof_digest`]. Owner edges for
-    /// a returned adapter's callbacks exist only where the project invokes that
-    /// adapter, which is a fact about every other file.
+    /// See [`SemanticLookup::cross_file_proof_digest`]. Owner seeds and edges
+    /// can depend on component or callback uses in another file.
     pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
     pub(crate) nodes: Vec<OwnerNode>,
@@ -481,7 +494,7 @@ pub(crate) fn find_missing_owners(
     let mut nodes = Vec::new();
     for file in &facts.files {
         for function in &file.ast.functions {
-            nodes.push(owner_node(file, indexes, entities, function));
+            nodes.push(owner_node(file, indexes, entities, function, lookup));
         }
     }
     let nodes_by_path = function_indices_by_path(&nodes);
@@ -490,7 +503,7 @@ pub(crate) fn find_missing_owners(
         .enumerate()
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
-    let mut contexts = seed_name_contexts(&nodes);
+    let mut contexts = seed_contexts(&nodes);
     let mut edges = Vec::<(usize, usize, OwnerEdgeKind)>::new();
     for (file_index, file) in facts.files.iter().enumerate() {
         for (call_index, call) in file.ast.calls.iter().enumerate() {
@@ -645,11 +658,7 @@ pub(crate) fn find_missing_owners(
                     .is_some_and(|index| {
                         nodes[index].exported
                             && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
-                            && !nodes[index]
-                                .name
-                                .as_deref()
-                                .and_then(|name| name.chars().next())
-                                .is_some_and(char::is_uppercase)
+                            && !nodes[index].component
                     });
                 let operation_span = if operation == "settled-cleanup" {
                     call.arguments
@@ -673,14 +682,8 @@ pub(crate) fn find_missing_owners(
             }
         }
         for element in &file.ast.jsx_elements {
-            let boundary = primitive_name(
-                file.path.as_str(),
-                element.name.span,
-                Some(file.source_text(element.name.span).unwrap_or_default()),
-                entities,
-                symbol_names,
-                lookup.dialect,
-            );
+            let boundary =
+                jsx_primitive_name(file, element, entities, symbol_names, lookup.dialect);
             if !boundary
                 .as_deref()
                 .is_some_and(|tag| lookup.dialect.is_async_boundary(tag))
@@ -735,7 +738,7 @@ pub(crate) fn discover_owner_file(
         .ast
         .functions
         .iter()
-        .map(|function| owner_node(file, indexes, entities, function))
+        .map(|function| owner_node(file, indexes, entities, function, lookup))
         .collect::<Vec<_>>();
     let nodes_by_path = function_indices_by_path(&nodes);
     let owner_at = |span| {
@@ -853,14 +856,7 @@ pub(crate) fn discover_owner_file(
         }
     }
     for element in &file.ast.jsx_elements {
-        let boundary = primitive_name(
-            file.path.as_str(),
-            element.name.span,
-            Some(file.source_text(element.name.span).unwrap_or_default()),
-            entities,
-            symbol_names,
-            dialect,
-        );
+        let boundary = jsx_primitive_name(file, element, entities, symbol_names, dialect);
         if boundary
             .as_deref()
             .is_some_and(|tag| dialect.is_async_boundary(tag))
@@ -878,7 +874,7 @@ pub(crate) fn discover_owner_file(
     }
     CachedOwnerFile {
         source_hash: file.source_hash.clone(),
-        cross_file_proofs: lookup.returned_callback_proof_digest(),
+        cross_file_proofs: lookup.cross_file_proof_digest(),
         compiler: file.compiler.clone(),
         nodes,
         edges,
@@ -923,7 +919,7 @@ pub(crate) fn find_missing_owners_incremental(
         if retained_source_paths.contains(file.path.as_str())
             && let Some(cached) = cache.get(file.path.as_str())
             && cached.source_hash == file.source_hash
-            && cached.cross_file_proofs == lookup.returned_callback_proof_digest()
+            && cached.cross_file_proofs == lookup.cross_file_proof_digest()
             && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                 || same_compiler_semantics(&cached.compiler, &file.compiler))
         {
@@ -962,7 +958,7 @@ pub(crate) fn find_missing_owners_incremental(
         .enumerate()
         .filter_map(|(index, node)| node.symbol.clone().map(|symbol| (symbol, index)))
         .collect::<HashMap<_, _>>();
-    let mut contexts = seed_name_contexts(&nodes);
+    let mut contexts = seed_contexts(&nodes);
     let mut outgoing = vec![Vec::<(usize, OwnerEdgeKind)>::new(); nodes.len()];
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {
@@ -1036,11 +1032,7 @@ pub(crate) fn find_missing_owners_incremental(
                     && owner_index.is_some_and(|index| {
                         nodes[index].exported
                             && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
-                            && !nodes[index]
-                                .name
-                                .as_deref()
-                                .and_then(|name| name.chars().next())
-                                .is_some_and(char::is_uppercase)
+                            && !nodes[index].component
                     }));
             push_owner_requirement(
                 &mut requirements,
@@ -1340,16 +1332,9 @@ pub(crate) fn jsx_element_is_loading(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
 ) -> bool {
-    primitive_name(
-        file.path.as_str(),
-        element.name.span,
-        Some(file.source_text(element.name.span).unwrap_or_default()),
-        entities,
-        symbol_names,
-        dialect,
-    )
-    .as_deref()
-    .is_some_and(|tag| dialect.is_async_boundary(tag))
+    jsx_primitive_name(file, element, entities, symbol_names, dialect)
+        .as_deref()
+        .is_some_and(|tag| dialect.is_async_boundary(tag))
 }
 
 pub(crate) fn jsx_target_function<'a>(
@@ -1386,10 +1371,50 @@ pub(crate) fn computation_is_async(
         .is_some_and(|function| function.r#async)
 }
 
-pub(crate) fn inside_lowercase_named_function(
+/// Whether local Type Facts or an imported package contract proves that a
+/// computation may return a Promise or AsyncIterable.
+pub(crate) fn computation_is_async_with_contracts(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    argument: Span,
+    contracted: &HashMap<SymbolId, crate::contracts::ResolvedContractBinding>,
+) -> bool {
+    if computation_is_async(lookup, file, argument) {
+        return true;
+    }
+    let contracted_async_at = |span| {
+        lookup
+            .entities()
+            .at(file.path.as_str(), span)
+            .and_then(|symbol| contracted.get(symbol))
+            .is_some_and(|binding| !binding.summary.async_behavior.is_empty())
+    };
+    if contracted_async_at(argument) {
+        return true;
+    }
+    let Some(function) = file
+        .ast
+        .functions_within(argument)
+        .max_by_key(|function| function.span.end - function.span.start)
+    else {
+        return false;
+    };
+    function
+        .expression_return
+        .as_ref()
+        .and_then(|returned| returned.callee)
+        .is_some_and(contracted_async_at)
+        || file.ast.returns_within(function.body).any(|returned| {
+            containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|owner| owner.span == function.span)
+                && returned.callee.is_some_and(contracted_async_at)
+        })
+}
+
+pub(crate) fn inside_non_component_function(
     file: &solid_facts::FileFacts,
     span: Span,
-    dialect: &dyn Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> bool {
     if file
         .compiler
@@ -1405,30 +1430,21 @@ pub(crate) fn inside_lowercase_named_function(
     // 1.x does not have, and it was missing every 1.x callback-taker outside
     // the four it shares.
     if file.ast.arguments_containing(span).any(|(call, index)| {
-        call.static_callee(&file.source).is_some_and(|callee| {
-            callee
-                .rsplit('.')
-                .next()
-                .and_then(|name| dialect.primitive(name))
-                .is_some_and(|primitive| {
-                    dialect
-                        .callback_semantics_at(primitive, index, call.arguments.len())
-                        .execution
-                        .is_some()
-                })
-        })
+        lookup
+            .primitive_at_call(file, call.span)
+            .is_some_and(|primitive| {
+                lookup
+                    .dialect
+                    .callback_semantics_at(primitive, index, call.arguments.len())
+                    .execution
+                    .is_some()
+            })
     }) {
         return false;
     }
     file.ast.functions_body_containing(span).any(|function| {
-        function_binding_name(file, function)
-            .and_then(|name| {
-                file.source_text(name.span)
-                    .unwrap_or_default()
-                    .chars()
-                    .next()
-            })
-            .is_some_and(char::is_lowercase)
+        function_binding_name(file, function).is_some()
+            && !lookup.function_is_component(file, function)
     })
 }
 
@@ -1564,12 +1580,16 @@ pub(crate) fn run_with_owner_callback_owner(
     lookup: &SemanticLookup<'_>,
 ) -> Option<solid_dialect::CallbackOwner> {
     let owner = call.arguments.first()?;
-    let source = file.source_text(owner.span)?.trim();
     if owner.value == solid_facts::ast::ArgumentValueKind::Undefined
-        || source == "null"
-        || source == "undefined"
-        || source.starts_with("void ")
+        || owner.value == solid_facts::ast::ArgumentValueKind::Null
     {
+        return Some(solid_dialect::CallbackOwner::None);
+    }
+    // `void expression` has no dedicated AST argument kind yet. This text
+    // check is conservative (it can only detach an owner) and remains local
+    // to the one syntax shape not represented by the fact protocol.
+    let source = file.source_text(owner.span)?.trim();
+    if source.starts_with("void ") {
         return Some(solid_dialect::CallbackOwner::None);
     }
 
@@ -1932,20 +1952,24 @@ pub(crate) fn function_binding_name<'a>(
     file: &'a solid_facts::FileFacts,
     function: &'a solid_facts::ast::FunctionFact,
 ) -> Option<&'a solid_facts::ast::NamedSpan> {
-    function.name.as_ref().or_else(|| {
-        file.ast
-            .bindings_initializer_containing(function.span)
-            .find(|binding| {
-                binding.initializer_function
-                    && binding.initializer.is_some_and(|initializer| {
-                        file.ast
-                            .functions_within(initializer)
-                            .max_by_key(|candidate| candidate.span.end - candidate.span.start)
-                            .is_some_and(|candidate| candidate.span == function.span)
-                    })
-            })
-            .and_then(|binding| binding.names.first())
-    })
+    function
+        .name
+        .as_ref()
+        .or(function.method_name.as_ref())
+        .or_else(|| {
+            file.ast
+                .bindings_initializer_containing(function.span)
+                .find(|binding| {
+                    binding.initializer_function
+                        && binding.initializer.is_some_and(|initializer| {
+                            file.ast
+                                .functions_within(initializer)
+                                .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+                                .is_some_and(|candidate| candidate.span == function.span)
+                        })
+                })
+                .and_then(|binding| binding.names.first())
+        })
 }
 
 /// Like [`function_binding_name`], but also sees through a call initializer:
@@ -1962,6 +1986,8 @@ pub(crate) fn component_binding_name<'a>(
             .bindings_initializer_containing(function.span)
             .find(|binding| {
                 binding.call_initializer.is_some()
+                    && binding.shape == solid_facts::ast::BindingShape::Identifier
+                    && binding.names.len() == 1
                     && binding.initializer.is_some_and(|initializer| {
                         file.ast
                             .functions_within(initializer)
@@ -1973,96 +1999,20 @@ pub(crate) fn component_binding_name<'a>(
     })
 }
 
-pub(crate) fn go_binding_pattern_accepts_call(
-    source: &str,
+pub(crate) fn binding_returns_reactive_source(
     binding: &solid_facts::ast::BindingFact,
     call: &solid_facts::ast::CallFact,
 ) -> bool {
-    let Some(name) = binding.array_slots.first().and_then(Option::as_ref) else {
-        return false;
-    };
-    let Ok(name_start) = usize::try_from(name.span.start) else {
-        return false;
-    };
-    let Ok(name_end) = usize::try_from(name.span.end) else {
-        return false;
-    };
-    let Ok(start) = usize::try_from(call.callee.end) else {
-        return false;
-    };
-    let Ok(callee_start) = usize::try_from(call.callee.start) else {
-        return false;
-    };
-    let Ok(end) = usize::try_from(call.span.end) else {
-        return false;
-    };
-    let bytes = source.as_bytes();
-    let Some(before_name) = bytes.get(..name_start) else {
-        return false;
-    };
-    let before_name = before_name.trim_ascii_end();
-    if before_name.last() != Some(&b'[') {
-        return false;
-    }
-    let declaration_prefix = before_name[..before_name.len() - 1].trim_ascii_end();
-    if !declaration_prefix.ends_with(b"const") {
-        return false;
-    }
-    let Some(binding_tail) = bytes.get(name_end..callee_start) else {
-        return false;
-    };
-    let Some(close) = binding_tail.iter().rposition(|byte| *byte == b']') else {
-        return false;
-    };
-    if binding_tail[close + 1..].trim_ascii() != b"=" {
-        return false;
-    }
-    let Some(mut suffix) = bytes.get(start..end) else {
-        return false;
-    };
-    suffix = suffix.trim_ascii_start();
-    if suffix.first() == Some(&b'<') {
-        let Some(close) = suffix.iter().position(|byte| *byte == b'>') else {
-            return false;
-        };
-        suffix = suffix[close + 1..].trim_ascii_start();
-    }
-    suffix.first() == Some(&b'(')
+    binding.immutable
+        && binding.shape == solid_facts::ast::BindingShape::Array
+        && binding.array_slots.first().is_some_and(Option::is_some)
+        && binding.call_initializer == Some(call.span)
 }
 
-pub(crate) fn go_returned_arrow_pattern_accepts(source: &str, span: Span) -> bool {
-    let Ok(start) = usize::try_from(span.start) else {
-        return false;
-    };
-    let Ok(end) = usize::try_from(span.end) else {
-        return false;
-    };
-    let Some(mut value) = source.as_bytes().get(start..end) else {
-        return false;
-    };
-    value = value.trim_ascii_start();
-    if value.starts_with(b"async") {
-        value = value[5..].trim_ascii_start();
-    }
-    if value.first() == Some(&b'(') {
-        let Some(close) = value.iter().position(|byte| *byte == b')') else {
-            return false;
-        };
-        return value[close + 1..].trim_ascii_start().starts_with(b"=>");
-    }
-    let identifier_end = value
-        .iter()
-        .position(|byte| {
-            !matches!(
-                byte,
-                b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'_' | b'$'
-            )
-        })
-        .unwrap_or(value.len());
-    identifier_end != 0
-        && value[identifier_end..]
-            .trim_ascii_start()
-            .starts_with(b"=>")
+pub(crate) fn returned_arrow_function(ast: &solid_facts::ast::AstFacts, span: Span) -> bool {
+    ast.functions_within(span)
+        .max_by_key(|function| function.span.end - function.span.start)
+        .is_some_and(|function| function.kind == solid_facts::ast::FunctionKind::Arrow)
 }
 
 pub(crate) fn inside_effect_apply(
@@ -2095,7 +2045,9 @@ pub(crate) fn inside_effect_apply(
     })
 }
 
-/// The typed descriptor at a callee, kept only when it names a Solid accessor.
+/// The typed descriptor at a callee, kept only when it names a callable Solid
+/// accessor. Tuple signals and object stores are source values but not direct
+/// accessor call targets.
 pub(crate) fn typed_accessor_descriptor_at<'a>(
     lookup: &SemanticLookup<'a>,
     path: &str,
@@ -2103,20 +2055,19 @@ pub(crate) fn typed_accessor_descriptor_at<'a>(
 ) -> Option<&'a typefacts::TypeDescriptor> {
     lookup
         .smallest_contained_descriptor(path, callee)
-        .filter(|descriptor| go_solid_accessor_descriptor(descriptor, lookup.dialect))
+        .filter(|descriptor| solid_accessor_declaration(descriptor, lookup.dialect).is_some())
 }
 
-/// Whether a typed descriptor's declaring module is one this dialect owns.
-///
-/// The module is the dialect's answer, not a literal: 1.x spreads its exports
-/// across `solid-js/store`, `solid-js/web` and `solid-js/universal`, and 2.0
-/// declares its DOM surface in `@solidjs/web`. Comparing against the package
-/// root alone silently dropped every accessor whose type came from a subpath.
-pub(crate) fn go_solid_accessor_descriptor(
-    descriptor: &typefacts::TypeDescriptor,
+/// The exact Solid accessor alias proven by Type Facts. Module plus exported
+/// alias identity is required; type text and user-local names are ignored.
+pub(crate) fn solid_accessor_declaration<'a>(
+    descriptor: &'a typefacts::TypeDescriptor,
     dialect: &dyn Dialect,
-) -> bool {
-    dialect.owns_module(descriptor.origin_module.as_ref())
+) -> Option<&'a typefacts::Declaration> {
+    descriptor.alias_declarations.iter().find(|declaration| {
+        dialect.type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
+            == Some(solid_dialect::TypeRole::Accessor)
+    })
 }
 
 pub(crate) fn source_function_exported(
@@ -2140,18 +2091,12 @@ pub(crate) fn source_function_exported(
         })
 }
 
-pub(crate) fn enclosing_render_function(file: &solid_facts::FileFacts, span: Span) -> bool {
-    file.ast.functions_body_containing(span).any(|function| {
-        function_binding_name(file, function)
-            .or(function.name.as_ref())
-            .and_then(|name| {
-                file.source_text(name.span)
-                    .unwrap_or_default()
-                    .chars()
-                    .next()
-            })
-            .is_some_and(char::is_uppercase)
-    })
+pub(crate) fn enclosing_render_function(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> bool {
+    lookup.inside_component(file, span)
 }
 
 pub(crate) fn function_is_solid_callback(
@@ -2224,11 +2169,12 @@ pub(crate) fn counts_as_strict_read_root(
     file: &solid_facts::FileFacts,
     span: Span,
     execution: ExecutionRole,
+    lookup: &SemanticLookup<'_>,
 ) -> bool {
     matches!(
         execution,
         ExecutionRole::EffectApply | ExecutionRole::UntrackedCallback
-    ) || enclosing_render_function(file, span)
+    ) || enclosing_render_function(file, span, lookup)
 }
 
 pub(crate) fn enclosing_function_label(file: &solid_facts::FileFacts, span: Span) -> String {
@@ -2246,19 +2192,14 @@ pub(crate) fn analysis_context(
     entities: &EntitySymbols,
     symbol_names: &HashMap<SymbolId, SymbolId>,
     dialect: &dyn Dialect,
+    lookup: &SemanticLookup<'_>,
 ) -> String {
     let enclosing = enclosing_function_label(file, span);
     if let Some(rendering) = file
         .ast
         .functions_body_containing(span)
-        .filter_map(|function| function.name.as_ref())
-        .filter(|name| {
-            file.source_text(name.span)
-                .unwrap_or_default()
-                .chars()
-                .next()
-                .is_some_and(char::is_uppercase)
-        })
+        .filter(|function| lookup.function_is_component(file, function))
+        .filter_map(|function| function_binding_name(file, function).or(function.name.as_ref()))
         .min_by_key(|name| name.span.end - name.span.start)
     {
         return file
@@ -2318,179 +2259,69 @@ pub(crate) fn analysis_context(
 mod tests {
     use super::{
         OWNER_CONTEXT_LEAF, OWNER_CONTEXT_OWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
-        callback_owner_edge_kind, compose_owner_edge, go_binding_pattern_accepts_call,
-        go_returned_arrow_pattern_accepts, inside_owner_providing_region, owner_edge_context,
-        propagate_owner_contexts, seed_name_contexts,
+        binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
+        compose_owner_edge, inside_owner_providing_region, owner_edge_context,
+        propagate_owner_contexts, returned_arrow_function, seed_contexts,
     };
-    use solid_facts::ast::{BindingFact, BindingShape, CallFact, NamedSpan};
+    use solid_facts::ast;
+    use solid_facts::compiler::{
+        COMPILER_FACTS_PROTOCOL, ExecutionMap, OwnershipRegion, OwnershipRegionKind,
+    };
+    use solid_facts::core::SourceHash;
     use solid_facts::core::Span;
 
-    /// Whether [`go_returned_arrow_pattern_accepts`] accepts the entire
-    /// string as the candidate initializer span.
-    fn arrow(source: &str) -> bool {
-        go_returned_arrow_pattern_accepts(source, Span::new(0, source.len() as u32))
+    fn returned_arrow(source: &str) -> bool {
+        let source = format!("function outer() {{ return {source}; }}");
+        let facts = ast::extract("test.tsx", &source).unwrap();
+        facts
+            .returns
+            .first()
+            .and_then(|returned| returned.argument)
+            .is_some_and(|argument| returned_arrow_function(&facts, argument))
     }
 
     #[test]
-    fn arrow_pattern_accepts_parenthesized_parameter_lists() {
-        assert!(arrow("() => go()"));
-        assert!(arrow("(a, b) => a + b"));
-        assert!(arrow("  ( value )  =>  value"));
-        assert!(arrow("async () => go()"));
+    fn returned_arrow_identity_comes_from_ast_facts() {
+        assert!(returned_arrow("(a = (0)) /* run */ => a"));
+        assert!(returned_arrow("async => async"));
+        assert!(!returned_arrow("function () { return 1; }"));
+    }
+
+    fn binding_accepts(source: &str) -> bool {
+        let facts = ast::extract("test.tsx", source).unwrap();
+        binding_returns_reactive_source(
+            facts.bindings.first().unwrap(),
+            facts.calls.first().unwrap(),
+        )
     }
 
     #[test]
-    fn arrow_pattern_accepts_a_bare_identifier_parameter() {
-        assert!(arrow("value => value"));
-        assert!(arrow("async value => value"));
-        assert!(arrow("$ok_1 => $ok_1"));
-    }
-
-    #[test]
-    fn arrow_pattern_rejects_non_arrows() {
-        assert!(!arrow("function () { return 1; }"));
-        assert!(!arrow("go()"));
-        assert!(!arrow("42"));
-        assert!(!arrow(""));
-    }
-
-    #[test]
-    fn arrow_pattern_rejects_a_span_outside_the_source() {
-        assert!(!go_returned_arrow_pattern_accepts(
-            "() => 1",
-            Span::new(0, 999)
-        ));
-    }
-
-    /// Documents a known limitation: the parameter-list skip stops at the
-    /// first `)`, so a parenthesized default value ends the scan early and a
-    /// real arrow is rejected.
-    #[test]
-    fn arrow_pattern_currently_rejects_parenthesized_default_parameters() {
-        assert!(!arrow("(a = (0)) => a"));
-    }
-
-    /// Documents a known limitation: comments are not skipped, so a comment
-    /// between the parameter list and `=>` hides the arrow.
-    #[test]
-    fn arrow_pattern_currently_rejects_a_comment_before_the_arrow() {
-        assert!(!arrow("() /* run */ => 1"));
-    }
-
-    /// Documents a known limitation: the `async` strip is unconditional, so a
-    /// parameter actually named `async` loses its identifier and the arrow is
-    /// rejected.
-    #[test]
-    fn arrow_pattern_currently_rejects_a_parameter_named_async() {
-        assert!(!arrow("async => 1"));
-    }
-
-    /// Runs [`go_binding_pattern_accepts_call`] over `source`, deriving the
-    /// spans from the first occurrences of `slot` (the first array-slot name)
-    /// and `callee`; the call is taken to end at the last `)`.
-    fn binding_accepts(source: &str, slot: Option<&str>, callee: &str) -> bool {
-        let named = |text: &str| {
-            let start = source.find(text).expect("marker text in source") as u32;
-            NamedSpan {
-                span: Span::new(start, start + text.len() as u32),
-            }
-        };
-        let slot = slot.map(named);
-        let callee = named(callee).span;
-        let call_end = source.rfind(')').expect("a call to end the source") as u32 + 1;
-        let binding = BindingFact {
-            declaration: Span::new(0, call_end),
-            pattern: slot.as_ref().map_or_else(
-                || Span::new(0, 0),
-                |named| Span::new(named.span.start - 1, named.span.end + 1),
-            ),
-            shape: BindingShape::Array,
-            names: slot.clone().into_iter().collect(),
-            array_slots: vec![slot],
-            initializer: Some(Span::new(callee.start, call_end)),
-            call_initializer: Some(Span::new(callee.start, call_end)),
-            initializer_function: false,
-            initializer_identifier: None,
-        };
-        let call = CallFact {
-            span: Span::new(callee.start, call_end),
-            callee,
-            direct_callee: true,
-            type_arguments: false,
-            arguments: Vec::new(),
-            static_callee: true,
-            owned_write_option: false,
-        };
-        go_binding_pattern_accepts_call(source, &binding, &call)
-    }
-
-    #[test]
-    fn binding_pattern_accepts_a_const_array_destructure_of_a_call() {
+    fn returned_source_binding_identity_comes_from_ast_facts() {
         assert!(binding_accepts(
-            "const [go] = makeGate();",
-            Some("go"),
-            "makeGate"
+            "const [go] = /* gate */ makeGate<Array<T>>();"
         ));
-        assert!(binding_accepts(
-            "const [ go ] = makeGate ();",
-            Some("go"),
-            "makeGate"
-        ));
+        assert!(!binding_accepts("let [go] = makeGate();"));
+        assert!(!binding_accepts("const [, go] = makeGate();"));
     }
 
     #[test]
-    fn binding_pattern_accepts_a_simple_generic_call() {
-        assert!(binding_accepts(
-            "const [go] = makeGate<T>();",
-            Some("go"),
-            "makeGate"
-        ));
-    }
-
-    #[test]
-    fn binding_pattern_requires_the_const_keyword() {
-        assert!(!binding_accepts(
-            "let [go] = makeGate();",
-            Some("go"),
-            "makeGate"
-        ));
-        assert!(!binding_accepts(
-            "var [go] = makeGate();",
-            Some("go"),
-            "makeGate"
-        ));
-    }
-
-    #[test]
-    fn binding_pattern_requires_a_named_first_array_slot() {
-        assert!(!binding_accepts(
-            "const [, go] = makeGate();",
-            None,
-            "makeGate"
-        ));
-    }
-
-    /// Documents a known limitation: the type-argument skip stops at the
-    /// first `>`, so a nested generic like `Foo<Bar<T>>` leaves the scan on
-    /// the second `>` and the call is rejected.
-    #[test]
-    fn binding_pattern_currently_rejects_nested_generic_arguments() {
-        assert!(!binding_accepts(
-            "const [go] = makeGate<Array<T>>();",
-            Some("go"),
-            "makeGate"
-        ));
-    }
-
-    /// Documents a known limitation: comments are not skipped, so a comment
-    /// between `=` and the callee breaks the `] =` tail check.
-    #[test]
-    fn binding_pattern_currently_rejects_a_comment_before_the_initializer() {
-        assert!(!binding_accepts(
-            "const [go] = /* gate */ makeGate();",
-            Some("go"),
-            "makeGate"
-        ));
+    fn compiler_ownership_regions_seed_owner_analysis() {
+        let facts = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: SourceHash::of("function run() {}"),
+            tracked_regions: vec![],
+            untracked_regions: vec![],
+            ownership_regions: vec![OwnershipRegion {
+                span: Span::new(0, 17),
+                kind: OwnershipRegionKind::Leaf,
+            }],
+            callback_roles: vec![],
+            jsx_operations: vec![],
+        };
+        assert_eq!(
+            compiler_owner_context(&facts, Span::new(15, 17)),
+            OWNER_CONTEXT_LEAF
+        );
     }
 
     #[test]
@@ -2558,34 +2389,33 @@ mod tests {
         );
     }
 
-    fn node(name: Option<&str>, exported: bool) -> OwnerNode {
+    fn node(seed_context: u8) -> OwnerNode {
         OwnerNode {
             path: "app.tsx".to_owned(),
             span: Span::new(0, 10),
             body: Span::new(0, 10),
-            name: name.map(str::to_owned),
             symbol: None,
-            exported,
+            exported: false,
+            component: seed_context & OWNER_CONTEXT_OWNED != 0,
+            seed_context,
         }
     }
 
     #[test]
-    fn name_seeds_mark_components_owned_and_exported_helpers_unowned() {
+    fn semantic_seeds_preserve_proven_owner_states() {
         let nodes = [
-            node(Some("Widget"), false),
-            node(Some("useThing"), true),
-            node(Some("useThing"), false),
-            node(Some("Widget"), true),
-            node(None, true),
+            node(OWNER_CONTEXT_OWNED),
+            node(OWNER_CONTEXT_UNOWNED),
+            node(0),
+            node(OWNER_CONTEXT_LEAF),
         ];
         assert_eq!(
-            seed_name_contexts(&nodes),
+            seed_contexts(&nodes),
             vec![
                 OWNER_CONTEXT_OWNED,
                 OWNER_CONTEXT_UNOWNED,
                 0,
-                OWNER_CONTEXT_OWNED,
-                0,
+                OWNER_CONTEXT_LEAF
             ]
         );
     }

@@ -8,7 +8,7 @@
 use solid_facts::compiler::{
     AnalysisRequest, COMPILER_FACTS_PROTOCOL, CallbackRole, CallbackRoleKind,
     CompilerFactsProvider, CompilerProviderError, ExecutionMap, ExecutionRegion, JsxOperation,
-    RegionReason,
+    OwnershipRegion, OwnershipRegionKind, RegionReason,
 };
 use solid_facts::core::{SourceHash, Span};
 
@@ -83,12 +83,23 @@ fn execution_map_from_trace(
         source_hash: SourceHash::of(source),
         tracked_regions: Vec::new(),
         untracked_regions: Vec::new(),
-        // The compiler has never emitted ownership regions; ownership is
-        // derived from the AST and type facts instead.
         ownership_regions: Vec::new(),
         callback_roles: Vec::new(),
         jsx_operations: Vec::new(),
     };
+
+    for site in &trace.ownership_sites {
+        use dom_expressions_compiler::OwnershipDecision;
+
+        map.ownership_regions.push(OwnershipRegion {
+            span: Span::new(site.span.start, site.span.end),
+            kind: match site.decision {
+                OwnershipDecision::Owned => OwnershipRegionKind::Owned,
+                OwnershipDecision::Unowned => OwnershipRegionKind::Unowned,
+                OwnershipDecision::Leaf => OwnershipRegionKind::Leaf,
+            },
+        });
+    }
 
     // Sites arrive ordered by (span, kind), so appending in iteration order
     // keeps every category in the canonical span order `validate` requires.
@@ -99,9 +110,9 @@ fn execution_map_from_trace(
             ExecutionSiteKind::NativeAttribute | ExecutionSiteKind::NativeSpread => {
                 "dynamic-attribute"
             }
-            ExecutionSiteKind::ComponentProperty
-            | ExecutionSiteKind::ComponentSpread
-            | ExecutionSiteKind::ComponentChild => "component-property",
+            ExecutionSiteKind::ComponentProperty => "component-property",
+            ExecutionSiteKind::ComponentSpread => "component-spread",
+            ExecutionSiteKind::ComponentChild => "component-child",
             ExecutionSiteKind::EventHandler => "event-listener",
             ExecutionSiteKind::Ref => "directive-apply",
             ExecutionSiteKind::ControlFlowRender => "control-flow-render",
@@ -171,4 +182,64 @@ fn execution_map_from_trace(
 
     map.validate(source)?;
     Ok(map)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solid_facts::compiler::{CompilerOptions, OwnershipRegionKind};
+
+    fn facts(effect_wrapper: Option<&str>) -> ExecutionMap {
+        let request = AnalysisRequest::new(
+            "App.tsx",
+            "const view = <div>{count()}</div>;",
+            CompilerOptions {
+                effect_wrapper: effect_wrapper.map(str::to_owned),
+                ..CompilerOptions::default()
+            },
+        );
+        NativeCompilerFacts
+            .analyze(&request)
+            .expect("compiler facts")
+    }
+
+    #[test]
+    fn default_effect_reruns_supply_owned_regions() {
+        let facts = facts(None);
+        assert_eq!(facts.ownership_regions.len(), 1);
+        assert_eq!(facts.ownership_regions[0].kind, OwnershipRegionKind::Owned);
+    }
+
+    #[test]
+    fn custom_effect_wrappers_make_no_owner_claim() {
+        assert!(facts(Some("customEffect")).ownership_regions.is_empty());
+    }
+
+    #[test]
+    fn component_operation_kinds_preserve_property_and_child_roles() {
+        let request = AnalysisRequest::new(
+            "App.tsx",
+            "const view = <Route component={Home} {...props}>{() => <Home />}</Route>;",
+            CompilerOptions::default(),
+        );
+        let facts = NativeCompilerFacts.analyze(&request).unwrap();
+        assert!(
+            facts
+                .jsx_operations
+                .iter()
+                .any(|operation| operation.kind == "component-property")
+        );
+        assert!(
+            facts
+                .jsx_operations
+                .iter()
+                .any(|operation| operation.kind == "component-child")
+        );
+        assert!(
+            facts
+                .jsx_operations
+                .iter()
+                .any(|operation| operation.kind == "component-spread")
+        );
+    }
 }

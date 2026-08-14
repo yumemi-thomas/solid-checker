@@ -293,6 +293,7 @@ pub(super) struct ContractGraph<'a> {
 pub(super) struct ContractAnalysis<'a> {
     pub(super) summaries: &'a [SummaryReads],
     pub(super) returned: &'a [SummaryReads],
+    pub(super) structured_returns: &'a [Option<ContractReturn>],
     pub(super) callbacks: &'a [Vec<ContractCallback>],
     pub(super) semantics: ContractSemantics<'a>,
 }
@@ -301,21 +302,28 @@ fn contract_export_function(
     node: &SummaryNode,
     summary: &SummaryReads,
     returned_summary: &SummaryReads,
+    structured_return: Option<&ContractReturn>,
     callbacks: &[ContractCallback],
     semantics: &ContractSemantics<'_>,
 ) -> ContractExport {
+    let mut seen_reactive_reads = HashSet::new();
     let reactive_reads = summary
         .iter()
-        .map(|read| ContractReactiveRead {
-            kind: read.kind.clone().unwrap_or_else(|| "accessor".into()),
-            label: semantics
-                .source_primitives
-                .get(&read.symbol)
-                .and_then(|primitive| semantics.bundled_returns.get(primitive))
-                .map_or_else(
-                    || read.display.to_string(),
-                    |returned| returned.label.clone(),
-                ),
+        .filter_map(|read| {
+            let reactive_read = ContractReactiveRead {
+                kind: read.kind.clone().unwrap_or_else(|| "accessor".into()),
+                label: semantics
+                    .source_primitives
+                    .get(&read.symbol)
+                    .and_then(|primitive| semantics.bundled_returns.get(primitive))
+                    .map_or_else(
+                        || read.display.to_string(),
+                        |returned| returned.label.clone(),
+                    ),
+            };
+            seen_reactive_reads
+                .insert((reactive_read.kind.clone(), reactive_read.label.clone()))
+                .then_some(reactive_read)
         })
         .collect::<Vec<_>>();
     let first_returned =
@@ -328,20 +336,25 @@ fn contract_export_function(
                 }
                 Some(best) => Some(best),
             });
-    let returns = first_returned.map(|read| ContractReturn {
-        kind: if semantics.source_kinds.get(&read.symbol) == Some(&ReactiveSourceKind::Store) {
-            "store-path".into()
-        } else {
-            "accessor".into()
-        },
-        label: semantics
-            .source_primitives
-            .get(&read.symbol)
-            .and_then(|primitive| semantics.bundled_returns.get(primitive))
-            .map_or_else(
-                || read.display.to_string(),
-                |returned| returned.label.clone(),
-            ),
+    let returns = structured_return.cloned().or_else(|| {
+        first_returned.map(|read| ContractReturn {
+            kind: if semantics.source_kinds.get(&read.symbol) == Some(&ReactiveSourceKind::Store) {
+                "store-path".into()
+            } else {
+                "accessor".into()
+            },
+            label: semantics
+                .source_primitives
+                .get(&read.symbol)
+                .and_then(|primitive| semantics.bundled_returns.get(primitive))
+                .map_or_else(
+                    || read.display.to_string(),
+                    |returned| returned.label.clone(),
+                ),
+            parameter: None,
+            elements: Vec::new(),
+            properties: BTreeMap::new(),
+        })
     });
     let mut callback_summary = callbacks.to_vec();
     callback_summary.sort_by_key(|callback| callback.parameter);
@@ -738,6 +751,7 @@ pub(super) fn contract_export_summaries_incremental(
             &graph.nodes[*index],
             &analysis.summaries[*index],
             &analysis.returned[*index],
+            analysis.structured_returns[*index].as_ref(),
             &analysis.callbacks[*index],
             &analysis.semantics,
         )
@@ -852,6 +866,7 @@ pub(super) fn contract_export_summaries(
                     node,
                     &analysis.summaries[index],
                     &analysis.returned[index],
+                    analysis.structured_returns[index].as_ref(),
                     &analysis.callbacks[index],
                     &analysis.semantics,
                 ),

@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 130,
+      "end": 156,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 238,
+      "end": 269,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 525,
+      "end": 555,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 636,
+      "end": 663,
+      "fixes": 0
+    }
+  ]
+}

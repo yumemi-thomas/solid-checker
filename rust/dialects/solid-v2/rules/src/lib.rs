@@ -271,7 +271,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
         )
     } else {
         match read.execution {
-            ExecutionRole::UntrackedRendering => (
+            ExecutionRole::ModuleInitialization | ExecutionRole::UntrackedRendering => (
                 Rule::PendingAsyncUntrackedRead,
                 format!(
                     "pending async accessor {:?} is read outside a tracking scope; an untracked read cannot suspend or retry, and Solid throws PENDING_ASYNC_UNTRACKED_READ in dev",
@@ -287,7 +287,8 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
                 ),
                 "This is safe but shows nothing while loading. Wrap the reading subtree in <Loading fallback={...}> for visible fallback UI, or leave it as is if an empty container during load is intended. For a revalidation indicator, use isPending(() => ...) under the same boundary.".to_owned(),
             ),
-            ExecutionRole::TrackedJsx
+            ExecutionRole::Unknown
+            | ExecutionRole::TrackedJsx
             | ExecutionRole::DeferredCallback
             | ExecutionRole::UntrackedCallback
             | ExecutionRole::EffectApply
@@ -344,6 +345,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ReactiveSourceUncaptured
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
+        | Rule::PreferComponentSyntax
+        | Rule::NoImplicitDraggable
+        | Rule::ValidJsxNesting
         | Rule::ReactiveWriteInOwnedScope
         | Rule::ActionCalledInOwnedScope
         | Rule::CleanupInForbiddenScope
@@ -360,6 +364,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
         | Rule::PackageContractExportMissing
+        | Rule::PackageContractCallbackMissing
         | Rule::PackageContractMissing
         | Rule::CleanupReturnUnresolved
         | Rule::ExecutionMapIncomplete => panic!(
@@ -381,10 +386,14 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
 fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
     let rule = match &defect.kind {
         StaticDefectKind::ExecutionMapIncomplete => Rule::ExecutionMapIncomplete,
-        StaticDefectKind::ComponentPropsDestructure => Rule::ComponentPropsDestructure,
+        StaticDefectKind::ReactiveObjectDestructure { .. } => Rule::ComponentPropsDestructure,
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
+        StaticDefectKind::PreferComponentSyntax { .. } => Rule::PreferComponentSyntax,
+        StaticDefectKind::ImplicitDraggableBoolean => Rule::NoImplicitDraggable,
+        StaticDefectKind::InvalidJsxNesting { .. } => Rule::ValidJsxNesting,
         StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
+        StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
@@ -405,6 +414,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
 const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
     solid_reactive_ir::StaticDefectTerms {
         props_destructure_hint: "Keep the props object intact and read props.<name> inside JSX or a tracked computation; the property access is what tracks. To split or default props, use omit(props, ...keys) and merge(defaults, props) instead of destructuring.",
+        reactive_object_destructure_hint: "Keep the reactive object intact and read object.<name> inside JSX or a tracked computation. A property access made there remains subscribed; a setup-time destructuring binding does not.",
         missing_effect_message: "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
         missing_effect_hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
         tracked_derived_scope: "JSX, a createMemo, or the compute function of createEffect(compute, apply)",

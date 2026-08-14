@@ -8,14 +8,14 @@ use crate::core::{SourceIdentity, Span};
 use compact_str::CompactString;
 use oxc_allocator::Allocator;
 use oxc_ast::ast::{
-    Argument, ArrowFunctionExpression, AssignmentExpression, AwaitExpression, BinaryExpression,
-    BindingPattern, CallExpression, ComputedMemberExpression, ConditionalExpression, Declaration,
-    ExportAllDeclaration, ExportDefaultDeclaration, ExportDefaultDeclarationKind,
-    ExportNamedDeclaration, Expression, FormalParameter, Function, FunctionType,
-    IdentifierReference, IfStatement, ImportDeclaration, ImportDeclarationSpecifier,
-    JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement, JSXElementName,
-    JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName, NewExpression,
-    ObjectProperty, ObjectPropertyKind, PropertyKey, ReturnStatement, SpreadElement,
+    Argument, ArrayExpressionElement, ArrowFunctionExpression, AssignmentExpression,
+    AssignmentTarget, AwaitExpression, BinaryExpression, BindingPattern, CallExpression,
+    ComputedMemberExpression, ConditionalExpression, Declaration, ExportAllDeclaration,
+    ExportDefaultDeclaration, ExportDefaultDeclarationKind, ExportNamedDeclaration, Expression,
+    FormalParameter, Function, FunctionType, IdentifierReference, IfStatement, ImportDeclaration,
+    ImportDeclarationSpecifier, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement,
+    JSXElementName, JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName,
+    NewExpression, ObjectProperty, ObjectPropertyKind, PropertyKey, ReturnStatement, SpreadElement,
     StaticMemberExpression, TSModuleDeclarationName, UnaryExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
@@ -26,7 +26,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 24;
+pub const AST_FACTS_SCHEMA: u32 = 29;
 
 mod span_index;
 
@@ -52,6 +52,11 @@ pub struct AstFacts {
     /// span inside JSX" must consult both tables.
     #[serde(default)]
     pub jsx_fragments: Vec<Span>,
+    /// Transparent TypeScript expression wrappers and the expression they
+    /// contain. Consumers use this table instead of reproducing parser-node
+    /// knowledge at each span-equality gate.
+    #[serde(default)]
+    pub transparent_wrappers: Vec<TransparentWrapperFact>,
     pub members: Vec<MemberFact>,
     #[serde(default)]
     pub computed_members: Vec<Span>,
@@ -118,6 +123,7 @@ pub struct ArgumentFact {
 #[serde(rename_all = "kebab-case")]
 pub enum ArgumentValueKind {
     Undefined,
+    Null,
     Identifier,
     Function,
     AsyncFunction,
@@ -147,6 +153,12 @@ pub struct BindingFact {
     pub shape: BindingShape,
     pub names: Vec<NamedSpan>,
     pub array_slots: Vec<Option<NamedSpan>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub object_slots: Vec<ObjectBindingFact>,
+    /// Whether this binding is a `const` variable declarator. Parameters and
+    /// mutable declarations are false.
+    #[serde(default)]
+    pub immutable: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer: Option<Span>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -154,6 +166,13 @@ pub struct BindingFact {
     pub initializer_function: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub initializer_identifier: Option<NamedSpan>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ObjectBindingFact {
+    pub property: CompactString,
+    pub local: NamedSpan,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -172,6 +191,12 @@ pub struct FunctionFact {
     pub kind: FunctionKind,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub name: Option<NamedSpan>,
+    /// The property name for an object-literal or class method. This is kept
+    /// separate from `name`: a method is not a lexical binding, but its
+    /// canonical property symbol is still the exact callee target for
+    /// interprocedural summaries.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub method_name: Option<NamedSpan>,
     pub parameters: Vec<BindingFact>,
     pub r#async: bool,
     pub generator: bool,
@@ -184,6 +209,13 @@ pub struct FunctionFact {
 #[serde(rename_all = "camelCase")]
 pub struct NamedSpan {
     pub span: Span,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransparentWrapperFact {
+    pub span: Span,
+    pub inner: Span,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -262,11 +294,45 @@ pub struct ReturnFact {
     pub span: Span,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub argument: Option<Span>,
-    pub control_tests: Vec<Span>,
+    pub control_tests: Box<[Span]>,
     pub value: ReturnValueKind,
     pub conditional: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub callee: Option<Span>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub structure: Option<Box<ReturnStructureFact>>,
+}
+
+impl ReturnFact {
+    #[must_use]
+    pub fn elements(&self) -> &[Option<Span>] {
+        self.structure
+            .as_deref()
+            .map_or(&[], |structure| structure.elements.as_slice())
+    }
+
+    #[must_use]
+    pub fn properties(&self) -> &[ReturnPropertyFact] {
+        self.structure
+            .as_deref()
+            .map_or(&[], |structure| structure.properties.as_slice())
+    }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReturnStructureFact {
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub elements: Vec<Option<Span>>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub properties: Vec<ReturnPropertyFact>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ReturnPropertyFact {
+    pub name: CompactString,
+    pub value: Span,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -367,6 +433,21 @@ pub struct ObjectPropertyFact {
     pub key: Span,
     pub value: Span,
     pub computed: bool,
+    /// Declaration this shorthand property's value binding refers to, as
+    /// resolved by the binder for that exact reference.
+    ///
+    /// A shorthand (`{ pathname }`) writes one identifier where a key and a
+    /// value both stand, and TypeScript answers a symbol query at that span
+    /// with the *property's* symbol, never the value binding's. Oxc's scope
+    /// tree does resolve the value reference, so the declaration it chose is
+    /// recorded here rather than left to be re-derived from the spelling.
+    ///
+    /// `None` for a non-shorthand property, and for a shorthand whose value
+    /// the binder resolves to no declaration in this file's scope tree -- an
+    /// import namespace member or a global. Consumers fail closed on `None`;
+    /// it is the absence of a fact, never proof of a missing binding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shorthand_binding: Option<Span>,
 }
 
 /// An untagged template literal and the expressions interpolated into it.
@@ -412,12 +493,16 @@ pub struct CoerciveOperandFact {
     pub kind: CoerciveOperandKind,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AssignmentFact {
     pub target: Span,
     pub value_span: Span,
     pub value: AssignmentValueKind,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_initializer: Option<Span>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub array_slots: Vec<Option<Span>>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -447,6 +532,31 @@ pub enum ReturnValueKind {
 }
 
 impl AstFacts {
+    /// Peel only syntax that preserves the runtime value of an expression.
+    ///
+    /// The parser already exposes the equivalent node-level operation as
+    /// [`Expression::get_inner_expression`]. Structural facts are serialized
+    /// as spans, so this small shared adapter preserves that operation for
+    /// consumers that no longer have Oxc nodes. It intentionally does not
+    /// peel arbitrary conversions, calls, or member expressions.
+    #[must_use]
+    pub fn peel_ts_sugar_span(&self, mut span: Span) -> Span {
+        // `transparent_wrappers` is sorted by span, and this runs at every
+        // callee and value resolution, so the lookup is a binary search
+        // rather than a scan of every wrapper in the file.
+        while let Ok(index) = self
+            .transparent_wrappers
+            .binary_search_by_key(&span, |wrapper| wrapper.span)
+        {
+            let wrapper = &self.transparent_wrappers[index];
+            if wrapper.inner == span {
+                break;
+            }
+            span = wrapper.inner;
+        }
+        span
+    }
+
     /// The non-array bindings an export statement itself declares: inside the
     /// export's span, but not inside the body of any function the same export
     /// contains (those belong to the function, not the export surface).
@@ -543,6 +653,7 @@ struct Collector<'s, 'semantic> {
     returns: Vec<ReturnFact>,
     jsx_elements: Vec<JsxElementFact>,
     jsx_fragments: Vec<Span>,
+    transparent_wrappers: Vec<TransparentWrapperFact>,
     members: Vec<MemberFact>,
     computed_members: Vec<Span>,
     parameter_properties: Vec<Span>,
@@ -556,6 +667,16 @@ struct Collector<'s, 'semantic> {
     assignments: Vec<AssignmentFact>,
     if_regions: Vec<IfRegionFact>,
     conditional_control_stack: Vec<Span>,
+    method_names: Vec<Option<NamedSpan>>,
+}
+
+#[derive(Default)]
+struct BindingMetadata {
+    initializer: Option<OxcSpan>,
+    call_initializer: Option<OxcSpan>,
+    initializer_function: bool,
+    initializer_identifier: Option<NamedSpan>,
+    immutable: bool,
 }
 
 impl<'s, 'semantic> Collector<'s, 'semantic> {
@@ -574,6 +695,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
+            transparent_wrappers: Vec::new(),
             members: Vec::new(),
             computed_members: Vec::new(),
             parameter_properties: Vec::new(),
@@ -587,6 +709,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             assignments: Vec::new(),
             if_regions: Vec::new(),
             conditional_control_stack: Vec::new(),
+            method_names: Vec::new(),
         }
     }
 
@@ -601,6 +724,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
         self.jsx_fragments.sort();
+        self.transparent_wrappers.sort_by_key(|fact| fact.span);
         self.members.sort_by_key(|fact| fact.span);
         self.computed_members.sort_unstable();
         self.parameter_properties.sort_unstable();
@@ -627,6 +751,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             returns: self.returns,
             jsx_elements: self.jsx_elements,
             jsx_fragments: self.jsx_fragments,
+            transparent_wrappers: self.transparent_wrappers,
             members: self.members,
             computed_members: self.computed_members,
             parameter_properties: self.parameter_properties,
@@ -646,10 +771,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         &self,
         declaration: OxcSpan,
         pattern: &BindingPattern<'_>,
-        initializer: Option<OxcSpan>,
-        call_initializer: Option<OxcSpan>,
-        initializer_function: bool,
-        initializer_identifier: Option<NamedSpan>,
+        metadata: BindingMetadata,
     ) -> BindingFact {
         let shape = match pattern {
             BindingPattern::BindingIdentifier(_) | BindingPattern::AssignmentPattern(_) => {
@@ -687,10 +809,38 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 }
                 _ => vec![],
             },
-            initializer: initializer.map(span),
-            call_initializer: call_initializer.map(span),
-            initializer_function,
-            initializer_identifier,
+            object_slots: match pattern {
+                BindingPattern::ObjectPattern(object) => object
+                    .properties
+                    .iter()
+                    .filter_map(|property| {
+                        let local = property
+                            .value
+                            .get_binding_identifiers()
+                            .into_iter()
+                            .next()?;
+                        let property_name = self
+                            .source
+                            .get(
+                                property.key.span().start as usize
+                                    ..property.key.span().end as usize,
+                            )?
+                            .trim_matches(['\'', '"']);
+                        Some(ObjectBindingFact {
+                            property: property_name.into(),
+                            local: NamedSpan {
+                                span: span(local.span),
+                            },
+                        })
+                    })
+                    .collect(),
+                _ => Vec::new(),
+            },
+            immutable: metadata.immutable,
+            initializer: metadata.initializer.map(span),
+            call_initializer: metadata.call_initializer.map(span),
+            initializer_function: metadata.initializer_function,
+            initializer_identifier: metadata.initializer_identifier,
         }
     }
 
@@ -699,14 +849,50 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             return ReturnFact {
                 span: span(fallback),
                 argument: None,
-                control_tests: self.conditional_control_stack.clone(),
+                control_tests: self.conditional_control_stack.clone().into_boxed_slice(),
                 value: ReturnValueKind::Undefined,
                 conditional: false,
                 callee: None,
+                structure: None,
             };
         };
         let argument_span = span(expression.span());
         let expression = expression.get_inner_expression();
+        let elements = match expression {
+            Expression::ArrayExpression(array) => array
+                .elements
+                .iter()
+                .map(|element| {
+                    (!matches!(
+                        element,
+                        ArrayExpressionElement::Elision(_)
+                            | ArrayExpressionElement::SpreadElement(_)
+                    ))
+                    .then(|| span(element.span()))
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        let properties = match expression {
+            Expression::ObjectExpression(object) => object
+                .properties
+                .iter()
+                .filter_map(|property| {
+                    let ObjectPropertyKind::ObjectProperty(property) = property else {
+                        return None;
+                    };
+                    let key = self
+                        .source
+                        .get(property.key.span().start as usize..property.key.span().end as usize)?
+                        .trim_matches(['\'', '"']);
+                    (!key.is_empty()).then(|| ReturnPropertyFact {
+                        name: key.into(),
+                        value: span(property.value.span()),
+                    })
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
         let conditional = matches!(expression, Expression::ConditionalExpression(_));
         let (value, callee) = match expression {
             Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
@@ -718,6 +904,9 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             Expression::Identifier(_) => (ReturnValueKind::Identifier, None),
             Expression::CallExpression(call) => {
                 (ReturnValueKind::Call, Some(span(call.callee.span())))
+            }
+            Expression::NewExpression(expression) => {
+                (ReturnValueKind::Call, Some(span(expression.callee.span())))
             }
             Expression::StaticMemberExpression(_)
             | Expression::ComputedMemberExpression(_)
@@ -732,10 +921,16 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         ReturnFact {
             span: span(expression.span()),
             argument: Some(argument_span),
-            control_tests: self.conditional_control_stack.clone(),
+            control_tests: self.conditional_control_stack.clone().into_boxed_slice(),
             value,
             conditional,
             callee,
+            structure: (!elements.is_empty() || !properties.is_empty()).then(|| {
+                Box::new(ReturnStructureFact {
+                    elements,
+                    properties,
+                })
+            }),
         }
     }
 
@@ -748,12 +943,33 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             })
     }
 
+    /// The declaration a shorthand property's value binding refers to.
+    ///
+    /// The binder already resolved this exact reference, so its answer is
+    /// used rather than a scope-chain lookup by spelling: it distinguishes
+    /// sibling block scopes, and an unresolved reference stays `None` instead
+    /// of silently matching a same-named binding somewhere else in the file.
+    fn shorthand_binding(&self, property: &ObjectProperty<'_>) -> Option<Span> {
+        if !property.shorthand {
+            return None;
+        }
+        let Expression::Identifier(value) = &property.value else {
+            return None;
+        };
+        let symbol = self
+            .scoping
+            .get_reference(value.reference_id.get()?)
+            .symbol_id()?;
+        Some(span(self.scoping.symbol_span(symbol)))
+    }
+
     fn argument_fact(argument: &Argument<'_>) -> ArgumentFact {
         let value = match argument {
             Argument::Identifier(identifier) if identifier.name == "undefined" => {
                 ArgumentValueKind::Undefined
             }
             Argument::Identifier(_) => ArgumentValueKind::Identifier,
+            Argument::NullLiteral(_) => ArgumentValueKind::Null,
             Argument::ArrowFunctionExpression(function) if function.r#async => {
                 ArgumentValueKind::AsyncFunction
             }
@@ -821,6 +1037,39 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
     }
 }
 
+/// Return the runtime-value expression underneath one or more transparent
+/// TypeScript wrappers. This is the node-level half of
+/// [`AstFacts::peel_ts_sugar_span`].
+#[must_use]
+pub fn peel_ts_sugar<'a>(expression: &'a Expression<'a>) -> &'a Expression<'a> {
+    let mut expression = expression;
+    loop {
+        let Some(inner) = transparent_inner_expression(expression) else {
+            return expression;
+        };
+        expression = inner;
+    }
+}
+
+fn transparent_inner_expression<'a>(expression: &'a Expression<'a>) -> Option<&'a Expression<'a>> {
+    match expression {
+        Expression::ParenthesizedExpression(expression) => Some(&expression.expression),
+        Expression::TSAsExpression(expression) => Some(&expression.expression),
+        Expression::TSSatisfiesExpression(expression) => Some(&expression.expression),
+        Expression::TSNonNullExpression(expression) => Some(&expression.expression),
+        _ => None,
+    }
+}
+
+fn static_property_name(key: &PropertyKey<'_>) -> Option<NamedSpan> {
+    match key {
+        PropertyKey::StaticIdentifier(identifier) => Some(NamedSpan {
+            span: span(identifier.span),
+        }),
+        _ => None,
+    }
+}
+
 impl<'a> Visit<'a> for Collector<'_, '_> {
     fn enter_scope(&mut self, _flags: ScopeFlags, scope_id: &std::cell::Cell<Option<ScopeId>>) {
         // SemanticBuilder populated every scope cell in this same AST before
@@ -835,6 +1084,16 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn leave_scope(&mut self) {
         self.scope_stack.pop();
+    }
+
+    fn visit_expression(&mut self, expression: &Expression<'a>) {
+        if let Some(inner) = transparent_inner_expression(expression) {
+            self.transparent_wrappers.push(TransparentWrapperFact {
+                span: span(expression.span()),
+                inner: span(inner.span()),
+            });
+        }
+        walk::walk_expression(self, expression);
     }
 
     fn visit_call_expression(&mut self, call: &CallExpression<'a>) {
@@ -911,10 +1170,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.bindings.push(self.binding_fact(
             declaration.span,
             &declaration.id,
-            initializer,
-            call_initializer,
-            initializer_function,
-            initializer_identifier,
+            BindingMetadata {
+                initializer,
+                call_initializer,
+                initializer_function,
+                initializer_identifier,
+                immutable: declaration.kind == oxc_ast::ast::VariableDeclarationKind::Const,
+            },
         ));
         walk::walk_variable_declarator(self, declaration);
     }
@@ -934,6 +1196,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 name: function.id.as_ref().map(|identifier| NamedSpan {
                     span: span(identifier.span),
                 }),
+                method_name: self.method_names.last().cloned().flatten(),
                 parameters: function
                     .params
                     .items
@@ -942,10 +1205,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         self.binding_fact(
                             parameter.span,
                             &parameter.pattern,
-                            None,
-                            None,
-                            false,
-                            None,
+                            BindingMetadata::default(),
                         )
                     })
                     .collect(),
@@ -958,6 +1218,12 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         walk::walk_function(self, function, flags);
     }
 
+    fn visit_method_definition(&mut self, method: &oxc_ast::ast::MethodDefinition<'a>) {
+        self.method_names.push(static_property_name(&method.key));
+        walk::walk_method_definition(self, method);
+        self.method_names.pop();
+    }
+
     fn visit_arrow_function_expression(&mut self, function: &ArrowFunctionExpression<'a>) {
         let expression_return = function
             .get_expression()
@@ -967,12 +1233,17 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             body: span(function.body.span),
             kind: FunctionKind::Arrow,
             name: None,
+            method_name: None,
             parameters: function
                 .params
                 .items
                 .iter()
                 .map(|parameter| {
-                    self.binding_fact(parameter.span, &parameter.pattern, None, None, false, None)
+                    self.binding_fact(
+                        parameter.span,
+                        &parameter.pattern,
+                        BindingMetadata::default(),
+                    )
                 })
                 .collect(),
             r#async: function.r#async,
@@ -1152,6 +1423,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
         if expression.operator == AssignmentOperator::Assign {
+            let inner = expression.right.get_inner_expression();
             self.assignments.push(AssignmentFact {
                 target: span(expression.left.span()),
                 value_span: span(expression.right.span()),
@@ -1161,6 +1433,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         AssignmentValueKind::Function
                     }
                     _ => AssignmentValueKind::Other,
+                },
+                call_initializer: match inner {
+                    Expression::CallExpression(call) => Some(span(call.span)),
+                    _ => None,
+                },
+                array_slots: match &expression.left {
+                    AssignmentTarget::ArrayAssignmentTarget(array) => array
+                        .elements
+                        .iter()
+                        .map(|element| element.as_ref().map(|element| span(element.span())))
+                        .collect(),
+                    _ => Vec::new(),
                 },
             });
         }
@@ -1207,13 +1491,20 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {
+        let method_name = property
+            .method
+            .then(|| static_property_name(&property.key))
+            .flatten();
+        self.method_names.push(method_name);
         self.object_properties.push(ObjectPropertyFact {
             span: span(property.span),
             key: span(property.key.span()),
             value: span(property.value.span()),
             computed: property.computed,
+            shorthand_binding: self.shorthand_binding(property),
         });
         walk::walk_object_property(self, property);
+        self.method_names.pop();
     }
 
     fn visit_tagged_template_expression(
@@ -1597,6 +1888,34 @@ export async function App(props: { title: string }) {
     }
 
     #[test]
+    fn peels_only_transparent_typescript_wrappers_and_names_methods() {
+        let source = r#"
+declare const fn: () => number;
+const wrapped = (((fn) as (() => number)) satisfies (() => number))!;
+const object = { helper() { return fn(); } };
+class Box { helper() { return fn(); } }
+"#;
+        let facts = extract("wrappers.ts", source).unwrap();
+        let initializer = facts.bindings.iter().find_map(|binding| {
+            (source.get(binding.pattern.start as usize..binding.pattern.end as usize)
+                == Some("wrapped"))
+            .then_some(binding.initializer)
+            .flatten()
+        });
+        let initializer = initializer.expect("wrapped initializer");
+        let peeled = facts.peel_ts_sugar_span(initializer);
+        assert_eq!(&source[peeled.start as usize..peeled.end as usize], "fn");
+        assert!(facts.transparent_wrappers.len() >= 3);
+        let methods = facts
+            .functions
+            .iter()
+            .filter_map(|function| function.method_name.as_ref())
+            .map(|name| &source[name.span.start as usize..name.span.end as usize])
+            .collect::<Vec<_>>();
+        assert_eq!(methods, ["helper", "helper"]);
+    }
+
+    #[test]
     fn certifies_static_callee_spans_without_retaining_their_text() {
         let source = "solid.createEffect(); (factory())();";
         let facts = extract("calls.ts", source).unwrap();
@@ -1671,7 +1990,8 @@ const mixed = () => {
 
     #[test]
     fn classifies_argument_shapes_and_boolean_options() {
-        let source = "createMemo(async () => 1, { sync: true, ownedWrite: false });";
+        let source =
+            "createMemo(async () => 1, { sync: true, ownedWrite: false }); runWithOwner(null, f);";
         let facts = extract("options.ts", source).unwrap();
         let call = &facts.calls[0];
         assert_eq!(call.arguments[0].value, ArgumentValueKind::AsyncFunction);
@@ -1686,6 +2006,7 @@ const mixed = () => {
                 .collect::<Vec<_>>(),
             [(Some("sync"), true), (Some("ownedWrite"), false),]
         );
+        assert_eq!(facts.calls[1].arguments[0].value, ArgumentValueKind::Null);
     }
 
     #[test]
@@ -1888,8 +2209,10 @@ const mixed = () => {
     fn retains_array_assignments_and_if_regions_for_runtime_proofs() {
         let source = r#"
 let callbacks = null;
+let resource;
 if (!callbacks) callbacks = [];
 if (Array.isArray(callbacks)) callbacks.push(fn);
+[resource] = createResource(source, fetcher);
 "#;
         let facts = extract("/project/runtime.js", source).unwrap();
         assert!(facts.assignments.iter().any(|assignment| {
@@ -1897,6 +2220,25 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
                 && source.get(assignment.target.start as usize..assignment.target.end as usize)
                     == Some("callbacks")
         }));
+        let resource = facts
+            .assignments
+            .iter()
+            .find(|assignment| !assignment.array_slots.is_empty())
+            .unwrap();
+        assert_eq!(
+            resource
+                .array_slots
+                .first()
+                .and_then(|slot| *slot)
+                .and_then(|span| source.get(span.start as usize..span.end as usize)),
+            Some("resource")
+        );
+        assert_eq!(
+            resource
+                .call_initializer
+                .and_then(|span| source.get(span.start as usize..span.end as usize)),
+            Some("createResource(source, fetcher)")
+        );
         assert!(facts.if_regions.iter().any(|region| {
             source.get(region.test.start as usize..region.test.end as usize)
                 == Some("Array.isArray(callbacks)")
@@ -2026,6 +2368,85 @@ function View(shadowedDirective: (element: HTMLDivElement) => void) {
     }
 
     #[test]
+    fn resolves_shorthand_property_values_through_block_scope() {
+        let source = r#"
+import { importedValue } from "./values";
+
+const moduleValue = () => "module";
+
+function make() {
+  {
+    const scoped = () => "block";
+    const fromBlock = { scoped };
+  }
+  const scoped = () => "function";
+  const fromFunction = { scoped };
+  const fromModule = { moduleValue };
+  const fromImport = { importedValue };
+  const fromGlobal = { structuredClone };
+  const written = { scoped: moduleValue };
+  const computed = { [moduleValue]: 1 };
+}
+"#;
+        let facts = extract("shorthand.ts", source).unwrap();
+        let text = |span: Span| source.get(span.start as usize..span.end as usize).unwrap();
+        let resolved = facts
+            .object_properties
+            .iter()
+            .map(|property| {
+                (
+                    text(property.span),
+                    property
+                        .shorthand_binding
+                        .map(|binding| (text(binding), binding.start as usize)),
+                )
+            })
+            .collect::<Vec<_>>();
+
+        // Two `scoped` declarations in sibling scopes. Each shorthand takes
+        // the one its own scope chain reaches -- the distinction the spelling
+        // alone cannot make. Everything below is keyed off the declaration
+        // offset, so a same-spelled sibling cannot satisfy the assertion.
+        assert_eq!(
+            resolved,
+            [
+                (
+                    "scoped",
+                    Some(("scoped", source.find("scoped = () => \"block\"").unwrap()))
+                ),
+                (
+                    "scoped",
+                    Some((
+                        "scoped",
+                        source.find("scoped = () => \"function\"").unwrap()
+                    ))
+                ),
+                (
+                    "moduleValue",
+                    Some((
+                        "moduleValue",
+                        source.find("moduleValue = () => \"module\"").unwrap()
+                    ))
+                ),
+                (
+                    "importedValue",
+                    Some((
+                        "importedValue",
+                        source.find("importedValue } from").unwrap()
+                    ))
+                ),
+                // A global resolves to no declaration in this file's scope
+                // tree, and a written or computed key is not a shorthand at
+                // all. All three are the absence of a fact, never proof that
+                // no binding exists.
+                ("structuredClone", None),
+                ("scoped: moduleValue", None),
+                ("[moduleValue]: 1", None),
+            ]
+        );
+    }
+
+    #[test]
     fn retains_untagged_template_interpolations() {
         let facts = extract(
             "App.tsx",
@@ -2083,5 +2504,51 @@ function View(shadowedDirective: (element: HTMLDivElement) => void) {
             fragment.contains(element),
             "the fragment wraps the element: {fragment:?} vs {element:?}"
         );
+    }
+
+    #[test]
+    fn structured_returns_retain_tuple_slots_and_object_properties() {
+        let source = r#"
+function tuple() { return [store, accessor] as const; }
+function object() { return { active: () => state(), pending: createMemo(() => state()) }; }
+"#;
+        let facts = extract("App.ts", source).unwrap();
+        let tuple = facts
+            .returns
+            .iter()
+            .find(|returned| !returned.elements().is_empty())
+            .unwrap();
+        assert_eq!(
+            tuple
+                .elements()
+                .iter()
+                .flatten()
+                .map(|span| &source[span.start as usize..span.end as usize])
+                .collect::<Vec<_>>(),
+            ["store", "accessor"]
+        );
+        let object = facts
+            .returns
+            .iter()
+            .find(|returned| !returned.properties().is_empty())
+            .unwrap();
+        assert_eq!(
+            object
+                .properties()
+                .iter()
+                .map(|property| property.name.as_str())
+                .collect::<Vec<_>>(),
+            ["active", "pending"]
+        );
+        let pending = object
+            .properties()
+            .iter()
+            .find(|property| property.name == "pending")
+            .unwrap();
+        assert_eq!(
+            source.get(pending.value.start as usize..pending.value.end as usize),
+            Some("createMemo(() => state())")
+        );
+        assert!(facts.calls.iter().any(|call| call.span == pending.value));
     }
 }

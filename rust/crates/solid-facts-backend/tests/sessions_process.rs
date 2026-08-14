@@ -250,6 +250,10 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         ),
         ("loop-await-accessor.tsx", "reactive-read-after-await"),
         ("component-props-tracked.tsx", "strict-read-untracked"),
+        (
+            "component-props-tracked-destructure.tsx",
+            "component-props-destructure",
+        ),
         ("noncomponent-object-read.ts", "strict-read-untracked"),
         (
             "noncomponent-object-destructure.ts",
@@ -597,6 +601,151 @@ fn incremental_reactive_ir_matches_fresh_after_an_edit() {
         timings.interprocedural_result_reused_files
             + timings.interprocedural_result_recomputed_files,
         u64::try_from(edited.files.len()).unwrap()
+    );
+}
+
+#[test]
+fn compiler_option_only_edit_invalidates_cached_ownership() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let (mut session, paths) = tracer_fixture_session(&typefacts);
+    let first = session.analyze().unwrap();
+    assert!(
+        first.files[0]
+            .compiler
+            .ownership_regions
+            .iter()
+            .any(|region| region.kind == solid_facts::compiler::OwnershipRegionKind::Owned),
+        "the default compiler wrapper should emit an ownership region"
+    );
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    incremental
+        .build(&first, dialect::default_dialect().vocabulary)
+        .unwrap();
+
+    let edited = session
+        .edit(
+            vec![SourceChange {
+                path: paths[0].to_string_lossy().into_owned(),
+                version: 1,
+                source: Some(fs::read_to_string(&paths[0]).unwrap()),
+                compiler_options: CompilerOptions {
+                    effect_wrapper: Some("customEffect".into()),
+                    ..CompilerOptions::default()
+                },
+            }],
+            None,
+        )
+        .unwrap();
+    assert!(
+        edited.files[0].compiler.ownership_regions.is_empty(),
+        "a custom wrapper must make no semantic ownership claim"
+    );
+
+    let fresh = solid_reactive_ir::build(&edited, dialect::default_dialect().vocabulary).unwrap();
+    let (retained, timings) = incremental
+        .build(&edited, dialect::default_dialect().vocabulary)
+        .unwrap();
+    assert_eq!(retained, fresh);
+    assert!(!timings.owner_fixed_point_reused);
+}
+
+#[test]
+fn cross_file_jsx_use_invalidates_cached_component_identity() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("component-identity-invalidation");
+    let project = directory.join("tsconfig.json");
+    let definition = directory.join("Card.tsx");
+    let usage = directory.join("usage.tsx");
+    let declarations = directory.join("solid-js.d.ts");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"files":["Card.tsx","usage.tsx","solid-js.d.ts"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        &definition,
+        r#"import { createEffect } from "solid-js";
+export const Card = () => {
+  const view = <div />;
+  createEffect(() => {});
+  return view;
+};
+"#,
+    )
+    .unwrap();
+    let rendered = r#"import { Card } from "./Card";
+void <Card />;
+"#;
+    fs::write(&usage, rendered).unwrap();
+    fs::write(
+        &declarations,
+        r#"declare module "solid-js" {
+  export function createEffect(callback: () => void): void;
+}
+declare namespace JSX {
+  interface IntrinsicElements { div: Record<string, never>; }
+}
+"#,
+    )
+    .unwrap();
+
+    let project_id = project.to_string_lossy().into_owned();
+    let sources = [&definition, &usage]
+        .into_iter()
+        .map(|path| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: fs::read_to_string(path).unwrap().into(),
+            compiler_options: CompilerOptions::default(),
+        })
+        .collect();
+    let typescript = open_type_facts_session(&typefacts, &project_id);
+    let selected = dialect::by_id("solid-v2").unwrap();
+    let mut session =
+        NativeIncrementalSession::open(selected, project_id, sources, typescript).unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    assert!(
+        selected
+            .solve(&initial)
+            .iter()
+            .all(|finding| finding.rule != "no-owner-effect"),
+        "the JSX use should prove Card is an owned component"
+    );
+
+    let unrendered = r#"import { Card } from "./Card";
+void Card;
+"#;
+    fs::write(&usage, unrendered).unwrap();
+    let edited = session
+        .edit(
+            vec![SourceChange {
+                path: usage.to_string_lossy().into_owned(),
+                version: 1,
+                source: Some(unrendered.into()),
+                compiler_options: CompilerOptions::default(),
+            }],
+            None,
+        )
+        .unwrap();
+    let fresh = solid_reactive_ir::build(&edited, selected.vocabulary).unwrap();
+    let (retained, _) = incremental.build(&edited, selected.vocabulary).unwrap();
+    let fresh_findings = selected.solve(&fresh);
+    assert!(
+        fresh_findings.iter().any(|finding| {
+            finding.rule == "no-owner-effect" && finding.primary_location.path.ends_with("Card.tsx")
+        }),
+        "without a JSX use, the exported untyped factory has no proven owner: {fresh_findings:#?}"
+    );
+    assert_eq!(
+        retained, fresh,
+        "an edit in a reference file must invalidate component-dependent artifacts in Card.tsx"
     );
 }
 

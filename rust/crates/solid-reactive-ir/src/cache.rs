@@ -2,13 +2,11 @@
 //! per-file contributions, fingerprints, and reuse checks.
 
 use crate::indexes::CachedAstFileIndex;
-use crate::owners::{
-    CachedOwnerFile, go_binding_pattern_accepts_call, go_returned_arrow_pattern_accepts,
-};
+use crate::owners::{CachedOwnerFile, binding_returns_reactive_source, returned_arrow_function};
 use crate::{
     ActionInvocation, AsyncRead, CacheRetention, ContractCallback, ContractExport,
     ContractGenerationObligation, FunctionNode, OwnerRequirement, Program, ReactiveRead,
-    ReactiveSourceKind, ReactiveWrite, Solid1xRuleOptions,
+    ReactiveSourceKind, ReactiveWrite, RuleOptions,
 };
 
 use std::{
@@ -39,7 +37,7 @@ pub(crate) struct BuildIdentity {
     pub(crate) contracts: Vec<[u8; 32]>,
     /// Per-rule options change what the static pass emits, so two runs with
     /// different options never share a retained program.
-    pub(crate) rule_options: Solid1xRuleOptions,
+    pub(crate) rule_options: RuleOptions,
 }
 
 pub(crate) struct RetainedBuild {
@@ -177,6 +175,7 @@ pub(crate) struct SourceDiscoveryContribution {
 
 pub(crate) struct CachedSourceDiscovery {
     pub(crate) identity: SourceDiscoveryIdentity,
+    pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
     pub(crate) contribution: SourceDiscoveryContribution,
 }
 
@@ -200,9 +199,25 @@ pub(crate) enum InterproceduralGraphTarget {
 pub(crate) struct InterproceduralGraphContribution {
     pub(crate) direct_reads: Vec<(Span, SummaryRead)>,
     pub(crate) edges: Vec<(Span, InterproceduralGraphTarget)>,
+    /// A composite TypeScript call can be dispatched to several exact local
+    /// implementations. These edges stay deferred until their summaries can
+    /// be compared; adding all of them eagerly would union incompatible
+    /// behavior and make an ambiguous call look certified.
+    pub(crate) dispatches: Vec<(Span, Vec<SymbolId>)>,
     pub(crate) invoked_parameters: Vec<(Span, usize)>,
+    /// A member invoked on a parameter: `(owner, parameter index, property)`
+    /// for `function invoke(reader) { reader.read() }`. The implementation is
+    /// not a property of the owner -- each call site supplies it -- so this
+    /// records the obligation and leaves resolution to the site.
+    pub(crate) invoked_parameter_members: Vec<(Span, usize, String)>,
     pub(crate) callbacks: Vec<(Span, ContractCallback)>,
-    pub(crate) callback_forwardings: Vec<(Span, InterproceduralGraphTarget, usize, usize)>,
+    pub(crate) callback_forwardings: Vec<(
+        Span,
+        InterproceduralGraphTarget,
+        usize,
+        usize,
+        Option<String>,
+    )>,
     pub(crate) contract_generation_obligations: Vec<(Span, ContractGenerationObligation)>,
     pub(crate) returned_bindings: Vec<(SymbolId, SymbolId)>,
     pub(crate) factory_calls: Vec<(Span, SymbolId)>,
@@ -227,6 +242,7 @@ pub(crate) enum InterproceduralResultDependencyState {
         name: Option<String>,
         summary: Vec<SummaryRead>,
         invoked_parameters: Vec<usize>,
+        invoked_parameter_members: Vec<(usize, String)>,
     },
     Returned(Vec<SummaryRead>),
     Inline(Vec<SummaryRead>),
@@ -425,10 +441,8 @@ pub(crate) struct ReachabilityEdge {
 
 pub(crate) struct CachedReachabilityFile {
     pub(crate) identity: SourceDiscoveryIdentity,
-    /// See [`SemanticLookup::returned_callback_proof_digest`]. Reachability
-    /// edges for a primitive whose callbacks run through a returned adapter
-    /// depend on whether *some other file* invokes that adapter, so this
-    /// fragment cannot be reused across a change to any file.
+    /// See [`SemanticLookup::cross_file_proof_digest`]. Reachability roots and
+    /// edges can depend on component or callback uses in another file.
     pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
     pub(crate) functions: Vec<FunctionNode>,
@@ -484,9 +498,8 @@ pub(crate) struct LocalAccessSymbolState {
 
 pub(crate) struct CachedLocalAccessFile {
     pub(crate) source_hash: SourceHash,
-    /// See [`SemanticLookup::returned_callback_proof_digest`]. Whether a read
-    /// inside a returned adapter's callback is dormant or live depends on
-    /// whether any project file invokes that adapter.
+    /// See [`SemanticLookup::cross_file_proof_digest`]. Execution and component
+    /// classification can depend on callback or JSX uses in another file.
     pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
     pub(crate) dependencies: HashSet<SymbolId>,
@@ -508,6 +521,7 @@ pub(crate) type SourceReferenceLocations = HashMap<String, HashMap<(u64, u64), S
 
 pub(crate) struct CachedLateStages {
     pub(crate) inputs: HashMap<SourcePath, LateStageFileInput>,
+    pub(crate) cross_file_proofs: Option<CrossFileProofDigest>,
     pub(crate) local_accesses: CachedLocalAccesses,
     pub(crate) interprocedural: Option<InterproceduralResult>,
     pub(crate) missing_owners: Option<Vec<OwnerRequirement>>,
@@ -591,7 +605,7 @@ pub(crate) fn late_stage_source_fingerprint(
         let shape = binding.call_initializer.and_then(|initializer| {
             file.ast
                 .call_at(initializer)
-                .map(|call| go_binding_pattern_accepts_call(file.source.as_ref(), binding, call))
+                .map(|call| binding_returns_reactive_source(binding, call))
         });
         optional_bool(&mut hasher, shape);
     }
@@ -601,10 +615,7 @@ pub(crate) fn late_stage_source_fingerprint(
             .flatten()
     });
     for argument in returned_functions {
-        hasher.update([u8::from(go_returned_arrow_pattern_accepts(
-            file.source.as_ref(),
-            argument,
-        ))]);
+        hasher.update([u8::from(returned_arrow_function(&file.ast, argument))]);
     }
     hasher.finalize().into()
 }
@@ -616,11 +627,12 @@ pub(crate) fn late_stage_inputs_match(cache: &CachedLateStages, facts: &ProjectF
                 .inputs
                 .get(file.path.as_str())
                 .is_some_and(|previous| {
-                    previous.source_hash == file.source_hash
-                        || same_reachability_ast(&previous.ast, &file.ast)
-                            && (Arc::ptr_eq(&previous.compiler, &file.compiler)
-                                || same_compiler_semantics(&previous.compiler, &file.compiler))
-                            && previous.source_fingerprint == late_stage_source_fingerprint(file)
+                    (Arc::ptr_eq(&previous.compiler, &file.compiler)
+                        || same_compiler_semantics(&previous.compiler, &file.compiler))
+                        && (previous.source_hash == file.source_hash
+                            || same_reachability_ast(&previous.ast, &file.ast)
+                                && previous.source_fingerprint
+                                    == late_stage_source_fingerprint(file))
                 })
         })
 }
@@ -656,9 +668,11 @@ pub(crate) fn refresh_late_stage_inputs(
         .collect::<HashSet<_>>();
     inputs.retain(|path, _| current_paths.contains(path.as_str()));
     for file in &facts.files {
-        let unchanged = inputs
-            .get(file.path.as_str())
-            .is_some_and(|input| input.source_hash == file.source_hash);
+        let unchanged = inputs.get(file.path.as_str()).is_some_and(|input| {
+            input.source_hash == file.source_hash
+                && (Arc::ptr_eq(&input.compiler, &file.compiler)
+                    || same_compiler_semantics(&input.compiler, &file.compiler))
+        });
         if unchanged {
             continue;
         }
@@ -690,6 +704,7 @@ impl ReusePlan {
     pub(crate) fn prepare(
         facts: &ProjectFacts,
         late_stages: Option<&mut Option<CachedLateStages>>,
+        cross_file_proofs: Option<CrossFileProofDigest>,
     ) -> Self {
         let typescript_unchanged = facts
             .typescript_changes
@@ -699,7 +714,10 @@ impl ReusePlan {
             && late_stages
                 .as_deref()
                 .and_then(Option::as_ref)
-                .is_some_and(|cache| late_stage_inputs_match(cache, facts));
+                .is_some_and(|cache| {
+                    cache.cross_file_proofs == cross_file_proofs
+                        && late_stage_inputs_match(cache, facts)
+                });
 
         if let Some(slot) = late_stages {
             if late_stages_reusable {
@@ -712,6 +730,7 @@ impl ReusePlan {
                 }
             } else if let Some(retained) = slot.as_mut() {
                 refresh_late_stage_inputs(&mut retained.inputs, facts);
+                retained.cross_file_proofs = cross_file_proofs;
                 retained.local_accesses.aggregate = None;
                 retained.interprocedural = None;
                 retained.missing_owners = None;
@@ -719,6 +738,7 @@ impl ReusePlan {
             } else {
                 *slot = Some(CachedLateStages {
                     inputs: current_late_stage_inputs(facts),
+                    cross_file_proofs,
                     local_accesses: CachedLocalAccesses::default(),
                     interprocedural: None,
                     missing_owners: None,

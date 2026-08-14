@@ -35,95 +35,6 @@ not a bug fix.
 
 ## Design-change candidates (open)
 
-### Name-case conventions as ownership/identity proofs — the big one
-
-Component and hook identity is decided by identifier casing at many gates:
-
-- `interproc.rs` `enclosing_render_function` gate on summarized reads: reads
-  reaching a lowercase-named caller (a `useThing` hook, a module
-  initializer, a factory) are never reported. **FN, project-wide.**
-- `local_access.rs` / `owners.rs` (`inside_lowercase_named_function`,
-  `inside_unclassified_callback`): accessor calls and props reads inside
-  lowercase-named helpers or unclassified closures are suppressed unless a
-  callback role was proven. **FN** — the mirror of the gate above.
-- `owners.rs::seed_name_contexts`, `source_discovery.rs` props roots,
-  `static_rules.rs`, `reachability.rs` roots: uppercase-led ⇒
-  owner-providing/component. An uppercase factory (`Vector({x, y})`) is
-  assumed owned (**FN** for owner rules, **FP** for SC1003); a lowercase
-  component gets neither props-source nor owner treatment (**FN**).
-
-Why deferred: casing is the load-bearing convention the whole owner model
-seeds from; replacing it means deriving component identity from usage (JSX
-call sites, `Component` type facts, compiler execution facts) and would move
-findings in every fixture. Worth a design doc before any code.
-
-### Callee resolution falls back to the smallest contained symbol
-
-`indexes.rs::callee_symbol`: when neither the callee span nor its member
-property carries an entity, the smallest symbol-bearing entity *inside* the
-callee answers. `handlers[i]()` can resolve to `i`; `wrapper.value()` to
-`wrapper`. Consumed by `local_access.rs` and `interproc.rs`. **FP** (phantom
-reads/writes/actions attributed to proven sources). A fix must distinguish
-"no resolution" from "wrong resolution" without losing the legitimate cases
-the fallback exists for (parenthesized and cast callees).
-
-### Type-origin registration of accessors
-
-`source_discovery.rs` registers every TypeScript entity whose type
-originates from a dialect-owned module as an accessor, picking the
-declaration by alias-name text (`"Accessor" | "Setter"`). A
-`Component`-typed value or a user alias named `Accessor` becomes a reactive
-source. **FP.** Also positional: the second binding of a destructured pair
-is assumed to be a setter. Fix needs real type identity (which export the
-alias resolves to), not name text.
-
-### Unclassified execution spans default to `UntrackedRendering`
-
-`execution_role.rs`: spans the execution map did not classify take the exact
-role the strict-read rule reports. Every compiler-fact gap becomes a
-user-facing warning instead of a suppressed unknown. **FP.** The
-alternative — an explicit `Unknown` role that reports as uncertifiable
-rather than violation — is a diagnostic-model change.
-
-### Functions invisible to the summary graph
-
-`interproc.rs`: an AST function with no byte-offset-matched TypeScript fact
-is dropped from summaries (class members, object-literal methods, offset
-drift), and generic or non-identifier callees (`helper<T>(sig)`,
-`obj.helper(sig)`) produce no edges or contract reads. **FN.** Needs either
-sturdier fact matching or a conservative "unknown callee" edge.
-
-### TS wrapper expressions defeat span-equality gates
-
-No shared unwrapping of `as` / `satisfies` / non-null / parenthesized
-expressions exists; classification gates that demand span equality
-(`source_discovery.rs` mapArray params, `owners.rs` owner-providing regions,
-several upstream-compat sites) silently reclassify
-`createRoot((() => {...}) as VoidFunction)`. **Both.** A `peel_ts_sugar`
-helper applied at each gate is bounded per-site but each site moves
-findings, so it should land gate-by-gate with fixtures.
-
-### Byte-scanning helpers in `owners.rs`
-
-`go_binding_pattern_accepts_call` / `go_returned_arrow_pattern_accepts`
-scan raw source: nested generics (`Foo<Bar<T>>`), defaults containing `)`,
-and comments defeat them. **Both.** Now pinned by unit tests (including the
-known-wrong cases, marked as such); a fix should come from AST facts rather
-than smarter scanning.
-
-### JSX member tags are not resolved against the vocabulary
-
-`<Solid.For>` / `<Solid.Repeat>` after `import * as Solid from "solid-js"`
-produce no control-flow classification: the JSX resolution paths match plain
-tag identifiers against imports and declarations, never member expressions.
-The call-form namespace vocabulary was widened to the census invariant
-(`namespace_import_primitives`, pinned by
-`every_modelled_export_resolves_through_its_namespace_module` in both dialect
-modules), so this is now the only way a namespace import hides a primitive.
-The silent shape is pinned in `fixtures/reactive-ir/namespace-import-v2/` —
-false negatives for any rule keyed on control-flow or boundary tags when the
-component arrives through a namespace member tag.
-
 ### `execution-map-incomplete` (SC9004) is unreachable from real source
 
 Both dialect compilers emit every `jsx-expression` operation together with a
@@ -134,8 +45,123 @@ against externally produced or partial compiler facts only, which is why no
 fixture can pin it; if a third compiler adapter ever lands, that adapter's
 tests are where this rule gets its coverage.
 
-### Report-on-missing-fact in `v1/jsx-no-undef`
+### Generic member dispatch is partially resolved
 
-`solid1x_undef.rs` reports "not defined" whenever the demand plan produced
-no entity for a span — any demand-plan gap becomes a hard violation. **FP.**
-Also, the auto-import allowlist covers `Show/For/Index/Switch/Match` only.
+Direct generic calls, class methods, object-literal methods, exact resolved
+member declarations, and structural calls whose formal receiver can be mapped
+to every exact in-project call-site argument now participate in summaries. A
+member call with multiple exact candidates is certified only when their
+semantic read/callback/async summaries are equivalent and none has an
+unresolved callback-contract obligation; missing, unresolved, or different
+candidates remain fail closed. Remaining **FN** cases are exported structural
+helpers with unseen external callers, computed members, and receiver
+expressions whose TypeScript facts do not expose an exact value.
+
+### A shorthand property's value is resolved only within its own file
+
+TypeScript projects a shorthand property's *own* symbol at `{ pathname }` --
+never the referenced value binding's -- so no TypeFacts entity, reference, or
+declaration fact at that span identifies the value. The binder that builds the
+Oxc AST facts does resolve that exact reference, and its answer is now carried
+on `ObjectPropertyFact::shorthand_binding`; `interproc.rs`
+(`binding_initializer`, `named_accessor`) reads the declaration from it instead
+of matching the spelling within the enclosing function. That is scope-exact, so
+the previous block-scoping hole is closed in both directions.
+
+What remains is a **FN**: the binder resolves an imported spelling to the
+*import specifier in this file*, and both sites require the declaration to be
+in the file being summarized, so `{ importedTracked }` naming an accessor
+declared in a sibling module yields no structured property. Reaching it needs
+the same cross-file declaration join the rest of contract generation already
+performs, not a new fact. `fixtures/package-contracts/shorthand-block-scope/`
+pins the resolved cases and this one.
+
+## Partially resolved design changes
+
+- **`v1/jsx-no-undef` now fails closed on missing semantic facts.** It reports
+  unresolved `use:` names only when the structural binder proves that no
+  lexical binding exists. Unresolved JSX tags, including dotted roots, are
+  uncertifiable and silent. The old auto-import helpers remain test coverage
+  for the upstream formatting logic, not a blanket semantic allowlist.
+- **Unknown callback helpers remain contract obligations.** Exact TypeScript
+  call facts now enrich the obligation and diagnostic with package,
+  entrypoint, export/function, callback parameter index/type, required
+  execution mode, and an editable schema-v1 contract stub. Standard-library
+  behavior and project/package contracts can discharge it; unknown execution
+  remains refused until an explicit contract proves it.
+
+## Resolved design changes
+
+- **Shorthand property values are resolved by the binder, not by spelling.**
+  The value binding at `{ pathname }` is named by
+  `ObjectPropertyFact::shorthand_binding` -- the declaration Oxc's scope tree
+  chose for that exact reference -- so a same-spelled binding in a sibling
+  block neither substitutes for the intended one nor makes it ambiguous. This
+  replaced a spelling match scoped to the enclosing function, which both lost
+  a provable structured return whenever any sibling block reused the spelling
+  and, worse, could certify an accessor the shorthand never named. A shorthand
+  the binder leaves unresolved carries no fact and proves nothing. The
+  remaining cross-file gap is listed above.
+
+- **Invoking a parameter's member is resolved per call site.** A function that
+  calls `reader.read(value)` on its own parameter makes no claim about which
+  implementation runs — that belongs to each caller. The owner records the
+  obligation (`invoked_parameter_members`: parameter index and property), and
+  `interprocedural_reads` resolves it against the argument actually passed at
+  each site, the way `invoked_parameters` already substitutes a directly
+  invoked parameter. A site whose argument is exactly one object contributes
+  that object's reads; an unresolved argument, or a conditional over two
+  objects, contributes nothing. This replaces pooling every call site into one
+  summary, which made an unambiguous site uncertifiable whenever a sibling site
+  was ambiguous. `fixtures/reactive-ir/interprocedural-methods-v2/` pins both
+  halves: `invoke(objectReader, …)` reports at its own call span, while
+  `invoke(cond ? objectReader : quietReader, …)` stays silent. The pooled
+  `structural_parameter_member_symbols` path still supplies the function's own
+  exported summary, where one answer must cover every call.
+
+- **Callee resolution is exact and conservative.** Parenthesized, `as`,
+  `satisfies`, and non-null wrappers are peeled through a shared AST fact
+  helper. Resolved call declarations identify member callees when TypeScript
+  provides them; static members can use their exact property entity, while
+  computed members such as `handlers[i]()` fail closed instead of inheriting
+  `i` or `handlers`.
+- **Summary discovery covers method, alias, and returned-value branches.**
+  Class/object methods, returned closures, conditional aliases, destructured
+  function properties, and exact object spreads retain their canonical
+  symbols. Direct generic calls and resolved structural member calls propagate
+  summaries only through the dispatch proof described above; unresolved
+  aliases and computed properties remain uncertifiable.
+- **Transparent TypeScript wrappers are peeled at equality gates.** The
+  shared helper is used by map/callback discovery, Solid 1.x structure gates,
+  and shared reactivity function matching, with AST and fixture coverage for
+  parentheses, `as`, `satisfies`, and non-null assertions.
+- **Namespace-imported JSX primitives use dialect vocabulary.** `<Solid.For>`,
+  `<Solid.Show>`, and `<Solid.Repeat>` resolve only when the namespace import
+  is from a dialect-owned module and the member is in that dialect's export
+  vocabulary. The namespace and named-import twins are pinned by
+  `fixtures/reactive-ir/namespace-import-v2/`.
+- **`prefer-component-syntax` covers conditional JSX returns and cross-file
+  calls.** It follows exact TypeScript function identities, so lower-case
+  value helpers and shadowed bindings stay out of the finding set. The focused
+  `prefer-component-syntax-v2` fixture pins this branch for issue #210.
+
+- **Component identity conventions are dialect-owned.** JSX call sites,
+  direct JSX returns (Solid 2), and exact compiler-resolved Solid component
+  aliases prove component identity. Solid 1 explicitly retains its upstream
+  uppercase-binding convention for parity; the shared reactive core contains
+  no hard-coded casing rule. Intrinsic-tag case checks remain syntax-only.
+- **Dialect-owned type origin is no longer enough to register a source.** The
+  dialect classifies exact exported aliases as component, accessor/resource,
+  signal, store, setter, or store setter; user-local lookalike aliases and
+  unrelated Solid types do not become accessors.
+- **Unclassified function spans are `Unknown`.** Explicit compiler-untracked
+  regions and other semantic proofs become `UntrackedRendering`; AST-proven
+  module evaluation is its own one-shot role. Unknown reads/writes are not
+  projected as violations.
+- **Owner-shape recognition is AST-backed.** Binding immutability, array
+  slots, call initializers, returned functions, and arrow kind now come from
+  facts rather than scanning source bytes.
+- **Compiler-established ownership is trace-backed.** Default compiler effect
+  reruns emit typed owned regions without changing generated code. Custom
+  wrappers make no claim; component and runtime-callback ownership still comes
+  from exact TypeFacts identity and package contracts.

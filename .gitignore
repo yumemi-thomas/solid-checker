@@ -7,6 +7,8 @@ fixtures/upstream-parity/.staging/
 **/.DS_Store
 **/target/
 **/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/
+!rust/crates/solid-facts-backend/tests/fixtures/contract-async/node_modules/**
 # Contract integration tests use small, hand-written packages as fixtures.
 !fixtures/reactive-ir/package-*/node_modules/
 !fixtures/reactive-ir/package-*/node_modules/**
@@ -16,6 +18,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/v1-reactivity/node_modules/**
 !fixtures/package-contracts/external-reexport/node_modules/
 !fixtures/package-contracts/external-reexport/node_modules/**
+!fixtures/package-contracts/dialect-detection/node_modules/
+!fixtures/package-contracts/dialect-detection/node_modules/**
 # Dialect detection reads the installed solid-js version from these stubs.
 !fixtures/reactive-ir/dialect-solid-*/node_modules/
 !fixtures/reactive-ir/dialect-solid-*/node_modules/**

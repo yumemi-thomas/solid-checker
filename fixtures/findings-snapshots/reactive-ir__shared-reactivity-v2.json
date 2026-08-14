@@ -42,6 +42,16 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 2301,
+      "end": 2308,
+      "fixes": 0
+    },
+    {
       "rule": "expected-function-got-expression",
       "code": "SC1007",
       "kind": "violation",
@@ -49,6 +59,16 @@
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
       "start": 2301,
       "end": 2308,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 3070,
+      "end": 3082,
       "fixes": 0
     },
     {

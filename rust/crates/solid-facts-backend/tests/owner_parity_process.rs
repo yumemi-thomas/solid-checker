@@ -31,10 +31,10 @@ fn source_file(path: &PathBuf) -> SourceFile {
 ///
 /// The fixture holds the three shapes that told the passes apart: a
 /// module-invoked arrow helper (its effects run unowned and must be
-/// reported), an exported uppercase arrow component (owned by naming
-/// convention, never reported), and an exported lowercase arrow hook
-/// (reported as uncertain — analyzed callers are unknown, exactly as its
-/// `function` spelling is treated).
+/// reported), an arrow with an exact Solid `Component` type (owned, never
+/// reported), and an exported lowercase arrow hook (reported as uncertain —
+/// analyzed callers are unknown, exactly as its `function` spelling is
+/// treated).
 #[test]
 fn arrow_bound_functions_get_the_same_owner_analysis_in_both_passes() {
     let Ok(typefacts) = env::var("SOLID_TYPEFACTS_BIN") else {

@@ -48,7 +48,10 @@ pub(super) fn add_solid_import_names(
                             (*primitive).into(),
                         );
                     }
-                } else if let Some(imported) = binding.imported.as_deref()
+                } else if let Some(imported) = binding
+                    .imported
+                    .as_deref()
+                    .or_else(|| file.source_text(binding.local.span))
                     && primitives.contains(&imported)
                 {
                     names.insert(symbol.clone(), imported.into());

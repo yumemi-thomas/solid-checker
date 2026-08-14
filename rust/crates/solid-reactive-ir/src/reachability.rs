@@ -167,19 +167,20 @@ fn discover_reachability_file(
     let mut roots = functions
         .iter()
         .filter(|function| {
-            function
-                .name
-                .as_deref()
-                .and_then(|name| name.chars().next())
-                .is_some_and(char::is_uppercase)
-                || file
-                    .ast
-                    .functions
-                    .iter()
-                    .find(|candidate| candidate.span == function.span)
-                    .is_some_and(|candidate| {
-                        function_is_solid_callback(file, candidate, entities, symbol_names, lookup)
-                    })
+            file.ast
+                .functions
+                .iter()
+                .find(|candidate| candidate.span == function.span)
+                .is_some_and(|candidate| {
+                    lookup.function_is_component(file, candidate)
+                        || function_is_solid_callback(
+                            file,
+                            candidate,
+                            entities,
+                            symbol_names,
+                            lookup,
+                        )
+                })
                 || exported_bodies
                     .contains(&(u64::from(function.body.start), u64::from(function.body.end)))
                 || file
@@ -310,7 +311,7 @@ fn discover_reachability_file(
     let topology = reachability_topology(&functions, &roots, &edges, &callback_edges);
     CachedReachabilityFile {
         identity: source_discovery_identity(file, indexes),
-        cross_file_proofs: lookup.returned_callback_proof_digest(),
+        cross_file_proofs: lookup.cross_file_proof_digest(),
         compiler: file.compiler.clone(),
         functions,
         roots,
@@ -469,7 +470,7 @@ pub(super) fn reachable_call_multiplicity_incremental(
                     &file.source_hash,
                     typescript_unchanged,
                     typescript_delta,
-                ) && cached.cross_file_proofs == lookup.returned_callback_proof_digest()
+                ) && cached.cross_file_proofs == lookup.cross_file_proof_digest()
                     && (Arc::ptr_eq(&cached.compiler, &file.compiler)
                         || same_compiler_semantics(&cached.compiler, &file.compiler))
             });

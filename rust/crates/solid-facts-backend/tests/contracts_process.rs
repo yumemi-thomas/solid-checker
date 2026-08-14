@@ -39,6 +39,11 @@ fn cli_consumes_discovered_package_contracts() {
             "state.value",
         ),
         (
+            "package-store-destructure",
+            "component-props-destructure",
+            "destructuring",
+        ),
+        (
             "package-unknown-export",
             "package-contract-export-missing",
             "unknownPrimitive",
@@ -63,6 +68,47 @@ fn cli_consumes_discovered_package_contracts() {
             findings[0]["message"]
                 .as_str()
                 .is_some_and(|finding| finding.contains(message))
+        );
+    }
+}
+
+#[test]
+fn cli_consumes_structured_returns_in_schema_one_contracts() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--format", "json", "--project"])
+        .arg(root.join("fixtures/reactive-ir/package-structured-return/tsconfig.json"))
+        .output()
+        .expect("run Rust diagnostic CLI");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let findings = decode_findings(&output.stdout);
+    let messages = findings
+        .iter()
+        .filter(|finding| finding["rule"] == "strict-read-untracked")
+        .filter_map(|finding| finding["message"].as_str())
+        .collect::<Vec<_>>();
+    for expected in ["state.value", "value", "active", "pending", "persisted"] {
+        assert!(
+            messages.iter().any(|message| message.contains(expected)),
+            "missing {expected:?} in {findings:#?}"
+        );
+    }
+    for expected_context in ["ObjectMemberConsumer", "DirectObjectMemberConsumer"] {
+        assert!(
+            findings.iter().any(|finding| {
+                finding["rule"] == "strict-read-untracked"
+                    && finding["analysisContext"] == expected_context
+            }),
+            "missing direct/member consumer {expected_context:?} in {findings:#?}"
         );
     }
 }
@@ -97,6 +143,30 @@ fn bundled_contract_resolves_the_exact_web_subpath() {
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
         .args(["--format", "json", "--project"])
         .arg(root.join("fixtures/reactive-ir/bundled-web-subpath-consumer/tsconfig.json"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        decode_findings(&output.stdout),
+        Vec::<serde_json::Value>::new()
+    );
+}
+
+#[test]
+fn bundled_scheduled_contract_marks_debounce_callback_deferred() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--format", "json", "--dialect", "solid-v1", "--project"])
+        .arg(root.join("fixtures/reactive-ir/bundled-scheduled-consumer/tsconfig.json"))
         .output()
         .unwrap();
     assert!(
@@ -456,8 +526,14 @@ fn cli_refuses_to_emit_unknown_callback_execution() {
         .unwrap();
     assert!(!result.status.success());
     let stderr = String::from_utf8_lossy(&result.stderr);
+    // The refusal comes from the obligation list, which knows the exported
+    // surface, so it names both ends of the uncertifiable edge: the export
+    // whose parameter escapes and the callee whose timing is unknown.
     assert!(stderr.contains("unresolved parameter behavior"), "{stderr}");
+    assert!(stderr.contains("schedule"), "{stderr}");
     assert!(stderr.contains("unknownScheduler"), "{stderr}");
+    assert!(stderr.contains("() => void"), "{stderr}");
+    assert!(stderr.contains("schemaVersion"), "{stderr}");
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -578,11 +654,19 @@ fn cyclic_unknown_callback_forwarding_terminates() {
                 "--package-version",
                 "1.0.0",
             ])
-            .stdout(Stdio::piped())
+            // stdout is never read here, and an undrained pipe that fills
+            // would block the child and read as a convergence failure.
+            .stdout(Stdio::null())
             .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(5);
+    // The guard is for a non-terminating fixed point, which no deadline would
+    // satisfy; it is not a performance budget. Emission for this fixture
+    // measures in tens of milliseconds, so the margin is enormous either way,
+    // and a tight bound only buys false failures: at 5s this tripped on
+    // scheduler delay when the suite ran its process tests in parallel, each
+    // spawning its own TypeFacts producer, rather than on the analysis.
+    let deadline = Instant::now() + Duration::from_secs(120);
     loop {
         if child.try_wait().unwrap().is_some() {
             break;
@@ -694,6 +778,243 @@ fn package_generator_discovers_exact_and_wildcard_subpaths() {
             .to_string_lossy()
             .starts_with(".solid-checker-contract-")
     }));
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn package_generator_isolates_each_entrypoint_from_unrelated_runtime_files() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/entrypoint-isolation");
+    let directory = temporary_directory("entrypoint-isolation-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .args(["--entrypoint", ".", "--entrypoint", "./feature"])
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&output);
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        ["readRoot"]
+    );
+    assert_eq!(
+        contract["entrypoints"]["./feature"]["exports"]
+            .as_object()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        ["featureValue"]
+    );
+    let broken = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(directory.join("broken.json"))
+        .args(["--entrypoint", "./broken"])
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(!broken.status.success());
+    let stderr = String::from_utf8_lossy(&broken.stderr);
+    assert!(stderr.contains("hiddenScheduler"), "{stderr}");
+    assert!(stderr.contains("unknownScheduler"), "{stderr}");
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn package_generator_detects_the_dialect_from_the_package_root() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/dialect-detection");
+    let directory = temporary_directory("dialect-detection-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&output);
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["observe"]["kind"],
+        "function"
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["indirect"]["callbacks"],
+        serde_json::json!([{ "parameter": 0, "execution": "tracked" }])
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["indirectResource"]["callbacks"],
+        serde_json::json!([{ "parameter": 0, "execution": "tracked" }])
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["returnedAccessor"]["returns"]["kind"],
+        "accessor"
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["returnedResource"]["returns"]["kind"],
+        "accessor"
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["assignedResource"]["returns"]["kind"],
+        "accessor"
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["tupleResult"]["returns"],
+        serde_json::json!({
+            "kind": "tuple",
+            "elements": [
+                { "kind": "store-path", "label": "result[0]" },
+                { "kind": "accessor", "label": "result[1]" }
+            ]
+        })
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["objectResult"]["returns"],
+        serde_json::json!({
+            "kind": "object",
+            "properties": {
+                "active": { "kind": "accessor", "label": "active" },
+                "pending": { "kind": "accessor", "label": "memo result" }
+            }
+        })
+    );
+    for export in [
+        "projectedObjectResult",
+        "projectedAliasResult",
+        "projectedTupleResult",
+    ] {
+        assert_eq!(
+            contract["entrypoints"]["."]["exports"][export]["returns"]["kind"], "accessor",
+            "missing projected return for {export}"
+        );
+    }
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["identityResult"]["returns"],
+        serde_json::json!({ "kind": "argument", "parameter": 0 })
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["contextLocation"]["returns"],
+        serde_json::json!({
+            "kind": "object",
+            "properties": {
+                "pathname": { "kind": "accessor", "label": "pathname" }
+            }
+        })
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["contextParams"]["returns"]["kind"],
+        "store-path"
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn shorthand_property_values_resolve_through_block_scope() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/shorthand-block-scope");
+    let directory = temporary_directory("shorthand-block-scope-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&output);
+    let exports = &contract["entrypoints"]["."]["exports"];
+
+    // A same-spelled accessor in a sibling block is invisible at the
+    // shorthand. It must neither be chosen nor make the visible declaration
+    // ambiguous, which the spelling within the enclosing function cannot
+    // distinguish.
+    for export in ["scopedShorthand", "writtenShorthand"] {
+        assert_eq!(
+            exports[export]["returns"],
+            serde_json::json!({
+                "kind": "object",
+                "properties": { "tracked": { "kind": "accessor", "label": "tracked" } }
+            }),
+            "missing proven shorthand return for {export}"
+        );
+    }
+
+    // Each of these names a binding that is provably not a local accessor, or
+    // one this file's scope tree does not declare. A same-spelled accessor is
+    // in the enclosing function for the first two; none of them may borrow it.
+    for export in [
+        "unprovenShorthand",
+        "shadowedShorthand",
+        "importedShorthand",
+        "importedAccessorShorthand",
+        "globalShorthand",
+    ] {
+        assert_eq!(
+            exports[export]["returns"],
+            serde_json::Value::Null,
+            "unproven shorthand return claimed for {export}"
+        );
+    }
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -834,6 +1155,62 @@ fn package_generator_preserves_conditional_callback_execution_modes() {
 }
 
 #[test]
+fn package_generator_classifies_callbacks_invoked_by_returned_schedulers_as_deferred() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/deferred-returned-callback");
+    let directory = temporary_directory("deferred-returned-callback-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&output);
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["debounce"]["callbacks"],
+        serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["direct"]["callbacks"],
+        serde_json::json!([{ "parameter": 0, "execution": "inline" }])
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["decorated"]["callbacks"],
+        serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["throughIdentity"]["callbacks"],
+        serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["nestedThroughIdentity"]["callbacks"],
+        serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
+    );
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["nestedThroughCallable"]["callbacks"],
+        serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
+    );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
 fn package_generator_expands_external_export_all_from_dependency_contracts() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
@@ -876,5 +1253,43 @@ fn package_generator_expands_external_export_all_from_dependency_contracts() {
         contract["entrypoints"]["."]["exports"]["forward"]["callbacks"],
         serde_json::json!([{ "parameter": 0, "execution": "inline" }])
     );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+#[test]
+fn package_generator_uses_bundled_solid_contract_for_renderer_reexports() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/solid-reexport");
+    let directory = temporary_directory("solid-reexport-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&output);
+    for name in ["createMemo", "createSignal"] {
+        assert_eq!(
+            contract["entrypoints"]["."]["exports"][name]["kind"],
+            "function"
+        );
+    }
     fs::remove_dir_all(directory).unwrap();
 }

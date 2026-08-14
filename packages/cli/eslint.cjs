@@ -183,7 +183,9 @@ function findingRange(sourceCode, location) {
 
 function findingMessage(finding) {
   const hint = finding.hint ? `\n\n${finding.hint}` : "";
-  return `[${finding.id}] ${finding.message}${hint}`;
+  const docsUrl = finding.documentationUrl ?? docsUrlsByRule.get(finding.rule);
+  const docs = docsUrl ? `\n\nDocs: ${docsUrl}` : "";
+  return `[${finding.id}] ${finding.message}${hint}${docs}`;
 }
 
 function fixForFinding(fixer, finding, sourceCode, filename) {
@@ -354,6 +356,11 @@ const manifests = Object.fromEntries(
 if (Object.keys(manifests).length !== discoveredCatalogs.length) {
   throw new Error("duplicate dialect in solid-checker rule manifests");
 }
+const docsUrlsByRule = new Map(
+  discoveredCatalogs.flatMap(catalog =>
+    catalog.rules.map(entry => [entry.name, `${catalog.docsBaseUrl}/${entry.name}.md`])
+  )
+);
 
 const plugin = {
   meta: { name: "solid-checker", version: packageVersion },
@@ -395,6 +402,7 @@ module.exports._testing = {
   byteOffsetToIndex,
   configuredProject,
   findProject,
+  findingMessage,
   loadSnapshot,
   manifests,
   ownedRules,

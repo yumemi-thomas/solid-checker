@@ -22,13 +22,23 @@
       "fixes": 0
     },
     {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
+      "start": 1267,
+      "end": 1274,
+      "fixes": 0
+    },
+    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
-      "start": 217,
-      "end": 229,
+      "start": 225,
+      "end": 237,
       "fixes": 0
     },
     {
@@ -37,8 +47,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
-      "start": 313,
-      "end": 321,
+      "start": 321,
+      "end": 329,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",
+      "start": 478,
+      "end": 485,
       "fixes": 0
     }
   ]

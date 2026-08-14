@@ -18,9 +18,17 @@ function forwardedDirective() {
   return innerDirective();
 }
 
+function makeHandler() {
+  setCount(4);
+  return () => {};
+}
+
 export function App() {
-  return <button ref={[directive(), forwardedDirective(), element => {
-    setCount(3);
-    createSignal(element);
-  }]}>{count()}</button>;
+  return <button
+    ref={[directive(), forwardedDirective(), element => {
+      setCount(3);
+      createSignal(element);
+    }]}
+    onClick={makeHandler()}
+  >{count()}</button>;
 }

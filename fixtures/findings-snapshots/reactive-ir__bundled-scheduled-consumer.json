@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "package-contract-missing",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/bundled-scheduled-consumer/App.tsx",
+      "start": 0,
+      "end": 55,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/bundled-scheduled-consumer/App.tsx",
+      "start": 193,
+      "end": 200,
+      "fixes": 0
+    }
+  ]
+}

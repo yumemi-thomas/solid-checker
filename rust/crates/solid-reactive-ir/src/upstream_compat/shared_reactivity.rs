@@ -593,6 +593,7 @@ fn trimmed_span(file: &FileFacts, span: Span) -> Span {
 /// The function written at exactly this span, if the argument is a literal
 /// function rather than a reference to one.
 fn function_at(file: &FileFacts, span: Span) -> Option<&FunctionFact> {
+    let span = file.ast.peel_ts_sugar_span(span);
     file.ast
         .functions
         .iter()
@@ -708,6 +709,18 @@ fn no_direct_mutation(
         let name = name.as_str();
         let through_member = root != assignment.target;
         let kind = context.source_kinds.get(symbol).copied();
+        // `createMutable` is the one Solid 1.x source whose proxy is designed
+        // to be written through directly. It still behaves like a store for
+        // reads, but treating that shared read shape as readonly recreates
+        // eslint-plugin-solid issue #99.
+        if through_member
+            && context
+                .source_primitives
+                .get(symbol)
+                .is_some_and(|primitive| primitive.as_str() == "createMutable")
+        {
+            continue;
+        }
         // A props root only misbehaves when written *through* — rebinding a
         // local `props`-like identifier is shadowing, not a dropped write.
         if props && !through_member {

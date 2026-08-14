@@ -1,4 +1,15 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-contract-callback-missing",
+      "code": "SC9006",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-unknown-callback-producer/index.ts",
+      "start": 138,
+      "end": 146,
+      "fixes": 0
+    }
+  ]
 }

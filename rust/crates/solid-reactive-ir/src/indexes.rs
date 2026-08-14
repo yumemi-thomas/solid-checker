@@ -11,10 +11,12 @@ use std::{
 use sha2::{Digest, Sha256};
 use solid_facts::core::Span;
 use solid_facts::{FileFacts, ProjectFacts, TypeScriptSymbol, TypeScriptTable};
-use typefacts::{Callability, EntityFact, FileFact, Location, ResolvedCall, TypeDescriptor};
+use typefacts::{
+    Callability, EntityFact, FileFact, Location, ResolvedCall, ResolvedCallValidity, TypeDescriptor,
+};
 
 use super::{SymbolId, SymbolName};
-use crate::owners::jsx_element_is_loading;
+use crate::owners::{function_binding_name, jsx_element_is_loading};
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
@@ -35,11 +37,52 @@ impl EntitySymbols {
     }
 }
 
+type DeclarationSymbols<'a> = HashMap<(&'a str, u64, u64), &'a str>;
+
+/// Symbols addressable by an exact declaration location.
+///
+/// TypeScript does not emit an entity at every class/object method key, but a
+/// resolved member call carries the declaration location and the canonical
+/// method symbol. Entities win over call declarations at the same location,
+/// preserving the direct-then-declaration order of the per-method lookup this
+/// replaces -- which rescanned every project entity twice per call.
+fn declaration_symbols(typescript: &TypeScriptTable) -> DeclarationSymbols<'_> {
+    let mut by_location = DeclarationSymbols::new();
+    for entity in typescript
+        .entities()
+        .filter(|entity| !entity.symbol.is_empty())
+    {
+        by_location
+            .entry((
+                entity.location.path.as_ref(),
+                entity.location.start_byte,
+                entity.location.end_byte,
+            ))
+            .or_insert(entity.symbol.as_ref());
+    }
+    for declaration in typescript
+        .entities()
+        .filter_map(|entity| entity.resolved_call.as_deref())
+        .filter_map(|call| call.declaration.as_ref())
+        .filter(|declaration| !declaration.symbol.is_empty())
+    {
+        by_location
+            .entry((
+                declaration.location.path.as_ref(),
+                declaration.location.start_byte,
+                declaration.location.end_byte,
+            ))
+            .or_insert(declaration.symbol.as_ref());
+    }
+    by_location
+}
+
 pub(super) struct ProjectIndexes<'a> {
     pub(super) files_by_path: HashMap<&'a str, &'a FileFacts>,
     pub(super) ast_files_by_path: HashMap<&'a str, &'a CachedAstFileIndex>,
     typescript: &'a TypeScriptTable,
     pub(super) symbols_by_id: HashMap<&'a str, TypeScriptSymbol<'a>>,
+    declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
 }
 
 impl<'a> ProjectIndexes<'a> {
@@ -71,11 +114,27 @@ impl<'a> ProjectIndexes<'a> {
             ast_files_by_path,
             typescript: &facts.typescript,
             symbols_by_id,
+            declaration_symbols: OnceLock::new(),
         }
     }
 
     pub(super) fn typescript_file(&self, path: &str) -> Option<&'a FileFact> {
         self.typescript.file(path)
+    }
+
+    /// TypeScript does not emit an entity at every class/object method key,
+    /// but a resolved member call carries the declaration location and the
+    /// canonical method symbol. Use that exact declaration pair to name a
+    /// structural method; never match by spelling alone.
+    pub(super) fn method_symbol(&self, path: &str, span: Span) -> Option<SymbolId> {
+        self.method_symbol_ref(path, span).map(SymbolId::from)
+    }
+
+    fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
+        self.declaration_symbols
+            .get_or_init(|| declaration_symbols(self.typescript))
+            .get(&(path, u64::from(span.start), u64::from(span.end)))
+            .copied()
     }
 
     pub(super) fn entities_for_path(&self, path: &str) -> &'a [EntityFact] {
@@ -205,6 +264,12 @@ struct BindingResolution {
     symbol: SymbolId,
 }
 
+#[derive(Clone, Copy)]
+struct FunctionCallSite {
+    file: usize,
+    callee: Span,
+}
+
 type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
 
 /// Lazy project-wide lookups that replace repeated whole-project scans.
@@ -221,6 +286,7 @@ pub(super) struct SemanticLookup<'a> {
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
+    resolved_contracts: &'a crate::contracts::ResolvedContracts,
     functions_by_symbol: OnceLock<HashMap<&'a str, SymbolFunction>>,
     entities_by_location: OnceLock<HashMap<(&'a str, u64, u64), &'a EntityFact>>,
     contained_entities_by_path: OnceLock<HashMap<&'a str, Vec<&'a EntityFact>>>,
@@ -229,6 +295,8 @@ pub(super) struct SemanticLookup<'a> {
     symbols_by_id: OnceLock<HashMap<&'a str, solid_facts::TypeScriptSymbol<'a>>>,
     context_symbols: OnceLock<HashSet<&'a str>>,
     jsx_call_sites: OnceLock<HashMap<(&'a str, Span), CallSiteLoading>>,
+    declaration_symbols: OnceLock<DeclarationSymbols<'a>>,
+    function_call_sites: OnceLock<HashMap<(&'a str, Span), Vec<FunctionCallSite>>>,
     bindings_by_reference: OnceLock<BindingsByReference>,
     files_by_path: OnceLock<HashMap<&'a str, usize>>,
     file_primitives: OnceLock<Vec<OnceLock<FilePrimitives>>>,
@@ -236,6 +304,8 @@ pub(super) struct SemanticLookup<'a> {
     project_primitives: OnceLock<HashSet<solid_dialect::Primitive>>,
     callback_capabilities: OnceLock<DialectCallbackCapabilities>,
     returned_callback_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
+    component_functions: OnceLock<HashSet<(&'a str, Span)>>,
+    cross_file_proof_digest: OnceLock<Option<CrossFileProofDigest>>,
 }
 
 /// Which parts of the returned-adapter contract this build's dialect can
@@ -284,6 +354,7 @@ impl<'a> SemanticLookup<'a> {
         entities: &'a EntitySymbols,
         symbol_names: &'a HashMap<SymbolId, SymbolName>,
         dialect: &'a dyn solid_dialect::Dialect,
+        resolved_contracts: &'a crate::contracts::ResolvedContracts,
     ) -> Self {
         debug_assert!(
             facts
@@ -299,6 +370,7 @@ impl<'a> SemanticLookup<'a> {
             ast_indexes,
             entities,
             symbol_names,
+            resolved_contracts,
             functions_by_symbol: OnceLock::new(),
             entities_by_location: OnceLock::new(),
             contained_entities_by_path: OnceLock::new(),
@@ -307,6 +379,8 @@ impl<'a> SemanticLookup<'a> {
             symbols_by_id: OnceLock::new(),
             context_symbols: OnceLock::new(),
             jsx_call_sites: OnceLock::new(),
+            declaration_symbols: OnceLock::new(),
+            function_call_sites: OnceLock::new(),
             bindings_by_reference: OnceLock::new(),
             files_by_path: OnceLock::new(),
             file_primitives: OnceLock::new(),
@@ -314,7 +388,16 @@ impl<'a> SemanticLookup<'a> {
             project_primitives: OnceLock::new(),
             callback_capabilities: OnceLock::new(),
             returned_callback_proof_digest: OnceLock::new(),
+            component_functions: OnceLock::new(),
+            cross_file_proof_digest: OnceLock::new(),
         }
+    }
+
+    pub(super) fn contract_callbacks(&self, symbol: &str) -> Option<&[super::ContractCallback]> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.callbacks.as_slice())
     }
 
     /// Every primitive this build can resolve at a call site.
@@ -452,6 +535,34 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// Digest of every project-wide proof whose answer is baked into a
+    /// per-file cache fragment.
+    ///
+    /// Component identity is a whole-project fact: a JSX call site in one
+    /// file can make a function in another file an owned component. Returned
+    /// callback reachability has the same shape. One digest gives every
+    /// dependent cache family the same coherent generation marker.
+    pub(super) fn cross_file_proof_digest(&self) -> Option<CrossFileProofDigest> {
+        *self.cross_file_proof_digest.get_or_init(|| {
+            let components = self.component_functions();
+            let mut component_keys = components.iter().copied().collect::<Vec<_>>();
+            component_keys.sort_unstable();
+            let mut hasher = Sha256::new();
+            hasher.update(b"components\0");
+            for (path, span) in component_keys {
+                hasher.update(u64::try_from(path.len()).unwrap_or(u64::MAX).to_le_bytes());
+                hasher.update(path.as_bytes());
+                hasher.update(span.start.to_le_bytes());
+                hasher.update(span.end.to_le_bytes());
+            }
+            if let Some(returned) = self.returned_callback_proof_digest() {
+                hasher.update(b"returned-callbacks\0");
+                hasher.update(returned);
+            }
+            Some(hasher.finalize().into())
+        })
+    }
+
     /// The position of a call in `file.ast.calls`, for the primitive tables
     /// that are index-aligned with it.
     pub(super) fn call_index(&self, file: &FileFacts, span: Span) -> Option<usize> {
@@ -571,6 +682,20 @@ impl<'a> SemanticLookup<'a> {
 
     pub(super) fn files(&self) -> &'a [FileFacts] {
         &self.facts.files
+    }
+
+    pub(super) fn file_by_path(&self, path: &str) -> Option<&'a FileFacts> {
+        self.files_by_path
+            .get_or_init(|| {
+                self.facts
+                    .files
+                    .iter()
+                    .enumerate()
+                    .map(|(index, file)| (file.path.as_str(), index))
+                    .collect()
+            })
+            .get(path)
+            .map(|index| &self.facts.files[*index])
     }
 
     pub(super) fn symbol_references(&self, symbol: &str) -> Vec<Location> {
@@ -790,20 +915,17 @@ impl<'a> SemanticLookup<'a> {
         file: &FileFacts,
         callee: Span,
     ) -> Option<&'a ResolvedCall> {
+        let original_callee = callee;
+        let callee = file.ast.peel_ts_sugar_span(callee);
         let call_span = self
-            .call_by_callee(file, callee)
-            .map_or(callee, |call| call.span);
+            .call_by_callee(file, original_callee)
+            .or_else(|| self.call_by_callee(file, callee))
+            .map_or(original_callee, |call| call.span);
         self.entity_at(file.path.as_str(), callee)
             .and_then(|entity| entity.resolved_call.as_deref())
             .or_else(|| {
                 self.entity_at(file.path.as_str(), call_span)
                     .and_then(|entity| entity.resolved_call.as_deref())
-            })
-            .or_else(|| {
-                self.smallest_contained(file.path.as_str(), callee, |entity| {
-                    entity.resolved_call.is_some()
-                })
-                .and_then(|entity| entity.resolved_call.as_deref())
             })
     }
 
@@ -814,6 +936,13 @@ impl<'a> SemanticLookup<'a> {
     ) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
         let symbol = self.entities.at(path, callee)?;
         self.function_for_symbol(symbol)
+    }
+
+    fn method_symbol_ref(&self, path: &str, span: Span) -> Option<&'a str> {
+        self.declaration_symbols
+            .get_or_init(|| declaration_symbols(&self.facts.typescript))
+            .get(&(path, u64::from(span.start), u64::from(span.end)))
+            .copied()
     }
 
     pub(super) fn function_for_symbol(
@@ -839,25 +968,504 @@ impl<'a> SemanticLookup<'a> {
         self.facts.typescript.file(path)
     }
 
-    /// The symbol a callee span resolves to: the exact entity at the span,
-    /// falling back to the smallest symbol-bearing entity contained in it.
+    /// The symbol a callee span resolves to. Transparent wrappers are peeled
+    /// because they preserve the called value; arbitrary contained symbols are
+    /// never substituted, since `handlers[i]()` and `wrapper.value()` must not
+    /// inherit the identity of `i` or `wrapper` when the complete callee has no
+    /// semantic fact.
     pub(super) fn callee_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
-        self.ast_indexes
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        let member_property = self
+            .ast_indexes
             .get(file.path.as_str())
-            .and_then(|index| index.member_property(callee))
-            .and_then(|property| self.entities.at(file.path.as_str(), property))
-            .map(SymbolId::as_str)
-            .or_else(|| {
-                self.entities
-                    .at(file.path.as_str(), callee)
-                    .map(SymbolId::as_str)
-            })
-            .or_else(|| {
-                self.smallest_contained(file.path.as_str(), callee, |entity| {
-                    !entity.symbol.is_empty()
+            .and_then(|index| index.member_property(callee));
+        let computed_member = file.ast.computed_members.contains(&callee);
+        member_property
+            .and_then(|property| {
+                self.resolved_declaration_symbol(file, callee).or_else(|| {
+                    if computed_member {
+                        None
+                    } else {
+                        self.entities
+                            .at(file.path.as_str(), property)
+                            .map(SymbolId::as_str)
+                    }
                 })
-                .map(|entity| entity.symbol.as_ref())
             })
+            .or_else(|| {
+                if member_property.is_none() {
+                    self.entities
+                        .at(file.path.as_str(), callee)
+                        .map(SymbolId::as_str)
+                } else {
+                    None
+                }
+            })
+    }
+
+    /// Exact callable identities for one call site.
+    ///
+    /// A normal TypeScript call fact supplies one selected declaration. A
+    /// composite/union call deliberately supplies none; in that case this
+    /// method only expands aliases and object values whose exact property
+    /// declarations are present in the semantic table. It never turns a
+    /// property spelling into a project-wide method lookup. Callers must
+    /// compare the returned candidates' summaries before using more than one.
+    pub(super) fn callee_symbols(&self, file: &FileFacts, callee: Span) -> Vec<SymbolId> {
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        let member_property = self
+            .ast_indexes
+            .get(file.path.as_str())
+            .and_then(|index| index.member_property(callee));
+        // For an identifier call the entity at the complete callee is the
+        // value binding (including a function parameter). A resolved
+        // FunctionType declaration is not the runtime function identity and
+        // must not replace it.
+        if member_property.is_none()
+            && let Some(symbol) = self.entities.at(file.path.as_str(), callee)
+        {
+            let mut visited = HashSet::new();
+            let aliases = self.direct_value_symbols(file, callee, &mut visited);
+            if !aliases.is_empty() {
+                return aliases;
+            }
+            return vec![symbol.clone()];
+        }
+        if let Some(call) = self.resolved_callee_call(file, callee)
+            && call.validity == ResolvedCallValidity::Valid
+            && let Some(declaration) = call.declaration.as_ref()
+            && !declaration.symbol.is_empty()
+        {
+            let symbol = SymbolId::from(declaration.symbol.as_ref());
+            // A selected declaration is sufficient when it names an
+            // analyzed implementation or an explicitly resolved package
+            // contract. A TypeScript interface/signature declaration without
+            // either is only a structural type, so continue to exact
+            // receiver/call-site dispatch below.
+            if self.function_for_symbol(symbol.as_str()).is_some()
+                || self.resolved_contracts.by_symbol.contains_key(&symbol)
+            {
+                return vec![symbol];
+            }
+        }
+        let Some(member_property) = member_property else {
+            return self
+                .entities
+                .at(file.path.as_str(), callee)
+                .cloned()
+                .into_iter()
+                .collect();
+        };
+        if file.ast.computed_members.binary_search(&callee).is_ok() {
+            return Vec::new();
+        }
+        let Some(property_name) = file.source_text(member_property) else {
+            return Vec::new();
+        };
+        let member = file.ast.members.iter().find(|member| member.span == callee);
+        let Some(member) = member else {
+            return Vec::new();
+        };
+        let mut symbols = Vec::new();
+        let mut visited_spans = HashSet::new();
+        self.member_value_symbols(
+            file,
+            member.object,
+            property_name,
+            &mut visited_spans,
+            &mut symbols,
+        );
+        if symbols.is_empty() {
+            self.structural_parameter_member_symbols(
+                file,
+                member.object,
+                property_name,
+                &mut symbols,
+            );
+        }
+        symbols.sort_unstable();
+        symbols.dedup();
+        symbols
+    }
+
+    /// The receiver symbol and property name of a non-computed member callee.
+    ///
+    /// `reader.read(value)` answers `(reader, "read")`. A computed member or a
+    /// callee with no member fact answers `None`, the same conservative gate
+    /// [`Self::callee_symbols`] applies -- `handlers[i]()` must never be read
+    /// as a property named `i`.
+    pub(super) fn member_callee_receiver(
+        &self,
+        file: &FileFacts,
+        callee: Span,
+    ) -> Option<(SymbolId, String)> {
+        let callee = file.ast.peel_ts_sugar_span(callee);
+        if file.ast.computed_members.binary_search(&callee).is_ok() {
+            return None;
+        }
+        let property = self
+            .ast_indexes
+            .get(file.path.as_str())?
+            .member_property(callee)?;
+        let property_name = file.source_text(property)?.to_owned();
+        let member = file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == callee)?;
+        let object = file.ast.peel_ts_sugar_span(member.object);
+        let receiver = self.entities.at(file.path.as_str(), object)?;
+        Some((receiver.clone(), property_name))
+    }
+
+    /// The single implementation `value.property` resolves to, or `None`.
+    ///
+    /// Used per call site, so an argument that is exactly one object proves
+    /// what runs there. Anything else -- an unresolved value, or a
+    /// conditional that could be either of two objects -- is not a proof and
+    /// answers `None`.
+    pub(super) fn member_value_symbol_at(
+        &self,
+        file: &FileFacts,
+        value: Span,
+        property_name: &str,
+    ) -> Option<SymbolId> {
+        let mut symbols = Vec::new();
+        let mut visited = HashSet::new();
+        self.member_value_symbols(file, value, property_name, &mut visited, &mut symbols);
+        symbols.sort_unstable();
+        symbols.dedup();
+        if symbols.len() == 1 {
+            symbols.pop()
+        } else {
+            None
+        }
+    }
+
+    /// Resolve `parameter.member()` through the exact project call sites of
+    /// the containing function. This is the structural-interface seam: the
+    /// member declaration itself may be a composite TypeScript signature,
+    /// while each analyzed call site supplies an exact runtime value. Every
+    /// call site must resolve to a concrete property value; one missing or
+    /// ambiguous site makes the whole dispatch uncertifiable.
+    fn structural_parameter_member_symbols(
+        &self,
+        file: &FileFacts,
+        object: Span,
+        property_name: &str,
+        symbols: &mut Vec<SymbolId>,
+    ) {
+        let object = file.ast.peel_ts_sugar_span(object);
+        let Some(receiver_symbol) = self.entities.at(file.path.as_str(), object) else {
+            return;
+        };
+        let Some(function) = file
+            .ast
+            .functions_body_containing(object)
+            .min_by_key(|function| function.body.end - function.body.start)
+        else {
+            return;
+        };
+        let Some(parameter_index) = function.parameters.iter().position(|parameter| {
+            parameter.names.iter().any(|name| {
+                self.entities
+                    .at(file.path.as_str(), name.span)
+                    .is_some_and(|symbol| symbol == receiver_symbol)
+            })
+        }) else {
+            return;
+        };
+        let Some(function_name) = function_binding_name(file, function) else {
+            return;
+        };
+        if self
+            .entities
+            .at(file.path.as_str(), function_name.span)
+            .is_none()
+        {
+            return;
+        }
+        let call_sites = self.function_call_sites(file.path.as_str(), function.span);
+        if call_sites.is_empty() {
+            return;
+        }
+        let mut unresolved_site = false;
+        for (caller_file, callee) in call_sites {
+            let Some(call) = self.call_by_callee(caller_file, callee) else {
+                unresolved_site = true;
+                continue;
+            };
+            let Some(argument) = call.arguments.get(parameter_index) else {
+                unresolved_site = true;
+                continue;
+            };
+            let mut site_symbols = Vec::new();
+            let mut visited = HashSet::new();
+            self.member_value_symbols(
+                caller_file,
+                argument.span,
+                property_name,
+                &mut visited,
+                &mut site_symbols,
+            );
+            site_symbols.sort_unstable();
+            site_symbols.dedup();
+            if site_symbols.is_empty() {
+                unresolved_site = true;
+            } else {
+                symbols.extend(site_symbols);
+            }
+        }
+        if unresolved_site {
+            symbols.clear();
+        }
+    }
+
+    fn member_value_symbols(
+        &self,
+        file: &FileFacts,
+        object: Span,
+        property_name: &str,
+        visited_spans: &mut HashSet<Span>,
+        symbols: &mut Vec<SymbolId>,
+    ) {
+        let object = file.ast.peel_ts_sugar_span(object);
+        if !visited_spans.insert(object) {
+            return;
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == object)
+        {
+            self.member_value_symbols(
+                file,
+                conditional.consequent,
+                property_name,
+                visited_spans,
+                symbols,
+            );
+            self.member_value_symbols(
+                file,
+                conditional.alternate,
+                property_name,
+                visited_spans,
+                symbols,
+            );
+            return;
+        }
+
+        let identifier_reference = file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == object
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        });
+        let binding = self
+            .entities
+            .at(file.path.as_str(), object)
+            .and_then(|symbol| self.binding_for_symbol(file, symbol))
+            .map(|binding| (file, binding))
+            .or_else(|| {
+                identifier_reference.then(|| {
+                    self.binding_at_reference(file.path.as_str(), object)
+                        .map(|(binding_file, binding, _)| (binding_file, binding))
+                })?
+            });
+        if let Some((binding_file, binding)) = binding {
+            if let Some(initializer) = binding.initializer {
+                self.member_value_symbols(
+                    binding_file,
+                    initializer,
+                    property_name,
+                    visited_spans,
+                    symbols,
+                );
+                if !symbols.is_empty() {
+                    return;
+                }
+            }
+            // A binding without an inspectable initializer is not evidence
+            // for any implementation. Retaining its variable symbol would
+            // turn receiver identity into a method-name guess.
+            return;
+        }
+
+        let Some(properties) = file
+            .ast
+            .object_properties
+            .iter()
+            .filter(|property| {
+                object.contains(property.span)
+                    && !property.computed
+                    && file.source_text(property.key) == Some(property_name)
+            })
+            .max_by_key(|property| property.span.start)
+        else {
+            for spread in file
+                .ast
+                .spreads
+                .iter()
+                .filter(|spread| object.contains(spread.span))
+            {
+                self.member_value_symbols(
+                    file,
+                    spread.argument,
+                    property_name,
+                    visited_spans,
+                    symbols,
+                );
+            }
+            return;
+        };
+
+        // The property key itself is a semantic identity once demanded by
+        // the backend. This works for class/object methods and for function
+        // properties copied through an exact object spread.
+        if let Some(symbol) = self.entities.at(file.path.as_str(), properties.key) {
+            symbols.push(symbol.clone());
+        }
+        for function in file.ast.functions.iter().filter(|function| {
+            properties.value.contains(function.span)
+                && function.method_name.as_ref().is_some_and(|name| {
+                    name.span == properties.key
+                        && self.entities.at(file.path.as_str(), name.span).is_some()
+                })
+        }) {
+            if let Some(name) = function.method_name.as_ref()
+                && let Some(symbol) = self.entities.at(file.path.as_str(), name.span)
+            {
+                symbols.push(symbol.clone());
+            }
+        }
+        if symbols.is_empty() {
+            self.member_value_symbols(
+                file,
+                properties.value,
+                property_name,
+                visited_spans,
+                symbols,
+            );
+        }
+        for spread in file.ast.spreads.iter().filter(|spread| {
+            object.contains(spread.span) && spread.span.start > properties.span.start
+        }) {
+            self.member_value_symbols(file, spread.argument, property_name, visited_spans, symbols);
+        }
+    }
+
+    fn binding_for_symbol<'b>(
+        &self,
+        file: &'b FileFacts,
+        symbol: &str,
+    ) -> Option<&'b solid_facts::ast::BindingFact> {
+        file.ast.bindings.iter().find(|binding| {
+            binding.names.iter().any(|name| {
+                self.entities
+                    .at(file.path.as_str(), name.span)
+                    .is_some_and(|candidate| candidate == symbol)
+            })
+        })
+    }
+
+    fn direct_value_symbols(
+        &self,
+        file: &FileFacts,
+        value: Span,
+        visited: &mut HashSet<Span>,
+    ) -> Vec<SymbolId> {
+        let value = file.ast.peel_ts_sugar_span(value);
+        if !visited.insert(value) {
+            return Vec::new();
+        }
+        if let Some(conditional) = file
+            .ast
+            .conditional_expressions
+            .iter()
+            .find(|conditional| conditional.span == value)
+        {
+            let mut symbols = self.direct_value_symbols(file, conditional.consequent, visited);
+            symbols.extend(self.direct_value_symbols(file, conditional.alternate, visited));
+            symbols.sort_unstable();
+            symbols.dedup();
+            return symbols;
+        }
+        let identifier_reference = file.ast.identifiers.iter().any(|identifier| {
+            identifier.span == value
+                && identifier.role == solid_facts::ast::IdentifierRole::Reference
+        });
+        let Some(symbol) = self
+            .entities
+            .at(file.path.as_str(), value)
+            .cloned()
+            .or_else(|| {
+                identifier_reference.then(|| {
+                    self.binding_at_reference(file.path.as_str(), value)
+                        .map(|(_, _, symbol)| symbol)
+                })?
+            })
+        else {
+            return Vec::new();
+        };
+        let Some((binding_file, binding)) = self
+            .entities
+            .at(file.path.as_str(), value)
+            .and_then(|symbol| self.binding_for_symbol(file, symbol))
+            .map(|binding| (file, binding))
+            .or_else(|| {
+                identifier_reference.then(|| {
+                    self.binding_at_reference(file.path.as_str(), value)
+                        .map(|(binding_file, binding, _)| (binding_file, binding))
+                })?
+            })
+        else {
+            return vec![symbol.clone()];
+        };
+        if binding.initializer_function {
+            return vec![symbol.clone()];
+        }
+        if let Some(initializer) = &binding.initializer_identifier {
+            let aliases = self.direct_value_symbols(binding_file, initializer.span, visited);
+            if !aliases.is_empty() {
+                return aliases;
+            }
+        }
+        if binding.shape == solid_facts::ast::BindingShape::Object
+            && let Some(initializer) = binding.initializer
+            && let Some(slot) = binding.object_slots.iter().find(|slot| {
+                self.entities
+                    .at(binding_file.path.as_str(), slot.local.span)
+                    .is_some_and(|candidate| candidate == &symbol)
+            })
+        {
+            let mut aliases = Vec::new();
+            let mut visited_objects = HashSet::new();
+            self.member_value_symbols(
+                binding_file,
+                initializer,
+                slot.property.as_str(),
+                &mut visited_objects,
+                &mut aliases,
+            );
+            aliases.sort_unstable();
+            aliases.dedup();
+            if !aliases.is_empty() {
+                return aliases;
+            }
+        }
+        if let Some(initializer) = binding.initializer {
+            let aliases = self.direct_value_symbols(binding_file, initializer, visited);
+            if aliases.len() > 1 {
+                return aliases;
+            }
+        }
+        vec![symbol.clone()]
+    }
+
+    fn resolved_declaration_symbol(&self, file: &FileFacts, callee: Span) -> Option<&'a str> {
+        self.resolved_callee_call(file, callee)
+            .and_then(|call| call.declaration.as_ref())
+            .map(|declaration| declaration.symbol.as_ref())
+            .filter(|symbol| !symbol.is_empty())
     }
 
     /// The type descriptor of the smallest typed entity contained in a span.
@@ -885,6 +1493,233 @@ impl<'a> SemanticLookup<'a> {
                     .get(symbol.as_str())
                     .copied()
             })
+    }
+
+    /// Whether a function is proven to be a Solid component by a JSX call
+    /// site or by an exact compiler-resolved Solid component type alias.
+    pub(super) fn function_is_component(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        self.component_functions()
+            .contains(&(file.path.as_str(), function.span))
+    }
+
+    fn component_functions(&self) -> &HashSet<(&'a str, Span)> {
+        self.component_functions.get_or_init(|| {
+            self.facts
+                .files
+                .iter()
+                .flat_map(|file| {
+                    file.ast.functions.iter().filter_map(move |function| {
+                        self.compute_function_is_component(file, function)
+                            .then_some((file.path.as_str(), function.span))
+                    })
+                })
+                .collect()
+        })
+    }
+
+    fn compute_function_is_component(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        if self
+            .jsx_call_site_loading(file.path.as_str(), function.span)
+            .any
+        {
+            return true;
+        }
+        let binding_name = crate::owners::component_binding_name(file, function);
+        if binding_name.is_some_and(|name| {
+            self.dialect
+                .component_name_is_compat_component(file.source_text(name.span).unwrap_or_default())
+        }) {
+            return true;
+        }
+        let directly_contains_jsx = |span: Span| {
+            file.ast.jsx_within(span).any(|element| {
+                crate::owners::containing_ast_function(&file.ast, element.span)
+                    .is_some_and(|owner| owner.span == function.span)
+            }) || file.ast.jsx_fragments.iter().any(|fragment| {
+                span.contains(*fragment)
+                    && crate::owners::containing_ast_function(&file.ast, *fragment)
+                        .is_some_and(|owner| owner.span == function.span)
+            })
+        };
+        let directly_returns_jsx = function
+            .expression_return
+            .as_ref()
+            .and_then(|returned| returned.argument)
+            .is_some_and(directly_contains_jsx)
+            || file.ast.returns_within(function.body).any(|returned| {
+                returned.argument.is_some_and(directly_contains_jsx)
+                    && crate::owners::containing_ast_function(&file.ast, returned.span)
+                        .is_some_and(|owner| owner.span == function.span)
+            });
+        // Component identity is about the function value itself, not anything
+        // lexically nested below a callback expression. The largest function
+        // inside a callback/argument is the direct value; nested declarations
+        // remain independently classifiable.
+        let direct_function_value = |candidate: &FileFacts, container: Span| {
+            candidate
+                .ast
+                .functions_within(container)
+                .max_by_key(|candidate| candidate.span.end - candidate.span.start)
+                .is_some_and(|candidate| candidate.span == function.span)
+        };
+        let used_as_callback_value = |candidate: &FileFacts| {
+            candidate
+                .compiler
+                .callback_roles
+                .iter()
+                .any(|role| direct_function_value(candidate, role.span))
+                || candidate
+                    .ast
+                    .arguments_containing(function.span)
+                    .any(|(call, index)| {
+                        direct_function_value(candidate, call.arguments[index].span)
+                            && self
+                                .primitive_at_call(candidate, call.span)
+                                .map(|primitive| {
+                                    self.dialect.callback_semantics_at(
+                                        primitive,
+                                        index,
+                                        call.arguments.len(),
+                                    )
+                                })
+                                .is_some_and(|semantics| {
+                                    semantics.execution.is_some() || semantics.stores_as_value
+                                })
+                    })
+        };
+        let used_as_any_call_argument = file
+            .ast
+            .arguments_containing(function.span)
+            .any(|(call, index)| direct_function_value(file, call.arguments[index].span));
+        let reference_span = |reference: &typefacts::Location| {
+            let candidate = self.file_by_path(reference.path.as_ref())?;
+            let start = u32::try_from(reference.start_byte).ok()?;
+            let end = u32::try_from(reference.end_byte).ok()?;
+            Some((candidate, Span::new(start, end)))
+        };
+        let reference_is_callback_value = |candidate: &FileFacts, span: Span| {
+            candidate.compiler.callback_roles.iter().any(|role| {
+                role.span.contains(span)
+                    && candidate.ast.functions_within(role.span).next().is_none()
+            }) || candidate
+                .ast
+                .arguments_containing(span)
+                .any(|(call, index)| {
+                    candidate
+                        .ast
+                        .functions_within(call.arguments[index].span)
+                        .next()
+                        .is_none()
+                        && self
+                            .primitive_at_call(candidate, call.span)
+                            .map(|primitive| {
+                                self.dialect.callback_semantics_at(
+                                    primitive,
+                                    index,
+                                    call.arguments.len(),
+                                )
+                            })
+                            .is_some_and(|semantics| {
+                                semantics.execution.is_some() || semantics.stores_as_value
+                            })
+                })
+        };
+        let component_value_operation = |candidate: &FileFacts, span: Span| {
+            candidate.compiler.jsx_operations.iter().any(|operation| {
+                if operation.kind == "component-property" && operation.span.contains(span) {
+                    return candidate.ast.jsx_elements.iter().any(|element| {
+                        element.attributes.iter().any(|attribute| {
+                            attribute.value.is_some_and(|value| value.contains(span))
+                                && candidate.source_text(attribute.local_name) == Some("component")
+                        })
+                    });
+                }
+                operation.kind == "component-spread"
+                    && operation.span.contains(span)
+                    && candidate.ast.object_properties.iter().any(|property| {
+                        operation.span.contains(property.span)
+                            && property.value.contains(span)
+                            && candidate.source_text(property.key) == Some("component")
+                    })
+            })
+        };
+        let used_as_render_value = file.compiler.jsx_operations.iter().any(|operation| {
+            matches!(
+                operation.kind.as_str(),
+                "component-property" | "component-spread" | "component-child"
+            ) && operation.span.contains(function.span)
+                && direct_function_value(file, operation.span)
+                && !component_value_operation(file, function.span)
+        });
+        let mut referenced_as_callback = false;
+        let mut referenced_as_component_property = false;
+        if let Some(symbol) = binding_name
+            .and_then(|name| self.entities.at(file.path.as_str(), name.span))
+            .and_then(|symbol| {
+                self.symbols_by_id
+                    .get_or_init(|| {
+                        self.facts
+                            .typescript
+                            .symbols()
+                            .map(|candidate| (candidate.id(), candidate))
+                            .collect()
+                    })
+                    .get(symbol.as_str())
+                    .copied()
+            })
+        {
+            for reference in symbol.references() {
+                let Some((candidate, span)) = reference_span(reference) else {
+                    continue;
+                };
+                referenced_as_callback |= reference_is_callback_value(candidate, span);
+                referenced_as_component_property |= component_value_operation(candidate, span);
+            }
+        }
+        let hoc_bound = binding_name.is_some()
+            && crate::owners::function_binding_name(file, function).is_none();
+        let directly_called = !self
+            .function_call_sites(file.path.as_str(), function.span)
+            .is_empty();
+        if directly_returns_jsx
+            && (self.dialect.direct_jsx_return_is_component()
+                || hoc_bound
+                || referenced_as_component_property)
+            && !directly_called
+            && (!used_as_callback_value(file) || hoc_bound)
+            && (!used_as_any_call_argument || hoc_bound)
+            && !used_as_render_value
+            && (!referenced_as_callback || referenced_as_component_property)
+        {
+            return true;
+        }
+        let Some(name) = binding_name else {
+            return false;
+        };
+        let Some(descriptor) = self.smallest_contained_descriptor(file.path.as_str(), name.span)
+        else {
+            return false;
+        };
+        descriptor.alias_declarations.iter().any(|declaration| {
+            self.dialect
+                .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
+                == Some(solid_dialect::TypeRole::Component)
+        })
+    }
+
+    /// Whether `span` executes inside a function proven to be a component.
+    pub(super) fn inside_component(&self, file: &FileFacts, span: Span) -> bool {
+        file.ast
+            .functions_body_containing(span)
+            .any(|function| self.function_is_component(file, function))
     }
 
     /// Compiler-derived callability for the smallest demanded entity in a
@@ -922,6 +1757,21 @@ impl<'a> SemanticLookup<'a> {
             .get(&(path, function))
             .copied()
             .unwrap_or_default()
+    }
+
+    /// Direct call sites whose Type Facts resolve to one project function.
+    /// Aliases, imports, and same-named locals follow canonical symbols.
+    pub(super) fn function_call_sites(
+        &self,
+        path: &str,
+        function: Span,
+    ) -> Vec<(&'a FileFacts, Span)> {
+        self.all_function_call_sites()
+            .get(&(path, function))
+            .into_iter()
+            .flatten()
+            .map(|site| (&self.facts.files[site.file], site.callee))
+            .collect()
     }
 
     fn smallest_contained(
@@ -971,20 +1821,39 @@ impl<'a> SemanticLookup<'a> {
             let mut map = HashMap::new();
             for (file_index, file) in self.facts.files.iter().enumerate() {
                 for (function_index, function) in file.ast.functions.iter().enumerate() {
-                    let Some(name) = function.name.as_ref() else {
+                    let Some(name) = function.name.as_ref().or(function.method_name.as_ref())
+                    else {
                         continue;
                     };
-                    let Some(symbol) = self.entities.at(file.path.as_str(), name.span) else {
+                    let Some(symbol) = self
+                        .entities
+                        .at(file.path.as_str(), name.span)
+                        .map(SymbolId::as_str)
+                        .or_else(|| {
+                            function.method_name.as_ref().and_then(|method| {
+                                self.method_symbol_ref(file.path.as_str(), method.span)
+                            })
+                        })
+                    else {
                         continue;
                     };
-                    map.entry(symbol.as_str())
-                        .or_insert(SymbolFunction::Resolved {
-                            file: file_index,
-                            function: function_index,
-                        });
+                    map.entry(symbol).or_insert(SymbolFunction::Resolved {
+                        file: file_index,
+                        function: function_index,
+                    });
                 }
                 for binding in &file.ast.bindings {
-                    if !binding.initializer_function {
+                    if !binding.initializer_function && binding.call_initializer.is_none() {
+                        continue;
+                    }
+                    if binding.call_initializer.is_some()
+                        && (binding.shape != solid_facts::ast::BindingShape::Identifier
+                            || binding.names.len() != 1)
+                    {
+                        // A call result may name a wrapped function only when
+                        // one identifier owns the whole result. Tuple/object
+                        // bindings name slots, not closures nested in the
+                        // call's arguments (`createSignal(() => value)`).
                         continue;
                     }
                     let mut outcome = None;
@@ -1047,6 +1916,29 @@ impl<'a> SemanticLookup<'a> {
                                     )
                             });
                     }
+                }
+            }
+            map
+        })
+    }
+
+    fn all_function_call_sites(&self) -> &HashMap<(&'a str, Span), Vec<FunctionCallSite>> {
+        self.function_call_sites.get_or_init(|| {
+            let mut map = HashMap::<(&str, Span), Vec<FunctionCallSite>>::new();
+            for (file_index, caller_file) in self.facts.files.iter().enumerate() {
+                for call in &caller_file.ast.calls {
+                    let Some(symbol) = self.callee_symbol(caller_file, call.callee) else {
+                        continue;
+                    };
+                    let Some((target_file, target)) = self.function_for_symbol(symbol) else {
+                        continue;
+                    };
+                    map.entry((target_file.path.as_str(), target.span))
+                        .or_default()
+                        .push(FunctionCallSite {
+                            file: file_index,
+                            callee: call.callee,
+                        });
                 }
             }
             map

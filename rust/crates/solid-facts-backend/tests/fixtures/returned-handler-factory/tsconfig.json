@@ -1,0 +1,8 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "strict": true,
+    "target": "ES2022"
+  },
+  "files": ["App.tsx", "jsx.d.ts"]
+}
