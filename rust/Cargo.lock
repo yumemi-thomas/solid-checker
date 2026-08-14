@@ -155,7 +155,7 @@ dependencies = [
 [[package]]
 name = "dom-expressions-compiler"
 version = "0.0.0"
-source = "git+https://github.com/yumemi-thomas/dom-expressions?rev=ac3f10e8e854e8ab12638074d6b8520af4289599#ac3f10e8e854e8ab12638074d6b8520af4289599"
+source = "git+https://github.com/yumemi-thomas/dom-expressions?rev=b0965a934120d238dfefbc04274f5e6c9c55387f#b0965a934120d238dfefbc04274f5e6c9c55387f"
 dependencies = [
  "html5ever",
  "htmlize",

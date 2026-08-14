@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "package": {
     "name": "solid-js",
-    "version": "2.0.0-beta.31"
+    "version": "2.0.0-rc.0"
   },
   "compilerFactsProtocol": 1,
   "exports": {
@@ -183,6 +183,9 @@
     "createUniqueId": {
       "kind": "function"
     },
+    "creationStamp": {
+      "kind": "function"
+    },
     "$$decline": {
       "kind": "function"
     },
@@ -240,7 +243,13 @@
     "getOwner": {
       "kind": "function"
     },
+    "getProjectionTrace": {
+      "kind": "function"
+    },
     "Hydration": {
+      "kind": "function"
+    },
+    "inServerComponentScope": {
       "kind": "function"
     },
     "IS_DEV": {
@@ -299,6 +308,9 @@
       ]
     },
     "Match": {
+      "kind": "function"
+    },
+    "materializeContainerTrace": {
       "kind": "function"
     },
     "merge": {

@@ -13,7 +13,7 @@ Writes are allowed in event handlers, actions, `onSettled`, effect apply callbac
 directive apply callbacks, and `untrack` blocks. Internal reactive sources created
 with `{ ownedWrite: true }` in their source-creation options are exempt.
 
-This is the static counterpart of Solid's dev-mode `SIGNAL_WRITE_IN_OWNED_SCOPE`
+This is the static counterpart of Solid's dev-mode `REACTIVE_WRITE_IN_OWNED_SCOPE`
 error.
 
 ## Why is this bad?

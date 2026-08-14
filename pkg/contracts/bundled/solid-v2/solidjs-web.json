@@ -2,8 +2,8 @@
   "schemaVersion": 1,
   "package": {
     "name": "@solidjs/web",
-    "version": "2.0.0-beta.31",
-    "integrity": "sha512-8ILyKQlByNORS7B0pSmQAmrlazi0/W6xKUGAYZFOu1HrzCt+HHJ8dTEzIFHq6T+dYCE8Q9duKESCOER1xm51OA=="
+    "version": "2.0.0-rc.0",
+    "integrity": "sha512-pYSaA9+dH8H1h/d/ZF/P2kR6omfzFGNcdzKhWTcg9fJghXhn8+5UrXUr2iYxDdYNOXZzxxFQhYHSJ7P4HKDqgw=="
   },
   "compilerFactsProtocol": 1,
   "summaries": {
@@ -47,13 +47,20 @@
           "acquireAsset",
           "addEvent",
           "applyRef",
-          "Assets",
           "assign",
           "claimElement",
           "claimElementTree",
           "className",
+          "clearFlashCookie",
           "clientOnly",
+          "commitEventResponse",
+          "commitResponseStub",
+          "composeMiddleware",
           "createComponent",
+          "createLiveHoles",
+          "createRequestEvent",
+          "createResponseStub",
+          "createSSRResponse",
           "delegateEvents",
           "dynamic",
           "Dynamic",
@@ -62,8 +69,8 @@
           "escape",
           "For",
           "generateHydrationScript",
-          "getAssets",
           "getDelegatedRoot",
+          "getExpectedRedirectStatus",
           "getFirstChild",
           "getHydrationKey",
           "getNextElement",
@@ -72,6 +79,9 @@
           "getNextSibling",
           "getOwner",
           "getRequestEvent",
+          "getServerFunctionMetadata",
+          "getServerFunctionRPC",
+          "hasFlashCookie",
           "httpHeader",
           "httpStatus",
           "hydrate",
@@ -81,10 +91,14 @@
           "installHydrationRuntime",
           "isHref",
           "isResponseEnvelope",
+          "isSafeError",
+          "isServerFunction",
           "Loading",
+          "markSafeError",
           "Match",
           "mergeProps",
           "NoHydration",
+          "parseCookieHeader",
           "Portal",
           "redirect",
           "ref",
@@ -95,7 +109,6 @@
           "render",
           "renderToStream",
           "renderToString",
-          "renderToStringAsync",
           "Repeat",
           "resolveSSRNode",
           "respond",
@@ -103,6 +116,7 @@
           "Reveal",
           "runHydrationEvents",
           "scope",
+          "serializeCookie",
           "setAttribute",
           "setAttributeNS",
           "setProperty",
@@ -111,7 +125,6 @@
           "spread",
           "ssr",
           "ssrAttribute",
-          "ssrClassList",
           "ssrClassName",
           "ssrElement",
           "ssrGroup",
@@ -124,8 +137,8 @@
           "unregisterDelegatedContainer",
           "unregisterDelegatedRoot",
           "untrack",
-          "useAssets",
-          "useHead"
+          "useHead",
+          "warmAsset"
         ],
         "value": [
           "ChildProperties",
@@ -140,6 +153,7 @@
           "RawTextElements",
           "RequestContext",
           "REVALIDATE_HEADER",
+          "SAFE_ERROR",
           "SVGElements",
           "VoidElements"
         ],
@@ -163,11 +177,11 @@
       "exports": {
         "function": [
           "applyFrameResponse",
+          "asyncArg",
           "createFrame",
           "createFrameElement",
           "createFrameHost",
           "createFrameSink",
-          "createJSONDataTable",
           "createServerComponentHandler",
           "frameTransformDirectResult",
           "frameTransformFlightResult",
@@ -199,10 +213,10 @@
       "exports": {
         "function": [
           "applyFrameResponse",
+          "asyncArg",
           "createFrame",
           "createFrameElement",
           "createFrameHost",
-          "createJSONDataTable",
           "createServerComponentHandler",
           "getFrameHost",
           "installServerComponents",
@@ -220,6 +234,7 @@
     "./frames/server": {
       "exports": {
         "function": [
+          "asyncArg",
           "createFrameSink",
           "frameTransformDirectResult",
           "frameTransformFlightResult",
@@ -245,13 +260,18 @@
           "acquireAsset",
           "addEvent",
           "applyRef",
-          "Assets",
           "assign",
           "claimElement",
           "claimElementTree",
           "className",
+          "clearFlashCookie",
           "clientOnly",
+          "commitEventResponse",
+          "composeMiddleware",
           "createComponent",
+          "createRequestEvent",
+          "createResponseStub",
+          "createSSRResponse",
           "delegateEvents",
           "dynamic",
           "Dynamic",
@@ -261,8 +281,8 @@
           "escape",
           "For",
           "generateHydrationScript",
-          "getAssets",
           "getDelegatedRoot",
+          "getExpectedRedirectStatus",
           "getFirstChild",
           "getHydrationKey",
           "getNextElement",
@@ -271,6 +291,9 @@
           "getNextSibling",
           "getOwner",
           "getRequestEvent",
+          "getServerFunctionMetadata",
+          "getServerFunctionRPC",
+          "hasFlashCookie",
           "httpHeader",
           "httpStatus",
           "hydrate",
@@ -280,11 +303,15 @@
           "installHydrationRuntime",
           "isHref",
           "isResponseEnvelope",
+          "isSafeError",
+          "isServerFunction",
           "Loading",
+          "markSafeError",
           "Match",
           "memo",
           "mergeProps",
           "NoHydration",
+          "parseCookieHeader",
           "Portal",
           "redirect",
           "ref",
@@ -295,7 +322,6 @@
           "render",
           "renderToStream",
           "renderToString",
-          "renderToStringAsync",
           "Repeat",
           "resolveSSRNode",
           "respond",
@@ -303,6 +329,7 @@
           "Reveal",
           "runHydrationEvents",
           "scope",
+          "serializeCookie",
           "setAttribute",
           "setAttributeNS",
           "setProperty",
@@ -311,18 +338,20 @@
           "spread",
           "ssr",
           "ssrAttribute",
-          "ssrClassList",
+          "ssrClassName",
           "ssrElement",
+          "ssrGroup",
           "ssrHydrationKey",
           "ssrStyle",
+          "ssrStyleProperty",
           "style",
           "Switch",
           "template",
           "unregisterDelegatedContainer",
           "unregisterDelegatedRoot",
           "untrack",
-          "useAssets",
-          "useHead"
+          "useHead",
+          "warmAsset"
         ],
         "value": [
           "ChildProperties",
@@ -337,6 +366,7 @@
           "RawTextElements",
           "RequestContext",
           "REVALIDATE_HEADER",
+          "SAFE_ERROR",
           "SVGElements",
           "VoidElements"
         ]
@@ -358,10 +388,28 @@
           "createJSONDataTable",
           "createJSONDeserializer",
           "createJSONSerializer",
+          "createPlugin",
           "createSerializer",
           "getLocalHeaderScript",
+          "OpaqueReference",
           "resolveSerializerPlugins",
           "serializeJSON"
+        ],
+        "value": [
+          "DEFAULT_WEB_PLUGINS"
+        ]
+      },
+      "conditions": [
+        "import"
+      ]
+    },
+    "./serialization/decode": {
+      "exports": {
+        "function": [
+          "createJSONDataTable",
+          "createJSONDeserializer",
+          "resolveCodecOptions",
+          "resolveSerializerPlugins"
         ],
         "value": [
           "DEFAULT_WEB_PLUGINS"
@@ -402,6 +450,9 @@
           "isServerFunction",
           "registerServerFunction",
           "registerServerReference",
+          "sanitizeServerError",
+          "serializeString",
+          "setServerFunctionsDev",
           "subscribeFlightData",
           "withMeta"
         ],
@@ -409,6 +460,7 @@
           "ERROR_HEADER",
           "FLASH_COOKIE",
           "FUNCTION_HEADER",
+          "GENERIC_SERVER_ERROR_MESSAGE",
           "INSTANCE_HEADER",
           "REVALIDATE_HEADER",
           "SINGLE_FLIGHT_HEADER"
@@ -417,6 +469,7 @@
       "conditions": [
         "browser",
         "deno",
+        "development",
         "import",
         "node",
         "worker"
@@ -444,6 +497,7 @@
           "hasFlashCookie",
           "isServerFunction",
           "registerServerReference",
+          "serializeString",
           "subscribeFlightData",
           "withMeta"
         ],
@@ -454,6 +508,16 @@
           "INSTANCE_HEADER",
           "REVALIDATE_HEADER",
           "SINGLE_FLIGHT_HEADER"
+        ]
+      },
+      "conditions": [
+        "import"
+      ]
+    },
+    "./server-functions/rich-args": {
+      "exports": {
+        "function": [
+          "enableRichArguments"
         ]
       },
       "conditions": [
@@ -484,6 +548,8 @@
           "isServerFunction",
           "registerServerFunction",
           "registerServerReference",
+          "sanitizeServerError",
+          "setServerFunctionsDev",
           "subscribeFlightData",
           "withMeta"
         ],
@@ -491,11 +557,13 @@
           "ERROR_HEADER",
           "FLASH_COOKIE",
           "FUNCTION_HEADER",
+          "GENERIC_SERVER_ERROR_MESSAGE",
           "INSTANCE_HEADER",
           "SINGLE_FLIGHT_HEADER"
         ]
       },
       "conditions": [
+        "development",
         "import"
       ]
     },

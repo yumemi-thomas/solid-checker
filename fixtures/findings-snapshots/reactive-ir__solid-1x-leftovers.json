@@ -70,7 +70,7 @@
       "start": 511,
       "end": 522,
       "fixes": 0,
-      "message": "accessor setter \"setCount\" is called inside owned scope Migrated; writes during the tracking phase create feedback loops in the reactive graph, and Solid throws SIGNAL_WRITE_IN_OWNED_SCOPE here in dev",
+      "message": "accessor setter \"setCount\" is called inside owned scope Migrated; writes during the tracking phase create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
       "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, onSettled, or the apply function of createEffect(compute, apply). For an internal reactive source only, opt in with { ownedWrite: true } in that source's creation options."
     },
     {
@@ -82,7 +82,7 @@
       "start": 539,
       "end": 550,
       "fixes": 0,
-      "message": "accessor setter \"setCount\" is called inside owned scope Migrated; writes during the tracking phase create feedback loops in the reactive graph, and Solid throws SIGNAL_WRITE_IN_OWNED_SCOPE here in dev",
+      "message": "accessor setter \"setCount\" is called inside owned scope Migrated; writes during the tracking phase create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
       "hint": "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, onSettled, or the apply function of createEffect(compute, apply). For an internal reactive source only, opt in with { ownedWrite: true } in that source's creation options."
     }
   ]

@@ -81,7 +81,7 @@ analysis engine:
 
 | | Solid 1.x | Solid 2.0 |
 | --- | --- | --- |
-| Audited runtime | `solid-js@1.9.14` | `solid-js@2.0.0-beta.31` and `@solidjs/web@2.0.0-beta.31` |
+| Audited runtime | `solid-js@1.9.14` | `solid-js@2.0.0-rc.0` and `@solidjs/web@2.0.0-rc.0` |
 | Dialect id | `solid-v1` | `solid-v2` |
 | Rule names | `v1/<rule>` | Unprefixed |
 | Effect model | `createEffect(fn, initialValue?, options?)` | `createEffect(compute, apply)` |
@@ -92,8 +92,8 @@ analysis engine:
 
 The checker detects the installed `solid-js` major automatically. Use
 `--dialect solid-v1` or `--dialect solid-v2` only when a package manager or
-fixture prevents version discovery. Solid 2.0 is still a beta API, so its
-bundled contracts intentionally require the exact audited beta; a later beta
+fixture prevents version discovery. Solid 2.0 is still a release candidate, so
+its bundled contracts intentionally require the exact audited RC; a later RC
 must be reviewed before it can certify a project.
 
 See [the workspace architecture](rust/ARCHITECTURE.md#version-ownership-at-a-glance)

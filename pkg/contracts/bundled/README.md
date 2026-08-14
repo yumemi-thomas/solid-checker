@@ -5,8 +5,8 @@ backend and used during project analysis. Paths are grouped by the same stable
 dialect id used by the checker:
 
 - `solid-v1/solid-js.json` models `solid-js@1.9.14`;
-- `solid-v2/solid-js.json` models `solid-js@2.0.0-beta.31`;
-- `solid-v2/solidjs-web.json` models `@solidjs/web@2.0.0-beta.31`.
+- `solid-v2/solid-js.json` models `solid-js@2.0.0-rc.0`;
+- `solid-v2/solidjs-web.json` models `@solidjs/web@2.0.0-rc.0`.
 
 The per-dialect assembly files at `rust/dialects/<id>/dialect.json` own these
 paths. `node scripts/check-bundled-contracts.mjs` enumerates contracts marked

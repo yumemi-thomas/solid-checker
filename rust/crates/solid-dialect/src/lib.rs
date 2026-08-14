@@ -55,10 +55,10 @@ impl Version {
     /// The dialect a resolved `solid-js` version speaks.
     ///
     /// Takes the major component of a semver string and nothing else, so
-    /// `2.0.0-beta.31` is 2.0 and `1.9.14` is 1.x. Prerelease and build
-    /// metadata are ignored deliberately: 2.0 has shipped only as betas so
-    /// far, and refusing to classify them would leave every real 2.0 project
-    /// on the fallback. Range prefixes (`^`, `~`, `>=`, `<`) are stripped for
+    /// `2.0.0-rc.0` is 2.0 and `1.9.14` is 1.x. Prerelease and build metadata
+    /// are ignored deliberately: refusing to classify a 2.0 prerelease would
+    /// leave real RC projects on the fallback. Range prefixes (`^`, `~`,
+    /// `>=`, `<`) are stripped for
     /// the same reason, although the detection path only ever passes exact
     /// installed versions.
     ///
@@ -167,7 +167,7 @@ pub enum Primitive {
     SuspenseList,
     ErrorBoundary,
     Loading,
-    // Solid 2.0 additions extracted from solid-js@2.0.0-beta.31 and its
+    // Solid 2.0 additions extracted from solid-js@2.0.0-rc.0 and its
     // bundled @solidjs/signals runtime (ADR 0006's rule: the package, not the
     // docs). The engine modelled none of these before.
     /// Also a 1.x core export by the same name; only the 2.0 table maps it
@@ -1127,9 +1127,9 @@ mod tests {
     #[test]
     fn a_resolved_solid_js_version_picks_its_dialect() {
         assert_eq!(Version::for_solid_js("1.9.14"), Some(Version::V1));
-        // 2.0 has only ever shipped as a prerelease; refusing to classify one
-        // would leave every real 2.0 project on the caller's fallback.
-        assert_eq!(Version::for_solid_js("2.0.0-beta.31"), Some(Version::V2));
+        // 2.0 is still a prerelease; refusing to classify the RC would leave
+        // every current 2.0 project on the caller's fallback.
+        assert_eq!(Version::for_solid_js("2.0.0-rc.0"), Some(Version::V2));
         assert_eq!(Version::for_solid_js("^1.8.0"), Some(Version::V1));
         assert_eq!(Version::for_solid_js("v2.0.0"), Some(Version::V2));
         // No guessing: a major nobody has released and a string that is not a
@@ -1680,7 +1680,7 @@ mod tests {
                 // the list argument); the 2.0 runtime tracks them — see the
                 // bundled contract rows for `mapArray`.
                 ("mapArray", "reports-untracked-reads")
-                // The beta.31 runtime emits STRICT_READ_UNTRACKED for a
+                // The RC.0 runtime emits STRICT_READ_UNTRACKED for a
                 // reactive read in the invalidation callback; the 1.x
                 // runtime has no such warning and models the callback as a
                 // leaf owner instead (see the `dialect-solid-*` fixture

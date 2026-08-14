@@ -25,7 +25,7 @@ pub struct Solid2;
 /// table; the old list no longer exists.
 ///
 /// `runWithOwner` is the one name here that came from neither. It is extracted
-/// from `solid-js@2.0.0-beta.31`, which re-exports it from `@solidjs/signals`
+/// from `solid-js@2.0.0-rc.0`, which re-exports it from `@solidjs/signals`
 /// as `runWithOwner<T>(owner: Owner | null, fn: () => T): T` — the same
 /// signature 1.x has. The engine had always recognised it by spelling whatever
 /// the dialect, so before this it resolved to `PrimitiveName::Other` under 2.0
@@ -109,9 +109,13 @@ impl Dialect for Solid2 {
             "@solidjs/web/frames",
             "@solidjs/web/frames/client",
             "@solidjs/web/frames/server",
+            "@solidjs/web/jsx-dev-runtime",
+            "@solidjs/web/jsx-runtime",
             "@solidjs/web/serialization",
+            "@solidjs/web/serialization/decode",
             "@solidjs/web/server-functions",
             "@solidjs/web/server-functions/client",
+            "@solidjs/web/server-functions/rich-args",
             "@solidjs/web/server-functions/server",
             "@solidjs/web/storage",
         ]
@@ -225,7 +229,7 @@ impl Dialect for Solid2 {
         }
     }
 
-    /// Source: the `solid-js@2.0.0-beta.31` and `@solidjs/web@2.0.0-beta.31`
+    /// Source: the `solid-js@2.0.0-rc.0` and `@solidjs/web@2.0.0-rc.0`
     /// implementations, read
     /// rather than inferred. What matters is whether the body creates an owner
     /// before invoking the callback:
@@ -271,13 +275,13 @@ impl Dialect for Solid2 {
             }
             // `createReaction` is deliberately absent from this arm: 1.x
             // runs its invalidation callback as a leaf owner, but the
-            // beta.31 runtime allocates the reaction a computation like
+            // RC.0 runtime allocates the reaction a computation like
             // `createEffect` does, so 2.0 does not end the ownership chain
             // there. The `dialect-solid-1x` / `dialect-solid-2` fixture
             // pair pins the difference.
             Primitive::CreateTrackedEffect | Primitive::OnSettled => &[(0, CallbackOwner::Leaf)],
             // Not a leaf (1.x's model — the `dialect-solid-2` fixture pins
-            // that difference), but not owned either: the beta.31 runtime
+            // that difference), but not owned either: the RC.0 runtime
             // invokes the invalidation callback with no owner, and
             // `onCleanup` inside it emits `NO_OWNER_CLEANUP`.
             Primitive::CreateReaction => &[(0, CallbackOwner::None)],
@@ -305,7 +309,7 @@ impl Dialect for Solid2 {
         }
     }
 
-    /// Source: `solid-js@2.0.0-beta.31`'s `types/client/flow.d.ts`, read from
+    /// Source: `solid-js@2.0.0-rc.0`'s `types/client/flow.d.ts`, read from
     /// the installed package, which spells the three `<For>` forms out:
     ///
     /// ```text
@@ -395,7 +399,7 @@ impl Dialect for Solid2 {
     /// holds this to.
     ///
     /// The four `createX(fn, …)` derived forms are not in that table and were
-    /// read from the runtime bundled by `solid-js@2.0.0-beta.31` instead:
+    /// read from the runtime bundled by `solid-js@2.0.0-rc.0` instead:
     /// `createSignal`,
     /// `createOptimistic`, `createStore` and `createOptimisticStore` all branch
     /// on `typeof first === "function"` and build a computed from it, so
@@ -467,7 +471,7 @@ impl Dialect for Solid2 {
     ) -> bool {
         let _ = argument_count;
         // `createReaction`'s invalidation callback runs untracked and
-        // one-shot; the beta.31 runtime emits `STRICT_READ_UNTRACKED` for a
+        // one-shot; the RC.0 runtime emits `STRICT_READ_UNTRACKED` for a
         // reactive read inside it, so the checker reports the same.
         (matches!(
             primitive,
@@ -490,7 +494,7 @@ impl Dialect for Solid2 {
     /// `const track = createReaction(onInvalidate); track(() => read())` —
     /// the tracker argument is a tracked computation, the same two-stage
     /// shape as 1.x. Source: the 2.0 cheatsheet's "one-shot tracked
-    /// callback" entry and the beta.31 runtime.
+    /// callback" entry and the RC.0 runtime.
     fn returned_callback_execution_at(
         &self,
         primitive: Primitive,
@@ -530,7 +534,7 @@ impl Dialect for Solid2 {
     /// being a function.
     ///
     /// `createReaction` is a correction to that extraction, not part of it:
-    /// the beta.31 runtime allocates a computation for the reaction when it
+    /// the RC.0 runtime allocates a computation for the reaction when it
     /// is called, exactly as `createEffect` does, so creating one in a leaf
     /// or cleanup scope leaks it. Its `creates_directive_owner` row already
     /// recorded the disposal obligation this arm was missing.
@@ -625,7 +629,7 @@ impl Dialect for Solid2 {
         )
     }
 
-    /// Source: `solid-js@2.0.0-beta.31`'s `types/index.d.ts`, which re-exports
+    /// Source: `solid-js@2.0.0-rc.0`'s `types/index.d.ts`, which re-exports
     /// the whole vocabulary from the package root. 2.0 folded the store API
     /// into core, so there is no `solid-js/store`; the one primitive that
     /// lives elsewhere is `dynamic`, from the web package.
@@ -877,7 +881,7 @@ mod tests {
     }
 
     #[test]
-    fn beta_31_web_primitives_have_distinct_callback_roles() {
+    fn rc_0_web_primitives_have_distinct_callback_roles() {
         assert_eq!(Solid2.primitive("clientOnly"), Some(Primitive::ClientOnly));
         assert_eq!(Solid2.primitive("useHead"), Some(Primitive::UseHead));
         assert_eq!(

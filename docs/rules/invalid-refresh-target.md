@@ -46,14 +46,13 @@ Examples of **correct** code for this rule:
 
 ```tsx
 refresh(user); // The source binding itself.
-refresh(() => expensive(query())); // Thunk form: re-runs the expression and returns its value.
 ```
 
 ## How to fix
 
 Pass the accessor or store exactly as returned by its create call — uncalled and
-unwrapped. To refresh an ad-hoc expression, use the thunk form
-`refresh(() => expr)`.
+unwrapped. Solid 2.0 RC.0 accepts only the branded binding; a local wrapper such
+as `refresh(() => expr)` is not a refresh target.
 
 ## Related
 

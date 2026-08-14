@@ -184,7 +184,7 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
             };
             (
                 format!(
-                    "{source} setter {:?} is called inside owned scope {context}; writes during the tracking phase create feedback loops in the reactive graph, and Solid throws SIGNAL_WRITE_IN_OWNED_SCOPE here in dev",
+                    "{source} setter {:?} is called inside owned scope {context}; writes during the tracking phase create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
                     write.setter
                 ),
                 "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, onSettled, or the apply function of createEffect(compute, apply). For an internal reactive source only, opt in with { ownedWrite: true } in that source's creation options.".to_owned(),

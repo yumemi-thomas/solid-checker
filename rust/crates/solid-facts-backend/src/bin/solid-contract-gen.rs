@@ -117,6 +117,10 @@ struct ContractTarget {
     /// `/storage` reads as "imported from the wrong module" when it is
     /// imported from `/storage`.
     entries: &'static [Entry],
+    /// Names whose declaration syntax occupies value position even though the
+    /// package publishes no runtime binding. Runtime probes are authoritative
+    /// for these ambient namespaces and type re-exports.
+    type_only: &'static [&'static str],
     /// Exports that are values rather than callables.
     values: &'static [&'static str],
     semantics: &'static [(&'static str, Semantics)],
@@ -125,7 +129,7 @@ struct ContractTarget {
     major: &'static str,
 }
 
-/// Solid 2.0. Sourced by reading `solid-js@2.0.0-beta.31` and its bundled
+/// Solid 2.0. Sourced by reading `solid-js@2.0.0-rc.0` and its bundled
 /// `@solidjs/signals` implementation, not the signatures — see the module docs.
 static SOLID_2: ContractTarget = ContractTarget {
     id: "solid-v2/solid-js",
@@ -146,6 +150,7 @@ static SOLID_2: ContractTarget = ContractTarget {
         entry("solid-js/refresh", "types/refresh/index.d.ts"),
         internal("types/client/core.d.ts"),
     ],
+    type_only: &[],
     // Verified `declare const` or `declare class` in solid-js or
     // @solidjs/signals. `enableExternalSource` and `enforceLoadingBoundary`
     // look like values and are `declare function` — they are declared in
@@ -252,6 +257,7 @@ static SOLID_1X: ContractTarget = ContractTarget {
         entry("solid-js/web", "web/types/index.d.ts"),
         entry("solid-js/universal", "universal/types/index.d.ts"),
     ],
+    type_only: &[],
     values: &[
         "$PROXY",
         "$TRACK",
@@ -346,10 +352,11 @@ static SOLIDJS_WEB: ContractTarget = ContractTarget {
     id: "solid-v2/solidjs-web",
     package: "@solidjs/web",
     major: "2.",
-    // Every subpath the package's `exports` map publishes, `jsx-runtime`
-    // aside: that one is the compiler's entry point, nothing a user imports by
-    // name, and it declares no values. `dist/types/index.d.ts` used to be
-    // listed here and has never existed in the published package.
+    // Every subpath the package's `exports` map publishes. The JSX runtime
+    // entries declare only types, but they are public import locations in RC.0
+    // and own the renderer-specific JSX namespace, so the type-position index
+    // must carry them too. `dist/types/index.d.ts` used to be listed here and
+    // has never existed in the published package.
     //
     // `./server-functions` and `./frames` each resolve to client or server
     // declarations depending on the condition, so both are listed under the
@@ -358,10 +365,16 @@ static SOLIDJS_WEB: ContractTarget = ContractTarget {
     // reachable from that specifier.
     entries: &[
         entry("@solidjs/web", "types/index.d.ts"),
+        entry("@solidjs/web/jsx-runtime", "types/jsx.d.ts"),
+        entry("@solidjs/web/jsx-dev-runtime", "types/jsx.d.ts"),
         entry("@solidjs/web/storage", "storage/types/index.d.ts"),
         entry(
             "@solidjs/web/serialization",
             "serialization/types/index.d.ts",
+        ),
+        entry(
+            "@solidjs/web/serialization/decode",
+            "serialization/types/serializer-decode.d.ts",
         ),
         entry(
             "@solidjs/web/server-functions",
@@ -379,12 +392,19 @@ static SOLIDJS_WEB: ContractTarget = ContractTarget {
             "@solidjs/web/server-functions/server",
             "types/server-functions/server.d.ts",
         ),
+        entry(
+            "@solidjs/web/server-functions/rich-args",
+            "types/server-functions/rich-args.d.ts",
+        ),
         entry("@solidjs/web/frames", "types/frames/client.d.ts"),
         entry("@solidjs/web/frames", "types/frames/server.d.ts"),
         entry("@solidjs/web/frames/client", "types/frames/client.d.ts"),
         entry("@solidjs/web/frames/server", "types/frames/server.d.ts"),
     ],
-    // Verified runtime values across every beta.31 entrypoint. This is kept
+    // Both names are type-only in the published runtime even though their
+    // ambient/re-export declaration syntax is classified in value position.
+    type_only: &["JSX", "RequestEventLocals"],
+    // Verified runtime values across every RC.0 entrypoint. This is kept
     // separate from the syntactic value-position index: TypeScript functions,
     // classes, and constants all occupy value position, while the contract's
     // `kind` distinguishes callable exports from inert data.
@@ -399,15 +419,19 @@ static SOLIDJS_WEB: ContractTarget = ContractTarget {
         "FRAME_APPLIED_EVENT",
         "FRAME_STREAM_HEADER",
         "FUNCTION_HEADER",
+        "GENERIC_SERVER_ERROR_MESSAGE",
         "HREF",
         "INSTANCE_HEADER",
         "isDev",
         "isServer",
         "MathMLElements",
         "Namespaces",
+        "OpaqueReference",
         "RawTextElements",
         "RequestContext",
+        "ResponseEnvelope",
         "REVALIDATE_HEADER",
+        "SAFE_ERROR",
         "SERVER_COMPONENT_BOOTSTRAP",
         "ServerComponentPlugin",
         "SINGLE_FLIGHT_HEADER",
@@ -441,6 +465,14 @@ static TARGETS: &[&ContractTarget] = &[&SOLID_2, &SOLID_1X, &SOLIDJS_WEB];
 struct Exports {
     values: BTreeSet<String>,
     types: BTreeSet<String>,
+}
+
+fn correct_runtime_type_only(exports: &mut Exports, names: &[&str]) {
+    for name in names {
+        if exports.values.remove(*name) {
+            exports.types.insert((*name).to_owned());
+        }
+    }
 }
 
 /// Every name a declaration entry exports, following re-export chains.
@@ -763,6 +795,7 @@ fn main() -> ExitCode {
             eprintln!("{error}");
             return ExitCode::FAILURE;
         }
+        correct_runtime_type_only(&mut exports, target.type_only);
         // The contract's export set is every value name from every entry; the
         // index only records the ones a specifier reaches.
         names.extend(
@@ -907,5 +940,21 @@ mod tests {
     fn interpolated_names_are_escaped() {
         assert_eq!(json_string("a\"b"), r#""a\"b""#);
         assert_eq!(format!("{:?}", "a\"b"), r#""a\"b""#);
+    }
+
+    #[test]
+    fn runtime_type_only_corrections_leave_the_type_index_intact() {
+        let mut exports = Exports {
+            values: BTreeSet::from(["JSX".into(), "render".into()]),
+            types: BTreeSet::from(["Component".into()]),
+        };
+
+        correct_runtime_type_only(&mut exports, &["JSX", "RequestEventLocals"]);
+
+        assert_eq!(exports.values, BTreeSet::from(["render".into()]));
+        assert_eq!(
+            exports.types,
+            BTreeSet::from(["Component".into(), "JSX".into()])
+        );
     }
 }

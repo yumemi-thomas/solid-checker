@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "package": {
     "name": "@solidjs/web",
-    "version": "2.0.0-beta.31"
+    "version": "2.0.0-rc.0"
   },
   "compilerFactsProtocol": 1,
   "exports": {
@@ -18,10 +18,10 @@
     "applyRef": {
       "kind": "function"
     },
-    "Assets": {
+    "assign": {
       "kind": "function"
     },
-    "assign": {
+    "asyncArg": {
       "kind": "function"
     },
     "ChildProperties": {
@@ -50,6 +50,12 @@
           "execution": "deferred"
         }
       ]
+    },
+    "commitEventResponse": {
+      "kind": "function"
+    },
+    "composeMiddleware": {
+      "kind": "function"
     },
     "configureServerFunctionsClient": {
       "kind": "function"
@@ -84,7 +90,19 @@
     "createJSONDeserializer": {
       "kind": "function"
     },
+    "createJSONSerializer": {
+      "kind": "function"
+    },
     "createNoJSHandler": {
+      "kind": "function"
+    },
+    "createPlugin": {
+      "kind": "function"
+    },
+    "createRequestEvent": {
+      "kind": "function"
+    },
+    "createResponseStub": {
       "kind": "function"
     },
     "createSerializer": {
@@ -94,6 +112,9 @@
       "kind": "function"
     },
     "createServerReference": {
+      "kind": "function"
+    },
+    "createSSRResponse": {
       "kind": "function"
     },
     "decodeErrorHeaderValue": {
@@ -150,6 +171,9 @@
         }
       ]
     },
+    "enableRichArguments": {
+      "kind": "function"
+    },
     "encodeErrorHeaderValue": {
       "kind": "function"
     },
@@ -198,16 +222,19 @@
     "generateHydrationScript": {
       "kind": "function"
     },
-    "GET": {
-      "kind": "function"
+    "GENERIC_SERVER_ERROR_MESSAGE": {
+      "kind": "value"
     },
-    "getAssets": {
+    "GET": {
       "kind": "function"
     },
     "getDelegatedRoot": {
       "kind": "function"
     },
     "getEventServerFunctionInvocation": {
+      "kind": "function"
+    },
+    "getExpectedRedirectStatus": {
       "kind": "function"
     },
     "getFlightDataConsumer": {
@@ -244,6 +271,9 @@
       "kind": "function"
     },
     "getServerFunctionMetadata": {
+      "kind": "function"
+    },
+    "getServerFunctionRPC": {
       "kind": "function"
     },
     "getServerFunctionsCodec": {
@@ -300,6 +330,9 @@
     "isResponseEnvelope": {
       "kind": "function"
     },
+    "isSafeError": {
+      "kind": "function"
+    },
     "isServer": {
       "kind": "value"
     },
@@ -307,6 +340,9 @@
       "kind": "function"
     },
     "Loading": {
+      "kind": "function"
+    },
+    "markSafeError": {
       "kind": "function"
     },
     "Match": {
@@ -331,6 +367,12 @@
       "kind": "value"
     },
     "NoHydration": {
+      "kind": "function"
+    },
+    "OpaqueReference": {
+      "kind": "value"
+    },
+    "parseCookieHeader": {
       "kind": "function"
     },
     "Portal": {
@@ -387,9 +429,6 @@
     "renderToString": {
       "kind": "function"
     },
-    "renderToStringAsync": {
-      "kind": "function"
-    },
     "Repeat": {
       "kind": "function"
     },
@@ -406,7 +445,7 @@
       "kind": "function"
     },
     "ResponseEnvelope": {
-      "kind": "function"
+      "kind": "value"
     },
     "REVALIDATE_HEADER": {
       "kind": "value"
@@ -417,10 +456,22 @@
     "runHydrationEvents": {
       "kind": "function"
     },
+    "SAFE_ERROR": {
+      "kind": "value"
+    },
+    "sanitizeServerError": {
+      "kind": "function"
+    },
     "scope": {
       "kind": "function"
     },
+    "serializeCookie": {
+      "kind": "function"
+    },
     "serializeJSON": {
+      "kind": "function"
+    },
+    "serializeString": {
       "kind": "function"
     },
     "SERVER_COMPONENT_BOOTSTRAP": {
@@ -441,6 +492,9 @@
     "setProperty": {
       "kind": "function"
     },
+    "setServerFunctionsDev": {
+      "kind": "function"
+    },
     "setStyleProperty": {
       "kind": "function"
     },
@@ -459,16 +513,22 @@
     "ssrAttribute": {
       "kind": "function"
     },
-    "ssrClassList": {
+    "ssrClassName": {
       "kind": "function"
     },
     "ssrElement": {
+      "kind": "function"
+    },
+    "ssrGroup": {
       "kind": "function"
     },
     "ssrHydrationKey": {
       "kind": "function"
     },
     "ssrStyle": {
+      "kind": "function"
+    },
+    "ssrStyleProperty": {
       "kind": "function"
     },
     "style": {
@@ -495,9 +555,6 @@
     "untrack": {
       "kind": "function"
     },
-    "useAssets": {
-      "kind": "function"
-    },
     "useHead": {
       "kind": "function",
       "callbacks": [
@@ -509,6 +566,9 @@
     },
     "VoidElements": {
       "kind": "value"
+    },
+    "warmAsset": {
+      "kind": "function"
     },
     "withMeta": {
       "kind": "function"

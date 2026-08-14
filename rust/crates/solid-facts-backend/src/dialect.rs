@@ -521,7 +521,7 @@ mod tests {
 
         std::fs::write(
             package.join("package.json"),
-            r#"{"name":"solid-js","version":"2.0.0-beta.31"}"#,
+            r#"{"name":"solid-js","version":"2.0.0-rc.0"}"#,
         )
         .unwrap();
         assert_eq!(detect(&project).id, "solid-v2");
@@ -566,7 +566,7 @@ mod tests {
         // manifest, masking the outer 1.x -- resolution order, not breakage.
         std::fs::write(
             inner.join("package.json"),
-            r#"{"name":"solid-js","version":"2.0.0-beta.31"}"#,
+            r#"{"name":"solid-js","version":"2.0.0-rc.0"}"#,
         )
         .unwrap();
         assert_eq!(detect(&project).id, "solid-v2");

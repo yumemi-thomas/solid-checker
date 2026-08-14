@@ -32,14 +32,14 @@ Code this rule flags:
 ```tsx
 import { todoStore } from "some-package"; // No contract entry describing what this is.
 
-affects(todoStore, ["items"]); // Store? Snapshot? The analyzer cannot tell.
+affects(todoStore, "items"); // Store? Snapshot? The analyzer cannot tell.
 ```
 
 Code that resolves:
 
 ```tsx
 const [store, setStore] = createStore({ items: [] });
-affects(store, ["items"]);
+affects(store, "items");
 ```
 
 ## How to fix

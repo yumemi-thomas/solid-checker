@@ -32,21 +32,22 @@ Examples of **incorrect** code for this rule:
 
 ```tsx
 affects(todos()); // A read value, not the source.
-affects(todos, ["items"], extra); // Wrong arity.
+affects(todos, "items", extra); // Wrong arity.
 ```
 
 Examples of **correct** code for this rule:
 
 ```tsx
 affects(todos); // The source binding itself.
-affects(store, ["todos"]); // Store target scoped to specific keys.
+affects(store, "todos"); // Store target scoped to one property.
 ```
 
 ## How to fix
 
 Pass the accessor or store exactly as returned by its create call — uncalled and
-unwrapped. The optional second argument is an array of store keys and is only valid
-when the target is a store.
+unwrapped. The optional second argument is one property key and is only valid
+when the target is a store. Use separate declarations for separate properties,
+or target a nested store record directly.
 
 ## Related
 

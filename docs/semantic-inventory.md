@@ -1,6 +1,6 @@
 # Solid 2.0 semantic inventory
 
-This inventory was re-audited against the Solid `2.0.0-beta.31` public exports,
+This inventory was re-audited against the Solid `2.0.0-rc.0` public exports,
 diagnostic union, and runtime call sites. “Conditional” means static certification
 requires type, execution-region, ownership, async, or compiler facts; it does
 not mean the checker may ignore the obligation.
@@ -18,7 +18,7 @@ counterparts.
 | `REACTIVE_WRITE_IN_OWNED_SCOPE` | Conditional | Resolve a signal/store setter or `refresh()` target and prove whether it executes in an owned forbidden scope or an allowed event/action/untracked/leaf region. |
 | `ACTION_CALLED_IN_OWNED_SCOPE` | Conditional | Resolve an `action()` result through calls and prove whether invocation occurs with a non-leaf owner. |
 | `PENDING_ASYNC_UNTRACKED_READ` | Conditional | Prove async provenance and that the read executes in a tracked, suspendable region. |
-| `ASYNC_OUTSIDE_LOADING_BOUNDARY` | Conditional | Prove an async render read is dominated by a compiler-recognized `Loading` boundary. |
+| `ASYNC_OUTSIDE_LOADING_BOUNDARY` | Conditional warning | Prove an async render read is dominated by a compiler-recognized `Loading` boundary; without one, report deferred atomic mount rather than a thrown runtime error. |
 | `CLEANUP_IN_FORBIDDEN_SCOPE` | Statically provable | Resolve `onCleanup` and prove its call region is `createTrackedEffect` or `onSettled`. |
 | `PRIMITIVE_IN_FORBIDDEN_SCOPE` | Statically provable | Resolve primitive creation and prove the containing callback is a leaf-owner role. |
 | Invalid cleanup return value | Conditional | Resolve callback role and prove every returned value is a function or `undefined`. |
@@ -34,7 +34,7 @@ counterparts.
 | `NO_OWNER_BOUNDARY` | Conditional | Use compiler facts to resolve boundary creation and prove no live owner dominates it. |
 | `RUN_WITH_DISPOSED_OWNER` | Runtime-only initially | Owner disposal is generally value- and control-flow-dependent; reject unresolved cases when certification depends on them. |
 | `INVALID_REFRESH_TARGET` | Conditional | Prove `refresh()` receives an original branded Solid accessor/store; reject proven wrappers, reads, literals, and invalid arity, and fail closed for unresolved targets. |
-| `INVALID_AFFECTS_TARGET` | Conditional | Prove `affects()` receives a branded accessor/store, with at most one key and keys only for stores. |
+| `INVALID_AFFECTS_TARGET` | Conditional | Prove `affects()` receives a branded accessor/store, with at most one property key and a key only for a store record. Multiple keys are separate calls, not a path array. |
 | `MISSING_EFFECT_FN` | Statically provable | Resolve `createEffect` and require both compute and effect arguments, including calls with trailing commas. |
 | `SYNC_NODE_RECEIVED_ASYNC` | Conditional | Resolve `sync: true` computations and prove whether their callback returns a Promise or AsyncIterable. |
 | `REACTIVITY_HALTED` | Runtime-only | This is a secondary runtime scheduler/error state after an escaped reactive error, not an independent source rule. |

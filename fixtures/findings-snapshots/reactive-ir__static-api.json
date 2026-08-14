@@ -177,8 +177,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 875,
-      "end": 882,
+      "start": 873,
+      "end": 880,
       "fixes": 0
     },
     {
@@ -187,8 +187,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 917,
-      "end": 925,
+      "start": 915,
+      "end": 923,
       "fixes": 0
     },
     {
@@ -197,8 +197,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 955,
-      "end": 969,
+      "start": 953,
+      "end": 967,
       "fixes": 0
     }
   ]

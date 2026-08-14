@@ -143,14 +143,14 @@ impl StaticApiContext<'_> {
                     id: "SC7003".into(),
                     rule: format!("invalid-{primitive}-target"),
                     message: if is_refresh {
-                        "refresh() takes exactly one argument: the derived signal, store, or projection to recompute, or a thunk to re-run".into()
+                        "refresh() takes exactly one argument: the original derived signal, store, or projection binding to recompute".into()
                     } else {
-                        "affects() takes a source target and optionally an array of store keys".into()
+                        "affects() takes a source target and at most one optional store property key; extra keys are not a path".into()
                     },
                     hint: if is_refresh {
-                        "Pass one target: refresh(source) to recompute a derived source, or refresh(() => expr) to re-run an expression and return its value.".into()
+                        "Pass the original refreshable binding directly: refresh(source). Wrapper thunks and already-read values are not refresh targets.".into()
                     } else {
-                        "Call affects(source) for signals, or affects(store, [\"key\"]) to scope invalidation to specific store paths.".into()
+                        "Call affects(source) for signals, affects(store) for a store record, or affects(store, \"key\") for one property. Mark multiple properties with separate calls or target the nested record directly.".into()
                     },
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
@@ -167,7 +167,7 @@ impl StaticApiContext<'_> {
                         "{primitive}() received a wrapper, read value, or literal instead of the original Solid source binding; the brand on the binding created by createSignal, createMemo, or createStore is how Solid identifies what to recompute"
                     ),
                     hint: if is_refresh {
-                        "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: refresh(user), not refresh(user()). To refresh an ad-hoc expression, use the thunk form refresh(() => expr).".into()
+                        "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: refresh(user), not refresh(user()) or refresh(() => user()).".into()
                     } else {
                         "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: affects(user), not affects(user()).".into()
                     },
@@ -211,8 +211,8 @@ impl StaticApiContext<'_> {
                     result.violations.push(StaticViolation {
                         id: "SC7004".into(),
                         rule: "affects-keys-on-accessor".into(),
-                        message: "affects() received keys but its target is a signal accessor; keys narrow invalidation to paths inside a store, and an accessor has no paths".into(),
-                        hint: "Drop the key array for signal targets (affects(source)), or pass the store binding if you meant to scope invalidation to specific store keys (affects(store, [\"todos\"])).".into(),
+                        message: "affects() received a property key but its target is a signal accessor; a key narrows a store record to one slot, and an accessor is already a single slot".into(),
+                        hint: "Drop the key for signal targets (affects(source)), or pass the owning store record if you meant to mark one property (affects(store, \"todos\")).".into(),
                         location: location(file.path.shared(), call.callee),
                         analysis_context: String::new(),
                         fixes: vec![],

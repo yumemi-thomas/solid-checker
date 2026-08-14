@@ -228,8 +228,8 @@ an exact compiler-resolved retaining runtime position, such as a Proxy handler.
 
 Verified contracts for `solid-js` and `@solidjs/web` are embedded in the
 checker and selected automatically from project imports. They pin Solid
-`2.0.0-beta.31` and its npm integrity. The core contract covers the root and
-refresh entrypoints; the web contract covers all 11 runtime entrypoints,
+`2.0.0-rc.0` and its npm integrity. The core contract covers the root and
+refresh entrypoints; the web contract covers all 13 runtime entrypoints,
 including server-functions, frames, serialization, storage, and the JSX
 runtimes.
 

@@ -13,5 +13,5 @@ declare module "solid-js" {
   export function createOptimistic<T>(compute: () => T, options?: Options): [() => Awaited<T>, (value: Awaited<T>) => void];
   export function createOptimisticStore<T extends object>(compute: () => T, seed: Awaited<T>, options?: Options): [Awaited<T>, (value: Awaited<T>) => void];
   export function refresh(target: unknown): void;
-  export function affects(...target: unknown[]): void;
+  export function affects(target: unknown, key?: PropertyKey): void;
 }
