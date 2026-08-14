@@ -36,6 +36,16 @@ copied into this repository.
 Oxc is consumed as published Rust crates. It is not forked or copied into this
 repository.
 
+## TypeFacts
+
+- Consumed repository: https://github.com/yumemi-thomas/solid-ts-facts
+- Pinned revision: `36d4aad89f6bd0acea437f9c841ffc0dc3a6c378`
+- License: MIT
+
+The Rust client and Go producer move together at this revision. The producer
+is built from the same pin and validates its protocol, schema, and build
+identity when the checker starts.
+
 ## tsgolint and TypeScript-Go
 
 - tsgolint revision: `c3269c01a0c894a31330e1b4c3bd4edc6eb7694b`
