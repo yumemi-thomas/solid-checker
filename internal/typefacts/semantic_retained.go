@@ -38,6 +38,16 @@ func (g *demandGroup) ensureExpanded() error {
 	if err != nil {
 		return err
 	}
+	// Compact rows retain the caller's string table verbatim. Re-establish the
+	// same clean-path invariant as the plain-demand seam when the rows are
+	// expanded; on Windows, the project run uses backslashes while a Rust
+	// client can encode the identical absolute path with forward slashes.
+	for index := range demands {
+		demands[index].Location.Path = filepath.Clean(demands[index].Location.Path)
+		if demands[index].QueryLocation != nil {
+			demands[index].QueryLocation.Path = filepath.Clean(demands[index].QueryLocation.Path)
+		}
+	}
 	g.demands = demands
 	return nil
 }

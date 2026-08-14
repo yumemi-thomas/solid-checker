@@ -116,6 +116,33 @@ func TestRetainedDemandStoreOwnsCompactRunsWithoutExpandedRows(t *testing.T) {
 	}
 }
 
+func TestRetainedDemandStoreCleansExpandedCompactPaths(t *testing.T) {
+	separator := string(filepath.Separator)
+	dirty := "project" + separator + "." + separator + "source.ts"
+	clean := filepath.Clean(dirty)
+	query := Location{Path: dirty, StartByte: 2, EndByte: 3}
+	compact := CompactDemandsV3From([]EntityDemand{{
+		Location:      Location{Path: dirty, StartByte: 1, EndByte: 2},
+		QueryLocation: &query,
+		Symbol:        true,
+	}})
+
+	var store retainedDemandStore
+	transaction, err := store.beginCompact(compact, nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	transaction.commit()
+
+	demands := store.at(clean)
+	if len(demands) != 1 ||
+		demands[0].Location.Path != clean ||
+		demands[0].QueryLocation == nil ||
+		demands[0].QueryLocation.Path != clean {
+		t.Fatalf("expanded compact demands are not canonical: %#v", demands)
+	}
+}
+
 func TestMalformedCompactDemandDoesNotMutateRetainedState(t *testing.T) {
 	var store retainedDemandStore
 	initial := store.begin([]EntityDemand{demandAt("a.ts", 1)}, nil, true)
