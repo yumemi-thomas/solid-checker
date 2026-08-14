@@ -43,16 +43,24 @@ jobs:
       - name: Certify absolute performance invariants
         env:
           SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
+          # Shared runners currently vary from about 165-193us/source for the
+          # same analyzer. Keep this as a gross absolute guard; the interleaved
+          # base/head comparison below is the regression gate.
+          SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE: 225000
         run: node benchmarks/verify-performance.mjs
 
       # The relative gate: build the merge base in a worktree and race it
       # against the head on this same runner, interleaved so scheduler drift
-      # cancels. This is what catches a 26ms -> 60ms regression that still
-      # clears the shared-runner absolute ceiling above.
+      # cancels. Pull requests compare their merge base; pushes and manual runs
+      # compare the preceding main commit. This is what catches a 26ms -> 60ms
+      # regression that still clears the shared-runner absolute ceiling above.
       - name: Build the merge-base benchmark runtime
-        if: github.event_name == 'pull_request'
         run: |
-          base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
+          else
+            base=$(git rev-parse HEAD^)
+          fi
           git worktree add /tmp/perf-base "$base"
           cd /tmp/perf-base
           scripts/build-typefacts.sh
@@ -60,7 +68,6 @@ jobs:
             -p solid-facts-backend --bin solid-checker-session-bench
 
       - name: Compare performance with the merge base
-        if: github.event_name == 'pull_request'
         run: |
           node benchmarks/compare-performance.mjs \
             --base-bench /tmp/perf-base/rust/target/release/solid-checker-session-bench \
