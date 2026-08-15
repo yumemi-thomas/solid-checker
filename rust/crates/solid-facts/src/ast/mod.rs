@@ -15,7 +15,8 @@ use oxc_ast::ast::{
     FormalParameter, Function, FunctionType, IdentifierReference, IfStatement, ImportDeclaration,
     ImportDeclarationSpecifier, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement,
     JSXElementName, JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName,
-    NewExpression, ObjectProperty, ObjectPropertyKind, PropertyKey, ReturnStatement, SpreadElement,
+    NewExpression, ObjectProperty, ObjectPropertyKind, PropertyKey, PropertyKind, ReturnStatement,
+    SpreadElement,
     StaticMemberExpression, TSModuleDeclarationName, UnaryExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
@@ -117,6 +118,23 @@ pub struct ArgumentFact {
     pub value: ArgumentValueKind,
     pub boolean_properties: Vec<BooleanPropertyFact>,
     pub identifier_properties: Vec<NamedSpan>,
+    /// Statically-named properties of an object-literal argument whose value
+    /// is a string literal, carrying the cooked string value.
+    #[serde(default)]
+    pub string_properties: Vec<StringPropertyFact>,
+    /// The key spans of every statically-named data property when the
+    /// argument is an object literal, regardless of value shape. Presence in
+    /// this list proves `"name" in options` at runtime; absence proves
+    /// nothing unless [`ArgumentFact::exact_object_literal`] also holds.
+    #[serde(default)]
+    pub property_names: Vec<Span>,
+    /// True when the argument is an object literal whose complete property
+    /// set is statically known: every property is a plain data property with
+    /// a static identifier key — no spreads, no computed keys, no accessors.
+    /// Only such a literal proves the *absence* or the *final value* of an
+    /// option.
+    #[serde(default)]
+    pub exact_object_literal: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -135,6 +153,13 @@ pub enum ArgumentValueKind {
 pub struct BooleanPropertyFact {
     pub name: Span,
     pub value: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StringPropertyFact {
+    pub name: Span,
+    pub value: CompactString,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1027,12 +1052,68 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 .collect(),
             _ => vec![],
         };
+        let string_properties = match argument {
+            Argument::ObjectExpression(object) => object
+                .properties
+                .iter()
+                .filter_map(|property| {
+                    let ObjectPropertyKind::ObjectProperty(property) = property else {
+                        return None;
+                    };
+                    let PropertyKey::StaticIdentifier(key) = &property.key else {
+                        return None;
+                    };
+                    let Expression::StringLiteral(value) = &property.value else {
+                        return None;
+                    };
+                    Some(StringPropertyFact {
+                        name: span(key.span),
+                        value: value.value.as_str().into(),
+                    })
+                })
+                .collect(),
+            _ => vec![],
+        };
+        let property_names = match argument {
+            Argument::ObjectExpression(object) => object
+                .properties
+                .iter()
+                .filter_map(|property| {
+                    let ObjectPropertyKind::ObjectProperty(property) = property else {
+                        return None;
+                    };
+                    let PropertyKey::StaticIdentifier(key) = &property.key else {
+                        return None;
+                    };
+                    Some(span(key.span))
+                })
+                .collect(),
+            _ => vec![],
+        };
+        // Getter/setter pairs are `ObjectProperty` nodes with a non-`Init`
+        // kind; the presence of a `get loadingValue()` still puts the key in
+        // `property_names` above (an `in` check sees it), but a literal that
+        // contains one no longer proves final option *values*, so it is not
+        // exact.
+        let exact_object_literal = match argument {
+            Argument::ObjectExpression(object) => object.properties.iter().all(|property| {
+                let ObjectPropertyKind::ObjectProperty(property) = property else {
+                    return false;
+                };
+                property.kind == PropertyKind::Init
+                    && matches!(&property.key, PropertyKey::StaticIdentifier(_))
+            }),
+            _ => false,
+        };
         ArgumentFact {
             span: span(argument.span()),
             spread: argument.is_spread(),
             value,
             boolean_properties,
             identifier_properties,
+            string_properties,
+            property_names,
+            exact_object_literal,
         }
     }
 }

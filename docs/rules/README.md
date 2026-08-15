@@ -48,8 +48,8 @@ that exact rule in the shared project configuration described below.
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
 | Shared concepts (24 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
-| Version-only concepts | 18 rules: `v1/no-async-tracked-scope` plus the SC8001–SC8017 ESLint-era surface | 14 rules: actions, `flush`, returned cleanup, async computations, `refresh`/`affects`, and their proof obligations |
-| Catalog size | 42 rules | 38 rules |
+| Version-only concepts | 18 rules: `v1/no-async-tracked-scope` plus the SC8001–SC8017 ESLint-era surface | 15 rules: actions, `flush`, returned cleanup, async computations and their SSR hydration options, `refresh`/`affects`, and their proof obligations |
+| Catalog size | 42 rules | 39 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -64,7 +64,11 @@ Findings come in two kinds:
 
 Uncertifiable findings normally carry **error** severity, including the ones
 the owner rules (`SC4001`–`SC4004`) emit for exported functions whose callers
-the analyzer cannot see. The sole exception is `SC9011`
+the analyzer cannot see, and the ones `SC5001`
+[pending-async-untracked-read](pending-async-untracked-read.md) emits when a
+source's options argument cannot be read (an unreadable `loadingValue`
+declaration would make the read safe during the first flight, so the throw is
+no longer proven). The sole exception is `SC9011`
 `reactive-source-uncaptured`: it has no proven-violation form and is
 advisory-by-design, warning that an undescribed package boundary prevents the
 analyzer from following a reactive source. A rule's severity in the manifest
@@ -159,6 +163,7 @@ rule's page documents its additional options and defaults.
 | SC5001 | [pending-async-untracked-read](pending-async-untracked-read.md) | error |
 | SC5002 | [pending-async-forbidden-scope](pending-async-forbidden-scope.md) | warning |
 | SC5003 | [async-outside-loading-boundary](async-outside-loading-boundary.md) | warning |
+| SC5005 | [ssr-client-source-outside-loading-boundary](ssr-client-source-outside-loading-boundary.md) | error |
 
 ## Directives
 
@@ -196,7 +201,9 @@ describe defects that exist in both language versions — `uncalled-accessor`,
 `no-direct-mutation`, and `reactive-source-uncaptured` — so the 2.0 catalog
 carries them too, under the same codes. `no-async-tracked-scope` stays
 1.x-only: Solid 2.0 models async computations as a feature, and its async
-surface is owned by SC5001–SC5003.
+surface is owned by SC5001–SC5003 and SC5005 (SC5004 remains the 1.x rule's
+code — it names a different defect concept, so the new 2.0-only SSR rule takes
+the next free code in the family).
 
 ## Solid 1.x
 

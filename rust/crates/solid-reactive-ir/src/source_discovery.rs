@@ -240,6 +240,145 @@ fn effective_call_return(
         })
 }
 
+/// The statically-proven rc.0 async/hydration options declared on one
+/// reactive source. All flags default to `false` when there is no options
+/// argument (or an explicit `undefined`/`null`), which keeps that case on the
+/// fully-proven path.
+///
+/// Runtime ground truth, probed against `solid-js@2.0.0-rc.0` /
+/// `@solidjs/signals@2.0.0-rc.0` (2026-08-15):
+///
+/// - A computation created with `loadingValue` (or a store-family source with
+///   `seedLoadingValue: true`) is born committed. During its first flight,
+///   untracked strict reads return the declared value (no
+///   `PENDING_ASYNC_UNTRACKED_READ`), tracked reads serve it without
+///   suspending (no `Loading` boundary participation, no
+///   `ASYNC_OUTSIDE_LOADING_BOUNDARY`), reads inside `createTrackedEffect`
+///   neither warn nor throw, and `isPending` reads `false`.
+/// - The declared window ends at the first real answer: with a re-ask in
+///   flight (input change or refresh), an untracked strict read throws
+///   `PENDING_ASYNC_UNTRACKED_READ` and a `createTrackedEffect` read warns
+///   `PENDING_ASYNC_FORBIDDEN_SCOPE` and throws — exactly like an undeclared
+///   async node. SC5001/SC5002 therefore stay reported on declared sources,
+///   with conditional wording.
+/// - A bare `ssrSource: "client"` source (no declaration) never runs its
+///   compute on the server; *any* read of it during SSR outside a `Loading`
+///   fallback flush throws `ssrSource: "client" read during SSR outside a
+///   <Loading> boundary` — including reads of a fully synchronous compute —
+///   while under a boundary it suspends finally so the fallback is flushed.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Hash)]
+pub(crate) struct AsyncSourceOptions {
+    /// The source provably declares `loadingValue` (presence-keyed at
+    /// runtime: `"loadingValue" in options`) or `seedLoadingValue: true` in
+    /// an exact object literal.
+    pub(crate) declared_loading: bool,
+    /// The source provably declares `ssrSource: "client"` with no
+    /// `loadingValue`/`seedLoadingValue` declaration, on a function-form
+    /// call: the server installs a client hole for it.
+    pub(crate) ssr_client_bare: bool,
+    /// An options argument exists that the analyzer cannot read as an exact
+    /// object literal, so option-dependent claims cannot be proven either
+    /// way.
+    pub(crate) opaque: bool,
+}
+
+/// Reads the async/hydration option surface of one source-creating call, as
+/// far as the options argument is statically readable. Value claims
+/// (`seedLoadingValue: true`, `ssrSource: "client"` with nothing declared)
+/// require an exact object literal; the presence claim for `loadingValue`
+/// survives spreads because a later spread cannot remove the key from the
+/// runtime's `in` check.
+pub(crate) fn async_source_options(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: Option<Primitive>,
+    dialect: &dyn Dialect,
+) -> AsyncSourceOptions {
+    use solid_facts::ast::ArgumentValueKind;
+    let Some(index) = primitive.and_then(|primitive| dialect.options_argument(primitive)) else {
+        return AsyncSourceOptions::default();
+    };
+    let Some(argument) = call.arguments.get(index) else {
+        return AsyncSourceOptions::default();
+    };
+    if matches!(
+        argument.value,
+        ArgumentValueKind::Undefined | ArgumentValueKind::Null
+    ) {
+        return AsyncSourceOptions::default();
+    }
+    let named = |span, expected: &str| file.source_text(span) == Some(expected);
+    let loading_key = argument
+        .property_names
+        .iter()
+        .any(|key| named(*key, "loadingValue"));
+    let seed_key = argument
+        .property_names
+        .iter()
+        .any(|key| named(*key, "seedLoadingValue"));
+    let seed_true = argument
+        .boolean_properties
+        .iter()
+        .any(|property| named(property.name, "seedLoadingValue") && property.value);
+    let seed_false = argument
+        .boolean_properties
+        .iter()
+        .any(|property| named(property.name, "seedLoadingValue") && !property.value);
+    let ssr_client = argument
+        .string_properties
+        .iter()
+        .any(|property| named(property.name, "ssrSource") && property.value == "client");
+    let declared_loading = loading_key || (argument.exact_object_literal && seed_true);
+    // The server installs the client hole only for function-form sources (a
+    // value-form `createSignal(0, …)` never runs a compute, so `ssrSource`
+    // is inert there); an unresolvable computation argument fails the proof.
+    let function_form = matches!(
+        call.arguments.first().map(|argument| argument.value),
+        Some(ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction)
+    );
+    let ssr_client_bare = argument.exact_object_literal
+        && ssr_client
+        && !loading_key
+        && (!seed_key || seed_false)
+        && function_form;
+    AsyncSourceOptions {
+        declared_loading,
+        ssr_client_bare,
+        opaque: !argument.exact_object_literal && !declared_loading,
+    }
+}
+
+/// The `@solidjs/web` exports whose import proves the project server-renders
+/// (or hydrates server-rendered HTML). A bare `ssrSource: "client"` source is
+/// only a runtime error on the server path, so SC5005 stays silent for
+/// CSR-only projects. Named imports only; the export names come from the
+/// bundled `@solidjs/web` contract.
+const SERVER_RENDER_IMPORTS: [&str; 6] = [
+    "renderToStream",
+    "renderToString",
+    "renderToFrameStream",
+    "renderServerComponent",
+    "handleServerFunctionRequest",
+    "hydrate",
+];
+
+/// Whether any analyzed file imports a server rendering entry point from
+/// `@solidjs/web` (or one of its subpaths).
+pub(crate) fn project_server_renders(facts: &ProjectFacts) -> bool {
+    facts.files.iter().any(|file| {
+        file.ast.imports.iter().any(|import| {
+            (import.module == "@solidjs/web" || import.module.starts_with("@solidjs/web/"))
+                && !import.type_only
+                && import.bindings.iter().any(|binding| {
+                    !binding.type_only
+                        && binding.imported.as_deref().is_some_and(|imported| {
+                            SERVER_RENDER_IMPORTS.contains(&imported)
+                        })
+                })
+        })
+    })
+}
+
 pub(crate) fn discover_file_sources(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
@@ -505,6 +644,10 @@ pub(crate) fn discover_file_sources(
                 result
                     .source_owned_write
                     .push((symbol.clone(), call.owned_write_option));
+                let options = async_source_options(file, call, resolved, lookup.dialect);
+                if options != AsyncSourceOptions::default() {
+                    result.source_async_options.push((symbol.clone(), options));
+                }
                 if call.arguments.first().is_some_and(|argument| {
                     computation_is_async_with_contracts(
                         lookup,
@@ -691,6 +834,7 @@ pub(crate) struct SourceDiscoveryMergeTarget<'a> {
     pub(crate) summary_source_symbols: &'a mut HashSet<SymbolId>,
     pub(crate) source_owned_write: &'a mut HashMap<SymbolId, bool>,
     pub(crate) async_sources: &'a mut HashSet<SymbolId>,
+    pub(crate) source_async_options: &'a mut HashMap<SymbolId, AsyncSourceOptions>,
     pub(crate) contracted_accessor_symbols: &'a mut HashSet<SymbolId>,
 }
 
@@ -707,6 +851,7 @@ pub(crate) struct SourceDiscoveryAggregate {
     pub(crate) summary_source_symbols: HashSet<SymbolId>,
     pub(crate) source_owned_write: HashMap<SymbolId, bool>,
     pub(crate) async_sources: HashSet<SymbolId>,
+    pub(crate) source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
     pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
 }
 
@@ -726,6 +871,7 @@ impl SourceDiscoveryAggregate {
                 summary_source_symbols: &mut self.summary_source_symbols,
                 source_owned_write: &mut self.source_owned_write,
                 async_sources: &mut self.async_sources,
+                source_async_options: &mut self.source_async_options,
                 contracted_accessor_symbols: &mut self.contracted_accessor_symbols,
             },
         );
@@ -747,6 +893,9 @@ impl SourceDiscoveryAggregate {
             .extend(self.summary_source_symbols);
         target.source_owned_write.extend(self.source_owned_write);
         target.async_sources.extend(self.async_sources);
+        target
+            .source_async_options
+            .extend(self.source_async_options);
         target
             .contracted_accessor_symbols
             .extend(self.contracted_accessor_symbols);
@@ -786,6 +935,9 @@ pub(crate) fn merge_source_discovery(
     target
         .async_sources
         .extend(contribution.async_sources.iter().cloned());
+    target
+        .source_async_options
+        .extend(contribution.source_async_options.iter().cloned());
     target
         .contracted_accessor_symbols
         .extend(contribution.contracted_accessor_symbols.iter().cloned());
@@ -832,6 +984,12 @@ pub(crate) fn extend_source_discovery_symbols(
             .map(|(symbol, _)| symbol.clone()),
     );
     symbols.extend(contribution.async_sources.iter().cloned());
+    symbols.extend(
+        contribution
+            .source_async_options
+            .iter()
+            .map(|(symbol, _)| symbol.clone()),
+    );
 }
 
 /// Owned reactive-source facts produced by the source-discovery stage and
@@ -848,6 +1006,7 @@ pub(crate) struct SourceDiscovery {
     pub(crate) summary_source_symbols: HashSet<SymbolId>,
     pub(crate) source_owned_write: HashMap<SymbolId, bool>,
     pub(crate) async_sources: HashSet<SymbolId>,
+    pub(crate) source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
     pub(crate) contract_reads: HashMap<SymbolId, Vec<(String, String, Location, String)>>,
     pub(crate) contract_callbacks: HashMap<SymbolId, Vec<ContractCallback>>,
     pub(crate) contract_returns: HashMap<SymbolId, (ContractReturn, Location)>,
@@ -922,6 +1081,7 @@ pub(crate) fn discover_sources(
     let mut summary_source_symbols = HashSet::<SymbolId>::new();
     let mut source_owned_write = HashMap::<SymbolId, bool>::new();
     let mut async_sources = HashSet::<SymbolId>::new();
+    let mut source_async_options = HashMap::<SymbolId, AsyncSourceOptions>::new();
     let mut contract_reads = HashMap::<SymbolId, Vec<(String, String, Location, String)>>::new();
     let mut contract_callbacks = HashMap::<SymbolId, Vec<ContractCallback>>::new();
     let mut contract_returns = HashMap::<SymbolId, (ContractReturn, Location)>::new();
@@ -1000,6 +1160,7 @@ pub(crate) fn discover_sources(
                 summary_source_symbols: &mut summary_source_symbols,
                 source_owned_write: &mut source_owned_write,
                 async_sources: &mut async_sources,
+                source_async_options: &mut source_async_options,
                 contracted_accessor_symbols: &mut contracted_accessor_symbols,
             });
         }
@@ -1101,6 +1262,7 @@ pub(crate) fn discover_sources(
                     summary_source_symbols: &mut summary_source_symbols,
                     source_owned_write: &mut source_owned_write,
                     async_sources: &mut async_sources,
+                    source_async_options: &mut source_async_options,
                     contracted_accessor_symbols: &mut contracted_accessor_symbols,
                 });
             }
@@ -1549,6 +1711,7 @@ pub(crate) fn discover_sources(
         summary_source_symbols,
         source_owned_write,
         async_sources,
+        source_async_options,
         contract_reads,
         contract_callbacks,
         contract_returns,

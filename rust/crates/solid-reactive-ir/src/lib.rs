@@ -462,6 +462,37 @@ pub struct AsyncRead {
     pub execution: ExecutionRole,
     pub leaf_owner: Option<Arc<str>>,
     pub under_loading: bool,
+    /// The source's computation is proven async (returns a Promise or
+    /// AsyncIterable). False only for rows that exist purely because the
+    /// source declares a bare `ssrSource: "client"` (see
+    /// [`AsyncRead::ssr_client_hole`]) — a client source can be fully
+    /// synchronous.
+    #[serde(default = "default_async_provenance")]
+    pub async_provenance: bool,
+    /// The source provably declares `loadingValue` (or a store-family
+    /// `seedLoadingValue: true`): it is born committed, so its first flight
+    /// never suspends readers and never trips a `Loading` boundary. Probed
+    /// against rc.0: the exemption ends at the first real answer — later
+    /// re-asks throw for untracked/leaf reads exactly like undeclared nodes,
+    /// so SC5001/SC5002 stay reported with conditional wording while SC5003
+    /// is suppressed.
+    #[serde(default)]
+    pub declared_loading: bool,
+    /// An options argument exists on the source that the analyzer cannot
+    /// read, so the loadingValue declaration can be neither proven nor
+    /// refuted; SC5001 downgrades from proven violation to uncertifiable.
+    #[serde(default)]
+    pub options_opaque: bool,
+    /// The source provably declares `ssrSource: "client"` with no
+    /// `loadingValue`/`seedLoadingValue`, and the project server-renders:
+    /// reading it during SSR outside a `Loading` boundary throws
+    /// unconditionally (SC5005).
+    #[serde(default)]
+    pub ssr_client_hole: bool,
+}
+
+fn default_async_provenance() -> bool {
+    true
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]

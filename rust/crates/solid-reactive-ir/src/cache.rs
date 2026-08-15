@@ -173,6 +173,8 @@ pub(crate) struct SourceDiscoveryContribution {
     pub(crate) summary_source_symbols: Vec<SymbolId>,
     pub(crate) source_owned_write: Vec<(SymbolId, bool)>,
     pub(crate) async_sources: Vec<SymbolId>,
+    pub(crate) source_async_options:
+        Vec<(SymbolId, crate::source_discovery::AsyncSourceOptions)>,
     pub(crate) contracted_accessor_symbols: Vec<SymbolId>,
 }
 
@@ -492,6 +494,10 @@ pub(crate) struct LocalAccessSymbolState {
     pub(crate) action: Option<(SymbolId, Location)>,
     pub(crate) source_primitive: Option<SymbolId>,
     pub(crate) async_source: bool,
+    /// The declared async/hydration options with the project-level
+    /// server-render fact already folded into `ssr_client_bare`, so a fixed
+    /// import elsewhere invalidates every file reading this source.
+    pub(crate) async_options: crate::source_discovery::AsyncSourceOptions,
     pub(crate) contract_reads: Option<Vec<(String, String, Location, String)>>,
     pub(crate) source_kind: Option<ReactiveSourceKind>,
     pub(crate) prop_source: Option<(SymbolId, Location)>,

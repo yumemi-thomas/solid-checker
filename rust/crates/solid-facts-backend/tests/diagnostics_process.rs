@@ -87,9 +87,27 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         (
             "async-boundary",
             &[
-                ("pending-async-untracked-read", 2),
-                ("pending-async-forbidden-scope", 2),
-                ("async-outside-loading-boundary", 11),
+                // Four untracked reads: two plain async sources, the
+                // declared-loadingValue source (still reported — the declared
+                // window ends at the first real answer, so later re-asks
+                // throw; conditional wording), and the opaque-options source
+                // (downgraded to uncertifiable, asserted below).
+                ("pending-async-untracked-read", 4),
+                ("pending-async-forbidden-scope", 3),
+                // The declared sources (loadingValue memo, seedLoadingValue
+                // projection and store) render bare without any SC5003: their
+                // first flight never trips a Loading boundary. The
+                // opaque-options render keeps the informational warning.
+                ("async-outside-loading-boundary", 12),
+            ],
+        ),
+        (
+            "ssr-client-boundary",
+            &[
+                // Only the bare ssrSource: "client" read outside Loading in a
+                // server-rendering project; the bounded, loadingValue, and
+                // seedLoadingValue reads stay silent.
+                ("ssr-client-source-outside-loading-boundary", 1),
             ],
         ),
     ] {
@@ -167,6 +185,80 @@ fn solid_one_missing_wording_paths_are_end_to_end() {
         1,
         "v1 package-contract wording path must run end to end: {findings:#?}"
     );
+}
+
+#[test]
+fn declared_first_paint_and_opaque_options_split_the_async_rules() {
+    let Some(findings) = diagnostic_fixture("async-boundary") else {
+        return;
+    };
+    // Fail-honest policy: SC5001 stays a proven violation when the options
+    // argument is absent or readable, and downgrades to a proof obligation
+    // when an unreadable options argument could declare a loadingValue.
+    let untracked = findings_for_rule(&findings, "pending-async-untracked-read");
+    let kinds = untracked
+        .iter()
+        .map(|finding| finding["kind"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        kinds.iter().filter(|kind| **kind == "violation").count(),
+        3,
+        "{untracked:#?}"
+    );
+    assert_eq!(
+        kinds.iter().filter(|kind| **kind == "uncertifiable").count(),
+        1,
+        "{untracked:#?}"
+    );
+    // The declared source keeps SC5001/SC5002 with conditional wording: the
+    // first flight cannot throw, later re-asks can (probed against rc.0).
+    assert!(
+        untracked.iter().any(|finding| {
+            finding["message"].as_str().is_some_and(|message| {
+                message.contains("declares a loadingValue")
+                    && message.contains("after the first real answer lands")
+            })
+        }),
+        "{untracked:#?}"
+    );
+    // No declared source may carry the boundary warning: the declared first
+    // paint is exactly what makes a Loading boundary unnecessary.
+    assert!(
+        findings_for_rule(&findings, "async-outside-loading-boundary")
+            .iter()
+            .all(|finding| {
+                finding["message"].as_str().is_some_and(|message| {
+                    !message.contains("declaredFeed")
+                        && !message.contains("seededUser")
+                        && !message.contains("seededStoreUser")
+                })
+            }),
+        "{findings:#?}"
+    );
+}
+
+#[test]
+fn ssr_client_hole_requires_a_server_rendering_project() {
+    let Some(findings) = diagnostic_fixture("ssr-client-boundary") else {
+        return;
+    };
+    let holes = findings_for_rule(&findings, "ssr-client-source-outside-loading-boundary");
+    assert_eq!(holes.len(), 1, "{findings:#?}");
+    assert_eq!(holes[0]["kind"], "violation", "{holes:#?}");
+    // The server throw is unconditional, so the rule mirrors it as an error.
+    assert_eq!(holes[0]["severity"], "error", "{holes:#?}");
+    assert!(
+        holes[0]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("ssrSource: \"client\"")),
+        "{holes:#?}"
+    );
+    // The same bare client source read in a CSR-only project must stay
+    // silent: the throwing code path lives in the server runtime.
+    let Some(csr_findings) = diagnostic_fixture("ssr-client-boundary-csr") else {
+        return;
+    };
+    assert!(csr_findings.is_empty(), "{csr_findings:#?}");
 }
 
 #[test]

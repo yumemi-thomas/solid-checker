@@ -401,10 +401,28 @@ pub fn project_findings(
                 .async_reads
                 .iter()
                 .filter(|read| {
-                    read.leaf_owner.is_some()
-                        || read.execution == crate::ExecutionRole::ModuleInitialization
-                        || read.execution == crate::ExecutionRole::UntrackedRendering
-                        || read.execution == crate::ExecutionRole::TrackedJsx && !read.under_loading
+                    // Pending-read rules (SC5001/SC5002) need proven async
+                    // provenance; they stay reported for loadingValue-declared
+                    // sources because the declared window ends at the first
+                    // real answer (probed, rc.0) — the catalog words them
+                    // conditionally.
+                    if read.async_provenance
+                        && (read.leaf_owner.is_some()
+                            || read.execution == crate::ExecutionRole::ModuleInitialization
+                            || read.execution == crate::ExecutionRole::UntrackedRendering)
+                    {
+                        return true;
+                    }
+                    // Tracked JSX outside a Loading boundary: the SSR client
+                    // hole (SC5005, error — it subsumes the SC5003 warning on
+                    // the same read), or the informational boundary warning
+                    // (SC5003) — suppressed for declared-first-paint sources,
+                    // whose whole point is to not need a boundary.
+                    read.leaf_owner.is_none()
+                        && read.execution == crate::ExecutionRole::TrackedJsx
+                        && !read.under_loading
+                        && (read.ssr_client_hole
+                            || (read.async_provenance && !read.declared_loading))
                 })
                 .map(|read| project_finding(FindingSeed::AsyncRead(read), catalog)),
         );
@@ -476,6 +494,15 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
         }
         FindingSeed::AsyncRead(read) => {
             finding.related_locations = vec![read.declaration.clone()];
+            // Fail-honest: an options argument the analyzer cannot read may
+            // declare a loadingValue, and a declared first flight cannot
+            // throw — so the untracked-read error is no longer a *proven*
+            // runtime throw and becomes a proof obligation instead. The
+            // boundary rules keep their reporting: SC5003 is informational
+            // either way, and SC5002's throw is timing-dependent by nature.
+            if read.options_opaque && finding.id == "SC5001" {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::PackageContractIssue(_) => {
             finding.analysis_context = "package contract completeness".into();
@@ -574,6 +601,10 @@ mod tests {
                 execution: ExecutionRole::TrackedJsx,
                 leaf_owner: None,
                 under_loading: false,
+                async_provenance: true,
+                declared_loading: false,
+                options_opaque: false,
+                ssr_client_hole: false,
             }],
             invalid_cleanup_returns: vec![InvalidCleanupReturn {
                 primitive: "onSettled".into(),
@@ -618,6 +649,10 @@ mod tests {
                 execution: ExecutionRole::TrackedJsx,
                 leaf_owner: None,
                 under_loading: true,
+                async_provenance: true,
+                declared_loading: false,
+                options_opaque: false,
+                ssr_client_hole: false,
             }],
             ..Program::default()
         };

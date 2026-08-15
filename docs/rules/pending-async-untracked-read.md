@@ -21,6 +21,22 @@ nearest `<Loading>` boundary shows its fallback, and the read re-runs once the
 value settles. An untracked read has none of that machinery — there is nothing to
 suspend and nothing to retry, so Solid throws.
 
+**Sources with a declared first paint still get this finding, with conditional
+wording.** A `loadingValue` (or store-family `seedLoadingValue: true`) node is
+born committed, so an untracked read during the *first flight* serves the
+declared value and cannot throw. But the window ends at the first real answer:
+probed against `solid-js@2.0.0-rc.0`, once a re-ask is in flight (an input
+change or `refresh`), an untracked read of the very same node throws
+`PENDING_ASYNC_UNTRACKED_READ` exactly like an undeclared one. The finding's
+message says so explicitly for declared sources.
+
+**Fail-honest downgrade.** When the source has an options argument the
+analyzer cannot read (a spread, a variable, a computed object), a
+`loadingValue` declaration can be neither proven nor ruled out — the throw is
+no longer proven, so the finding is reported as `uncertifiable` instead of a
+proven violation. A source with no options argument at all keeps the proven
+violation.
+
 ## Examples
 
 Examples of **incorrect** code for this rule:
@@ -49,7 +65,9 @@ function Profile() {
 
 Read async values where the graph can wait for them: JSX, a `createMemo`, or an
 effect's compute function. The read then suspends to the nearest `<Loading>`
-boundary and re-runs when the value settles.
+boundary and re-runs when the value settles. A `loadingValue` declaration only
+protects the first flight — it does not make untracked reads safe after the
+first answer lands.
 
 ## Related
 

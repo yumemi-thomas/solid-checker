@@ -14,7 +14,7 @@ pub enum Rule {
     // are version-independent, so both catalogs carry them under the same SC
     // codes and suppressions survive a migration. `no-async-tracked-scope`
     // stays 1.x-only: 2.0 models async computations as a feature
-    // (SC5001–SC5003 own that surface).
+    // (SC5001–SC5003 and SC5005 own that surface).
     UncalledAccessor,
     UntrackedDerivedFunction,
     ExpectedFunctionGotExpression,
@@ -38,6 +38,7 @@ pub enum Rule {
     PendingAsyncUntrackedRead,
     PendingAsyncForbiddenScope,
     AsyncOutsideLoadingBoundary,
+    SsrClientSourceOutsideLoadingBoundary,
     PrimitiveInDirectiveApplication,
     MissingEffectFunction,
     SyncNodeReceivedAsync,
@@ -65,7 +66,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 39] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -91,6 +92,7 @@ impl Rule {
         Self::PendingAsyncUntrackedRead,
         Self::PendingAsyncForbiddenScope,
         Self::AsyncOutsideLoadingBoundary,
+        Self::SsrClientSourceOutsideLoadingBoundary,
         Self::PrimitiveInDirectiveApplication,
         Self::MissingEffectFunction,
         Self::SyncNodeReceivedAsync,
@@ -159,6 +161,15 @@ impl Rule {
             Self::AsyncOutsideLoadingBoundary => {
                 ("SC5003", "async-outside-loading-boundary", "warning", false)
             }
+            // SC5004 belongs to v1/no-async-tracked-scope, a different defect
+            // concept; per the shared-code-by-concept policy this new 2.0-only
+            // rule takes the next free code in the async family.
+            Self::SsrClientSourceOutsideLoadingBoundary => (
+                "SC5005",
+                "ssr-client-source-outside-loading-boundary",
+                "error",
+                false,
+            ),
             Self::PrimitiveInDirectiveApplication => (
                 "SC6001",
                 "primitive-in-directive-application",
@@ -298,6 +309,13 @@ mod tests {
         assert_eq!(
             Rule::PendingAsyncForbiddenScope.metadata().severity,
             "warning"
+        );
+        // The server throw for a bare ssrSource: "client" read outside a
+        // Loading boundary is unconditional (rc.0 dist/server.js), so the
+        // static rule mirrors it as an error.
+        assert_eq!(
+            Rule::SsrClientSourceOutsideLoadingBoundary.metadata().severity,
+            "error"
         );
     }
 }

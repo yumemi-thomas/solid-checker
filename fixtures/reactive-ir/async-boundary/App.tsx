@@ -105,5 +105,43 @@ export function BadWrapperBoundary() {
   return <WrongLoadingWrapper fallback={<div />}>{user().name}</WrongLoadingWrapper>;
 }
 
+// Declared first paint (rc.0): a loadingValue / seedLoadingValue node is born
+// committed — its first flight never suspends readers and never trips a
+// Loading boundary, so no SC5003 fires on rendering it bare. The window ends
+// at the first real answer: later re-asks throw for untracked and leaf reads,
+// so SC5001/SC5002 stay (with conditional wording).
+const declaredFeed = createMemo(async () => ({ name: "Dorothy" }), { loadingValue: { name: "placeholder" } });
+const seededUser = createProjection(async () => ({ name: "Grace" }), { name: "seed" }, { seedLoadingValue: true });
+const [seededStoreUser] = createStore(async () => ({ name: "Annie" }), { name: "seed" }, { seedLoadingValue: true });
+
+export function GoodDeclaredRender() {
+  return <div>{declaredFeed().name}{seededUser.name}{seededStoreUser.name}</div>;
+}
+
+export function BadDeclaredUntracked() {
+  const name = declaredFeed().name;
+  return <div>{name}</div>;
+}
+
+export function BadDeclaredLeaf() {
+  onSettled(() => void declaredFeed().name);
+  return <div />;
+}
+
+// Fail-honest: an options argument the analyzer cannot read may declare a
+// loadingValue, so the untracked-read error downgrades to uncertifiable while
+// the informational boundary warning keeps firing.
+declare const opaqueOptions: { loadingValue?: { name: string } };
+const opaqueUser = createMemo(async () => ({ name: "Alan" }), opaqueOptions);
+
+export function OpaqueOptionsRender() {
+  return <div>{opaqueUser().name}</div>;
+}
+
+export function OpaqueOptionsUntracked() {
+  const name = opaqueUser().name;
+  return <div>{name}</div>;
+}
+
 declare function streamUser(): AsyncIterable<{ name: string }>;
 declare function maybeStreamUser(): AsyncIterable<{ name: string }> | { name: string };

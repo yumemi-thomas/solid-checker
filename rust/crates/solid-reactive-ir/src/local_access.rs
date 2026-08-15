@@ -12,7 +12,7 @@ use crate::owners::{
     typed_accessor_descriptor_at,
 };
 use crate::pipeline::parallel_file_chunk_results;
-use crate::source_discovery::bundled_contract_location;
+use crate::source_discovery::{AsyncSourceOptions, bundled_contract_location};
 use crate::{
     ActionInvocation, AsyncRead, ContractReturn, ExecutionRole, ReactiveRead, ReactiveSourceKind,
     ReactiveWrite, location, primitive_name,
@@ -45,6 +45,11 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) actions: &'a HashMap<SymbolId, (SymbolId, Location)>,
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) async_sources: &'a HashSet<SymbolId>,
+    pub(crate) source_async_options: &'a HashMap<SymbolId, AsyncSourceOptions>,
+    /// Whether any file in the project imports a server rendering entry
+    /// point; folded into every source's effective `ssr_client_bare` so a
+    /// bare client source never fires SC5005 in a CSR-only project.
+    pub(crate) server_renders: bool,
     pub(crate) source_declarations: &'a HashMap<SymbolId, Declaration>,
     pub(crate) contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
     pub(crate) contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
@@ -226,6 +231,19 @@ impl LocalAccessContext<'_, '_> {
             .collect()
     }
 
+    /// The source's declared async/hydration options with the project-level
+    /// server-render fact already folded in: a bare `ssrSource: "client"`
+    /// only becomes a hole when a server path exists to hit it.
+    fn effective_async_options(&self, symbol: &str) -> AsyncSourceOptions {
+        let mut options = self
+            .source_async_options
+            .get(symbol)
+            .copied()
+            .unwrap_or_default();
+        options.ssr_client_bare &= self.server_renders;
+        options
+    }
+
     pub(crate) fn symbol_state(&self, symbol: &str) -> LocalAccessSymbolState {
         LocalAccessSymbolState {
             accessor: self.accessors.get(symbol).cloned(),
@@ -234,6 +252,7 @@ impl LocalAccessContext<'_, '_> {
             action: self.actions.get(symbol).cloned(),
             source_primitive: self.source_primitives.get(symbol).cloned(),
             async_source: self.async_sources.contains(symbol),
+            async_options: self.effective_async_options(symbol),
             contract_reads: self.contract_reads.get(symbol).cloned(),
             source_kind: self.source_kinds.get(symbol).copied(),
             prop_source: self.prop_sources.get(symbol).cloned(),
@@ -441,7 +460,9 @@ impl LocalAccessContext<'_, '_> {
                 {
                     result.strict_read_obligations += 1;
                 }
-                if self.async_sources.contains(symbol) {
+                let async_provenance = self.async_sources.contains(symbol);
+                let async_options = self.effective_async_options(symbol);
+                if async_provenance || async_options.ssr_client_bare {
                     let async_execution = async_execution_role(file, call.callee, execution);
                     result.async_reads.push(Arc::new(AsyncRead {
                         accessor: format!("{name}()").into(),
@@ -462,6 +483,10 @@ impl LocalAccessContext<'_, '_> {
                             call.callee,
                             self.symbol_names,
                         ),
+                        async_provenance,
+                        declared_loading: async_options.declared_loading,
+                        options_opaque: async_options.opaque,
+                        ssr_client_hole: async_options.ssr_client_bare,
                     }));
                 }
             }
@@ -675,8 +700,10 @@ impl LocalAccessContext<'_, '_> {
             {
                 result.strict_read_obligations += 1;
             }
+            let member_async = self.async_sources.contains(symbol);
+            let member_options = self.effective_async_options(symbol);
             if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
-                && self.async_sources.contains(symbol)
+                && (member_async || member_options.ssr_client_bare)
             {
                 let async_execution = async_execution_role(file, member.span, execution);
                 result.async_reads.push(Arc::new(AsyncRead {
@@ -702,6 +729,10 @@ impl LocalAccessContext<'_, '_> {
                         member.span,
                         self.symbol_names,
                     ),
+                    async_provenance: member_async,
+                    declared_loading: member_options.declared_loading,
+                    options_opaque: member_options.opaque,
+                    ssr_client_hole: member_options.ssr_client_bare,
                 }));
             }
         }
@@ -796,6 +827,10 @@ impl LocalAccessContext<'_, '_> {
                     element.name.span,
                     self.symbol_names,
                 ),
+                async_provenance: true,
+                declared_loading: false,
+                options_opaque: false,
+                ssr_client_hole: false,
             }));
         }
         result

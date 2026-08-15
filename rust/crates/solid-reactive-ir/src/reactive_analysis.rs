@@ -73,6 +73,8 @@ pub(crate) fn collect_project<'facts>(
         actions: &source.actions,
         source_primitives: &source.source_primitives,
         async_sources: &source.async_sources,
+        source_async_options: &source.source_async_options,
+        server_renders: crate::source_discovery::project_server_renders(ctx.facts),
         source_declarations,
         contract_reads: &source.contract_reads,
         contract_returns: &source.contract_returns,

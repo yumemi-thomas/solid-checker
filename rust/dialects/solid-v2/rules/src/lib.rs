@@ -271,13 +271,28 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
 }
 
 fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
+    // Declared first paint (probed against rc.0): a loadingValue /
+    // seedLoadingValue node is born committed, so its *first flight* cannot
+    // throw anywhere — but once the first real answer lands, a pending
+    // re-ask (input change or refresh) throws for untracked and leaf reads
+    // exactly like an undeclared node. SC5001/SC5002 therefore stay
+    // reported on declared sources with this conditional wording, while
+    // SC5003 never reaches this function for them (suppressed in selection).
+    let declared = read.declared_loading;
     let (rule, message, hint) = if let Some(owner) = &read.leaf_owner {
         (
             Rule::PendingAsyncForbiddenScope,
-            format!(
-                "pending async accessor {:?} is read inside {}, which runs after the graph settles and cannot suspend; a pending read here throws at runtime",
-                read.accessor, owner
-            ),
+            if declared {
+                format!(
+                    "async accessor {:?} declares a loadingValue, so its first flight serves the declared value here, but after the first real answer lands any pending re-ask read inside {} throws at runtime ({} runs after the graph settles and cannot suspend)",
+                    read.accessor, owner, owner
+                )
+            } else {
+                format!(
+                    "pending async accessor {:?} is read inside {}, which runs after the graph settles and cannot suspend; a pending read here throws at runtime",
+                    read.accessor, owner
+                )
+            },
             format!(
                 "Settle the value before it reaches {owner}: read the accessor in the compute function of createEffect(compute, apply) and pass the resolved value through, or guard the scope so it only runs once the data is ready."
             ),
@@ -286,11 +301,31 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
         match read.execution {
             ExecutionRole::ModuleInitialization | ExecutionRole::UntrackedRendering => (
                 Rule::PendingAsyncUntrackedRead,
+                if declared {
+                    format!(
+                        "async accessor {:?} declares a loadingValue, so this untracked read serves the declared value during the first flight, but after the first real answer lands a pending re-ask (input change or refresh) makes it throw PENDING_ASYNC_UNTRACKED_READ in dev",
+                        read.accessor
+                    )
+                } else if read.options_opaque {
+                    format!(
+                        "async accessor {:?} may be read here while pending; its options argument cannot be read statically, so unless it declares a loadingValue this untracked read cannot suspend or retry and throws PENDING_ASYNC_UNTRACKED_READ in dev",
+                        read.accessor
+                    )
+                } else {
+                    format!(
+                        "pending async accessor {:?} is read outside a tracking scope; an untracked read cannot suspend or retry, and Solid throws PENDING_ASYNC_UNTRACKED_READ in dev",
+                        read.accessor
+                    )
+                },
+                "Read async values where the graph can wait for them: JSX, a createMemo, or an effect's compute function. The read then suspends to the nearest <Loading> boundary and re-runs when the value settles.".to_owned(),
+            ),
+            ExecutionRole::TrackedJsx if read.ssr_client_hole && !read.under_loading => (
+                Rule::SsrClientSourceOutsideLoadingBoundary,
                 format!(
-                    "pending async accessor {:?} is read outside a tracking scope; an untracked read cannot suspend or retry, and Solid throws PENDING_ASYNC_UNTRACKED_READ in dev",
+                    "source {:?} declares ssrSource: \"client\" with no loadingValue/seedLoadingValue, and this project server-renders; the server never runs the compute, so rendering this read outside a Loading boundary throws `ssrSource: \"client\" read during SSR outside a <Loading> boundary` during SSR — even when the compute is fully synchronous",
                     read.accessor
                 ),
-                "Read async values where the graph can wait for them: JSX, a createMemo, or an effect's compute function. The read then suspends to the nearest <Loading> boundary and re-runs when the value settles.".to_owned(),
+                "Wrap the reading subtree in <Loading fallback={...}> so the server can flush the fallback and hand the position to the client, or declare a loadingValue (loadingValue: undefined is valid; store-family sources use seedLoadingValue: true) so the server renders a provisional value instead.".to_owned(),
             ),
             ExecutionRole::TrackedJsx if !read.under_loading => (
                 Rule::AsyncOutsideLoadingBoundary,
@@ -311,9 +346,19 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             }
         }
     };
+    let mut provenance = if rule == Rule::SsrClientSourceOutsideLoadingBoundary {
+        "the source declares ssrSource: \"client\" and no loadingValue/seedLoadingValue, and a server rendering entry point is imported in this project".to_owned()
+    } else {
+        "the accessor is returned by an async computation".to_owned()
+    };
+    if read.options_opaque && rule == Rule::PendingAsyncUntrackedRead {
+        provenance.push_str(
+            "; the source's options argument cannot be read statically, so a loadingValue declaration (which would make the first flight safe) can be neither proven nor ruled out — this finding is a proof obligation, not a proven throw",
+        );
+    }
     FindingWording::new(rule.metadata(), message.clone(), hint).with_evidence(vec![
         EvidenceStep {
-            message: "the accessor is returned by an async computation".into(),
+            message: provenance,
             location: Some(read.declaration.clone()),
         },
         EvidenceStep {
@@ -374,6 +419,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::PendingAsyncUntrackedRead
         | Rule::PendingAsyncForbiddenScope
         | Rule::AsyncOutsideLoadingBoundary
+        | Rule::SsrClientSourceOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
         | Rule::PackageContractExportMissing

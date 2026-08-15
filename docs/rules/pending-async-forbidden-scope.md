@@ -18,6 +18,14 @@ scope runs — a refetch in flight, a slow first load — the read cannot suspen
 throws at runtime. The failure is timing-dependent, which makes it easy to miss in
 development and hit in production.
 
+**Sources with a declared first paint still get this finding, with conditional
+wording.** A `loadingValue` (or store-family `seedLoadingValue: true`) node is
+born committed: a leaf-owner read during the *first flight* serves the declared
+value without warning or throwing. The window ends at the first real answer —
+probed against `solid-js@2.0.0-rc.0`, a leaf-owner read during a later re-ask
+warns `PENDING_ASYNC_FORBIDDEN_SCOPE` and throws exactly like an undeclared
+node. The declaration narrows the timing window; it does not remove it.
+
 ## Examples
 
 Examples of **incorrect** code for this rule:

@@ -30,6 +30,7 @@
     { "code": "SC5001", "name": "pending-async-untracked-read", "severity": "error", "uncertifiable": false },
     { "code": "SC5002", "name": "pending-async-forbidden-scope", "severity": "warning", "uncertifiable": false },
     { "code": "SC5003", "name": "async-outside-loading-boundary", "severity": "warning", "uncertifiable": false },
+    { "code": "SC5005", "name": "ssr-client-source-outside-loading-boundary", "severity": "error", "uncertifiable": false },
     { "code": "SC6001", "name": "primitive-in-directive-application", "severity": "error", "uncertifiable": false },
     { "code": "SC7001", "name": "missing-effect-function", "severity": "error", "uncertifiable": false },
     { "code": "SC7002", "name": "sync-node-received-async", "severity": "error", "uncertifiable": false },
