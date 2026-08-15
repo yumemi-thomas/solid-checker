@@ -198,6 +198,7 @@ export const result = factory();
 	demand := func(end int) typefacts.EntityDemand {
 		return typefacts.EntityDemand{
 			Location:           typefacts.Location{Path: path, StartByte: start, EndByte: end},
+			Callability:        true,
 			RuntimeValueDomain: true,
 		}
 	}
@@ -213,6 +214,12 @@ export const result = factory();
 	}
 	callee := results[0].Entities[0].RuntimeValueDomain
 	call := results[0].Entities[1].RuntimeValueDomain
+	if got := results[0].Entities[0].Callability; got != typefacts.CallabilityCallable {
+		t.Fatalf("callee callability = %q, want callable", got)
+	}
+	if got := results[0].Entities[1].Callability; got != typefacts.CallabilityUnknown {
+		t.Fatalf("call expression callability = %q, want unknown", got)
+	}
 	if callee == nil || !callee.MayBeCallable || callee.Unknown {
 		t.Fatalf("callee domain = %+v, want known callable", callee)
 	}

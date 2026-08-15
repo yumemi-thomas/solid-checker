@@ -242,7 +242,9 @@ fn rust_client_consumes_compiler_semantic_facts_across_retained_updates() {
         })
         .unwrap();
     let entity = first.entities().next().expect("one demanded entity");
-    assert_eq!(entity.callability, Some(Callability::Callable));
+    // Callability classifies the complete query expression. `localCount()`
+    // returns a number even though resolved-call selection finds its callee.
+    assert_eq!(entity.callability, Some(Callability::NonCallable));
     assert_eq!(entity.reference_space, Some(ReferenceSpace::Value));
     assert!(entity.runtime_identity.starts_with("runtime:h:"));
     let resolved = entity.resolved_call.as_ref().unwrap();
