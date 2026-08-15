@@ -42,3 +42,33 @@ export function App() {
 
   return <div>{count()}</div>;
 }
+
+// Out-of-band onSettled: called from an event handler, the callback is
+// enqueued as a plain function, not a leaf owner (rc.0 dev.js:4855-4893) —
+// onCleanup only warns no-owner-cleanup, primitives attach nowhere without
+// throwing, and flush() is a silent no-op, so no SC3xxx fires here.
+export function OutOfBand() {
+  const [count] = createSignal(0);
+  return (
+    <button
+      onClick={() =>
+        onSettled(() => {
+          onCleanup(() => {});
+          createMemo(() => count());
+          flush();
+        })
+      }
+    >
+      {count()}
+    </button>
+  );
+}
+
+// An exported helper's callers are unknowable: owner-backed the onCleanup
+// throws, out-of-band it only warns — so the leaf-owner finding is an
+// uncertifiable proof obligation, not a proven violation.
+export function settleWithCleanup() {
+  onSettled(() => {
+    onCleanup(() => {});
+  });
+}

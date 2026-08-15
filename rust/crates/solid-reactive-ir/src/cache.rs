@@ -2,7 +2,10 @@
 //! per-file contributions, fingerprints, and reuse checks.
 
 use crate::indexes::CachedAstFileIndex;
-use crate::owners::{CachedOwnerFile, binding_returns_reactive_source, returned_arrow_function};
+use crate::owners::{
+    CachedOwnerFile, SettledGateDecisions, binding_returns_reactive_source,
+    returned_arrow_function,
+};
 use crate::{
     ActionInvocation, AsyncRead, CacheRetention, ContractCallback, ContractExport,
     ContractGenerationObligation, FunctionNode, OwnerRequirement, Program, ReactiveRead,
@@ -525,6 +528,11 @@ pub(crate) struct CachedLateStages {
     pub(crate) local_accesses: CachedLocalAccesses,
     pub(crate) interprocedural: Option<InterproceduralResult>,
     pub(crate) missing_owners: Option<Vec<OwnerRequirement>>,
+    /// The call-site gate decisions the owner fixed point resolved for
+    /// call-site-gated leaf owners, cached beside `missing_owners` under the
+    /// same reuse condition: the leaf-operation table is rebuilt every run
+    /// and must be re-gated even when the graph itself is reused.
+    pub(crate) settled_gates: Option<SettledGateDecisions>,
     pub(crate) owner_files: HashMap<SourcePath, CachedOwnerFile>,
     /// The upstream-compat surface's location-keyed reference map. Retained
     /// under the same condition as `interprocedural`, because both are
@@ -734,6 +742,7 @@ impl ReusePlan {
                 retained.local_accesses.aggregate = None;
                 retained.interprocedural = None;
                 retained.missing_owners = None;
+                retained.settled_gates = None;
                 retained.compat_reference_locations = None;
             } else {
                 *slot = Some(CachedLateStages {
@@ -742,6 +751,7 @@ impl ReusePlan {
                     local_accesses: CachedLocalAccesses::default(),
                     interprocedural: None,
                     missing_owners: None,
+                    settled_gates: None,
                     owner_files: HashMap::new(),
                     compat_reference_locations: None,
                 });

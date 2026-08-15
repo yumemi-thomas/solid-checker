@@ -36,19 +36,23 @@ pub(crate) fn collect_project(
 ) {
     let cached = reusable
         .then(|| {
-            cache
-                .as_ref()
-                .and_then(|cache| cache.missing_owners.clone())
+            cache.as_ref().and_then(|cache| {
+                cache
+                    .missing_owners
+                    .clone()
+                    .zip(cache.settled_gates.clone())
+            })
         })
         .flatten();
-    if let Some(cached) = cached {
+    if let Some((cached, gates)) = cached {
         draft.missing_owners = cached;
+        apply_settled_gates(&mut draft.leaf_operations, &gates);
         timings.owner_fixed_point_reused = true;
         timings.owner_reused_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
         return;
     }
     if let Some(cache) = cache {
-        let (requirements, owner_timings) = find_missing_owners_incremental(
+        let (requirements, gates, owner_timings) = find_missing_owners_incremental(
             ctx.facts,
             ctx.semantic_lookup,
             project_indexes,
@@ -57,15 +61,19 @@ pub(crate) fn collect_project(
             &mut cache.owner_files,
         );
         draft.missing_owners.extend(requirements);
+        apply_settled_gates(&mut draft.leaf_operations, &gates);
         timings.absorb_owner(&owner_timings);
         cache.missing_owners = Some(draft.missing_owners.clone());
+        cache.settled_gates = Some(gates);
     } else {
-        draft.missing_owners.extend(find_missing_owners(
+        let (requirements, gates) = find_missing_owners(
             ctx.facts,
             ctx.semantic_lookup,
             project_indexes,
             ctx.symbol_names,
-        ));
+        );
+        draft.missing_owners.extend(requirements);
+        apply_settled_gates(&mut draft.leaf_operations, &gates);
         timings.owner_recomputed_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
     }
 }
@@ -449,6 +457,81 @@ pub(crate) struct OwnerRequirementCandidate {
     pub(crate) report_mask: u8,
     pub(crate) allow_uncertain: bool,
     pub(crate) settled_target: Option<OwnerTarget>,
+    /// For call-site-gated leaf owners (2.0 `onSettled`): the owner call's
+    /// span, published as a [`LeafGateDecision`] once the graph settles so
+    /// the leaf-operation table can be resolved against real ownership.
+    pub(crate) settled_gate: Option<Span>,
+}
+
+/// Whether a call-site-gated leaf owner (`onSettled`) actually materializes
+/// as a leaf owner, resolved against the propagated owner graph.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum LeafGateDecision {
+    /// The call runs under a live children-capable owner: the callback is a
+    /// leaf owner and the leaf-scope rules apply.
+    Owned,
+    /// The call runs out-of-band (unowned, event handler, inside a leaf):
+    /// the runtime enqueues a plain callback and none of the leaf-scope
+    /// throw sites exist — drop the operations.
+    OutOfBand,
+    /// The call site's ownership cannot be proven (exported helper,
+    /// conditional owner): keep the operations, projected as uncertifiable.
+    Uncertain,
+}
+
+/// Gate decisions keyed by the owner call's location bytes.
+pub(crate) type SettledGateDecisions = HashMap<(String, u64, u64), LeafGateDecision>;
+
+fn leaf_gate_decision(
+    owner_index: Option<usize>,
+    nodes: &[OwnerNode],
+    contexts: &[u8],
+) -> LeafGateDecision {
+    let Some(index) = owner_index else {
+        // Module evaluation: no owner can be live, so the call is
+        // out-of-band by construction.
+        return LeafGateDecision::OutOfBand;
+    };
+    let context = contexts[index];
+    let conditional = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+        == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+    // The same escalation the owner requirements use: an exported
+    // non-component helper has callers the analysis cannot see, so assuming
+    // either owned or out-of-band would be a guess.
+    let exported_unproven = nodes[index].exported
+        && context & OWNER_CONTEXT_UNOWNED != 0
+        && !nodes[index].component;
+    if conditional || exported_unproven {
+        LeafGateDecision::Uncertain
+    } else if context & OWNER_CONTEXT_OWNED != 0 {
+        LeafGateDecision::Owned
+    } else {
+        LeafGateDecision::OutOfBand
+    }
+}
+
+/// Resolves the call-site gates recorded by the leaf-and-cleanup stage: an
+/// out-of-band `onSettled` sheds its leaf operations, an unprovable one keeps
+/// them as uncertifiable, and everything else stays a proven violation. A
+/// gate with no decision sits inside an owner-providing region the graph
+/// never doubts (directly under `createRoot`), which is owned.
+pub(crate) fn apply_settled_gates(
+    operations: &mut Vec<crate::LeafOwnerOperation>,
+    decisions: &SettledGateDecisions,
+) {
+    operations.retain_mut(|operation| {
+        let Some(gate) = operation.call_site_gate.as_ref() else {
+            return true;
+        };
+        match decisions.get(&(gate.path.to_string(), gate.start_byte, gate.end_byte)) {
+            None | Some(LeafGateDecision::Owned) => true,
+            Some(LeafGateDecision::OutOfBand) => false,
+            Some(LeafGateDecision::Uncertain) => {
+                operation.uncertain = true;
+                true
+            }
+        }
+    });
 }
 
 #[derive(Clone, Copy)]
@@ -484,7 +567,7 @@ pub(crate) fn find_missing_owners(
     lookup: &SemanticLookup<'_>,
     indexes: &ProjectIndexes<'_>,
     symbol_names: &HashMap<SymbolId, SymbolId>,
-) -> Vec<OwnerRequirement> {
+) -> (Vec<OwnerRequirement>, SettledGateDecisions) {
     let entities = lookup.entities();
     let owner_file_indexes = facts
         .files
@@ -579,6 +662,7 @@ pub(crate) fn find_missing_owners(
     propagate_owner_contexts(&mut contexts, &outgoing);
 
     let mut requirements = Vec::new();
+    let mut settled_gates = SettledGateDecisions::new();
     let mut seen = HashSet::new();
     for (file_index, file) in facts.files.iter().enumerate() {
         for (call_index, call) in file.ast.calls.iter().enumerate() {
@@ -595,6 +679,28 @@ pub(crate) fn find_missing_owners(
                 &owner_file_indexes[file_index].providing_regions,
                 call.span,
             );
+            if !root_owned
+                && primitive
+                    .is_some_and(|primitive| lookup.dialect.leaf_owner_requires_owned_call_site(primitive))
+            {
+                settled_gates.insert(
+                    (
+                        file.path.to_string(),
+                        u64::from(call.span.start),
+                        u64::from(call.span.end),
+                    ),
+                    leaf_gate_decision(
+                        containing_function_indexed(
+                            &nodes,
+                            &nodes_by_path,
+                            file.path.as_str(),
+                            call.span,
+                        ),
+                        &nodes,
+                        &contexts,
+                    ),
+                );
+            }
             let operation = match primitive {
                 // `createRenderEffect` is deliberately included alongside
                 // `createEffect`: both register a computation on the owner,
@@ -719,7 +825,7 @@ pub(crate) fn find_missing_owners(
             );
         }
     }
-    requirements
+    (requirements, settled_gates)
 }
 
 pub(crate) fn discover_owner_file(
@@ -831,6 +937,9 @@ pub(crate) fn discover_owner_file(
             _ => None,
         };
         if let Some((operation, report_mask, settled_target, operation_span)) = operation {
+            let settled_gate = known_primitive(&call_primitives[call_index])
+                .filter(|primitive| dialect.leaf_owner_requires_owned_call_site(*primitive))
+                .map(|_| call.span);
             requirements.push(OwnerRequirementCandidate {
                 operation,
                 operation_span,
@@ -838,6 +947,7 @@ pub(crate) fn discover_owner_file(
                 report_mask,
                 allow_uncertain: true,
                 settled_target,
+                settled_gate,
             });
         }
     }
@@ -869,6 +979,7 @@ pub(crate) fn discover_owner_file(
                 report_mask: OWNER_CONTEXT_UNOWNED,
                 allow_uncertain: false,
                 settled_target: None,
+                settled_gate: None,
             });
         }
     }
@@ -904,7 +1015,11 @@ pub(crate) fn find_missing_owners_incremental(
     symbol_names: &HashMap<SymbolId, SymbolId>,
     retained_source_paths: &HashSet<String>,
     cache: &mut HashMap<SourcePath, CachedOwnerFile>,
-) -> (Vec<OwnerRequirement>, OwnerIncrementalTimings) {
+) -> (
+    Vec<OwnerRequirement>,
+    SettledGateDecisions,
+    OwnerIncrementalTimings,
+) {
     let entities = lookup.entities();
     let mut timings = OwnerIncrementalTimings::default();
     let total_started = Instant::now();
@@ -990,12 +1105,29 @@ pub(crate) fn find_missing_owners_incremental(
 
     let requirements_started = Instant::now();
     let mut requirements = Vec::new();
+    let mut settled_gates = SettledGateDecisions::new();
     let mut seen = HashSet::new();
     for file in &facts.files {
         let Some(fragment) = cache.get(file.path.as_str()) else {
             continue;
         };
         for candidate in &fragment.requirements {
+            if let Some(gate) = candidate.settled_gate {
+                let owner_index = candidate.owner.and_then(|span| {
+                    nodes_by_span
+                        .get(file.path.as_str())
+                        .and_then(|nodes| nodes.get(&span))
+                        .copied()
+                });
+                settled_gates.insert(
+                    (
+                        file.path.to_string(),
+                        u64::from(gate.start),
+                        u64::from(gate.end),
+                    ),
+                    leaf_gate_decision(owner_index, &nodes, &contexts),
+                );
+            }
             if candidate.operation == "settled-cleanup" {
                 let returns_cleanup = candidate
                     .settled_target
@@ -1051,6 +1183,7 @@ pub(crate) fn find_missing_owners_incremental(
     let requirement_emission = requirements_started.elapsed();
     (
         requirements,
+        settled_gates,
         OwnerIncrementalTimings {
             fragment_build,
             graph_assembly,

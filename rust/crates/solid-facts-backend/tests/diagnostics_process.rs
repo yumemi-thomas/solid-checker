@@ -8,12 +8,16 @@ fn write_scope_diagnostics_have_semantic_locations() {
     let Some(findings) = diagnostic_fixture("write-scope") else {
         return;
     };
+    // 14 writes / 2 actions: the untrack-wrapped writes in the component body
+    // and in a memo count (the rc.0 guard keys on the owner, not tracking),
+    // while writes and the action inside createTrackedEffect no longer do
+    // (children-forbidden leaf scopes are legal write regions).
     assert_eq!(
         (
             findings_for_rule(&findings, "reactive-write-in-owned-scope").len(),
             findings_for_rule(&findings, "action-called-in-owned-scope").len(),
         ),
-        (13, 3)
+        (14, 2)
     );
     assert!(
         findings
@@ -41,7 +45,10 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         (
             "leaf-owner",
             &[
-                ("cleanup-in-forbidden-scope", 3),
+                // Three owner-backed violations plus the exported-helper
+                // proof obligation; the out-of-band (event handler) onSettled
+                // contributes nothing to any SC3xxx rule.
+                ("cleanup-in-forbidden-scope", 4),
                 ("primitive-in-leaf-owner", 3),
                 ("flush-in-forbidden-scope", 2),
                 ("invalid-cleanup-return", 6),
@@ -93,6 +100,53 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
             assert_rule_findings(&findings, rule, *expected);
         }
     }
+}
+
+#[test]
+fn settled_leaf_rules_follow_call_site_ownership() {
+    let Some(findings) = diagnostic_fixture("leaf-owner") else {
+        return;
+    };
+    let cleanup = findings_for_rule(&findings, "cleanup-in-forbidden-scope");
+    // The out-of-band onSettled (event handler) must not carry any leaf-scope
+    // finding: the runtime enqueues a plain callback there.
+    assert!(
+        findings
+            .iter()
+            .filter(|finding| {
+                matches!(
+                    finding["rule"].as_str(),
+                    Some(
+                        "cleanup-in-forbidden-scope"
+                            | "primitive-in-leaf-owner"
+                            | "flush-in-forbidden-scope"
+                    )
+                )
+            })
+            .all(|finding| {
+                finding["message"]
+                    .as_str()
+                    .is_some_and(|message| !message.contains("OutOfBand"))
+            }),
+        "{findings:#?}"
+    );
+    // The exported helper's call sites are unknowable, so its onSettled leaf
+    // finding is a proof obligation, not a proven violation; the owner-backed
+    // component-body ones stay violations.
+    let kinds = cleanup
+        .iter()
+        .map(|finding| finding["kind"].as_str().unwrap_or_default())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        kinds.iter().filter(|kind| **kind == "violation").count(),
+        3,
+        "{cleanup:#?}"
+    );
+    assert_eq!(
+        kinds.iter().filter(|kind| **kind == "uncertifiable").count(),
+        1,
+        "{cleanup:#?}"
+    );
 }
 
 #[test]

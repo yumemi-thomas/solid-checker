@@ -42,23 +42,13 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "no-direct-mutation",
+      "code": "SC2003",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 2301,
-      "end": 2308,
-      "fixes": 0
-    },
-    {
-      "rule": "expected-function-got-expression",
-      "code": "SC1007",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 2301,
-      "end": 2308,
+      "start": 2767,
+      "end": 2777,
       "fixes": 0
     },
     {
@@ -67,8 +57,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 3070,
-      "end": 3082,
+      "start": 3079,
+      "end": 3086,
       "fixes": 0
     },
     {
@@ -77,8 +67,28 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 3070,
-      "end": 3082,
+      "start": 3079,
+      "end": 3086,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 3848,
+      "end": 3860,
+      "fixes": 0
+    },
+    {
+      "rule": "expected-function-got-expression",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 3848,
+      "end": 3860,
       "fixes": 0
     },
     {
@@ -87,8 +97,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 3383,
-      "end": 3390,
+      "start": 4161,
+      "end": 4168,
       "fixes": 0
     },
     {
@@ -97,8 +107,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 3825,
-      "end": 3833,
+      "start": 4603,
+      "end": 4611,
       "fixes": 0
     }
   ]

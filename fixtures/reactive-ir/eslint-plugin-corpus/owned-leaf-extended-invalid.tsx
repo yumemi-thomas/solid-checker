@@ -7,6 +7,7 @@ import {
   flush,
   onCleanup,
   refresh,
+  untrack,
 } from "solid-js";
 
 const value = createMemo(() => 1);
@@ -25,7 +26,6 @@ createTrackedEffect(() => {
 
 const [, setSignal] = createSignal(0);
 createMemo(() => setSignal(1));
-createTrackedEffect(() => {
-  value();
-  setSignal(2);
-});
+// The rc.0 guard keys on the owner, not on tracking: untrack() inside a memo
+// keeps the memo's owner, so the write still throws at runtime.
+createMemo(() => untrack(() => setSignal(2)));

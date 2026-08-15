@@ -907,8 +907,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 197,
-      "end": 210,
+      "start": 208,
+      "end": 221,
       "fixes": 0
     },
     {
@@ -917,8 +917,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 279,
-      "end": 295,
+      "start": 290,
+      "end": 306,
       "fixes": 0
     },
     {
@@ -927,8 +927,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 354,
-      "end": 360,
+      "start": 365,
+      "end": 371,
       "fixes": 0
     },
     {
@@ -937,8 +937,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 364,
-      "end": 383,
+      "start": 375,
+      "end": 394,
       "fixes": 0
     },
     {
@@ -947,8 +947,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 394,
-      "end": 403,
+      "start": 405,
+      "end": 414,
       "fixes": 0
     },
     {
@@ -957,8 +957,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 394,
-      "end": 403,
+      "start": 405,
+      "end": 414,
       "fixes": 0
     },
     {
@@ -967,8 +967,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 417,
-      "end": 422,
+      "start": 428,
+      "end": 433,
       "fixes": 0
     },
     {
@@ -977,18 +977,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 487,
-      "end": 499,
-      "fixes": 0
-    },
-    {
-      "rule": "no-owner-effect",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 502,
-      "end": 521,
+      "start": 498,
+      "end": 510,
       "fixes": 0
     },
     {
@@ -997,8 +987,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
-      "start": 543,
-      "end": 555,
+      "start": 687,
+      "end": 699,
       "fixes": 0
     },
     {
@@ -1007,8 +997,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-valid.tsx",
-      "start": 326,
-      "end": 390,
+      "start": 370,
+      "end": 434,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-valid.tsx",
+      "start": 748,
+      "end": 767,
       "fixes": 0
     },
     {

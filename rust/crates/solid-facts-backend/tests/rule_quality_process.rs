@@ -145,7 +145,13 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ("leaf-valid.tsx", [("no-owner-effect", 2)].as_slice()),
         (
             "owned-leaf-extended-valid.tsx",
-            [("no-owner-settled-cleanup", 1)].as_slice(),
+            [
+                ("no-owner-settled-cleanup", 1),
+                // The module-scope createTrackedEffect that pins leaf-scope
+                // write legality is itself an undisposed effect.
+                ("no-owner-effect", 1),
+            ]
+            .as_slice(),
         ),
         (
             "owned-scope-valid.tsx",

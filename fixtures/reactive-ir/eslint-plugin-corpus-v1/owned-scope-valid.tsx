@@ -7,7 +7,10 @@ createRoot(() => {
   createEffect(() => setCount(count() + 1));
 });
 
-// An explicit untrack around the write states the intent.
+// Upstream's reactivity rule exempts untrack-wrapped writes. This project
+// resolves to the default 2.0 dialect, whose rc.0 write guard keys on the
+// owner rather than tracking, so the write still throws and SC2001 fires —
+// a deliberate divergence from upstream, pinned here.
 createMemo(() => untrack(() => setCount(2)));
 
 // A local function that merely looks like createSignal is not Solid's.

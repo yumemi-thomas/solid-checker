@@ -392,6 +392,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/owned-scope-valid.tsx",
+      "start": 588,
+      "end": 599,
+      "fixes": 0
+    },
+    {
       "rule": "package-contract-export-missing",
       "code": "SC9001",
       "kind": "uncertifiable",

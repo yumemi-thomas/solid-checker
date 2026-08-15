@@ -85,6 +85,15 @@ pub(super) fn leaf_owner_operations_for_file(
         else {
             continue;
         };
+        // 2.0's `onSettled` is a leaf owner only when the call runs under a
+        // live children-capable owner; out-of-band it enqueues a plain
+        // callback where none of these operations throw. This pass is
+        // lexical, so record the call for the owner fixed point to resolve
+        // against the propagated owner graph.
+        let call_site_gate = owner
+            .primitive()
+            .filter(|primitive| dialect.leaf_owner_requires_owned_call_site(*primitive))
+            .map(|_| location(file.path.shared(), owner_call.span));
         for call in &file.ast.calls {
             if call.span == owner_call.span || !region.contains(call.span) {
                 continue;
@@ -140,6 +149,8 @@ pub(super) fn leaf_owner_operations_for_file(
                     owner: owner.to_string(),
                     location: location(file.path.shared(), call.callee),
                     fix,
+                    call_site_gate: call_site_gate.clone(),
+                    uncertain: false,
                 });
             }
         }

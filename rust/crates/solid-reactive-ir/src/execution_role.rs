@@ -15,9 +15,9 @@ use super::{
     known_primitive, location, primitive_name,
 };
 use crate::owners::{
-    callback_execution_at_call, containing_ast_function, enclosing_function_label,
-    function_binding_name, returned_callback_execution_at_call, returned_callback_invocation_sites,
-    returned_primitive_invocation,
+    callback_execution_at_call, callback_owner_at_call, containing_ast_function,
+    enclosing_function_label, function_binding_name, returned_callback_execution_at_call,
+    returned_callback_invocation_sites, returned_primitive_invocation,
 };
 
 /// The effect primitives: the ones 2.0 spells `(compute, apply)`.
@@ -219,6 +219,54 @@ pub(super) fn semantic_write_execution_role(
     )
 }
 
+/// How the innermost containing callback changes a write's legality region,
+/// when it does. Never consulted for reads: reads keep their own classifier.
+enum WriteRegionAdjustment {
+    /// The write sits in a children-forbidden leaf callback
+    /// (`createTrackedEffect`, `onSettled`), which the runtime's write guard
+    /// exempts — the write is legal regardless of what surrounds the leaf.
+    LeafScope,
+    /// The write sits in an owner-transparent inline callback (`untrack`),
+    /// which clears tracking but keeps the caller's owner context; the write
+    /// is exactly as legal as at the wrapped call itself, so classify there.
+    CallSite(Span),
+}
+
+/// The write-legality adjustment for the innermost callback directly
+/// containing `span`, per the dialect's owner-context model.
+///
+/// Direct containment (the span's own function is the callback function)
+/// guarantees at most one candidate: a nested callback's contents are that
+/// callback's business on the next recursion step.
+fn write_region_adjustment(
+    file: &solid_facts::FileFacts,
+    span: Span,
+    lookup: &SemanticLookup<'_>,
+) -> Option<WriteRegionAdjustment> {
+    file.ast
+        .arguments_containing(span)
+        .find_map(|(call, index)| {
+            if !direct_callback_contains(file, call.arguments[index].span, span) {
+                return None;
+            }
+            let primitive = lookup.primitive_at_call(file, call.span)?;
+            if lookup.dialect.leaf_scopes_allow_writes()
+                && callback_owner_at_call(file, call, primitive, index, lookup)
+                    == Some(solid_dialect::CallbackOwner::Leaf)
+            {
+                return Some(WriteRegionAdjustment::LeafScope);
+            }
+            if lookup
+                .dialect
+                .callback_preserves_owner_write_context(primitive)
+                && callback_execution_at_call(file, call, primitive, index, lookup).is_some()
+            {
+                return Some(WriteRegionAdjustment::CallSite(call.span));
+            }
+            None
+        })
+}
+
 fn semantic_write_execution_role_within(
     file: &solid_facts::FileFacts,
     span: Span,
@@ -228,6 +276,19 @@ fn semantic_write_execution_role_within(
     lookup: &SemanticLookup<'_>,
     visiting: &mut HashSet<(String, Span)>,
 ) -> ExecutionRole {
+    // Write legality follows the runtime's *owner* context, which is not
+    // always the read-execution context: leaf scopes are write-legal though
+    // their reads track, and `untrack` writes answer to the enclosing owner
+    // though its reads do not subscribe. Resolve those two adjustments first
+    // (innermost outward) and only then classify normally.
+    let mut span = span;
+    loop {
+        match write_region_adjustment(file, span, lookup) {
+            Some(WriteRegionAdjustment::LeafScope) => return ExecutionRole::DeferredCallback,
+            Some(WriteRegionAdjustment::CallSite(outer)) => span = outer,
+            None => break,
+        }
+    }
     let direct = semantic_execution_role(file, span, allowed, entities, symbol_names, lookup);
     if direct != ExecutionRole::Unknown {
         return direct;

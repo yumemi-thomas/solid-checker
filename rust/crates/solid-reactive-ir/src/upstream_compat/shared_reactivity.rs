@@ -737,6 +737,17 @@ fn no_direct_mutation(
         } else {
             DirectMutationTarget::AccessorBinding
         };
+        // 2.0 write-enables the original store proxy for the duration of its
+        // own setter's draft callback (probed on rc.0: the write commits;
+        // through another store's setter it is silently dropped). A write
+        // through the store rooted lexically inside that store's own setter
+        // callback is therefore correct code, not a dropped write.
+        if target == DirectMutationTarget::Store
+            && context.dialect.store_setter_callback_enables_proxy_writes()
+            && inside_own_setter_callback(file, context, assignment.target, symbol)
+        {
+            continue;
+        }
         defects.push(StaticDefect {
             kind: StaticDefectKind::DirectMutation {
                 name: name.to_owned(),
@@ -747,6 +758,52 @@ fn no_direct_mutation(
             fixes: vec![],
         });
     }
+}
+
+/// Whether `target` (an assignment through a store proxy rooted at
+/// `store_symbol`) sits lexically inside a callback passed to that store's
+/// *own* setter.
+///
+/// The pairing is proven, not guessed: the callee must resolve to the second
+/// slot of the exact array destructuring whose first slot is `store_symbol` —
+/// `const [store, setStore] = createStore(...)`. Another store's setter, a
+/// same-spelled local, or an eagerly evaluated argument (no function between
+/// the assignment and the argument) all fail the proof and keep the finding.
+fn inside_own_setter_callback(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    target: Span,
+    store_symbol: &crate::SymbolId,
+) -> bool {
+    file.ast.arguments_containing(target).any(|(call, index)| {
+        let argument = &call.arguments[index];
+        // The write must run when the setter invokes the callback, not while
+        // building the argument list.
+        if !file
+            .ast
+            .functions_within(argument.span)
+            .any(|function| function.body.contains(target))
+        {
+            return false;
+        }
+        let Some((binding_file, binding, callee_symbol)) = context
+            .lookup
+            .binding_at_reference(file.path.as_str(), call.callee)
+        else {
+            return false;
+        };
+        if binding.shape != solid_facts::ast::BindingShape::Array {
+            return false;
+        }
+        let slot_symbol = |slot: usize| {
+            binding
+                .array_slots
+                .get(slot)
+                .and_then(Option::as_ref)
+                .and_then(|name| context.entities.at(binding_file.path.as_str(), name.span))
+        };
+        slot_symbol(1) == Some(&callee_symbol) && slot_symbol(0) == Some(store_symbol)
+    })
 }
 
 /// Whether this identifier is the callee of a call — the correct use.

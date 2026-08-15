@@ -2,43 +2,67 @@
 
 `SC3001` · **error** · violation · 🛠️ safe fix available
 
-`onCleanup` is called inside a leaf owner (`onSettled` or `createTrackedEffect`),
-which manages cleanup through its return value instead.
+`onCleanup` is called inside a leaf owner (`createTrackedEffect`, or an
+owner-backed `onSettled`), which manages cleanup through its return value
+instead.
 
 ## What it does
 
-Flags `onCleanup` calls that are lexically contained in an `onSettled` or
-`createTrackedEffect` callback. When the `onCleanup` call is the trailing statement
-of the callback, solid-checker offers a safe fix that rewrites it to a `return`.
+Flags `onCleanup` calls that are lexically contained in a `createTrackedEffect`
+callback, or in an `onSettled` callback whose call is proven to execute under a
+live children-capable owner (a component body, memo, `createRoot`, …). When the
+`onCleanup` call is the trailing statement of the callback, solid-checker offers
+a safe fix that rewrites it to a `return`.
+
+`onSettled` is only a leaf owner when it is called *owner-backed*. Called
+out-of-band — from an event handler, with no owner at all, or inside another
+leaf scope — the rc.0 runtime enqueues the callback as a plain function instead:
+`onCleanup` inside it does not throw (it warns, which
+[no-owner-cleanup](no-owner-cleanup.md) reports), so this rule stays silent
+there. Where the call site's ownership cannot be proven (an exported helper,
+a conditionally supplied owner) the finding is reported as **uncertifiable**
+rather than a proven violation. `createTrackedEffect` is a leaf owner
+unconditionally.
 
 This is the static counterpart of Solid's dev-mode `CLEANUP_IN_FORBIDDEN_SCOPE`
 error.
 
 ## Why is this bad?
 
-`onSettled` and `createTrackedEffect` are leaf owners: they own no child scopes, so
-there is nothing for `onCleanup` to register on. Their cleanup contract is the
-return value — returning a function schedules it for the next run or disposal.
-Calling `onCleanup` inside them throws in dev.
+Leaf owners own no child scopes, so there is nothing for `onCleanup` to register
+on. Their cleanup contract is the return value — returning a function schedules
+it for the next run or disposal. Calling `onCleanup` inside them throws in dev.
 
 ## Examples
 
 Examples of **incorrect** code for this rule:
 
 ```tsx
-onSettled(() => {
-  const id = setInterval(tick, 1000);
-  onCleanup(() => clearInterval(id)); // Throws: no owner to register on.
-});
+function Widget() {
+  onSettled(() => {
+    // Owner-backed: the component body proves a live owner, so this
+    // onSettled is a leaf owner and the call throws in dev.
+    const id = setInterval(tick, 1000);
+    onCleanup(() => clearInterval(id));
+  });
+  return <div />;
+}
 ```
 
 Examples of **correct** code for this rule:
 
 ```tsx
-onSettled(() => {
-  const id = setInterval(tick, 1000);
-  return () => clearInterval(id); // The return value is the cleanup.
-});
+function Widget() {
+  onSettled(() => {
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id); // The return value is the cleanup.
+  });
+  return <div />;
+}
+
+// Out-of-band onSettled runs a plain queued callback, not a leaf owner —
+// this does not throw (the cleanup will never run; no-owner-cleanup warns).
+<button onClick={() => onSettled(() => onCleanup(dispose))} />;
 ```
 
 ## How to fix
@@ -52,3 +76,4 @@ and component bodies — just not inside leaf owners.
 - [invalid-cleanup-return](invalid-cleanup-return.md) — what the return value may be
 - [primitive-in-leaf-owner](primitive-in-leaf-owner.md) — the same constraint for primitives
 - [no-owner-cleanup](no-owner-cleanup.md) — `onCleanup` with no owner at all
+- [no-owner-settled-cleanup](no-owner-settled-cleanup.md) — the out-of-band `onSettled` defect (a returned cleanup that is dropped)

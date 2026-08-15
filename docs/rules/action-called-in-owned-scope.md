@@ -2,23 +2,30 @@
 
 `SC2002` · **error** · violation
 
-An `action` is invoked inside an owned scope — a component body or a computation's
-tracking phase.
+An `action` is invoked inside an owned scope — a component body or a
+children-capable computation.
 
 ## What it does
 
-Flags calls to functions created with `action()` when they execute inside a
-component body, a memo, or an effect's compute function. Actions may be invoked
-from event handlers, `onSettled`, effect apply callbacks, and other imperative
-scopes.
+Flags calls to functions created with `action()` when they execute under a live
+children-capable owner: a component body, a memo, or an effect's compute
+function. Actions may be invoked from event handlers, effect apply callbacks,
+and the children-forbidden leaf scopes `onSettled` and `createTrackedEffect` —
+the runtime's action guard uses the same owner test as the write guard and
+explicitly exempts leaf imperative scopes.
+
+`untrack` is **not** an escape hatch: it clears tracking but keeps the owner
+context, so an action invoked inside `untrack(...)` within a memo or component
+body still throws `ACTION_CALLED_IN_OWNED_SCOPE` at runtime.
 
 ## Why is this bad?
 
 Invoking an action starts a write transaction: optimistic writes apply, async work
 runs inside the transition, and `refresh` re-derives state when it settles. Started
-from inside the tracking phase, that transaction invalidates the very graph that is
+under a children-capable owner, that transaction invalidates the very graph that is
 being tracked — re-triggering the scope that called it, exactly the feedback loop
-Solid 2.0 forbids for plain setters.
+Solid 2.0 forbids for plain setters. Leaf scopes have no children to re-trigger,
+which is why the runtime leaves them legal.
 
 ## Examples
 
@@ -34,7 +41,7 @@ const save = action(function* (todo) {
 });
 
 function TodoList() {
-  save(defaultTodo); // Called during component setup — starts a transaction while tracking.
+  save(defaultTodo); // Called during component setup — starts a transaction under a live owner.
   return <For each={todos()}>{(todo) => <Row todo={todo} />}</For>;
 }
 ```
@@ -50,11 +57,17 @@ function TodoList() {
     </>
   );
 }
+
+// Leaf scopes are legal action sites — the guard exempts them:
+createTrackedEffect(() => {
+  if (shouldAutosave()) save(draft());
+});
 ```
 
 ## How to fix
 
-Call the action from an event handler, `onSettled`, or another imperative boundary.
+Call the action from an event handler, `onSettled`, `createTrackedEffect`, or
+another imperative boundary; wrapping the call in `untrack` does not help.
 If the goal is loading data reactively rather than mutating it, an action is the
 wrong tool: return the Promise from a computation (`createMemo(() => fetchX())`)
 and read it under a `<Loading>` boundary.

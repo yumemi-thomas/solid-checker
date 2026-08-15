@@ -223,6 +223,52 @@ impl Dialect for Solid2 {
         )
     }
 
+    /// Source: the rc.0 write guard, which exempts children-forbidden
+    /// scopes — `!(context._config & CONFIG_CHILDREN_FORBIDDEN)` at the
+    /// setter (`dev.js:3154-3172`), `refresh` (`:3316-3331`), and action
+    /// (`:4312-4400`) throw sites, with the runtime comment "leaf imperative
+    /// scopes (tracked effects, onSettled) stay legal". Empirically probed:
+    /// writes, `refresh`, and action calls inside `createTrackedEffect` and
+    /// owner-backed `onSettled` succeed on the published rc.0 bundle.
+    fn leaf_scopes_allow_writes(&self) -> bool {
+        true
+    }
+
+    /// Source: rc.0 `untrack` (`dev.js:2928-2942`) clears `tracking` but not
+    /// `context`, and the write guard keys on `context`. Probed: a setter,
+    /// `refresh`, or action call inside `untrack(...)` within a memo,
+    /// component body, or effect compute throws
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE` / `ACTION_CALLED_IN_OWNED_SCOPE`,
+    /// while the identical `untrack` call in an event handler succeeds. So
+    /// for write legality `untrack` is transparent to its call site. (The
+    /// official RFC text claims `untrack` blocks allow writes; the rc.0
+    /// runtime contradicts it — the runtime wins.)
+    fn callback_preserves_owner_write_context(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::Untrack
+    }
+
+    /// Source: rc.0 `onSettled` (`dev.js:4855-4893`). Called under a live
+    /// children-capable owner it becomes `createTrackedEffect(() =>
+    /// untrack(cb))` — a leaf owner where the leaf-scope rules apply. Called
+    /// out-of-band (event handler, no owner, inside another leaf) the
+    /// callback is enqueued as a plain function: `onCleanup` inside it warns
+    /// `NO_OWNER_CLEANUP` instead of throwing, primitives do not throw, and
+    /// `flush()` is a silent no-op (all probed). `createTrackedEffect` is a
+    /// leaf owner unconditionally and stays out of this list.
+    fn leaf_owner_requires_owned_call_site(&self, primitive: Primitive) -> bool {
+        primitive == Primitive::OnSettled
+    }
+
+    /// Source: rc.0 store setters put the store into the Writing set for the
+    /// duration of the draft callback, so `setStore(d => { store.value = 7 })`
+    /// commits through the original proxy (probed: the write lands after
+    /// `flush()`; the same write through *another* store's proxy inside that
+    /// callback is silently dropped, and outside any setter it is silently
+    /// dropped too).
+    fn store_setter_callback_enables_proxy_writes(&self) -> bool {
+        true
+    }
+
     /// Source: `solid-reactive-ir/src/lib.rs` `read_is_under_loading` and
     /// `jsx_element_is_loading`. 2.0's error boundary is `Errored`.
     fn boundary_kind(&self, tag: &str) -> Option<Boundary> {

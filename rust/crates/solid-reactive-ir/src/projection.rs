@@ -458,6 +458,13 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
         }
         FindingSeed::LeafOperation(operation) => {
             finding.fixes = operation.fix.clone().into_iter().collect();
+            // The same escalation an unproven owner forces on owner
+            // requirements: when the leaf owner's call site cannot be proven
+            // owned (exported helper, conditional owner), the finding is a
+            // proof obligation, not a proven runtime violation.
+            if operation.uncertain {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::StaticViolation(violation) => {
             finding.analysis_context = violation.analysis_context.clone();

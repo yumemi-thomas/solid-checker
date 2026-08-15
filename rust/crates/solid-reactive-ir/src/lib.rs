@@ -173,6 +173,18 @@ pub struct LeafOwnerOperation {
     pub owner: String,
     pub location: Location,
     pub fix: Option<Fix>,
+    /// When set, this leaf owner only materializes if the owner call at this
+    /// location executes under a live children-capable owner (2.0
+    /// `onSettled`). The owner fixed point resolves the gate against the
+    /// owner graph: an out-of-band call drops the operation, an unprovable
+    /// call site marks it [`LeafOwnerOperation::uncertain`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_site_gate: Option<Location>,
+    /// The gate could not be resolved (exported helper, conditional owner):
+    /// the finding is projected as uncertifiable rather than a proven
+    /// violation.
+    #[serde(default)]
+    pub uncertain: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

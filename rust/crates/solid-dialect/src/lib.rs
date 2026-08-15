@@ -428,6 +428,70 @@ pub trait Dialect: Sync {
     /// and stop reporting reads inside it.
     fn runs_callback_deferred(&self, primitive: Primitive) -> bool;
 
+    /// Whether this dialect's children-forbidden leaf callbacks
+    /// ([`CallbackOwner::Leaf`]) are legal write/action regions.
+    ///
+    /// The `@solidjs/signals@2.0.0-rc.0` write guard exempts them: the
+    /// setter, `refresh`, and action guards all test
+    /// `owner && !(owner._config & CONFIG_CHILDREN_FORBIDDEN)` (dev bundle
+    /// `dev.js:3154-3172`, `:3316-3331`, `:4312-4400`), with the runtime's
+    /// own comment "leaf imperative scopes (tracked effects, onSettled) stay
+    /// legal". Probed on the published rc.0 bundle: `setSignal`, `refresh`,
+    /// and an action invocation inside `createTrackedEffect` and an
+    /// owner-backed `onSettled` all succeed. 1.x has no such scopes, so the
+    /// default is `false`.
+    fn leaf_scopes_allow_writes(&self) -> bool {
+        false
+    }
+
+    /// Whether this primitive's inline callback keeps the caller's *owner*
+    /// context while clearing only the tracking listener — so a reactive
+    /// write (or refresh/action invocation) inside it is exactly as legal or
+    /// illegal as at the call site itself.
+    ///
+    /// The rc.0 write guard keys on the ambient owner, not on tracking:
+    /// `untrack` swaps `tracking` and leaves `context` untouched
+    /// (`dev.js:2928-2942`), so a write inside `untrack(...)` within a memo,
+    /// component body, or effect compute throws
+    /// `REACTIVE_WRITE_IN_OWNED_SCOPE`, while the same `untrack` write in an
+    /// event handler succeeds (both probed). Read semantics are not this
+    /// method's question — `untrack` stays an untracked-read scope either
+    /// way.
+    fn callback_preserves_owner_write_context(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// Whether this primitive's [`CallbackOwner::Leaf`] callback only
+    /// materializes as a leaf owner when the call executes under a live,
+    /// children-capable owner.
+    ///
+    /// rc.0's `onSettled` called out-of-band — from an event handler, with no
+    /// owner, or inside another leaf scope — enqueues its callback as a plain
+    /// function (`dev.js:4855-4893`): `onCleanup` inside it warns
+    /// `NO_OWNER_CLEANUP` instead of throwing, primitives attach nowhere but
+    /// do not throw, and `flush()` is a no-op. Only an owner-backed call
+    /// becomes `createTrackedEffect(() => untrack(cb))`, the leaf owner the
+    /// leaf-scope rules describe. `createTrackedEffect` itself is a leaf
+    /// unconditionally, so the default is `false`.
+    fn leaf_owner_requires_owned_call_site(&self, primitive: Primitive) -> bool {
+        let _ = primitive;
+        false
+    }
+
+    /// Whether a store's own setter callback write-enables the *original*
+    /// store proxy for the duration of the callback.
+    ///
+    /// 2.0 puts the store into its Writing set while the draft callback
+    /// runs, so `setStore(draft => { store.value = 7 })` commits through the
+    /// original proxy exactly like a draft write (probed on rc.0; a write
+    /// through *another* store's proxy in that callback is still silently
+    /// dropped). 1.x setters take path arguments or pure updaters and never
+    /// unlock the proxy, so the default is `false`.
+    fn store_setter_callback_enables_proxy_writes(&self) -> bool {
+        false
+    }
+
     /// Which owner each of this primitive's callback arguments runs under.
     ///
     /// Empty means the dialect does not model the primitive's ownership, which

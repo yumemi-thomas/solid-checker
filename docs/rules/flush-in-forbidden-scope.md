@@ -2,13 +2,20 @@
 
 `SC3003` · **error** · violation
 
-`flush()` is called inside `onSettled` or `createTrackedEffect`, which run as part
-of the flush cycle itself.
+`flush()` is called inside `createTrackedEffect` or an owner-backed
+`onSettled`, which run as part of the flush cycle itself.
 
 ## What it does
 
-Flags `flush()` calls that are lexically contained in an `onSettled` or
-`createTrackedEffect` callback.
+Flags `flush()` calls that are lexically contained in a `createTrackedEffect`
+callback, or in an `onSettled` callback whose call is proven to execute under a
+live children-capable owner.
+
+`onSettled` called out-of-band (from an event handler, with no owner, or inside
+another leaf scope) runs its callback as a plain queued function where `flush()`
+is a silent no-op rather than a throw, so this rule stays silent there; an
+unprovable call site (exported helper) is reported as **uncertifiable**.
+`createTrackedEffect` is a leaf owner unconditionally.
 
 ## Why is this bad?
 
@@ -22,11 +29,14 @@ throws in dev instead of risking re-entrant flushes.
 Examples of **incorrect** code for this rule:
 
 ```tsx
-onSettled(() => {
-  setReady(true);
-  flush(); // Throws: already inside the flush cycle.
-  measure(element);
-});
+function Widget() {
+  onSettled(() => {
+    setReady(true); // the write itself is fine here — leaf scopes may write
+    flush(); // Throws: already inside the flush cycle.
+    measure(element);
+  });
+  return <div />;
+}
 ```
 
 Examples of **correct** code for this rule:

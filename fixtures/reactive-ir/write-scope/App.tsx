@@ -46,8 +46,17 @@ export function Counter() {
     () => { setCount(4); save(); },
   );
   const update = action(() => setCount(5));
+  // untrack clears tracking but keeps the component body's owner, so the
+  // write still throws REACTIVE_WRITE_IN_OWNED_SCOPE at runtime.
   untrack(() => setCount(6));
   onSettled(() => setCount(7));
+  // Children-forbidden leaf scopes are legal write/action regions: the rc.0
+  // guard exempts them, so no finding here.
   createTrackedEffect(() => { setCount(8); save(); });
-  return <button onClick={() => { setCount(previous => previous + 1); save(); }}>{count()}{aliased()}{namespaced()}{optimistic()}{optimisticState.value}</button>;
+  // untrack in a memo keeps the memo's owner: still a violation.
+  createMemo(() => untrack(() => setCount(9)));
+  // untrack inside a leaf scope inherits the leaf's write legality.
+  createTrackedEffect(() => { untrack(() => setCount(10)); });
+  // untrack in an event handler stays legal: no owner is live there.
+  return <button onClick={() => { setCount(previous => previous + 1); save(); untrack(() => setCount(11)); }}>{count()}{aliased()}{namespaced()}{optimistic()}{optimisticState.value}</button>;
 }

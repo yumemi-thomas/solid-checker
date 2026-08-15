@@ -142,13 +142,23 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/write-scope/App.tsx",
+      "start": 1584,
+      "end": 1595,
+      "fixes": 0
+    },
+    {
       "rule": "cleanup-return-unresolved",
       "code": "SC9002",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1476,
-      "end": 1487,
+      "start": 1616,
+      "end": 1627,
       "fixes": 0
     },
     {
@@ -157,18 +167,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1520,
-      "end": 1531,
-      "fixes": 0
-    },
-    {
-      "rule": "action-called-in-owned-scope",
-      "code": "SC2002",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/write-scope/App.tsx",
-      "start": 1533,
-      "end": 1539,
+      "start": 1906,
+      "end": 1917,
       "fixes": 0
     }
   ]

@@ -21,7 +21,7 @@ export function Leaf() {
   onSettled(() => {
     children(() => null);
   });
-  return null;
+  return <div />;
 }
 
 export function Rows() {

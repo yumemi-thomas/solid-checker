@@ -170,6 +170,36 @@
       "start": 900,
       "end": 902,
       "fixes": 0
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 1525,
+      "end": 1534,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-in-forbidden-scope",
+      "code": "SC3001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 1934,
+      "end": 1943,
+      "fixes": 1
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 1934,
+      "end": 1943,
+      "fixes": 0
     }
   ]
 }

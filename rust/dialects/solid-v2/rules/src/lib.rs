@@ -54,13 +54,13 @@ impl CatalogWording for Catalog {
             FindingSeed::Action(action) => FindingWording::new(
                 Rule::ActionCalledInOwnedScope.metadata(),
                 format!(
-                    "action {:?} is called inside owned scope {}; invoking an action starts a write transaction (optimistic writes, refresh) while the graph is still tracking, which re-triggers the scope that called it",
+                    "action {:?} is called inside owned scope {}; invoking an action starts a write transaction (optimistic writes, refresh) under a children-capable owner, which re-triggers the scope that called it",
                     action.action, action.context
                 ),
-                "Call the action from an event handler, onSettled, or another imperative boundary. To load data reactively you don't need an action: return the Promise from a computation and read it under a <Loading> boundary.",
+                "Call the action from an event handler, onSettled, createTrackedEffect, or another imperative boundary; untrack() does not lift the restriction. To load data reactively you don't need an action: return the Promise from a computation and read it under a <Loading> boundary.",
             )
             .with_evidence(vec![EvidenceStep {
-                message: "invoking an action starts a write transaction while an owner is active"
+                message: "invoking an action starts a write transaction while a children-capable owner is active"
                     .into(),
                 location: Some(action.location.clone()),
             }]),
@@ -172,9 +172,9 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
     let (message, hint, provenance) = match write.operation {
         ReactiveWriteOperation::Refresh => (
             format!(
-                "refresh() is called inside owned scope {context}; a write transaction cannot start while the graph is tracking, and Solid throws here in dev"
+                "refresh() is called inside owned scope {context}; a write transaction cannot start while an owner is tracking, and Solid throws here in dev"
             ),
-            "Move the refresh() call to an event handler, an action, onSettled, or another imperative scope; a recompute cannot be requested from inside the tracking phase.".to_owned(),
+            "Move the refresh() call to an event handler, an action, or a leaf scope such as onSettled or createTrackedEffect; a recompute cannot be requested from inside a children-capable owner, and untrack() does not lift the restriction.".to_owned(),
             "the refresh target is a proven Solid source accessor or store".to_owned(),
         ),
         ReactiveWriteOperation::Setter => {
@@ -184,10 +184,10 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
             };
             (
                 format!(
-                    "{source} setter {:?} is called inside owned scope {context}; writes during the tracking phase create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
+                    "{source} setter {:?} is called inside owned scope {context}; writes under a children-capable owner create feedback loops in the reactive graph, and Solid throws REACTIVE_WRITE_IN_OWNED_SCOPE here in dev",
                     write.setter
                 ),
-                "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, onSettled, or the apply function of createEffect(compute, apply). For an internal reactive source only, opt in with { ownedWrite: true } in that source's creation options.".to_owned(),
+                "Derive the value instead of writing it back: replace compute-then-set with a createMemo. If the write is genuinely imperative, move it to an event handler, an action, the apply function of createEffect(compute, apply), or a leaf scope (onSettled, createTrackedEffect). Wrapping the write in untrack() does not help: the guard keys on the owner, not on tracking. For an internal reactive source only, opt in with { ownedWrite: true } in that source's creation options.".to_owned(),
                 format!(
                     "{:?} is paired with a source proven to be a Solid {source}",
                     write.setter
@@ -206,14 +206,14 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
             location: Some(write.declaration.clone()),
         },
         EvidenceStep {
-            message: "this scope is owned (tracking phase); writes are only allowed in event handlers, actions, onSettled, and effect apply callbacks".into(),
+            message: "this scope runs under a children-capable owner; writes are only legal outside one — event handlers, actions, effect apply callbacks, and the leaf scopes onSettled and createTrackedEffect — and untrack() keeps the enclosing owner".into(),
             location: Some(write.location.clone()),
         },
     ])
 }
 
 fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> FindingWording {
-    let (rule, message, hint) = match &operation.kind {
+    let (rule, mut message, hint) = match &operation.kind {
         LeafOwnerOperationKind::Cleanup => (
             Rule::CleanupInForbiddenScope,
             format!(
@@ -248,13 +248,26 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
         ),
     };
-    FindingWording::new(rule.metadata(), message, hint).with_evidence(vec![EvidenceStep {
+    let mut evidence = vec![EvidenceStep {
         message: format!(
             "the call is lexically contained by the {} callback",
             operation.owner
         ),
         location: Some(operation.location.clone()),
-    }])
+    }];
+    if operation.uncertain {
+        message.push_str(
+            "; solid-checker cannot prove this call runs under a live children-capable owner (out-of-band the callback is a plain queued function and this does not throw), so the finding is a proof obligation",
+        );
+        evidence.push(EvidenceStep {
+            message: format!(
+                "the {} call site's owner context cannot be proven (exported helper or conditional owner)",
+                operation.owner
+            ),
+            location: operation.call_site_gate.clone(),
+        });
+    }
+    FindingWording::new(rule.metadata(), message, hint).with_evidence(evidence)
 }
 
 fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {

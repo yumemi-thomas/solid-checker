@@ -17,13 +17,14 @@ Solid.createEffect(
 );
 
 // `children` joined the namespace list with the census widening: it
-// registers cleanup, so creating it inside the leaf owner `onSettled` is
-// primitive-in-leaf-owner — through either import style.
+// registers cleanup, so creating it inside an owner-backed `onSettled` (the
+// component body proves the owner) is primitive-in-leaf-owner — through
+// either import style. The JSX return is what proves `Leaf` a component.
 export function Leaf() {
   Solid.onSettled(() => {
     Solid.children(() => null);
   });
-  return null;
+  return <div />;
 }
 
 // JSX member tags are resolved against the namespace vocabulary, so these

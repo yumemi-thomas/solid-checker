@@ -50,6 +50,22 @@ export function MutatesThroughSetter() {
   return <button onClick={() => setStore({ open: true })}>{String(store.open)}</button>;
 }
 
+// 2.0 write-enables the original proxy for the duration of its own setter's
+// draft callback (probed on rc.0: the write commits), so this is correct
+// code and must stay silent.
+export function MutatesInsideOwnSetter() {
+  const [store, setStore] = createStore({ open: false });
+  return <button onClick={() => setStore(() => { store.open = true; })}>{String(store.open)}</button>;
+}
+
+// Another store's setter enables nothing for this proxy: the write is
+// silently dropped at runtime and stays a finding.
+export function MutatesInsideOtherSetter() {
+  const [store] = createStore({ open: false });
+  const [other, setOther] = createStore({ count: 0 });
+  return <button onClick={() => setOther(() => { store.open = true; })}>{String(store.open)}{other.count}</button>;
+}
+
 // expected-function-got-expression (SC1007): count() runs during setup and
 // its result -- a number, not a function -- is bound as the listener.
 export function CalledHandler() {
