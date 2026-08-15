@@ -135,9 +135,12 @@ func prepareRetainedContribution(
 		}
 		if entity.Symbol != "" {
 			target.Symbol = entity.Symbol
+			target.SymbolUnresolved = false
 			if demand.References {
 				contribution.fullTier = append(contribution.fullTier, uint32(len(contribution.entities)-1))
 			}
+		} else if entity.SymbolUnresolved && target.Symbol == "" {
+			target.SymbolUnresolved = true
 		}
 		if entity.TypeDescriptor != nil {
 			target.TypeDescriptor = entity.TypeDescriptor

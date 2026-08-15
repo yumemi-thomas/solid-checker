@@ -13,14 +13,18 @@ use crate::{
 pub const TYPE_FACTS_SCHEMA_V5: u64 = 5;
 pub const TYPE_FACTS_SCHEMA_V6: u64 = 6;
 pub const TYPE_FACTS_SCHEMA_V7: u64 = 7;
+pub const TYPE_FACTS_SCHEMA_V8: u64 = 8;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V3: u64 = 3;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V4: u64 = 4;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V5: u64 = 5;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
     "sha256:a4dfff25783d9dd99cf0d44e315a7c01e6c7d132965431ab5624a0975fd549a8";
 pub const TYPE_FACTS_SCHEMA_V6_SHA256: &str =
     "sha256:adffdee1486dd009bb2599593e09edd4c48804678b4f23002f72e5693ffc606d";
 pub const TYPE_FACTS_SCHEMA_V7_SHA256: &str =
     "sha256:6939a166249694edf3cf4fe1f81bd687f9b572d331988f2faaa6f2277047d352";
+pub const TYPE_FACTS_SCHEMA_V8_SHA256: &str =
+    "sha256:edbb15dc48793a12230a70305d2586da503f27f26ae5644c43b271661a30b1e1";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -681,10 +685,10 @@ fn decode_entity_run(
             .ok_or_else(|| "packed entity end overflow".to_owned())?;
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
-        let known_flags = if table_schema == TYPE_FACTS_TABLE_SCHEMA_V4 {
-            63
-        } else {
-            31
+        let known_flags = match table_schema {
+            TYPE_FACTS_TABLE_SCHEMA_V5 => 127,
+            TYPE_FACTS_TABLE_SCHEMA_V4 => 63,
+            _ => 31,
         };
         if flags & !known_flags != 0 {
             return Err(format!("packed entity has unknown flags {flags}"));
@@ -719,6 +723,10 @@ fn decode_entity_run(
         } else {
             None
         };
+        let symbol_unresolved = flags & 64 != 0;
+        if symbol_unresolved && !symbol.is_empty() {
+            return Err("packed entity cannot be both resolved and unresolved".into());
+        }
         entities.push(EntityFact {
             location: Location {
                 path: path.clone(),
@@ -726,6 +734,7 @@ fn decode_entity_run(
                 end_byte: end,
             },
             symbol,
+            symbol_unresolved,
             type_descriptor,
             resolved_call,
             callability,
@@ -934,7 +943,10 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         value => return Err(format!("unsupported table transition mode {value}")),
     };
     let table_schema = cursor.u64()?;
-    if table_schema != TYPE_FACTS_TABLE_SCHEMA_V3 && table_schema != TYPE_FACTS_TABLE_SCHEMA_V4 {
+    if table_schema != TYPE_FACTS_TABLE_SCHEMA_V3
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V4
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V5
+    {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
     let base_generation = cursor.u64()?;
@@ -1254,9 +1266,9 @@ mod tests {
 
     use super::{
         SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_SCHEMA_V6_SHA256, TYPE_FACTS_SCHEMA_V7_SHA256,
-        TransitionMode, decode_table_transition, parse_argument_mapping_reason,
-        parse_argument_mapping_status, parse_call_kind, parse_callability, parse_reference_space,
-        parse_resolved_call_validity, push_uvarint,
+        TYPE_FACTS_SCHEMA_V8_SHA256, TransitionMode, decode_table_transition,
+        parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
+        parse_callability, parse_reference_space, parse_resolved_call_validity, push_uvarint,
     };
 
     fn push_test_string(frame: &mut Vec<u8>, value: &str) {
@@ -1299,6 +1311,25 @@ mod tests {
         frame
     }
 
+    fn unresolved_symbol_transition(table_schema: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, table_schema, 0, 1, 3] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        // Project, empty base token, one path; path index, entity-replace tag.
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity: start 0, length 1, no symbol, explicit-unresolved flag.
+        for value in [1, 0, 1, 0, 64, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
     #[test]
     fn handshake_hash_matches_frozen_schema() {
         let actual = format!(
@@ -1316,6 +1347,11 @@ mod tests {
             Sha256::digest(include_bytes!("../../../schema/typefacts-v7.schema.json"))
         );
         assert_eq!(actual_v7, TYPE_FACTS_SCHEMA_V7_SHA256);
+        let actual_v8 = format!(
+            "sha256:{:x}",
+            Sha256::digest(include_bytes!("../../../schema/typefacts-v8.schema.json"))
+        );
+        assert_eq!(actual_v8, TYPE_FACTS_SCHEMA_V8_SHA256);
     }
 
     #[test]
@@ -1359,6 +1395,17 @@ mod tests {
         );
         assert!(decode_table_transition(&runtime_value_domain_transition(4, 16)).is_err());
         assert!(decode_table_transition(&runtime_value_domain_transition(3, 3)).is_err());
+    }
+
+    #[test]
+    fn wire_table_v5_decodes_explicit_unresolved_symbols_and_v4_stays_frozen() {
+        let transition = decode_table_transition(&unresolved_symbol_transition(5)).unwrap();
+        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert!(entities[0].symbol.is_empty());
+        assert!(entities[0].symbol_unresolved);
+        assert!(decode_table_transition(&unresolved_symbol_transition(4)).is_err());
     }
 
     #[test]

@@ -252,6 +252,8 @@ pub struct EntityFact {
     pub location: Location,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub symbol: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub symbol_unresolved: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub type_descriptor: Option<Arc<TypeDescriptor>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

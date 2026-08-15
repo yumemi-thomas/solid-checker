@@ -147,6 +147,22 @@ identifiers. Space is keyed by the local alias symbol rather than its canonical
 target, so two imports of the same export may correctly have different
 results.
 
+## Explicit symbol resolution
+
+`EntityDemand.symbol` produces exactly one of three outcomes at the demanded
+location:
+
+- `EntityFact.symbol` is non-empty when TypeScript-Go resolves a symbol;
+- `EntityFact.symbolUnresolved` is true when the source node exists and
+  `Checker.GetSymbolAtLocation` explicitly returns no symbol;
+- both fields are empty when the producer could not inspect the source node.
+
+The last case is unavailable evidence, not proof that a binding is missing.
+Consumers may diagnose an undefined name only from `symbolUnresolved`; they
+must not reinterpret an empty row as a negative answer. A demand for a narrow
+root inside a JSX member tag stays narrow, while a demand spanning the complete
+tag resolves the selected member.
+
 ## Canonical runtime identity
 
 `EntityDemand.runtimeIdentity` produces `EntityFact.runtimeIdentity` when the
@@ -169,8 +185,8 @@ they do not duplicate symbol rows. Retained per-file contributions track
 declaration and parameter source dependencies, so an edit rematerializes only
 facts that could otherwise carry stale locations.
 
-The active lifecycle schema is v7 and the active Wire table model is v4. The
+The active lifecycle schema is v8 and the active Wire table model is v5. The
 packed transition framing remains version 1. Frozen lifecycle v5/v6 adapters
-continue to emit Wire table v3 and reject the new demand. Go and Rust pin the
-same per-schema digest, so mismatched producer/client versions fail during the
-startup handshake.
+continue to emit Wire table v3, and frozen v7 emits Wire table v4. Go and Rust
+pin the same per-schema digest, so mismatched producer/client versions fail
+during the startup handshake.

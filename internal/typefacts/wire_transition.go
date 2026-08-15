@@ -131,6 +131,10 @@ func (e *wireTransitionEncoder) encode(
 	}
 	rows.text(input.ProjectID)
 	rows.text(input.BaseStateToken)
+	tableSchema := e.tableSchema
+	if tableSchema == 0 {
+		tableSchema = TypeFactsTableSchemaVersion
+	}
 	if mode == wireTransitionFull {
 		e.internFullOperationKeys(input.Target)
 	} else {
@@ -155,14 +159,14 @@ func (e *wireTransitionEncoder) encode(
 					path,
 				)
 			}
-			if err := writeWireTransitionPathOp(&rows, &operation); err != nil {
+			if err := writeWireTransitionPathOp(&rows, &operation, tableSchema); err != nil {
 				e.rows = rows.bytes[:0]
 				return encodedWireTransition{}, fmt.Errorf("encode path operation %d: %w", index, err)
 			}
 		}
 	} else {
 		for index := range e.pathOps {
-			if err := writeWireTransitionPathOp(&rows, &e.pathOps[index]); err != nil {
+			if err := writeWireTransitionPathOp(&rows, &e.pathOps[index], tableSchema); err != nil {
 				e.rows = rows.bytes[:0]
 				return encodedWireTransition{}, fmt.Errorf("encode path operation %d: %w", index, err)
 			}
@@ -218,10 +222,6 @@ func (e *wireTransitionEncoder) encode(
 	frame := packedWriter{bytes: e.frame[:0]}
 	frame.u64(wireTransitionVersion)
 	frame.u64(uint64(mode))
-	tableSchema := e.tableSchema
-	if tableSchema == 0 {
-		tableSchema = TypeFactsTableSchemaVersion
-	}
 	frame.u64(tableSchema)
 	frame.u64(baseGeneration)
 	frame.u64(input.Target.Generation)

@@ -98,6 +98,7 @@ func runtimeValueDomainEqual(left, right *RuntimeValueDomain) bool {
 func entityFactEqual(left, right EntityFact) bool {
 	return left.Location == right.Location &&
 		left.Symbol == right.Symbol &&
+		left.SymbolUnresolved == right.SymbolUnresolved &&
 		left.Callability == right.Callability &&
 		left.ReferenceSpace == right.ReferenceSpace &&
 		left.RuntimeIdentity == right.RuntimeIdentity &&

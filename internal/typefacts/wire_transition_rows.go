@@ -17,6 +17,7 @@ const (
 	wireTransitionEntityHasReferenceSpace
 	wireTransitionEntityHasRuntimeIdentity
 	wireTransitionEntityHasRuntimeValueDomain
+	wireTransitionEntitySymbolUnresolved
 )
 
 const (
@@ -26,7 +27,7 @@ const (
 	wireTransitionParameterHasTypeDescriptor
 )
 
-func writeWireTransitionPathOp(w *packedWriter, operation *wireTransitionPathOp) error {
+func writeWireTransitionPathOp(w *packedWriter, operation *wireTransitionPathOp, tableSchema uint64) error {
 	if operation.path == "" {
 		return fmt.Errorf("path operation has an empty path")
 	}
@@ -48,7 +49,7 @@ func writeWireTransitionPathOp(w *packedWriter, operation *wireTransitionPathOp)
 		w.raw(operation.source.SHA256[:])
 	}
 	if operation.entityOp == wireTransitionReplace {
-		if err := writeWireTransitionEntityRun(w, operation.path, operation.entities); err != nil {
+		if err := writeWireTransitionEntityRun(w, operation.path, operation.entities, tableSchema); err != nil {
 			return fmt.Errorf("entity replacement for %q: %w", operation.path, err)
 		}
 	}
@@ -93,6 +94,7 @@ func writeWireTransitionEntityRun(
 	w *packedWriter,
 	path string,
 	entities []EntityFact,
+	tableSchema uint64,
 ) error {
 	w.u64(uint64(len(entities)))
 	var previousStart int64
@@ -108,6 +110,9 @@ func writeWireTransitionEntityRun(
 		}
 		if err := validateWireTransitionLocation(entity.Location); err != nil {
 			return fmt.Errorf("entity %d location: %w", index, err)
+		}
+		if entity.Symbol != "" && entity.SymbolUnresolved {
+			return fmt.Errorf("entity %d cannot be both resolved and unresolved", index)
 		}
 
 		var callability uint64
@@ -148,6 +153,9 @@ func writeWireTransitionEntityRun(
 		}
 		if entity.RuntimeValueDomain != nil {
 			flags |= wireTransitionEntityHasRuntimeValueDomain
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
+			flags |= wireTransitionEntitySymbolUnresolved
 		}
 		w.u64(flags)
 		if entity.TypeDescriptor != nil {
