@@ -82,6 +82,10 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // renders; only invoking the returned directive is in the
                 // compiler's directive-application phase.
                 ("reactive-write-in-owned-scope", 2),
+                // Owner-attaching creations only: the direct createMemo, the
+                // forwarded createEffect, and the function-form createSignal.
+                // The three value-form createSignal(element) calls allocate
+                // plain state that needs no owner and stay silent.
                 ("primitive-in-directive-application", 3),
             ],
         ),
@@ -405,7 +409,12 @@ fn prefer_component_syntax_follows_conditional_cross_file_returns() {
 
 #[test]
 fn control_flow_and_effect_phases_classify_strict_reads() {
-    for (fixture, expected) in [("control-flow", 2), ("execution-phases", 1)] {
+    // control-flow: the two frozen Show-callback reads, plus the two frozen
+    // reads under <For keyed={byId}> — a named key function proven callable
+    // through type facts keeps the custom-key accessor claims. The dynamic
+    // boolean `keyed={flag()}` functions contribute nothing: the callback
+    // shape is ambiguous, so neither parameter is claimed as an accessor.
+    for (fixture, expected) in [("control-flow", 4), ("execution-phases", 1)] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             return;
         };

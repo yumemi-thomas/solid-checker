@@ -399,20 +399,35 @@ impl Dialect for Solid2 {
     /// `<Repeat>` is 2.0's answer to `<Index>` and is not the same shape: its
     /// children take `(index: number)`, a plain number, so it has no accessor
     /// parameter at all.
+    /// The dynamic-flag form claims nothing anywhere: RFC 03 says to "avoid
+    /// dynamic boolean `keyed` values with function children" precisely
+    /// because the callback shape is mode-specific — a truthy flag hands the
+    /// callback raw values where the falsy overload hands accessors.
+    /// Claiming either shape would fabricate a source for the other, so the
+    /// table refuses, mirroring the 1.x dialect's stance on its boolean
+    /// `keyed={expr}` (`Show`/`Match` there). `CustomKey` only reaches here
+    /// when the key expression is proven a function.
     fn children_accessor_parameters(
         &self,
         primitive: Primitive,
         key: crate::KeyForm,
     ) -> &'static [usize] {
         match primitive {
+            // `Show`/`Match` take a boolean `keyed` only (rc.0 flow.d.ts has
+            // no key-function overload for them); a function value would be
+            // truthy at runtime and select the raw-value overload, so the
+            // proven-function form also claims no accessor.
             Primitive::Show | Primitive::Match => match key {
-                crate::KeyForm::Keyed => &[],
-                _ => &[0],
+                crate::KeyForm::Keyed | crate::KeyForm::CustomKey | crate::KeyForm::DynamicFlag => {
+                    &[]
+                }
+                crate::KeyForm::Unkeyed | crate::KeyForm::Absent => &[0],
             },
             Primitive::For => match key {
                 crate::KeyForm::CustomKey => &[0, 1],
                 crate::KeyForm::Unkeyed => &[0],
                 crate::KeyForm::Absent | crate::KeyForm::Keyed => &[1],
+                crate::KeyForm::DynamicFlag => &[],
             },
             _ => &[],
         }
@@ -687,6 +702,15 @@ impl Dialect for Solid2 {
         )
     }
 
+    /// Probed on `@solidjs/web@2.0.0-rc.0` (client `setAttribute`/`assign`
+    /// and SSR `ssrAttribute`/`ssrElement`/`renderToString`): a literal
+    /// `true` renders the bare attribute on both paths — `<div draggable>`,
+    /// `setAttribute("draggable", "")` — never `draggable="true"`. See the
+    /// trait doc for the full matrix.
+    fn literal_true_attribute_is_presence_only(&self) -> bool {
+        true
+    }
+
     /// Source: `solid-reactive-ir/src/directives.rs` `is_created_primitive`.
     fn creates_directive_owner(&self, primitive: Primitive) -> bool {
         matches!(
@@ -835,6 +859,50 @@ const NAMESPACE_SOLIDJS_WEB: &[&str] = &[
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The three `<For>` overloads from rc.0's `flow.d.ts`, plus the two
+    /// forms that must claim nothing: a dynamic boolean flag (either overload
+    /// may run — RFC 03 tells authors to prefer a literal or key function),
+    /// and — for `Show`/`Match`, whose `keyed` is boolean-only — any
+    /// expression form at all.
+    #[test]
+    fn keyed_forms_claim_only_proven_callback_shapes() {
+        use crate::KeyForm;
+        assert_eq!(
+            Solid2.children_accessor_parameters(Primitive::For, KeyForm::Absent),
+            &[1]
+        );
+        assert_eq!(
+            Solid2.children_accessor_parameters(Primitive::For, KeyForm::Keyed),
+            &[1]
+        );
+        assert_eq!(
+            Solid2.children_accessor_parameters(Primitive::For, KeyForm::Unkeyed),
+            &[0]
+        );
+        assert_eq!(
+            Solid2.children_accessor_parameters(Primitive::For, KeyForm::CustomKey),
+            &[0, 1]
+        );
+        assert!(
+            Solid2
+                .children_accessor_parameters(Primitive::For, KeyForm::DynamicFlag)
+                .is_empty()
+        );
+        for primitive in [Primitive::Show, Primitive::Match] {
+            assert_eq!(
+                Solid2.children_accessor_parameters(primitive, KeyForm::Absent),
+                &[0]
+            );
+            for form in [KeyForm::Keyed, KeyForm::CustomKey, KeyForm::DynamicFlag] {
+                assert!(
+                    Solid2
+                        .children_accessor_parameters(primitive, form)
+                        .is_empty()
+                );
+            }
+        }
+    }
 
     /// The vocabulary, pinned by name rather than by count.
     ///

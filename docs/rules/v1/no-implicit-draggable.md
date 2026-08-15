@@ -10,8 +10,15 @@ an empty value and selects the invalid/default `auto` state.
 ```tsx
 <img draggable />              // Incorrect: draggable=""
 <img draggable="true" />       // Correct static value
-<img draggable={canDrag()} />  // Correct dynamic value
+<img draggable={canDrag()} />  // Correct in 1.x (see below)
 ```
+
+Unlike the Solid 2.0 rule, only the shorthand is flagged here: 1.x's
+dom-expressions runtime stringifies attribute values, so `draggable={true}`
+and a dynamic boolean render `draggable="true"` / `draggable="false"` and
+behave. In 2.0 boolean values serialize presence-only and are also defects —
+prefer the portable `draggable={condition ? "true" : "false"}` spelling if
+the code will migrate.
 
 Component props, explicit values, and namespaced attributes are not affected.
 Use a static string when the element is always draggable, or an expression

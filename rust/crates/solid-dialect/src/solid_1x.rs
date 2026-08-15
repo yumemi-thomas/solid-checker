@@ -372,9 +372,12 @@ impl Dialect for Solid1x {
             // overload at runtime: truthy hands the callback the raw value,
             // falsy an accessor. A static table cannot prove which, and
             // claiming an accessor for a raw value would fabricate a source,
-            // so the expression form claims nothing.
+            // so both expression forms (proven-function and dynamic flag)
+            // claim nothing.
             Primitive::Show | Primitive::Match => match key {
-                crate::KeyForm::Keyed | crate::KeyForm::CustomKey => &[],
+                crate::KeyForm::Keyed | crate::KeyForm::CustomKey | crate::KeyForm::DynamicFlag => {
+                    &[]
+                }
                 crate::KeyForm::Unkeyed | crate::KeyForm::Absent => &[0],
             },
             Primitive::For => &[1],
@@ -995,6 +998,11 @@ mod tests {
             assert!(
                 Solid1x
                     .children_accessor_parameters(primitive, crate::KeyForm::CustomKey)
+                    .is_empty()
+            );
+            assert!(
+                Solid1x
+                    .children_accessor_parameters(primitive, crate::KeyForm::DynamicFlag)
                     .is_empty()
             );
         }

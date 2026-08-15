@@ -20,6 +20,13 @@ export function ValidNesting() {
       <p><Child><div /></Child></p>
       <svg><a><a /></a></svg>
       <svg><foreignObject><p><span /></p></foreignObject></svg>
+      {/* WHATWG scope boundaries: the inner list stops the li walk, the
+          button takes p out of button scope, and the td terminates the
+          default scope around the inner button. */}
+      <ul><li><ul><li /></ul></li></ul>
+      <dl><dd><dl><dt /></dl></dd></dl>
+      <p><button><div /></button></p>
+      <button><table><tbody><tr><td><button /></td></tr></tbody></table></button>
     </main>
   );
 }

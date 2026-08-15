@@ -175,10 +175,16 @@ impl Rule {
                 "error",
                 false,
             ),
+            // The apply callback runs with no owner (`@solidjs/web` rc.0's
+            // `ref()` is `runWithOwner(null, ...)`), so an owner-attaching
+            // primitive created there is the SC4001-family defect: a real,
+            // per-element leak the dev runtime answers with a NO_OWNER_*
+            // *warning* (probed), never a throw. The catalog mirrors that —
+            // warning severity, violation kind (the leak is proven).
             Self::PrimitiveInDirectiveApplication => (
                 "SC6001",
                 "primitive-in-directive-application",
-                "error",
+                "warning",
                 false,
             ),
             Self::MissingEffectFunction => ("SC7001", "missing-effect-function", "error", false),

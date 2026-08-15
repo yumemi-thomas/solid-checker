@@ -100,8 +100,9 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
                 self.symbol_names,
                 self.lookup.dialect,
             )
-            .filter(|primitive| is_created_primitive(self.lookup.dialect, primitive))
-            {
+            .filter(|primitive| {
+                creation_registers_work(self.lookup.dialect, file, call, primitive)
+            }) {
                 push_directive_creation(
                     self.creations,
                     self.seen,
@@ -127,6 +128,45 @@ pub(super) fn is_created_primitive(dialect: &dyn Dialect, primitive: &PrimitiveN
     primitive
         .primitive()
         .is_some_and(|primitive| dialect.creates_directive_owner(primitive))
+}
+
+/// Whether this concrete call registers work an owner would have to dispose.
+///
+/// The directive apply callback runs with *no owner* — `@solidjs/web`
+/// rc.0's `ref()` is literally `runWithOwner(null, () => applyRef(...))` —
+/// so the defect this stage feeds (SC6001) is the unowned-leak class: a
+/// computation created there warns `NO_OWNER_EFFECT` in dev and is never
+/// disposed (probed on the rc.0 dev bundle). That leak needs a computation.
+/// The same [`CleanupRule::WhenFirstArgumentIsFunction`] distinction the
+/// leaf-owner rule (SC3002) applies holds here: `createSignal(0)` or a
+/// value-form `createStore` allocates plain state that needs no owner and
+/// misbehaves in no way, while `createSignal(fn)` registers a derived
+/// computation that does. Dialects whose state constructors never register
+/// work from a function argument (1.x answers [`CleanupRule::Never`]) keep
+/// their unconditional answer.
+pub(super) fn creation_registers_work(
+    dialect: &dyn Dialect,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: &PrimitiveName,
+) -> bool {
+    if !is_created_primitive(dialect, primitive) {
+        return false;
+    }
+    let Some(primitive) = primitive.primitive() else {
+        return false;
+    };
+    match dialect.cleanup_rule(primitive) {
+        solid_dialect::CleanupRule::WhenFirstArgumentIsFunction => {
+            call.arguments.first().is_some_and(|argument| {
+                file.ast
+                    .functions
+                    .iter()
+                    .any(|function| argument.span.contains(function.span))
+            })
+        }
+        _ => true,
+    }
 }
 
 pub(super) fn push_directive_creation(
@@ -167,7 +207,7 @@ pub(crate) fn discover_directive_creations(ctx: &AnalysisContext<'_>, draft: &mu
                     ctx.symbol_names,
                     ctx.dialect,
                 )
-                .filter(|primitive| is_created_primitive(ctx.dialect, primitive))
+                .filter(|primitive| creation_registers_work(ctx.dialect, file, call, primitive))
             {
                 push_directive_creation(
                     &mut draft.directive_creations,

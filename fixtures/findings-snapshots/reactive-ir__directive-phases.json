@@ -7,28 +7,28 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/directive-phases/App.tsx",
-      "start": 111,
-      "end": 122,
+      "start": 137,
+      "end": 148,
       "fixes": 0
     },
     {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/directive-phases/App.tsx",
-      "start": 167,
-      "end": 179,
+      "start": 352,
+      "end": 362,
       "fixes": 0
     },
     {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/directive-phases/App.tsx",
-      "start": 246,
-      "end": 258,
+      "start": 721,
+      "end": 733,
       "fixes": 0
     },
     {
@@ -37,18 +37,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/directive-phases/App.tsx",
-      "start": 361,
-      "end": 372,
+      "start": 856,
+      "end": 867,
       "fixes": 0
     },
     {
       "rule": "primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",
-      "severity": "error",
+      "severity": "warning",
       "path": "fixtures/reactive-ir/directive-phases/App.tsx",
-      "start": 520,
-      "end": 532,
+      "start": 1196,
+      "end": 1208,
       "fixes": 0
     }
   ]

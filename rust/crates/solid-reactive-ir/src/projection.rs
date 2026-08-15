@@ -84,9 +84,17 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 uppercase_first(name)
             ),
         ),
-        StaticDefectKind::ImplicitDraggableBoolean => (
-            "the draggable attribute uses JSX boolean shorthand, which emits an empty attribute value; HTML treats that as the invalid/default state rather than draggable=true".into(),
-            "Write draggable=\"true\" for a static attribute, or draggable={condition} for a dynamic boolean value.".into(),
+        StaticDefectKind::ImplicitDraggableBoolean { literal_true } => (
+            if *literal_true {
+                // Probed on @solidjs/web@2.0.0-rc.0: a literal `true` renders
+                // the bare attribute on the client (setAttribute("draggable",
+                // "")) and on the server (`<div draggable>`); both select the
+                // enumerated attribute's invalid-value default, `auto`.
+                "the draggable attribute is given the boolean true, which the runtime renders as a bare presence-only attribute; draggable is an enumerated attribute, so that selects the invalid/default auto state rather than draggable=\"true\"".into()
+            } else {
+                "the draggable attribute uses JSX boolean shorthand, which emits an empty attribute value; HTML treats that as the invalid/default state rather than draggable=\"true\"".into()
+            },
+            "Write draggable=\"true\" for a static attribute, or draggable={condition ? \"true\" : \"false\"} for a dynamic one; draggable is enumerated, so only the strings \"true\" and \"false\" select a state.".into(),
         ),
         StaticDefectKind::InvalidJsxNesting {
             parent,
@@ -205,8 +213,11 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::PreferComponentSyntax { .. } => {
             "the resolved local function directly returns JSX and this call is inside JSX"
         }
-        StaticDefectKind::ImplicitDraggableBoolean => {
+        StaticDefectKind::ImplicitDraggableBoolean { literal_true: false } => {
             "the intrinsic draggable attribute has no explicit value"
+        }
+        StaticDefectKind::ImplicitDraggableBoolean { literal_true: true } => {
+            "the intrinsic draggable attribute is a literal boolean true, which the runtime serializes presence-only"
         }
         StaticDefectKind::InvalidJsxNesting { .. } => {
             "the intrinsic JSX ancestor chain is statically known and HTML parsing changes this nesting"

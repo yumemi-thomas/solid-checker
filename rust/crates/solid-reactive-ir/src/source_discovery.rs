@@ -1086,6 +1086,62 @@ pub(crate) struct StageContext<'a> {
     pub(crate) contracts: &'a [PackageContract],
 }
 
+/// Classifies a non-literal `keyed` attribute value.
+///
+/// Only a *proven function* selects the custom-key overload statically: an
+/// inline function literal, or a value whose demanded type facts say
+/// callable. Everything else — a boolean-typed expression, a member read, an
+/// unresolved value — is a [`solid_dialect::KeyForm::DynamicFlag`], whose
+/// runtime truthiness picks the keyed or unkeyed overload. RFC 03 tells
+/// authors to "avoid dynamic boolean `keyed` values with function children"
+/// and "prefer a literal `true`, literal `false`, or a custom key function";
+/// until they do, the callback shape is ambiguous and the dialect tables
+/// claim no accessor for it rather than fabricate a source for what may be a
+/// raw value (see `children_accessor_parameters` in both dialects).
+fn dynamic_key_form(
+    file: &FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    semantic_lookup: &SemanticLookup<'_>,
+) -> solid_dialect::KeyForm {
+    let expression = element.attributes.iter().find_map(|attribute| {
+        (attribute.namespace.is_none()
+            && file.source_text(attribute.local_name) == Some("keyed"))
+        .then_some(attribute.expression)
+        .flatten()
+    });
+    let Some(expression) = expression else {
+        // A string or element value: truthy at runtime, but not a key
+        // function — the ambiguous-flag stance applies.
+        return solid_dialect::KeyForm::DynamicFlag;
+    };
+    if file
+        .ast
+        .functions
+        .iter()
+        .any(|function| function.span == expression)
+    {
+        return solid_dialect::KeyForm::CustomKey;
+    }
+    // Callability is trusted for plain identifier values only. At a call
+    // expression's span the demanded entity answers for the *callee* — a
+    // boolean-returning `keyed={cond()}` reads back `Callable` — so any
+    // computed value stays in the ambiguous bucket.
+    let identifier = file.ast.identifiers.iter().any(|identifier| {
+        identifier.span == expression
+            && identifier.role == solid_facts::ast::IdentifierRole::Reference
+    });
+    if identifier
+        && semantic_lookup
+            .entity_at(file.path.as_str(), expression)
+            .and_then(|entity| entity.callability)
+            == Some(typefacts::Callability::Callable)
+    {
+        return solid_dialect::KeyForm::CustomKey;
+    }
+    // Boolean-typed, computed, or unresolved: refuse to fabricate.
+    solid_dialect::KeyForm::DynamicFlag
+}
+
 pub(crate) fn discover_sources(
     ctx: &StageContext<'_>,
     source_discovery_cache: Option<&mut HashMap<SourcePath, CachedSourceDiscovery>>,
@@ -1420,7 +1476,7 @@ pub(crate) fn discover_sources(
                     .iter()
                     .any(|property| file.source_text(*property) == Some("keyed")) =>
                 {
-                    solid_dialect::KeyForm::CustomKey
+                    dynamic_key_form(file, element, semantic_lookup)
                 }
                 None => solid_dialect::KeyForm::Absent,
             };

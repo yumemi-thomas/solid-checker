@@ -192,6 +192,21 @@ fn plan_file(
                 add_symbol(expression, false);
                 type_descriptor_spans.insert(expression);
             }
+            // A non-literal `keyed` value on a control-flow component picks
+            // the children-callback overload at runtime; source discovery
+            // claims the custom-key shape only when the value's demanded
+            // type proves callable, and claims nothing otherwise. Literal
+            // `true`/`false` values are already classified syntactically.
+            if name == "keyed"
+                && attribute.namespace.is_none()
+                && !element
+                    .boolean_properties
+                    .iter()
+                    .any(|property| property.name == attribute.name)
+            {
+                add_symbol(expression, false);
+                type_descriptor_spans.insert(expression);
+            }
         }
     }
     // JSX compilation lowers a context provider to a component call whose

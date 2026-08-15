@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/control-flow/App.tsx",
-      "start": 164,
-      "end": 171,
+      "start": 219,
+      "end": 226,
       "fixes": 0
     },
     {
@@ -17,8 +17,28 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/control-flow/App.tsx",
-      "start": 416,
-      "end": 423,
+      "start": 471,
+      "end": 478,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/control-flow/App.tsx",
+      "start": 1906,
+      "end": 1912,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/control-flow/App.tsx",
+      "start": 1940,
+      "end": 1947,
       "fixes": 0
     }
   ]

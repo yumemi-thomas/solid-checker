@@ -274,7 +274,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentsReturnOnce,
         StaticDefectKind::PreferComponentSyntax { .. } => Rule::PreferComponentSyntax,
-        StaticDefectKind::ImplicitDraggableBoolean => Rule::NoImplicitDraggable,
+        StaticDefectKind::ImplicitDraggableBoolean { .. } => Rule::NoImplicitDraggable,
         StaticDefectKind::InvalidJsxNesting { .. } => Rule::ValidJsxNesting,
         StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
         StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,

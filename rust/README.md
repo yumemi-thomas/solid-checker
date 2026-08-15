@@ -85,9 +85,9 @@ Implemented rule slices are:
 - `sync-node-received-async`;
 - `invalid-refresh-target` and `invalid-affects-target`, including refresh
   writes flowing through the owned-scope rule;
-- `primitive-in-directive-application`, including primitives in direct
-  application callbacks and closures returned through forwarded directive
-  factories;
+- `primitive-in-directive-application`, covering owner-attaching primitives
+  (value-form state constructors are exempt) in direct application callbacks
+  and in closures returned through forwarded directive factories;
 - `no-owner-effect`, `no-owner-cleanup`, `no-owner-boundary`, and
   `no-owner-settled-cleanup`, using a fixed-point owner-context graph across
   components, roots, helpers, effect phases, events, and leaf owners;

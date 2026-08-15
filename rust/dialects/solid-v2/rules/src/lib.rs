@@ -109,10 +109,10 @@ impl CatalogWording for Catalog {
             FindingSeed::DirectiveCreation(creation) => FindingWording::new(
                 Rule::PrimitiveInDirectiveApplication.metadata(),
                 format!(
-                    "reactive primitive {} is created in a directive application callback; the apply phase runs per element as an unowned leaf, so primitives created here are never tracked or disposed",
+                    "reactive primitive {} registers a computation in a directive application callback; the apply phase runs once per element with no owner, so the computation is never disposed and leaks for every element the directive is applied to (the dev runtime warns NO_OWNER for it)",
                     creation.primitive
                 ),
-                "Use the two-phase directive factory: create primitives and subscriptions in the setup phase (the factory body, which runs in an owned scope) and keep the returned ref callback to DOM work only.",
+                "Use the two-phase directive factory: create computations and subscriptions in the setup phase (the factory body, which runs in an owned scope) and keep the returned ref callback to DOM work only. Value-form state (createSignal(0), createStore({...})) needs no owner and is fine here.",
             )
             .with_evidence(vec![EvidenceStep {
                 message: if creation.returned_closure {
@@ -461,7 +461,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
         StaticDefectKind::PreferComponentSyntax { .. } => Rule::PreferComponentSyntax,
-        StaticDefectKind::ImplicitDraggableBoolean => Rule::NoImplicitDraggable,
+        StaticDefectKind::ImplicitDraggableBoolean { .. } => Rule::NoImplicitDraggable,
         StaticDefectKind::InvalidJsxNesting { .. } => Rule::ValidJsxNesting,
         StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
         StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,

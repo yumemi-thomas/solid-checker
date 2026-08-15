@@ -1,0 +1,75 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "no-implicit-draggable",
+      "code": "SC8019",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 882,
+      "end": 891,
+      "fixes": 0
+    },
+    {
+      "rule": "no-implicit-draggable",
+      "code": "SC8019",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 975,
+      "end": 991,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-jsx-nesting",
+      "code": "SC8020",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 2220,
+      "end": 2222,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-jsx-nesting",
+      "code": "SC8020",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 2343,
+      "end": 2349,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-jsx-nesting",
+      "code": "SC8020",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 2429,
+      "end": 2430,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-jsx-nesting",
+      "code": "SC8020",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 2541,
+      "end": 2544,
+      "fixes": 0
+    },
+    {
+      "rule": "valid-jsx-nesting",
+      "code": "SC8020",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 2636,
+      "end": 2638,
+      "fixes": 0
+    }
+  ]
+}

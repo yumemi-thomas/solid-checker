@@ -102,6 +102,16 @@ fn function_directly_returns_jsx(
 
 /// SC8019: `draggable` is enumerated, not boolean. JSX shorthand serializes
 /// an empty value, whose HTML state is `auto`, not `true`.
+///
+/// Where the dialect's runtime also serializes a literal `true` expression
+/// value as a presence-only attribute (Solid 2.0 — see
+/// [`solid_dialect::Dialect::literal_true_attribute_is_presence_only`] for
+/// the `@solidjs/web@2.0.0-rc.0` probe), `draggable={true}` is the same
+/// defect and is flagged too. `draggable={false}` is deliberately not
+/// flagged: it removes the attribute, which selects `auto` — the element's
+/// default — and matches the author's intent everywhere except the few
+/// draggable-by-default elements; that boundary is documented on the rule
+/// page instead of guessed here.
 fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for element in &file.ast.jsx_elements {
@@ -111,15 +121,31 @@ fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
             }
             for attribute in &element.attributes {
                 if attribute.namespace.is_some()
-                    || attribute.value_kind != solid_facts::ast::JsxAttributeValueKind::Boolean
                     || file.source_text(attribute.local_name) != Some("draggable")
                 {
                     continue;
                 }
+                let literal_true = match attribute.value_kind {
+                    solid_facts::ast::JsxAttributeValueKind::Boolean => false,
+                    solid_facts::ast::JsxAttributeValueKind::Expression
+                        if ctx.dialect.literal_true_attribute_is_presence_only() =>
+                    {
+                        // `draggable={true}`: the boolean-literal fact mirrors
+                        // the attribute name span, carrying the literal value.
+                        let is_true_literal = element.boolean_properties.iter().any(|property| {
+                            property.name == attribute.local_name && property.value
+                        });
+                        if !is_true_literal {
+                            continue;
+                        }
+                        true
+                    }
+                    _ => continue,
+                };
                 draft.push_defect(
                     "no-implicit-draggable",
                     StaticDefect {
-                        kind: StaticDefectKind::ImplicitDraggableBoolean,
+                        kind: StaticDefectKind::ImplicitDraggableBoolean { literal_true },
                         location: location(file.path.shared(), attribute.span),
                         analysis_context: element_name.to_owned(),
                         fixes: vec![],
@@ -267,6 +293,12 @@ fn is_heading(name: &str) -> bool {
     matches!(name, "h1" | "h2" | "h3" | "h4" | "h5" | "h6")
 }
 
+/// The WHATWG "in body" start-tag rules that implicitly close an *ancestor*
+/// element, with the spec's scope boundaries applied: each walk inspects the
+/// stack of open elements innermost-first and gives up at the same elements
+/// the parser's scope check or implied-end-tag loop stops at, so only
+/// nestings the parser would actually rewrite are reported.
+/// <https://html.spec.whatwg.org/multipage/parsing.html#parsing-main-inbody>
 fn invalid_html_ancestor<'a>(
     file: &'a solid_facts::FileFacts,
     child: &str,
@@ -275,21 +307,203 @@ fn invalid_html_ancestor<'a>(
     let names = ancestors
         .iter()
         .map(|ancestor| file.source_text(ancestor.name.span).unwrap_or_default());
+    let names = names.collect::<Vec<_>>();
     match child {
+        // WHATWG "in body" p-closing start tags: the listed tags, plus the
+        // separate rules for h1-h6, pre/listing, form, table, hr, and xmp,
+        // all begin with "if the stack of open elements has a p element in
+        // *button scope*, close a p element". `search` is in the spec's
+        // list; the implied-end-tag walk stops at button-scope boundaries.
         "address" | "article" | "aside" | "blockquote" | "center" | "details" | "dialog"
         | "dir" | "div" | "dl" | "fieldset" | "figcaption" | "figure" | "footer" | "header"
-        | "hgroup" | "main" | "menu" | "nav" | "ol" | "p" | "section" | "summary" | "ul"
-        | "pre" | "listing" | "table" | "hr" | "xmp" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
-            names.into_iter().find(|name| *name == "p")
-        }
-        "form" => names.into_iter().find(|name| matches!(*name, "form" | "p")),
-        "li" => names.into_iter().find(|name| *name == "li"),
-        "dd" | "dt" => names.into_iter().find(|name| matches!(*name, "dd" | "dt")),
-        "button" => names.into_iter().find(|name| *name == "button"),
-        "a" => names.into_iter().find(|name| *name == "a"),
-        "nobr" => names.into_iter().find(|name| *name == "nobr"),
+        | "hgroup" | "main" | "menu" | "nav" | "ol" | "p" | "search" | "section" | "summary"
+        | "ul" | "pre" | "listing" | "table" | "hr" | "xmp" | "h1" | "h2" | "h3" | "h4" | "h5"
+        | "h6" => scan_open_elements(&names, |name| name == "p", is_button_scope_boundary),
+        // The form element pointer ignores intervening elements entirely —
+        // no scope walk — except that it is not consulted at all when a
+        // template element is on the stack. Form is also a p-closer (button
+        // scope), checked as its own walk.
+        "form" => scan_open_elements(&names, |name| name == "form", |name| name == "template")
+            .or_else(|| scan_open_elements(&names, |name| name == "p", is_button_scope_boundary)),
+        // The li (and dd/dt) start-tag loops walk the stack from the current
+        // node: a matching item generates implied end tags; any *special*
+        // element other than address, div, or p breaks the loop first.
+        "li" => scan_open_elements(&names, |name| name == "li", is_implied_end_tag_boundary),
+        "dd" | "dt" => scan_open_elements(
+            &names,
+            |name| matches!(name, "dd" | "dt"),
+            is_implied_end_tag_boundary,
+        ),
+        // button and nobr start tags use the plain "in scope" check; the a
+        // start tag consults the list of active formatting elements up to
+        // the last marker, and every marker-inserting element is in the
+        // default scope list, so the same stop set is a sound approximation.
+        "button" => scan_open_elements(&names, |name| name == "button", is_default_scope_boundary),
+        "a" => scan_open_elements(&names, |name| name == "a", is_default_scope_boundary),
+        "nobr" => scan_open_elements(&names, |name| name == "nobr", is_default_scope_boundary),
         _ => None,
     }
+}
+
+/// Walks the intrinsic ancestors innermost-first — the parser's stack of open
+/// elements from the current node — reporting the first `target` reached
+/// before any `boundary`. The target test runs first, matching the spec's
+/// loops, where "node is an li element" precedes the special-category break.
+fn scan_open_elements<'a>(
+    names: &[&'a str],
+    target: impl Fn(&str) -> bool,
+    boundary: impl Fn(&str) -> bool,
+) -> Option<&'a str> {
+    for name in names {
+        if target(name) {
+            return Some(name);
+        }
+        if boundary(name) {
+            return None;
+        }
+    }
+    None
+}
+
+/// The default "has an element in scope" list:
+/// <https://html.spec.whatwg.org/multipage/parsing.html#has-an-element-in-scope>
+/// — applet, caption, html, table, td, th, marquee, object, template, plus
+/// the MathML text integration points (mi, mo, mn, ms, mtext,
+/// annotation-xml) and the SVG HTML integration points (foreignObject, desc,
+/// title).
+fn is_default_scope_boundary(name: &str) -> bool {
+    matches!(
+        name,
+        "applet"
+            | "caption"
+            | "html"
+            | "table"
+            | "td"
+            | "th"
+            | "marquee"
+            | "object"
+            | "template"
+            | "mi"
+            | "mo"
+            | "mn"
+            | "ms"
+            | "mtext"
+            | "annotation-xml"
+            | "foreignObject"
+            | "desc"
+            | "title"
+    )
+}
+
+/// The "has a p element in button scope" list: the default scope list plus
+/// `button`. A `<div>` inside `<p><button>` does not close the paragraph —
+/// the button terminates the scope walk and the parser preserves the tree.
+fn is_button_scope_boundary(name: &str) -> bool {
+    name == "button" || is_default_scope_boundary(name)
+}
+
+/// The WHATWG *special* category
+/// (<https://html.spec.whatwg.org/multipage/parsing.html#special>) minus
+/// `address`, `div`, and `p`, which the li/dd/dt start-tag loops exempt:
+/// "if node is in the special category, but is not an address, div, or p
+/// element, then jump to the step labeled done". This is what keeps nested
+/// lists legal — the inner `<ul>`/`<ol>`/`<dl>` stops the walk before the
+/// outer `li`/`dd`/`dt` is reached, and the parser preserves
+/// `<ul><li><ul><li>…` verbatim.
+fn is_implied_end_tag_boundary(name: &str) -> bool {
+    matches!(
+        name,
+        "applet"
+            | "area"
+            | "article"
+            | "aside"
+            | "base"
+            | "basefont"
+            | "bgsound"
+            | "blockquote"
+            | "body"
+            | "br"
+            | "button"
+            | "caption"
+            | "center"
+            | "col"
+            | "colgroup"
+            | "dd"
+            | "details"
+            | "dir"
+            | "dl"
+            | "dt"
+            | "embed"
+            | "fieldset"
+            | "figcaption"
+            | "figure"
+            | "footer"
+            | "form"
+            | "frame"
+            | "frameset"
+            | "h1"
+            | "h2"
+            | "h3"
+            | "h4"
+            | "h5"
+            | "h6"
+            | "head"
+            | "header"
+            | "hgroup"
+            | "hr"
+            | "html"
+            | "iframe"
+            | "img"
+            | "input"
+            | "keygen"
+            | "li"
+            | "link"
+            | "listing"
+            | "main"
+            | "marquee"
+            | "menu"
+            | "meta"
+            | "nav"
+            | "noembed"
+            | "noframes"
+            | "noscript"
+            | "object"
+            | "ol"
+            | "param"
+            | "plaintext"
+            | "pre"
+            | "script"
+            | "search"
+            | "section"
+            | "select"
+            | "source"
+            | "style"
+            | "summary"
+            | "table"
+            | "tbody"
+            | "td"
+            | "template"
+            | "textarea"
+            | "tfoot"
+            | "th"
+            | "thead"
+            | "tr"
+            | "track"
+            | "ul"
+            | "wbr"
+            | "xmp"
+            // MathML text integration points and SVG HTML integration points
+            // are special too.
+            | "mi"
+            | "mo"
+            | "mn"
+            | "ms"
+            | "mtext"
+            | "annotation-xml"
+            | "foreignObject"
+            | "desc"
+            | "title"
+    )
 }
 
 /// SC9004: JSX expressions the compiler left without an execution role.

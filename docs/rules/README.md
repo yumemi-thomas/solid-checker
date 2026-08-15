@@ -171,7 +171,7 @@ rule's page documents its additional options and defaults.
 
 | Code | Rule | Severity |
 | --- | --- | --- |
-| SC6001 | [primitive-in-directive-application](primitive-in-directive-application.md) | error |
+| SC6001 | [primitive-in-directive-application](primitive-in-directive-application.md) | warning |
 
 ## API shapes
 

@@ -132,14 +132,22 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
     }
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/jsx-correctness/tsconfig.json");
+    // The 1.x runtime stringifies attribute values (`draggable={true}` renders
+    // draggable="true" and behaves), so only the shorthand is a defect there;
+    // the 2.0 runtime renders a literal `true` presence-only on both the
+    // client and SSR paths (probed on @solidjs/web@2.0.0-rc.0), so the
+    // literal-true expression is the same defect and reports too.
     for (dialect, expected) in [
         (
             "solid-v1",
-            ["v1/prefer-component-syntax", "v1/no-implicit-draggable"],
+            &[
+                ("v1/prefer-component-syntax", 1),
+                ("v1/no-implicit-draggable", 1),
+            ][..],
         ),
         (
             "solid-v2",
-            ["prefer-component-syntax", "no-implicit-draggable"],
+            &[("prefer-component-syntax", 1), ("no-implicit-draggable", 2)][..],
         ),
     ] {
         let findings = project_snapshot_findings(project.clone(), Some(dialect));
@@ -147,16 +155,16 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
             .iter()
             .map(|finding| finding["rule"].as_str().unwrap())
             .collect::<Vec<_>>();
-        for rule in expected {
+        for (rule, count) in expected {
             assert_eq!(
-                rules.iter().filter(|candidate| **candidate == rule).count(),
-                1,
-                "{dialect} should report exactly one {rule}: {findings:#?}"
+                rules.iter().filter(|candidate| **candidate == *rule).count(),
+                *count,
+                "{dialect} should report exactly {count} {rule}: {findings:#?}"
             );
         }
         assert_eq!(
             rules.len(),
-            2,
+            expected.iter().map(|(_, count)| count).sum::<usize>(),
             "unexpected {dialect} findings: {findings:#?}"
         );
     }
@@ -181,7 +189,7 @@ fn valid_jsx_nesting_reports_only_parser_tree_changes() {
         assert_eq!(
             nesting.len(),
             6,
-            "{dialect} should report each parser-changing nesting once (the standalone <tr><div> has two) and cross no component boundary: {findings:#?}"
+            "{dialect} should report each parser-changing nesting once (the standalone <tr><div> has two), cross no component boundary, and stop at WHATWG scope boundaries (nested lists, p behind button scope, button behind td): {findings:#?}"
         );
     }
 }

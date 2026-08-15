@@ -278,7 +278,13 @@ pub enum StaticDefectKind {
     PreferComponentSyntax {
         name: String,
     },
-    ImplicitDraggableBoolean,
+    ImplicitDraggableBoolean {
+        /// `draggable={true}` rather than the bare `draggable` shorthand.
+        /// Only emitted for dialects whose runtime renders a literal `true`
+        /// presence-only (Solid 2.0); the wording names the actual spelling.
+        #[serde(default)]
+        literal_true: bool,
+    },
     InvalidJsxNesting {
         parent: String,
         child: String,

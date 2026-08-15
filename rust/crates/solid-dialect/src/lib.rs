@@ -292,8 +292,18 @@ pub enum KeyForm {
     Keyed,
     /// `keyed={false}`.
     Unkeyed,
-    /// `keyed={expression}` — a key function rather than a flag.
+    /// `keyed={expression}` where the expression is *proven* a function — an
+    /// inline function literal, or a value whose type facts say callable.
     CustomKey,
+    /// `keyed={expression}` where the expression is a boolean (or cannot be
+    /// resolved): the flag's runtime truthiness picks the keyed or unkeyed
+    /// overload, so the children callback's shape is ambiguous. RFC 03 warns
+    /// against exactly this ("Avoid dynamic boolean `keyed` values with
+    /// function children ... prefer a literal `true`, literal `false`, or a
+    /// custom key function"). A static table cannot prove which overload
+    /// runs, and claiming an accessor for what may be a raw value would
+    /// fabricate a source — so this form claims nothing.
+    DynamicFlag,
 }
 
 /// When a primitive's callback argument runs, and whether it re-runs.
@@ -586,6 +596,29 @@ pub trait Dialect: Sync {
 
     /// Whether creating this primitive registers a directive-applied owner.
     fn creates_directive_owner(&self, primitive: Primitive) -> bool;
+
+    /// Whether the runtime renders a literal `true` JSX attribute value as a
+    /// presence-only attribute (no `="true"` text) on intrinsic elements.
+    ///
+    /// Solid 2.0 unified boolean handling — "Boolean literals add/remove the
+    /// attribute (no `="true"` string)" (RFC 07) — and the pinned
+    /// `@solidjs/web@2.0.0-rc.0` confirms it on both paths with no
+    /// per-attribute special case (probed 2026-08-15):
+    ///
+    /// - SSR: `ssrAttribute("draggable", true)` → ` draggable`;
+    ///   `renderToString` of `{draggable: true}` → `<div draggable>`.
+    /// - Client: `setAttribute(el, "draggable", true)` →
+    ///   `el.setAttribute("draggable", "")`; same through `assign`/spread.
+    ///
+    /// Both therefore select the enumerated attribute's *invalid value
+    /// default* (`auto` for `draggable`), not `true` — the paths agree, so
+    /// there is no hydration mismatch, just the wrong state on both.
+    /// 1.x's dom-expressions stringifies attribute values instead
+    /// (`draggable={true}` renders `draggable="true"` and behaves), so the
+    /// default answer is `false` and only the 2.0 dialect opts in.
+    fn literal_true_attribute_is_presence_only(&self) -> bool {
+        false
+    }
 
     /// Which parameters of a control-flow component's children callback are
     /// reactive accessors rather than plain values.
