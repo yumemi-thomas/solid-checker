@@ -1,0 +1,40 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(rg:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(ls:*)",
+      "Bash(cat:*)",
+      "Bash(jq empty schema/solid-reactivity.schema.json)",
+      "Bash(node scripts/coverage.mjs)",
+      "Bash(node scripts/parity.mjs)",
+      "Bash(node scripts/dialect-manifests.mjs validate)",
+      "Bash(node scripts/check-bundled-contracts.mjs)",
+      "Bash(cargo +1.97 fmt:*)",
+      "Bash(cargo +1.97 clippy:*)",
+      "Bash(cargo +1.97 test:*)",
+      "Bash(npm test --prefix packages/cli)",
+      "Bash(npm test --prefix packages/wasm)"
+    ],
+    "deny": [
+      "Bash(git reset --hard:*)",
+      "Bash(git checkout --:*)",
+      "Bash(git clean:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/snapshot-update-guard.sh"
+          }
+        ]
+      }
+    ]
+  }
+}

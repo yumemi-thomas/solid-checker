@@ -1,4 +1,7 @@
 /bin/
+# Per-user agent state; .claude/settings.json, skills, and hooks are shared.
+.claude/settings.local.json
+.claude/worktrees/
 # extract-upstream-cases.mjs writes typecheck stubs here during re-extraction.
 fixtures/upstream-parity/.staging/
 /dist/
