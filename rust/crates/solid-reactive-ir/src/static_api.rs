@@ -153,6 +153,31 @@ impl StaticApiContext<'_> {
                     fixes: vec![],
                 });
             }
+            // SC2004: resolve() in a tracked scope. Probed on
+            // `@solidjs/signals@2.0.0-rc.0`: the dev bundle guards on the
+            // *observer* (`dev.js:4738` — `if (getObserver()) throw new
+            // Error("Cannot call resolve inside a reactive scope…")`), so a
+            // resolve() inside a memo/effect compute, `createTrackedEffect`,
+            // or tracked JSX throws in dev, while `untrack` callbacks,
+            // component bodies, event handlers, and effect apply callbacks
+            // all clear the observer and stay legal. The production bundle
+            // has no guard — the call silently resolves a one-shot value —
+            // so the dev throw is what this mirrors.
+            if kind == Some(Primitive::Resolve)
+                && let Some(scope) = resolve_tracked_scope(file, call, &allowed, self)
+            {
+                result.violations.push(StaticViolation {
+                    id: "SC2004".into(),
+                    rule: "resolve-in-reactive-scope".into(),
+                    message: format!(
+                        "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev"
+                    ),
+                    hint: "Call resolve() from imperative code — an event handler, onSettled, or an effect's apply function. To depend on a pending value inside a computation, read the accessor directly: tracked reads suspend and re-run on their own. A deliberate one-shot read can be wrapped in untrack(), which clears the observer the runtime guards on.".into(),
+                    location: location(file.path.shared(), call.callee),
+                    analysis_context: String::new(),
+                    fixes: vec![],
+                });
+            }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {
                 continue;
             };
@@ -365,6 +390,71 @@ impl StaticApiContext<'_> {
         }
         result
     }
+}
+
+/// The tracked scope a `resolve()` call provably runs in, named for the
+/// message, or `None` where the call is legal or unprovable.
+///
+/// The decision mirrors the probed rc.0 guard, which keys on the *observer*:
+///
+/// - The innermost callback the call sits directly in (no intervening
+///   function) decides first: a tracked, non-deferred callback — a memo or
+///   effect compute, `createTrackedEffect`, a boundary body — reports;
+///   `untrack`, `onSettled`, apply callbacks, and every other deferred or
+///   inline-untracked scope is legal and wins even inside a memo. An
+///   unresolvable container stays silent.
+/// - With no direct callback container, a call inside a compiler-proven
+///   tracked JSX region reports (JSX expressions run in render-effect
+///   computes); component bodies, module scope, and helpers stay silent —
+///   the component body runs with no observer (probed).
+fn resolve_tracked_scope(
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    allowed: &[Span],
+    context: &StaticApiContext<'_>,
+) -> Option<String> {
+    if let Some((container, index)) = file.ast.arguments_containing(call.span).find(|(container, index)| {
+        crate::execution_role::direct_callback_contains(
+            file,
+            container.arguments[*index].span,
+            call.span,
+        )
+    }) {
+        let primitive = context.lookup.primitive_at_call(file, container.span)?;
+        let tracked = crate::owners::callback_execution_at_call(
+            file,
+            container,
+            primitive,
+            index,
+            context.lookup,
+        ) == Some(solid_dialect::Execution::Tracked)
+            && !context.lookup.dialect.runs_callback_deferred(primitive);
+        return tracked.then(|| {
+            format!(
+                "the tracked {} callback",
+                context
+                    .lookup
+                    .dialect
+                    .name_of(primitive)
+                    .unwrap_or("compute")
+            )
+        });
+    }
+    let in_tracked_region = file
+        .compiler
+        .tracked_regions
+        .iter()
+        .any(|region| region.span.contains(call.span));
+    (in_tracked_region
+        && crate::execution_role::semantic_execution_role(
+            file,
+            call.span,
+            allowed,
+            context.entities,
+            context.symbol_names,
+            context.lookup,
+        ) == crate::ExecutionRole::TrackedJsx)
+        .then(|| "tracked JSX".to_owned())
 }
 
 /// The root expression span of a member/call chain: `state.user` and

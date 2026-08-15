@@ -715,7 +715,7 @@ fn uncalled_accessor(
         if is_called(file, identifier.span) || is_argument(file, identifier.span) {
             continue;
         }
-        let Some(position) = value_position(file, identifier.span) else {
+        let Some(position) = value_position(file, identifier.span, context.dialect) else {
             continue;
         };
         defects.push(StaticDefect {
@@ -902,7 +902,11 @@ fn is_argument(file: &FileFacts, span: Span) -> bool {
 /// upstream's own enumeration. Anywhere else — a bare reference, a return, a
 /// property value — passing the accessor on is idiomatic, and reporting it
 /// would be the false positive upstream's issue #193 describes.
-fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
+fn value_position(
+    file: &FileFacts,
+    span: Span,
+    dialect: &dyn solid_dialect::Dialect,
+) -> Option<&'static str> {
     if let Some(operand) = file
         .ast
         .coercive_operands
@@ -919,7 +923,11 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     // accessor. Native attributes are different: the compiler hands the
     // expression's value to the DOM operation, so a bare accessor is
     // stringified/assigned as the function object. Callback-like attributes
-    // remain excluded because their contract expects a function.
+    // remain excluded because their contract expects a function — and, where
+    // the dialect's runtime routes a `children` attribute through child
+    // insertion (which calls zero-argument functions; code-read on
+    // `@solidjs/web@2.0.0-rc.0` `insert`/`flatten`), `children` is a live
+    // callback position too, not a value position.
     if file.ast.jsx_elements.iter().any(|element| {
         let element_name = text(file, element.name.span);
         is_lowercase_led(element_name)
@@ -928,11 +936,37 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
                 attribute.namespace.is_none()
                     && attribute.expression == Some(span)
                     && name != "ref"
+                    && !(name == "children" && dialect.native_children_attribute_invokes_functions())
                     && !(name.starts_with("on")
                         && name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic))
             })
     }) {
         return Some("a native JSX attribute");
+    }
+
+    // The object form of `class` coerces each property value by truthiness
+    // (probed on `@solidjs/web@2.0.0-rc.0`: `ssrClassName({ active: () =>
+    // false })` renders "active"; the client's `className` applies the same
+    // `!!value[key]`). An accessor object is always truthy, so the class is
+    // permanently on and never updates — in the object form directly or
+    // nested in the array form.
+    if dialect.class_object_values_are_truthiness_coerced()
+        && file.ast.object_properties.iter().any(|property| {
+            property.value == span
+                && !property.computed
+                && file.ast.jsx_elements.iter().any(|element| {
+                    is_lowercase_led(text(file, element.name.span))
+                        && element.attributes.iter().any(|attribute| {
+                            attribute.namespace.is_none()
+                                && text(file, attribute.name) == "class"
+                                && attribute
+                                    .expression
+                                    .is_some_and(|expression| expression.contains(property.span))
+                        })
+                })
+        })
+    {
+        return Some("a class object value, which is coerced by truthiness");
     }
 
     // An untagged template literal stringifies each interpolation, so an

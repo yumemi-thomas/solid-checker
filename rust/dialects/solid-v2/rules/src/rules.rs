@@ -27,6 +27,7 @@ pub enum Rule {
     ValidJsxNesting,
     ReactiveWriteInOwnedScope,
     ActionCalledInOwnedScope,
+    ResolveInReactiveScope,
     CleanupInForbiddenScope,
     PrimitiveInLeafOwner,
     FlushInForbiddenScope,
@@ -45,6 +46,9 @@ pub enum Rule {
     InvalidRefreshTarget,
     InvalidAffectsTarget,
     AffectsKeysOnAccessor,
+    HttpResponseAfterFlush,
+    ServerFunctionModuleDirective,
+    ServerFunctionRichArgument,
     PackageContractExportMissing,
     PackageContractMissing,
     CleanupReturnUnresolved,
@@ -66,7 +70,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 39] = [
+    pub const ALL: [Self; 43] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -81,6 +85,7 @@ impl Rule {
         Self::ValidJsxNesting,
         Self::ReactiveWriteInOwnedScope,
         Self::ActionCalledInOwnedScope,
+        Self::ResolveInReactiveScope,
         Self::CleanupInForbiddenScope,
         Self::PrimitiveInLeafOwner,
         Self::FlushInForbiddenScope,
@@ -99,6 +104,9 @@ impl Rule {
         Self::InvalidRefreshTarget,
         Self::InvalidAffectsTarget,
         Self::AffectsKeysOnAccessor,
+        Self::HttpResponseAfterFlush,
+        Self::ServerFunctionModuleDirective,
+        Self::ServerFunctionRichArgument,
         Self::PackageContractExportMissing,
         Self::PackageContractMissing,
         Self::CleanupReturnUnresolved,
@@ -141,6 +149,15 @@ impl Rule {
             }
             Self::ActionCalledInOwnedScope => {
                 ("SC2002", "action-called-in-owned-scope", "error", false)
+            }
+            // SC2003 is the shared no-direct-mutation concept; this new
+            // 2.0-only rule takes the next free code in the writes/actions
+            // family. The rc.0 dev guard throws on an active observer
+            // (probed), so the proven tracked-scope form mirrors it as an
+            // error; production has no guard and silently takes a one-shot
+            // snapshot.
+            Self::ResolveInReactiveScope => {
+                ("SC2004", "resolve-in-reactive-scope", "error", false)
             }
             Self::CleanupInForbiddenScope => {
                 ("SC3001", "cleanup-in-forbidden-scope", "error", false)
@@ -196,6 +213,23 @@ impl Rule {
             Self::InvalidRefreshTarget => ("SC7003", "invalid-refresh-target", "error", false),
             Self::InvalidAffectsTarget => ("SC7003", "invalid-affects-target", "error", false),
             Self::AffectsKeysOnAccessor => ("SC7004", "affects-keys-on-accessor", "error", false),
+            // The post-flush drop is real but conditional: a Loading
+            // boundary that settles *before* the shell flush (fast data,
+            // renderToString, deferStream) still applies its writes, so the
+            // static form is a warning, not a proven-unconditional error.
+            Self::HttpResponseAfterFlush => {
+                ("SC7005", "http-response-after-flush", "warning", false)
+            }
+            // The client build silently loses the export (RFC 10 §Compiler
+            // implications — "Minimum: a diagnostic"), so this is an error.
+            Self::ServerFunctionModuleDirective => {
+                ("SC7006", "server-function-module-directive", "error", false)
+            }
+            // The default transport throws at the call site (probed, rc.0
+            // server-functions client), so the proven form is an error.
+            Self::ServerFunctionRichArgument => {
+                ("SC7007", "server-function-rich-argument", "error", false)
+            }
             Self::PackageContractExportMissing => {
                 ("SC9001", "package-contract-export-missing", "error", true)
             }
@@ -296,10 +330,14 @@ mod tests {
     #[test]
     fn every_v2_static_violation_identity_resolves() {
         for (code, name) in [
+            ("SC2004", "resolve-in-reactive-scope"),
             ("SC7002", "sync-node-received-async"),
             ("SC7003", "invalid-refresh-target"),
             ("SC7003", "invalid-affects-target"),
             ("SC7004", "affects-keys-on-accessor"),
+            ("SC7005", "http-response-after-flush"),
+            ("SC7006", "server-function-module-directive"),
+            ("SC7007", "server-function-rich-argument"),
             ("SC9003", "refresh-target-unresolved"),
             ("SC9003", "affects-target-unresolved"),
         ] {
@@ -333,5 +371,15 @@ mod tests {
         // returning a cleanup in an unowned scope halts in dev and drops the
         // cleanup in production. The catalog mirrors the throw as an error.
         assert_eq!(Rule::NoOwnerSettledCleanup.metadata().severity, "error");
+        // resolve() under an active observer is a dev *throw* ("Cannot call
+        // resolve inside a reactive scope", probed on the rc.0 signals dev
+        // bundle), mirrored as an error like the other owned/tracked-scope
+        // throws.
+        assert_eq!(Rule::ResolveInReactiveScope.metadata().severity, "error");
+        // The rich-argument transport throw is unconditional at the default
+        // client (probed) — error; the post-flush header drop only occurs
+        // when the boundary settles after the shell flush — warning.
+        assert_eq!(Rule::ServerFunctionRichArgument.metadata().severity, "error");
+        assert_eq!(Rule::HttpResponseAfterFlush.metadata().severity, "warning");
     }
 }

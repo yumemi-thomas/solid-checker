@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "resolve-in-reactive-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-scope/App.tsx",
+      "start": 676,
+      "end": 683,
+      "fixes": 0
+    },
+    {
+      "rule": "resolve-in-reactive-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-scope/App.tsx",
+      "start": 899,
+      "end": 906,
+      "fixes": 0
+    },
+    {
+      "rule": "resolve-in-reactive-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-scope/App.tsx",
+      "start": 1110,
+      "end": 1117,
+      "fixes": 0
+    },
+    {
+      "rule": "resolve-in-reactive-scope",
+      "code": "SC2004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/resolve-scope/App.tsx",
+      "start": 1326,
+      "end": 1333,
+      "fixes": 0
+    }
+  ]
+}

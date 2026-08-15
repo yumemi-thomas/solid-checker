@@ -155,6 +155,15 @@ pub enum Primitive {
     Dynamic,
     ClientOnly,
     UseHead,
+    /// `httpStatus(code, text?)` from `@solidjs/web` — declares the response
+    /// status for the calling reactive scope's lifetime during SSR. A
+    /// shell-time API: `@solidjs/web@2.0.0-rc.0` `dist/server.js` gates both
+    /// the write and the cleanup-time retraction on `!response.committed`,
+    /// so a call made after the shell flush is a silent no-op.
+    HttpStatus,
+    /// `httpHeader(name, value, options?)` from `@solidjs/web`; the same
+    /// committed-gate contract as [`Primitive::HttpStatus`].
+    HttpHeader,
 
     // Control flow — component tags
     For,
@@ -900,6 +909,45 @@ pub trait Dialect: Sync {
     /// calls. The 2.0 rule page claims them; 1.x parity pins the accessor-call
     /// surface upstream's `reactivity` rule counts, so the default is `false`.
     fn reports_member_reads_after_await(&self) -> bool {
+        false
+    }
+
+    /// Whether this dialect's compiler contract includes server functions —
+    /// the `"use server"` directive, `@solidjs/web/server-functions`, and the
+    /// plain-JSON argument transport. Gates the server-function rules
+    /// (`server-function-module-directive`, `server-function-rich-argument`)
+    /// so a same-spelled directive in a 1.x project stays out of that
+    /// catalog. Solid 1.x has no core server functions, so the default is
+    /// `false`.
+    fn models_server_functions(&self) -> bool {
+        false
+    }
+
+    /// Whether the DOM runtime coerces `class` object-form values by
+    /// truthiness, so a function object (an uncalled accessor) in value
+    /// position is *always truthy* and the class can never turn off.
+    ///
+    /// Probed on `@solidjs/web@2.0.0-rc.0`: `ssrClassName({ active: () =>
+    /// false })` renders `"active"`, and the client's `className` applies the
+    /// same `!!value[key]` coercion after `classListToObject` — RFC 07's
+    /// "object values are truthiness-coerced", confirmed on both paths. 1.x
+    /// keeps upstream `reactivity` parity, so the default is `false`.
+    fn class_object_values_are_truthiness_coerced(&self) -> bool {
+        false
+    }
+
+    /// Whether a `children` *attribute* on an intrinsic element routes
+    /// through child insertion, which invokes zero-argument functions — so a
+    /// bare accessor there is called reactively and is correct usage, not an
+    /// uncalled-accessor defect.
+    ///
+    /// Code-read on `@solidjs/web@2.0.0-rc.0`: `insert()` wraps a function
+    /// value in an effect and calls it (`dist/dev.js:657-696`), and the
+    /// spread path's `assign()` sends `props.children` through
+    /// `normalize()`/`flatten()`, which unwraps zero-argument functions by
+    /// calling them (`@solidjs/signals` `flatten`). 1.x keeps upstream
+    /// parity, so the default is `false`.
+    fn native_children_attribute_invokes_functions(&self) -> bool {
         false
     }
 

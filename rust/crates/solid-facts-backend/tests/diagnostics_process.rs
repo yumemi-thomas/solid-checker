@@ -275,6 +275,81 @@ fn ssr_client_hole_requires_a_server_rendering_project() {
     assert!(csr_findings.is_empty(), "{csr_findings:#?}");
 }
 
+/// The wave-6 server-surface and resolve rules, pinned at their probed
+/// gates: SC7005's server-render + Loading-children dominance, SC7006's
+/// module-directive export shapes, SC7007's enableRichArguments silence, and
+/// SC2004's observer-keyed scope split.
+#[test]
+fn server_surface_and_resolve_rules_pin_their_probed_gates() {
+    if let Some(findings) = diagnostic_fixture("http-response-flush") {
+        let drops = findings_for_rule(&findings, "http-response-after-flush");
+        // The two component-body calls below the Loading boundary plus the
+        // lexical call in its children; the shell, fallback, and
+        // event-handler calls stay silent.
+        assert_eq!(drops.len(), 3, "{findings:#?}");
+        assert!(
+            drops.iter().all(|finding| finding["severity"] == "warning"
+                && finding["kind"] == "violation"),
+            "the post-flush drop is conditional and must stay a warning: {drops:#?}"
+        );
+        // CSR twin: both exports are client no-ops everywhere, no drop to
+        // report.
+        if let Some(csr) = diagnostic_fixture("http-response-flush-csr") {
+            assert!(csr.is_empty(), "{csr:#?}");
+        }
+    }
+    if let Some(findings) = diagnostic_fixture("server-function-directive") {
+        // Two wrapped exports, one named re-export, one star re-export, one
+        // wrapped default export; the direct function exports stay silent.
+        assert_rule_findings(&findings, "server-function-module-directive", 5);
+        assert!(
+            findings.iter().all(|finding| {
+                !finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("plain.ts"))
+            }),
+            "a module without the directive puts nothing at risk: {findings:#?}"
+        );
+    }
+    if let Some(findings) = diagnostic_fixture("server-function-rich-args") {
+        // Date, Set, Map, RegExp (module-level directive), Float64Array, and
+        // the Set of the mixed call; lone/trailing Uint8Array, plain JSON
+        // shapes, and the unresolvable inline `new Date()` stay silent.
+        assert_rule_findings(&findings, "server-function-rich-argument", 6);
+        if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
+            assert!(
+                enabled.is_empty(),
+                "enableRichArguments installs the codec and removes the throw everywhere: {enabled:#?}"
+            );
+        }
+    }
+    if let Some(findings) = diagnostic_fixture("resolve-scope") {
+        // Memo compute, effect compute, createTrackedEffect, tracked JSX;
+        // untrack, component body, event handler, apply, and module scope
+        // are observer-free and stay silent (probed, rc.0).
+        assert_rule_findings(&findings, "resolve-in-reactive-scope", 4);
+        assert!(
+            findings
+                .iter()
+                .all(|finding| finding["rule"] == "resolve-in-reactive-scope"),
+            "{findings:#?}"
+        );
+    }
+    if let Some(findings) = diagnostic_fixture("uncalled-accessor-v2") {
+        // The two class-object values plus the plain native attribute; the
+        // children attribute and the called accessors stay silent.
+        assert_rule_findings(&findings, "uncalled-accessor", 3);
+        assert!(
+            findings.iter().any(|finding| {
+                finding["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("class object value"))
+            }),
+            "{findings:#?}"
+        );
+    }
+}
+
 #[test]
 fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
     let Some(async_findings) = diagnostic_fixture("async-boundary") else {

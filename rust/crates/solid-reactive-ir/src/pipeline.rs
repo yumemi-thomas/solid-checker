@@ -23,7 +23,7 @@ use crate::{
     ReactiveSourceKind, ReactiveWrite, RuleOptions, Solid1xRuleOptions, StaticDefect,
     StaticViolation, UnresolvedCleanupReturn, location_order,
 };
-use crate::{cleanup, directives, owners, reactive_analysis, static_api, static_rules};
+use crate::{cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules};
 use solid_dialect::Dialect;
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::Location;
@@ -412,6 +412,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
     cleanup::collect_project(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::LeafAndCleanup);
     static_api::check_project(&analysis, &mut draft);
+    server_rules::check_project(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::StaticApi);
     directives::discover_directive_creations(&analysis, &mut draft);
     clock.finish(&mut build_timings, ReactiveIrStage::Directives);

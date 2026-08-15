@@ -15,6 +15,7 @@ mod reachability;
 mod reactive_analysis;
 mod runtime_semantics;
 mod source_discovery;
+mod server_rules;
 mod static_api;
 mod static_rules;
 mod symbols;

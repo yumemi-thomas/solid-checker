@@ -57,6 +57,8 @@ const TABLE: &[(&str, Primitive)] = &[
     ("flush", Primitive::Flush),
     ("For", Primitive::For),
     ("getOwner", Primitive::GetOwner),
+    ("httpHeader", Primitive::HttpHeader),
+    ("httpStatus", Primitive::HttpStatus),
     ("hydrate", Primitive::Hydrate),
     ("isPending", Primitive::IsPending),
     ("latest", Primitive::Latest),
@@ -294,6 +296,34 @@ impl Dialect for Solid2 {
     /// values at call time. Neither misbehaves at runtime, so the 2.0 catalog
     /// exempts those call roles.
     fn derived_function_role_exemptions(&self) -> bool {
+        true
+    }
+
+    /// Source: RFC 10 — Solid 2.0 moves the `"use server"` directive and the
+    /// `@solidjs/web/server-functions` runtime into core, and the pinned
+    /// `@solidjs/web@2.0.0-rc.0` ships that runtime (`server-functions/dist`,
+    /// probed). 1.x server functions belonged to SolidStart, not this
+    /// vocabulary.
+    fn models_server_functions(&self) -> bool {
+        true
+    }
+
+    /// Probed on `@solidjs/web@2.0.0-rc.0` (2026-08-15): `ssrClassName({
+    /// active: () => false })` returns `"active"` — the object value is
+    /// coerced with `!!value[key]` after `classListToObject` on both the SSR
+    /// (`dist/server.js`) and client (`dist/dev.js` `className`) paths, so a
+    /// function object in class-object value position is permanently truthy.
+    fn class_object_values_are_truthiness_coerced(&self) -> bool {
+        true
+    }
+
+    /// Code-read on `@solidjs/web@2.0.0-rc.0`: a function reaching child
+    /// insertion is invoked — `insert()` wraps it in an effect and calls it
+    /// (`dist/dev.js:657-696`), and `assign()`'s `children` arm normalizes
+    /// through `flatten()`, which unwraps zero-argument functions by calling
+    /// them. A bare accessor as a `children` attribute value on an intrinsic
+    /// element is therefore live, called usage.
+    fn native_children_attribute_invokes_functions(&self) -> bool {
         true
     }
 
@@ -850,6 +880,8 @@ const NAMESPACE_SOLIDJS_WEB: &[&str] = &[
     "clientOnly",
     "dynamic",
     "getOwner",
+    "httpHeader",
+    "httpStatus",
     "hydrate",
     "render",
     "untrack",
@@ -946,6 +978,8 @@ mod tests {
                 "flush",
                 "For",
                 "getOwner",
+                "httpHeader",
+                "httpStatus",
                 "hydrate",
                 "isPending",
                 "latest",

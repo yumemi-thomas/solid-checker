@@ -1,0 +1,55 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "server-function-module-directive",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-directive/api.ts",
+      "start": 466,
+      "end": 473,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-module-directive",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-directive/api.ts",
+      "start": 589,
+      "end": 596,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-module-directive",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-directive/api.ts",
+      "start": 701,
+      "end": 707,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-module-directive",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-directive/api.ts",
+      "start": 769,
+      "end": 792,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-module-directive",
+      "code": "SC7006",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-directive/default-wrapped.ts",
+      "start": 218,
+      "end": 260,
+      "fixes": 0
+    }
+  ]
+}

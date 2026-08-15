@@ -391,6 +391,18 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::SyncNodeReceivedAsync => {
             "a sync computation is proven capable of returning Promise or AsyncIterable"
         }
+        Rule::ResolveInReactiveScope => {
+            "the resolve() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
+        }
+        Rule::HttpResponseAfterFlush => {
+            "the call's scope renders below a Loading boundary in a project that server-renders, and the response head admits no writes after the shell flush"
+        }
+        Rule::ServerFunctionModuleDirective => {
+            "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"
+        }
+        Rule::ServerFunctionRichArgument => {
+            "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
+        }
         Rule::InvalidRefreshTarget => {
             "the refresh call's arity or target shape violates the branded-source contract"
         }

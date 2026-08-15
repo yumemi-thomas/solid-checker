@@ -27,7 +27,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 30;
+pub const AST_FACTS_SCHEMA: u32 = 31;
 
 mod span_index;
 
@@ -91,6 +91,13 @@ pub struct AstFacts {
     pub assignments: Vec<AssignmentFact>,
     #[serde(default)]
     pub if_regions: Vec<IfRegionFact>,
+    /// Module-level string directives (`"use server"`, `"use strict"`, …):
+    /// the statements the parser classifies as the module's directive
+    /// prologue, in source order, carrying the cooked directive text. A
+    /// string literal after the first non-directive statement is an ordinary
+    /// expression statement and is deliberately absent.
+    #[serde(default)]
+    pub module_directives: Vec<DirectiveFact>,
     #[serde(skip, default)]
     pub span_index: LazySpanIndex,
 }
@@ -184,6 +191,15 @@ pub struct StringPropertyFact {
     pub value: CompactString,
 }
 
+/// One string directive from a directive prologue (module or function body),
+/// carrying its span and cooked text.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DirectiveFact {
+    pub span: Span,
+    pub value: CompactString,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum BindingShape {
@@ -250,6 +266,19 @@ pub struct FunctionFact {
     pub expression_body: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expression_return: Option<ReturnFact>,
+    /// The string directives of this function body's directive prologue
+    /// (`"use server"`, …), in source order. Always empty for
+    /// expression-bodied arrows, which have no statement prologue.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub directives: Vec<CompactString>,
+}
+
+impl FunctionFact {
+    /// Whether this function's own directive prologue contains `directive`.
+    #[must_use]
+    pub fn has_directive(&self, directive: &str) -> bool {
+        self.directives.iter().any(|value| value == directive)
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -714,6 +743,7 @@ struct Collector<'s, 'semantic> {
     coercive_operands: Vec<CoerciveOperandFact>,
     assignments: Vec<AssignmentFact>,
     if_regions: Vec<IfRegionFact>,
+    module_directives: Vec<DirectiveFact>,
     conditional_control_stack: Vec<Span>,
     method_names: Vec<Option<NamedSpan>>,
     /// How many conditional/repeated/aborting constructs (if, ternary,
@@ -766,6 +796,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercive_operands: Vec::new(),
             assignments: Vec::new(),
             if_regions: Vec::new(),
+            module_directives: Vec::new(),
             conditional_control_stack: Vec::new(),
             method_names: Vec::new(),
             conditional_flow_depth: 0,
@@ -798,6 +829,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.coercive_operands.sort_by_key(|fact| fact.span);
         self.assignments.sort_by_key(|fact| fact.target);
         self.if_regions.sort_by_key(|fact| fact.consequent);
+        self.module_directives.sort_by_key(|fact| fact.span);
         AstFacts {
             schema: AST_FACTS_SCHEMA,
             source,
@@ -826,6 +858,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             coercive_operands: self.coercive_operands,
             assignments: self.assignments,
             if_regions: self.if_regions,
+            module_directives: self.module_directives,
         }
     }
 
@@ -1230,6 +1263,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         self.scope_stack.pop();
     }
 
+    fn visit_program(&mut self, program: &oxc_ast::ast::Program<'a>) {
+        // The parser has already classified the directive prologue: only the
+        // leading string-literal statements land in `directives`, so this is
+        // a transcription, not a re-derivation.
+        self.module_directives
+            .extend(program.directives.iter().map(|directive| DirectiveFact {
+                span: span(directive.span),
+                value: directive.expression.value.as_str().into(),
+            }));
+        walk::walk_program(self, program);
+    }
+
     fn visit_expression(&mut self, expression: &Expression<'a>) {
         if let Some(inner) = transparent_inner_expression(expression) {
             self.transparent_wrappers.push(TransparentWrapperFact {
@@ -1357,6 +1402,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 generator: function.generator,
                 expression_body: false,
                 expression_return: None,
+                directives: body
+                    .directives
+                    .iter()
+                    .map(|directive| directive.expression.value.as_str().into())
+                    .collect(),
             });
         }
         self.function_flow_depths.push(self.conditional_flow_depth);
@@ -1396,6 +1446,18 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             generator: false,
             expression_body: function.expression,
             expression_return,
+            // An expression-bodied arrow has no statement prologue; a
+            // block-bodied one carries its directives like any function.
+            directives: if function.expression {
+                Vec::new()
+            } else {
+                function
+                    .body
+                    .directives
+                    .iter()
+                    .map(|directive| directive.expression.value.as_str().into())
+                    .collect()
+            },
         });
         self.function_flow_depths.push(self.conditional_flow_depth);
         walk::walk_arrow_function_expression(self, function);
@@ -2032,6 +2094,59 @@ fn export_declaration_names(declaration: &Declaration<'_>) -> Vec<ExportSpecifie
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// String directives: the module prologue lands in `module_directives`,
+    /// each function's prologue lands on its `FunctionFact`, and a string
+    /// literal after the first real statement is not a directive.
+    #[test]
+    fn extracts_module_and_function_directive_prologues() {
+        let source = r#""use server";
+"use strict";
+export async function addTodo(title: string) {
+  "use server";
+  return title;
+}
+export const wrapped = async () => {
+  "use server";
+  return 1;
+};
+const notAPrologue = 1;
+"not a directive";
+export const short = async () => 2;
+"#;
+        let facts = extract("/project/api.ts", source).unwrap();
+        assert_eq!(
+            facts
+                .module_directives
+                .iter()
+                .map(|directive| directive.value.as_str())
+                .collect::<Vec<_>>(),
+            ["use server", "use strict"]
+        );
+        let declaration = facts
+            .functions
+            .iter()
+            .find(|function| function.kind == FunctionKind::Declaration)
+            .unwrap();
+        assert!(declaration.has_directive("use server"));
+        assert!(!declaration.has_directive("use strict"));
+        let arrows: Vec<_> = facts
+            .functions
+            .iter()
+            .filter(|function| function.kind == FunctionKind::Arrow)
+            .collect();
+        assert_eq!(arrows.len(), 2);
+        assert!(arrows.iter().any(|arrow| arrow.has_directive("use server")));
+        // The expression-bodied arrow has no prologue at all.
+        assert!(
+            arrows
+                .iter()
+                .any(|arrow| arrow.expression_body && arrow.directives.is_empty())
+        );
+        // The trailing string literal sits after a statement and is not a
+        // module directive.
+        assert_eq!(facts.module_directives.len(), 2);
+    }
 
     #[test]
     fn extracts_tsx_structure_without_text_patterns() {

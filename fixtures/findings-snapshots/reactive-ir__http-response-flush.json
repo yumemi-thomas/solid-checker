@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
+      "start": 735,
+      "end": 745,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
+      "start": 754,
+      "end": 764,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
+      "start": 1780,
+      "end": 1790,
+      "fixes": 0
+    }
+  ]
+}
