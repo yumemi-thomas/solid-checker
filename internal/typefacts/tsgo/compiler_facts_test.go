@@ -725,6 +725,156 @@ intersected(1);
 	}
 }
 
+func TestResolvedUnionCallDerivesExhaustiveTargetCandidates(t *testing.T) {
+	dir := t.TempDir()
+	// The two implementations carry distinguishable literal return types:
+	// structurally identical function types are subtype-reduced out of a
+	// union by the compiler itself, which leaves the single selected
+	// declaration fact rather than a candidate set.
+	implsSource := `export function implA(value: string): "a" {
+	return "a";
+}
+export function implB(value: string): "b" {
+	return "b";
+}
+`
+	source := `import { implA, implB } from "./impls";
+declare const cond: boolean;
+const dispatch = cond ? implA : implB;
+export const direct = dispatch("value");
+declare const pair: [typeof implA, typeof implB];
+declare const index: number;
+export const computed = pair[index]("value");
+class Left {
+	read(): string {
+		return "left";
+	}
+}
+class Right {
+	read(): number {
+		return 2;
+	}
+}
+declare const union: Left | Right;
+export const method = union.read();
+interface Shape {
+	(value: string): string;
+}
+declare const shaped: typeof implA | Shape;
+export const structural = shaped("value");
+declare const generic: typeof implA | (<T>(value: T) => T);
+export const open = generic("value");
+export const broken = dispatch("value", "extra");
+`
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	implsPath := filepath.Join(dir, "impls.ts")
+	if err := os.WriteFile(implsPath, []byte(implsSource), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	sourcePath := filepath.Join(dir, "union-targets.ts")
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+
+	calls := []string{
+		`dispatch("value")`,
+		`pair[index]("value")`,
+		`union.read()`,
+		`shaped("value")`,
+		`generic("value")`,
+		`dispatch("value", "extra")`,
+	}
+	demands := make([]typefacts.EntityDemand, 0, len(calls))
+	for _, call := range calls {
+		start := strings.Index(source, call)
+		if start < 0 {
+			t.Fatalf("call %q not found", call)
+		}
+		demands = append(demands, typefacts.EntityDemand{
+			Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(call)},
+			ResolvedCall: true,
+		})
+	}
+	entities, err := opened.(typefacts.SemanticEntityLookup).SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	assertCandidates := func(index int, wantKind string, wantQualified []string, wantPath string) {
+		t.Helper()
+		call := entities[index].ResolvedCall
+		if call == nil || call.Validity != typefacts.ResolvedCallValid {
+			t.Fatalf("%s call = %+v", calls[index], call)
+		}
+		if call.Declaration != nil {
+			t.Errorf("%s guessed one declaration %+v", calls[index], call.Declaration)
+		}
+		targets := call.Targets
+		if targets == nil || !targets.Exhaustive {
+			t.Fatalf("%s targets = %+v, want an exhaustive set", calls[index], targets)
+		}
+		if len(targets.Candidates) != len(wantQualified) {
+			t.Fatalf("%s candidates = %+v, want %d", calls[index], targets.Candidates, len(wantQualified))
+		}
+		seen := map[typefacts.SymbolID]bool{}
+		for candidateIndex, candidate := range targets.Candidates {
+			if candidate.Symbol == "" || seen[candidate.Symbol] {
+				t.Errorf("%s candidate %d symbol = %q, want distinct non-empty identities",
+					calls[index], candidateIndex, candidate.Symbol)
+			}
+			seen[candidate.Symbol] = true
+			if candidate.Kind != wantKind {
+				t.Errorf("%s candidate %d kind = %q, want %q", calls[index], candidateIndex, candidate.Kind, wantKind)
+			}
+			if candidate.QualifiedName != wantQualified[candidateIndex] {
+				t.Errorf("%s candidate %d qualified name = %q, want %q",
+					calls[index], candidateIndex, candidate.QualifiedName, wantQualified[candidateIndex])
+			}
+			if candidate.Location.Path != wantPath {
+				t.Errorf("%s candidate %d path = %q, want %q",
+					calls[index], candidateIndex, candidate.Location.Path, wantPath)
+			}
+			if candidateIndex > 0 {
+				previous := targets.Candidates[candidateIndex-1].Location
+				if previous.Path > candidate.Location.Path ||
+					(previous.Path == candidate.Location.Path && previous.StartByte > candidate.Location.StartByte) {
+					t.Errorf("%s candidates are not deterministically ordered: %+v", calls[index], targets.Candidates)
+				}
+			}
+		}
+	}
+	// A conditional union of two exact cross-file function declarations is a
+	// proven two-candidate dispatch, whether the callee is an identifier or a
+	// dynamically indexed tuple slot.
+	assertCandidates(0, "FunctionDeclaration", []string{"implA", "implB"}, implsPath)
+	assertCandidates(1, "FunctionDeclaration", []string{"implA", "implB"}, implsPath)
+	// Same-named methods keep their own class identities.
+	assertCandidates(2, "MethodDeclaration", []string{"Left.read", "Right.read"}, sourcePath)
+	for index, label := range map[int]string{
+		3: "structural interface constituent",
+		4: "generic constituent",
+		5: "recovery call",
+	} {
+		call := entities[index].ResolvedCall
+		if call == nil {
+			t.Fatalf("%s: no resolved call", label)
+		}
+		if call.Targets != nil {
+			t.Errorf("%s emitted target candidates %+v, want none", label, call.Targets)
+		}
+	}
+	if entities[5].ResolvedCall.Validity != typefacts.ResolvedCallRecovery {
+		t.Errorf("broken call validity = %q, want recovery", entities[5].ResolvedCall.Validity)
+	}
+}
+
 func TestResolvedUnionCallDoesNotGuessOneConstituentDeclaration(t *testing.T) {
 	dir := t.TempDir()
 	source := `interface Left {

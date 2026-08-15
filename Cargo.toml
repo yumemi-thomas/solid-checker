@@ -7,7 +7,7 @@ edition = "2024"
 license = "MIT"
 publish = true
 rust-version = "1.97"
-version = "0.8.0"
+version = "0.9.0"
 
 # The client's hot paths are tight decode and delta-application loops; thin
 # LTO and a single codegen unit are worth their compile time there.

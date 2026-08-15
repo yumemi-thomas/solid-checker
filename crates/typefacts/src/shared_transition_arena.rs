@@ -194,7 +194,7 @@ mod tests {
         length: u64,
     ) -> Response {
         Response {
-            schema: v3::TYPE_FACTS_SCHEMA_V8,
+            schema: v3::TYPE_FACTS_SCHEMA_V9,
             request_id,
             project_id: "/p/tsconfig.json".into(),
             generation: 1,

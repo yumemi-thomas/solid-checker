@@ -58,6 +58,111 @@ fn explicit_unresolved_symbols_survive_the_process_seam() {
 }
 
 #[test]
+fn exhaustive_call_target_sets_survive_full_delta_and_reuse_responses() {
+    let project = repository_root()
+        .join("internal/typefacts/testdata/call-targets/tsconfig.json")
+        .canonicalize()
+        .unwrap();
+    let path = project.parent().unwrap().join("dispatch.ts");
+    let source = fs::read_to_string(&path).unwrap();
+    let start = source.find("dispatch(\"value\")").unwrap();
+    let demand = EntityDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + "dispatch(\"value\")".len()) as u64,
+        },
+        resolved_call: true,
+        ..EntityDemand::default()
+    };
+    let analysis = || AnalysisDemand {
+        entities: vec![demand.clone()],
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let full = session.analyze(&analysis()).unwrap();
+    let entity = full.entities().next().unwrap();
+    let call = entity.resolved_call.as_ref().unwrap();
+    assert_eq!(call.validity, ResolvedCallValidity::Valid);
+    assert!(call.declaration.is_none());
+    let targets = call.targets.as_ref().expect("exhaustive target set");
+    assert!(targets.exhaustive);
+    let names = targets
+        .candidates
+        .iter()
+        .map(|candidate| candidate.name.as_ref())
+        .collect::<Vec<_>>();
+    assert_eq!(names, ["implA", "implB"]);
+    assert!(
+        targets
+            .candidates
+            .iter()
+            .all(|candidate| !candidate.symbol.is_empty()
+                && candidate.kind.as_ref() == "FunctionDeclaration")
+    );
+
+    let reused = session.analyze(&analysis()).unwrap();
+    assert_eq!(reused.entities().next(), full.entities().next());
+    assert!(session.take_last_table_changes().unwrap().unchanged);
+
+    // Replacing one implementation with a structural function type keeps the
+    // union composite but voids the exhaustiveness proof: no candidate set.
+    session
+        .update([FileChange {
+            path: path.to_string_lossy().into_owned(),
+            source: source
+                .replace(
+                    "const dispatch = cond ? implA : implB;",
+                    "declare const external: { (value: string): \"x\" };\nconst dispatch = cond ? implA : external;",
+                )
+                .into_bytes(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let delta_demand = EntityDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: (start
+                + "declare const external: { (value: string): \"x\" };\n".len()
+                + "const dispatch = cond ? implA : external;".len()
+                - "const dispatch = cond ? implA : implB;".len()) as u64,
+            end_byte: (start
+                + "declare const external: { (value: string): \"x\" };\n".len()
+                + "const dispatch = cond ? implA : external;".len()
+                - "const dispatch = cond ? implA : implB;".len()
+                + "dispatch(\"value\")".len()) as u64,
+        },
+        resolved_call: true,
+        ..EntityDemand::default()
+    };
+    let delta = session
+        .analyze(&AnalysisDemand {
+            entities: vec![delta_demand],
+        })
+        .unwrap();
+    let delta_call = delta
+        .entities()
+        .next()
+        .unwrap()
+        .resolved_call
+        .as_ref()
+        .cloned()
+        .expect("composite call keeps a resolved-call fact");
+    assert!(
+        delta_call.targets.is_none(),
+        "structural constituent must void the exhaustive candidate set: {:?}",
+        delta_call.targets
+    );
+    session.close().unwrap();
+}
+
+#[test]
 fn runtime_value_domain_survives_full_delta_and_reuse_responses() {
     let project = repository_root()
         .join("internal/typefacts/testdata/runtime-value-domain/tsconfig.json")

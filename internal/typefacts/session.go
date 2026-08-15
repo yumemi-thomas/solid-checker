@@ -65,6 +65,13 @@ func NewSessionV8(backend Project, projectID string, trace Trace) (*Session, err
 	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV8)
 }
 
+// NewSessionV9 carries exhaustive resolved-call target candidate sets and
+// emits Wire table schema v6. Frozen v5-v8 sessions remain available for
+// compatibility.
+func NewSessionV9(backend Project, projectID string, trace Trace) (*Session, error) {
+	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV9)
+}
+
 func newSession(backend Project, projectID string, trace Trace, schema uint64) (*Session, error) {
 	projectID = filepath.Clean(projectID)
 	if projectID == "" || projectID == "." {
@@ -81,6 +88,8 @@ func newSession(backend Project, projectID string, trace Trace, schema uint64) (
 		tableSchema = TypeFactsTableSchemaVersionV3
 	} else if schema < TypeFactsSchemaVersionV8 {
 		tableSchema = TypeFactsTableSchemaVersionV4
+	} else if schema < TypeFactsSchemaVersionV9 {
+		tableSchema = TypeFactsTableSchemaVersionV5
 	}
 	return &Session{
 		closure:    closure,

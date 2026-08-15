@@ -1,0 +1,204 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://solid-checker.dev/schema/typefacts-v9.schema.json",
+  "title": "TypeFactsSchema v9 (exhaustive call-target sets)",
+  "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. V9 preserves v8's explicit negative symbol resolution and adds compiler-proven exhaustive resolved-call target candidate sets in Wire table schema v6. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
+  "oneOf": [
+    { "$ref": "#/$defs/lifecycleRequest" },
+    { "$ref": "#/$defs/lifecycleResponse" }
+  ],
+  "$defs": {
+    "bytes": {
+      "type": "string",
+      "description": "CBOR byte string; JSON Schema has no byte-string type."
+    },
+    "location": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "startByte", "endByte"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "startByte": { "type": "integer", "minimum": 0 },
+        "endByte": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "fileChange": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "version"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "version": { "type": "integer", "minimum": 0 },
+        "source": { "$ref": "#/$defs/bytes" },
+        "deleted": { "type": "boolean" }
+      }
+    },
+    "entityDemand": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["location"],
+      "properties": {
+        "location": { "$ref": "#/$defs/location" },
+        "queryLocation": { "$ref": "#/$defs/location" },
+        "symbol": { "type": "boolean" },
+        "typeDescriptor": { "type": "boolean" },
+        "resolvedCall": { "type": "boolean" },
+        "callability": { "type": "boolean" },
+        "runtimeValueDomain": { "type": "boolean" },
+        "referenceSpace": { "type": "boolean" },
+        "runtimeIdentity": { "type": "boolean" },
+        "references": { "type": "boolean" },
+        "async": { "type": "boolean" },
+        "structuralAccessor": { "type": "boolean" }
+      }
+    },
+    "declaration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "location"],
+      "properties": {
+        "name": { "type": "string" },
+        "kind": { "type": "string" },
+        "location": { "$ref": "#/$defs/location" }
+      }
+    },
+    "symbolQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "references": { "type": "boolean" },
+        "referencesOnly": { "type": "boolean" }
+      }
+    },
+    "symbolFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "aliasTarget": { "type": "string" },
+        "declarations": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/declaration" } },
+        "references": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/location" } }
+      }
+    },
+    "compactDemands": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["groups", "strings"],
+      "description": "Demand snapshot with one string dictionary per frame; index 0 is the empty string. Each group is [pathIndex, packedRows] where packedRows holds unsigned LEB128 (flags << 1 | hasQuery, startDelta, length) triples, each optionally followed by (queryPath, queryStart, queryLength). Bit 9 requests runtimeValueDomain.",
+      "properties": {
+        "groups": {
+          "type": "array",
+          "maxItems": 1000000,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "prefixItems": [
+              { "type": "integer", "minimum": 0 },
+              { "$ref": "#/$defs/bytes" }
+            ]
+          }
+        },
+        "strings": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } }
+      }
+    },
+    "lifecycleRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "requestId", "operation", "projectId", "generation"],
+      "properties": {
+        "schema": { "const": 9 },
+        "requestId": { "type": "integer", "minimum": 1 },
+        "operation": {
+          "enum": ["open", "update", "analyze", "symbols", "sources", "cancel", "close"]
+        },
+        "projectId": { "type": "string", "minLength": 1 },
+        "generation": { "type": "integer", "minimum": 1 },
+        "changes": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/fileChange" } },
+        "demands": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/entityDemand" } },
+        "compactDemands": { "$ref": "#/$defs/compactDemands" },
+        "stateToken": { "type": "string" },
+        "resetState": { "type": "boolean" },
+        "removedDemandPaths": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } },
+        "symbolQueries": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/symbolQuery" } },
+        "releaseAnalysis": { "type": "boolean" },
+        "referenceChanges": { "type": "boolean" },
+        "referencePaths": { "type": "array", "maxItems": 1000000, "items": { "type": "string", "minLength": 1 } },
+        "cancelRequestId": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "timings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["analyzeNs"],
+      "properties": {
+        "requestDecodeNs": { "type": "integer", "minimum": 0 },
+        "analyzeNs": { "type": "integer", "minimum": 0 },
+        "asyncNs": { "type": "integer", "minimum": 0 },
+        "demandNs": { "type": "integer", "minimum": 0 },
+        "assemblyNs": { "type": "integer", "minimum": 0 },
+        "sortNs": { "type": "integer", "minimum": 0 },
+        "closeSymbolsNs": { "type": "integer", "minimum": 0 },
+        "materialized": { "type": "boolean" },
+        "retainedFiles": { "type": "integer", "minimum": 0 },
+        "recomputedFiles": { "type": "integer", "minimum": 0 },
+        "nonDurableFiles": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "lifecycleResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "requestId", "projectId", "generation", "ok"],
+      "description": "Analyze carries at most one opaque tableTransition. The transition proves its base project, generation, and state token and selects full or delta mode internally. An absent transition reuses the retained table.",
+      "properties": {
+        "schema": { "const": 9 },
+        "requestId": { "type": "integer", "minimum": 1 },
+        "projectId": { "type": "string", "minLength": 1 },
+        "generation": { "type": "integer", "minimum": 1 },
+        "ok": { "type": "boolean" },
+        "tableTransition": {
+          "$ref": "#/$defs/bytes",
+          "description": "Opaque full-or-delta Wire table transition. V9 emits Wire table schema v6, whose resolved-call rows may carry an exhaustive set of exact target candidate declarations."
+        },
+        "symbolEvidence": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/symbolFact" } },
+        "referenceEvidence": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/symbolFact" } },
+        "changedReferenceSymbols": { "type": "array", "maxItems": 1000000, "items": { "type": "string", "minLength": 1 } },
+        "referenceChangesExact": { "type": "boolean" },
+        "stateToken": { "type": "string" },
+        "affected": { "type": "array", "maxItems": 1000000, "items": { "type": "string" } },
+        "sources": {
+          "type": "array",
+          "maxItems": 1000000,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["path"],
+            "properties": {
+              "path": { "type": "string", "minLength": 1 },
+              "source": { "$ref": "#/$defs/bytes" },
+              "local": { "type": "boolean" }
+            }
+          }
+        },
+        "sourceArena": {
+          "type": "string",
+          "description": "Filesystem path to a temporary file holding every source body back to back, sliced by sourceLengths. Implies a producer and client that share a filesystem."
+        },
+        "sourceLengths": { "type": "array", "maxItems": 1000000, "items": { "type": "integer", "minimum": 0 } },
+        "timings": { "$ref": "#/$defs/timings" },
+        "error": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["code", "message"],
+          "properties": {
+            "code": { "type": "string", "minLength": 1 },
+            "message": { "type": "string" }
+          }
+        }
+      }
+    }
+  }
+}

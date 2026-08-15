@@ -5,18 +5,21 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, AsyncFunctionFact, CallKind,
-    Callability, Declaration, DeclarationOwner, EntityFact, FileFact, Location, ParameterFact,
-    ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain,
-    SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact, TypeDescriptor,
+    CallTargetSet, Callability, Declaration, DeclarationOwner, EntityFact, FileFact, Location,
+    ParameterFact, ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration,
+    RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact,
+    TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V5: u64 = 5;
 pub const TYPE_FACTS_SCHEMA_V6: u64 = 6;
 pub const TYPE_FACTS_SCHEMA_V7: u64 = 7;
 pub const TYPE_FACTS_SCHEMA_V8: u64 = 8;
+pub const TYPE_FACTS_SCHEMA_V9: u64 = 9;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V3: u64 = 3;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V4: u64 = 4;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V5: u64 = 5;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V6: u64 = 6;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
     "sha256:a4dfff25783d9dd99cf0d44e315a7c01e6c7d132965431ab5624a0975fd549a8";
 pub const TYPE_FACTS_SCHEMA_V6_SHA256: &str =
@@ -25,6 +28,8 @@ pub const TYPE_FACTS_SCHEMA_V7_SHA256: &str =
     "sha256:6939a166249694edf3cf4fe1f81bd687f9b572d331988f2faaa6f2277047d352";
 pub const TYPE_FACTS_SCHEMA_V8_SHA256: &str =
     "sha256:edbb15dc48793a12230a70305d2586da503f27f26ae5644c43b271661a30b1e1";
+pub const TYPE_FACTS_SCHEMA_V9_SHA256: &str =
+    "sha256:c6f4ffd342381a64ba6220785f7a71f688d15c9abee43bddd6d37c8d790c2e8d";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -521,7 +526,11 @@ impl<'a> PackedCursor<'a> {
         })
     }
 
-    fn resolved_call(&mut self, strings: &[Arc<str>]) -> Result<ResolvedCall, String> {
+    fn resolved_call(
+        &mut self,
+        strings: &[Arc<str>],
+        table_schema: u64,
+    ) -> Result<ResolvedCall, String> {
         let target = self.string_index(strings, "resolved target")?;
         let return_type_text = self.string_index(strings, "return type")?;
         let validity = parse_resolved_call_validity(self.u64()?)?;
@@ -531,6 +540,28 @@ impl<'a> PackedCursor<'a> {
         } else {
             None
         };
+        let targets =
+            if table_schema >= TYPE_FACTS_TABLE_SCHEMA_V6 && self.boolean("target set presence")? {
+                let exhaustive = self.boolean("target set exhaustiveness")?;
+                let candidate_count = self.count("target candidates")?;
+                if candidate_count == 0 {
+                    return Err("packed resolved-call target set has no candidates".into());
+                }
+                let mut candidates = Vec::with_capacity(candidate_count);
+                for _ in 0..candidate_count {
+                    let candidate = self.resolved_declaration(strings)?;
+                    if candidate.symbol.is_empty() {
+                        return Err("packed target candidate has no symbol".into());
+                    }
+                    candidates.push(candidate);
+                }
+                Some(CallTargetSet {
+                    exhaustive,
+                    candidates: candidates.into(),
+                })
+            } else {
+                None
+            };
         let argument_count = self.count("argument mappings")?;
         let mut arguments = Vec::with_capacity(argument_count);
         for _ in 0..argument_count {
@@ -587,6 +618,7 @@ impl<'a> PackedCursor<'a> {
             validity,
             kind,
             declaration,
+            targets,
             arguments: arguments.into(),
         })
     }
@@ -686,7 +718,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
-            TYPE_FACTS_TABLE_SCHEMA_V5 => 127,
+            TYPE_FACTS_TABLE_SCHEMA_V5 | TYPE_FACTS_TABLE_SCHEMA_V6 => 127,
             TYPE_FACTS_TABLE_SCHEMA_V4 => 63,
             _ => 31,
         };
@@ -699,7 +731,7 @@ fn decode_entity_run(
             None
         };
         let resolved_call = if flags & 2 != 0 {
-            Some(Arc::new(cursor.resolved_call(strings)?))
+            Some(Arc::new(cursor.resolved_call(strings, table_schema)?))
         } else {
             None
         };
@@ -946,6 +978,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
     if table_schema != TYPE_FACTS_TABLE_SCHEMA_V3
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V4
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V5
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V6
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }

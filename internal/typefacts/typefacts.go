@@ -249,6 +249,18 @@ type ArgumentMapping struct {
 	Parameter     *ParameterFact
 }
 
+// CallTargetSet is a finite set of exact callable declarations for one call.
+// Exhaustive is an explicit compiler proof that Candidates cover every call
+// signature of the callee's apparent type: every union constituent was a
+// closed concrete callable and every one of its signatures named one exact
+// implementation declaration. A set without that proof bit must never be
+// treated as the complete runtime dispatch set. Candidates are deduplicated
+// and ordered deterministically by declaration location, then symbol.
+type CallTargetSet struct {
+	Exhaustive bool
+	Candidates []ResolvedDeclaration
+}
+
 // Call describes the target and instantiated return type of a demanded call.
 // The return type is carried as text only: the opaque per-generation identity
 // that used to accompany it had no consumer, and because it embedded the
@@ -260,7 +272,12 @@ type Call struct {
 	Validity       ResolvedCallValidity
 	Kind           CallKind
 	Declaration    *ResolvedDeclaration
-	Arguments      []ArgumentMapping
+	// Targets carries the exact candidate declarations of a composite
+	// (union) callee when the compiler proves the set exhaustive. It is
+	// complementary to Declaration, which stays nil for composite callees
+	// because no single signature was selected.
+	Targets   *CallTargetSet
+	Arguments []ArgumentMapping
 }
 
 // FileChange is one monotonically-versioned editor overlay change.

@@ -100,6 +100,25 @@ adapter maps that declaration through the current target symbol's declarations.
 If no current declaration can be established, it omits the selected declaration
 instead of publishing a stale location.
 
+## Exhaustive target candidate sets
+
+A valid composite call — one whose callee type is a union — carries no single
+selected declaration. Since lifecycle v9, it may instead carry
+`resolvedCall.targets`, a `CallTargetSet` with an explicit `exhaustive` proof
+bit and deterministically ordered, deduplicated candidate declarations. The
+set is emitted only when every union constituent is one closed concrete
+callable and every one of its call (or construct) signatures names one exact
+implementation declaration (`FunctionDeclaration`, `MethodDeclaration`,
+`ArrowFunction`, `FunctionExpression`, `Constructor`) with a canonical symbol.
+`any`, `unknown`, nullable, generic, intersection, error, type-level, and
+declaration-less constituents void the whole set; an incomplete candidate set
+is never published. The proof covers the callee's apparent type — the same
+evidence class as the single selected declaration — so consumers must compare
+each candidate's analyzed behavior before certifying the dispatch, and must
+keep divergent or unresolved candidates fail-closed. Argument mappings remain
+`compositeSignature` for composite callees because per-candidate mappings may
+differ.
+
 ## Argument-to-parameter mapping
 
 Every supplied argument has an `ArgumentMapping`:

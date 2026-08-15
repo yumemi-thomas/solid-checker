@@ -220,6 +220,21 @@ pub struct ArgumentMapping {
     pub parameter: Option<ParameterFact>,
 }
 
+/// A finite set of exact callable declarations for one composite call.
+///
+/// `exhaustive` is an explicit compiler proof that `candidates` cover every
+/// call signature of the callee's apparent type. A set without that proof
+/// must never be treated as the complete runtime dispatch set; the producer
+/// only emits proven sets, and consumers must still check the bit.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CallTargetSet {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub exhaustive: bool,
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub candidates: Arc<[ResolvedDeclaration]>,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResolvedCall {
@@ -231,6 +246,8 @@ pub struct ResolvedCall {
     pub kind: CallKind,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub declaration: Option<ResolvedDeclaration>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub targets: Option<CallTargetSet>,
     #[serde(default, skip_serializing_if = "is_empty_slice")]
     pub arguments: Arc<[ArgumentMapping]>,
 }

@@ -44,6 +44,7 @@ func Checker_isContextSensitive(recv *checker.Checker, node *ast.Node) bool
 func NewChecker(program checker.Program, tracer *checker.Tracer) (*checker.Checker, *sync.Mutex)
 
 const SignatureKindCall = checker.SignatureKindCall
+const SignatureKindConstruct = checker.SignatureKindConstruct
 const SignatureFlagsIsSignatureCandidateForOverloadFailure = checker.SignatureFlagsIsSignatureCandidateForOverloadFailure
 const TypeFlagsAny = checker.TypeFlagsAny
 const TypeFlagsUnknown = checker.TypeFlagsUnknown

@@ -162,7 +162,7 @@ func writeWireTransitionEntityRun(
 			w.internalTypeDescriptor(entity.TypeDescriptor)
 		}
 		if entity.ResolvedCall != nil {
-			if err := writeWireTransitionResolvedCall(w, entity.ResolvedCall); err != nil {
+			if err := writeWireTransitionResolvedCall(w, entity.ResolvedCall, tableSchema); err != nil {
 				return fmt.Errorf("entity %d resolved call: %w", index, err)
 			}
 		}
@@ -183,7 +183,7 @@ func writeWireTransitionEntityRun(
 	return nil
 }
 
-func writeWireTransitionResolvedCall(w *packedWriter, call *Call) error {
+func writeWireTransitionResolvedCall(w *packedWriter, call *Call, tableSchema uint64) error {
 	validity, err := wireTransitionValidityCode(call.Validity)
 	if err != nil {
 		return err
@@ -200,6 +200,23 @@ func writeWireTransitionResolvedCall(w *packedWriter, call *Call) error {
 	w.u64(boolBit(call.Declaration != nil))
 	if call.Declaration != nil {
 		w.internalResolvedDeclaration(call.Declaration)
+	}
+	if tableSchema >= TypeFactsTableSchemaVersionV6 {
+		w.u64(boolBit(call.Targets != nil))
+		if call.Targets != nil {
+			if len(call.Targets.Candidates) == 0 {
+				return fmt.Errorf("resolved-call target set has no candidates")
+			}
+			w.u64(boolBit(call.Targets.Exhaustive))
+			w.u64(uint64(len(call.Targets.Candidates)))
+			for index := range call.Targets.Candidates {
+				candidate := &call.Targets.Candidates[index]
+				if candidate.Symbol == "" {
+					return fmt.Errorf("target candidate %d has no symbol", index)
+				}
+				w.internalResolvedDeclaration(candidate)
+			}
+		}
 	}
 	w.u64(uint64(len(call.Arguments)))
 	for index := range call.Arguments {

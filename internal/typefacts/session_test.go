@@ -245,8 +245,25 @@ func TestRuntimeValueDomainIsAvailableOnlyInV7(t *testing.T) {
 	if !response.OK {
 		t.Fatalf("v8 rejected runtime value domain: %+v", response.Error)
 	}
+	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersionV5 {
+		t.Fatalf("v8 Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersionV5)
+	}
+
+	v9, err := NewSessionV9(newSessionTestBackend(), projectID, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer v9.Close()
+	response = v9.Lifecycle(context.Background(), LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV9, RequestID: 1, Operation: LifecycleAnalyze,
+		ProjectID: projectID, Generation: 1, ResetState: true,
+		Demands: []EntityDemand{demand},
+	})
+	if !response.OK {
+		t.Fatalf("v9 rejected runtime value domain: %+v", response.Error)
+	}
 	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersion {
-		t.Fatalf("v8 Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersion)
+		t.Fatalf("v9 Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersion)
 	}
 }
 

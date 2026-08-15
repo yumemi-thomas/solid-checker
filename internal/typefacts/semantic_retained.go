@@ -666,6 +666,11 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 				builder.enqueueSymbol(entity.Symbol)
 				if entity.ResolvedCall != nil {
 					builder.enqueueSymbol(entity.ResolvedCall.Target)
+					if entity.ResolvedCall.Targets != nil {
+						for candidateIndex := range entity.ResolvedCall.Targets.Candidates {
+							builder.enqueueSymbol(entity.ResolvedCall.Targets.Candidates[candidateIndex].Symbol)
+						}
+					}
 				}
 			}
 			for _, entityIndex := range group.contribution.fullTier {

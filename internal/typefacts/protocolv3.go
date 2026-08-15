@@ -6,6 +6,7 @@ const TypeFactsSchemaVersionV5 uint64 = 5
 const TypeFactsSchemaVersionV6 uint64 = 6
 const TypeFactsSchemaVersionV7 uint64 = 7
 const TypeFactsSchemaVersionV8 uint64 = 8
+const TypeFactsSchemaVersionV9 uint64 = 9
 
 const (
 	TypeFactsHandshakeProtocol uint64 = 1
@@ -13,6 +14,9 @@ const (
 	TypeFactsSchemaV6SHA256           = "sha256:adffdee1486dd009bb2599593e09edd4c48804678b4f23002f72e5693ffc606d"
 	TypeFactsSchemaV7SHA256           = "sha256:6939a166249694edf3cf4fe1f81bd687f9b572d331988f2faaa6f2277047d352"
 	TypeFactsSchemaV8SHA256           = "sha256:edbb15dc48793a12230a70305d2586da503f27f26ae5644c43b271661a30b1e1"
+	// TypeFactsSchemaV9SHA256 is the digest of schema/typefacts-v9.schema.json;
+	// protocolv3_test.go verifies the pairing.
+	TypeFactsSchemaV9SHA256 = "sha256:c6f4ffd342381a64ba6220785f7a71f688d15c9abee43bddd6d37c8d790c2e8d"
 )
 
 type ServiceHandshake struct {
@@ -114,7 +118,7 @@ type LifecycleResponse struct {
 }
 
 func ValidateLifecycleRequest(request LifecycleRequest) error {
-	if request.Schema != TypeFactsSchemaVersionV5 && request.Schema != TypeFactsSchemaVersionV6 && request.Schema != TypeFactsSchemaVersionV7 && request.Schema != TypeFactsSchemaVersionV8 {
+	if request.Schema != TypeFactsSchemaVersionV5 && request.Schema != TypeFactsSchemaVersionV6 && request.Schema != TypeFactsSchemaVersionV7 && request.Schema != TypeFactsSchemaVersionV8 && request.Schema != TypeFactsSchemaVersionV9 {
 		return fmt.Errorf("unsupported TypeFacts schema %d", request.Schema)
 	}
 	if request.RequestID == 0 || request.ProjectID == "" || request.Generation == 0 {

@@ -14,4 +14,5 @@ var ErrGenerationMismatch = errors.New("type facts generation mismatch")
 const TypeFactsTableSchemaVersionV3 uint64 = 3
 const TypeFactsTableSchemaVersionV4 uint64 = 4
 const TypeFactsTableSchemaVersionV5 uint64 = 5
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV5
+const TypeFactsTableSchemaVersionV6 uint64 = 6
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV6

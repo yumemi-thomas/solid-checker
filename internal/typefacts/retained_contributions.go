@@ -43,6 +43,13 @@ func (c *retainedContribution) prepareTransportSeeds() {
 		if entity.ResolvedCall != nil && entity.ResolvedCall.Target != "" {
 			c.roots = append(c.roots, entity.ResolvedCall.Target)
 		}
+		if entity.ResolvedCall != nil && entity.ResolvedCall.Targets != nil {
+			for candidateIndex := range entity.ResolvedCall.Targets.Candidates {
+				if symbol := entity.ResolvedCall.Targets.Candidates[candidateIndex].Symbol; symbol != "" {
+					c.roots = append(c.roots, symbol)
+				}
+			}
+		}
 		if entity.Symbol != "" && entity.TypeDescriptor != nil {
 			c.descriptors = append(c.descriptors, retainedDescriptor{
 				symbol: entity.Symbol, descriptor: entity.TypeDescriptor,

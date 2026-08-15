@@ -369,6 +369,7 @@ func (p *project) resolveCallRunLocked(
 			continue
 		}
 		if calleeType != nil && calleeType.Flags()&checker.TypeFlagsUnion != 0 {
+			call.Targets = p.unionCallTargetsLocked(node, calleeType, evidence)
 			fillUnresolvedArgumentMappings(call.Arguments, typefacts.ArgumentMappingCompositeSignature)
 			continue
 		}
@@ -379,6 +380,107 @@ func (p *project) resolveCallRunLocked(
 		p.fillArgumentMappingsLocked(call.Arguments, node, signature, declaration, evidence)
 	}
 	return nil
+}
+
+// isExactCallableImplementationKind names declaration kinds that identify one
+// runtime callable implementation. Type-level signature declarations —
+// interface members, function types, call/construct/index signatures — only
+// describe a structural shape, so they never become dispatch candidates.
+func isExactCallableImplementationKind(kind string) bool {
+	switch kind {
+	case "FunctionDeclaration", "MethodDeclaration", "ArrowFunction", "FunctionExpression", "Constructor":
+		return true
+	default:
+		return false
+	}
+}
+
+// unionCallTargetsLocked derives the exact candidate declarations of a valid
+// call whose callee type is a union. The set is emitted only when the
+// compiler proves it exhaustive: every union constituent is one closed
+// concrete callable and every one of its call (or construct) signatures
+// names one exact implementation declaration with a canonical symbol. Any
+// open, recovery, type-level, or declaration-less constituent leaves the
+// composite call without a target set; an incomplete candidate set is never
+// emitted, because it would read as the complete runtime dispatch set.
+func (p *project) unionCallTargetsLocked(
+	node *ast.Node,
+	calleeType *checker.Type,
+	evidence *semanticEvidence,
+) *typefacts.CallTargetSet {
+	signatureKind := checker.SignatureKindCall
+	if ast.IsNewExpression(node) {
+		signatureKind = checker.SignatureKindConstruct
+	}
+	// Instantiable covers unconstrained and constrained generics: a
+	// constraint bounds behavior structurally but does not enumerate exact
+	// implementations, so any generic constituent voids the proof.
+	const openFlags = checker.TypeFlagsAny |
+		checker.TypeFlagsUnknown |
+		checker.TypeFlagsNever |
+		checker.TypeFlagsUndefined |
+		checker.TypeFlagsNull |
+		checker.TypeFlagsInstantiable |
+		checker.TypeFlagsUnion |
+		checker.TypeFlagsIntersection |
+		checker.TypeFlagsIncludesError
+	var candidates []typefacts.ResolvedDeclaration
+	for _, constituent := range calleeType.Types() {
+		if constituent == nil || constituent.Flags()&openFlags != 0 {
+			return nil
+		}
+		signatures := p.checker.GetSignaturesOfType(constituent, signatureKind)
+		if len(signatures) == 0 {
+			return nil
+		}
+		target := constituent.Symbol()
+		for _, signature := range signatures {
+			if signature == nil ||
+				signature.Flags()&checker.SignatureFlagsIsSignatureCandidateForOverloadFailure != 0 {
+				return nil
+			}
+			declaration := p.currentSignatureDeclaration(signature, target)
+			if declaration == nil {
+				return nil
+			}
+			resolved := p.resolvedDeclaration(signature, declaration, target)
+			if resolved == nil ||
+				resolved.Symbol == "" ||
+				!isExactCallableImplementationKind(resolved.Kind) {
+				return nil
+			}
+			candidates = append(candidates, *resolved)
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	sort.Slice(candidates, func(left, right int) bool {
+		if candidates[left].Location.Path != candidates[right].Location.Path {
+			return candidates[left].Location.Path < candidates[right].Location.Path
+		}
+		if candidates[left].Location.StartByte != candidates[right].Location.StartByte {
+			return candidates[left].Location.StartByte < candidates[right].Location.StartByte
+		}
+		if candidates[left].Location.EndByte != candidates[right].Location.EndByte {
+			return candidates[left].Location.EndByte < candidates[right].Location.EndByte
+		}
+		return candidates[left].Symbol < candidates[right].Symbol
+	})
+	write := 1
+	for read := 1; read < len(candidates); read++ {
+		previous := &candidates[write-1]
+		if candidates[read].Symbol == previous.Symbol && candidates[read].Location == previous.Location {
+			continue
+		}
+		candidates[write] = candidates[read]
+		write++
+	}
+	candidates = candidates[:write:write]
+	for index := range candidates {
+		evidence.declaration(&candidates[index])
+	}
+	return &typefacts.CallTargetSet{Exhaustive: true, Candidates: candidates}
 }
 
 func resolvedCallHasSpreadArgument(node *ast.Node) bool {

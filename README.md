@@ -6,7 +6,7 @@ TypeScript project. This repository owns both sides of the protocol:
 - `cmd/solid-typefacts` is the TypeScript-Go producer.
 - `crates/typefacts` is the Rust model, deterministic-CBOR codec, and retained
   session client.
-- `schema` contains the frozen lifecycle schemas through v8 and codec limits.
+- `schema` contains the frozen lifecycle schemas through v9 and codec limits.
   The producer reports that schema's digest in its startup handshake, and the
   client rejects a producer whose digest, protocol version, or build id differs.
 
