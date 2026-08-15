@@ -191,6 +191,15 @@ func runtimeValueDomainOfTypeSeen(
 	if flags&checker.TypeFlagsUndefined != 0 {
 		return typefacts.RuntimeValueDomain{MayBeUndefined: true}
 	}
+	// `void` is a contract to ignore the result, not a claim that the result is
+	// undefined. TypeScript's return-type bivariance lets a value-returning
+	// function inhabit a void-returning slot -- `const f: () => void = () => 42`
+	// is legal -- so a void-typed expression proves neither that its value is
+	// undefined nor that it is not a function. Only a concrete annotated body
+	// guarantees undefined, and a call site cannot see which it has.
+	if flags&checker.TypeFlagsVoid != 0 {
+		return unknownRuntimeValueDomain()
+	}
 	if len(typeChecker.GetSignaturesOfType(value, checker.SignatureKindCall)) != 0 {
 		return typefacts.RuntimeValueDomain{MayBeCallable: true}
 	}

@@ -50,6 +50,7 @@ const TypeFlagsAny = checker.TypeFlagsAny
 const TypeFlagsUnknown = checker.TypeFlagsUnknown
 const TypeFlagsNever = checker.TypeFlagsNever
 const TypeFlagsUndefined = checker.TypeFlagsUndefined
+const TypeFlagsVoid = checker.TypeFlagsVoid
 const TypeFlagsNull = checker.TypeFlagsNull
 const TypeFlagsTypeParameter = checker.TypeFlagsTypeParameter
 const TypeFlagsInstantiable = checker.TypeFlagsInstantiable

@@ -109,6 +109,8 @@ declare const unknownValue: unknown;
 declare const neverValue: never;
 function unconstrained<T>(genericValue: T) { return genericValue; }
 declare const recoveryValue: MissingType;
+declare function voidCall(): void;
+const voidResult = voidCall();
 `
 	sourcePath := filepath.Join(dir, "domains.ts")
 	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
@@ -147,6 +149,10 @@ declare const recoveryValue: MissingType;
 		{"callableIntersection", callable},
 		{"optionalCleanup", cleanup},
 		{"boundedCleanup", cleanup},
+		// `void` is a contract to ignore the result, not a claim that it is
+		// undefined: return-type bivariance lets a value-returning function
+		// inhabit a void slot, so the domain stays open.
+		{"voidResult", unknown},
 		{"numberValue", other},
 		{"nullValue", other},
 		{"objectValue", other},
