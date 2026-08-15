@@ -179,6 +179,48 @@ func TestSemanticDemandRunsRejectsCrossFileQueryLocation(t *testing.T) {
 	}
 }
 
+func TestSemanticDemandRunsClassifiesTheCompleteDemandedExpression(t *testing.T) {
+	dir := t.TempDir()
+	write := writeProject(t, dir)
+	write("tsconfig.json", `{"compilerOptions":{"strict":true},"include":["*.ts"]}`)
+	source := `declare function factory(): any;
+export const result = factory();
+`
+	path := write("run.ts", source)
+
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	runner := opened.(semanticDemandRunner)
+	start := strings.Index(source, "factory();")
+	demand := func(end int) typefacts.EntityDemand {
+		return typefacts.EntityDemand{
+			Location:           typefacts.Location{Path: path, StartByte: start, EndByte: end},
+			RuntimeValueDomain: true,
+		}
+	}
+	results, err := runner.SemanticDemandRuns(context.Background(), []typefacts.SemanticDemandRun{{
+		Path: path,
+		Demands: []typefacts.EntityDemand{
+			demand(start + len("factory")),
+			demand(start + len("factory()")),
+		},
+	}}, typefacts.SemanticScope{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	callee := results[0].Entities[0].RuntimeValueDomain
+	call := results[0].Entities[1].RuntimeValueDomain
+	if callee == nil || !callee.MayBeCallable || callee.Unknown {
+		t.Fatalf("callee domain = %+v, want known callable", callee)
+	}
+	if call == nil || !call.Unknown || !call.MayBeCallable || !call.MayBeUndefined || !call.MayBeOther {
+		t.Fatalf("call domain = %+v, want open any domain", call)
+	}
+}
+
 func embeddedSemanticIDs(result typefacts.SemanticDemandRunResult) []typefacts.SymbolID {
 	ids := append([]typefacts.SymbolID(nil), result.Structural...)
 	for _, entity := range result.Entities {

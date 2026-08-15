@@ -29,6 +29,34 @@ func (c *semanticNodeCursor) at(position int) *ast.Node {
 	return c.node
 }
 
+// covering returns the smallest syntax node that contains the complete
+// demanded range. Type/value queries describe expressions, not merely the
+// deepest token at their first byte: `factory()` and `factory` start at the
+// same offset but have different runtime domains and callability.
+func (c *semanticNodeCursor) covering(start int, end int) *ast.Node {
+	if end <= start {
+		return c.at(start)
+	}
+	return deepestNodeCovering(c.sourceFile.AsNode(), start, end)
+}
+
+func deepestNodeCovering(node *ast.Node, start int, end int) *ast.Node {
+	if node == nil || node.Pos() > start || node.End() < end {
+		return nil
+	}
+	best := node
+	node.ForEachChild(func(child *ast.Node) bool {
+		if child.Pos() <= start && end <= child.End() {
+			if candidate := deepestNodeCovering(child, start, end); candidate != nil {
+				best = candidate
+			}
+			return true
+		}
+		return false
+	})
+	return best
+}
+
 // SemanticDemandRuns resolves canonically ordered per-file runs under one
 // checker lock. Results are index-aligned with runs and with each run's
 // demands; no caller has to flatten or repartition file ownership.
@@ -194,10 +222,7 @@ func (p *project) SemanticDemandRuns(
 				query = *demand.QueryLocation
 				query.Path = path
 			}
-			queryNode := resultNode
-			if query.StartByte != location.StartByte || query.EndByte != location.EndByte {
-				queryNode = queryCursor.at(query.StartByte)
-			}
+			queryNode := queryCursor.covering(query.StartByte, query.EndByte)
 			var queryType *checker.Type
 			queryTypeLoaded := false
 			if demand.TypeDescriptor && queryNode != nil && !structuralSuppressed(entity.Symbol) {
@@ -228,7 +253,11 @@ func (p *project) SemanticDemandRuns(
 				}
 			}
 			if demand.ResolvedCall {
-				node := queryNode
+				// Call lookup is anchored at the first token and walks outward;
+				// callers may demand a statement-sized range including a trailing
+				// semicolon. Type/value domains above instead classify the complete
+				// demanded expression range.
+				node := queryCursor.at(query.StartByte)
 				for node != nil && !isCallLikeExpression(node) {
 					node = node.Parent
 				}
