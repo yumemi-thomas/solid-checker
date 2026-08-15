@@ -113,6 +113,7 @@ pub(super) fn resolve_contract_imports(
                                 location: location(file.path.shared(), member.property),
                                 analysis_context: String::new(),
                                 fixes: vec![],
+                                uncertain: false,
                             });
                             continue;
                         };
@@ -185,6 +186,7 @@ pub(super) fn resolve_contract_imports(
                         location: binding_location,
                         analysis_context: String::new(),
                         fixes: vec![],
+                        uncertain: false,
                     });
                     continue;
                 };
@@ -247,6 +249,7 @@ pub(super) fn resolve_contract_imports(
                         location: specifier_location,
                         analysis_context: String::new(),
                         fixes: vec![],
+                        uncertain: false,
                     });
                     continue;
                 };

@@ -504,7 +504,8 @@ pub(crate) struct LocalAccessSymbolState {
     pub(crate) async_options: crate::source_discovery::AsyncSourceOptions,
     pub(crate) contract_reads: Option<Vec<(String, String, Location, String)>>,
     pub(crate) source_kind: Option<ReactiveSourceKind>,
-    pub(crate) prop_source: Option<(SymbolId, Location)>,
+    pub(crate) prop_source:
+        Option<(SymbolId, Location, Option<crate::source_discovery::PropsReactivity>)>,
     pub(crate) source_declaration: Option<Declaration>,
     pub(crate) symbol_name: Option<SymbolId>,
 }
@@ -525,7 +526,12 @@ pub(crate) struct CachedLocalAccesses {
     pub(crate) aggregate: Option<LocalAccessResult>,
     pub(crate) files: HashMap<SourcePath, CachedLocalAccessFile>,
     pub(crate) dependency_states: HashMap<SymbolId, LocalAccessSymbolState>,
-    pub(crate) prop_sources: HashMap<SymbolId, (SymbolId, Location)>,
+    /// Prop-source identity plus caller classification per props symbol.
+    /// Classification is cross-file — a call site in one file decides
+    /// findings in another — so a change here re-enters the symbol into the
+    /// changed-dependency set even when both files' sources are untouched.
+    pub(crate) prop_sources:
+        HashMap<SymbolId, (SymbolId, Location, Option<crate::source_discovery::PropsReactivity>)>,
 }
 
 /// The proven-source symbol at each exact TypeScript reference location:
@@ -563,6 +569,7 @@ pub(crate) fn same_reachability_ast(
         && previous.exports == current.exports
         && previous.identifiers == current.identifiers
         && previous.awaits == current.awaits
+        && previous.unconditional_awaits == current.unconditional_awaits
         && previous.returns == current.returns
         && previous.jsx_elements == current.jsx_elements
         && previous.members == current.members

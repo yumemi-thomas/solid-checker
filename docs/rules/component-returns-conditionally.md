@@ -14,7 +14,17 @@ runs exactly once.
 
 Flags components whose `return` statement is controlled by a condition that reads a
 reactive value (a signal, store path, or prop) — early returns, `if`/`else` around
-returns, and conditional expressions that select the returned JSX structure.
+returns, `switch` statements whose cases return, logical expressions that select
+returned JSX (`return props.user && <Profile/>`, `return cond() || <Fallback/>`),
+and conditional expressions that select the returned JSX structure.
+
+Only *structural* tests count: the tests of the returned expression's own
+conditional/logical spine and of the `if`/`switch` statements a return sits under.
+A ternary nested inside a JSX attribute of a returned branch
+(`return cond() ? <div title={flag() ? "a" : "b"}/> : <span/>`) is a tracked
+binding that re-evaluates with `flag()` — it is not a structural branch and is not
+reported. A logical guard that selects plain data rather than JSX structure is not
+this rule either.
 
 ## Why is this bad?
 

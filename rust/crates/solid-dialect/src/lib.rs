@@ -845,6 +845,41 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether component props are only reactive when a caller passes a
+    /// reactive expression — so the engine must prove signal-backing from the
+    /// component's call sites instead of assuming every prop is reactive.
+    ///
+    /// rc.0 ground truth (probed on the published `solid-js@2.0.0-rc.0` dev
+    /// entry): `devComponent` wraps the component body in
+    /// `untrack(() => Comp(props), '<Name>')`, and the strict-read warning
+    /// fires only when a prop *getter* reads reactive state during that
+    /// window. A prop every call site passes as a static value compiles to a
+    /// plain property and never warns, so reporting its reads would claim a
+    /// runtime misbehavior that cannot occur. The 1.x catalog keeps the
+    /// upstream over-approximation for eslint-plugin-solid parity, so the
+    /// default is `false`.
+    fn props_require_caller_proof(&self) -> bool {
+        false
+    }
+
+    /// Whether the after-await rule also proves member reads (store paths,
+    /// component props) after the dominating await, in addition to accessor
+    /// calls. The 2.0 rule page claims them; 1.x parity pins the accessor-call
+    /// surface upstream's `reactivity` rule counts, so the default is `false`.
+    fn reports_member_reads_after_await(&self) -> bool {
+        false
+    }
+
+    /// Whether `untracked-derived-function` exempts a derived helper whose
+    /// every call runs in a tracked compute or a fresh-at-call-time imperative
+    /// scope (event handler, deferred/leaf callback, effect apply, untrack).
+    /// Reads there either track or are legitimately fresh, so nothing
+    /// misbehaves. The 1.x catalog keeps upstream's expectations for parity,
+    /// so the default is `false`.
+    fn derived_function_role_exemptions(&self) -> bool {
+        false
+    }
+
     /// The modules this dialect exports `name` from, in `position`.
     ///
     /// The other half of [`Dialect::modules`], and the reason that list is

@@ -19,6 +19,16 @@ passed as an argument, returned, called from a nested callback, or rendered
 anywhere is left alone rather than guessed about — any of those may hand it
 to a tracking scope the analysis cannot enumerate.
 
+The 2.0 catalog additionally gates on the call's execution role: a helper
+bound and called entirely inside a tracked compute (`createMemo` body, an
+effect's compute function) tracks its reads there, and one called only from a
+legal imperative scope (an event handler, `onSettled` or another deferred/leaf
+callback, an effect's apply function, `untrack`, a directive application)
+reads legitimately fresh values at call time. Neither misbehaves at runtime,
+so neither is reported; only setup-time calls (component body, module scope)
+remain evidence. The `v1/` twin keeps upstream eslint-plugin-solid's
+expectations unchanged.
+
 ## Why is this bad?
 
 Wrapping reactive reads in a function defers them, but deferral only helps if the

@@ -302,6 +302,7 @@ mod tests {
                 via: "".into(),
                 origin: None,
                 origin_context: "".into(),
+                uncertain: false,
             }],
             writes: vec![ReactiveWrite {
                 setter: "sampleSetter".into(),
@@ -340,6 +341,7 @@ mod tests {
                     location: location(index as u64 + 10),
                     analysis_context: String::new(),
                     fixes: vec![],
+                    uncertain: false,
                 })
                 .collect(),
             ..Program::default()

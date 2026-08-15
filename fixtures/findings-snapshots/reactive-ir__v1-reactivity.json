@@ -58,7 +58,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
       "start": 1400,
-      "end": 1406,
+      "end": 1405,
       "fixes": 0
     },
     {

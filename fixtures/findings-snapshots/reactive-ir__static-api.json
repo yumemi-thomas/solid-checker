@@ -282,36 +282,6 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 2030,
-      "end": 2040,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 2059,
-      "end": 2076,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 2176,
-      "end": 2186,
-      "fixes": 0
-    },
-    {
       "rule": "invalid-refresh-target",
       "code": "SC7003",
       "kind": "violation",
@@ -319,26 +289,6 @@
       "path": "fixtures/reactive-ir/static-api/App.tsx",
       "start": 2176,
       "end": 2186,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 2493,
-      "end": 2505,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 2536,
-      "end": 2548,
       "fixes": 0
     },
     {

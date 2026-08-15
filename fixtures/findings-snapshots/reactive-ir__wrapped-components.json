@@ -1,10 +1,10 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "component-props-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/wrapped-components/plain-invalid.tsx",
       "start": 239,
@@ -14,7 +14,7 @@
     {
       "rule": "component-props-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/wrapped-components/wrapped-invalid.tsx",
       "start": 560,

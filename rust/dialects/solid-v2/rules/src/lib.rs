@@ -44,12 +44,24 @@ impl CatalogWording for Catalog {
 
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
-            FindingSeed::StrictRead(read) => FindingWording::new(
-                Rule::StrictReadUntracked.metadata(),
-                strict_read_message(read),
-                "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev.",
-            )
-            .with_evidence(strict_read_evidence(read)),
+            FindingSeed::StrictRead(read) => {
+                let mut message = strict_read_message(read);
+                if read.uncertain {
+                    // Signal-backing is a caller-decided fact in 2.0 (probed:
+                    // devComponent's strict-read window only warns for props
+                    // whose getter reads reactive state). When the callers
+                    // cannot be enumerated, this is a proof obligation.
+                    message.push_str(
+                        "; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the prop is signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime warning",
+                    );
+                }
+                FindingWording::new(
+                    Rule::StrictReadUntracked.metadata(),
+                    message,
+                    "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev.",
+                )
+                .with_evidence(strict_read_evidence(read))
+            }
             FindingSeed::OwnedWrite(write) => owned_write_wording(write),
             FindingSeed::Action(action) => FindingWording::new(
                 Rule::ActionCalledInOwnedScope.metadata(),
@@ -462,7 +474,13 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::DirectMutation { .. } => Rule::NoDirectMutation,
     };
     let text = solid_reactive_ir::static_defect_text(defect, &V2_STATIC_TERMS);
-    FindingWording::new(rule.metadata(), text.message, text.hint).with_evidence(vec![
+    let mut message = text.message;
+    if defect.uncertain {
+        message.push_str(
+            "; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the props are signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime defect",
+        );
+    }
+    FindingWording::new(rule.metadata(), message, text.hint).with_evidence(vec![
         EvidenceStep {
             message: text.evidence.into(),
             location: Some(defect.location.clone()),

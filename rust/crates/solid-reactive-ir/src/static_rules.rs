@@ -68,6 +68,7 @@ fn prefer_component_syntax(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) 
                         location: location(caller_file.path.shared(), call.callee),
                         analysis_context: enclosing_function_label(caller_file, call.span),
                         fixes: vec![],
+                        uncertain: false,
                     },
                 );
             }
@@ -122,6 +123,7 @@ fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
                         location: location(file.path.shared(), attribute.span),
                         analysis_context: element_name.to_owned(),
                         fixes: vec![],
+                        uncertain: false,
                     },
                 );
             }
@@ -191,6 +193,7 @@ fn valid_jsx_nesting(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
                     location: location(file.path.shared(), child.name.span),
                     analysis_context: format!("<{invalid_parent}>"),
                     fixes: vec![],
+                    uncertain: false,
                 },
             );
         }
@@ -300,6 +303,7 @@ fn execution_map_incomplete(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
                     location: location(file.path.shared(), span),
                     analysis_context: String::new(),
                     fixes: vec![],
+                    uncertain: false,
                 },
             );
         }
@@ -309,6 +313,16 @@ fn execution_map_incomplete(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
 /// SC1003: a reactive object destructured outside tracking. Component
 /// parameter patterns are necessarily setup-time reads; body bindings are
 /// classified through the same semantic execution-role engine as direct reads.
+///
+/// Two precision gates:
+/// - **Roles.** Destructuring inside an event handler, a deferred/leaf
+///   callback (`onSettled`, action bodies), an effect's apply callback, an
+///   `untrack` callback, or a directive application reads fresh values at
+///   call time — legal at runtime — so only setup-time contexts (component
+///   body, module scope, unclassified spans) are flagged.
+/// - **Caller-proven props.** Under a dialect requiring caller proof, a
+///   destructure that binds only proven-static props is not a reactive read
+///   at all; an unprovable one is reported as a proof obligation.
 fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for function in &file.ast.functions {
@@ -323,6 +337,11 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                 && ctx.semantic_lookup.function_is_component(file, function)
             {
                 let location = location(file.path.shared(), parameter.pattern);
+                let uncertain = match destructured_props_use(ctx, parameter, &location) {
+                    crate::source_discovery::PropUse::Static => continue,
+                    crate::source_discovery::PropUse::Reactive => false,
+                    crate::source_discovery::PropUse::Unknown => true,
+                };
                 draft.push_defect(
                     "component-props-destructure",
                     StaticDefect {
@@ -344,6 +363,7 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                         )
                         .into_iter()
                         .collect(),
+                        uncertain,
                     },
                 );
             }
@@ -361,46 +381,107 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
             if binding.shape != solid_facts::ast::BindingShape::Object {
                 continue;
             }
-            let props = binding
+            let prop_declaration = binding
                 .initializer_identifier
                 .as_ref()
                 .and_then(|identifier| {
                     ctx.entities
                         .get(&location(file.path.shared(), identifier.span))
                 })
-                .is_some_and(|symbol| ctx.prop_sources.contains_key(symbol));
+                .and_then(|symbol| ctx.prop_sources.get(symbol))
+                .map(|(_, declaration)| declaration.clone());
+            let props = prop_declaration.is_some();
             let reactive_object = props || binding_initializes_reactive_store(ctx, file, binding);
-            if reactive_object
-                && semantic_execution_role(
-                    file,
-                    binding.pattern,
-                    &allowed,
-                    ctx.entities,
-                    ctx.symbol_names,
-                    ctx.semantic_lookup,
-                ) != crate::ExecutionRole::TrackedJsx
-            {
-                let location = location(file.path.shared(), binding.pattern);
-                let source = binding
-                    .initializer
-                    .and_then(|span| file.source_text(span))
-                    .unwrap_or("reactive object")
-                    .to_owned();
-                draft.push_defect(
-                    "component-props-destructure",
-                    StaticDefect {
-                        kind: StaticDefectKind::ReactiveObjectDestructure {
-                            source,
-                            component_props: props,
-                        },
-                        location,
-                        analysis_context: enclosing_function_label(file, binding.pattern),
-                        fixes: vec![],
-                    },
-                );
+            if !reactive_object {
+                continue;
             }
+            let role = semantic_execution_role(
+                file,
+                binding.pattern,
+                &allowed,
+                ctx.entities,
+                ctx.symbol_names,
+                ctx.semantic_lookup,
+            );
+            // Fresh-at-call-time contexts: tracked scopes re-run and
+            // re-subscribe; event handlers, deferred/leaf callbacks, effect
+            // apply, untrack, and directive application read current values
+            // when they execute. None of those misbehaves at runtime.
+            if matches!(
+                role,
+                crate::ExecutionRole::TrackedJsx
+                    | crate::ExecutionRole::EventCallback
+                    | crate::ExecutionRole::DeferredCallback
+                    | crate::ExecutionRole::UntrackedCallback
+                    | crate::ExecutionRole::EffectApply
+                    | crate::ExecutionRole::DirectiveApply
+            ) {
+                continue;
+            }
+            // The same guard the strict-read member loop applies: a
+            // destructure inside a body-defined handler or helper executes
+            // when that function is invoked and reads values fresh at that
+            // moment — only a proven setup-time role above makes it a
+            // once-frozen snapshot.
+            if crate::owners::inside_non_component_function(
+                file,
+                binding.pattern,
+                ctx.semantic_lookup,
+            ) && crate::execution_role::named_callback_execution_role(
+                file,
+                binding.pattern,
+                ctx.semantic_lookup,
+            )
+            .is_none()
+            {
+                continue;
+            }
+            let mut uncertain = false;
+            if let Some(declaration) = &prop_declaration {
+                match destructured_props_use(ctx, binding, declaration) {
+                    crate::source_discovery::PropUse::Static => continue,
+                    crate::source_discovery::PropUse::Reactive => {}
+                    crate::source_discovery::PropUse::Unknown => uncertain = true,
+                }
+            }
+            let location = location(file.path.shared(), binding.pattern);
+            let source = binding
+                .initializer
+                .and_then(|span| file.source_text(span))
+                .unwrap_or("reactive object")
+                .to_owned();
+            draft.push_defect(
+                "component-props-destructure",
+                StaticDefect {
+                    kind: StaticDefectKind::ReactiveObjectDestructure {
+                        source,
+                        component_props: props,
+                    },
+                    location,
+                    analysis_context: enclosing_function_label(file, binding.pattern),
+                    fixes: vec![],
+                    uncertain,
+                },
+            );
         }
     }
+}
+
+/// The caller classification of the props a destructuring pattern binds: the
+/// named slots when they are all it binds, the whole object when a rest
+/// element (or an unresolved slot) captures the remainder.
+fn destructured_props_use(
+    ctx: &AnalysisContext<'_>,
+    binding: &solid_facts::ast::BindingFact,
+    declaration: &Location,
+) -> crate::source_discovery::PropUse {
+    if binding.names.len() > binding.object_slots.len() {
+        return ctx.props_reactivity.object_use(declaration);
+    }
+    ctx.props_reactivity.names_use(
+        declaration,
+        binding.object_slots.iter().map(|slot| slot.property.as_str()),
+    )
 }
 
 fn binding_initializes_reactive_store(
@@ -443,11 +524,18 @@ fn binding_initializes_reactive_store(
         .is_some_and(|primitive| ctx.dialect.returns_store(primitive))
 }
 
-/// SC1002: reactive accessors read after an await inside a tracked async
-/// computation, where dependency tracking has already ended.
+/// SC1002: reactive reads after an await inside a tracked async computation,
+/// where dependency tracking has already ended. Accessor calls come from the
+/// TypeScript-side dominance analysis; store-path and props member reads are
+/// proven against the straight-line awaits the AST facts record
+/// (`unconditional_awaits`), with the same precision guards — no conditional
+/// dominance, no nested closures.
 fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
+            let Some(analysis_context) = tracked_async_computation_context(ctx, function) else {
+                continue;
+            };
             for call in &function.calls_after_await {
                 let Some(symbol) = ctx.entities.get(call) else {
                     continue;
@@ -476,54 +564,7 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                 let diagnostic_location = Location {
                     path: call.path.clone(),
                     start_byte: call.start_byte,
-                    end_byte: call.end_byte.saturating_add(1),
-                };
-                let function_symbol = async_symbol_root(
-                    ctx.aliases
-                        .get(function.symbol.as_ref())
-                        .map_or(function.symbol.as_ref(), SymbolId::as_str),
-                    &ctx.facts.typescript,
-                );
-                let Some(analysis_context) = ctx.facts.files.iter().find_map(|file| {
-                    file.ast.calls.iter().find_map(|candidate| {
-                        let argument = candidate.arguments.first()?;
-                        let lexical = *file.path.as_str() == *function.expression.path
-                            && argument.span.contains(Span::new(
-                                u32::try_from(function.expression.start_byte).ok()?,
-                                u32::try_from(function.expression.end_byte).ok()?,
-                            ));
-                        let semantic = ctx
-                            .entities
-                            .get(&location(file.path.shared(), argument.span))
-                            .is_some_and(|symbol| {
-                                async_symbol_root(symbol, &ctx.facts.typescript) == function_symbol
-                            });
-                        if !lexical && !semantic {
-                            return None;
-                        }
-                        let primitive = primitive_name(
-                            file.path.as_str(),
-                            candidate.callee,
-                            candidate.static_callee(&file.source),
-                            ctx.entities,
-                            ctx.symbol_names,
-                            ctx.dialect,
-                        )?;
-                        // A tracked callback is what makes this a computation
-                        // whose reads matter after an await. The list this
-                        // replaced was 2.0's eight; under 1.x three of them
-                        // resolve to nothing and `createComputed` was absent.
-                        primitive
-                            .primitive()
-                            .is_some_and(|resolved| {
-                                ctx.dialect
-                                    .callback_semantics_at(resolved, 0, candidate.arguments.len())
-                                    .tracks_reads
-                            })
-                            .then(|| format!("{primitive} async computation"))
-                    })
-                }) else {
-                    continue;
+                    end_byte: call.end_byte,
                 };
                 draft.push_defect(
                     "reactive-read-after-await",
@@ -532,18 +573,198 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                             accessor: display.to_string(),
                         },
                         location: diagnostic_location,
-                        analysis_context,
+                        analysis_context: analysis_context.clone(),
                         fixes: vec![],
+                        uncertain: false,
                     },
                 );
             }
+            if ctx.dialect.reports_member_reads_after_await() {
+                member_reads_after_await(ctx, draft, function, &analysis_context);
+            }
         }
+    }
+}
+
+/// The tracked-computation proof for one async function: the call that
+/// receives it as a tracked compute callback, named for the finding's
+/// analysis context. `None` means no tracked computation receives the
+/// function and its after-await reads are not this rule's business.
+fn tracked_async_computation_context(
+    ctx: &AnalysisContext<'_>,
+    function: &typefacts::AsyncFunctionFact,
+) -> Option<String> {
+    let function_symbol = async_symbol_root(
+        ctx.aliases
+            .get(function.symbol.as_ref())
+            .map_or(function.symbol.as_ref(), SymbolId::as_str),
+        &ctx.facts.typescript,
+    );
+    ctx.facts.files.iter().find_map(|file| {
+        file.ast.calls.iter().find_map(|candidate| {
+            let argument = candidate.arguments.first()?;
+            let lexical = *file.path.as_str() == *function.expression.path
+                && argument.span.contains(Span::new(
+                    u32::try_from(function.expression.start_byte).ok()?,
+                    u32::try_from(function.expression.end_byte).ok()?,
+                ));
+            let semantic = ctx
+                .entities
+                .get(&location(file.path.shared(), argument.span))
+                .is_some_and(|symbol| {
+                    async_symbol_root(symbol, &ctx.facts.typescript) == function_symbol
+                });
+            if !lexical && !semantic {
+                return None;
+            }
+            let primitive = primitive_name(
+                file.path.as_str(),
+                candidate.callee,
+                candidate.static_callee(&file.source),
+                ctx.entities,
+                ctx.symbol_names,
+                ctx.dialect,
+            )?;
+            // A tracked callback is what makes this a computation
+            // whose reads matter after an await. The list this
+            // replaced was 2.0's eight; under 1.x three of them
+            // resolve to nothing and `createComputed` was absent.
+            primitive
+                .primitive()
+                .is_some_and(|resolved| {
+                    ctx.dialect
+                        .callback_semantics_at(resolved, 0, candidate.arguments.len())
+                        .tracks_reads
+                })
+                .then(|| format!("{primitive} async computation"))
+        })
+    })
+}
+
+/// Store-path and component-props member reads dominated by a straight-line
+/// await of the same async computation. The dominating await must sit in the
+/// function's own unconditional flow (no conditional dominance), and both the
+/// await and the read must belong to the function directly (no nested
+/// closures). Props follow the caller classification: a proven-static prop is
+/// not reactive and stays silent, an unprovable one is a proof obligation.
+fn member_reads_after_await(
+    ctx: &AnalysisContext<'_>,
+    draft: &mut ProgramDraft,
+    function: &typefacts::AsyncFunctionFact,
+    analysis_context: &str,
+) {
+    let Some(file) = ctx
+        .facts
+        .files
+        .iter()
+        .find(|file| *file.path.as_str() == *function.expression.path)
+    else {
+        return;
+    };
+    let (Ok(start), Ok(end)) = (
+        u32::try_from(function.expression.start_byte),
+        u32::try_from(function.expression.end_byte),
+    ) else {
+        return;
+    };
+    let expression = file.ast.peel_ts_sugar_span(Span::new(start, end));
+    let Some(ast_function) = file
+        .ast
+        .functions
+        .iter()
+        .find(|candidate| candidate.span == expression)
+    else {
+        return;
+    };
+    let Some(boundary) = file
+        .ast
+        .unconditional_awaits
+        .iter()
+        .filter(|awaited| {
+            ast_function.body.contains(**awaited)
+                && containing_ast_function(&file.ast, **awaited)
+                    .is_some_and(|owner| owner.span == ast_function.span)
+        })
+        .map(|awaited| awaited.end)
+        .min()
+    else {
+        return;
+    };
+    for member in &file.ast.members {
+        if member.span.start < boundary
+            || !ast_function.body.contains(member.span)
+            || containing_ast_function(&file.ast, member.span)
+                .is_none_or(|owner| owner.span != ast_function.span)
+        {
+            continue;
+        }
+        // Only the complete member chain reads a store path; its prefixes are
+        // the same read's steps.
+        if file
+            .ast
+            .members
+            .iter()
+            .any(|candidate| candidate.object == member.span)
+        {
+            continue;
+        }
+        let Some(symbol) = ctx
+            .entities
+            .get(&location(file.path.shared(), member.object))
+        else {
+            continue;
+        };
+        let store = ctx.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
+            && ctx.accessors.contains_key(symbol);
+        let (name, uncertain) = if store {
+            let Some((name, _)) = ctx.accessors.get(symbol) else {
+                continue;
+            };
+            (name, false)
+        } else if let Some((name, declaration)) = ctx.prop_sources.get(symbol) {
+            let property = file.source_text(member.property).unwrap_or_default();
+            match ctx.props_reactivity.prop_use(declaration, property) {
+                crate::source_discovery::PropUse::Static => continue,
+                crate::source_discovery::PropUse::Reactive => (name, false),
+                crate::source_discovery::PropUse::Unknown => (name, true),
+            }
+        } else {
+            continue;
+        };
+        let accessor = file
+            .source_text(member.span)
+            .and_then(|path| {
+                path.find('.')
+                    .map(|index| format!("{name}{}", &path[index..]))
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "{name}.{}",
+                    file.source_text(member.property).unwrap_or_default()
+                )
+            });
+        draft.push_defect(
+            "reactive-read-after-await",
+            StaticDefect {
+                kind: StaticDefectKind::ReactiveReadAfterAwait { accessor },
+                location: location(file.path.shared(), member.span),
+                analysis_context: analysis_context.to_owned(),
+                fixes: vec![],
+                uncertain,
+            },
+        );
     }
 }
 
 /// SC1004: a component whose return value hinges on a reactive condition,
 /// evaluated once at setup and never again. Runs after the read tables are
 /// merged: "reactive condition" is answered by the draft's reads.
+///
+/// A test is structural only when it selects which returned tree exists:
+/// an `if`/`switch` a return sits under (its recorded control tests), or the
+/// conditional/logical spine of the returned expression itself. A ternary
+/// nested inside a JSX attribute of a returned branch is a tracked binding,
+/// not a structural branch, and stays out.
 pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for function in &file.ast.functions {
@@ -567,7 +788,16 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
             if let Some(returned) = &function.expression_return {
                 direct_returns.push(returned);
             }
-            for test in file.ast.conditional_tests.iter().filter(|test| {
+            let mut tests = Vec::new();
+            for returned in &direct_returns {
+                tests.extend(returned.control_tests.iter().copied());
+                if let Some(argument) = returned.argument {
+                    return_spine_tests(file, argument, &mut tests);
+                }
+            }
+            tests.sort_unstable();
+            tests.dedup();
+            for test in tests.iter().filter(|test| {
                 function.body.contains(**test)
                     && containing_ast_function(&file.ast, **test)
                         .is_some_and(|owner| owner.span == function.span)
@@ -577,14 +807,7 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                         && u64::from(test.start) <= read.location.start_byte
                         && read.location.end_byte <= u64::from(test.end)
                 });
-                let conditional_return = direct_returns.iter().any(|returned| {
-                    returned.control_tests.contains(test)
-                        || (returned.conditional
-                            && returned
-                                .argument
-                                .is_some_and(|argument| argument.contains(*test)))
-                });
-                if reactive && conditional_return {
+                if reactive {
                     let location = location(file.path.shared(), *test);
                     draft.push_defect(
                         "component-returns-conditionally",
@@ -596,10 +819,53 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                                 .unwrap_or_default()
                                 .to_owned(),
                             fixes: vec![],
+                            uncertain: false,
                         },
                     );
                 }
             }
         }
     }
+}
+
+/// The structural tests of one returned expression: the top-level conditional
+/// chain's tests, and the guards of logical expressions whose right operand
+/// renders JSX structure (`return props.user && <Profile/>`, `return cond()
+/// || <Fallback/>`). Branches recurse, so a chained ternary and a logical
+/// inside a ternary branch each contribute their own test; anything nested
+/// deeper — a ternary inside a JSX attribute, say — is evaluated where JSX
+/// tracks and is not a structural branch.
+fn return_spine_tests(file: &solid_facts::FileFacts, expression: Span, tests: &mut Vec<Span>) {
+    let expression = file.ast.peel_ts_sugar_span(expression);
+    if let Some(conditional) = file
+        .ast
+        .conditional_expressions
+        .iter()
+        .find(|conditional| conditional.span == expression)
+    {
+        tests.push(conditional.test);
+        return_spine_tests(file, conditional.consequent, tests);
+        return_spine_tests(file, conditional.alternate, tests);
+    } else if let Some(logical) = file
+        .ast
+        .logical_expressions
+        .iter()
+        .find(|logical| logical.span == expression)
+    {
+        if jsx_structure_within(file, logical.right) {
+            tests.push(logical.left);
+        }
+        return_spine_tests(file, logical.left, tests);
+        return_spine_tests(file, logical.right, tests);
+    }
+}
+
+/// Whether a span directly holds JSX structure (an element or fragment).
+fn jsx_structure_within(file: &solid_facts::FileFacts, span: Span) -> bool {
+    file.ast.jsx_within(span).next().is_some()
+        || file
+            .ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| span.contains(*fragment))
 }

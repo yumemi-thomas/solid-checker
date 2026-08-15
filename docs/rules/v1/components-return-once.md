@@ -15,7 +15,11 @@ runs exactly once.
 
 Flags components whose `return` statement is controlled by a condition that reads a
 reactive value (a signal, store path, or prop) — early returns, `if`/`else` around
-returns, and conditional expressions that select the returned JSX structure.
+returns, `switch` statements whose cases return, logical expressions selecting
+returned JSX (`return props.user && <Profile/>`), and conditional expressions that
+select the returned JSX structure. Only the returned expression's own
+conditional/logical spine counts; a ternary nested inside a JSX attribute of a
+returned branch is a tracked binding, not a structural branch.
 
 ## Why is this bad?
 

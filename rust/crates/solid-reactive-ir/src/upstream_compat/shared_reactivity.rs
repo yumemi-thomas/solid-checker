@@ -155,7 +155,14 @@ fn untracked_derived_function(
                         .is_some_and(|read| {
                             read != symbol
                                 && (context.accessors.contains_key(read)
-                                    || context.prop_sources.contains_key(read))
+                                    || context.prop_sources.get(read).is_some_and(
+                                        |(_, declaration)| {
+                                            // Proven-static props are not
+                                            // reactive state to derive from.
+                                            context.props_reactivity.object_use(declaration)
+                                                != crate::source_discovery::PropUse::Static
+                                        },
+                                    ))
                         })
             });
             let derived_call = file.ast.calls.iter().any(|call| {
@@ -176,6 +183,16 @@ fn untracked_derived_function(
         }
     }
 
+    // Execution-role gate (2.0 catalog): a call in a tracked compute tracks
+    // its reads, and a call in an event handler, deferred/leaf callback,
+    // effect apply, untrack, or directive application reads legitimately
+    // fresh values at call time. Neither is untracked-read evidence.
+    let role_exemptions = context.dialect.derived_function_role_exemptions();
+    let allowed = if role_exemptions {
+        crate::execution_role::allowed_callback_spans(file, context.lookup)
+    } else {
+        Vec::new()
+    };
     for (_, declared, _, enclosing, symbol) in candidates {
         if !derived.contains(&symbol) {
             continue;
@@ -203,6 +220,28 @@ fn untracked_derived_function(
                 if !directly_enclosed || within_jsx(file, call.span) {
                     return false;
                 }
+                if role_exemptions
+                    && matches!(
+                        crate::execution_role::semantic_execution_role(
+                            file,
+                            call.span,
+                            &allowed,
+                            context.entities,
+                            context.lookup.symbol_names(),
+                            context.lookup,
+                        ),
+                        crate::ExecutionRole::TrackedJsx
+                            | crate::ExecutionRole::EventCallback
+                            | crate::ExecutionRole::DeferredCallback
+                            | crate::ExecutionRole::UntrackedCallback
+                            | crate::ExecutionRole::EffectApply
+                            | crate::ExecutionRole::DirectiveApply
+                    )
+                {
+                    // Tracked or fresh-at-call-time: this call misbehaves in
+                    // no way and contributes no untracked evidence.
+                    return true;
+                }
                 calls += 1;
                 true
             });
@@ -217,6 +256,7 @@ fn untracked_derived_function(
             location: location(file.path.shared(), declared.span),
             analysis_context: String::new(),
             fixes: vec![],
+            uncertain: false,
         });
     }
 }
@@ -332,6 +372,7 @@ fn reactive_source_uncaptured(
                 location: location(file.path.shared(), argument.span),
                 analysis_context: String::new(),
                 fixes: vec![],
+                uncertain: false,
             });
         }
     }
@@ -466,29 +507,58 @@ fn expected_function_got_expression(
             // A native listener receives its function value once during DOM
             // setup. Reading that function through reactive props/store state
             // here freezes the initial handler. The member root is a proven
-            // source; a plain object member is left alone.
-            let reactive_member = file
+            // source; a plain object member is left alone. Props follow the
+            // caller classification: a handler prop every call site passes
+            // statically is a plain property whose value never changes —
+            // installing it once is exactly right and stays silent.
+            let member_symbol = file
                 .ast
                 .members
                 .iter()
                 .find(|member| member.span == expression)
                 .and_then(|_| member_root(file, expression))
-                .and_then(|root| context.entities.at(file.path.as_str(), root))
-                .is_some_and(|symbol| {
-                    context.accessors.contains_key(symbol)
-                        || context.prop_sources.contains_key(symbol)
+                .and_then(|root| {
+                    Some((root, context.entities.at(file.path.as_str(), root)?))
                 });
-            if reactive_member {
-                defects.push(StaticDefect {
-                    kind: StaticDefectKind::ReactiveHandlerRead {
-                        attribute: name.to_owned(),
-                        expression: text(file, expression).to_owned(),
-                    },
-                    location: location(file.path.shared(), expression),
-                    analysis_context: String::new(),
-                    fixes: vec![],
-                });
-                continue;
+            if let Some((root, symbol)) = member_symbol {
+                let uncertain = if context.accessors.contains_key(symbol) {
+                    Some(false)
+                } else if let Some((_, declaration)) = context.prop_sources.get(symbol) {
+                    let property = file
+                        .ast
+                        .members
+                        .iter()
+                        .find(|member| member.object == root && expression.contains(member.span))
+                        .map(|member| text(file, member.property))
+                        .unwrap_or_default();
+                    match context.props_reactivity.prop_use(declaration, property) {
+                        crate::source_discovery::PropUse::Static => None,
+                        crate::source_discovery::PropUse::Reactive => Some(false),
+                        crate::source_discovery::PropUse::Unknown => Some(true),
+                    }
+                } else {
+                    None
+                };
+                if let Some(uncertain) = uncertain {
+                    defects.push(StaticDefect {
+                        kind: StaticDefectKind::ReactiveHandlerRead {
+                            attribute: name.to_owned(),
+                            expression: text(file, expression).to_owned(),
+                        },
+                        location: location(file.path.shared(), expression),
+                        analysis_context: String::new(),
+                        fixes: vec![],
+                        uncertain,
+                    });
+                    continue;
+                }
+                if context.accessors.contains_key(symbol)
+                    || context.prop_sources.contains_key(symbol)
+                {
+                    // A proven-static prop member: not a defect, and not the
+                    // call-result shape below either.
+                    continue;
+                }
             }
             // The binding must be a call spanning the whole expression. A bare
             // reference is the correct form, and a call merely *inside* the
@@ -518,6 +588,7 @@ fn expected_function_got_expression(
                 location: location(file.path.shared(), expression),
                 analysis_context: String::new(),
                 fixes: vec![],
+                uncertain: false,
             });
         }
     }
@@ -655,6 +726,7 @@ fn uncalled_accessor(
             location: location(file.path.shared(), identifier.span),
             analysis_context: String::new(),
             fixes: vec![],
+            uncertain: false,
         });
     }
 }
@@ -756,6 +828,7 @@ fn no_direct_mutation(
             location: location(file.path.shared(), assignment.target),
             analysis_context: String::new(),
             fixes: vec![],
+            uncertain: false,
         });
     }
 }

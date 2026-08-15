@@ -14,7 +14,7 @@ use crate::{
     ReactiveSourceKind, jsx_primitive_name, known_primitive, location, primitive_name,
 };
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::contracts::ResolvedContracts;
 use crate::identity::{SymbolId, symbol_id};
@@ -1062,6 +1062,10 @@ pub(crate) struct SourceDiscovery {
     pub(crate) contract_returns: HashMap<SymbolId, (ContractReturn, Location)>,
     pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
     pub(crate) prop_sources: HashMap<SymbolId, (SymbolId, Location)>,
+    /// Caller-proven props reactivity per props declaration; empty (answering
+    /// `Reactive` everywhere) for dialects that keep the upstream
+    /// over-approximation.
+    pub(crate) props_reactivity: PropsReactivityIndex,
     pub(crate) bundled_returns: HashMap<SymbolId, ContractReturn>,
     pub(crate) retained_source_paths: HashSet<String>,
     pub(crate) changed_source_symbols: HashSet<SymbolId>,
@@ -1748,6 +1752,14 @@ pub(crate) fn discover_sources(
             break;
         }
     }
+    let props_reactivity = classify_component_props(
+        facts,
+        semantic_lookup,
+        entities,
+        &accessors,
+        &source_kinds,
+        &prop_sources,
+    );
     clock.finish(
         build_timings,
         ReactiveIrStage::PropPropagationAndControlFlow,
@@ -1771,8 +1783,500 @@ pub(crate) fn discover_sources(
         contract_returns,
         contracted_accessor_symbols,
         prop_sources,
+        props_reactivity,
         bundled_returns,
         retained_source_paths,
         changed_source_symbols,
     }
+}
+
+/// How each use of one prop is classified once the component's callers are
+/// enumerated.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum PropUse {
+    /// Every visible call site passes a static value: the prop compiles to a
+    /// plain property and reading it can never warn or misbehave.
+    Static,
+    /// Some visible call site passes a proven reactive expression: the prop
+    /// is signal-backed and untracked reads are proven runtime warnings.
+    Reactive,
+    /// Neither provable: the component escapes enumeration, or a passed value
+    /// resolves to nothing the engine can classify.
+    Unknown,
+}
+
+impl PropUse {
+    fn worst(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Reactive, _) | (_, Self::Reactive) => Self::Reactive,
+            (Self::Unknown, _) | (_, Self::Unknown) => Self::Unknown,
+            _ => Self::Static,
+        }
+    }
+}
+
+/// Caller-proven reactivity of one component's props.
+///
+/// rc.0 ground truth (probed): `devComponent` opens a strict-read window with
+/// `untrack(() => Comp(props), '<Name>')`, and `STRICT_READ_UNTRACKED` fires
+/// only when a prop *getter* reads reactive state inside it. `{ title:
+/// "Hello" }` never warns; `{ get title() { return sig() } }` warns. Whether
+/// a prop is signal-backed is therefore a fact about the component's callers,
+/// which this records per prop name.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum PropsReactivity {
+    /// Every in-project use is an enumerated JSX call site with no spread
+    /// attributes. `reactive` holds the prop names some call site passes a
+    /// proven reactive expression for; `unresolved` holds the names whose
+    /// passed value could be proven neither way. Every other prop is proven
+    /// static.
+    Enumerated {
+        reactive: BTreeSet<String>,
+        unresolved: BTreeSet<String>,
+    },
+    /// The component escapes enumeration — exported, referenced outside JSX,
+    /// or spread into at a call site — so nothing about its props is provable
+    /// and every use is a proof obligation.
+    Unknown,
+}
+
+/// The per-declaration classification map, keyed by the props parameter's
+/// declaration location (the same location `prop_sources` carries, so aliases
+/// and `merge` results resolve to their component's classification) and by
+/// the parameter pattern span (how the destructure rule addresses a
+/// destructured parameter).
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub(crate) struct PropsReactivityIndex {
+    /// Whether the dialect asked for caller proof at all. When false, every
+    /// query answers [`PropUse::Reactive`] — the upstream over-approximation
+    /// the 1.x catalog pins for eslint-plugin-solid parity.
+    caller_proof: bool,
+    by_declaration: HashMap<Location, PropsReactivity>,
+}
+
+impl PropsReactivityIndex {
+    pub(crate) fn prop_use(&self, declaration: &Location, name: &str) -> PropUse {
+        if !self.caller_proof {
+            return PropUse::Reactive;
+        }
+        match self.by_declaration.get(declaration) {
+            None | Some(PropsReactivity::Unknown) => PropUse::Unknown,
+            Some(PropsReactivity::Enumerated {
+                reactive,
+                unresolved,
+            }) => {
+                if reactive.contains(name) {
+                    PropUse::Reactive
+                } else if unresolved.contains(name) {
+                    PropUse::Unknown
+                } else {
+                    PropUse::Static
+                }
+            }
+        }
+    }
+
+    /// The classification of a whole-object use (aliasing, spreading, or
+    /// destructuring with a rest element): reactive if any prop is, unknown
+    /// if any prop is, static only when every caller-passed value is.
+    pub(crate) fn object_use(&self, declaration: &Location) -> PropUse {
+        if !self.caller_proof {
+            return PropUse::Reactive;
+        }
+        match self.by_declaration.get(declaration) {
+            None | Some(PropsReactivity::Unknown) => PropUse::Unknown,
+            Some(PropsReactivity::Enumerated {
+                reactive,
+                unresolved,
+            }) => {
+                if !reactive.is_empty() {
+                    PropUse::Reactive
+                } else if !unresolved.is_empty() {
+                    PropUse::Unknown
+                } else {
+                    PropUse::Static
+                }
+            }
+        }
+    }
+
+    /// The worst classification across an enumerated set of prop names.
+    /// Without caller proof every destructure keeps the upstream answer —
+    /// including the empty pattern, which binds nothing but is still the
+    /// shape the 1.x rule reports.
+    pub(crate) fn names_use<'n>(
+        &self,
+        declaration: &Location,
+        names: impl Iterator<Item = &'n str>,
+    ) -> PropUse {
+        if !self.caller_proof {
+            return PropUse::Reactive;
+        }
+        names.fold(PropUse::Static, |worst, name| {
+            worst.worst(self.prop_use(declaration, name))
+        })
+    }
+
+    /// The per-symbol view the incremental cache fingerprints: the
+    /// classification behind one props symbol's declaration, if any.
+    pub(crate) fn for_declaration(&self, declaration: &Location) -> Option<&PropsReactivity> {
+        self.by_declaration.get(declaration)
+    }
+}
+
+/// Builds [`PropsReactivityIndex`] from the proven components' JSX call
+/// sites. Empty (answering [`PropUse::Reactive`] everywhere) when the dialect
+/// keeps the upstream over-approximation.
+fn classify_component_props(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+) -> PropsReactivityIndex {
+    if !lookup.dialect.props_require_caller_proof() {
+        return PropsReactivityIndex::default();
+    }
+    // Every JSX element resolved to the project function it renders.
+    let mut uses = HashMap::<(&str, solid_facts::core::Span), Vec<(usize, usize)>>::new();
+    for (file_index, file) in facts.files.iter().enumerate() {
+        for (element_index, element) in file.ast.jsx_elements.iter().enumerate() {
+            if let Some((target_file, target)) =
+                lookup.function_called_at(file.path.as_str(), element.name.span)
+            {
+                uses.entry((target_file.path.as_str(), target.span))
+                    .or_default()
+                    .push((file_index, element_index));
+            }
+        }
+    }
+    let mut by_declaration = HashMap::new();
+    for file in &facts.files {
+        for function in &file.ast.functions {
+            let Some(parameter) = function.parameters.first() else {
+                continue;
+            };
+            if function.parameters.len() > 1
+                || !lookup.function_is_component(file, function)
+            {
+                continue;
+            }
+            let classification = classify_one_component(
+                facts,
+                lookup,
+                entities,
+                accessors,
+                source_kinds,
+                prop_sources,
+                &uses,
+                file,
+                function,
+            );
+            by_declaration.insert(
+                location(file.path.shared(), parameter.pattern),
+                classification.clone(),
+            );
+            if let Some(name) = parameter.names.first() {
+                by_declaration.insert(location(file.path.shared(), name.span), classification);
+            }
+        }
+    }
+    PropsReactivityIndex {
+        caller_proof: true,
+        by_declaration,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn classify_one_component(
+    facts: &ProjectFacts,
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    uses: &HashMap<(&str, solid_facts::core::Span), Vec<(usize, usize)>>,
+    file: &FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> PropsReactivity {
+    use solid_facts::core::Span;
+    let name = crate::owners::component_binding_name(file, function).or(function.name.as_ref());
+    let Some(symbol) = name.and_then(|name| entities.get(&location(file.path.shared(), name.span)))
+    else {
+        // An anonymous component value (a HOC argument, say) has no symbol to
+        // enumerate references through.
+        return PropsReactivity::Unknown;
+    };
+    // Exported: callers outside the project can pass anything.
+    if component_symbol_is_exported(facts, entities, symbol) {
+        return PropsReactivity::Unknown;
+    }
+    let empty = Vec::new();
+    let component_uses = uses
+        .get(&(file.path.as_str(), function.span))
+        .unwrap_or(&empty);
+    // Every reference must be the declaration itself or one of the resolved
+    // JSX uses; anything else (passed as a value, aliased, re-exported) hands
+    // the component to callers this cannot see. An empty reference list is
+    // the absence of the fact, not proof of no references.
+    let references = lookup.symbol_references(symbol.as_str());
+    if references.is_empty() {
+        return PropsReactivity::Unknown;
+    }
+    let name_text = name
+        .and_then(|name| file.source_text(name.span))
+        .unwrap_or_default();
+    for reference in &references {
+        let (Ok(start), Ok(end)) = (
+            u32::try_from(reference.start_byte),
+            u32::try_from(reference.end_byte),
+        ) else {
+            return PropsReactivity::Unknown;
+        };
+        let span = Span::new(start, end);
+        let own_declaration = *reference.path == *file.path.as_str()
+            && (function.span.contains(span)
+                || name.is_some_and(|name| name.span == span));
+        if own_declaration {
+            continue;
+        }
+        let jsx_use = component_uses.iter().any(|(file_index, element_index)| {
+            let use_file = &facts.files[*file_index];
+            let element = &use_file.ast.jsx_elements[*element_index];
+            *reference.path == *use_file.path.as_str()
+                && (element.name.span == span
+                    || (element.span.contains(span)
+                        && use_file.source_text(span) == Some(name_text)))
+        });
+        if !jsx_use {
+            return PropsReactivity::Unknown;
+        }
+    }
+    let mut reactive = BTreeSet::new();
+    let mut unresolved = BTreeSet::new();
+    for (file_index, element_index) in component_uses {
+        let use_file = &facts.files[*file_index];
+        let element = &use_file.ast.jsx_elements[*element_index];
+        // A spread hands over an object whose properties this cannot
+        // enumerate.
+        if !element.spreads.is_empty() {
+            return PropsReactivity::Unknown;
+        }
+        for attribute in &element.attributes {
+            let Some(attribute_name) = use_file.source_text(attribute.local_name) else {
+                return PropsReactivity::Unknown;
+            };
+            let value_use = if attribute.namespace.is_some() {
+                PropUse::Unknown
+            } else {
+                match attribute.value_kind {
+                    solid_facts::ast::JsxAttributeValueKind::Boolean
+                    | solid_facts::ast::JsxAttributeValueKind::String => PropUse::Static,
+                    solid_facts::ast::JsxAttributeValueKind::Element
+                    | solid_facts::ast::JsxAttributeValueKind::Fragment => PropUse::Unknown,
+                    solid_facts::ast::JsxAttributeValueKind::Expression => {
+                        match attribute.expression {
+                            Some(expression) => classify_passed_expression(
+                                lookup,
+                                entities,
+                                accessors,
+                                source_kinds,
+                                prop_sources,
+                                use_file,
+                                expression,
+                            ),
+                            None => PropUse::Unknown,
+                        }
+                    }
+                }
+            };
+            match value_use {
+                PropUse::Static => {}
+                PropUse::Reactive => {
+                    reactive.insert(attribute_name.to_owned());
+                }
+                PropUse::Unknown => {
+                    unresolved.insert(attribute_name.to_owned());
+                }
+            }
+        }
+        for child in &element.children {
+            match classify_passed_expression(
+                lookup,
+                entities,
+                accessors,
+                source_kinds,
+                prop_sources,
+                use_file,
+                *child,
+            ) {
+                PropUse::Static => {}
+                PropUse::Reactive => {
+                    reactive.insert("children".to_owned());
+                }
+                PropUse::Unknown => {
+                    unresolved.insert("children".to_owned());
+                }
+            }
+        }
+    }
+    PropsReactivity::Enumerated {
+        reactive,
+        unresolved,
+    }
+}
+
+/// Whether the component's canonical symbol is exported from any analyzed
+/// file — by declaration (`export function Card`), by specifier
+/// (`export { Card }`), or as a default export.
+fn component_symbol_is_exported(
+    facts: &ProjectFacts,
+    entities: &EntitySymbols,
+    symbol: &SymbolId,
+) -> bool {
+    facts.files.iter().any(|file| {
+        file.ast.exports.iter().any(|export| {
+            export
+                .specifiers
+                .iter()
+                .chain(export.declarations.iter())
+                .filter(|specifier| !specifier.type_only)
+                .any(|specifier| {
+                    entities.get(&location(file.path.shared(), specifier.local.span))
+                        == Some(symbol)
+                })
+        })
+    })
+}
+
+/// Classifies one expression a call site passes for a prop (or renders as a
+/// child).
+///
+/// Reactive proof: a call to a proven accessor, a member chain rooted at a
+/// proven store or props object, or a store/props object passed whole — the
+/// compiled getter re-evaluates the expression per read, so those subscribe.
+/// Static proof: everything in the expression resolves to values that are not
+/// reactive (bindings, function values — including nested function literals,
+/// whose bodies run later, not in the getter). Anything unresolvable, any
+/// call the engine cannot classify, and JSX evaluated inside the getter stay
+/// unknown.
+fn classify_passed_expression(
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    source_kinds: &HashMap<SymbolId, ReactiveSourceKind>,
+    prop_sources: &HashMap<SymbolId, (SymbolId, Location)>,
+    file: &FileFacts,
+    expression: solid_facts::core::Span,
+) -> PropUse {
+    use solid_facts::core::Span;
+    let expression = file.ast.peel_ts_sugar_span(expression);
+    let nested_functions: Vec<Span> = file
+        .ast
+        .functions_within(expression)
+        .map(|function| function.span)
+        .collect();
+    let inside_nested = |span: Span| {
+        nested_functions
+            .iter()
+            .any(|function| function.contains(span))
+    };
+    let mut result = PropUse::Static;
+    // Member chains rooted at a proven store or props object are reactive;
+    // rooted at anything resolvable they are static; unresolvable roots are
+    // unknown.
+    for member in &file.ast.members {
+        if !expression.contains(member.span)
+            || inside_nested(member.span)
+            // Only chain roots: prefixes repeat the same root.
+            || file
+                .ast
+                .members
+                .iter()
+                .any(|candidate| expression.contains(candidate.span) && candidate.object == member.span)
+        {
+            continue;
+        }
+        let mut root = member.object;
+        while let Some(inner) = file
+            .ast
+            .members
+            .iter()
+            .find(|candidate| candidate.span == root)
+        {
+            root = inner.object;
+        }
+        let symbol = entities
+            .get(&location(file.path.shared(), root))
+            .cloned()
+            .or_else(|| {
+                // The binder fallback covers plain locals entity facts skip.
+                lookup
+                    .binding_at_reference(file.path.as_str(), root)
+                    .map(|(_, _, symbol)| symbol)
+            });
+        match symbol {
+            Some(symbol)
+                if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store)
+                    || prop_sources.contains_key(&symbol) =>
+            {
+                return PropUse::Reactive;
+            }
+            Some(_) => {}
+            None => result = PropUse::Unknown,
+        }
+    }
+    for call in file.ast.calls_within(expression) {
+        if inside_nested(call.span) {
+            continue;
+        }
+        let callee = entities.get(&location(file.path.shared(), call.callee));
+        if callee.is_some_and(|symbol| accessors.contains_key(symbol)) {
+            return PropUse::Reactive;
+        }
+        // Any other call may read reactive state each time the compiled
+        // getter re-evaluates: not provable either way.
+        result = PropUse::Unknown;
+    }
+    if file
+        .ast
+        .jsx_within(expression)
+        .any(|element| !inside_nested(element.span))
+        || file
+            .ast
+            .jsx_fragments
+            .iter()
+            .any(|fragment| expression.contains(*fragment) && !inside_nested(*fragment))
+    {
+        result = PropUse::Unknown;
+    }
+    for identifier in file.ast.identifiers_within(expression) {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference
+            || inside_nested(identifier.span)
+        {
+            continue;
+        }
+        let symbol = entities
+            .get(&location(file.path.shared(), identifier.span))
+            .cloned()
+            .or_else(|| {
+                lookup
+                    .binding_at_reference(file.path.as_str(), identifier.span)
+                    .map(|(_, _, symbol)| symbol)
+            });
+        match symbol {
+            Some(symbol)
+                if source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store)
+                    || prop_sources.contains_key(&symbol) =>
+            {
+                // A store or props object passed whole stays a live proxy in
+                // the receiver.
+                return PropUse::Reactive;
+            }
+            Some(_) => {}
+            None => result = PropUse::Unknown,
+        }
+    }
+    result
 }

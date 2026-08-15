@@ -12,7 +12,9 @@ use crate::owners::{
     typed_accessor_descriptor_at,
 };
 use crate::pipeline::parallel_file_chunk_results;
-use crate::source_discovery::{AsyncSourceOptions, bundled_contract_location};
+use crate::source_discovery::{
+    AsyncSourceOptions, PropUse, PropsReactivityIndex, bundled_contract_location,
+};
 use crate::{
     ActionInvocation, AsyncRead, ContractReturn, ExecutionRole, ReactiveRead, ReactiveSourceKind,
     ReactiveWrite, location, primitive_name,
@@ -56,6 +58,7 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) props_reactivity: &'a PropsReactivityIndex,
 }
 
 pub(crate) struct LocalAccessReuse<'a> {
@@ -102,7 +105,7 @@ impl LocalAccessContext<'_, '_> {
                 candidate_dependencies.extend(delta.semantic_symbol_ids.iter().cloned());
             }
             for (symbol, previous) in &cache.prop_sources {
-                if self.prop_sources.get(symbol) != Some(previous) {
+                if self.prop_state(symbol) != Some(previous.clone()) {
                     candidate_dependencies.insert(symbol.clone());
                 }
             }
@@ -177,9 +180,12 @@ impl LocalAccessContext<'_, '_> {
             cache
                 .prop_sources
                 .retain(|symbol, _| self.prop_sources.contains_key(symbol));
-            for (symbol, source) in self.prop_sources {
-                if cache.prop_sources.get(symbol) != Some(source) {
-                    cache.prop_sources.insert(symbol.clone(), source.clone());
+            for symbol in self.prop_sources.keys() {
+                let state = self
+                    .prop_state(symbol)
+                    .expect("prop state exists for every prop source");
+                if cache.prop_sources.get(symbol) != Some(&state) {
+                    cache.prop_sources.insert(symbol.clone(), state);
                 }
             }
             let local_access_files = &cache.files;
@@ -244,6 +250,22 @@ impl LocalAccessContext<'_, '_> {
         options
     }
 
+    /// The prop-source identity plus its caller classification, the pair the
+    /// incremental cache fingerprints: a call site in one file deciding a
+    /// prop's reactivity must invalidate the component's file.
+    pub(crate) fn prop_state(
+        &self,
+        symbol: &str,
+    ) -> Option<(SymbolId, Location, Option<crate::source_discovery::PropsReactivity>)> {
+        self.prop_sources.get(symbol).map(|(name, declaration)| {
+            (
+                name.clone(),
+                declaration.clone(),
+                self.props_reactivity.for_declaration(declaration).cloned(),
+            )
+        })
+    }
+
     pub(crate) fn symbol_state(&self, symbol: &str) -> LocalAccessSymbolState {
         LocalAccessSymbolState {
             accessor: self.accessors.get(symbol).cloned(),
@@ -255,7 +277,7 @@ impl LocalAccessContext<'_, '_> {
             async_options: self.effective_async_options(symbol),
             contract_reads: self.contract_reads.get(symbol).cloned(),
             source_kind: self.source_kinds.get(symbol).copied(),
-            prop_source: self.prop_sources.get(symbol).cloned(),
+            prop_source: self.prop_state(symbol),
             source_declaration: self.source_declarations.get(symbol).cloned(),
             symbol_name: self.symbol_names.get(symbol).cloned(),
         }
@@ -369,6 +391,7 @@ impl LocalAccessContext<'_, '_> {
                             .into(),
                         origin: Some(declaration.clone()),
                         origin_context: Arc::from("package return contract"),
+                        uncertain: false,
                     }));
                     if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                         result.strict_read_obligations += 1;
@@ -452,6 +475,7 @@ impl LocalAccessContext<'_, '_> {
                     origin_context: origin
                         .map_or_else(String::new, |origin| origin.1.to_string())
                         .into(),
+                    uncertain: false,
                 }));
                 if !matches!(
                     self.source_primitives.get(symbol).map(SymbolId::as_str),
@@ -518,6 +542,7 @@ impl LocalAccessContext<'_, '_> {
                     via: Arc::from(""),
                     origin: None,
                     origin_context: Arc::from(""),
+                    uncertain: false,
                 }));
                 result.strict_read_obligations += 1;
             }
@@ -543,6 +568,7 @@ impl LocalAccessContext<'_, '_> {
                             via: via.clone().into(),
                             origin: Some(declaration.clone()),
                             origin_context: via.clone().into(),
+                            uncertain: false,
                         }));
                         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                             result.strict_read_obligations += 1;
@@ -660,6 +686,20 @@ impl LocalAccessContext<'_, '_> {
             {
                 continue;
             }
+            // Caller-proven props: a prop every call site passes statically
+            // compiles to a plain property — reading it is not a reactive
+            // read at all. Unprovable backing stays a proof obligation.
+            let mut uncertain = false;
+            if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+                && let Some((_, prop_declaration)) = self.prop_sources.get(symbol)
+            {
+                let property = file.source_text(member.property).unwrap_or_default();
+                match self.props_reactivity.prop_use(prop_declaration, property) {
+                    PropUse::Static => continue,
+                    PropUse::Reactive => {}
+                    PropUse::Unknown => uncertain = true,
+                }
+            }
             let key = (object.path.clone(), object.start_byte, object.end_byte);
             if !seen.insert(key) {
                 continue;
@@ -692,6 +732,7 @@ impl LocalAccessContext<'_, '_> {
                 via: Arc::from(""),
                 origin: None,
                 origin_context: Arc::from(""),
+                uncertain,
             }));
             if !matches!(
                 self.source_primitives.get(symbol).map(SymbolId::as_str),
@@ -767,6 +808,18 @@ impl LocalAccessContext<'_, '_> {
             let Some((name, declaration)) = source else {
                 continue;
             };
+            // A spread unwraps every prop, so it follows the whole-object
+            // caller classification.
+            let mut uncertain = false;
+            if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+                && self.prop_sources.contains_key(symbol)
+            {
+                match self.props_reactivity.object_use(declaration) {
+                    PropUse::Static => continue,
+                    PropUse::Reactive => {}
+                    PropUse::Unknown => uncertain = true,
+                }
+            }
             result.reads.push(Arc::new(ReactiveRead {
                 kind: if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
                     "store-path".into()
@@ -781,6 +834,7 @@ impl LocalAccessContext<'_, '_> {
                 via: Arc::from(""),
                 origin: None,
                 origin_context: Arc::from(""),
+                uncertain,
             }));
             if !matches!(
                 self.source_primitives.get(symbol).map(SymbolId::as_str),

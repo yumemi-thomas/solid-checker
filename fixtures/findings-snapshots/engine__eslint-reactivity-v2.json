@@ -8,7 +8,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-aliased-callback.tsx",
       "start": 150,
-      "end": 156,
+      "end": 155,
       "fixes": 0
     },
     {
@@ -18,7 +18,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-both-branches.tsx",
       "start": 227,
-      "end": 233,
+      "end": 232,
       "fixes": 0
     },
     {
@@ -28,7 +28,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-callback-before-read.tsx",
       "start": 206,
-      "end": 212,
+      "end": 211,
       "fixes": 0
     },
     {
@@ -38,7 +38,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-member.tsx",
       "start": 183,
-      "end": 194,
+      "end": 193,
       "fixes": 0
     },
     {
@@ -48,7 +48,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-named-callback.tsx",
       "start": 150,
-      "end": 156,
+      "end": 155,
       "fixes": 0
     },
     {
@@ -58,7 +58,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-namespace.tsx",
       "start": 162,
-      "end": 167,
+      "end": 166,
       "fixes": 0
     },
     {
@@ -68,7 +68,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-parameter.tsx",
       "start": 198,
-      "end": 203,
+      "end": 202,
       "fixes": 0
     },
     {
@@ -78,7 +78,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-same-expression.tsx",
       "start": 156,
-      "end": 162,
+      "end": 161,
       "fixes": 0
     },
     {
@@ -88,7 +88,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/after-await-try-finally.tsx",
       "start": 212,
-      "end": 218,
+      "end": 217,
       "fixes": 0
     },
     {
@@ -104,7 +104,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-alias.tsx",
       "start": 81,
@@ -114,7 +114,7 @@
     {
       "rule": "component-props-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-body-destructure.tsx",
       "start": 50,
@@ -124,7 +124,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-merge-alias.tsx",
       "start": 148,
@@ -134,7 +134,7 @@
     {
       "rule": "component-props-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
       "start": 17,
@@ -144,7 +144,7 @@
     {
       "rule": "component-props-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
       "start": 109,
@@ -154,7 +154,7 @@
     {
       "rule": "component-props-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-complex-destructure.tsx",
       "start": 203,
@@ -164,7 +164,7 @@
     {
       "rule": "component-props-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-parameter-destructure.tsx",
       "start": 14,
@@ -174,7 +174,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/component-props-read.tsx",
       "start": 58,
@@ -184,7 +184,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-conditional-return.tsx",
       "start": 53,
@@ -204,7 +204,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/component-reactive-early-return.tsx",
       "start": 50,
@@ -318,7 +318,7 @@
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/imported-after-await-definition.ts",
       "start": 144,
-      "end": 150,
+      "end": 149,
       "fixes": 0
     },
     {

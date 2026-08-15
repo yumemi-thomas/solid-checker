@@ -18,7 +18,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/after-await-extended-invalid.tsx",
       "start": 205,
-      "end": 211,
+      "end": 210,
       "fixes": 0
     },
     {
@@ -28,7 +28,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/after-await-extended-invalid.tsx",
       "start": 309,
-      "end": 315,
+      "end": 314,
       "fixes": 0
     },
     {
@@ -38,7 +38,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/after-await-extended-invalid.tsx",
       "start": 319,
-      "end": 325,
+      "end": 324,
       "fixes": 0
     },
     {
@@ -48,7 +48,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/after-await-extended-invalid.tsx",
       "start": 418,
-      "end": 424,
+      "end": 423,
       "fixes": 0
     },
     {
@@ -58,7 +58,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/after-await-extended-invalid.tsx",
       "start": 524,
-      "end": 530,
+      "end": 529,
       "fixes": 0
     },
     {
@@ -68,7 +68,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/after-await-invalid.tsx",
       "start": 252,
-      "end": 264,
+      "end": 263,
       "fixes": 0
     },
     {
@@ -78,7 +78,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/after-await-invalid.tsx",
       "start": 407,
-      "end": 413,
+      "end": 412,
       "fixes": 0
     },
     {
@@ -88,7 +88,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/after-await-invalid.tsx",
       "start": 545,
-      "end": 550,
+      "end": 549,
       "fixes": 0
     },
     {
@@ -108,7 +108,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/await-control-flow-invalid.tsx",
       "start": 211,
-      "end": 217,
+      "end": 216,
       "fixes": 0
     },
     {
@@ -118,7 +118,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/await-control-flow-invalid.tsx",
       "start": 329,
-      "end": 335,
+      "end": 334,
       "fixes": 0
     },
     {
@@ -128,7 +128,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/await-control-flow-invalid.tsx",
       "start": 465,
-      "end": 471,
+      "end": 470,
       "fixes": 0
     },
     {
@@ -138,7 +138,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/await-control-flow-invalid.tsx",
       "start": 577,
-      "end": 583,
+      "end": 582,
       "fixes": 0
     },
     {
@@ -148,7 +148,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/await-control-flow-invalid.tsx",
       "start": 687,
-      "end": 693,
+      "end": 692,
       "fixes": 0
     },
     {
@@ -158,7 +158,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/await-control-flow-invalid.tsx",
       "start": 841,
-      "end": 847,
+      "end": 846,
       "fixes": 0
     },
     {
@@ -168,7 +168,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/await-control-flow-invalid.tsx",
       "start": 979,
-      "end": 985,
+      "end": 984,
       "fixes": 0
     },
     {
@@ -178,7 +178,7 @@
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/await-control-flow-invalid.tsx",
       "start": 1110,
-      "end": 1116,
+      "end": 1115,
       "fixes": 0
     },
     {
@@ -194,7 +194,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/component-return-invalid.tsx",
       "start": 126,
@@ -214,7 +214,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/component-return-invalid.tsx",
       "start": 249,
@@ -254,7 +254,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/component-return-invalid.tsx",
       "start": 851,
@@ -264,7 +264,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/control-flow-invalid.tsx",
       "start": 231,
@@ -414,7 +414,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-extended-invalid.tsx",
       "start": 170,
@@ -424,7 +424,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-extended-invalid.tsx",
       "start": 508,
@@ -454,7 +454,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-invalid.tsx",
       "start": 143,
@@ -464,7 +464,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-invalid.tsx",
       "start": 293,
@@ -474,7 +474,7 @@
     {
       "rule": "strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-invalid.tsx",
       "start": 415,
@@ -484,7 +484,7 @@
     {
       "rule": "component-props-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-invalid.tsx",
       "start": 519,

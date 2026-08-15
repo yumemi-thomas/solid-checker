@@ -12,6 +12,20 @@ Flags object destructuring of a component's props — both in the parameter list
 and of objects proven reactive by native APIs or reviewed package contracts.
 It does not guess from hook names such as `useParams`.
 
+Only setup-time destructures are reported. Destructuring inside a scope that runs
+fresh at call time is legal at runtime and stays silent: event handlers,
+`onSettled` and other deferred/leaf callbacks, `untrack` callbacks, an effect's
+apply function, directive applications, tracked computations (which re-run and
+re-subscribe), and body-defined handlers/helpers whose execution the engine cannot
+pin to setup.
+
+Props also follow their callers (probed against rc.0's `devComponent`): a
+destructure that binds only props every call site passes statically unwraps plain
+properties and misbehaves in no way — silent. Binding a prop some call site passes
+reactively stays a **violation**. When the component's call sites cannot be
+enumerated (exported, spread into, or referenced outside JSX), the finding is
+reported as **uncertifiable** — a proof obligation, not a proven runtime defect.
+
 When every destructured property is only read (never reassigned), solid-checker
 offers a safe fix that restores the `props` parameter and rewrites the body to
 `props.<name>` accesses.

@@ -269,6 +269,34 @@ impl Dialect for Solid2 {
         true
     }
 
+    /// Source: rc.0 `devComponent` (`solid-js` dev entry `dev.js:35-50`)
+    /// wraps the body in `untrack(() => Comp(props), '<Name>')`, so
+    /// `STRICT_READ_UNTRACKED` fires only when a prop getter reads reactive
+    /// state during that window. Probed: a component receiving
+    /// `{ title: "Hello" }` reads `props.title` in its body with no warning;
+    /// the same component receiving `{ get title() { return sig() } }`
+    /// warns. Which of the two a prop is is decided entirely by the callers.
+    fn props_require_caller_proof(&self) -> bool {
+        true
+    }
+
+    /// The 2.0 `reactive-read-after-await` page claims store-path and props
+    /// member reads; dependency collection genuinely ends at the first await
+    /// for those exactly as for accessor calls (`@solidjs/signals` tracks via
+    /// the ambient listener, which the resumed continuation no longer has).
+    fn reports_member_reads_after_await(&self) -> bool {
+        true
+    }
+
+    /// A derived helper bound and called entirely inside a tracked compute
+    /// tracks its reads there; one called from an event handler, `onSettled`,
+    /// `untrack`, or an effect's apply callback reads legitimately fresh
+    /// values at call time. Neither misbehaves at runtime, so the 2.0 catalog
+    /// exempts those call roles.
+    fn derived_function_role_exemptions(&self) -> bool {
+        true
+    }
+
     /// Source: `solid-reactive-ir/src/lib.rs` `read_is_under_loading` and
     /// `jsx_element_is_loading`. 2.0's error boundary is `Errored`.
     fn boundary_kind(&self, tag: &str) -> Option<Boundary> {

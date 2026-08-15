@@ -81,6 +81,7 @@ pub(crate) fn collect_project<'facts>(
         bundled_returns: &source.bundled_returns,
         source_kinds: ctx.source_kinds,
         prop_sources: ctx.prop_sources,
+        props_reactivity: ctx.props_reactivity,
     };
     let cached_interprocedural = reuse
         .late_stages_reusable
@@ -266,6 +267,7 @@ pub(crate) fn collect_project<'facts>(
                 location: obligation.location.clone(),
                 analysis_context: obligation.message.clone(),
                 fixes: vec![],
+                uncertain: false,
             },
         );
     }

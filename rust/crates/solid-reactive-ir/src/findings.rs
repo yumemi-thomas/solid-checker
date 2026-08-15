@@ -235,10 +235,14 @@ pub fn finish_findings(
 /// is the hint, which the catalogs word themselves.
 #[must_use]
 pub fn strict_read_message(read: &ReactiveRead) -> String {
-    let context = if read.context.is_empty() {
-        "rendering function"
-    } else {
+    let context = if !read.context.is_empty() {
         &read.context
+    } else if read.execution == crate::ExecutionRole::ModuleInitialization {
+        // A module-scope read has no enclosing function to name; calling it a
+        // "rendering function" would describe a context that does not exist.
+        "module scope"
+    } else {
+        "rendering function"
     };
     if read.via.is_empty() {
         format!(
@@ -296,10 +300,12 @@ pub fn strict_read_evidence(read: &ReactiveRead) -> Vec<EvidenceStep> {
             message: format!(
                 "the call to {} propagates that read into {}",
                 read.via,
-                if read.context.is_empty() {
-                    "rendering function"
-                } else {
+                if !read.context.is_empty() {
                     &read.context
+                } else if read.execution == crate::ExecutionRole::ModuleInitialization {
+                    "module scope"
+                } else {
+                    "rendering function"
                 }
             ),
             location: Some(read.location.clone()),

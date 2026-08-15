@@ -298,7 +298,12 @@ Two consequences worth knowing before switching a project over:
   read. A region that contains several defects still collects a finding per
   defect — an `async` callback in a tracked scope is
   `v1/no-async-tracked-scope`, and a reactive read after its `await` is a
-  separate `v1/reactive-read-after-await` finding.
+  separate `v1/reactive-read-after-await` finding. One declared exception:
+  a reactive handler expression (`onClick={count()}`) keeps both
+  `v1/expected-function-got-expression` and `v1/strict-read-untracked` in this
+  catalog, pinned by the upstream parity ledger's rule-split entry; the 2.0
+  catalog lets the handler rule own the expression and suppresses the
+  strict-read duplicate.
 
 ### The other nineteen
 

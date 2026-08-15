@@ -114,6 +114,7 @@ impl StaticApiContext<'_> {
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
+                    uncertain: false,
                 });
             }
             // Where each primitive takes its options object -- a second index

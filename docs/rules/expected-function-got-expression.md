@@ -13,6 +13,16 @@ instead of a function. Shared with the 1.x catalog as
 [v1/expected-function-got-expression](v1/expected-function-got-expression.md)
 under the same code, so a suppression comment survives a migration.
 
+Handler props follow the component's caller classification (see
+[strict-read-untracked](strict-read-untracked.md)): `onClick={props.onSave}` on a
+native element installs the handler once, which only misbehaves when the prop is
+signal-backed. When every visible call site passes the handler statically the
+binding is exactly right and stays silent; a proven-reactive handler prop is a
+**violation**; an unenumerable component (exported, spread into, referenced
+outside JSX) makes the finding **uncertifiable**. When this rule claims a handler
+expression, the strict-read finding on the identical span is suppressed — one
+defect class, one rule.
+
 ## Why is this bad?
 
 A function-expecting position defers execution: Solid calls the function later,

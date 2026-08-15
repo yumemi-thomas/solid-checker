@@ -117,6 +117,13 @@ pub struct ReactiveRead {
     pub via: Arc<str>,
     pub origin: Option<Location>,
     pub origin_context: Arc<str>,
+    /// The read's reactive backing cannot be proven or ruled out — a
+    /// component-props read whose callers the analyzer cannot enumerate
+    /// (exported component, unresolvable references, call-site spreads).
+    /// Projection reports it as an uncertifiable proof obligation rather
+    /// than a proven violation.
+    #[serde(default)]
+    pub uncertain: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -247,6 +254,13 @@ pub struct StaticDefect {
     pub analysis_context: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub fixes: Vec<Fix>,
+    /// The defect's reactive premise cannot be proven or ruled out — a
+    /// props-backed defect whose component's callers the analyzer cannot
+    /// enumerate. Projection reports it as an uncertifiable proof obligation
+    /// instead of a proven violation, mirroring the owner-requirement and
+    /// leaf-operation escalations.
+    #[serde(default)]
+    pub uncertain: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]

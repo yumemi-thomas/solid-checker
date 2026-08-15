@@ -25,14 +25,6 @@
       "status": "evidence-backed",
       "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
     },
-    "components-return-once__invalid__07": {
-      "status": "evidence-backed",
-      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
-    },
-    "components-return-once__invalid__08": {
-      "status": "evidence-backed",
-      "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noConditionalReturn)."
-    },
     "components-return-once__invalid__09": {
       "status": "evidence-backed",
       "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."

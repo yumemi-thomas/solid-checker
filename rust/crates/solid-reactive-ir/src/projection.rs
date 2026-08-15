@@ -249,6 +249,19 @@ pub struct CatalogCapabilities {
     pub actions: bool,
     pub async_reads: bool,
     pub cleanup_returns: bool,
+    /// Whether module-scope reads are reported by the strict-read rule.
+    /// The rc.0 runtime installs strict-read contexts only inside component
+    /// and effect bodies (probed: a module-scope signal or memo read emits no
+    /// `STRICT_READ_UNTRACKED`), so the 2.0 catalog stays silent there; the
+    /// 1.x catalog keeps upstream `reactivity` semantics, which report
+    /// module-scope-adjacent reads.
+    pub module_scope_strict_reads: bool,
+    /// Whether an `expected-function-got-expression` finding owns the
+    /// handler expression it claims, suppressing the strict-read finding on
+    /// the identical span (the README's one-defect-class-one-rule policy).
+    /// The 1.x catalog keeps both, pinned by the upstream parity ledger's
+    /// declared rule-split deviation.
+    pub handler_expression_owns_strict_read: bool,
 }
 
 impl CatalogCapabilities {
@@ -256,12 +269,16 @@ impl CatalogCapabilities {
         actions: false,
         async_reads: false,
         cleanup_returns: false,
+        module_scope_strict_reads: true,
+        handler_expression_owns_strict_read: false,
     };
 
     pub const SOLID_2: Self = Self {
         actions: true,
         async_reads: true,
         cleanup_returns: true,
+        module_scope_strict_reads: false,
+        handler_expression_owns_strict_read: true,
     };
 }
 
@@ -350,7 +367,11 @@ pub fn project_findings(
         program
             .reads
             .iter()
-            .filter(|read| read.execution.reports_untracked_read())
+            .filter(|read| {
+                read.execution.reports_untracked_read()
+                    && (capabilities.module_scope_strict_reads
+                        || read.execution != crate::ExecutionRole::ModuleInitialization)
+            })
             .map(|read| project_finding(FindingSeed::StrictRead(read), catalog)),
     );
     findings.extend(
@@ -445,6 +466,43 @@ pub fn project_findings(
         );
     }
 
+    // One defect class, one rule: when expected-function-got-expression
+    // claims a handler expression, the strict-read finding on the identical
+    // span is the same defect worded twice — the handler rule carries the
+    // more specific consequence, so it wins and the strict read is dropped.
+    if capabilities.handler_expression_owns_strict_read {
+        let handler_spans: std::collections::HashSet<_> = program
+            .static_defects
+            .iter()
+            .filter(|defect| {
+                matches!(
+                    defect.kind,
+                    StaticDefectKind::ReactiveHandlerRead { .. }
+                        | StaticDefectKind::HandlerCallResult { .. }
+                )
+            })
+            .map(|defect| {
+                (
+                    defect.location.path.clone(),
+                    defect.location.start_byte,
+                    defect.location.end_byte,
+                )
+            })
+            .collect();
+        if !handler_spans.is_empty() {
+            // SC1001 is the strict-read rule's stable diagnostic code in
+            // every catalog; the external rule name differs per dialect.
+            findings.retain(|finding| {
+                finding.id != "SC1001"
+                    || !handler_spans.contains(&(
+                        finding.primary_location.path.clone(),
+                        finding.primary_location.start_byte,
+                        finding.primary_location.end_byte,
+                    ))
+            });
+        }
+    }
+
     finish_findings(findings, total_started, construction_started)
 }
 
@@ -473,6 +531,12 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             finding.analysis_context = read.context.to_string();
             finding.subject_kind = read.kind.to_string();
             finding.related_locations = crate::strict_read_related_locations(read);
+            // Fail-honest: a props read whose component's callers cannot be
+            // enumerated may or may not be signal-backed, so the finding is a
+            // proof obligation, not a proven runtime warning.
+            if read.uncertain {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::OwnedWrite(write) => {
             finding.analysis_context = if write.context.is_empty() {
@@ -499,6 +563,12 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
         FindingSeed::StaticDefect(defect) => {
             finding.analysis_context = defect.analysis_context.clone();
             finding.fixes = defect.fixes.clone();
+            // The same escalation as strict reads: a props-backed defect
+            // whose component's callers cannot be enumerated is a proof
+            // obligation rather than a proven violation.
+            if defect.uncertain {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::AsyncRead(read) => {
             finding.related_locations = vec![read.declaration.clone()];

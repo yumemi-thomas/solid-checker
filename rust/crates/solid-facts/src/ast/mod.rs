@@ -27,7 +27,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 29;
+pub const AST_FACTS_SCHEMA: u32 = 30;
 
 mod span_index;
 
@@ -45,6 +45,14 @@ pub struct AstFacts {
     pub exports: Vec<ExportFact>,
     pub identifiers: Vec<IdentifierFact>,
     pub awaits: Vec<Span>,
+    /// The subset of [`AstFacts::awaits`] proven to execute on every run of
+    /// their innermost enclosing function (or of module evaluation): awaits
+    /// with no conditional, logical, loop, switch, or try construct between
+    /// the function entry and the expression. Code positioned after one of
+    /// these is await-dominated in the straight-line sense — the conservative
+    /// core the after-await member-read check builds on.
+    #[serde(default)]
+    pub unconditional_awaits: Vec<Span>,
     pub returns: Vec<ReturnFact>,
     pub jsx_elements: Vec<JsxElementFact>,
     /// JSX fragment spans (`<>…</>`). A fragment's children are as tracked
@@ -689,6 +697,7 @@ struct Collector<'s, 'semantic> {
     exports: Vec<ExportFact>,
     identifiers: Vec<IdentifierFact>,
     awaits: Vec<Span>,
+    unconditional_awaits: Vec<Span>,
     returns: Vec<ReturnFact>,
     jsx_elements: Vec<JsxElementFact>,
     jsx_fragments: Vec<Span>,
@@ -707,6 +716,15 @@ struct Collector<'s, 'semantic> {
     if_regions: Vec<IfRegionFact>,
     conditional_control_stack: Vec<Span>,
     method_names: Vec<Option<NamedSpan>>,
+    /// How many conditional/repeated/aborting constructs (if, ternary,
+    /// logical right operand, loop, switch case, try) enclose the current
+    /// node. Compared against the depth recorded at the innermost function
+    /// entry to decide whether an await is in that function's straight-line
+    /// flow.
+    conditional_flow_depth: usize,
+    /// The [`Collector::conditional_flow_depth`] at each enclosing function's
+    /// entry, innermost last.
+    function_flow_depths: Vec<usize>,
 }
 
 #[derive(Default)]
@@ -731,6 +749,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             exports: Vec::new(),
             identifiers: Vec::new(),
             awaits: Vec::new(),
+            unconditional_awaits: Vec::new(),
             returns: Vec::new(),
             jsx_elements: Vec::new(),
             jsx_fragments: Vec::new(),
@@ -749,6 +768,8 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             if_regions: Vec::new(),
             conditional_control_stack: Vec::new(),
             method_names: Vec::new(),
+            conditional_flow_depth: 0,
+            function_flow_depths: Vec::new(),
         }
     }
 
@@ -760,6 +781,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         self.exports.sort_by_key(|fact| fact.span);
         self.identifiers.sort_by_key(|identifier| identifier.span);
         self.awaits.sort_unstable();
+        self.unconditional_awaits.sort_unstable();
         self.returns.sort_by_key(|fact| fact.span);
         self.jsx_elements.sort_by_key(|fact| fact.span);
         self.jsx_fragments.sort();
@@ -787,6 +809,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             exports: self.exports,
             identifiers: self.identifiers,
             awaits: self.awaits,
+            unconditional_awaits: self.unconditional_awaits,
             returns: self.returns,
             jsx_elements: self.jsx_elements,
             jsx_fragments: self.jsx_fragments,
@@ -1336,7 +1359,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 expression_return: None,
             });
         }
+        self.function_flow_depths.push(self.conditional_flow_depth);
         walk::walk_function(self, function, flags);
+        self.function_flow_depths.pop();
     }
 
     fn visit_method_definition(&mut self, method: &oxc_ast::ast::MethodDefinition<'a>) {
@@ -1372,7 +1397,9 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             expression_body: function.expression,
             expression_return,
         });
+        self.function_flow_depths.push(self.conditional_flow_depth);
         walk::walk_arrow_function_expression(self, function);
+        self.function_flow_depths.pop();
     }
 
     fn visit_import_declaration(&mut self, declaration: &ImportDeclaration<'a>) {
@@ -1517,6 +1544,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
 
     fn visit_await_expression(&mut self, expression: &AwaitExpression<'a>) {
         self.awaits.push(span(expression.span));
+        if self.conditional_flow_depth
+            == self.function_flow_depths.last().copied().unwrap_or_default()
+        {
+            self.unconditional_awaits.push(span(expression.span));
+        }
         walk::walk_await_expression(self, expression);
     }
 
@@ -1535,10 +1567,25 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
         });
         self.visit_expression(&statement.test);
         self.conditional_control_stack.push(test);
+        self.conditional_flow_depth += 1;
         self.visit_statement(&statement.consequent);
         if let Some(alternate) = &statement.alternate {
             self.visit_statement(alternate);
         }
+        self.conditional_flow_depth -= 1;
+        self.conditional_control_stack.pop();
+    }
+
+    /// A switch discriminant selects among the statement's clauses exactly as
+    /// an if test selects a branch: it joins the conditional-test table, and
+    /// returns inside the clauses carry it as a control test.
+    fn visit_switch_statement(&mut self, statement: &oxc_ast::ast::SwitchStatement<'a>) {
+        let discriminant = span(statement.discriminant.span());
+        self.conditional_tests.push(discriminant);
+        self.conditional_control_stack.push(discriminant);
+        self.conditional_flow_depth += 1;
+        walk::walk_switch_statement(self, statement);
+        self.conditional_flow_depth -= 1;
         self.conditional_control_stack.pop();
     }
 
@@ -1594,7 +1641,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 consequent: span(expression.consequent.span()),
                 alternate: span(expression.alternate.span()),
             });
-        walk::walk_conditional_expression(self, expression);
+        self.visit_expression(&expression.test);
+        self.conditional_flow_depth += 1;
+        self.visit_expression(&expression.consequent);
+        self.visit_expression(&expression.alternate);
+        self.conditional_flow_depth -= 1;
     }
 
     fn visit_logical_expression(&mut self, expression: &LogicalExpression<'a>) {
@@ -1608,7 +1659,46 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 LogicalOperator::Coalesce => LogicalOperatorKind::Coalesce,
             },
         });
-        walk::walk_logical_expression(self, expression);
+        self.visit_expression(&expression.left);
+        self.conditional_flow_depth += 1;
+        self.visit_expression(&expression.right);
+        self.conditional_flow_depth -= 1;
+    }
+
+    fn visit_for_statement(&mut self, statement: &oxc_ast::ast::ForStatement<'a>) {
+        self.conditional_flow_depth += 1;
+        walk::walk_for_statement(self, statement);
+        self.conditional_flow_depth -= 1;
+    }
+
+    fn visit_for_in_statement(&mut self, statement: &oxc_ast::ast::ForInStatement<'a>) {
+        self.conditional_flow_depth += 1;
+        walk::walk_for_in_statement(self, statement);
+        self.conditional_flow_depth -= 1;
+    }
+
+    fn visit_for_of_statement(&mut self, statement: &oxc_ast::ast::ForOfStatement<'a>) {
+        self.conditional_flow_depth += 1;
+        walk::walk_for_of_statement(self, statement);
+        self.conditional_flow_depth -= 1;
+    }
+
+    fn visit_while_statement(&mut self, statement: &oxc_ast::ast::WhileStatement<'a>) {
+        self.conditional_flow_depth += 1;
+        walk::walk_while_statement(self, statement);
+        self.conditional_flow_depth -= 1;
+    }
+
+    fn visit_do_while_statement(&mut self, statement: &oxc_ast::ast::DoWhileStatement<'a>) {
+        self.conditional_flow_depth += 1;
+        walk::walk_do_while_statement(self, statement);
+        self.conditional_flow_depth -= 1;
+    }
+
+    fn visit_try_statement(&mut self, statement: &oxc_ast::ast::TryStatement<'a>) {
+        self.conditional_flow_depth += 1;
+        walk::walk_try_statement(self, statement);
+        self.conditional_flow_depth -= 1;
     }
 
     fn visit_object_property(&mut self, property: &ObjectProperty<'a>) {

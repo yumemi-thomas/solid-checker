@@ -593,6 +593,10 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// facts. Member names may be unresolved (for example an inferred `any`),
     /// but the props object itself remains a reactive proxy.
     pub(super) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    /// Caller-proven props reactivity per props declaration; answers
+    /// `Reactive` everywhere for dialects that keep the upstream
+    /// over-approximation.
+    pub(super) props_reactivity: &'a crate::source_discovery::PropsReactivityIndex,
     /// The proven-source symbol at each exact TypeScript reference location,
     /// indexed path → byte range. Entity facts intentionally cover only
     /// semantically interesting expression shapes; ordinary operator operands
@@ -672,6 +676,7 @@ pub(crate) fn check_project(
         source_kinds: ctx.source_kinds,
         source_primitives: ctx.source_primitives,
         prop_sources: ctx.prop_sources,
+        props_reactivity: ctx.props_reactivity,
         source_reference_index: retained.unwrap_or_else(|| {
             crate::symbols::source_reference_locations(
                 &ctx.facts.typescript,

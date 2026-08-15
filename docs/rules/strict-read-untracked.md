@@ -13,7 +13,25 @@ function called from an untracked position, or through a chain of calls that end
 in one of those places. The finding's evidence trail shows where the value was
 declared and how the read reached the untracked scope.
 
-This is the static counterpart of Solid's dev-mode `STRICT_READ_UNTRACKED` warning.
+This is the static counterpart of Solid's dev-mode `STRICT_READ_UNTRACKED` warning,
+and it mirrors where the runtime actually installs strict-read contexts (component
+and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
+
+- **Module scope is not reported.** A module-scope read runs before any component
+  exists; the runtime opens no strict-read window there and never warns. A
+  deliberate module-scope snapshot is legal, undiagnosed Solid, so this rule stays
+  silent for it. (The `v1/` catalog keeps reporting module scope, matching
+  eslint-plugin-solid.)
+- **Props follow their callers.** `devComponent` wraps the body in
+  `untrack(() => Comp(props), '<Name>')`, and the warning fires only when a prop
+  *getter* reads reactive state in that window. A prop that every visible call
+  site passes as a static value compiles to a plain property and can never warn —
+  reads of it are not reported. A prop some call site passes a reactive expression
+  for (a signal or memo call, a store or props member, a tracked expression) is
+  proven signal-backed and reported as a violation. When the component's call
+  sites cannot be enumerated — it is exported, spread into (`<Card {...rest}/>`),
+  or referenced outside JSX — the finding is reported as **uncertifiable**: a
+  proof obligation rather than a proven runtime warning.
 
 ## Why is this bad?
 

@@ -2853,6 +2853,7 @@ fn interprocedural_result_reads_for_file(
                             via: label.clone().into(),
                             origin: Some(read.origin.clone()),
                             origin_context: read.origin_context.clone().into(),
+                            uncertain: false,
                         });
                     }
                 }
@@ -2882,6 +2883,7 @@ fn interprocedural_result_reads_for_file(
                     via: label.clone().into(),
                     origin: Some(read.origin),
                     origin_context: read.origin_context.into(),
+                    uncertain: false,
                 });
             }
         }

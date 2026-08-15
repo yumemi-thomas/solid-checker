@@ -11,6 +11,17 @@ Flags reads of signal accessors, store paths, and props that occur after the fir
 `await` in an async function passed to a computation (`createMemo`, `createEffect`,
 `createProjection`, and friends).
 
+Accessor **calls** are proven by TypeScript-side dominance analysis, which handles
+branches, loops, `switch`, and `try`/`finally` precisely (both-branch awaits
+dominate; a conditional or looped await does not). Store-path and props **member
+reads** are proven against the function's straight-line awaits: an await with no
+conditional, logical, loop, switch, or try construct between the function entry
+and the expression dominates every later read in the same function body. Both
+proofs exclude nested closures — a callback created after the await has its own
+tracking story. Props member reads follow the component's caller classification
+(see [strict-read-untracked](strict-read-untracked.md)): proven-static props are
+not reactive and stay silent; unprovable ones are reported as **uncertifiable**.
+
 ## Why is this bad?
 
 Tracking is synchronous: a computation collects dependencies only until its first
