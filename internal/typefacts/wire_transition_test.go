@@ -245,3 +245,16 @@ func TestWireTransitionRejectsUnknownEnumsAndRecoversItsScratch(t *testing.T) {
 		t.Fatal("failed encode contaminated reusable scratch")
 	}
 }
+
+func TestWireTransitionRejectsContradictorySymbolResolution(t *testing.T) {
+	table := goldenWireTable()
+	table.Entities = append([]EntityFact(nil), table.Entities...)
+	table.Entities[0].SymbolUnresolved = true
+
+	if _, err := (&wireTransitionEncoder{}).Encode(wireTransitionInput{
+		ProjectID: table.ProjectID,
+		Target:    &table,
+	}); err == nil {
+		t.Fatal("resolved and unresolved symbol state was encoded together")
+	}
+}

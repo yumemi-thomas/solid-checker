@@ -51,6 +51,7 @@ type SemanticDemandRunResult struct {
 type EntityFact struct {
 	Location           Location            `cbor:"location" json:"location"`
 	Symbol             SymbolID            `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	SymbolUnresolved   bool                `cbor:"symbolUnresolved,omitempty" json:"symbolUnresolved,omitempty"`
 	TypeDescriptor     *TypeDescriptor     `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
 	ResolvedCall       *Call               `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
 	Callability        Callability         `cbor:"callability,omitempty" json:"callability,omitempty"`

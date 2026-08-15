@@ -34,11 +34,10 @@ func (p *project) SemanticEntities(ctx context.Context, demands []typefacts.Enti
 	return entities, nil
 }
 
-// jsxTagNameAt normalizes a node selected from a JSX name span to the complete
-// compiler tag-name expression. In particular, a position at the start of
-// `Runtime.Component` selects the `Runtime` identifier; asking the checker
-// about that child resolves the namespace object, while asking about the
-// enclosing property-access tag resolves `Component`.
+// jsxTagNameAt normalizes a node selected from a complete JSX name span to the
+// complete compiler tag-name expression. A deliberately narrower demand, such
+// as `Runtime` within `Runtime.Component`, keeps the identifier node so callers
+// can ask whether the member root itself resolves.
 func jsxTagNameAt(node *ast.Node, location typefacts.Location) *ast.Node {
 	for current := node; current != nil; current = current.Parent {
 		switch current.Kind {
@@ -48,9 +47,8 @@ func jsxTagNameAt(node *ast.Node, location typefacts.Location) *ast.Node {
 		}
 		tagName := current.TagName()
 		if tagName == nil ||
-			location.StartByte < tagName.Pos() ||
-			location.StartByte >= tagName.End() ||
-			location.EndByte > tagName.End() {
+			location.StartByte != tagName.Pos() ||
+			location.EndByte != tagName.End() {
 			return node
 		}
 		return tagName

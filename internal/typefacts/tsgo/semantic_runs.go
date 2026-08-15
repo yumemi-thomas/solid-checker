@@ -170,6 +170,9 @@ func (p *project) SemanticDemandRuns(
 				if demand.Symbol && entity.Symbol == "" && resultSymbol != nil {
 					entity.Symbol = p.idFor(resultSymbol)
 				}
+				if demand.Symbol && entity.Symbol == "" && resultSymbol == nil {
+					entity.SymbolUnresolved = true
+				}
 			}
 			evidence[runIndex].symbol(entity.Symbol)
 			if demand.ReferenceSpace {

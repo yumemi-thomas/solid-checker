@@ -7,6 +7,57 @@ use typefacts::{
 };
 
 #[test]
+fn explicit_unresolved_symbols_survive_the_process_seam() {
+    let root = std::env::temp_dir().join(format!(
+        "typefacts-unresolved-symbol-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let project = root.join("tsconfig.json");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"strict":true,"noEmit":true},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+    let path = root.join("source.ts");
+    let source = "export const present = 1;\nexport const missing = MissingName;\n";
+    fs::write(&path, source).unwrap();
+    let demand = |needle: &str, from: usize| {
+        let start = source[from..].find(needle).unwrap() + from;
+        EntityDemand {
+            location: Location {
+                path: path.to_string_lossy().into_owned().into(),
+                start_byte: start as u64,
+                end_byte: (start + needle.len()) as u64,
+            },
+            symbol: true,
+            ..EntityDemand::default()
+        }
+    };
+    let demands = vec![
+        demand("present", source.find("present").unwrap()),
+        demand("MissingName", 0),
+    ];
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let facts = session
+        .analyze(&AnalysisDemand { entities: demands })
+        .unwrap();
+    let entities = facts.entities().collect::<Vec<_>>();
+    assert!(!entities[0].symbol.is_empty());
+    assert!(!entities[0].symbol_unresolved);
+    assert!(entities[1].symbol.is_empty());
+    assert!(entities[1].symbol_unresolved);
+    session.close().unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
 fn runtime_value_domain_survives_full_delta_and_reuse_responses() {
     let project = repository_root()
         .join("internal/typefacts/testdata/runtime-value-domain/tsconfig.json")

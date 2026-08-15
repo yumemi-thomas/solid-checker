@@ -70,6 +70,8 @@ const namespaceMember = <Runtime.Component />;
 const reexported = <ReExported />;
 const local = <Local />;
 const intrinsic = <div />;
+const missing = <Missing />;
+const missingMember = <MissingNamespace.Component />;
 const invalidTypeOnly = <TypeOnlyComponent />;
 function render(Component: typeof Runtime.Component) {
 	return <Component />;
@@ -95,9 +97,13 @@ function render(Component: typeof Runtime.Component) {
 	locations["closing"] = location("closing tag", "Component", strings.Index(consumer, "</Component>"))
 	locations["alias"] = location("aliased self-closing tag", "Alias", strings.Index(consumer, "const selfClosing"))
 	locations["namespaceMember"] = location("namespace-member tag", "Runtime.Component", strings.Index(consumer, "const namespaceMember"))
+	locations["namespaceRoot"] = location("namespace-member root", "Runtime", strings.Index(consumer, "const namespaceMember"))
 	locations["reexported"] = location("re-exported tag", "ReExported", strings.Index(consumer, "const reexported"))
 	locations["local"] = location("local tag", "Local", strings.Index(consumer, "const local"))
 	locations["intrinsic"] = location("intrinsic tag", "div", strings.Index(consumer, "const intrinsic"))
+	locations["missing"] = location("missing tag", "Missing", strings.Index(consumer, "const missing"))
+	locations["missingMember"] = location("missing member tag", "MissingNamespace.Component", strings.Index(consumer, "const missingMember"))
+	locations["missingMemberRoot"] = location("missing member root", "MissingNamespace", strings.Index(consumer, "const missingMember"))
 	locations["typeOnly"] = location("type-only tag", "TypeOnlyComponent", strings.Index(consumer, "const invalidTypeOnly"))
 	shadowFunction := strings.Index(consumer, "function render")
 	locations["shadowDeclaration"] = location("shadow declaration", "Component", shadowFunction)
@@ -116,7 +122,9 @@ function render(Component: typeof Runtime.Component) {
 		})
 	}
 	sort.Slice(demands, func(i, j int) bool {
-		return demands[i].Location.StartByte < demands[j].Location.StartByte
+		left, right := demands[i].Location, demands[j].Location
+		return left.StartByte < right.StartByte ||
+			(left.StartByte == right.StartByte && left.EndByte < right.EndByte)
 	})
 	return jsxSymbolFixture{
 		projectPath:   projectPath,
@@ -181,9 +189,18 @@ func TestJSXTagDemandsUseCompilerSymbolIdentity(t *testing.T) {
 	if err := directProject.Close(); err != nil {
 		t.Fatal(err)
 	}
+	missing := map[typefacts.Location]bool{
+		fixture.locations["missing"]:           true,
+		fixture.locations["missingMember"]:     true,
+		fixture.locations["missingMemberRoot"]: true,
+	}
 	for index, entity := range direct {
-		if entity.Symbol == "" {
-			t.Errorf("direct entity %d at %+v has no symbol", index, entity.Location)
+		if missing[entity.Location] {
+			if entity.Symbol != "" || !entity.SymbolUnresolved {
+				t.Errorf("direct unresolved entity %d at %+v = %+v", index, entity.Location, entity)
+			}
+		} else if entity.Symbol == "" || entity.SymbolUnresolved {
+			t.Errorf("direct resolved entity %d at %+v = %+v", index, entity.Location, entity)
 		}
 	}
 
@@ -242,6 +259,14 @@ func TestJSXTagDemandsUseCompilerSymbolIdentity(t *testing.T) {
 	}
 	if got, namespace := entity("namespaceMember").Symbol, entity("namespaceImport").Symbol; got == namespace {
 		t.Errorf("namespace-member JSX resolved namespace symbol %s instead of the selected member", got)
+	}
+	if got, member := entity("namespaceRoot").Symbol, entity("namespaceMember").Symbol; got == "" || got == member {
+		t.Errorf("namespace-member root symbol = %q, want a resolved namespace distinct from member %q", got, member)
+	}
+	for _, label := range []string{"missing", "missingMember", "missingMemberRoot"} {
+		if got := entity(label); got.Symbol != "" || !got.SymbolUnresolved {
+			t.Errorf("%s entity = %+v, want an explicit unresolved symbol", label, got)
+		}
 	}
 	if len(component.Declarations) == 0 ||
 		filepath.Clean(component.Declarations[0].Location.Path) != filepath.Clean(fixture.runtimePath) ||
