@@ -14,6 +14,12 @@ no primitive semantics. Shared with the 1.x catalog as
 [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) under the
 same code, so a suppression comment survives a migration.
 
+**The warning severity does not soften certification.** Certification status is
+computed from a finding's *kind*, not its severity: like every `uncertifiable`
+finding, an SC9011 warning fails `--certify` until the boundary is described (or
+the rule is disabled in `rule-options.json`). "Advisory" describes the tone —
+nothing has been proven wrong — not an exemption from the certification gate.
+
 Only callees imported from a package are reported, because those are the
 callees the fix applies to. An ambient global (`setTimeout`, `console.log`,
 an array method) comes from no package, so no contract could ever describe

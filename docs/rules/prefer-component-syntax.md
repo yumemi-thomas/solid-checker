@@ -23,3 +23,13 @@ const Panel = () => <article><Header /></article>;
 
 Besides making component boundaries explicit, component syntax preserves the
 runtime and compiler conventions around props, ownership, and setup execution.
+
+## Scope: convention, not proven misbehavior
+
+Calling a lowercase JSX-returning function inside JSX **works at runtime** — the
+call executes inside the enclosing tracked scope and renders; no Solid 2.0
+diagnostic exists for it. This rule enforces a convention (component identity,
+dev-tools naming, ownership granularity), unlike the checker's semantic rules,
+which prove runtime misbehavior. Like every finding it participates in
+`--certify`; a project that prefers render-helper calls should disable the rule
+in `.solid-checker/rule-options.json` rather than suppress individual findings.

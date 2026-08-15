@@ -18,6 +18,17 @@ this order:
 General-purpose packages that do not depend on Solid are deliberately exempt — they
 cannot participate in reactivity, so they need no contract.
 
+**The bundled contracts are version-pinned.** Each bundled contract names the exact
+audited release (`solid-js@2.0.0-rc.0`, `@solidjs/web@2.0.0-rc.0` for the Solid 2.0
+dialect; `solid-js@1.9.14` for 1.x) and is matched by exact version equality against
+the installed package's manifest. Installing **any other version — including a newer
+RC** — silently skips the bundled contract, so `solid-js` itself becomes a package
+with no contract and this rule fires, making the whole project uncertifiable. That is
+deliberate: a new RC must be re-audited before the checker can vouch for it. If you
+hit SC9005 on `solid-js` or `@solidjs/web` right after upgrading, this is why — pin
+back to the audited version or provide a reviewed local contract override. See
+[package-contracts.md](../package-contracts.md#bundled-contracts) for details.
+
 ## Why is this analysis-limiting?
 
 A Solid-integrating package can read reactive values, take tracked callbacks, and

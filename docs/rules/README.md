@@ -241,6 +241,9 @@ plugin keeps its rule names under the `v1/` namespace.
 | SC8015 | [v1/prefer-show](v1/prefer-show.md) | warning |
 | SC8016 | [v1/self-closing-comp](v1/self-closing-comp.md) | warning |
 | SC8017 | [v1/style-prop](v1/style-prop.md) | warning |
+| SC8018 | [v1/prefer-component-syntax](v1/prefer-component-syntax.md) | warning |
+| SC8019 | [v1/no-implicit-draggable](v1/no-implicit-draggable.md) | error |
+| SC8020 | [v1/valid-jsx-nesting](v1/valid-jsx-nesting.md) | error |
 | SC9001 | [v1/package-contract-export-missing](v1/package-contract-export-missing.md) | error |
 | SC9004 | [v1/execution-map-incomplete](v1/execution-map-incomplete.md) | error |
 | SC9006 | [v1/package-contract-callback-missing](v1/package-contract-callback-missing.md) | error |
