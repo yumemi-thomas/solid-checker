@@ -38,18 +38,22 @@ func (g *demandGroup) ensureExpanded() error {
 	if err != nil {
 		return err
 	}
-	// Compact rows retain the caller's string table verbatim. Re-establish the
-	// same clean-path invariant as the plain-demand seam when the rows are
-	// expanded; on Windows, the project run uses backslashes while a Rust
-	// client can encode the identical absolute path with forward slashes.
+	canonicalizeDemandRun(g.path, demands)
+	g.demands = demands
+	return nil
+}
+
+// canonicalizeDemandRun restores the retained group's clean path invariant
+// after expanding compact rows. The compact string table carries paths as
+// sent by the client, which can use forward slashes on Windows even though
+// filepath.Clean(group.Path) produced a backslash-separated retention key.
+func canonicalizeDemandRun(path string, demands []EntityDemand) {
 	for index := range demands {
-		demands[index].Location.Path = filepath.Clean(demands[index].Location.Path)
+		demands[index].Location.Path = path
 		if demands[index].QueryLocation != nil {
 			demands[index].QueryLocation.Path = filepath.Clean(demands[index].QueryLocation.Path)
 		}
 	}
-	g.demands = demands
-	return nil
 }
 
 func (g *demandGroup) releaseExpanded() {
@@ -67,7 +71,13 @@ func (g *demandGroup) appendAsyncDemands(target []EntityDemand) ([]EntityDemand,
 		}
 		return target, nil
 	}
-	return appendCompactDemandsWithFlag(target, g.compact, g.strings, demandFlagAsync)
+	start := len(target)
+	result, err := appendCompactDemandsWithFlag(target, g.compact, g.strings, demandFlagAsync)
+	if err != nil {
+		return nil, err
+	}
+	canonicalizeDemandRun(g.path, result[start:])
+	return result, nil
 }
 
 func validateCanonicalSourceFiles(files []SourceFile) error {
