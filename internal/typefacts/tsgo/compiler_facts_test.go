@@ -149,10 +149,9 @@ const voidResult = voidCall();
 		{"callableIntersection", callable},
 		{"optionalCleanup", cleanup},
 		{"boundedCleanup", cleanup},
-		// `void` is a contract to ignore the result, not a claim that it is
-		// undefined: return-type bivariance lets a value-returning function
-		// inhabit a void slot, so the domain stays open.
-		{"voidResult", unknown},
+		// A void result is undefined at runtime and is trusted like any other
+		// declared return type; the bivariance hole is documented, not modelled.
+		{"voidResult", undefined},
 		{"numberValue", other},
 		{"nullValue", other},
 		{"objectValue", other},
