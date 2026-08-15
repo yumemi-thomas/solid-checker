@@ -1,5 +1,39 @@
 # Solid 2.0 rule catalog audit
 
+> **Remediation status (2026-08-15, same branch):** every confirmed finding in this
+> report has been fixed on this branch, in six commits following the audit commit.
+> Mapping:
+>
+> - §1.1, §1.2, §2.1, §1.8-SC2003, §4-leaf-owner-example → *"Match the write-scope
+>   and leaf-owner model to the rc.0 runtime"*
+> - §1.3, §2.2, §4-inventory (async half) → *"Model the rc.0 async hydration options
+>   and close the SSR client-source hole"* (new rule **SC5005**; probes showed
+>   pending throws return after the declared first-flight window, so SC5001/SC5002
+>   remain with conditional-truth messages and an opaque-options uncertifiable path)
+> - §1.4, §1.5, §2.3, §2.4-SC7001, §3-SC4004, §4-SC9001-hint → *"Anchor the
+>   API-shape rules on the probed rc.0 runtime"*
+> - §1.6, §1.8-SC1004/SC1006, §2.4-SC1002/SC1004, §4-SC1002-page/span,
+>   §3-SC1003 (via kind reclassification) → *"Prove props reactivity from callers
+>   and sharpen the tracking rules"* (also resolved two declared upstream parity
+>   deviations)
+> - §1.7, §2.4-SC8019/keyed, §1.8-SC6001, §5-fixtures → *"Teach the JSX rules
+>   parser scope and stop fabricating keyed accessors"* (`draggable={true}` was
+>   probe-confirmed broken and is now flagged)
+> - §2.5, plus `resolve()` and the SC1005 edges → *"Cover the server surface,
+>   resolve(), and the uncalled-accessor edges"* (new rules **SC7005 SC7006 SC7007
+>   SC2004**)
+> - §3-SC8018/SC9011, §4-README-table/SC9005 → *"Document certification gates, the
+>   rc pin, and convention-rule scope"*
+>
+> The catalog is now 43 Solid 2.0 rules. Remaining known boundaries are documented
+> on the relevant rule pages rather than left silent: SC8020 svg-breakout and
+> option-children refinements, `draggable={false}` on draggable-by-default
+> elements, WeakMap/WeakSet and nested rich types in SC7007, named-function
+> `untrack` callbacks, and dynamic-extent leaf-scope helpers. Upstream issues worth
+> filing against solidjs/solid remain: RFC 01/08 claim writes in `untrack` are
+> allowed (the rc.0 guard throws), and `ACTION_CALLED_IN_OWNED_SCOPE` is missing
+> from the RFC 08 diagnostics table.
+
 **Date:** 2026-08-15
 **Audited:** the 38-rule Solid 2.0 catalog (`docs/rules/`, `rust/dialects/solid-v2/`, shared engine crates, fixtures) at commit `a74fc81`.
 **Ground truth:** the current `solidjs/solid@next` `documentation/solid-2.0/` set (all 15 files, fetched 2026-08-15 — note it now includes `10-server-functions.md`, `11-server-components.md`, `12-ssr-http.md`), the pinned `solid-js@2.0.0-rc.0` npm tarball, and the `@solidjs/signals@2.0.0-rc.0` dev bundle it re-exports. Where docs and runtime disagreed, ~25 empirical Node probes against the dev bundle settled it.
