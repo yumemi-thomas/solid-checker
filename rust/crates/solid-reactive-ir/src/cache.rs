@@ -175,6 +175,10 @@ pub(crate) struct SourceDiscoveryContribution {
     pub(crate) async_sources: Vec<SymbolId>,
     pub(crate) source_async_options:
         Vec<(SymbolId, crate::source_discovery::AsyncSourceOptions)>,
+    /// Store bindings whose initializer is provably the value form
+    /// (`createStore(value)` / `createOptimisticStore(value)`): no compute
+    /// node exists, so the store is not a valid `refresh()` target.
+    pub(crate) value_form_stores: Vec<SymbolId>,
     pub(crate) contracted_accessor_symbols: Vec<SymbolId>,
 }
 

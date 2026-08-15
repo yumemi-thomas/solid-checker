@@ -424,10 +424,15 @@ impl Dialect for Solid2 {
     }
 
     /// Spelled out per the trait's rule that an options slot alone is not
-    /// evidence for a particular option key. Today the list coincides with
-    /// [`Solid2::options_argument`]'s domain — every entry is a computation
-    /// node in `@solidjs/signals` — but a future options-bearing addition
-    /// has to earn its `sync` row here instead of inheriting it.
+    /// evidence for a particular option key. Only the signal-family
+    /// constructors route `options.sync` into their node's `CONFIG_SYNC`:
+    /// the store family (`createStore(fn, …)`, `createProjection`,
+    /// `createOptimisticStore`) rebuilds its node options with only
+    /// `loadingValue`/`name` (`@solidjs/signals@2.0.0-rc.0` dev bundle,
+    /// `createProjectionInternal`), `sync` is absent from their option
+    /// types, and probing confirms a `sync: true` async store derive never
+    /// emits `SYNC_NODE_RECEIVED_ASYNC` — the option is inert there, so a
+    /// rule keyed on it would flag runtime-legal code.
     fn supports_sync_option(&self, primitive: Primitive) -> bool {
         matches!(
             primitive,
@@ -435,9 +440,6 @@ impl Dialect for Solid2 {
                 | Primitive::CreateSignal
                 | Primitive::CreateOptimistic
                 | Primitive::CreateTrackedEffect
-                | Primitive::CreateStore
-                | Primitive::CreateProjection
-                | Primitive::CreateOptimisticStore
                 | Primitive::CreateEffect
                 | Primitive::CreateRenderEffect
         )

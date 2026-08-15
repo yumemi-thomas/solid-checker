@@ -10,8 +10,16 @@ Overload shape is part of the model. In particular, value-form `createSignal`,
 sources but no child computation. Their function-form overloads create a
 computed/projection child and are therefore forbidden inside leaf owners. The
 optimistic variants otherwise participate in read provenance, setter-write,
-refresh/affects-target, async, and `sync: true` checks like their non-optimistic
-counterparts.
+refresh/affects-target, and async checks like their non-optimistic
+counterparts. `sync: true` checks apply only to the signal family
+(`createSignal(fn)`, `createMemo`, `createOptimistic(fn)`, `createEffect`,
+`createRenderEffect`, `createTrackedEffect`): the store-family constructors
+(`createStore(fn)`, `createProjection`, `createOptimisticStore`) rebuild their
+node options with only `loadingValue`/`name`, so `options.sync` never reaches
+their node and is inert there (probed, rc.0). Construction form also decides
+refreshability: only the derived store forms own a compute node, and
+`refresh()` on a value-form `createStore(obj)`/`createOptimisticStore(obj)`
+store — or any of its child records — throws `INVALID_REFRESH_TARGET` in dev.
 
 | Runtime diagnostic / condition | Static class | Initial proof obligation |
 | --- | --- | --- |
@@ -34,8 +42,8 @@ counterparts.
 | `NO_OWNER_CLEANUP` | Conditional | Resolve cleanup registration and prove no live owner dominates it. |
 | `NO_OWNER_BOUNDARY` | Conditional | Use compiler facts to resolve boundary creation and prove no live owner dominates it. |
 | `RUN_WITH_DISPOSED_OWNER` | Runtime-only initially | Owner disposal is generally value- and control-flow-dependent; reject unresolved cases when certification depends on them. |
-| `INVALID_REFRESH_TARGET` | Conditional | Prove `refresh()` receives an original branded Solid accessor/store; reject proven wrappers, reads, literals, and invalid arity, and fail closed for unresolved targets. |
-| `INVALID_AFFECTS_TARGET` | Conditional | Prove `affects()` receives a branded accessor/store, with at most one property key and a key only for a store record. Multiple keys are separate calls, not a path array. |
+| `INVALID_REFRESH_TARGET` | Conditional | Prove `refresh()` receives an original branded Solid accessor or refreshable store (member chains on a store base count — child records carry the brand); reject proven wrappers, reads, literals, zero-argument calls, and value-form store targets, and fail closed for unresolved targets. Extra arguments are ignored by the runtime and are not rejected. |
+| `INVALID_AFFECTS_TARGET` | Conditional | Prove `affects()` receives a branded accessor/store — including nested store records reached through member chains — with at most one property key and a key only for a store record. Multiple keys are separate calls, not a path array. |
 | `MISSING_EFFECT_FN` | Statically provable | Resolve `createEffect` and require both compute and effect arguments, including calls with trailing commas. |
 | `SYNC_NODE_RECEIVED_ASYNC` | Conditional | Resolve `sync: true` computations and prove whether their callback returns a Promise or AsyncIterable. |
 | `REACTIVITY_HALTED` | Runtime-only | This is a secondary runtime scheduler/error state after an escaped reactive error, not an independent source rule. |

@@ -135,6 +135,20 @@ pub struct ArgumentFact {
     /// option.
     #[serde(default)]
     pub exact_object_literal: bool,
+    /// True when the runtime value (behind TS sugar) is a primitive literal:
+    /// string, number, boolean, bigint, template, or regexp. Such a value is
+    /// proven to be neither a function nor an object.
+    #[serde(default)]
+    pub primitive_literal: bool,
+    /// True when the runtime value (behind TS sugar) is an object or array
+    /// literal — proven not callable, but possibly a store seed/value.
+    #[serde(default)]
+    pub container_literal: bool,
+    /// The span of the runtime value expression when TypeScript sugar
+    /// (parentheses, `as`, `satisfies`, `!`) wraps it; `None` when the
+    /// argument span already is the runtime value.
+    #[serde(default)]
+    pub value_span: Option<Span>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1105,6 +1119,29 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             }),
             _ => false,
         };
+        // Classify the runtime value behind TypeScript sugar so downstream
+        // rules can reason about what actually reaches the call: a
+        // `value as const` still passes the literal, and `target!` still
+        // passes the member chain.
+        let expression = argument.as_expression().map(peel_ts_sugar);
+        let primitive_literal = matches!(
+            expression,
+            Some(
+                Expression::StringLiteral(_)
+                    | Expression::NumericLiteral(_)
+                    | Expression::BooleanLiteral(_)
+                    | Expression::BigIntLiteral(_)
+                    | Expression::RegExpLiteral(_)
+                    | Expression::TemplateLiteral(_)
+            )
+        );
+        let container_literal = matches!(
+            expression,
+            Some(Expression::ObjectExpression(_) | Expression::ArrayExpression(_))
+        );
+        let value_span = expression
+            .map(|expression| span(expression.span()))
+            .filter(|inner| *inner != span(argument.span()));
         ArgumentFact {
             span: span(argument.span()),
             spread: argument.is_spread(),
@@ -1114,6 +1151,9 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             string_properties,
             property_names,
             exact_object_literal,
+            primitive_literal,
+            container_literal,
+            value_span,
         }
     }
 }

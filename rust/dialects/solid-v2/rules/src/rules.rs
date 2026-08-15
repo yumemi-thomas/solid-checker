@@ -151,7 +151,12 @@ impl Rule {
             Self::NoOwnerEffect => ("SC4001", "no-owner-effect", "warning", false),
             Self::NoOwnerCleanup => ("SC4002", "no-owner-cleanup", "warning", false),
             Self::NoOwnerBoundary => ("SC4003", "no-owner-boundary", "warning", false),
-            Self::NoOwnerSettledCleanup => ("SC4004", "no-owner-settled-cleanup", "warning", false),
+            // Unlike the other owner rules (whose runtime consequence is a
+            // silent leak), the runtime enforces this one: an onSettled
+            // callback returning a cleanup with no owner throws
+            // SETTLED_CLEANUP_UNOWNED in dev (rc.0), so the proven form
+            // mirrors that as an error.
+            Self::NoOwnerSettledCleanup => ("SC4004", "no-owner-settled-cleanup", "error", false),
             Self::PendingAsyncUntrackedRead => {
                 ("SC5001", "pending-async-untracked-read", "error", false)
             }
@@ -317,5 +322,10 @@ mod tests {
             Rule::SsrClientSourceOutsideLoadingBoundary.metadata().severity,
             "error"
         );
+        // SETTLED_CLEANUP_UNOWNED is a dev *throw* (rc.0 dev bundle emits an
+        // error diagnostic and throws), not a warning: an onSettled callback
+        // returning a cleanup in an unowned scope halts in dev and drops the
+        // cleanup in production. The catalog mirrors the throw as an error.
+        assert_eq!(Rule::NoOwnerSettledCleanup.metadata().severity, "error");
     }
 }

@@ -1,6 +1,6 @@
 # no-owner-settled-cleanup
 
-`SC4004` · **warning** · violation (uncertifiable, reported as an error, for exported functions)
+`SC4004` · **error** · violation (uncertifiable for exported functions)
 
 An `onSettled` callback returns a cleanup function, but no owner can register
 the cleanup.
@@ -11,17 +11,18 @@ Flags `onSettled` calls whose callback returns a cleanup function while the
 call executes without a component, computation, or root owner. When the call
 sits in an exported function whose call sites are outside the project, the
 finding is reported as **uncertifiable** instead: solid-checker cannot prove
-callers provide an owner. Like the other owner rules, that uncertifiable form
-carries **error** severity; the catalog's **warning** applies to the proven
-violation form.
+callers provide an owner. Both forms carry **error** severity — unlike the
+other owner rules, whose proven form is a warning, this one mirrors a runtime
+throw.
 
 ## Why is this bad?
 
 `onSettled` may return a cleanup function after the current reactive activity
 settles. That function only has a lifetime when Solid can attach it to an
-owner that will eventually dispose. With no owner, setup runs but the returned
-cleanup is silently dropped, so an interval, listener, socket, or subscription
-can leak.
+owner that will eventually dispose. In development, returning a cleanup with
+no owner **throws `SETTLED_CLEANUP_UNOWNED`**. In production the guard is
+compiled out: setup runs but the returned cleanup is silently dropped, so an
+interval, listener, socket, or subscription can leak.
 
 ## Examples
 

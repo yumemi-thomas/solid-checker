@@ -6,10 +6,12 @@ The target passed to `refresh()` cannot be traced back to a Solid source.
 
 ## What it does
 
-Flags `refresh(target)` calls where the target identifier cannot be resolved to a
-binding the analyzer knows to be a branded Solid source (a derived signal, store,
-or projection) — typically values that crossed a file or package boundary the
-analysis cannot see through.
+Flags `refresh(target)` calls where the target identifier — or, for a
+member-expression target such as `refresh(state.user)`, the root of its member
+chain — cannot be resolved to a binding the analyzer knows to be a branded
+Solid source (a derived signal, store, or projection). Typically these are
+values that crossed a file or package boundary the analysis cannot see
+through, or store records received as parameters.
 
 ## Shared code
 

@@ -6,9 +6,12 @@ The target passed to `affects()` cannot be traced back to a Solid source.
 
 ## What it does
 
-Flags `affects(target, keys?)` calls where the target identifier cannot be resolved
-to a binding the analyzer knows to be a branded Solid source — typically values
-that crossed a file or package boundary the analysis cannot see through.
+Flags `affects(target, keys?)` calls where the target identifier — or, for a
+member-expression target such as `affects(state.user, "name")`, the root of
+its member chain — cannot be resolved to a binding the analyzer knows to be a
+branded Solid source. Typically these are values that crossed a file or
+package boundary the analysis cannot see through, or store records received
+as parameters.
 
 ## Shared code
 

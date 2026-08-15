@@ -995,7 +995,7 @@
       "rule": "no-owner-settled-cleanup",
       "code": "SC4004",
       "kind": "violation",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-valid.tsx",
       "start": 370,
       "end": 434,

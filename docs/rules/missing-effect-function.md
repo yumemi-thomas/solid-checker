@@ -7,8 +7,13 @@ single-callback form.
 
 ## What it does
 
-Flags `createEffect` calls with fewer than two arguments, or with `undefined` as
-the second argument.
+Flags `createEffect` calls with fewer than two arguments, with `undefined` or
+`null` as the second argument, or with a proven non-function second argument
+such as a string, number, or boolean literal. An absent apply function throws
+`MISSING_EFFECT_FN` in dev; a non-function value crashes the effect queue when
+the runtime reads `.effect` off it or calls it (`null.effect`,
+`5.effect is not a function`). The `{ effect, error }` object form is legal;
+identifiers and expressions the checker cannot prove non-function stay silent.
 
 ## Why is this bad?
 
@@ -28,6 +33,10 @@ Examples of **incorrect** code for this rule:
 createEffect(() => {
   console.log(name());
 });
+
+// Proven non-function apply values crash the effect queue at runtime.
+createEffect(() => name(), null);
+createEffect(() => name(), 5);
 ```
 
 Examples of **correct** code for this rule:

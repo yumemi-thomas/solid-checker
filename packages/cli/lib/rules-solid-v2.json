@@ -26,7 +26,7 @@
     { "code": "SC4001", "name": "no-owner-effect", "severity": "warning", "uncertifiable": false },
     { "code": "SC4002", "name": "no-owner-cleanup", "severity": "warning", "uncertifiable": false },
     { "code": "SC4003", "name": "no-owner-boundary", "severity": "warning", "uncertifiable": false },
-    { "code": "SC4004", "name": "no-owner-settled-cleanup", "severity": "warning", "uncertifiable": false },
+    { "code": "SC4004", "name": "no-owner-settled-cleanup", "severity": "error", "uncertifiable": false },
     { "code": "SC5001", "name": "pending-async-untracked-read", "severity": "error", "uncertifiable": false },
     { "code": "SC5002", "name": "pending-async-forbidden-scope", "severity": "warning", "uncertifiable": false },
     { "code": "SC5003", "name": "async-outside-loading-boundary", "severity": "warning", "uncertifiable": false },

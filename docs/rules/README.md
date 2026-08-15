@@ -64,7 +64,9 @@ Findings come in two kinds:
 
 Uncertifiable findings normally carry **error** severity, including the ones
 the owner rules (`SC4001`–`SC4004`) emit for exported functions whose callers
-the analyzer cannot see, and the ones `SC5001`
+the analyzer cannot see (for `SC4004` this is no escalation: its proven form
+is already an error, mirroring the runtime's dev-mode
+`SETTLED_CLEANUP_UNOWNED` throw), and the ones `SC5001`
 [pending-async-untracked-read](pending-async-untracked-read.md) emits when a
 source's options argument cannot be read (an unreadable `loadingValue`
 declaration would make the read safe during the first flight, so the throw is
@@ -154,7 +156,7 @@ rule's page documents its additional options and defaults.
 | SC4001 | [no-owner-effect](no-owner-effect.md) | warning |
 | SC4002 | [no-owner-cleanup](no-owner-cleanup.md) | warning |
 | SC4003 | [no-owner-boundary](no-owner-boundary.md) | warning |
-| SC4004 | [no-owner-settled-cleanup](no-owner-settled-cleanup.md) | warning |
+| SC4004 | [no-owner-settled-cleanup](no-owner-settled-cleanup.md) | error |
 
 ## Async
 

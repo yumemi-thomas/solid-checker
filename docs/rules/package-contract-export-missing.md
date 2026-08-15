@@ -29,6 +29,16 @@ import { createGizmo } from "solid-widgets";
 const gizmo = createGizmo(count); // Uncertifiable: is `count` read reactively? Returned?
 ```
 
+## Removed 1.x APIs
+
+Under the Solid 2.0 dialect, when the flagged export of `solid-js` (or
+`@solidjs/web`) is a known API that 2.0 removed or renamed — `batch`, `on`,
+`onMount`, `onError`, `createResource`, `createComputed`, `createMutable`,
+`mergeProps`, `splitProps`, `Suspense`, and the rest of the migration guide's
+removal table — the finding's hint points at the 2.0 replacement instead of
+asking for a contract entry: there is no export left to describe, and the fix
+is migrating the call site.
+
 ## How to fix
 
 Add an export summary for the flagged export to the package's

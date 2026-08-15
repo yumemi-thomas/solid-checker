@@ -7,16 +7,24 @@ AsyncIterable.
 
 ## What it does
 
-Flags `createMemo`, `createSignal`, `createStore`, `createEffect`, and related
-calls whose options include `sync: true` while the computation's callback is async
-or statically returns a Promise/AsyncIterable.
+Flags the signal-family constructors — `createMemo`, `createSignal(fn)`,
+`createOptimistic(fn)`, `createEffect`, and related computation nodes — whose
+options include `sync: true` while the computation's callback is async or
+statically returns a Promise/AsyncIterable.
+
+The store-family constructors (`createStore(fn, …)`, `createProjection`,
+`createOptimisticStore`) are deliberately not checked: the runtime rebuilds
+their node options with only `loadingValue`/`name`, so `options.sync` never
+reaches their node — the option is inert there, not dangerous.
 
 ## Why is this bad?
 
-`sync: true` promises the scheduler that the node settles within the same flush —
-it can neither defer nor suspend. An async result breaks that promise: the node
-cannot wait for the Promise, so the combination throws at runtime the moment the
-computation returns one.
+`sync: true` is a performance assertion: it tells the runtime the computation
+settles synchronously, so the async-shape probe on its result can be skipped.
+An async result breaks that assertion. In development the runtime still probes
+and throws `SYNC_NODE_RECEIVED_ASYNC`; in production the probe is skipped and
+the unawaited Promise is stored as the node's value — readers see a Promise
+object instead of the settled value, with no diagnostic.
 
 ## Examples
 

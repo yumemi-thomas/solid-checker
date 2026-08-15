@@ -379,6 +379,36 @@ pub(crate) fn project_server_renders(facts: &ProjectFacts) -> bool {
     })
 }
 
+/// Whether a store-family creation is provably the value form
+/// (`createStore(value)` / `createOptimisticStore(value)`), which never
+/// builds a compute node. Runtime ground truth (probed, rc.0): `refresh()`
+/// on such a store — or on any of its child records — throws
+/// `INVALID_REFRESH_TARGET` in dev, while the function forms, projections,
+/// and function-form optimistic stores all accept it. The runtime branches
+/// on `typeof first === "function"`, so the proof is that argument 0 is a
+/// non-callable value: a container or primitive literal, `null`, or
+/// `undefined`. An identifier or other expression could still be a derive
+/// function, so it stays unknown and refresh acceptance is preserved.
+fn store_is_value_form(
+    call: &solid_facts::ast::CallFact,
+    primitive: Option<Primitive>,
+) -> bool {
+    use solid_facts::ast::ArgumentValueKind;
+    if !matches!(
+        primitive,
+        Some(Primitive::CreateStore | Primitive::CreateOptimisticStore)
+    ) {
+        return false;
+    }
+    call.arguments.first().is_some_and(|argument| {
+        matches!(
+            argument.value,
+            ArgumentValueKind::Null | ArgumentValueKind::Undefined
+        ) || argument.primitive_literal
+            || argument.container_literal
+    })
+}
+
 pub(crate) fn discover_file_sources(
     lookup: &SemanticLookup<'_>,
     file: &FileFacts,
@@ -641,6 +671,9 @@ pub(crate) fn discover_file_sources(
                         .source_primitives
                         .push((symbol.clone(), primitive.into()));
                 }
+                if store_is_value_form(call, resolved) {
+                    result.value_form_stores.push(symbol.clone());
+                }
                 result
                     .source_owned_write
                     .push((symbol.clone(), call.owned_write_option));
@@ -769,6 +802,9 @@ pub(crate) fn discover_file_sources(
                 ));
             }
         }
+        if store_is_value_form(call, resolved) {
+            result.value_form_stores.push(symbol.clone());
+        }
         result
             .source_owned_write
             .push((symbol.clone(), call.owned_write_option));
@@ -835,6 +871,7 @@ pub(crate) struct SourceDiscoveryMergeTarget<'a> {
     pub(crate) source_owned_write: &'a mut HashMap<SymbolId, bool>,
     pub(crate) async_sources: &'a mut HashSet<SymbolId>,
     pub(crate) source_async_options: &'a mut HashMap<SymbolId, AsyncSourceOptions>,
+    pub(crate) value_form_stores: &'a mut HashSet<SymbolId>,
     pub(crate) contracted_accessor_symbols: &'a mut HashSet<SymbolId>,
 }
 
@@ -852,6 +889,7 @@ pub(crate) struct SourceDiscoveryAggregate {
     pub(crate) source_owned_write: HashMap<SymbolId, bool>,
     pub(crate) async_sources: HashSet<SymbolId>,
     pub(crate) source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
+    pub(crate) value_form_stores: HashSet<SymbolId>,
     pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
 }
 
@@ -872,6 +910,7 @@ impl SourceDiscoveryAggregate {
                 source_owned_write: &mut self.source_owned_write,
                 async_sources: &mut self.async_sources,
                 source_async_options: &mut self.source_async_options,
+                value_form_stores: &mut self.value_form_stores,
                 contracted_accessor_symbols: &mut self.contracted_accessor_symbols,
             },
         );
@@ -896,6 +935,7 @@ impl SourceDiscoveryAggregate {
         target
             .source_async_options
             .extend(self.source_async_options);
+        target.value_form_stores.extend(self.value_form_stores);
         target
             .contracted_accessor_symbols
             .extend(self.contracted_accessor_symbols);
@@ -938,6 +978,9 @@ pub(crate) fn merge_source_discovery(
     target
         .source_async_options
         .extend(contribution.source_async_options.iter().cloned());
+    target
+        .value_form_stores
+        .extend(contribution.value_form_stores.iter().cloned());
     target
         .contracted_accessor_symbols
         .extend(contribution.contracted_accessor_symbols.iter().cloned());
@@ -990,6 +1033,7 @@ pub(crate) fn extend_source_discovery_symbols(
             .iter()
             .map(|(symbol, _)| symbol.clone()),
     );
+    symbols.extend(contribution.value_form_stores.iter().cloned());
 }
 
 /// Owned reactive-source facts produced by the source-discovery stage and
@@ -1007,6 +1051,12 @@ pub(crate) struct SourceDiscovery {
     pub(crate) source_owned_write: HashMap<SymbolId, bool>,
     pub(crate) async_sources: HashSet<SymbolId>,
     pub(crate) source_async_options: HashMap<SymbolId, AsyncSourceOptions>,
+    /// Store bindings proven to come from the value form
+    /// (`createStore(value)` / `createOptimisticStore(value)`), which builds
+    /// no compute node: `refresh()` on them (or a child record) throws
+    /// `INVALID_REFRESH_TARGET` in dev (probed, rc.0). A store whose
+    /// construction form is unknown is absent, keeping refresh acceptance.
+    pub(crate) value_form_stores: HashSet<SymbolId>,
     pub(crate) contract_reads: HashMap<SymbolId, Vec<(String, String, Location, String)>>,
     pub(crate) contract_callbacks: HashMap<SymbolId, Vec<ContractCallback>>,
     pub(crate) contract_returns: HashMap<SymbolId, (ContractReturn, Location)>,
@@ -1082,6 +1132,7 @@ pub(crate) fn discover_sources(
     let mut source_owned_write = HashMap::<SymbolId, bool>::new();
     let mut async_sources = HashSet::<SymbolId>::new();
     let mut source_async_options = HashMap::<SymbolId, AsyncSourceOptions>::new();
+    let mut value_form_stores = HashSet::<SymbolId>::new();
     let mut contract_reads = HashMap::<SymbolId, Vec<(String, String, Location, String)>>::new();
     let mut contract_callbacks = HashMap::<SymbolId, Vec<ContractCallback>>::new();
     let mut contract_returns = HashMap::<SymbolId, (ContractReturn, Location)>::new();
@@ -1161,6 +1212,7 @@ pub(crate) fn discover_sources(
                 source_owned_write: &mut source_owned_write,
                 async_sources: &mut async_sources,
                 source_async_options: &mut source_async_options,
+                value_form_stores: &mut value_form_stores,
                 contracted_accessor_symbols: &mut contracted_accessor_symbols,
             });
         }
@@ -1263,6 +1315,7 @@ pub(crate) fn discover_sources(
                     source_owned_write: &mut source_owned_write,
                     async_sources: &mut async_sources,
                     source_async_options: &mut source_async_options,
+                    value_form_stores: &mut value_form_stores,
                     contracted_accessor_symbols: &mut contracted_accessor_symbols,
                 });
             }
@@ -1712,6 +1765,7 @@ pub(crate) fn discover_sources(
         source_owned_write,
         async_sources,
         source_async_options,
+        value_form_stores,
         contract_reads,
         contract_callbacks,
         contract_returns,

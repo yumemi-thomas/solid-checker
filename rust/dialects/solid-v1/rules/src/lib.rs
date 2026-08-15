@@ -303,7 +303,14 @@ const V1_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
         missing_effect_hint: "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned.",
         tracked_derived_scope: "JSX, a createMemo, or a createEffect callback",
         store_mutation_hint: v1_store_mutation_hint,
+        // The removed-API migration map is a 2.0 concept: nothing has been
+        // removed *from* the 1.x surface this catalog describes.
+        removed_export_hint: v1_no_removed_export_hint,
     };
+
+fn v1_no_removed_export_hint(_module: &str, _export: &str) -> Option<String> {
+    None
+}
 
 fn v1_store_mutation_hint(name: &str) -> String {
     format!(

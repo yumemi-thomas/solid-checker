@@ -122,6 +122,16 @@
       "fixes": 0
     },
     {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
+      "start": 2309,
+      "end": 2321,
+      "fixes": 0
+    },
+    {
       "rule": "cleanup-return-unresolved",
       "code": "SC9002",
       "kind": "uncertifiable",

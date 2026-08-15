@@ -27,6 +27,15 @@ export function invalidateUnknown(target: unknown) {
   affects(target);
 }
 
+// Member-expression targets resolve through their chain root. When that root
+// is not a proven Solid source — a plain object, or a store record received
+// as a parameter — the call stays unresolved (SC9003), never proven-invalid:
+// the base might carry the store brand at runtime.
+refresh(plain.value);
+export function annotate(state: { user: { name: string } }) {
+  affects(state.user, "name");
+}
+
 export function App() {
   return <div>{doubled()}{count()}</div>;
 }

@@ -23,6 +23,12 @@ pub struct StaticDefectTerms {
     pub missing_effect_hint: &'static str,
     pub tracked_derived_scope: &'static str,
     pub store_mutation_hint: fn(&str) -> String,
+    /// A dialect-owned override for the missing-contract-export hint: when
+    /// the dialect knows the export was removed or renamed upstream (the
+    /// Solid 2.0 catalog's removed-1.x-API map), the hint should point at
+    /// the migration, not at writing a contract entry for an export that no
+    /// longer exists. Returning `None` keeps the generic contract hint.
+    pub removed_export_hint: fn(module: &str, export: &str) -> Option<String>,
 }
 
 pub struct StaticDefectText {
@@ -104,9 +110,11 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "the reactivity contract for {module} has no entrypoint/export summary for {} export {export}; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
                 if *reexported { "re-exported" } else { "imported" }
             ),
-            format!(
-                "Add an export summary for {export} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
-            ),
+            (terms.removed_export_hint)(module, export).unwrap_or_else(|| {
+                format!(
+                    "Add an export summary for {export} to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
+                )
+            }),
         ),
         StaticDefectKind::UnknownCallbackExecution {
             package,

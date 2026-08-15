@@ -124,7 +124,7 @@ impl CatalogWording for Catalog {
                     ),
                     OwnerRequirementOperation::SettledCleanup => (
                         Rule::NoOwnerSettledCleanup,
-                        "onSettled returns a cleanup function in a scope with no owner to register it on; the cleanup is silently dropped and will never run",
+                        "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run",
                         "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead.",
                     ),
                     OwnerRequirementOperation::Effect => (
@@ -478,10 +478,109 @@ const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
         missing_effect_hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
         tracked_derived_scope: "JSX, a createMemo, or the compute function of createEffect(compute, apply)",
         store_mutation_hint: v2_store_mutation_hint,
+        removed_export_hint: v2_removed_export_hint,
     };
 
 fn v2_store_mutation_hint(name: &str) -> String {
     format!(
         "Write through the store's setter: setStore(store => {{ store.key = value; }}) mutates the draft in place, and setStore(reconcile(next)) replaces it wholesale. Direct assignment to {name} does not notify subscribers."
     )
+}
+
+/// The Solid 1.x APIs removed or renamed in 2.0 that a project migrating to
+/// the v2 dialect is most likely to still import, mapped to their 2.0
+/// replacement. Derived from the official 2.0 migration guide's rename and
+/// removal tables; each name is verified absent from the bundled
+/// `solid-v2/solid-js.json` contract by
+/// `removed_exports_are_absent_from_the_bundled_contract` — anything the
+/// contract still exports is not removed and must not appear here.
+const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
+    ("batch", "updates batch by default on the microtask queue; call flush() where you need the old synchronous application"),
+    ("on", "split effects make it unnecessary: put the reads in createEffect's compute function and the side effect in apply"),
+    ("onMount", "use onSettled, which can also return a cleanup function"),
+    ("onError", "use the <Errored> boundary or the { effect, error } second argument of createEffect"),
+    ("catchError", "use the <Errored> boundary or the { effect, error } second argument of createEffect"),
+    ("createResource", "use an async computation (createMemo(async ...) or createStore(fn)) read under a <Loading> boundary"),
+    // `createRenderEffect` and `untrack` are deliberately NOT here: both
+    // still exist in 2.0 (bundled contract exports them), so a missing
+    // summary for them is a real contract gap, not a removed API.
+    ("createComputed", "use createEffect(compute, apply), a function-form createSignal/createStore, or createMemo"),
+    ("createMutable", "use createStore with draft-first setters"),
+    ("modifyMutable", "use createStore with draft-first setters"),
+    ("mergeProps", "renamed to merge"),
+    ("splitProps", "renamed to omit"),
+    ("Suspense", "renamed to Loading"),
+    ("SuspenseList", "renamed to Reveal, which coordinates sibling Loading boundaries via its order prop"),
+    ("ErrorBoundary", "renamed to Errored"),
+    ("Index", "use <For keyed={false}>, whose children receive an item accessor and a stable numeric index"),
+    ("indexArray", "use mapArray with keyed: false"),
+    ("createSelector", "use createProjection or a function-form createStore"),
+    ("createDynamic", "use the dynamic(source) component factory"),
+    ("unwrap", "renamed to snapshot"),
+    ("equalFn", "renamed to isEqual"),
+    ("getListener", "renamed to getObserver"),
+    ("startTransition", "transitions are built in; use isPending/Loading and the optimistic APIs"),
+    ("useTransition", "transitions are built in; use isPending/Loading and the optimistic APIs"),
+    ("produce", "draft-first mutation is now the default store setter behavior; drop the wrapper"),
+    ("from", "use async iterators as computation results"),
+    ("observable", "push signal changes to external subscribers with createEffect"),
+    ("createDeferred", "removed; handle deferral outside Solid"),
+    ("resetErrorBoundaries", "no longer needed; error boundaries heal automatically"),
+    ("enableScheduling", "removed; scheduling is built in"),
+    ("writeSignal", "removed; it was an internal API"),
+];
+
+/// Migration-oriented SC9001 hint for the removed 1.x APIs: telling the user
+/// to write a contract entry for `batch` would send them to document an
+/// export that no longer exists. Applies to the packages the v2 dialect
+/// itself contracts (`solid-js`, `@solidjs/web`); a same-named export of a
+/// third-party package keeps the generic contract hint.
+fn v2_removed_export_hint(module: &str, export: &str) -> Option<String> {
+    if module != "solid-js" && module != "@solidjs/web" && !module.starts_with("@solidjs/web/") {
+        return None;
+    }
+    let (_, replacement) = V2_REMOVED_EXPORTS
+        .iter()
+        .find(|(name, _)| *name == export)?;
+    Some(format!(
+        "{export} was removed in Solid 2.0; see the migration guide — {replacement}."
+    ))
+}
+
+#[cfg(test)]
+mod removed_export_tests {
+    use super::{V2_REMOVED_EXPORTS, v2_removed_export_hint};
+
+    /// A name the bundled 2.0 contract still exports is not removed: hinting
+    /// "migrate away" for it would be wrong, and SC9001 for it is a genuine
+    /// contract gap. This holds the map to the shipped export list.
+    #[test]
+    fn removed_exports_are_absent_from_the_bundled_contract() {
+        let contract = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../../crates/solid-dialect/contracts/solid-v2/solid-js.json");
+        let contract: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(&contract).unwrap()).unwrap();
+        let exports = contract["exports"]
+            .as_object()
+            .expect("bundled contract has an exports object");
+        for (name, _) in V2_REMOVED_EXPORTS {
+            assert!(
+                !exports.contains_key(*name),
+                "{name} is exported by the bundled solid-v2 contract, so it is not a removed API and must leave V2_REMOVED_EXPORTS"
+            );
+        }
+    }
+
+    #[test]
+    fn removed_export_hint_is_scoped_to_solid_packages() {
+        let hint = v2_removed_export_hint("solid-js", "batch").expect("batch is removed");
+        assert!(hint.contains("removed in Solid 2.0"));
+        assert!(hint.contains("flush()"));
+        assert_eq!(v2_removed_export_hint("some-lib", "batch"), None);
+        assert_eq!(v2_removed_export_hint("solid-js", "createMemo"), None);
+        // The fixture-pinned quartet all carry migration hints.
+        for name in ["batch", "createComputed", "createResource", "onMount"] {
+            assert!(v2_removed_export_hint("solid-js", name).is_some());
+        }
+    }
 }

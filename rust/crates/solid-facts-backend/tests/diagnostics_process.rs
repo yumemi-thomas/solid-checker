@@ -57,9 +57,19 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         (
             "static-api",
             &[
-                ("missing-effect-function", 2),
-                ("sync-node-received-async", 6),
-                ("invalid-refresh-target", 2),
+                // Absent, `undefined`, `null`, `5`, and `"apply"` second
+                // arguments: the last three are proven non-functions that
+                // crash the effect queue. The `{ effect, error }` object and
+                // the plain apply function stay silent.
+                ("missing-effect-function", 5),
+                // Signal-family only: the store constructors never route
+                // options.sync into their node, so their three sync: true
+                // async derives are negative cases now.
+                ("sync-node-received-async", 3),
+                // Wrapper, literal, zero-arg, value-form store, value-form
+                // store child record, and a member chain on an accessor.
+                // refresh(target, extra) is runtime-legal and not counted.
+                ("invalid-refresh-target", 6),
                 ("invalid-affects-target", 2),
                 ("affects-keys-on-accessor", 2),
                 ("reactive-write-in-owned-scope", 1),
@@ -289,8 +299,12 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
     let Some(unresolved_findings) = diagnostic_fixture("static-api-unresolved") else {
         return;
     };
-    assert_rule_findings(&unresolved_findings, "refresh-target-unresolved", 2);
-    assert_rule_findings(&unresolved_findings, "affects-target-unresolved", 2);
+    // Two identifier targets each (a plain object and an untraceable
+    // parameter), plus one member-chain target each whose root is not a
+    // proven source: `refresh(plain.value)` and `affects(state.user, "name")`
+    // on a parameter — unresolved, never proven-invalid.
+    assert_rule_findings(&unresolved_findings, "refresh-target-unresolved", 3);
+    assert_rule_findings(&unresolved_findings, "affects-target-unresolved", 3);
 }
 
 #[test]

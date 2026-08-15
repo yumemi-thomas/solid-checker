@@ -1427,6 +1427,12 @@ mod tests {
         // And createStore's, the other way round.
         assert_eq!(one.options_argument(Primitive::CreateStore), Some(1));
         assert_eq!(two.options_argument(Primitive::CreateStore), Some(2));
+        // The store family has an options slot but no `sync` routing: rc.0
+        // rebuilds projection node options with only `loadingValue`/`name`,
+        // so `sync: true` is inert on all three constructors (probed).
+        assert!(!two.supports_sync_option(Primitive::CreateStore));
+        assert!(!two.supports_sync_option(Primitive::CreateProjection));
+        assert!(!two.supports_sync_option(Primitive::CreateOptimisticStore));
 
         // 1.x's tracked computations include createComputed, which 2.0 does
         // not have at all -- so no 2.0-shaped list could name it, and the read
