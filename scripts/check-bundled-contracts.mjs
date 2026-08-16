@@ -181,6 +181,7 @@ const observed = {
     }),
   ),
   probes: observations.flatMap(observation => observation.probes),
+  discoveredClaims: observations.flatMap(observation => observation.discoveredClaims ?? []),
 };
 const hiddenLockPath = join(install, "node_modules", ".package-lock.json");
 const hiddenLock = existsSync(hiddenLockPath)
@@ -199,25 +200,23 @@ const installedIntegrity = name =>
 if (write) {
   for (const item of contracts) {
     const runtime = observed.packages[item.name];
-    const previous = item.contract.entrypoints ?? {};
     item.contract.package.version = runtime.version;
     const integrity = installedIntegrity(item.name);
     if (integrity) item.contract.package.integrity = integrity;
     item.contract.entrypoints = Object.fromEntries(
-      Object.entries(runtime.entrypoints)
+      Object.entries(item.contract.entrypoints)
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([entrypoint, surface]) => {
-          const oldExports = previous[entrypoint]?.exports ?? {};
+          const runtimeSurface = runtime.entrypoints[entrypoint];
           const exports = Object.fromEntries(
-            Object.entries(surface.exports)
-              .sort(([left], [right]) => left.localeCompare(right))
-              .map(([name, kind]) => {
-                const old = oldExports[name];
-                const summary = old?.kind === kind ? old : { kind };
-                return [name, writeProbeEvidence(summary, item.name, entrypoint, name)];
-              }),
+            Object.entries(surface.exports).map(([name, summary]) => [
+              name,
+              runtimeSurface?.exports[name]
+                ? writeProbeEvidence(summary, item.name, entrypoint, name)
+                : summary,
+            ]),
           );
-          return [entrypoint, { exports, conditions: surface.conditions }];
+          return [entrypoint, { ...surface, exports }];
         }),
     );
     writeFileSync(
@@ -278,6 +277,11 @@ for (const result of observed.probes) {
   results.set(key, modeResults);
 }
 const claimed = new Set();
+const declaredByTarget = new Map();
+const incompleteness = [];
+const targetKey = (packageName, entrypoint, name) =>
+  `${packageName}:${entrypoint}:${name}`;
+const claimFamily = claim => claim.replace(/=.*/, "");
 for (const item of contracts) {
   for (const [entrypoint, entry] of Object.entries(item.contract.entrypoints)) {
     for (const [name, summary] of Object.entries(entry.exports)) {
@@ -287,6 +291,7 @@ for (const item of contracts) {
         ),
         ...(summary.returns ? [`returns=${summary.returns.kind}`] : []),
       ];
+      declaredByTarget.set(targetKey(item.name, entrypoint, name), claims);
       for (const claim of claims) {
         const key = `${item.name}:${entrypoint}:${name}:${claim}`;
         claimed.add(key);
@@ -311,9 +316,23 @@ for (const item of contracts) {
     }
   }
 }
-for (const result of observed.probes) {
-  const key = `${result.pkg}:${result.entrypoint}:${result.name}:${result.claim}`;
-  if (!claimed.has(key)) fail(`probe has no matching contract claim: ${key}`);
+for (const observation of observed.discoveredClaims) {
+  const key = `${observation.pkg}:${observation.entrypoint}:${observation.name}:${observation.claim}`;
+  if (claimed.has(key)) continue;
+  const target = targetKey(observation.pkg, observation.entrypoint, observation.name);
+  const declared = declaredByTarget.get(target) ?? [];
+  if (declared.some(claim => claimFamily(claim) === claimFamily(observation.claim))) {
+    fail(
+      `${target} observed ${observation.claim} in ${observation.mode} but the contract states a different ${claimFamily(observation.claim)} claim`,
+    );
+  } else {
+    const report = `${target} observed ${observation.claim} in ${observation.mode} but the contract has no such claim`;
+    incompleteness.push(report);
+    fail(`INCOMPLETENESS ${report}`);
+  }
+}
+if (incompleteness.length > 0) {
+  console.error(`incompleteness reports: ${incompleteness.length}`);
 }
 
 if (failures > 0) process.exit(1);

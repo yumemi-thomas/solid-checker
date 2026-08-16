@@ -231,4 +231,15 @@ probe("@solidjs/web", ".", "memo", "callbacks[0]=tracked", () => {
   return runs > before;
 }, 2);
 
-process.stdout.write(JSON.stringify({ packages, probes }));
+const discoveredClaims = probes
+  .filter(probe => probe.ok)
+  .map(({ pkg, entrypoint, name, claim, mode, calls }) => ({
+    pkg,
+    entrypoint,
+    name,
+    claim,
+    mode,
+    calls,
+  }));
+
+process.stdout.write(JSON.stringify({ packages, probes, discoveredClaims }));
