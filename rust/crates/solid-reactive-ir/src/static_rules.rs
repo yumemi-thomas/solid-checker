@@ -801,8 +801,29 @@ fn binding_initializes_reactive_store(
 /// (`unconditional_awaits`), with the same precision guards — no conditional
 /// dominance, no nested closures.
 fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    // The producer reports an async-function fact for every project
+    // function, so both per-function steps below must stay cheap: the file
+    // lookup goes through this index instead of a linear scan, and the
+    // tracked-computation proof — a whole-project call scan — runs only for
+    // a function that has something to report. A function with no
+    // after-await calls and no unconditional await cannot produce a finding,
+    // so resolving its computation context is pure cost.
+    let files_by_path: std::collections::HashMap<&str, &solid_facts::FileFacts> = ctx
+        .facts
+        .files
+        .iter()
+        .map(|file| (file.path.as_str(), file))
+        .collect();
     for typescript_file in ctx.facts.typescript.files() {
         for function in typescript_file.async_functions.iter() {
+            let member_site = ctx
+                .dialect
+                .reports_member_reads_after_await()
+                .then(|| member_read_site(&files_by_path, function))
+                .flatten();
+            if function.calls_after_await.is_empty() && member_site.is_none() {
+                continue;
+            }
             let Some(analysis_context) = tracked_async_computation_context(ctx, function) else {
                 continue;
             };
@@ -849,11 +870,47 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                     },
                 );
             }
-            if ctx.dialect.reports_member_reads_after_await() {
-                member_reads_after_await(ctx, draft, function, &analysis_context);
+            if let Some(site) = member_site {
+                member_reads_after_await(ctx, draft, site, &analysis_context);
             }
         }
     }
+}
+
+/// The resolved location of an async function's member-read analysis: its
+/// file, its AST function, and the end of the first await in the function's
+/// own unconditional flow. `None` means the function has no straight-line
+/// await, so no member read can be dominated by one and the rule has nothing
+/// to prove there.
+fn member_read_site<'f>(
+    files_by_path: &std::collections::HashMap<&str, &'f solid_facts::FileFacts>,
+    function: &typefacts::AsyncFunctionFact,
+) -> Option<(
+    &'f solid_facts::FileFacts,
+    &'f solid_facts::ast::FunctionFact,
+    u32,
+)> {
+    let file = files_by_path.get(&*function.expression.path)?;
+    let start = u32::try_from(function.expression.start_byte).ok()?;
+    let end = u32::try_from(function.expression.end_byte).ok()?;
+    let expression = file.ast.peel_ts_sugar_span(Span::new(start, end));
+    let ast_function = file
+        .ast
+        .functions
+        .iter()
+        .find(|candidate| candidate.span == expression)?;
+    let boundary = file
+        .ast
+        .unconditional_awaits
+        .iter()
+        .filter(|awaited| {
+            ast_function.body.contains(**awaited)
+                && containing_ast_function(&file.ast, **awaited)
+                    .is_some_and(|owner| owner.span == ast_function.span)
+        })
+        .map(|awaited| awaited.end)
+        .min()?;
+    Some((file, ast_function, boundary))
 }
 
 /// The tracked-computation proof for one async function: the call that
@@ -920,46 +977,14 @@ fn tracked_async_computation_context(
 fn member_reads_after_await(
     ctx: &AnalysisContext<'_>,
     draft: &mut ProgramDraft,
-    function: &typefacts::AsyncFunctionFact,
+    site: (
+        &solid_facts::FileFacts,
+        &solid_facts::ast::FunctionFact,
+        u32,
+    ),
     analysis_context: &str,
 ) {
-    let Some(file) = ctx
-        .facts
-        .files
-        .iter()
-        .find(|file| *file.path.as_str() == *function.expression.path)
-    else {
-        return;
-    };
-    let (Ok(start), Ok(end)) = (
-        u32::try_from(function.expression.start_byte),
-        u32::try_from(function.expression.end_byte),
-    ) else {
-        return;
-    };
-    let expression = file.ast.peel_ts_sugar_span(Span::new(start, end));
-    let Some(ast_function) = file
-        .ast
-        .functions
-        .iter()
-        .find(|candidate| candidate.span == expression)
-    else {
-        return;
-    };
-    let Some(boundary) = file
-        .ast
-        .unconditional_awaits
-        .iter()
-        .filter(|awaited| {
-            ast_function.body.contains(**awaited)
-                && containing_ast_function(&file.ast, **awaited)
-                    .is_some_and(|owner| owner.span == ast_function.span)
-        })
-        .map(|awaited| awaited.end)
-        .min()
-    else {
-        return;
-    };
+    let (file, ast_function, boundary) = site;
     for member in &file.ast.members {
         if member.span.start < boundary
             || !ast_function.body.contains(member.span)
