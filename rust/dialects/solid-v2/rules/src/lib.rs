@@ -37,6 +37,14 @@ pub fn package_contract_finding(issue: &PackageContractIssue) -> Finding {
     project_finding(FindingSeed::PackageContractIssue(issue), &Catalog)
 }
 
+fn strict_read_hint(kind: &str) -> &'static str {
+    if kind == "component-props" {
+        "Move the prop read into a tracking scope: read props.<name> directly in JSX, derive it with createMemo(() => props.<name>), or read it in the compute function of createEffect(compute, apply). Do not use untrack() to make a prop reactive; untrack() only documents an intentional one-time snapshot. Solid warns STRICT_READ_UNTRACKED here in dev."
+    } else {
+        "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev."
+    }
+}
+
 impl CatalogWording for Catalog {
     fn capabilities(&self) -> CatalogCapabilities {
         CatalogCapabilities::SOLID_2
@@ -58,7 +66,7 @@ impl CatalogWording for Catalog {
                 FindingWording::new(
                     Rule::StrictReadUntracked.metadata(),
                     message,
-                    "Move the read into a tracking scope: JSX, a createMemo, or the compute function of createEffect(compute, apply). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit. Solid warns STRICT_READ_UNTRACKED here in dev.",
+                    strict_read_hint(&read.kind),
                 )
                 .with_evidence(strict_read_evidence(read))
             }
@@ -669,5 +677,17 @@ mod removed_export_tests {
         for name in ["batch", "createComputed", "createResource", "onMount"] {
             assert!(v2_removed_export_hint("solid-js", name).is_some());
         }
+    }
+}
+
+#[cfg(test)]
+mod strict_read_hint_tests {
+    use super::strict_read_hint;
+
+    #[test]
+    fn component_props_hint_does_not_present_untrack_as_a_reactivity_fix() {
+        let hint = strict_read_hint("component-props");
+        assert!(hint.contains("read props.<name> directly in JSX"));
+        assert!(hint.contains("Do not use untrack() to make a prop reactive"));
     }
 }

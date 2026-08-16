@@ -85,6 +85,10 @@ of `createEffect(compute, apply)`. To observe a whole store in an effect, read
 `deep(store)` in the compute phase. If a one-time snapshot is intended, wrap the
 read in `untrack()` so the intent is visible to both readers and the analyzer.
 
+For component props specifically, read `props.name` directly in JSX or derive it
+with `createMemo(() => props.name)`. `untrack(() => props.name)` is only an
+explicit one-time snapshot; it does not make the prop reactive.
+
 ## Related
 
 - [component-props-destructure](component-props-destructure.md) — the destructuring special case

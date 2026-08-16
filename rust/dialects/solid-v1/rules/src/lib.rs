@@ -31,6 +31,14 @@ pub fn package_contract_finding(issue: &PackageContractIssue) -> Finding {
     project_finding(FindingSeed::PackageContractIssue(issue), &Catalog)
 }
 
+fn strict_read_hint(kind: &str) -> &'static str {
+    if kind == "component-props" {
+        "Move the prop read into a tracking scope: read props.<name> directly in JSX, derive it with createMemo(() => props.<name>), or read it in the callback of createEffect(fn). Do not use untrack() to make a prop reactive; untrack() only documents an intentional one-time snapshot."
+    } else {
+        "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit."
+    }
+}
+
 impl CatalogWording for Catalog {
     fn capabilities(&self) -> CatalogCapabilities {
         CatalogCapabilities::SOLID_1
@@ -38,12 +46,14 @@ impl CatalogWording for Catalog {
 
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
-            FindingSeed::StrictRead(read) => FindingWording::new(
-                Rule::StrictReadUntracked.metadata(),
-                strict_read_message(read),
-                "Move the read into a tracking scope: JSX, a createMemo, or the callback of createEffect(fn). If a one-time snapshot is intended, wrap the read in untrack() to make that explicit.",
-            )
-            .with_evidence(strict_read_evidence(read)),
+            FindingSeed::StrictRead(read) => {
+                FindingWording::new(
+                    Rule::StrictReadUntracked.metadata(),
+                    strict_read_message(read),
+                    strict_read_hint(&read.kind),
+                )
+                .with_evidence(strict_read_evidence(read))
+            }
             FindingSeed::OwnedWrite(write) => owned_write_wording(write),
             FindingSeed::LeafOperation(operation) => {
                 let (rule, message, hint) = match &operation.kind {
@@ -331,4 +341,16 @@ fn v1_store_mutation_hint(name: &str) -> String {
     format!(
         "Write through the store's setter: setStore(\"key\", value), or produce(draft => ...) for an in-place update. Direct assignment to {name} does not notify subscribers."
     )
+}
+
+#[cfg(test)]
+mod strict_read_hint_tests {
+    use super::strict_read_hint;
+
+    #[test]
+    fn component_props_hint_does_not_present_untrack_as_a_reactivity_fix() {
+        let hint = strict_read_hint("component-props");
+        assert!(hint.contains("read props.<name> directly in JSX"));
+        assert!(hint.contains("Do not use untrack() to make a prop reactive"));
+    }
 }
