@@ -262,7 +262,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         if (!typescript_unchanged && !indexes_patched) || cache.is_none() {
             let substage_started = Instant::now();
             let (indexes, alias_roots, entity_symbols) =
-                build_typescript_indexes(&facts.typescript, dialect, facts.files.len() >= 256);
+                build_typescript_indexes(&facts.typescript, dialect, facts.files.len());
             build_timings.alias_roots = alias_roots;
             build_timings.entity_symbols = entity_symbols;
             build_timings.alias_and_entity_indexes = substage_started.elapsed();
@@ -274,7 +274,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
     } else {
         let substage_started = Instant::now();
         let (indexes, alias_roots, entity_symbols) =
-            build_typescript_indexes(&facts.typescript, dialect, facts.files.len() >= 256);
+            build_typescript_indexes(&facts.typescript, dialect, facts.files.len());
         build_timings.alias_roots = alias_roots;
         build_timings.entity_symbols = entity_symbols;
         build_timings.alias_and_entity_indexes = substage_started.elapsed();
@@ -313,53 +313,79 @@ pub(crate) fn build_with_contracts_measured_incremental(
         ..ProgramDraft::default()
     };
     let mut owned_reachable_calls = None;
-    let source_discovery = std::thread::scope(|scope| {
-        let shared_worker_limit = analysis_worker_limit_for_lanes(2);
-        let source_context = StageContext {
-            facts,
-            project_indexes: &project_indexes,
-            typescript_indexes,
-            entities,
-            source_declarations,
-            symbol_names: &symbol_names,
-            semantic_lookup,
-            resolved_contracts: &resolved_contracts,
-            contracts,
-        };
-        let source_discovery_handle = scope.spawn(move || {
-            let _worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
-            let mut timings = BuildTimings::default();
-            let sources = discover_sources(
-                &source_context,
-                source_discovery_cache,
-                reuse.typescript_unchanged,
-                &mut timings,
-                emit_timings,
-            );
-            (sources, timings)
-        });
-        let reachability_worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
+    // Source discovery and reachability are independent lanes over the same
+    // settled indexes. Both are prepared once here so the two arms below
+    // differ only in how they are scheduled.
+    let source_context = StageContext {
+        facts,
+        project_indexes: &project_indexes,
+        typescript_indexes,
+        entities,
+        source_declarations,
+        symbol_names: &symbol_names,
+        semantic_lookup,
+        resolved_contracts: &resolved_contracts,
+        contracts,
+    };
+    let discover = move || {
+        let mut timings = BuildTimings::default();
+        let sources = discover_sources(
+            &source_context,
+            source_discovery_cache,
+            reuse.typescript_unchanged,
+            &mut timings,
+            emit_timings,
+        );
+        (sources, timings)
+    };
+    let reachability_inputs = ReachabilityInputs {
+        facts,
+        indexes: &project_indexes,
+        entities,
+        symbol_names: &symbol_names,
+        lookup: semantic_lookup,
+        typescript_unchanged: reuse.typescript_unchanged,
+        typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
+    };
+    let source_discovery = if available_analysis_workers() <= 1 {
+        // No worker is available, so the lanes run one after the other. A
+        // wasm32-wasip1 reactor build has no threads at all and `Scope::spawn`
+        // panics there, so this arm is a correctness requirement.
+        //
+        // Reachability closes the stage span before discovery starts:
+        // `discover_sources` owns its own stage clock, and counting its time
+        // inside this span too would make the stage sum exceed the real total.
         owned_reachable_calls = reachability_stage(
-            ReachabilityInputs {
-                facts,
-                indexes: &project_indexes,
-                entities,
-                symbol_names: &symbol_names,
-                lookup: semantic_lookup,
-                typescript_unchanged: reuse.typescript_unchanged,
-                typescript_delta: typescript_indexes.source_discovery_delta.as_ref(),
-            },
+            reachability_inputs,
             reachability_cache.as_deref_mut(),
             &mut build_timings,
         );
-        drop(reachability_worker_limit);
         clock.finish(&mut build_timings, ReactiveIrStage::IndexesAndReachability);
-        let (source_discovery, discovery_timings) = source_discovery_handle
-            .join()
-            .expect("parallel source discovery worker panicked");
+        let (source_discovery, discovery_timings) = discover();
         build_timings.absorb_source_discovery(&discovery_timings);
         source_discovery
-    });
+    } else {
+        std::thread::scope(|scope| {
+            let shared_worker_limit = analysis_worker_limit_for_lanes(2);
+            let source_discovery_handle = scope.spawn(move || {
+                let _worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
+                discover()
+            });
+            let reachability_worker_limit = AnalysisWorkerLimit::enter(shared_worker_limit);
+            owned_reachable_calls = reachability_stage(
+                reachability_inputs,
+                reachability_cache.as_deref_mut(),
+                &mut build_timings,
+            );
+            drop(reachability_worker_limit);
+            clock.finish(&mut build_timings, ReactiveIrStage::IndexesAndReachability);
+            let (source_discovery, discovery_timings) = source_discovery_handle
+                .join()
+                .expect("parallel source discovery worker panicked");
+            build_timings.absorb_source_discovery(&discovery_timings);
+            source_discovery
+        })
+    };
     let reachable_calls = if let Some(cache) = reachability_cache {
         &cache.as_ref().expect("reachability initialized").calls
     } else {
@@ -367,7 +393,8 @@ pub(crate) fn build_with_contracts_measured_incremental(
             .as_ref()
             .expect("owned reachability initialized")
     };
-    // discover_sources owns its own stage clock; restart this function's so
+    // discover_sources owns its own stage clock, and in the sequential arm it
+    // also ran after the stage above closed; restart this function's clock so
     // the static-prepass stage measures only the prepass loops.
     clock.restart();
 

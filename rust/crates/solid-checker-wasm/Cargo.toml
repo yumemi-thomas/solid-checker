@@ -7,7 +7,9 @@ publish.workspace = true
 rust-version.workspace = true
 
 [features]
-default = ["dialect-v1", "dialect-v2"]
+default = ["napi-host", "dialect-v1", "dialect-v2"]
+napi-host = ["dep:napi", "dep:napi-derive"]
+reactor = []
 dialect-v1 = ["solid-facts-backend/dialect-v1"]
 dialect-v2 = ["solid-facts-backend/dialect-v2"]
 
@@ -17,12 +19,13 @@ test = false
 doctest = false
 
 [dependencies]
-napi.workspace = true
-napi-derive.workspace = true
+napi = { workspace = true, optional = true }
+napi-derive = { workspace = true, optional = true }
 serde.workspace = true
 serde_json.workspace = true
 solid-facts = { path = "../solid-facts" }
 solid-facts-backend = { path = "../solid-facts-backend", default-features = false }
+typefacts.workspace = true
 
 [build-dependencies]
 napi-build = "2"

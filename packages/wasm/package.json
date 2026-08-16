@@ -20,6 +20,7 @@
   "scripts": {
     "build": "node scripts/build.mjs --release",
     "build:debug": "node scripts/build.mjs",
+    "prototype:self-contained": "node prototypes/self-contained.mjs",
     "test": "node --test test/*.test.mjs"
   },
   "napi": {

@@ -636,6 +636,55 @@ pub struct NativeBuildTimings {
     pub exchange: TypeFactsExchangeTimings,
 }
 
+/// Splits `items` into one chunk per worker, runs `analyze` over each, and
+/// concatenates the results in chunk order. `analyze` receives the index its
+/// chunk's first item has in `items`.
+///
+/// When only one worker is available the whole pass runs inline on the calling
+/// thread. That is a correctness requirement, not just an optimization: the
+/// wasm32-wasip1 reactor build has no thread support, and `Scope::spawn`
+/// panics with "failed to spawn thread" there rather than degrading. Every
+/// chunked fan-out in this crate goes through this one shape so the fallback
+/// cannot be forgotten at a new call site.
+fn analyze_in_chunks<'items, T, R, E, F>(
+    items: &'items [T],
+    worker: &'static str,
+    analyze: F,
+) -> Result<Vec<R>, E>
+where
+    T: Sync,
+    R: Send,
+    E: Send,
+    F: Fn(usize, &'items [T]) -> Result<Vec<R>, E> + Sync,
+{
+    let workers = std::thread::available_parallelism()
+        .map_or(1, usize::from)
+        .min(items.len().max(1));
+    if workers <= 1 {
+        return analyze(0, items);
+    }
+    let chunk_size = items.len().div_ceil(workers).max(1);
+    std::thread::scope(|scope| {
+        let handles = items
+            .chunks(chunk_size)
+            .enumerate()
+            .map(|(chunk_index, chunk)| {
+                let analyze = &analyze;
+                scope.spawn(move || analyze(chunk_index * chunk_size, chunk))
+            })
+            .collect::<Vec<_>>();
+        let mut results = Vec::with_capacity(items.len());
+        for handle in handles {
+            results.extend(
+                handle
+                    .join()
+                    .unwrap_or_else(|_| panic!("{worker} worker panicked"))?,
+            );
+        }
+        Ok(results)
+    })
+}
+
 pub fn build_project_native_measured(
     dialect: &'static Dialect,
     project_id: impl Into<String>,
@@ -647,42 +696,27 @@ pub fn build_project_native_measured(
     let generation = Generation::new(generation).map_err(|_| BackendError::Generation)?;
     let source_files_recomputed = u64::try_from(sources.len()).unwrap_or(u64::MAX);
     let analysis_started = Instant::now();
-    let workers = std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .min(sources.len().max(1));
-    let chunk_size = sources.len().div_ceil(workers);
-    let analyzed = std::thread::scope(|scope| {
-        let mut handles = Vec::new();
-        for (chunk_index, chunk) in sources.chunks(chunk_size.max(1)).enumerate() {
-            handles.push(scope.spawn(move || {
-                let mut compiler = (dialect.compiler)();
-                chunk
-                    .iter()
-                    .enumerate()
-                    .map(|(offset, file)| {
-                        let ast = solid_facts::ast::extract(&file.path, &file.source)?;
-                        let request = AnalysisRequest::new(
-                            &file.path,
-                            Arc::clone(&file.source),
-                            file.compiler_options.clone(),
-                        );
-                        let execution = compiler.analyze(&request)?;
-                        execution.validate(&file.source)?;
-                        Ok((
-                            chunk_index * chunk_size + offset,
-                            FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?,
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, BackendError>>()
-            }));
-        }
-        let mut analyzed = Vec::with_capacity(sources.len());
-        for handle in handles {
-            analyzed.extend(handle.join().expect("native facts worker panicked")?);
-        }
-        Ok::<_, BackendError>(analyzed)
+    let mut analyzed = analyze_in_chunks(&sources, "native facts", |start, chunk| {
+        let mut compiler = (dialect.compiler)();
+        chunk
+            .iter()
+            .enumerate()
+            .map(|(offset, file)| {
+                let ast = solid_facts::ast::extract(&file.path, &file.source)?;
+                let request = AnalysisRequest::new(
+                    &file.path,
+                    Arc::clone(&file.source),
+                    file.compiler_options.clone(),
+                );
+                let execution = compiler.analyze(&request)?;
+                execution.validate(&file.source)?;
+                Ok((
+                    start + offset,
+                    FileFacts::new(generation, Arc::clone(&file.source), ast, execution)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, BackendError>>()
     })?;
-    let mut analyzed = analyzed;
     analyzed.sort_by_key(|(index, _)| *index);
     let mut files = Vec::with_capacity(analyzed.len());
     let mut seeds = Vec::new();
@@ -934,35 +968,21 @@ fn prepare_native_compiler_parallel(
             misses.push((index, key, file));
         }
     }
-    let workers = std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .min(misses.len().max(1));
-    let chunk_size = misses.len().div_ceil(workers);
-    let analyzed = std::thread::scope(|scope| {
-        let mut handles = Vec::new();
-        for chunk in misses.chunks(chunk_size.max(1)) {
-            handles.push(scope.spawn(move || {
-                let mut compiler = (dialect.compiler)();
-                chunk
-                    .iter()
-                    .map(|(index, key, file)| {
-                        let request = AnalysisRequest::new(
-                            &file.path,
-                            Arc::clone(&file.source),
-                            file.compiler_options.clone(),
-                        );
-                        let execution = compiler.analyze(&request)?;
-                        execution.validate(&file.source)?;
-                        Ok((*index, key.clone(), execution))
-                    })
-                    .collect::<Result<Vec<_>, BackendError>>()
-            }));
-        }
-        let mut analyzed = Vec::with_capacity(misses.len());
-        for handle in handles {
-            analyzed.extend(handle.join().expect("native compiler worker panicked")?);
-        }
-        Ok::<_, BackendError>(analyzed)
+    let analyzed = analyze_in_chunks(&misses, "native compiler", |_, chunk| {
+        let mut compiler = (dialect.compiler)();
+        chunk
+            .iter()
+            .map(|(index, key, file)| {
+                let request = AnalysisRequest::new(
+                    &file.path,
+                    Arc::clone(&file.source),
+                    file.compiler_options.clone(),
+                );
+                let execution = compiler.analyze(&request)?;
+                execution.validate(&file.source)?;
+                Ok((*index, key.clone(), execution))
+            })
+            .collect::<Result<Vec<_>, BackendError>>()
     })?;
     for (index, key, execution) in analyzed {
         let execution = Arc::new(execution);
@@ -1319,31 +1339,17 @@ fn prepare_ast_parallel(
             misses.push((index, key, file.path.as_str(), file.source.as_ref()));
         }
     }
-    let workers = std::thread::available_parallelism()
-        .map_or(1, usize::from)
-        .min(misses.len().max(1));
-    let chunk_size = misses.len().div_ceil(workers);
-    let parsed = std::thread::scope(|scope| {
-        let mut handles = Vec::new();
-        for chunk in misses.chunks(chunk_size.max(1)) {
-            handles.push(scope.spawn(move || {
-                chunk
-                    .iter()
-                    .map(|(index, key, path, source)| {
-                        Ok((
-                            *index,
-                            key.clone(),
-                            solid_facts::ast::extract(*path, source)?,
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, solid_facts::ast::AstFactsError>>()
-            }));
-        }
-        let mut parsed = Vec::new();
-        for handle in handles {
-            parsed.extend(handle.join().expect("Oxc worker panicked")?);
-        }
-        Ok::<_, solid_facts::ast::AstFactsError>(parsed)
+    let parsed = analyze_in_chunks(&misses, "Oxc", |_, chunk| {
+        chunk
+            .iter()
+            .map(|(index, key, path, source)| {
+                Ok((
+                    *index,
+                    key.clone(),
+                    solid_facts::ast::extract(*path, source)?,
+                ))
+            })
+            .collect::<Result<Vec<_>, solid_facts::ast::AstFactsError>>()
     })?;
     for (index, key, ast) in parsed {
         let ast = Arc::new(ast);

@@ -27,5 +27,32 @@ export interface CheckRequest {
   typeFacts: unknown
 }
 
+export interface PlanRequest {
+  projectId: string
+  /**
+   * Dialect id ("solid-v2" or "solid-v1"). The wasm build cannot inspect a
+   * node_modules tree, so an absent dialect means the default (solid-v2)
+   * rather than detection.
+   */
+  dialect?: string
+  generation: number
+  sources: SourceFile[]
+}
+
+export interface PlanResponse {
+  projectId: string
+  generation: number
+  /** TypeFacts v3 entity demands the host's TypeScript engine must answer. */
+  demands: unknown[]
+}
+
 /** Runs the Oxc, Solid compiler, reactive IR, and solver pipeline in-process. */
 export declare function checkSync(requestJson: string): string
+
+/**
+ * Runs the Oxc and Solid compiler passes only and returns the exact TypeFacts
+ * demands those sources produce, as a JSON `PlanResponse`. A host answers them
+ * with its own TypeScript engine and passes the resulting table to
+ * `checkSync`, which repeats the syntax and compiler passes.
+ */
+export declare function planSync(requestJson: string): string

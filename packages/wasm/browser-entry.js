@@ -1,1 +1,1 @@
-export { checkSync } from "./solid-checker-wasm.wasi-browser.js";
+export { checkSync, planSync } from "./solid-checker-wasm.wasi-browser.js";

@@ -15,13 +15,15 @@ use typefacts::Declaration;
 
 use crate::cache::{
     CachedInterproceduralGraph, CachedInterproceduralResults, CachedLateStages,
-    CachedTypedAccessors, LocalAccessResult, ReusePlan, SourceDiscoveryTypeScriptDelta,
+    CachedTypedAccessors, LocalAccessResult, PARALLEL_INDEX_FILE_THRESHOLD, ReusePlan,
+    SourceDiscoveryTypeScriptDelta,
 };
 use crate::indexes::ProjectIndexes;
 use crate::interproc::{InterproceduralContext, InterproceduralTimings};
 use crate::local_access::{LocalAccessContext, LocalAccessReuse};
 use crate::pipeline::{
     AnalysisContext, AnalysisWorkerLimit, ProgramDraft, analysis_worker_limit_for_lanes,
+    available_analysis_workers,
 };
 use crate::source_discovery::SourceDiscovery;
 use crate::static_rules;
@@ -106,7 +108,13 @@ pub(crate) fn collect_project<'facts>(
         .late_stages
         .as_deref_mut()
         .map(|cache| &mut cache.local_accesses);
-    let overlap = cached_interprocedural.is_none() && ctx.facts.files.len() >= 256;
+    // Overlapping the two lanes only pays off on a large project, and only
+    // where the host has a second worker: a wasm32-wasip1 reactor build has no
+    // thread support and `Scope::spawn` panics there instead of degrading to
+    // an inline call.
+    let overlap = cached_interprocedural.is_none()
+        && ctx.facts.files.len() >= PARALLEL_INDEX_FILE_THRESHOLD
+        && available_analysis_workers() > 1;
     let interprocedural_context = InterproceduralContext {
         facts: ctx.facts,
         project_indexes,

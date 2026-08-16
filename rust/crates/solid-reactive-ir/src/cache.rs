@@ -5,6 +5,7 @@ use crate::indexes::CachedAstFileIndex;
 use crate::owners::{
     CachedOwnerFile, SettledGateDecisions, binding_returns_reactive_source, returned_arrow_function,
 };
+use crate::pipeline::available_analysis_workers;
 use crate::{
     ActionInvocation, AsyncRead, CacheRetention, ContractCallback, ContractExport,
     ContractGenerationObligation, FunctionNode, OwnerRequirement, Program, ReactiveRead,
@@ -361,11 +362,25 @@ pub(crate) struct CachedTypeScriptIndexes {
     pub(crate) source_discovery_delta: Option<SourceDiscoveryTypeScriptDelta>,
 }
 
+/// Below this many project files the five index lanes are cheaper to run in
+/// order than to hand to worker threads.
+pub(crate) const PARALLEL_INDEX_FILE_THRESHOLD: usize = 256;
+
+/// Builds every TypeScript-derived index for one generation.
+///
+/// `project_files` is the project's file count; the fan-out decision lives
+/// here rather than at the callers so there is one place that also asks
+/// whether the host has workers at all. A wasm32-wasip1 reactor build has no
+/// thread support, and `Scope::spawn` panics there instead of degrading to an
+/// inline call, so the sequential arm is a correctness requirement and not
+/// only a small-project optimization.
 pub(crate) fn build_typescript_indexes(
     table: &solid_facts::TypeScriptTable,
     dialect: &dyn Dialect,
-    parallel: bool,
+    project_files: usize,
 ) -> (CachedTypeScriptIndexes, Duration, Duration) {
+    let parallel =
+        project_files >= PARALLEL_INDEX_FILE_THRESHOLD && available_analysis_workers() > 1;
     let interner = SymbolInterner::from_table(table);
     let aliases_started = Instant::now();
     let (aliases, source_declarations) = alias_roots_and_source_declarations(table, &interner);
