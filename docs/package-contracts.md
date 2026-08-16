@@ -188,6 +188,15 @@ Evidence is enforced, not decorative. Contracts emitted by this CLI use
 them. Certification accepts `verified`, `reviewed`, `trusted`, and `attested`
 contracts. Legacy `generated` remains parseable but is also unverified.
 
+Schema-v1 contracts may also put `evidence` on an export summary, reactive-read
+row, callback row, or recursive return row. Row evidence is one of `inferred`,
+`probed`, `reviewed`, or `inherited-from`; probed rows record `modes` and a
+positive `calls` count, while inherited rows record the exact `package` and
+`version`. Contracts without row evidence retain the contract-level behavior.
+When row evidence is present, certification additionally rejects any inferred
+row so a promoted contract cannot hide an uncertified claim inside a verified
+document.
+
 Promote an inferred contract only after checking it against the exact package
 artifacts and reviewing every unresolved behavior. `verified` means mechanical
 artifact/surface/behavior checks passed; `reviewed` records an explicit human

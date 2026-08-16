@@ -14,6 +14,22 @@ fn expanded_contract(path: &Path) -> serde_json::Value {
     serde_json::to_value(solid_facts_backend::read_package_contract(path).unwrap()).unwrap()
 }
 
+fn without_claim_evidence(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(object) => serde_json::Value::Object(
+            object
+                .iter()
+                .filter(|(key, _)| key.as_str() != "evidence")
+                .map(|(key, value)| (key.clone(), without_claim_evidence(value)))
+                .collect(),
+        ),
+        serde_json::Value::Array(values) => {
+            serde_json::Value::Array(values.iter().map(without_claim_evidence).collect())
+        }
+        value => value.clone(),
+    }
+}
+
 #[test]
 fn cli_consumes_discovered_package_contracts() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
@@ -467,23 +483,31 @@ fn cli_emits_and_revalidates_package_contracts() {
         "value"
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["createWrappedCount"]["callbacks"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["createWrappedCount"]["callbacks"]
+        ),
         serde_json::json!([{ "parameter": 0, "execution": "tracked" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["createTransitivelyWrapped"]["callbacks"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["createTransitivelyWrapped"]["callbacks"]
+        ),
         serde_json::json!([{ "parameter": 0, "execution": "tracked" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["listen"]["callbacks"],
+        without_claim_evidence(&contract["entrypoints"]["."]["exports"]["listen"]["callbacks"]),
         serde_json::json!([{ "parameter": 1, "execution": "deferred" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["configureDeferredMethod"]["callbacks"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["configureDeferredMethod"]["callbacks"]
+        ),
         serde_json::json!([{ "parameter": 1, "execution": "deferred" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["createDeferredProxy"]["callbacks"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["createDeferredProxy"]["callbacks"]
+        ),
         serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
     );
     assert_eq!(contract["artifacts"]["declaration"]["path"], "index.d.ts");
@@ -736,6 +760,10 @@ fn package_generator_discovers_exact_and_wildcard_subpaths() {
     assert_eq!(contract["package"]["version"], "1.2.3");
     assert_eq!(contract["evidence"]["kind"], "inferred");
     assert_eq!(
+        contract["entrypoints"]["."]["exports"]["rootConstant"]["evidence"]["kind"],
+        "inferred"
+    );
+    assert_eq!(
         contract["entrypoints"]
             .as_object()
             .unwrap()
@@ -884,11 +912,13 @@ fn package_generator_detects_the_dialect_from_the_package_root() {
         "function"
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["indirect"]["callbacks"],
+        without_claim_evidence(&contract["entrypoints"]["."]["exports"]["indirect"]["callbacks"]),
         serde_json::json!([{ "parameter": 0, "execution": "tracked" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["indirectResource"]["callbacks"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["indirectResource"]["callbacks"]
+        ),
         serde_json::json!([{ "parameter": 0, "execution": "tracked" }])
     );
     assert_eq!(
@@ -904,7 +934,7 @@ fn package_generator_detects_the_dialect_from_the_package_root() {
         "accessor"
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["tupleResult"]["returns"],
+        without_claim_evidence(&contract["entrypoints"]["."]["exports"]["tupleResult"]["returns"]),
         serde_json::json!({
             "kind": "tuple",
             "elements": [
@@ -914,7 +944,7 @@ fn package_generator_detects_the_dialect_from_the_package_root() {
         })
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["objectResult"]["returns"],
+        without_claim_evidence(&contract["entrypoints"]["."]["exports"]["objectResult"]["returns"]),
         serde_json::json!({
             "kind": "object",
             "properties": {
@@ -934,11 +964,15 @@ fn package_generator_detects_the_dialect_from_the_package_root() {
         );
     }
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["identityResult"]["returns"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["identityResult"]["returns"]
+        ),
         serde_json::json!({ "kind": "argument", "parameter": 0 })
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["contextLocation"]["returns"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["contextLocation"]["returns"]
+        ),
         serde_json::json!({
             "kind": "object",
             "properties": {
@@ -990,7 +1024,7 @@ fn shorthand_property_values_resolve_through_block_scope() {
     // distinguish.
     for export in ["scopedShorthand", "writtenShorthand"] {
         assert_eq!(
-            exports[export]["returns"],
+            without_claim_evidence(&exports[export]["returns"]),
             serde_json::json!({
                 "kind": "object",
                 "properties": { "tracked": { "kind": "accessor", "label": "tracked" } }
@@ -1184,27 +1218,33 @@ fn package_generator_classifies_callbacks_invoked_by_returned_schedulers_as_defe
     );
     let contract = expanded_contract(&output);
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["debounce"]["callbacks"],
+        without_claim_evidence(&contract["entrypoints"]["."]["exports"]["debounce"]["callbacks"]),
         serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["direct"]["callbacks"],
+        without_claim_evidence(&contract["entrypoints"]["."]["exports"]["direct"]["callbacks"]),
         serde_json::json!([{ "parameter": 0, "execution": "inline" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["decorated"]["callbacks"],
+        without_claim_evidence(&contract["entrypoints"]["."]["exports"]["decorated"]["callbacks"]),
         serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["throughIdentity"]["callbacks"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["throughIdentity"]["callbacks"]
+        ),
         serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["nestedThroughIdentity"]["callbacks"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["nestedThroughIdentity"]["callbacks"]
+        ),
         serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["nestedThroughCallable"]["callbacks"],
+        without_claim_evidence(
+            &contract["entrypoints"]["."]["exports"]["nestedThroughCallable"]["callbacks"]
+        ),
         serde_json::json!([{ "parameter": 0, "execution": "deferred" }])
     );
     fs::remove_dir_all(directory).unwrap();
@@ -1250,7 +1290,7 @@ fn package_generator_expands_external_export_all_from_dependency_contracts() {
         "function"
     );
     assert_eq!(
-        contract["entrypoints"]["."]["exports"]["forward"]["callbacks"],
+        without_claim_evidence(&contract["entrypoints"]["."]["exports"]["forward"]["callbacks"]),
         serde_json::json!([{ "parameter": 0, "execution": "inline" }])
     );
     fs::remove_dir_all(directory).unwrap();

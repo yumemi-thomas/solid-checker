@@ -14,8 +14,8 @@ mod projection;
 mod reachability;
 mod reactive_analysis;
 mod runtime_semantics;
-mod source_discovery;
 mod server_rules;
+mod source_discovery;
 mod static_api;
 mod static_rules;
 mod symbols;
@@ -426,6 +426,7 @@ const fn is_false(value: &bool) -> bool {
 }
 
 fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static str> {
+    validate_claim_evidence(returned.evidence.as_ref())?;
     match returned.kind.as_str() {
         "accessor" | "store-path" => {
             if returned.label.is_empty() || returned.parameter.is_some() {
@@ -470,6 +471,49 @@ fn validate_contract_return(returned: &ContractReturn) -> Result<(), &'static st
             }
         }
         _ => return Err("the return kind is unsupported"),
+    }
+    Ok(())
+}
+
+fn validate_claim_evidence(evidence: Option<&ContractClaimEvidence>) -> Result<(), &'static str> {
+    let Some(evidence) = evidence else {
+        return Ok(());
+    };
+    match evidence.kind.as_str() {
+        "inferred" | "reviewed" => {
+            if !evidence.modes.is_empty()
+                || evidence.calls.is_some()
+                || !evidence.package.is_empty()
+                || !evidence.version.is_empty()
+            {
+                return Err(
+                    "inferred or reviewed claim evidence cannot carry probe or inheritance details",
+                );
+            }
+        }
+        "probed" => {
+            if evidence.modes.is_empty()
+                || evidence.modes.iter().any(String::is_empty)
+                || evidence.modes.iter().collect::<HashSet<_>>().len() != evidence.modes.len()
+                || evidence.calls.is_none_or(|calls| calls == 0)
+                || !evidence.package.is_empty()
+                || !evidence.version.is_empty()
+            {
+                return Err(
+                    "probed claim evidence requires unique modes and a positive call count",
+                );
+            }
+        }
+        "inherited-from" => {
+            if evidence.package.is_empty()
+                || evidence.version.is_empty()
+                || !evidence.modes.is_empty()
+                || evidence.calls.is_some()
+            {
+                return Err("inherited claim evidence requires an exact package and version");
+            }
+        }
+        _ => return Err("claim evidence kind is unsupported"),
     }
     Ok(())
 }
@@ -565,9 +609,25 @@ pub struct ContractEvidence {
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContractClaimEvidence {
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modes: Vec<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub calls: Option<usize>,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub package: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub version: String,
+}
+
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ContractExport {
     #[serde(default)]
     pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<ContractClaimEvidence>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reactive_reads: Vec<ContractReactiveRead>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -585,6 +645,8 @@ pub struct ContractReactiveRead {
     pub kind: String,
     #[serde(default)]
     pub label: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<ContractClaimEvidence>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -592,12 +654,16 @@ pub struct ContractReactiveRead {
 pub struct ContractCallback {
     pub parameter: usize,
     pub execution: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<ContractClaimEvidence>,
 }
 
 #[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct ContractReturn {
     pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<ContractClaimEvidence>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub label: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -711,6 +777,46 @@ impl PackageContract {
         Ok(())
     }
 
+    /// Whether every explicitly annotated claim has certifiable provenance.
+    ///
+    /// Legacy contracts have no row annotations and deliberately return true;
+    /// their existing contract-level evidence gate remains authoritative.
+    #[must_use]
+    pub fn claims_are_certifiable(&self) -> bool {
+        fn evidence_is_certifiable(evidence: Option<&ContractClaimEvidence>) -> bool {
+            evidence.is_none_or(|evidence| {
+                matches!(
+                    evidence.kind.as_str(),
+                    "probed" | "reviewed" | "inherited-from"
+                )
+            })
+        }
+        fn returned_is_certifiable(returned: &ContractReturn) -> bool {
+            evidence_is_certifiable(returned.evidence.as_ref())
+                && returned
+                    .elements
+                    .iter()
+                    .flatten()
+                    .all(returned_is_certifiable)
+                && returned.properties.values().all(returned_is_certifiable)
+        }
+
+        self.entrypoints.values().all(|entrypoint| {
+            entrypoint.exports.values().all(|summary| {
+                evidence_is_certifiable(summary.evidence.as_ref())
+                    && summary
+                        .reactive_reads
+                        .iter()
+                        .all(|read| evidence_is_certifiable(read.evidence.as_ref()))
+                    && summary
+                        .callbacks
+                        .iter()
+                        .all(|callback| evidence_is_certifiable(callback.evidence.as_ref()))
+                    && summary.returns.as_ref().is_none_or(returned_is_certifiable)
+            })
+        })
+    }
+
     fn validate_export(
         &self,
         entrypoint: &str,
@@ -723,6 +829,11 @@ impl PackageContract {
                 summary.kind
             ));
         }
+        validate_claim_evidence(summary.evidence.as_ref()).map_err(|reason| {
+            format!(
+                "package contract export {entrypoint}:{name} has invalid claim evidence: {reason}"
+            )
+        })?;
         if summary.kind == "value"
             && (!summary.reactive_reads.is_empty()
                 || summary.returns.is_some()
@@ -739,6 +850,11 @@ impl PackageContract {
                     "package contract export {entrypoint}:{name} has an invalid reactive read"
                 ));
             }
+            validate_claim_evidence(read.evidence.as_ref()).map_err(|reason| {
+                format!(
+                    "package contract export {entrypoint}:{name} has invalid reactive-read evidence: {reason}"
+                )
+            })?;
         }
         if let Some(returned) = &summary.returns {
             validate_contract_return(returned).map_err(|reason| {
@@ -756,6 +872,13 @@ impl PackageContract {
             return Err(format!(
                 "package contract export {entrypoint}:{name} has an invalid callback execution"
             ));
+        }
+        for callback in &summary.callbacks {
+            validate_claim_evidence(callback.evidence.as_ref()).map_err(|reason| {
+                format!(
+                    "package contract export {entrypoint}:{name} has invalid callback evidence: {reason}"
+                )
+            })?;
         }
         if !summary.async_behavior.is_empty()
             && !matches!(
@@ -1569,6 +1692,82 @@ mod tests {
             hash: "sha256:not-a-digest".into(),
         });
         assert!(malformed_hash.validate().is_err());
+    }
+
+    #[test]
+    fn claim_evidence_is_optional_but_certification_rejects_inferred_rows() {
+        let mut contract = PackageContract {
+            schema_version: 1,
+            package: ContractPackage {
+                name: "reactive-package".into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            compiler_facts_protocol: 1,
+            artifacts: ContractArtifacts::default(),
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: BTreeMap::from([(
+                        "createValue".into(),
+                        ContractExport {
+                            kind: "function".into(),
+                            callbacks: vec![ContractCallback {
+                                parameter: 0,
+                                execution: "tracked".into(),
+                                evidence: Some(ContractClaimEvidence {
+                                    kind: "inferred".into(),
+                                    ..ContractClaimEvidence::default()
+                                }),
+                            }],
+                            ..ContractExport::default()
+                        },
+                    )]),
+                    conditions: Vec::new(),
+                },
+            )]),
+            evidence: ContractEvidence {
+                kind: "verified".into(),
+                generator: String::new(),
+            },
+            contract_hash: String::new(),
+            source_path: String::new(),
+        };
+        assert!(contract.validate().is_ok());
+        assert!(!contract.claims_are_certifiable());
+
+        contract
+            .entrypoints
+            .get_mut(".")
+            .unwrap()
+            .exports
+            .get_mut("createValue")
+            .unwrap()
+            .callbacks[0]
+            .evidence = Some(ContractClaimEvidence {
+            kind: "probed".into(),
+            modes: vec!["browser".into(), "server".into()],
+            calls: Some(2),
+            ..ContractClaimEvidence::default()
+        });
+        assert!(contract.validate().is_ok());
+        assert!(contract.claims_are_certifiable());
+
+        let mut malformed = contract.clone();
+        malformed
+            .entrypoints
+            .get_mut(".")
+            .unwrap()
+            .exports
+            .get_mut("createValue")
+            .unwrap()
+            .callbacks[0]
+            .evidence = Some(ContractClaimEvidence {
+            kind: "inherited-from".into(),
+            package: "solid-js".into(),
+            ..ContractClaimEvidence::default()
+        });
+        assert!(malformed.validate().is_err());
     }
 
     #[test]

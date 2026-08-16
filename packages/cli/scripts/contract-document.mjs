@@ -4,6 +4,7 @@ function canonicalSummary(summary) {
 
 function plainSummary(summary) {
   return (
+    !summary.evidence &&
     !summary.reactiveReads?.length &&
     !summary.returns &&
     !summary.callbacks?.length &&

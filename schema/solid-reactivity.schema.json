@@ -100,6 +100,7 @@
       "required": ["kind"],
       "properties": {
         "kind": { "enum": ["function", "value"] },
+        "evidence": { "$ref": "#/$defs/claimEvidence" },
         "returns": { "$ref": "#/$defs/return" },
         "callbacks": {
           "type": "array",
@@ -110,7 +111,8 @@
             "required": ["parameter", "execution"],
             "properties": {
               "parameter": { "type": "integer", "minimum": 0 },
-              "execution": { "enum": ["inline", "tracked", "deferred"] }
+              "execution": { "enum": ["inline", "tracked", "deferred"] },
+              "evidence": { "$ref": "#/$defs/claimEvidence" }
             }
           }
         },
@@ -123,7 +125,8 @@
             "required": ["kind", "label"],
             "properties": {
               "kind": { "enum": ["accessor", "store-path"] },
-              "label": { "type": "string", "minLength": 1 }
+              "label": { "type": "string", "minLength": 1 },
+              "evidence": { "$ref": "#/$defs/claimEvidence" }
             }
           }
         }
@@ -137,7 +140,8 @@
           "required": ["kind", "label"],
           "properties": {
             "kind": { "enum": ["accessor", "store-path"] },
-            "label": { "type": "string", "minLength": 1 }
+            "label": { "type": "string", "minLength": 1 },
+            "evidence": { "$ref": "#/$defs/claimEvidence" }
           }
         },
         {
@@ -146,6 +150,7 @@
           "required": ["kind", "elements"],
           "properties": {
             "kind": { "const": "tuple" },
+            "evidence": { "$ref": "#/$defs/claimEvidence" },
             "elements": {
               "type": "array",
               "minItems": 1,
@@ -164,6 +169,7 @@
           "required": ["kind", "properties"],
           "properties": {
             "kind": { "const": "object" },
+            "evidence": { "$ref": "#/$defs/claimEvidence" },
             "properties": {
               "type": "object",
               "minProperties": 1,
@@ -178,7 +184,60 @@
           "required": ["kind", "parameter"],
           "properties": {
             "kind": { "const": "argument" },
-            "parameter": { "type": "integer", "minimum": 0 }
+            "parameter": { "type": "integer", "minimum": 0 },
+            "evidence": { "$ref": "#/$defs/claimEvidence" }
+          }
+        }
+      ]
+    },
+    "claimEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": {
+          "enum": ["inferred", "probed", "reviewed", "inherited-from"]
+        },
+        "modes": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "calls": { "type": "integer", "minimum": 1 },
+        "package": { "type": "string", "minLength": 1 },
+        "version": { "type": "string", "minLength": 1 }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "kind": { "const": "probed" } } },
+          "then": {
+            "required": ["modes", "calls"],
+            "not": { "anyOf": [{ "required": ["package"] }, { "required": ["version"] }] }
+          }
+        },
+        {
+          "if": { "properties": { "kind": { "const": "inherited-from" } } },
+          "then": {
+            "required": ["package", "version"],
+            "not": { "anyOf": [{ "required": ["modes"] }, { "required": ["calls"] }] }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "kind": { "enum": ["inferred", "reviewed"] }
+            }
+          },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["modes"] },
+                { "required": ["calls"] },
+                { "required": ["package"] },
+                { "required": ["version"] }
+              ]
+            }
           }
         }
       ]

@@ -341,6 +341,8 @@ function mergeSummaries(left, right) {
     return undefined;
   }
   const merged = { kind: left.kind };
+  const evidence = left.evidence ?? right.evidence;
+  if (evidence) merged.evidence = evidence;
   const returns = left.returns ?? right.returns;
   if (returns) merged.returns = returns;
   const callbacks = mergeUnique(
@@ -358,6 +360,55 @@ function mergeSummaries(left, right) {
   );
   if (reactiveReads.length) merged.reactiveReads = reactiveReads;
   return merged;
+}
+
+function inferredClaimEvidence() {
+  return { kind: "inferred" };
+}
+
+function annotateReturnEvidence(returned) {
+  if (!returned) return returned;
+  return {
+    ...returned,
+    evidence: returned.evidence ?? inferredClaimEvidence(),
+    ...(returned.elements
+      ? { elements: returned.elements.map(element => annotateReturnEvidence(element)) }
+      : {}),
+    ...(returned.properties
+      ? {
+          properties: Object.fromEntries(
+            Object.entries(returned.properties).map(([name, value]) => [
+              name,
+              annotateReturnEvidence(value)
+            ])
+          )
+        }
+      : {})
+  };
+}
+
+function annotateClaimEvidence(summary) {
+  return {
+    ...summary,
+    evidence: summary.evidence ?? inferredClaimEvidence(),
+    ...(summary.reactiveReads
+      ? {
+          reactiveReads: summary.reactiveReads.map(read => ({
+            ...read,
+            evidence: read.evidence ?? inferredClaimEvidence()
+          }))
+        }
+      : {}),
+    ...(summary.callbacks
+      ? {
+          callbacks: summary.callbacks.map(callback => ({
+            ...callback,
+            evidence: callback.evidence ?? inferredClaimEvidence()
+          }))
+        }
+      : {}),
+    ...(summary.returns ? { returns: annotateReturnEvidence(summary.returns) } : {})
+  };
 }
 
 function runChecked(args, options = {}) {
@@ -547,7 +598,9 @@ export async function generatePackageContract(arguments_) {
       }
       entrypoints[entrypoint] = {
         exports: Object.fromEntries(
-          Object.entries(exports).sort(([left], [right]) => left.localeCompare(right))
+          Object.entries(exports)
+            .map(([name, summary]) => [name, annotateClaimEvidence(summary)])
+            .sort(([left], [right]) => left.localeCompare(right))
         ),
         ...(conditions.size ? { conditions: [...conditions].sort() } : {})
       };

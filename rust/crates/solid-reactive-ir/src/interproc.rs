@@ -736,6 +736,7 @@ fn discover_interprocedural_graph(
                     ContractCallback {
                         parameter,
                         execution: execution.into(),
+                        evidence: None,
                     },
                 ));
             } else {
@@ -785,6 +786,7 @@ fn discover_interprocedural_graph(
                             ContractCallback {
                                 parameter,
                                 execution: callback.execution.clone(),
+                                evidence: None,
                             },
                         ));
                     }
@@ -856,6 +858,7 @@ fn discover_interprocedural_graph(
                     ContractCallback {
                         parameter,
                         execution: execution.into(),
+                        evidence: None,
                     },
                 ));
                 continue;
@@ -913,6 +916,7 @@ fn discover_interprocedural_graph(
                                     RuntimeArgumentBehavior::ValueOnly => unreachable!(),
                                 }
                                 .into(),
+                                evidence: None,
                             },
                         ));
                     }
@@ -3380,6 +3384,7 @@ fn interprocedural_reads(
                     } else {
                         callback.execution
                     },
+                    evidence: None,
                 };
                 if !callback_summaries[*owner].contains(&forwarded) {
                     callback_summaries[*owner].push(forwarded);
@@ -4138,6 +4143,7 @@ mod tests {
         let callback = |parameter, execution: &str| ContractCallback {
             parameter,
             execution: execution.to_owned(),
+            evidence: None,
         };
         let repeated = [callback(0, "deferred"), callback(0, "deferred")];
         let distinct = [callback(0, "deferred"), callback(1, "inline")];

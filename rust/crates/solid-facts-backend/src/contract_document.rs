@@ -74,7 +74,8 @@ fn normalize(contract: &PackageContract) -> Result<ContractDocument, BackendErro
     let mut summary_ids = HashMap::<String, String>::new();
     let mut summaries = BTreeMap::new();
     for (canonical, summary) in unique {
-        let plain = summary.reactive_reads.is_empty()
+        let plain = summary.evidence.is_none()
+            && summary.reactive_reads.is_empty()
             && summary.returns.is_none()
             && summary.callbacks.is_empty()
             && summary.async_behavior.is_empty();
@@ -361,5 +362,36 @@ mod tests {
           "evidence":{"kind":"inferred"}
         }"#;
         assert!(decode(cycle).is_err());
+    }
+
+    #[test]
+    fn legacy_documents_decode_and_claim_evidence_round_trips() {
+        let document = br#"{
+          "schemaVersion":1,
+          "package":{"name":"example","version":"1.0.0"},
+          "compilerFactsProtocol":1,
+          "summaries":{"function-1":{
+            "kind":"function",
+            "evidence":{"kind":"inferred"},
+            "callbacks":[{"parameter":0,"execution":"tracked",
+              "evidence":{"kind":"probed","modes":["client","server"],"calls":2}}]
+          }},
+          "entrypoints":{".":{"exports":{"function-1":["observe"]}}},
+          "evidence":{"kind":"verified"}
+        }"#;
+        let decoded = decode(document).unwrap();
+        let summary = &decoded.entrypoints["."].exports["observe"];
+        assert_eq!(summary.evidence.as_ref().unwrap().kind, "inferred");
+        let evidence = summary.callbacks[0].evidence.as_ref().unwrap();
+        assert_eq!(evidence.kind, "probed");
+        assert_eq!(evidence.modes, ["client", "server"]);
+        assert_eq!(evidence.calls, Some(2));
+
+        let legacy = contract();
+        assert!(
+            legacy.entrypoints["."].exports["Component"]
+                .evidence
+                .is_none()
+        );
     }
 }

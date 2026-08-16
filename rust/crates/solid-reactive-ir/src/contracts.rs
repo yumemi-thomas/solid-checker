@@ -323,6 +323,7 @@ fn contract_export_function(
                         || read.display.to_string(),
                         |returned| returned.label.clone(),
                     ),
+                evidence: None,
             };
             seen_reactive_reads
                 .insert((reactive_read.kind.clone(), reactive_read.label.clone()))
@@ -357,12 +358,14 @@ fn contract_export_function(
             parameter: None,
             elements: Vec::new(),
             properties: BTreeMap::new(),
+            evidence: None,
         })
     });
     let mut callback_summary = callbacks.to_vec();
     callback_summary.sort_by_key(|callback| callback.parameter);
     ContractExport {
         kind: "function".into(),
+        evidence: None,
         reactive_reads,
         callbacks: callback_summary,
         returns,
