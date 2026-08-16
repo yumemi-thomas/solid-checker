@@ -135,6 +135,7 @@ function probeSplitEffect(pkg, name, create) {
       },
     );
     solid.flush();
+    if (applyRuns !== 1) return false;
     const before = applyRuns;
     writeOutsideOwner(setOther, 1);
     solid.flush();

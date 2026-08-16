@@ -8,7 +8,8 @@ this export.
 ## What it does
 
 Flags import bindings whose package has a `solid-reactivity.json` contract that
-does not describe the imported export. (Exports of `solid-js` itself are exempt —
+does not describe the imported export, or whose export has conditional summaries
+but no runtime condition was selected. (Exports of `solid-js` itself are exempt —
 the bundled contract is authoritative there.)
 
 ## Why is this analysis-limiting?
@@ -18,7 +19,9 @@ For code inside the project it reads the source; for packages it relies on the
 contract's per-export summaries — which reactive values an export reads, which
 callbacks it tracks, and whether it returns accessors. An export with no summary is
 a hole in that map: anything flowing through it cannot be certified, so every use
-site becomes uncertifiable rather than certified or proven wrong.
+site becomes uncertifiable rather than certified or proven wrong. The same
+fail-closed result applies when the package has different browser and server
+summaries: selecting one without a pinned environment would be a guess.
 
 ## Example
 
@@ -44,6 +47,9 @@ is migrating the call site.
 Add an export summary for the flagged export to the package's
 `solid-reactivity.json` — its reactive reads, tracked callbacks, and return kind.
 If the export is not reactive at all, an empty summary certifies that explicitly.
+For conditional implementations, add a complete `variants` summary for each
+condition; the current environment-unaware analyzer remains uncertifiable until
+a pinned runtime-condition selector is available.
 
 If you consume the package but do not maintain it, place a local contract at
 `.solid-checker/contracts/<package>/solid-reactivity.json` in your project.

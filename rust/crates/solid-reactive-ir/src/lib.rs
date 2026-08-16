@@ -296,6 +296,15 @@ pub enum StaticDefectKind {
         export: String,
         reexported: bool,
     },
+    /// A package export has different certified summaries for different
+    /// conditional runtime targets. The current project analysis has no
+    /// selected package condition, so applying any one variant would be a
+    /// guess; keep the import uncertifiable until a human selects the target.
+    PackageContractEnvironmentDependent {
+        module: String,
+        export: String,
+        reexported: bool,
+    },
     /// An exported callback reached an external call whose execution timing
     /// is not certified. The fields are deliberately data, not a guessed
     /// contract: the diagnostic can produce an editable stub while analysis
@@ -348,6 +357,7 @@ impl StaticDefectKind {
             self,
             Self::ExecutionMapIncomplete
                 | Self::PackageContractExportMissing { .. }
+                | Self::PackageContractEnvironmentDependent { .. }
                 | Self::UnknownCallbackExecution { .. }
                 | Self::ReactiveSourceUncaptured { .. }
         )
@@ -628,6 +638,12 @@ pub struct ContractExport {
     pub kind: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<ContractClaimEvidence>,
+    /// Complete summaries for conditional runtime targets whose behavior is
+    /// not identical. The top-level summary remains the conservative union
+    /// used by legacy readers; environment-unaware consumers must fail closed
+    /// when this field is present rather than apply that union as a guess.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub variants: Vec<ContractExportVariant>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reactive_reads: Vec<ContractReactiveRead>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -636,6 +652,13 @@ pub struct ContractExport {
     pub callbacks: Vec<ContractCallback>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub async_behavior: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContractExportVariant {
+    pub conditions: Vec<String>,
+    pub summary: Box<ContractExport>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -801,20 +824,26 @@ impl PackageContract {
                 && returned.properties.values().all(returned_is_certifiable)
         }
 
-        self.entrypoints.values().all(|entrypoint| {
-            entrypoint.exports.values().all(|summary| {
-                evidence_is_certifiable(summary.evidence.as_ref())
-                    && summary
-                        .reactive_reads
-                        .iter()
-                        .all(|read| evidence_is_certifiable(read.evidence.as_ref()))
-                    && summary
-                        .callbacks
-                        .iter()
-                        .all(|callback| evidence_is_certifiable(callback.evidence.as_ref()))
-                    && summary.returns.as_ref().is_none_or(returned_is_certifiable)
-            })
-        })
+        fn export_is_certifiable(summary: &ContractExport) -> bool {
+            evidence_is_certifiable(summary.evidence.as_ref())
+                && summary
+                    .reactive_reads
+                    .iter()
+                    .all(|read| evidence_is_certifiable(read.evidence.as_ref()))
+                && summary
+                    .callbacks
+                    .iter()
+                    .all(|callback| evidence_is_certifiable(callback.evidence.as_ref()))
+                && summary.returns.as_ref().is_none_or(returned_is_certifiable)
+                && summary
+                    .variants
+                    .iter()
+                    .all(|variant| export_is_certifiable(&variant.summary))
+        }
+
+        self.entrypoints
+            .values()
+            .all(|entrypoint| entrypoint.exports.values().all(export_is_certifiable))
     }
 
     fn validate_export(
@@ -834,6 +863,26 @@ impl PackageContract {
                 "package contract export {entrypoint}:{name} has invalid claim evidence: {reason}"
             )
         })?;
+        let mut variant_conditions = HashSet::new();
+        for variant in &summary.variants {
+            if variant.conditions.is_empty()
+                || variant.conditions.iter().any(String::is_empty)
+                || variant.conditions.iter().collect::<HashSet<_>>().len()
+                    != variant.conditions.len()
+                || !variant_conditions.insert(&variant.conditions)
+            {
+                return Err(format!(
+                    "package contract export {entrypoint}:{name} has invalid conditional summary conditions"
+                ));
+            }
+            if variant.summary.kind != summary.kind {
+                return Err(format!(
+                    "package contract export {entrypoint}:{name} has a conditional summary with kind {:?}, expected {:?}",
+                    variant.summary.kind, summary.kind
+                ));
+            }
+            self.validate_export(entrypoint, name, &variant.summary)?;
+        }
         if summary.kind == "value"
             && (!summary.reactive_reads.is_empty()
                 || summary.returns.is_some()
@@ -1768,6 +1817,46 @@ mod tests {
             ..ContractClaimEvidence::default()
         });
         assert!(malformed.validate().is_err());
+
+        let mut conditional = contract.clone();
+        conditional
+            .entrypoints
+            .get_mut(".")
+            .unwrap()
+            .exports
+            .get_mut("createValue")
+            .unwrap()
+            .variants = vec![ContractExportVariant {
+            conditions: vec!["browser".into()],
+            summary: Box::new(ContractExport {
+                kind: "function".into(),
+                callbacks: vec![ContractCallback {
+                    parameter: 0,
+                    execution: "tracked".into(),
+                    evidence: Some(ContractClaimEvidence {
+                        kind: "probed".into(),
+                        modes: vec!["client".into()],
+                        calls: Some(2),
+                        ..ContractClaimEvidence::default()
+                    }),
+                }],
+                ..ContractExport::default()
+            }),
+        }];
+        assert!(conditional.validate().is_ok());
+        assert!(conditional.claims_are_certifiable());
+
+        conditional
+            .entrypoints
+            .get_mut(".")
+            .unwrap()
+            .exports
+            .get_mut("createValue")
+            .unwrap()
+            .variants[0]
+            .conditions
+            .clear();
+        assert!(conditional.validate().is_err());
     }
 
     #[test]

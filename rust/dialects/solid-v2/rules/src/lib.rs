@@ -476,6 +476,9 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::ImplicitDraggableBoolean { .. } => Rule::NoImplicitDraggable,
         StaticDefectKind::InvalidJsxNesting { .. } => Rule::ValidJsxNesting,
         StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
+        StaticDefectKind::PackageContractEnvironmentDependent { .. } => {
+            Rule::PackageContractExportMissing
+        }
         StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,

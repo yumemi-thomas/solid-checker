@@ -28,6 +28,11 @@ the package directory the default output is `solid-reactivity.json`.
 When conditional builds invoke the same callback parameter with different
 timing, every observed timing mode is preserved. Consumers analyze each mode;
 the merge does not discard one branch or treat the modes as contradictory.
+When a conditional build changes a complete export summary (including removing
+reactive behavior on the server), schema-v1 adds `variants`: each variant names
+the conditions and the complete summary proven for that target. A consumer without
+an explicit runtime-condition selector fails closed with an uncertifiable
+environment-dependent contract result; it never applies the merged union.
 
 Bundled conformance probes each applicable claim in client, server,
 development, and production condition modes, and callback probes perform both

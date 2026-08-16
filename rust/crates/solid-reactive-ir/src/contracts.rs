@@ -61,6 +61,26 @@ fn native_vocabulary_outranks_contract(
     dialect.owns_module(module) && dialect.declares_primitive(imported)
 }
 
+fn push_environment_dependent_export(
+    missing_exports: &mut Vec<StaticDefect>,
+    module: &str,
+    export: &str,
+    reexported: bool,
+    location: Location,
+) {
+    missing_exports.push(StaticDefect {
+        kind: StaticDefectKind::PackageContractEnvironmentDependent {
+            module: module.to_owned(),
+            export: export.to_owned(),
+            reexported,
+        },
+        location,
+        analysis_context: String::new(),
+        fixes: vec![],
+        uncertain: false,
+    });
+}
+
 pub(super) fn resolve_contract_imports(
     facts: &ProjectFacts,
     contracts: &[PackageContract],
@@ -121,6 +141,19 @@ pub(super) fn resolve_contract_imports(
                         let Some(symbol) = entities.get(&member_location).cloned() else {
                             continue;
                         };
+                        if native_vocabulary_outranks_contract(dialect, &import.module, &imported) {
+                            continue;
+                        }
+                        if !summary.variants.is_empty() {
+                            push_environment_dependent_export(
+                                &mut missing_exports,
+                                &import.module,
+                                &imported,
+                                false,
+                                member_location,
+                            );
+                            continue;
+                        }
                         let resolved = ResolvedContractBinding {
                             local_name: imported.clone(),
                             imported_name: imported.clone(),
@@ -138,11 +171,8 @@ pub(super) fn resolve_contract_imports(
                         // the only semantic evidence for public Solid exports
                         // outside that native vocabulary. Apply the same
                         // precedence to namespace and named imports.
-                        if !native_vocabulary_outranks_contract(dialect, &import.module, &imported)
-                        {
-                            bindings.push(resolved.clone());
-                            by_symbol.insert(symbol, resolved);
-                        }
+                        bindings.push(resolved.clone());
+                        by_symbol.insert(symbol, resolved);
                     }
                     continue;
                 }
@@ -190,6 +220,19 @@ pub(super) fn resolve_contract_imports(
                     });
                     continue;
                 };
+                if native_vocabulary_outranks_contract(dialect, &import.module, imported) {
+                    continue;
+                }
+                if !summary.variants.is_empty() {
+                    push_environment_dependent_export(
+                        &mut missing_exports,
+                        &import.module,
+                        imported,
+                        false,
+                        binding_location,
+                    );
+                    continue;
+                }
                 let resolved = ResolvedContractBinding {
                     local_name: file
                         .source_text(binding.local.span)
@@ -210,10 +253,8 @@ pub(super) fn resolve_contract_imports(
                 // provenance, writes, and cleanup phases). Keep the bundled
                 // contract as evidence and for export completeness, but do
                 // not layer its coarse callbacks/returns over native facts.
-                if !native_vocabulary_outranks_contract(dialect, &import.module, imported) {
-                    bindings.push(resolved.clone());
-                    by_symbol.insert(symbol, resolved);
-                }
+                bindings.push(resolved.clone());
+                by_symbol.insert(symbol, resolved);
             }
         }
         for export in &file.ast.exports {
@@ -254,6 +295,16 @@ pub(super) fn resolve_contract_imports(
                     continue;
                 };
                 if native_vocabulary_outranks_contract(dialect, module, imported) {
+                    continue;
+                }
+                if !summary.variants.is_empty() {
+                    push_environment_dependent_export(
+                        &mut missing_exports,
+                        module,
+                        imported,
+                        true,
+                        specifier_location,
+                    );
                     continue;
                 }
                 let resolved = ResolvedContractBinding {
@@ -366,6 +417,7 @@ fn contract_export_function(
     ContractExport {
         kind: "function".into(),
         evidence: None,
+        variants: Vec::new(),
         reactive_reads,
         callbacks: callback_summary,
         returns,
@@ -951,6 +1003,7 @@ fn path_within_project(path: &Path, directory: &Path) -> bool {
 fn value_contract_export() -> ContractExport {
     ContractExport {
         kind: "value".into(),
+        variants: Vec::new(),
         ..ContractExport::default()
     }
 }

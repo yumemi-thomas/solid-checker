@@ -451,6 +451,14 @@ function mergeSummaries(left, right) {
     (a, b) => a.kind.localeCompare(b.kind) || a.label.localeCompare(b.label)
   );
   if (reactiveReads.length) merged.reactiveReads = reactiveReads;
+  const variants = mergeUnique(
+    left.variants,
+    right.variants,
+    (a, b) =>
+      JSON.stringify(a.conditions).localeCompare(JSON.stringify(b.conditions)) ||
+      JSON.stringify(a.summary).localeCompare(JSON.stringify(b.summary)),
+  );
+  if (variants.length) merged.variants = variants;
   return merged;
 }
 
@@ -499,7 +507,15 @@ function annotateClaimEvidence(summary) {
           }))
         }
       : {}),
-    ...(summary.returns ? { returns: annotateReturnEvidence(summary.returns) } : {})
+    ...(summary.returns ? { returns: annotateReturnEvidence(summary.returns) } : {}),
+    ...(summary.variants
+      ? {
+          variants: summary.variants.map(variant => ({
+            ...variant,
+            summary: annotateClaimEvidence(variant.summary)
+          }))
+        }
+      : {})
   };
 }
 
@@ -649,6 +665,7 @@ export async function generatePackageContract(arguments_) {
       left.localeCompare(right)
     )) {
       const exports = {};
+      const conditionalSummaries = new Map();
       const conditions = new Set();
       const targets = new Set();
       for (const variant of variants) {
@@ -656,7 +673,8 @@ export async function generatePackageContract(arguments_) {
         targets.add(variant.target);
       }
       targetsByEntrypoint.set(entrypoint, targets);
-      for (const target of targets) {
+      for (const variant of variants) {
+        const target = variant.target;
         const excludedTargets = [...targets]
           .filter(candidate => candidate !== target)
           .sort();
@@ -676,6 +694,12 @@ export async function generatePackageContract(arguments_) {
           targetAnalyses.set(analysisKey, observed);
         }
         for (const [name, summary] of Object.entries(observed)) {
+          const variantsForName = conditionalSummaries.get(name) ?? [];
+          variantsForName.push({
+            conditions: [...variant.conditions],
+            summary
+          });
+          conditionalSummaries.set(name, variantsForName);
           const merged = exports[name] ? mergeSummaries(exports[name], summary) : summary;
           if (!merged) {
             throw new Error(
@@ -683,6 +707,29 @@ export async function generatePackageContract(arguments_) {
             );
           }
           exports[name] = merged;
+        }
+      }
+      for (const [name, summaries] of conditionalSummaries) {
+        const distinct = new Map(
+          summaries.map(variant => [JSON.stringify(variant.summary), variant.summary]),
+        );
+        if (distinct.size > 1) {
+          exports[name] = {
+            ...exports[name],
+            variants: summaries
+              .map(variant => ({
+                conditions: variant.conditions.length
+                  ? [...variant.conditions].sort()
+                  : ["default"],
+                summary: variant.summary
+              }))
+              .sort(
+                (left, right) =>
+                  JSON.stringify(left.conditions).localeCompare(
+                    JSON.stringify(right.conditions),
+                  ) || JSON.stringify(left.summary).localeCompare(JSON.stringify(right.summary)),
+              )
+          };
         }
       }
       if (Object.keys(exports).length === 0) {

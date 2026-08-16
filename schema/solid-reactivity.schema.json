@@ -116,6 +116,25 @@
             }
           }
         },
+        "variants": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["conditions", "summary"],
+            "properties": {
+              "conditions": {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              },
+              "summary": { "$ref": "#/$defs/export" }
+            }
+          }
+        },
         "asyncBehavior": { "enum": ["promise", "async-iterable"] },
         "reactiveReads": {
           "type": "array",

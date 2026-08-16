@@ -52,6 +52,13 @@ observation is a conformance failure. The worker never edits a contract. A
 human promotion or a reviewed generator change is required before an
 observation becomes a claim.
 
+When conditional runtime leaves disagree, the generator preserves the complete
+per-leaf summaries in additive export `variants` entries instead of merging an
+environment-specific claim into an unconditional one. Until analysis has an
+explicit runtime-condition selector, the Rust reader refuses that export as an
+uncertifiable environment-dependent boundary. This keeps SSR/client skew
+visible and prevents a browser summary from certifying server code.
+
 ## Migration
 
 Existing bundled, published, and local contracts remain valid without row

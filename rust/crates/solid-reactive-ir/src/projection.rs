@@ -225,6 +225,9 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::PackageContractExportMissing { .. } => {
             "the imported package has a contract, but this export has no effect summary"
         }
+        StaticDefectKind::PackageContractEnvironmentDependent { .. } => {
+            "the imported package has conditional effect summaries, but no runtime environment was selected"
+        }
         StaticDefectKind::UnknownCallbackExecution { .. } => {
             "TypeScript resolved the callable parameter, but no exact runtime contract proves when the external helper invokes it"
         }

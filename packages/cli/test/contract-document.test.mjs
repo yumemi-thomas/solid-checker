@@ -66,3 +66,18 @@ test("rejects missing summaries, duplicate exports, and alias cycles", () => {
   cycle.entrypoints["."] = { sameAs: "./client" };
   assert.throws(() => expandContract(cycle), /alias cycle/);
 });
+
+test("round-trips conditional export summaries without collapsing variants", () => {
+  const conditional = expandedContract();
+  conditional.entrypoints["."].exports.createMemo = {
+    ...trackedSummary,
+    variants: [
+      { conditions: ["browser"], summary: trackedSummary },
+      { conditions: ["node"], summary: { kind: "function" } }
+    ]
+  };
+  const normalized = normalizeContract(conditional);
+  const expanded = expandContract(normalized);
+  assert.deepEqual(expanded.entrypoints["."].exports.createMemo, conditional.entrypoints["."].exports.createMemo);
+  assert.equal(normalized.summaries.function.variants, undefined);
+});

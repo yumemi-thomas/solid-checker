@@ -16,7 +16,165 @@
         },
         {
           "parameter": 1,
-          "execution": "deferred"
+          "execution": "deferred",
+          "evidence": {
+            "kind": "probed",
+            "modes": [
+              "client",
+              "development",
+              "production",
+              "server"
+            ],
+            "calls": 2
+          }
+        }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              },
+              {
+                "parameter": 1,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "client",
+                "development",
+                "production"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "browser",
+            "development",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              },
+              {
+                "parameter": 1,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "development"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "deno",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 1,
+                "execution": "deferred"
+              }
+            ]
+          }
+        },
+        {
+          "conditions": [
+            "node",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 1,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "server"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "server"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "worker",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 1,
+                "execution": "deferred"
+              }
+            ]
+          }
         }
       ]
     },
@@ -24,12 +182,164 @@
       "kind": "function",
       "returns": {
         "kind": "accessor",
-        "label": "memo result"
+        "label": "memo result",
+        "evidence": {
+          "kind": "probed",
+          "modes": [
+            "client",
+            "development",
+            "production",
+            "server"
+          ],
+          "calls": 1
+        }
       },
       "callbacks": [
         {
           "parameter": 0,
           "execution": "tracked"
+        }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result",
+              "evidence": {
+                "kind": "probed",
+                "modes": [
+                  "client",
+                  "development",
+                  "production"
+                ],
+                "calls": 1
+              }
+            },
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "client",
+                "development",
+                "production"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "browser",
+            "development",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result",
+              "evidence": {
+                "kind": "probed",
+                "modes": [
+                  "development"
+                ],
+                "calls": 1
+              }
+            },
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "development"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "deno",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result"
+            }
+          }
+        },
+        {
+          "conditions": [
+            "node",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result",
+              "evidence": {
+                "kind": "probed",
+                "modes": [
+                  "server"
+                ],
+                "calls": 1
+              }
+            },
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "server"
+              ],
+              "calls": 1
+            }
+          }
+        },
+        {
+          "conditions": [
+            "worker",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result"
+            }
+          }
         }
       ]
     },

@@ -89,14 +89,36 @@ function probeEvidence(resultsForClaim) {
   };
 }
 
-function writeProbeEvidence(summary, packageName, entrypoint, name) {
+function conditionsMatchMode(conditions, mode) {
+  const active = new Set([...mode.conditions, "import"]);
+  return conditions.every(condition => condition === "default" || active.has(condition));
+}
+
+function summaryForMode(summary, mode) {
+  if (!summary.variants?.length) return summary;
+  const matches = summary.variants
+    .filter(variant => conditionsMatchMode(variant.conditions, mode))
+    .sort((left, right) => right.conditions.length - left.conditions.length);
+  if (!matches.length) return undefined;
+  const mostSpecific = matches.filter(
+    variant => variant.conditions.length === matches[0].conditions.length,
+  );
+  if (mostSpecific.length > 1) {
+    const canonical = new Set(mostSpecific.map(variant => JSON.stringify(variant.summary)));
+    if (canonical.size > 1) return undefined;
+  }
+  return mostSpecific[0].summary;
+}
+
+function writeProbeEvidence(summary, packageName, entrypoint, name, allowedModes = probeModes) {
   const claimResults = claim =>
     observed.probes.filter(
       result =>
         result.pkg === packageName &&
         result.entrypoint === entrypoint &&
         result.name === name &&
-        result.claim === claim,
+        result.claim === claim &&
+        allowedModes.some(mode => mode.name === result.mode),
     );
   const next = { ...summary };
   const exportResults = [
@@ -124,6 +146,18 @@ function writeProbeEvidence(summary, packageName, entrypoint, name) {
     if (returnEvidence && (!summary.returns.evidence || summary.returns.evidence.kind === "inferred")) {
       next.returns = { ...summary.returns, evidence: returnEvidence };
     }
+  }
+  if (summary.variants?.length) {
+    next.variants = summary.variants.map(variant => ({
+      ...variant,
+      summary: writeProbeEvidence(
+        variant.summary,
+        packageName,
+        entrypoint,
+        name,
+        probeModes.filter(mode => conditionsMatchMode(variant.conditions, mode)),
+      ),
+    }));
   }
   return next;
 }
@@ -376,7 +410,6 @@ for (const result of observed.probes) {
   modeResults.push(result);
   results.set(key, modeResults);
 }
-const claimed = new Set();
 const declaredByTarget = new Map();
 const incompleteness = [];
 const targetKey = (packageName, entrypoint, name) =>
@@ -385,22 +418,22 @@ const claimFamily = claim => claim.replace(/=.*/, "");
 for (const item of contracts) {
   for (const [entrypoint, entry] of Object.entries(item.contract.entrypoints)) {
     for (const [name, summary] of Object.entries(entry.exports)) {
-      const claims = [
-        ...(summary.callbacks ?? []).map(
-          callback => `callbacks[${callback.parameter}]=${callback.execution}`,
-        ),
-        ...(summary.returns ? [`returns=${summary.returns.kind}`] : []),
-      ];
-      declaredByTarget.set(targetKey(item.name, entrypoint, name), claims);
-      for (const claim of claims) {
-        const key = `${item.name}:${entrypoint}:${name}:${claim}`;
-        claimed.add(key);
-        const modeResults = results.get(key) ?? [];
-        if (modeResults.length === 0) {
-          fail(`${item.file} ${entrypoint}:${name} ${claim} has no probe`);
+      declaredByTarget.set(targetKey(item.name, entrypoint, name), summary);
+      for (const mode of probeModes.filter(candidate => modeApplies(entry, candidate))) {
+        const selected = summaryForMode(summary, mode);
+        if (!selected) {
+          fail(`${item.file} ${entrypoint}:${name} has no unambiguous summary in ${mode.name}`);
           continue;
         }
-        for (const mode of probeModes.filter(candidate => modeApplies(entry, candidate))) {
+        const claims = [
+          ...(selected.callbacks ?? []).map(
+            callback => `callbacks[${callback.parameter}]=${callback.execution}`,
+          ),
+          ...(selected.returns ? [`returns=${selected.returns.kind}`] : []),
+        ];
+        for (const claim of claims) {
+          const key = `${item.name}:${entrypoint}:${name}:${claim}`;
+          const modeResults = results.get(key) ?? [];
           const result = modeResults.find(candidate => candidate.mode === mode.name);
           if (!result) {
             fail(`${item.file} ${entrypoint}:${name} ${claim} has no probe in ${mode.name}`);
@@ -417,10 +450,19 @@ for (const item of contracts) {
   }
 }
 for (const observation of observed.discoveredClaims) {
-  const key = `${observation.pkg}:${observation.entrypoint}:${observation.name}:${observation.claim}`;
-  if (claimed.has(key)) continue;
   const target = targetKey(observation.pkg, observation.entrypoint, observation.name);
-  const declared = declaredByTarget.get(target) ?? [];
+  const summary = declaredByTarget.get(target);
+  const mode = probeModes.find(candidate => candidate.name === observation.mode);
+  const selected = summary && mode ? summaryForMode(summary, mode) : undefined;
+  const declared = selected
+    ? [
+        ...(selected.callbacks ?? []).map(
+          callback => `callbacks[${callback.parameter}]=${callback.execution}`,
+        ),
+        ...(selected.returns ? [`returns=${selected.returns.kind}`] : []),
+    ]
+    : [];
+  if (declared.includes(observation.claim)) continue;
   if (declared.some(claim => claimFamily(claim) === claimFamily(observation.claim))) {
     fail(
       `${target} observed ${observation.claim} in ${observation.mode} but the contract states a different ${claimFamily(observation.claim)} claim`,

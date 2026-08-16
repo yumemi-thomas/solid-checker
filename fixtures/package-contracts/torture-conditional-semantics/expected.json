@@ -16,11 +16,41 @@
             "kind": "inferred"
           }
         },
+      {
+        "parameter": 0,
+        "execution": "inline",
+        "evidence": {
+          "kind": "inferred"
+        }
+      }
+      ],
+      "variants": [
         {
-          "parameter": 0,
-          "execution": "inline",
-          "evidence": {
-            "kind": "inferred"
+          "conditions": ["browser", "import"],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "inline",
+                "evidence": { "kind": "inferred" }
+              }
+            ],
+            "evidence": { "kind": "inferred" }
+          }
+        },
+        {
+          "conditions": ["import", "node"],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "deferred",
+                "evidence": { "kind": "inferred" }
+              }
+            ],
+            "evidence": { "kind": "inferred" }
           }
         }
       ],

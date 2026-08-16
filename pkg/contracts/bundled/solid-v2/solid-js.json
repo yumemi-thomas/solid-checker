@@ -14,6 +14,98 @@
           "parameter": 0,
           "execution": "deferred"
         }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "client",
+                "development",
+                "production"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "browser",
+            "development",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "development"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "deno",
+            "import"
+          ],
+          "summary": {
+            "kind": "function"
+          }
+        },
+        {
+          "conditions": [
+            "node",
+            "import"
+          ],
+          "summary": {
+            "kind": "function"
+          }
+        },
+        {
+          "conditions": [
+            "worker",
+            "import"
+          ],
+          "summary": {
+            "kind": "function"
+          }
+        }
       ]
     },
     "function-2": {
@@ -21,9 +113,29 @@
       "callbacks": [
         {
           "parameter": 0,
-          "execution": "inline"
+          "execution": "inline",
+          "evidence": {
+            "kind": "probed",
+            "modes": [
+              "client",
+              "development",
+              "production",
+              "server"
+            ],
+            "calls": 1
+          }
         }
-      ]
+      ],
+      "evidence": {
+        "kind": "probed",
+        "modes": [
+          "client",
+          "development",
+          "production",
+          "server"
+        ],
+        "calls": 1
+      }
     },
     "function-3": {
       "kind": "function",
@@ -34,7 +146,165 @@
         },
         {
           "parameter": 1,
-          "execution": "deferred"
+          "execution": "deferred",
+          "evidence": {
+            "kind": "probed",
+            "modes": [
+              "client",
+              "development",
+              "production",
+              "server"
+            ],
+            "calls": 2
+          }
+        }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              },
+              {
+                "parameter": 1,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "client",
+                "development",
+                "production"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "browser",
+            "development",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              },
+              {
+                "parameter": 1,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "development"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "deno",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 1,
+                "execution": "deferred"
+              }
+            ]
+          }
+        },
+        {
+          "conditions": [
+            "node",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 1,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "server"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "server"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "worker",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 1,
+                "execution": "deferred"
+              }
+            ]
+          }
         }
       ]
     },
@@ -44,6 +314,126 @@
         {
           "parameter": 0,
           "execution": "tracked"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
+        }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              },
+              {
+                "parameter": 1,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "client",
+                "development",
+                "production"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "browser",
+            "development",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              },
+              {
+                "parameter": 1,
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "development"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "deno",
+            "import"
+          ],
+          "summary": {
+            "kind": "function"
+          }
+        },
+        {
+          "conditions": [
+            "node",
+            "import"
+          ],
+          "summary": {
+            "kind": "function"
+          }
+        },
+        {
+          "conditions": [
+            "worker",
+            "import"
+          ],
+          "summary": {
+            "kind": "function"
+          }
         }
       ]
     },
@@ -51,48 +441,513 @@
       "kind": "function",
       "callbacks": [
         {
-          "parameter": 1,
-          "execution": "inline"
+          "parameter": 0,
+          "execution": "tracked"
+        }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "client",
+                "development",
+                "production"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "browser",
+            "development",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "development"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "deno",
+            "import"
+          ],
+          "summary": {
+            "kind": "function"
+          }
+        },
+        {
+          "conditions": [
+            "node",
+            "import"
+          ],
+          "summary": {
+            "kind": "function"
+          }
+        },
+        {
+          "conditions": [
+            "worker",
+            "import"
+          ],
+          "summary": {
+            "kind": "function"
+          }
         }
       ]
     },
     "function-6": {
       "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "mapped array"
+      "callbacks": [
+        {
+          "parameter": 1,
+          "execution": "inline",
+          "evidence": {
+            "kind": "probed",
+            "modes": [
+              "client",
+              "development",
+              "production",
+              "server"
+            ],
+            "calls": 1
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "probed",
+        "modes": [
+          "client",
+          "development",
+          "production",
+          "server"
+        ],
+        "calls": 1
       }
     },
     "function-7": {
       "kind": "function",
       "returns": {
         "kind": "accessor",
-        "label": "memo result"
+        "label": "mapped array",
+        "evidence": {
+          "kind": "probed",
+          "modes": [
+            "client",
+            "development",
+            "production",
+            "server"
+          ],
+          "calls": 1
+        }
+      },
+      "evidence": {
+        "kind": "probed",
+        "modes": [
+          "client",
+          "development",
+          "production",
+          "server"
+        ],
+        "calls": 1
+      }
+    },
+    "function-8": {
+      "kind": "function",
+      "returns": {
+        "kind": "accessor",
+        "label": "memo result",
+        "evidence": {
+          "kind": "probed",
+          "modes": [
+            "client",
+            "development",
+            "production",
+            "server"
+          ],
+          "calls": 1
+        }
       },
       "callbacks": [
         {
           "parameter": 0,
           "execution": "tracked"
         }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result",
+              "evidence": {
+                "kind": "probed",
+                "modes": [
+                  "client",
+                  "development",
+                  "production"
+                ],
+                "calls": 1
+              }
+            },
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "client",
+                "development",
+                "production"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "browser",
+            "development",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result",
+              "evidence": {
+                "kind": "probed",
+                "modes": [
+                  "development"
+                ],
+                "calls": 1
+              }
+            },
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "development"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "deno",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result"
+            }
+          }
+        },
+        {
+          "conditions": [
+            "node",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result",
+              "evidence": {
+                "kind": "probed",
+                "modes": [
+                  "server"
+                ],
+                "calls": 1
+              }
+            },
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "server"
+              ],
+              "calls": 1
+            }
+          }
+        },
+        {
+          "conditions": [
+            "worker",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "accessor",
+              "label": "memo result"
+            }
+          }
+        }
       ]
-    },
-    "function-8": {
-      "kind": "function",
-      "returns": {
-        "kind": "accessor",
-        "label": "resolved children"
-      }
     },
     "function-9": {
       "kind": "function",
       "returns": {
+        "kind": "accessor",
+        "label": "resolved children",
+        "evidence": {
+          "kind": "probed",
+          "modes": [
+            "client",
+            "development",
+            "production",
+            "server"
+          ],
+          "calls": 1
+        }
+      },
+      "evidence": {
+        "kind": "probed",
+        "modes": [
+          "client",
+          "development",
+          "production",
+          "server"
+        ],
+        "calls": 1
+      }
+    },
+    "function-10": {
+      "kind": "function",
+      "returns": {
         "kind": "store-path",
-        "label": "projection result"
+        "label": "projection result",
+        "evidence": {
+          "kind": "probed",
+          "modes": [
+            "client",
+            "development",
+            "production",
+            "server"
+          ],
+          "calls": 1
+        }
       },
       "callbacks": [
         {
           "parameter": 0,
           "execution": "tracked"
+        }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "store-path",
+              "label": "projection result",
+              "evidence": {
+                "kind": "probed",
+                "modes": [
+                  "client",
+                  "development",
+                  "production"
+                ],
+                "calls": 1
+              }
+            },
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "client",
+                "development",
+                "production"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "browser",
+            "development",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "store-path",
+              "label": "projection result",
+              "evidence": {
+                "kind": "probed",
+                "modes": [
+                  "development"
+                ],
+                "calls": 1
+              }
+            },
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "tracked",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "development"
+                  ],
+                  "calls": 2
+                }
+              }
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "development"
+              ],
+              "calls": 2
+            }
+          }
+        },
+        {
+          "conditions": [
+            "deno",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "store-path",
+              "label": "projection result"
+            }
+          }
+        },
+        {
+          "conditions": [
+            "node",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "store-path",
+              "label": "projection result",
+              "evidence": {
+                "kind": "probed",
+                "modes": [
+                  "server"
+                ],
+                "calls": 1
+              }
+            },
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "server"
+              ],
+              "calls": 1
+            }
+          }
+        },
+        {
+          "conditions": [
+            "worker",
+            "import"
+          ],
+          "summary": {
+            "kind": "function",
+            "returns": {
+              "kind": "store-path",
+              "label": "projection result"
+            }
+          }
         }
       ]
     },
@@ -176,32 +1031,34 @@
           "untrack",
           "useContext"
         ],
-        "function-8": [
+        "function-9": [
           "children"
         ],
-        "function-3": [
-          "createEffect",
-          "createRenderEffect"
+        "function-4": [
+          "createEffect"
         ],
-        "function-7": [
+        "function-8": [
           "createMemo"
         ],
-        "function-9": [
+        "function-10": [
           "createProjection"
+        ],
+        "function-3": [
+          "createRenderEffect"
         ],
         "function-2": [
           "createRoot"
         ],
-        "function-4": [
+        "function-5": [
           "createTrackedEffect"
         ],
-        "function-6": [
+        "function-7": [
           "mapArray"
         ],
         "function-1": [
           "onSettled"
         ],
-        "function-5": [
+        "function-6": [
           "runWithOwner"
         ]
       },

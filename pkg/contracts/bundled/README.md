@@ -35,3 +35,8 @@ The similarly named files below `rust/crates/solid-dialect/contracts/` are a
 different artifact set: flat review inputs used to test the hand-written
 vocabulary and generate Rust export indexes. See that directory's README and
 use `make contracts` to regenerate them.
+
+The Solid 2 contracts retain conditional variants for browser/development and
+server/worker builds. The backend does not guess which variant an unconfigured
+consumer runs: it reports an uncertifiable environment-dependent export until
+the runtime condition is explicitly selected.

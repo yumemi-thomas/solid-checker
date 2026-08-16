@@ -78,6 +78,7 @@ fn normalize(contract: &PackageContract) -> Result<ContractDocument, BackendErro
             && summary.reactive_reads.is_empty()
             && summary.returns.is_none()
             && summary.callbacks.is_empty()
+            && summary.variants.is_empty()
             && summary.async_behavior.is_empty();
         let id = if plain {
             summary.kind.clone()

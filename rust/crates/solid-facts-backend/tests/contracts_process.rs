@@ -420,6 +420,69 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
     assert_eq!(findings.len(), 1);
     assert_eq!(findings[0]["rule"], "strict-read-untracked");
 
+    fs::write(
+        local.join("solid-reactivity.json"),
+        r#"{
+  "schemaVersion": 1,
+  "package": {
+    "name": "reactive-package",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "reactiveReads": [
+        { "kind": "accessor", "label": "project-owned reactive value" }
+      ],
+      "variants": [
+        {
+          "conditions": ["browser"],
+          "summary": {
+            "kind": "function",
+            "reactiveReads": [
+              { "kind": "accessor", "label": "project-owned reactive value" }
+            ]
+          }
+        },
+        {
+          "conditions": ["node"],
+          "summary": { "kind": "function" }
+        }
+      ]
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-1": ["readCount"]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "reviewed",
+    "generator": "application developer"
+  }
+}
+"#,
+    )
+    .unwrap();
+    let conditional = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--format", "json", "--certify", "--project"])
+        .arg(directory.join("tsconfig.json"))
+        .output()
+        .unwrap();
+    assert_eq!(conditional.status.code(), Some(1));
+    let conditional_findings = decode_findings(&conditional.stdout);
+    assert_eq!(conditional_findings.len(), 1);
+    assert_eq!(conditional_findings[0]["id"], "SC9001");
+    assert!(
+        conditional_findings[0]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("conditional runtime targets"))
+    );
+
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -1185,6 +1248,26 @@ fn package_generator_preserves_conditional_callback_execution_modes() {
     assert_eq!(callbacks[0]["execution"], "deferred");
     assert_eq!(callbacks[1]["parameter"], 0);
     assert_eq!(callbacks[1]["execution"], "inline");
+    let variants = contract["entrypoints"]["."]["exports"]["schedule"]["variants"]
+        .as_array()
+        .unwrap();
+    assert_eq!(variants.len(), 2);
+    let development = variants
+        .iter()
+        .find(|variant| variant["conditions"] == serde_json::json!(["development"]))
+        .unwrap();
+    assert_eq!(
+        development["summary"]["callbacks"][0]["execution"],
+        "inline"
+    );
+    let production = variants
+        .iter()
+        .find(|variant| variant["conditions"] == serde_json::json!(["default"]))
+        .unwrap();
+    assert_eq!(
+        production["summary"]["callbacks"][0]["execution"],
+        "deferred"
+    );
     fs::remove_dir_all(directory).unwrap();
 }
 
