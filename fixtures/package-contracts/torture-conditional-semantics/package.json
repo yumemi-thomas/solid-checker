@@ -1,0 +1,15 @@
+{
+  "name": "torture-conditional-semantics-package",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "browser": {
+        "import": "./browser.js"
+      },
+      "node": {
+        "import": "./server.js"
+      }
+    }
+  }
+}

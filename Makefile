@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust package test test-rust test-cli verify verify-performance corpus contract-conformance contracts contracts-check coverage coverage-update parity parity-update clean
+.PHONY: build build-typefacts build-rust package test test-rust test-cli verify verify-performance corpus contract-corpus contract-conformance contracts contracts-check coverage coverage-update parity parity-update clean
 
 build: build-rust
 
@@ -53,6 +53,9 @@ verify-performance: build-typefacts
 
 corpus: build-rust
 	scripts/run-solid-primitives-corpus.sh
+
+contract-corpus: build-rust
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/bin/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/contract-corpus.mjs
 
 contract-conformance:
 	node scripts/check-bundled-contracts.mjs

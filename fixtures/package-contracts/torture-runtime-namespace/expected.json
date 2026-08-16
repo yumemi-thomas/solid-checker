@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "torture-runtime-namespace-package",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "value-1": {
+      "kind": "value",
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "value-1": ["runtimeNamespace"],
+        "function-1": ["stable"]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

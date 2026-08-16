@@ -1,0 +1,65 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "torture-getter-exports-package",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "reactiveReads": [
+        {
+          "kind": "accessor",
+          "label": "memo result",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "returns": {
+        "kind": "object",
+        "properties": {
+          "value": {
+            "kind": "accessor",
+            "label": "value",
+            "evidence": {
+              "kind": "inferred"
+            }
+          }
+        },
+        "evidence": {
+          "kind": "inferred"
+        }
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "value-1": {
+      "kind": "value",
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-1": ["getterFunction"],
+        "value-1": ["getterObject"],
+        "function-2": ["getterResult"]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}
