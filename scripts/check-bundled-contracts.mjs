@@ -33,17 +33,47 @@ const fail = message => {
   console.error(`FAIL ${message}`);
 };
 const pass = message => console.log(`ok   ${message}`);
+const runtimeLockPath = join(root, "pkg/contracts/bundled/runtime-lock.json");
+let runtimeLock = { schemaVersion: 1, packages: {} };
+try {
+  runtimeLock = JSON.parse(readFileSync(runtimeLockPath, "utf8"));
+} catch (error) {
+  fail(`cannot read ${runtimeLockPath}: ${error.message}`);
+}
+if (runtimeLock.schemaVersion !== 1 || !runtimeLock.packages || typeof runtimeLock.packages !== "object") {
+  fail(`${runtimeLockPath} must use runtime-lock schemaVersion 1`);
+}
 
 function modeApplies(entrypoint, mode) {
   const conditions = new Set(entrypoint.conditions ?? []);
   const environment = new Set(["browser", "node", "client", "server", "development", "production"]);
   const selected = [...environment].filter(condition => conditions.has(condition));
   if (selected.length === 0) return true;
-  if (conditions.has("development")) return mode.name === "development";
-  if (conditions.has("production")) return mode.name === "production";
-  if (conditions.has("server") || conditions.has("node")) return mode.name === "server";
-  if (conditions.has("client") || conditions.has("browser")) {
-    return ["client", "development", "production"].includes(mode.name);
+  if (
+    conditions.has("development") &&
+    !conditions.has("browser") &&
+    !conditions.has("node") &&
+    !conditions.has("client") &&
+    !conditions.has("server")
+  ) {
+    return mode.name === "development";
+  }
+  if (
+    conditions.has("production") &&
+    !conditions.has("browser") &&
+    !conditions.has("node") &&
+    !conditions.has("client") &&
+    !conditions.has("server")
+  ) {
+    return mode.name === "production";
+  }
+  if (mode.name === "server") return conditions.has("server") || conditions.has("node");
+  if (mode.name === "client") return conditions.has("client") || conditions.has("browser");
+  if (mode.name === "development") {
+    return conditions.has("development") || conditions.has("client") || conditions.has("browser");
+  }
+  if (mode.name === "production") {
+    return conditions.has("production") || conditions.has("client") || conditions.has("browser");
   }
   return selected.some(condition => mode.conditions.includes(condition));
 }
@@ -166,13 +196,20 @@ const observed = {
         .map(observation => observation.packages[name])
         .filter(Boolean);
       const entrypoints = {};
-      for (const surface of surfaces) {
+      for (const [index, surface] of surfaces.entries()) {
         for (const [entrypoint, value] of Object.entries(surface.entrypoints)) {
           const current = entrypoints[entrypoint] ?? {
             exports: {},
             conditions: [],
           };
-          Object.assign(current.exports, value.exports);
+          for (const [name, kind] of Object.entries(value.exports)) {
+            if (current.exports[name] && current.exports[name] !== kind) {
+              fail(
+                `${name}@${entrypoint} has runtime kinds ${current.exports[name]} and ${kind} across ${probeModes[index].name} and an earlier mode`,
+              );
+            }
+            current.exports[name] ??= kind;
+          }
           current.conditions = [...new Set([...current.conditions, ...value.conditions])].sort();
           entrypoints[entrypoint] = current;
         }
@@ -196,6 +233,69 @@ const installedIntegrity = name =>
     ([path]) =>
       path === `node_modules/${name}` || path.endsWith(`/node_modules/${name}`),
   )?.[1]?.integrity;
+
+const installedManifest = name => {
+  const path = join(install, "node_modules", ...name.split("/"), "package.json");
+  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
+};
+
+function splitPackageVersion(identifier) {
+  const separator = identifier.lastIndexOf("@");
+  if (separator <= 0 || separator === identifier.length - 1) return undefined;
+  return { name: identifier.slice(0, separator), version: identifier.slice(separator + 1) };
+}
+
+function checkRuntimeLock() {
+  for (const [identifier, record] of Object.entries(runtimeLock.packages ?? {})) {
+    const expected = splitPackageVersion(identifier);
+    if (!expected || !record || typeof record !== "object") {
+      fail(`${runtimeLockPath} has malformed package entry ${identifier}`);
+      continue;
+    }
+    const actualVersion = installedVersion(expected.name);
+    if (actualVersion !== expected.version) {
+      fail(
+        `${runtimeLockPath} pins ${identifier}, installed ${expected.name}@${actualVersion ?? "missing"}`,
+      );
+    }
+    const manifest = installedManifest(expected.name);
+    if (!manifest) {
+      fail(`${runtimeLockPath} package ${identifier} is not installed`);
+      continue;
+    }
+    for (const [dependencyKind, edges] of [
+      ["dependencies", record.dependencies ?? {}],
+      ["peerDependencies", record.peerDependencies ?? {}],
+    ]) {
+      for (const name of Object.keys(manifest[dependencyKind] ?? {})) {
+        if (!(name in edges)) {
+          fail(`${runtimeLockPath} has no pinned ${dependencyKind} edge ${identifier} -> ${name}`);
+        }
+      }
+      for (const [name, edge] of Object.entries(edges)) {
+        const declared = manifest[dependencyKind]?.[name];
+        if (!edge || typeof edge !== "object" || !edge.range || !edge.version || !edge.integrity) {
+          fail(`${runtimeLockPath} has malformed ${dependencyKind} edge ${identifier} -> ${name}`);
+          continue;
+        }
+        if (declared !== edge.range) {
+          fail(
+            `${runtimeLockPath} expects ${identifier} ${dependencyKind} ${name}@${edge.range}, installed manifest declares ${declared ?? "missing"}`,
+          );
+        }
+        const resolvedVersion = installedVersion(name);
+        const resolvedIntegrity = installedIntegrity(name);
+        if (resolvedVersion !== edge.version || resolvedIntegrity !== edge.integrity) {
+          fail(
+            `${runtimeLockPath} expects ${name}@${edge.version} (${edge.integrity}), installed ${name}@${resolvedVersion ?? "missing"} (${resolvedIntegrity ?? "no integrity"})`,
+          );
+        }
+      }
+    }
+  }
+}
+
+checkRuntimeLock();
 
 if (write) {
   for (const item of contracts) {

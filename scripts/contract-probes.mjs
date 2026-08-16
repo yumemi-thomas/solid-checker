@@ -77,6 +77,15 @@ function probe(pkg, entrypoint, name, claim, body, calls = 1) {
   });
 }
 
+// Development builds reject writes made from a parent-owned test root unless
+// the source explicitly opts into ownedWrite. A probe represents an external
+// event/update, so detach the write exactly as the runtime's public
+// runWithOwner(null, ...) escape hatch does instead of changing the package's
+// source-creation options just for the harness.
+function writeOutsideOwner(setter, value) {
+  return solid.runWithOwner(null, () => setter(value));
+}
+
 probe("solid-js", ".", "createMemo", "returns=accessor", () => {
   const memo = solid.createMemo(() => 1);
   return typeof memo === "function" && memo() === 1;
@@ -91,7 +100,7 @@ probe("solid-js", ".", "createMemo", "callbacks[0]=tracked", () => {
   });
   memo();
   const before = runs;
-  setSource(1);
+  writeOutsideOwner(setSource, 1);
   solid.flush();
   memo();
   return runs > before;
@@ -110,7 +119,7 @@ function probeSplitEffect(pkg, name, create) {
     );
     solid.flush();
     const before = runs;
-    setSource(1);
+    writeOutsideOwner(setSource, 1);
     solid.flush();
     return runs > before;
   }, 2);
@@ -127,7 +136,7 @@ function probeSplitEffect(pkg, name, create) {
     );
     solid.flush();
     const before = applyRuns;
-    setOther(1);
+    writeOutsideOwner(setOther, 1);
     solid.flush();
     return applyRuns === before;
   }, 2);
@@ -146,7 +155,7 @@ probe("solid-js", ".", "createTrackedEffect", "callbacks[0]=tracked", () => {
   });
   solid.flush();
   const before = runs;
-  setSource(1);
+  writeOutsideOwner(setSource, 1);
   solid.flush();
   return runs > before;
 }, 2);
@@ -176,7 +185,7 @@ probe("solid-js", ".", "createProjection", "callbacks[0]=tracked", () => {
     draft.value = source();
   }, { value: 0 });
   const before = runs;
-  setSource(2);
+  writeOutsideOwner(setSource, 2);
   solid.flush();
   return projection.value === 2 && runs > before;
 }, 2);
@@ -190,7 +199,7 @@ probe("solid-js", ".", "onSettled", "callbacks[0]=deferred", () => {
   });
   solid.flush();
   if (runs !== 1) return false;
-  setSource(1);
+  writeOutsideOwner(setSource, 1);
   solid.flush();
   return runs === 1;
 }, 2);
@@ -225,7 +234,7 @@ probe("@solidjs/web", ".", "memo", "callbacks[0]=tracked", () => {
   });
   memo();
   const before = runs;
-  setSource(1);
+  writeOutsideOwner(setSource, 1);
   solid.flush();
   memo();
   return runs > before;

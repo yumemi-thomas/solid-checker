@@ -29,6 +29,14 @@ When conditional builds invoke the same callback parameter with different
 timing, every observed timing mode is preserved. Consumers analyze each mode;
 the merge does not discard one branch or treat the modes as contradictory.
 
+Bundled conformance probes each applicable claim in client, server,
+development, and production condition modes, and callback probes perform both
+the initial and a subsequent update. A claim that passes only in one mode is a
+conformance failure: the result is a surfaced environment mismatch, not a
+reason to omit that mode or silently weaken the contract. The probe runner
+records successful modes and call counts as row evidence only for claims that
+already exist; it never writes newly observed behavior into a contract.
+
 Use `--entrypoint ./state` to generate only one subpath while investigating a
 failure, or `--conditions browser,import` to resolve the export map for a
 specific environment. With no condition selector, every materialized supported
@@ -190,6 +198,14 @@ Artifacts remain optional because they are not always available at emission
 time, but they are verified whenever present. The contract itself is SHA-256
 hashed when loaded, and that identity is included in the certification package
 summary.
+
+The bundled Solid 2 artifacts also ship
+`pkg/contracts/bundled/runtime-lock.json`. It records the resolved version and
+npm integrity for every dependency and peer edge in the audited
+`solid-js`/`@solidjs/web` runtime closure. Conformance checks the installed
+manifests, resolved versions, and integrities against that lock; the
+`^2.0.0-rc.0` declaration for `@solidjs/signals` therefore cannot drift without
+failing the gate.
 
 Evidence is enforced, not decorative. Contracts emitted by this CLI use
 `inferred`; consumers report them as `unverified` and cannot certify through

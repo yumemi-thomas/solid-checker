@@ -8,12 +8,17 @@ dialect id used by the checker:
 - `solid-v1/solid-primitives-scheduled.json` is the reviewed callback-timing
   overlay for `@solid-primitives/scheduled@1.5.3`;
 - `solid-v2/solid-js.json` models `solid-js@2.0.0-rc.0`;
-- `solid-v2/solidjs-web.json` models `@solidjs/web@2.0.0-rc.0`.
+- `solid-v2/solidjs-web.json` models `@solidjs/web@2.0.0-rc.0`;
+- `runtime-lock.json` pins the resolved dependency closure used by the Solid 2
+  runtime probes, including `@solidjs/signals`, with version and npm integrity.
 
 The per-dialect assembly files at `rust/dialects/<id>/dialect.json` own these
 paths. `node scripts/check-bundled-contracts.mjs` enumerates contracts marked
 `probeRuntime`, installs their exact releases, checks their export surfaces and
-integrity, and executes every declared behavior probe.
+integrity, checks every edge in `runtime-lock.json`, and executes every
+declared behavior probe in client, server, development, and production Node
+condition modes. A lock or probe mismatch fails conformance; it is not repaired
+by `--write`.
 
 The Solid 1.x artifact is composed by
 `scripts/generate-bundled-solid1-contract.mjs` from the adjacent
