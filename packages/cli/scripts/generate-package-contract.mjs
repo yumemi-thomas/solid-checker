@@ -289,6 +289,98 @@ function defaultOutput(packageRoot, packageName) {
   );
 }
 
+function reviewPlanPath(output) {
+  return output.toLowerCase().endsWith(".json")
+    ? `${output.slice(0, -5)}.review.md`
+    : `${output}.review.md`;
+}
+
+function collectReviewItems(entrypoints, selected) {
+  const missingSummaries = [...selected.keys()]
+    .filter(entrypoint => !entrypoints[entrypoint])
+    .map(entrypoint => `${entrypoint}: no generated export summary`);
+  const callbackGaps = [];
+  const inheritedRows = [];
+  const environmentBranches = [];
+  const visit = (summary, location) => {
+    if (summary.kind === "function" && !(summary.callbacks?.length > 0)) {
+      callbackGaps.push(`${location}: no callback execution row`);
+    }
+    if (summary.evidence?.kind === "inherited-from") {
+      inheritedRows.push(
+        `${location}: ${summary.evidence.package}@${summary.evidence.version}`
+      );
+    }
+    for (const [index, read] of (summary.reactiveReads ?? []).entries()) {
+      if (read.evidence?.kind === "inherited-from") {
+        inheritedRows.push(
+          `${location}.reactiveReads[${index}]: ${read.evidence.package}@${read.evidence.version}`
+        );
+      }
+    }
+    for (const [index, callback] of (summary.callbacks ?? []).entries()) {
+      if (callback.evidence?.kind === "inherited-from") {
+        inheritedRows.push(
+          `${location}.callbacks[${index}]: ${callback.evidence.package}@${callback.evidence.version}`
+        );
+      }
+    }
+    const visitReturn = (returned, returnLocation) => {
+      if (!returned) return;
+      if (returned.evidence?.kind === "inherited-from") {
+        inheritedRows.push(
+          `${returnLocation}: ${returned.evidence.package}@${returned.evidence.version}`
+        );
+      }
+      for (const [index, element] of (returned.elements ?? []).entries()) {
+        visitReturn(element, `${returnLocation}.elements[${index}]`);
+      }
+      for (const [name, property] of Object.entries(returned.properties ?? {})) {
+        visitReturn(property, `${returnLocation}.properties.${name}`);
+      }
+    };
+    visitReturn(summary.returns, `${location}.returns`);
+  };
+  for (const [entrypoint, entry] of Object.entries(entrypoints)) {
+    if (entry.conditions?.length) {
+      environmentBranches.push(`${entrypoint}: ${entry.conditions.join(", ")}`);
+    }
+    for (const [name, summary] of Object.entries(entry.exports)) {
+      visit(summary, `${entrypoint}:${name}`);
+    }
+  }
+  return {
+    "exports with no summary": missingSummaries,
+    "callbacks with no execution row": callbackGaps,
+    "inherited rows": inheritedRows,
+    "environment-branching exports": environmentBranches
+  };
+}
+
+function renderReviewPlan(packageName, packageVersion, output, items) {
+  const sections = Object.entries(items).map(([title, rows]) => {
+    const body = rows.length
+      ? rows.map(row => `- [ ] ${row}`).join("\n")
+      : "- [x] none observed by the generator";
+    return `## ${title}\n\n${body}`;
+  });
+  const count = Object.values(items).reduce((total, rows) => total + rows.length, 0);
+  return {
+    count,
+    text: [
+      "# Package contract review plan",
+      "",
+      `Package: ${packageName}@${packageVersion}`,
+      `Contract: ${output}`,
+      "",
+      ...sections,
+      "",
+      "Generated evidence is inferred. Check every item against the exact package release before promoting the contract to verified, reviewed, or trusted.",
+      ""
+    ].join("\n")
+  };
+}
+
 function dependencyContracts(packageRoot, manifest) {
   const dependencies = new Set([
     ...Object.keys(manifest.dependencies ?? {}),
@@ -654,10 +746,24 @@ export async function generatePackageContract(arguments_) {
     } finally {
       rmSync(candidate, { force: true });
     }
+    const review = renderReviewPlan(
+      manifest.name,
+      manifest.version,
+      output,
+      collectReviewItems(entrypoints, selected)
+    );
+    writeFileSync(reviewPlanPath(output), review.text);
   } finally {
     rmSync(temporaryDirectory, { recursive: true, force: true });
   }
+  const reviewOutput = reviewPlanPath(output);
+  const review = renderReviewPlan(
+    manifest.name,
+    manifest.version,
+    output,
+    collectReviewItems(entrypoints, selected)
+  );
   process.stdout.write(
-    `generated ${manifest.name}@${manifest.version} contract with ${Object.keys(entrypoints).length} entrypoints at ${output}\n`
+    `generated ${manifest.name}@${manifest.version} contract with ${Object.keys(entrypoints).length} entrypoints at ${output}; review plan ${reviewOutput} (${review.count} checklist items)\n`
   );
 }

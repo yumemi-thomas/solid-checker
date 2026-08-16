@@ -54,6 +54,14 @@ for export filtering and module resolution. Package code is analyzed statically
 and is not executed. CJS-only entrypoints currently fail as unsupported instead
 of receiving an inferred empty summary.
 
+`contract generate` also writes a sibling `<contract>.review.md` checklist. It
+calls out runtime entrypoints with no generated summary, function exports with
+no callback execution row, inherited claim rows, and entrypoints whose
+conditional environment selection needs review. The checklist is intentionally
+separate from `solid-reactivity.json`: generation never promotes inferred
+claims or auto-resolves the items it lists. Stdout remains one line and names
+both output paths.
+
 The lower-level single-project workflow remains useful for packages without a
 `package.json#exports` map:
 
