@@ -17,7 +17,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
+          # Vercel's Linux runtime is based on an older glibc than the latest
+          # GitHub image. Build the x64 artifact on 22.04 so the published
+          # native package remains runnable there as well as on newer Linux.
+          - runner: ubuntu-22.04
             platform: linux
             arch: x64
           - runner: ubuntu-24.04-arm
