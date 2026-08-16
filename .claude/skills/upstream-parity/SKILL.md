@@ -40,9 +40,8 @@ failure, not an acceptable delta.
 
 Code under `rust/crates/solid-reactive-ir/src/upstream_compat/` ports upstream
 heuristics **byte-faithfully**. Several look like bugs and are not — proven
-examples: the `on*` third-character-alphabetic event-handler test, `on:` /
-`oncapture:` duplicate folding, and ASCII-only case tests. Before "fixing"
-anything there:
+examples: the `on*` third-character-alphabetic event-handler test and the
+ASCII-only case tests. Before "fixing" anything there:
 
 1. Read the actual upstream source at the pinned revision:
 
@@ -55,7 +54,13 @@ anything there:
    already there.
 3. If the checker deliberately does better (evidence-backed precision), keep
    the divergence and declare it in `deviations.json` with the semantic
-   reason.
+   reason. `jsx-no-duplicate-props`' `on:` / `oncapture:` duplicate folding
+   is the worked example: upstream folds every `on*` spelling onto one name,
+   the *pinned 1.x compiler* lowers them to separate listeners that all fire,
+   and the checker follows the compiler
+   (`docs/rules/v1/jsx-no-duplicate-props.md`). Upstream faithfulness is the
+   fallback when nothing else settles the question — the compiler outranks it
+   when it does.
 4. Only if the port genuinely mismatches upstream is it a bug to fix — with a
    focused fixture pinning the corrected behavior.
 

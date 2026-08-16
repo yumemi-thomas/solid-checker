@@ -187,7 +187,8 @@ impl StaticApiContext<'_> {
             // arguments are NOT arity errors: the runtime reads only the
             // first argument and silently ignores the rest (probed, rc.0 —
             // `refresh(source, force)` is legal, if inert).
-            let invalid_arity = call.arguments.is_empty() || !is_refresh && call.arguments.len() > 2;
+            let invalid_arity =
+                call.arguments.is_empty() || !is_refresh && call.arguments.len() > 2;
             if invalid_arity {
                 result.violations.push(StaticViolation {
                     id: "SC7003".into(),
@@ -256,8 +257,8 @@ impl StaticApiContext<'_> {
                     .and_then(|root| self.entities.at(file.path.as_str(), root))
             };
             let target_location = location(file.path.shared(), target.span);
-            let Some((symbol, kind)) = symbol
-                .and_then(|symbol| Some((symbol, self.source_kinds.get(symbol).copied()?)))
+            let Some((symbol, kind)) =
+                symbol.and_then(|symbol| Some((symbol, self.source_kinds.get(symbol).copied()?)))
             else {
                 result.violations.push(StaticViolation {
                     id: "SC9003".into(),
@@ -413,13 +414,17 @@ fn resolve_tracked_scope(
     allowed: &[Span],
     context: &StaticApiContext<'_>,
 ) -> Option<String> {
-    if let Some((container, index)) = file.ast.arguments_containing(call.span).find(|(container, index)| {
-        crate::execution_role::direct_callback_contains(
-            file,
-            container.arguments[*index].span,
-            call.span,
-        )
-    }) {
+    if let Some((container, index)) =
+        file.ast
+            .arguments_containing(call.span)
+            .find(|(container, index)| {
+                crate::execution_role::direct_callback_contains(
+                    file,
+                    container.arguments[*index].span,
+                    call.span,
+                )
+            })
+    {
         let primitive = context.lookup.primitive_at_call(file, container.span)?;
         let tracked = crate::owners::callback_execution_at_call(
             file,

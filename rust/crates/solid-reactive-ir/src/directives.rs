@@ -100,9 +100,8 @@ impl<'a, 'c> DirectiveCreationCollector<'a, 'c> {
                 self.symbol_names,
                 self.lookup.dialect,
             )
-            .filter(|primitive| {
-                creation_registers_work(self.lookup.dialect, file, call, primitive)
-            }) {
+            .filter(|primitive| creation_registers_work(self.lookup.dialect, file, call, primitive))
+            {
                 push_directive_creation(
                     self.creations,
                     self.seen,

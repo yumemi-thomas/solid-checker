@@ -5,6 +5,7 @@
 // a shorthand with a same-spelled declaration the shorthand cannot see.
 import { createMemo } from "solid-js";
 import { helper, importedTracked } from "./values";
+import { ambiguousTracked } from "./ambiguous";
 
 // Same spelling as the block-scoped accessor in `unprovenShorthand`, and not
 // reactive. Nothing may promote it.
@@ -45,11 +46,20 @@ export function importedShorthand() {
 }
 
 export function importedAccessorShorthand() {
-  // `importedTracked` *is* an accessor, but it is declared in another file
-  // and the binder resolves this reference to the import specifier here.
-  // Fails closed rather than matching the declaration by spelling; recorded
-  // in docs/precision-backlog.md.
+  // `importedTracked` is an accessor declared in ./values. The binder
+  // resolves this reference to the import specifier here; the named-import
+  // join follows the relative specifier to the exporting file's declaration
+  // and matches the accessor exactly — never by spelling.
   return { importedTracked };
+}
+
+export function ambiguousShorthand() {
+  // `./ambiguous` names both `ambiguous.ts` and `ambiguous/index.ts`, and
+  // both export an accessor called `ambiguousTracked`. Which one a bundler
+  // picks is a resolution setting this pass does not model, so the join fails
+  // closed: a proven claim sourced from the wrong module would be worse than
+  // no claim.
+  return { ambiguousTracked };
 }
 
 export function globalShorthand() {

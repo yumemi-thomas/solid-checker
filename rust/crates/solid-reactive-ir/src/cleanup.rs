@@ -16,6 +16,7 @@ use super::{
     Fix, InvalidCleanupReturn, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId,
     TextEdit, UnresolvedCleanupReturn, location, primitive_name,
 };
+use crate::execution_role::direct_callback_contains;
 use crate::owners::{callback_owner_at_call, containing_ast_function};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 
@@ -44,12 +45,6 @@ pub(super) fn leaf_owner_operations_for_file(
     let entities = lookup.entities();
     let dialect = lookup.dialect;
     let mut operations = Vec::new();
-    let function_spans = file
-        .ast
-        .functions
-        .iter()
-        .map(|function| function.span)
-        .collect::<Vec<_>>();
     for owner_call in &file.ast.calls {
         let owner = primitive_name(
             file.path.as_str(),
@@ -94,6 +89,10 @@ pub(super) fn leaf_owner_operations_for_file(
             .primitive()
             .filter(|primitive| dialect.leaf_owner_requires_owned_call_site(*primitive))
             .map(|_| location(file.path.shared(), owner_call.span));
+        // The dynamic-extent path needs the leaf callback itself, not just
+        // the argument text it was written in, and the answer is the same
+        // for every call in the region — compute it once per owner call.
+        let leaf_callback = leaf_callback_literal(file, region);
         for call in &file.ast.calls {
             if call.span == owner_call.span || !region.contains(call.span) {
                 continue;
@@ -107,55 +106,219 @@ pub(super) fn leaf_owner_operations_for_file(
                 dialect,
             );
             let Some(primitive) = primitive else {
+                // Not a primitive: an exactly-resolved in-project helper
+                // called here runs its synchronous extent in this leaf
+                // scope, so a forbidden operation inside it executes here.
+                //
+                // Two containment facts have to hold before that reasoning
+                // applies, and neither follows from the argument span alone.
+                // The argument must be a function *literal* — the callback
+                // the owner receives — because `createTrackedEffect(makeCb())`
+                // evaluates `makeCb()` at argument-evaluation time under the
+                // *enclosing* owner, and `createTrackedEffect(wrap(cb))`
+                // hands `cb` to `wrap`, which decides whether and where it
+                // runs. And the call must sit in that callback's own
+                // synchronous extent: a helper call inside a nested function
+                // (an event handler built in the callback) runs later, in
+                // that function's scope. Anything else stays silent.
+                let Some(callback) = leaf_callback else {
+                    continue;
+                };
+                if !direct_callback_contains(file, callback, call.span) {
+                    continue;
+                }
+                let mut kinds = Vec::new();
+                let mut visited = Vec::new();
+                helper_forbidden_operations(
+                    lookup,
+                    symbol_names,
+                    file,
+                    call,
+                    &mut kinds,
+                    &mut visited,
+                    8,
+                );
+                if kinds.is_empty() {
+                    continue;
+                }
+                let via = file.source_text(call.callee).unwrap_or_default().to_owned();
+                for kind in kinds {
+                    operations.push(LeafOwnerOperation {
+                        kind,
+                        owner: owner.to_string(),
+                        location: location(file.path.shared(), call.callee),
+                        fix: None,
+                        call_site_gate: call_site_gate.clone(),
+                        uncertain: false,
+                        via: Some(via.clone()),
+                    });
+                }
                 continue;
             };
-            let rule = primitive
-                .primitive()
-                .map(|primitive| dialect.cleanup_rule(primitive));
-            let forbidden = match rule {
-                Some(CleanupRule::Always) => true,
-                // `createSignal(fn)` registers work; `createSignal(0)` does
-                // not. Flattening this arm into the unconditional one would
-                // turn every plainly seeded signal under a leaf owner into a
-                // false positive.
-                Some(CleanupRule::WhenFirstArgumentIsFunction) => {
-                    call.arguments.first().is_some_and(|argument| {
-                        function_spans
-                            .iter()
-                            .any(|function| argument.span.contains(*function))
-                    })
-                }
-                Some(CleanupRule::Never) | None => false,
+            let Some(kind) = forbidden_operation_kind(dialect, file, call, &primitive) else {
+                continue;
             };
-            if forbidden {
-                // Only `onCleanup` has a rewrite -- return the cleanup
-                // instead of registering it -- and only where the owner reads
-                // a returned function as cleanup. That is a 2.0 idea: 1.x's
-                // leaf owner threads return values elsewhere, so offering the
-                // rewrite there would introduce a bug, not fix one.
-                let fix = (primitive.primitive() == Some(Primitive::OnCleanup)
-                    && owner
-                        .primitive()
-                        .is_some_and(|owner| dialect.accepts_cleanup_return(owner)))
-                .then(|| terminal_cleanup_fix(file, region, call))
-                .flatten();
-                let kind = match primitive.primitive() {
-                    Some(Primitive::OnCleanup) => crate::LeafOwnerOperationKind::Cleanup,
-                    Some(Primitive::Flush) => crate::LeafOwnerOperationKind::Flush,
-                    _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
-                };
-                operations.push(LeafOwnerOperation {
-                    kind,
-                    owner: owner.to_string(),
-                    location: location(file.path.shared(), call.callee),
-                    fix,
-                    call_site_gate: call_site_gate.clone(),
-                    uncertain: false,
-                });
-            }
+            // Only `onCleanup` has a rewrite -- return the cleanup
+            // instead of registering it -- and only where the owner reads
+            // a returned function as cleanup. That is a 2.0 idea: 1.x's
+            // leaf owner threads return values elsewhere, so offering the
+            // rewrite there would introduce a bug, not fix one.
+            let fix = (primitive.primitive() == Some(Primitive::OnCleanup)
+                && owner
+                    .primitive()
+                    .is_some_and(|owner| dialect.accepts_cleanup_return(owner)))
+            .then(|| terminal_cleanup_fix(file, region, call))
+            .flatten();
+            operations.push(LeafOwnerOperation {
+                kind,
+                owner: owner.to_string(),
+                location: location(file.path.shared(), call.callee),
+                fix,
+                call_site_gate: call_site_gate.clone(),
+                uncertain: false,
+                via: None,
+            });
         }
     }
     operations
+}
+
+/// The span of the function literal written *directly* in a leaf owner's
+/// callback argument, or `None` when the argument is any other expression.
+///
+/// The leaf-owner rules reason about what runs inside the callback the owner
+/// receives, and only a literal in argument position makes the enclosing
+/// argument text and that callback the same region. `owner(makeCb())` and
+/// `owner(wrap(() => …))` both contain a call — the first evaluated under the
+/// enclosing owner before the leaf scope exists, the second handed to an
+/// opaque wrapper — so neither is proof and both fail closed here.
+///
+/// Parentheses and whitespace are the only fillers a literal tolerates
+/// between the argument's bounds and its own; anything else means the
+/// function is an operand rather than the argument.
+fn leaf_callback_literal(file: &FileFacts, argument: Span) -> Option<Span> {
+    let function = file
+        .ast
+        .functions_within(argument)
+        .max_by_key(|function| function.span.end - function.span.start)?;
+    let start = usize::try_from(argument.start).ok()?;
+    let end = usize::try_from(argument.end).ok()?;
+    let inner_start = usize::try_from(function.span.start).ok()?;
+    let inner_end = usize::try_from(function.span.end).ok()?;
+    let filler = |text: &str| {
+        text.bytes()
+            .all(|byte| byte.is_ascii_whitespace() || byte == b'(' || byte == b')')
+    };
+    (filler(file.source.get(start..inner_start)?) && filler(file.source.get(inner_end..end)?))
+        .then_some(function.span)
+}
+
+/// The leaf-owner operation kind a call performs under `dialect`, or `None`
+/// when the call is not a forbidden operation.
+///
+/// Shared by the lexical path (a primitive written inside the leaf callback)
+/// and the dynamic-extent path (the same primitive reached through an exactly
+/// resolved helper), so the two cannot answer differently for one call.
+fn forbidden_operation_kind(
+    dialect: &dyn solid_dialect::Dialect,
+    file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    primitive: &PrimitiveName,
+) -> Option<crate::LeafOwnerOperationKind> {
+    let kind = primitive.primitive()?;
+    let forbidden = match dialect.cleanup_rule(kind) {
+        CleanupRule::Always => true,
+        // `createSignal(fn)` registers work; `createSignal(0)` does not.
+        // Flattening this arm into the unconditional one would turn every
+        // plainly seeded signal under a leaf owner into a false positive.
+        CleanupRule::WhenFirstArgumentIsFunction => call
+            .arguments
+            .first()
+            .is_some_and(|argument| file.ast.functions_within(argument.span).next().is_some()),
+        CleanupRule::Never => false,
+    };
+    forbidden.then(|| match kind {
+        Primitive::OnCleanup => crate::LeafOwnerOperationKind::Cleanup,
+        Primitive::Flush => crate::LeafOwnerOperationKind::Flush,
+        _ => crate::LeafOwnerOperationKind::Primitive(primitive.to_string()),
+    })
+}
+
+/// Collects the forbidden-operation kinds an exactly-resolved helper performs
+/// in its own *synchronous extent* — its body minus nested function bodies,
+/// which calling the helper does not execute — following further exact helper
+/// calls transitively up to `depth`.
+///
+/// This is the dynamic-extent half of the leaf-owner rules: `onCleanup` or
+/// `flush` in a helper called synchronously from a leaf callback throws at
+/// runtime exactly as the inline spelling does. Only the exact TypeScript
+/// entity join resolves a callee (see `SemanticLookup::function_for_symbol`);
+/// an unresolved, ambiguous, or package callee contributes nothing here and
+/// stays owned by the package-contract obligation surface.
+fn helper_forbidden_operations(
+    lookup: &SemanticLookup<'_>,
+    symbol_names: &HashMap<SymbolId, SymbolId>,
+    call_file: &FileFacts,
+    call: &solid_facts::ast::CallFact,
+    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    visited: &mut Vec<(String, Span)>,
+    depth: usize,
+) {
+    if depth == 0 {
+        return;
+    }
+    let Some(symbol) = lookup.entities().at(call_file.path.as_str(), call.callee) else {
+        return;
+    };
+    let Some((helper_file, helper)) = lookup.function_for_symbol(symbol) else {
+        return;
+    };
+    let key = (helper_file.path.as_str().to_owned(), helper.span);
+    if visited.contains(&key) {
+        return;
+    }
+    visited.push(key);
+    let dialect = lookup.dialect;
+    let entities = lookup.entities();
+    for inner in helper_file.ast.calls_within(helper.body) {
+        // A call inside a nested function is not executed by calling the
+        // helper; it belongs to whatever later invokes that function.
+        let nested = containing_ast_function(&helper_file.ast, inner.span)
+            .is_some_and(|function| function.span != helper.span);
+        if nested {
+            continue;
+        }
+        let primitive = primitive_name(
+            helper_file.path.as_str(),
+            inner.callee,
+            inner.static_callee(&helper_file.source),
+            entities,
+            symbol_names,
+            dialect,
+        );
+        let Some(primitive) = primitive else {
+            helper_forbidden_operations(
+                lookup,
+                symbol_names,
+                helper_file,
+                inner,
+                kinds,
+                visited,
+                depth - 1,
+            );
+            continue;
+        };
+        // One kind per call site, however many helper calls or transitive
+        // hops reach it: the finding names the operation, not each way of
+        // arriving at it. Kinds arrive interleaved across hops, so an
+        // adjacent-only `dedup` would leave byte-identical operations in the
+        // serialized IR — reject at the push instead.
+        if let Some(kind) = forbidden_operation_kind(dialect, helper_file, inner, &primitive)
+            && !kinds.contains(&kind)
+        {
+            kinds.push(kind);
+        }
+    }
 }
 
 pub(super) fn cleanup_returns_for_file<'a, 'f>(

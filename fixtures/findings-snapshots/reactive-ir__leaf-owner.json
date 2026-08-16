@@ -200,6 +200,86 @@
       "start": 1934,
       "end": 1943,
       "fixes": 0
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 2282,
+      "end": 2291,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-in-forbidden-scope",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 2989,
+      "end": 3005,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-forbidden-scope",
+      "code": "SC3003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 3047,
+      "end": 3055,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-in-forbidden-scope",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 3089,
+      "end": 3105,
+      "fixes": 0
+    },
+    {
+      "rule": "primitive-in-leaf-owner",
+      "code": "SC3002",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 3147,
+      "end": 3158,
+      "fixes": 0
+    },
+    {
+      "rule": "flush-in-forbidden-scope",
+      "code": "SC3003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 3600,
+      "end": 3608,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 3600,
+      "end": 3610,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "code": "SC9002",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 4743,
+      "end": 4765,
+      "fixes": 0
     }
   ]
 }

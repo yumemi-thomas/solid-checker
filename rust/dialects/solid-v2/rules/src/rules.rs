@@ -156,9 +156,7 @@ impl Rule {
             // (probed), so the proven tracked-scope form mirrors it as an
             // error; production has no guard and silently takes a one-shot
             // snapshot.
-            Self::ResolveInReactiveScope => {
-                ("SC2004", "resolve-in-reactive-scope", "error", false)
-            }
+            Self::ResolveInReactiveScope => ("SC2004", "resolve-in-reactive-scope", "error", false),
             Self::CleanupInForbiddenScope => {
                 ("SC3001", "cleanup-in-forbidden-scope", "error", false)
             }
@@ -363,7 +361,9 @@ mod tests {
         // Loading boundary is unconditional (rc.0 dist/server.js), so the
         // static rule mirrors it as an error.
         assert_eq!(
-            Rule::SsrClientSourceOutsideLoadingBoundary.metadata().severity,
+            Rule::SsrClientSourceOutsideLoadingBoundary
+                .metadata()
+                .severity,
             "error"
         );
         // SETTLED_CLEANUP_UNOWNED is a dev *throw* (rc.0 dev bundle emits an
@@ -379,7 +379,10 @@ mod tests {
         // The rich-argument transport throw is unconditional at the default
         // client (probed) — error; the post-flush header drop only occurs
         // when the boundary settles after the shell flush — warning.
-        assert_eq!(Rule::ServerFunctionRichArgument.metadata().severity, "error");
+        assert_eq!(
+            Rule::ServerFunctionRichArgument.metadata().severity,
+            "error"
+        );
         assert_eq!(Rule::HttpResponseAfterFlush.metadata().severity, "warning");
     }
 }

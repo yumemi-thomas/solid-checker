@@ -45,12 +45,24 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         (
             "leaf-owner",
             &[
-                // Three owner-backed violations plus the exported-helper
-                // proof obligation; the out-of-band (event handler) onSettled
-                // contributes nothing to any SC3xxx rule.
-                ("cleanup-in-forbidden-scope", 4),
-                ("primitive-in-leaf-owner", 3),
-                ("flush-in-forbidden-scope", 2),
+                // Three owner-backed inline violations, two dynamic-extent
+                // violations reached through exact helpers (registerTeardown
+                // and the transitive indirectTeardown), plus the
+                // exported-helper proof obligation. Silent, each for its own
+                // reason: the out-of-band (event handler) onSettled, the
+                // helper call written inside the event handler, the helper
+                // that only builds a nested function, and — because the
+                // argument is not a function literal the owner receives —
+                // both `createTrackedEffect(makeTeardownCallback())` and
+                // `createTrackedEffect(wrapCallback(() => …))`.
+                ("cleanup-in-forbidden-scope", 6),
+                // Three inline (the function-seeded createSignal, createMemo,
+                // createRoot) plus the dynamic-extent trackDouble() reached
+                // through its helper.
+                ("primitive-in-leaf-owner", 4),
+                // Two inline plus flushNow() reached through its helper from
+                // a block-bodied and an expression-bodied leaf callback.
+                ("flush-in-forbidden-scope", 4),
                 ("invalid-cleanup-return", 6),
             ][..],
         ),
@@ -164,18 +176,22 @@ fn settled_leaf_rules_follow_call_site_ownership() {
     );
     // The exported helper's call sites are unknowable, so its onSettled leaf
     // finding is a proof obligation, not a proven violation; the owner-backed
-    // component-body ones stay violations.
+    // component-body ones stay violations — three inline, two reached through
+    // the exactly-resolved dynamic-extent helpers.
     let kinds = cleanup
         .iter()
         .map(|finding| finding["kind"].as_str().unwrap_or_default())
         .collect::<Vec<_>>();
     assert_eq!(
         kinds.iter().filter(|kind| **kind == "violation").count(),
-        3,
+        5,
         "{cleanup:#?}"
     );
     assert_eq!(
-        kinds.iter().filter(|kind| **kind == "uncertifiable").count(),
+        kinds
+            .iter()
+            .filter(|kind| **kind == "uncertifiable")
+            .count(),
         1,
         "{cleanup:#?}"
     );
@@ -220,7 +236,10 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
         "{untracked:#?}"
     );
     assert_eq!(
-        kinds.iter().filter(|kind| **kind == "uncertifiable").count(),
+        kinds
+            .iter()
+            .filter(|kind| **kind == "uncertifiable")
+            .count(),
         1,
         "{untracked:#?}"
     );
@@ -288,8 +307,9 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // event-handler calls stay silent.
         assert_eq!(drops.len(), 3, "{findings:#?}");
         assert!(
-            drops.iter().all(|finding| finding["severity"] == "warning"
-                && finding["kind"] == "violation"),
+            drops
+                .iter()
+                .all(|finding| finding["severity"] == "warning" && finding["kind"] == "violation"),
             "the post-flush drop is conditional and must stay a warning: {drops:#?}"
         );
         // CSR twin: both exports are client no-ops everywhere, no drop to

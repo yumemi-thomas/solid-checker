@@ -73,12 +73,24 @@ impl CatalogWording for Catalog {
                         panic!("Solid 1.x analysis emitted a 2.0-only flush leaf operation")
                     }
                 };
+                let message = match &operation.via {
+                    Some(via) => format!(
+                        "{message} — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
+                    ),
+                    None => message,
+                };
                 FindingWording::new(rule.metadata(), message, hint).with_evidence(vec![
                     EvidenceStep {
-                        message: format!(
-                            "the call is lexically contained by the {} callback",
-                            operation.owner
-                        ),
+                        message: match &operation.via {
+                            Some(via) => format!(
+                                "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
+                                operation.owner
+                            ),
+                            None => format!(
+                                "the call is lexically contained by the {} callback",
+                                operation.owner
+                            ),
+                        },
                         location: Some(operation.location.clone()),
                     },
                 ])

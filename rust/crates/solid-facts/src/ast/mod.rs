@@ -16,8 +16,8 @@ use oxc_ast::ast::{
     ImportDeclarationSpecifier, JSXAttributeItem, JSXAttributeName, JSXAttributeValue, JSXElement,
     JSXElementName, JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName,
     NewExpression, ObjectProperty, ObjectPropertyKind, PropertyKey, PropertyKind, ReturnStatement,
-    SpreadElement,
-    StaticMemberExpression, TSModuleDeclarationName, UnaryExpression, VariableDeclarator,
+    SpreadElement, StaticMemberExpression, TSModuleDeclarationName, UnaryExpression,
+    VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
@@ -1607,7 +1607,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     fn visit_await_expression(&mut self, expression: &AwaitExpression<'a>) {
         self.awaits.push(span(expression.span));
         if self.conditional_flow_depth
-            == self.function_flow_depths.last().copied().unwrap_or_default()
+            == self
+                .function_flow_depths
+                .last()
+                .copied()
+                .unwrap_or_default()
         {
             self.unconditional_awaits.push(span(expression.span));
         }

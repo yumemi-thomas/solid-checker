@@ -741,6 +741,14 @@ impl Dialect for Solid2 {
         true
     }
 
+    /// The removal half of the same probe: a literal `false` removes the
+    /// attribute on the client and omits it in SSR (RFC 07 — "Boolean
+    /// literals add/remove the attribute"). 1.x stringifies instead, so
+    /// only this dialect answers true.
+    fn false_attribute_value_removes_attribute(&self) -> bool {
+        true
+    }
+
     /// Source: `solid-reactive-ir/src/directives.rs` `is_created_primitive`.
     fn creates_directive_owner(&self, primitive: Primitive) -> bool {
         matches!(

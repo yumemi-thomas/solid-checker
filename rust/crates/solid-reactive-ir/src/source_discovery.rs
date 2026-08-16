@@ -371,9 +371,10 @@ pub(crate) fn project_server_renders(facts: &ProjectFacts) -> bool {
                 && !import.type_only
                 && import.bindings.iter().any(|binding| {
                     !binding.type_only
-                        && binding.imported.as_deref().is_some_and(|imported| {
-                            SERVER_RENDER_IMPORTS.contains(&imported)
-                        })
+                        && binding
+                            .imported
+                            .as_deref()
+                            .is_some_and(|imported| SERVER_RENDER_IMPORTS.contains(&imported))
                 })
         })
     })
@@ -389,10 +390,7 @@ pub(crate) fn project_server_renders(facts: &ProjectFacts) -> bool {
 /// non-callable value: a container or primitive literal, `null`, or
 /// `undefined`. An identifier or other expression could still be a derive
 /// function, so it stays unknown and refresh acceptance is preserved.
-fn store_is_value_form(
-    call: &solid_facts::ast::CallFact,
-    primitive: Option<Primitive>,
-) -> bool {
+fn store_is_value_form(call: &solid_facts::ast::CallFact, primitive: Option<Primitive>) -> bool {
     use solid_facts::ast::ArgumentValueKind;
     if !matches!(
         primitive,
@@ -1104,10 +1102,9 @@ fn dynamic_key_form(
     semantic_lookup: &SemanticLookup<'_>,
 ) -> solid_dialect::KeyForm {
     let expression = element.attributes.iter().find_map(|attribute| {
-        (attribute.namespace.is_none()
-            && file.source_text(attribute.local_name) == Some("keyed"))
-        .then_some(attribute.expression)
-        .flatten()
+        (attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("keyed"))
+            .then_some(attribute.expression)
+            .flatten()
     });
     let Some(expression) = expression else {
         // A string or element value: truthy at runtime, but not a key
@@ -2013,9 +2010,7 @@ fn classify_component_props(
             let Some(parameter) = function.parameters.first() else {
                 continue;
             };
-            if function.parameters.len() > 1
-                || !lookup.function_is_component(file, function)
-            {
+            if function.parameters.len() > 1 || !lookup.function_is_component(file, function) {
                 continue;
             }
             let classification = classify_one_component(
@@ -2092,8 +2087,7 @@ fn classify_one_component(
         };
         let span = Span::new(start, end);
         let own_declaration = *reference.path == *file.path.as_str()
-            && (function.span.contains(span)
-                || name.is_some_and(|name| name.span == span));
+            && (function.span.contains(span) || name.is_some_and(|name| name.span == span));
         if own_declaration {
             continue;
         }

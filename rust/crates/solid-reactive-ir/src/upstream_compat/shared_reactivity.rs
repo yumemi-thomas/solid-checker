@@ -517,9 +517,7 @@ fn expected_function_got_expression(
                 .iter()
                 .find(|member| member.span == expression)
                 .and_then(|_| member_root(file, expression))
-                .and_then(|root| {
-                    Some((root, context.entities.at(file.path.as_str(), root)?))
-                });
+                .and_then(|root| Some((root, context.entities.at(file.path.as_str(), root)?)));
             if let Some((root, symbol)) = member_symbol {
                 let uncertain = if context.accessors.contains_key(symbol) {
                     Some(false)
@@ -936,7 +934,8 @@ fn value_position(
                 attribute.namespace.is_none()
                     && attribute.expression == Some(span)
                     && name != "ref"
-                    && !(name == "children" && dialect.native_children_attribute_invokes_functions())
+                    && !(name == "children"
+                        && dialect.native_children_attribute_invokes_functions())
                     && !(name.starts_with("on")
                         && name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic))
             })

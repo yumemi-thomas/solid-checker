@@ -48,18 +48,16 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
     for file in &ctx.facts.files {
         let mut allowed = None;
         for call in &file.ast.calls {
-            let Some(kind @ (Primitive::HttpStatus | Primitive::HttpHeader)) =
-                primitive_name(
-                    file.path.as_str(),
-                    call.callee,
-                    call.static_callee(&file.source),
-                    ctx.entities,
-                    ctx.symbol_names,
-                    ctx.dialect,
-                )
-                .as_ref()
-                .and_then(crate::PrimitiveName::primitive)
-            else {
+            let Some(kind @ (Primitive::HttpStatus | Primitive::HttpHeader)) = primitive_name(
+                file.path.as_str(),
+                call.callee,
+                call.static_callee(&file.source),
+                ctx.entities,
+                ctx.symbol_names,
+                ctx.dialect,
+            )
+            .as_ref()
+            .and_then(crate::PrimitiveName::primitive) else {
                 continue;
             };
             if !*server_renders
@@ -252,7 +250,10 @@ fn non_function_export_shape(file: &FileFacts, local: Span) -> Option<&'static s
     if file.ast.functions.iter().any(|function| {
         function.span == file.ast.peel_ts_sugar_span(local)
             || (function.kind == FunctionKind::Declaration
-                && function.name.as_ref().is_some_and(|name| name.span == local))
+                && function
+                    .name
+                    .as_ref()
+                    .is_some_and(|name| name.span == local))
     }) {
         return None;
     }
@@ -490,10 +491,7 @@ fn project_enables_rich_arguments(ctx: &AnalysisContext<'_>) -> bool {
         let rich_args_import = file.ast.imports.iter().any(|import| {
             !import.type_only
                 && import.module.as_str() == "@solidjs/web/server-functions/rich-args"
-                && import
-                    .bindings
-                    .iter()
-                    .any(|binding| !binding.type_only)
+                && import.bindings.iter().any(|binding| !binding.type_only)
         });
         if rich_args_import {
             return true;
@@ -512,9 +510,10 @@ fn project_enables_rich_arguments(ctx: &AnalysisContext<'_>) -> bool {
         imports_configure
             && file.ast.calls.iter().any(|call| {
                 call.arguments.iter().any(|argument| {
-                    argument.property_names.iter().any(|name| {
-                        file.source_text(*name) == Some("serializeArgs")
-                    })
+                    argument
+                        .property_names
+                        .iter()
+                        .any(|name| file.source_text(*name) == Some("serializeArgs"))
                 })
             })
     })

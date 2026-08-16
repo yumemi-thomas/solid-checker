@@ -24,6 +24,15 @@ a conditionally supplied owner) the finding is reported as **uncertifiable**
 rather than a proven violation. `createTrackedEffect` is a leaf owner
 unconditionally.
 
+The rule also follows the **dynamic extent** through exactly-resolved
+helpers: a project function that calls `onCleanup` in its own synchronous
+extent (its body minus nested function bodies) throws just the same when it
+is called from a leaf scope, so that call site is flagged, naming the helper.
+The resolution is the exact TypeScript identity, transitively through further
+exact helper calls; an unresolved, ambiguous, or package callee contributes
+nothing here — package behavior stays owned by the contract obligation
+surface.
+
 This is the static counterpart of Solid's dev-mode `CLEANUP_IN_FORBIDDEN_SCOPE`
 error.
 

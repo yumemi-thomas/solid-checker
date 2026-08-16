@@ -133,10 +133,19 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/jsx-correctness/tsconfig.json");
     // The 1.x runtime stringifies attribute values (`draggable={true}` renders
-    // draggable="true" and behaves), so only the shorthand is a defect there;
-    // the 2.0 runtime renders a literal `true` presence-only on both the
-    // client and SSR paths (probed on @solidjs/web@2.0.0-rc.0), so the
-    // literal-true expression is the same defect and reports too.
+    // draggable="true", `draggable={false}` renders draggable="false", and
+    // both behave), so only the shorthand is a defect there. The 2.0 runtime
+    // treats boolean literals as attribute presence (probed on
+    // @solidjs/web@2.0.0-rc.0): a literal `true` renders presence-only — the
+    // same empty-attribute defect — and a literal `false` removes the
+    // attribute, which on the draggable-by-default elements (`img`,
+    // `a[href]`) selects the auto state and silently re-enables dragging.
+    // The href-less `a` and the `div` are not draggable by default, so their
+    // `draggable={false}` removal matches intent and stays clean, as does
+    // the enumerated string spelling `draggable="false"`. The `a` whose
+    // `href` is a dynamic expression stays clean too: a nullish value removes
+    // that attribute, and then the anchor is not draggable by default — the
+    // default is unproven, so the rule does not report it.
     for (dialect, expected) in [
         (
             "solid-v1",
@@ -147,7 +156,7 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
         ),
         (
             "solid-v2",
-            &[("prefer-component-syntax", 1), ("no-implicit-draggable", 2)][..],
+            &[("prefer-component-syntax", 1), ("no-implicit-draggable", 4)][..],
         ),
     ] {
         let findings = project_snapshot_findings(project.clone(), Some(dialect));
@@ -157,7 +166,10 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
             .collect::<Vec<_>>();
         for (rule, count) in expected {
             assert_eq!(
-                rules.iter().filter(|candidate| **candidate == *rule).count(),
+                rules
+                    .iter()
+                    .filter(|candidate| **candidate == *rule)
+                    .count(),
                 *count,
                 "{dialect} should report exactly {count} {rule}: {findings:#?}"
             );

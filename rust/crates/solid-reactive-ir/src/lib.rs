@@ -193,6 +193,13 @@ pub struct LeafOwnerOperation {
     /// violation.
     #[serde(default)]
     pub uncertain: bool,
+    /// The exactly-resolved helper the operation is reached through: the
+    /// operation sits in the helper's synchronous extent and the helper is
+    /// called from this leaf scope, so it executes here. The finding anchors
+    /// at the helper call site — the call is what introduces the defect; the
+    /// helper body may have other, legal callers.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub via: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -264,6 +271,25 @@ pub struct StaticDefect {
     pub uncertain: bool,
 }
 
+/// The boolean spelling written on a `draggable` attribute. Each selects a
+/// different wrong runtime state under the reporting dialect; the wording
+/// arms in `projection` name the exact spelling and consequence.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum DraggableSpelling {
+    /// The bare `draggable` shorthand — an empty attribute value, whose
+    /// enumerated state is the invalid-value default `auto`.
+    #[default]
+    Shorthand,
+    /// `draggable={true}` under a runtime that renders boolean literals
+    /// presence-only — the same empty-attribute defect as the shorthand.
+    LiteralTrue,
+    /// `draggable={false}` on a draggable-by-default element (`img`,
+    /// `a[href]`) under a runtime that removes the attribute on `false` —
+    /// removal selects `auto`, which re-enables dragging there.
+    LiteralFalseOnDraggableDefault,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
@@ -280,11 +306,11 @@ pub enum StaticDefectKind {
         name: String,
     },
     ImplicitDraggableBoolean {
-        /// `draggable={true}` rather than the bare `draggable` shorthand.
-        /// Only emitted for dialects whose runtime renders a literal `true`
-        /// presence-only (Solid 2.0); the wording names the actual spelling.
+        /// Which boolean spelling was written; the wording names it. The
+        /// literal spellings are only emitted for dialects whose runtime
+        /// treats boolean literals as attribute presence (Solid 2.0).
         #[serde(default)]
-        literal_true: bool,
+        spelling: DraggableSpelling,
     },
     InvalidJsxNesting {
         parent: String,

@@ -72,3 +72,93 @@ export function settleWithCleanup() {
     onCleanup(() => {});
   });
 }
+
+// Dynamic extent: these helpers perform forbidden operations in their own
+// synchronous extent, so calling one from a leaf callback throws exactly
+// like the inline spelling. The findings anchor at the call site inside the
+// leaf scope — the helper body has other, legal callers.
+function registerTeardown() {
+  onCleanup(() => {});
+}
+
+function flushNow() {
+  flush();
+}
+
+// Transitive: one exact hop deeper still executes synchronously.
+function indirectTeardown() {
+  registerTeardown();
+}
+
+// A helper whose synchronous extent creates an owner-attaching primitive:
+// inside a leaf scope there is no owner to attach it to.
+function trackDouble() {
+  createMemo(() => 2);
+}
+
+// The forbidden call sits inside a nested function the helper only builds;
+// calling the helper executes nothing forbidden.
+function buildTeardownHandler() {
+  const handler = () => onCleanup(() => {});
+  return handler;
+}
+
+export function DynamicExtent() {
+  const [count] = createSignal(0);
+  createTrackedEffect(() => {
+    count();
+    registerTeardown(); // SC3001, via registerTeardown()
+    flushNow(); // SC3003, via flushNow()
+    indirectTeardown(); // SC3001, via indirectTeardown()
+    trackDouble(); // SC3002, via trackDouble()
+    buildTeardownHandler(); // clean: nested body is not synchronous extent
+  });
+  // The same synchronous extent written without braces: an expression-bodied
+  // leaf callback is still the callback the owner receives. (What it returns
+  // is `flushNow()`'s void, which is not provably not a cleanup function, so
+  // the cleanup-return obligation is uncertifiable — SC9002.)
+  createTrackedEffect(() => flushNow()); // SC3003, via flushNow()
+  return (
+    <button
+      onClick={() => {
+        // Not a leaf scope: an event handler runs out-of-band, where
+        // onCleanup at worst warns no-owner-cleanup — the leaf rules stay
+        // silent on this call.
+        registerTeardown();
+      }}
+    >
+      {count()}
+    </button>
+  );
+}
+
+// Argument position: the dynamic-extent reasoning only applies to calls in
+// the *leaf callback's own* synchronous extent, and a call argument that is
+// not a function literal is not that callback. Both of these stay clean.
+function makeTeardownCallback() {
+  return () => {
+    registerTeardown();
+  };
+}
+
+function wrapCallback(callback: () => void) {
+  return callback;
+}
+
+export function ArgumentPosition() {
+  // `makeTeardownCallback()` is evaluated here, at argument-evaluation time,
+  // under the enclosing owner — before any leaf scope exists. The callback
+  // the owner ends up with is opaque to this pass, so no SC3xxx is proven;
+  // what the callback *returns* is unprovable too, so the cleanup-return
+  // obligation is reported as uncertifiable (SC9002).
+  createTrackedEffect(makeTeardownCallback());
+  // The arrow is `wrapCallback`'s argument, not the owner's callback:
+  // `wrapCallback` decides whether and where it runs. Calls written inside
+  // it are not proven to execute in the leaf scope.
+  createTrackedEffect(
+    wrapCallback(() => {
+      registerTeardown();
+    }),
+  );
+  return <div />;
+}

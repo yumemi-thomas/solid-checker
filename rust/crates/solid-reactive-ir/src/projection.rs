@@ -9,10 +9,10 @@ use std::time::Instant;
 use typefacts::Location;
 
 use crate::{
-    ActionInvocation, AsyncRead, EvidenceStep, Finding, InvalidCleanupReturn, LeafOwnerOperation,
-    OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveWrite, RuleMetadata,
-    SolveTimings, StaticDefect, StaticDefectKind, StaticViolation, UnresolvedCleanupReturn,
-    finish_findings,
+    ActionInvocation, AsyncRead, DraggableSpelling, EvidenceStep, Finding, InvalidCleanupReturn,
+    LeafOwnerOperation, OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveWrite,
+    RuleMetadata, SolveTimings, StaticDefect, StaticDefectKind, StaticViolation,
+    UnresolvedCleanupReturn, finish_findings,
 };
 
 /// The few phrases where shared static-defect concepts use dialect APIs.
@@ -84,17 +84,33 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 uppercase_first(name)
             ),
         ),
-        StaticDefectKind::ImplicitDraggableBoolean { literal_true } => (
-            if *literal_true {
+        StaticDefectKind::ImplicitDraggableBoolean { spelling } => (
+            match spelling {
                 // Probed on @solidjs/web@2.0.0-rc.0: a literal `true` renders
                 // the bare attribute on the client (setAttribute("draggable",
                 // "")) and on the server (`<div draggable>`); both select the
                 // enumerated attribute's invalid-value default, `auto`.
-                "the draggable attribute is given the boolean true, which the runtime renders as a bare presence-only attribute; draggable is an enumerated attribute, so that selects the invalid/default auto state rather than draggable=\"true\"".into()
-            } else {
-                "the draggable attribute uses JSX boolean shorthand, which emits an empty attribute value; HTML treats that as the invalid/default state rather than draggable=\"true\"".into()
+                DraggableSpelling::LiteralTrue => {
+                    "the draggable attribute is given the boolean true, which the runtime renders as a bare presence-only attribute; draggable is an enumerated attribute, so that selects the invalid/default auto state rather than draggable=\"true\"".into()
+                }
+                DraggableSpelling::Shorthand => {
+                    "the draggable attribute uses JSX boolean shorthand, which emits an empty attribute value; HTML treats that as the invalid/default state rather than draggable=\"true\"".into()
+                }
+                // The removal half of the same probe: `false` removes the
+                // attribute, and removal selects `auto` — which is draggable
+                // on this element.
+                DraggableSpelling::LiteralFalseOnDraggableDefault => {
+                    "the draggable attribute is given the boolean false, which the runtime serializes by removing the attribute; this element is draggable by default, so the removed attribute's auto state silently re-enables dragging rather than selecting draggable=\"false\"".into()
+                }
             },
-            "Write draggable=\"true\" for a static attribute, or draggable={condition ? \"true\" : \"false\"} for a dynamic one; draggable is enumerated, so only the strings \"true\" and \"false\" select a state.".into(),
+            match spelling {
+                DraggableSpelling::LiteralFalseOnDraggableDefault => {
+                    "Write draggable=\"false\"; draggable is enumerated, so only the string \"false\" disables dragging on images and links, whose auto state is draggable.".into()
+                }
+                DraggableSpelling::Shorthand | DraggableSpelling::LiteralTrue => {
+                    "Write draggable=\"true\" for a static attribute, or draggable={condition ? \"true\" : \"false\"} for a dynamic one; draggable is enumerated, so only the strings \"true\" and \"false\" select a state.".into()
+                }
+            },
         ),
         StaticDefectKind::InvalidJsxNesting {
             parent,
@@ -226,11 +242,18 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::PreferComponentSyntax { .. } => {
             "the resolved local function directly returns JSX and this call is inside JSX"
         }
-        StaticDefectKind::ImplicitDraggableBoolean { literal_true: false } => {
-            "the intrinsic draggable attribute has no explicit value"
-        }
-        StaticDefectKind::ImplicitDraggableBoolean { literal_true: true } => {
+        StaticDefectKind::ImplicitDraggableBoolean {
+            spelling: DraggableSpelling::Shorthand,
+        } => "the intrinsic draggable attribute has no explicit value",
+        StaticDefectKind::ImplicitDraggableBoolean {
+            spelling: DraggableSpelling::LiteralTrue,
+        } => {
             "the intrinsic draggable attribute is a literal boolean true, which the runtime serializes presence-only"
+        }
+        StaticDefectKind::ImplicitDraggableBoolean {
+            spelling: DraggableSpelling::LiteralFalseOnDraggableDefault,
+        } => {
+            "the intrinsic draggable attribute is a literal boolean false on a draggable-by-default element, and the runtime removes the attribute on false"
         }
         StaticDefectKind::InvalidJsxNesting { .. } => {
             "the intrinsic JSX ancestor chain is statically known and HTML parsing changes this nesting"

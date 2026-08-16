@@ -23,7 +23,9 @@ use crate::{
     ReactiveSourceKind, ReactiveWrite, RuleOptions, Solid1xRuleOptions, StaticDefect,
     StaticViolation, UnresolvedCleanupReturn, location_order,
 };
-use crate::{cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules};
+use crate::{
+    cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
+};
 use solid_dialect::Dialect;
 use solid_facts::{FileFacts, ProjectFacts};
 use typefacts::Location;

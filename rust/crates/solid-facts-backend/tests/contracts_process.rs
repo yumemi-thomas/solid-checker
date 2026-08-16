@@ -1096,6 +1096,20 @@ fn shorthand_property_values_resolve_through_block_scope() {
         );
     }
 
+    // A shorthand naming a *named relative import* joins to the exporting
+    // file's declaration — exact ESM resolution against the project's own
+    // file set, then the same accessor-map match as the same-file arm.
+    assert_eq!(
+        without_claim_evidence(&exports["importedAccessorShorthand"]["returns"]),
+        serde_json::json!({
+            "kind": "object",
+            "properties": {
+                "importedTracked": { "kind": "accessor", "label": "importedTracked" }
+            }
+        }),
+        "missing proven cross-file shorthand return"
+    );
+
     // Each of these names a binding that is provably not a local accessor, or
     // one this file's scope tree does not declare. A same-spelled accessor is
     // in the enclosing function for the first two; none of them may borrow it.
@@ -1103,7 +1117,11 @@ fn shorthand_property_values_resolve_through_block_scope() {
         "unprovenShorthand",
         "shadowedShorthand",
         "importedShorthand",
-        "importedAccessorShorthand",
+        // `./ambiguous` names two project files that both export the
+        // accessor. File-enumeration order is not evidence, so the relative
+        // resolver fails closed rather than proving a claim from whichever
+        // module it happened to see first.
+        "ambiguousShorthand",
         "globalShorthand",
     ] {
         assert_eq!(

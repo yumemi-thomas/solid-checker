@@ -24,6 +24,13 @@ throw, so this rule stays silent there; an unprovable call site (exported
 helper) is reported as **uncertifiable** instead. `createTrackedEffect` is a
 leaf owner unconditionally.
 
+The rule also follows the dynamic extent through exactly-resolved helpers: a
+project function that creates an owner-attaching primitive in its own
+synchronous extent throws just the same when called from a leaf scope, so
+that call site is flagged, naming the helper. Unresolved, ambiguous, or
+package callees contribute nothing here; package behavior stays owned by the
+contract obligation surface.
+
 ## Why is this bad?
 
 Leaf owners own no children. A primitive created inside one has no owner to attach

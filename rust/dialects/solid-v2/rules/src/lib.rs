@@ -260,11 +260,22 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
         ),
     };
+    if let Some(via) = &operation.via {
+        message.push_str(&format!(
+            " — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
+        ));
+    }
     let mut evidence = vec![EvidenceStep {
-        message: format!(
-            "the call is lexically contained by the {} callback",
-            operation.owner
-        ),
+        message: match &operation.via {
+            Some(via) => format!(
+                "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
+                operation.owner
+            ),
+            None => format!(
+                "the call is lexically contained by the {} callback",
+                operation.owner
+            ),
+        },
         location: Some(operation.location.clone()),
     }];
     if operation.uncertain {
@@ -495,12 +506,10 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
             "; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the props are signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime defect",
         );
     }
-    FindingWording::new(rule.metadata(), message, text.hint).with_evidence(vec![
-        EvidenceStep {
-            message: text.evidence.into(),
-            location: Some(defect.location.clone()),
-        },
-    ])
+    FindingWording::new(rule.metadata(), message, text.hint).with_evidence(vec![EvidenceStep {
+        message: text.evidence.into(),
+        location: Some(defect.location.clone()),
+    }])
 }
 
 const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
@@ -528,37 +537,82 @@ fn v2_store_mutation_hint(name: &str) -> String {
 /// `removed_exports_are_absent_from_the_bundled_contract` — anything the
 /// contract still exports is not removed and must not appear here.
 const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
-    ("batch", "updates batch by default on the microtask queue; call flush() where you need the old synchronous application"),
-    ("on", "split effects make it unnecessary: put the reads in createEffect's compute function and the side effect in apply"),
-    ("onMount", "use onSettled, which can also return a cleanup function"),
-    ("onError", "use the <Errored> boundary or the { effect, error } second argument of createEffect"),
-    ("catchError", "use the <Errored> boundary or the { effect, error } second argument of createEffect"),
-    ("createResource", "use an async computation (createMemo(async ...) or createStore(fn)) read under a <Loading> boundary"),
+    (
+        "batch",
+        "updates batch by default on the microtask queue; call flush() where you need the old synchronous application",
+    ),
+    (
+        "on",
+        "split effects make it unnecessary: put the reads in createEffect's compute function and the side effect in apply",
+    ),
+    (
+        "onMount",
+        "use onSettled, which can also return a cleanup function",
+    ),
+    (
+        "onError",
+        "use the <Errored> boundary or the { effect, error } second argument of createEffect",
+    ),
+    (
+        "catchError",
+        "use the <Errored> boundary or the { effect, error } second argument of createEffect",
+    ),
+    (
+        "createResource",
+        "use an async computation (createMemo(async ...) or createStore(fn)) read under a <Loading> boundary",
+    ),
     // `createRenderEffect` and `untrack` are deliberately NOT here: both
     // still exist in 2.0 (bundled contract exports them), so a missing
     // summary for them is a real contract gap, not a removed API.
-    ("createComputed", "use createEffect(compute, apply), a function-form createSignal/createStore, or createMemo"),
+    (
+        "createComputed",
+        "use createEffect(compute, apply), a function-form createSignal/createStore, or createMemo",
+    ),
     ("createMutable", "use createStore with draft-first setters"),
     ("modifyMutable", "use createStore with draft-first setters"),
     ("mergeProps", "renamed to merge"),
     ("splitProps", "renamed to omit"),
     ("Suspense", "renamed to Loading"),
-    ("SuspenseList", "renamed to Reveal, which coordinates sibling Loading boundaries via its order prop"),
+    (
+        "SuspenseList",
+        "renamed to Reveal, which coordinates sibling Loading boundaries via its order prop",
+    ),
     ("ErrorBoundary", "renamed to Errored"),
-    ("Index", "use <For keyed={false}>, whose children receive an item accessor and a stable numeric index"),
+    (
+        "Index",
+        "use <For keyed={false}>, whose children receive an item accessor and a stable numeric index",
+    ),
     ("indexArray", "use mapArray with keyed: false"),
-    ("createSelector", "use createProjection or a function-form createStore"),
+    (
+        "createSelector",
+        "use createProjection or a function-form createStore",
+    ),
     ("createDynamic", "use the dynamic(source) component factory"),
     ("unwrap", "renamed to snapshot"),
     ("equalFn", "renamed to isEqual"),
     ("getListener", "renamed to getObserver"),
-    ("startTransition", "transitions are built in; use isPending/Loading and the optimistic APIs"),
-    ("useTransition", "transitions are built in; use isPending/Loading and the optimistic APIs"),
-    ("produce", "draft-first mutation is now the default store setter behavior; drop the wrapper"),
+    (
+        "startTransition",
+        "transitions are built in; use isPending/Loading and the optimistic APIs",
+    ),
+    (
+        "useTransition",
+        "transitions are built in; use isPending/Loading and the optimistic APIs",
+    ),
+    (
+        "produce",
+        "draft-first mutation is now the default store setter behavior; drop the wrapper",
+    ),
     ("from", "use async iterators as computation results"),
-    ("observable", "push signal changes to external subscribers with createEffect"),
+    (
+        "observable",
+        "push signal changes to external subscribers with createEffect",
+    ),
     ("createDeferred", "removed; handle deferral outside Solid"),
-    ("resetErrorBoundaries", "no longer needed; error boundaries heal automatically"),
+    (
+        "resetErrorBoundaries",
+        "no longer needed; error boundaries heal automatically",
+    ),
     ("enableScheduling", "removed; scheduling is built in"),
     ("writeSignal", "removed; it was an internal API"),
 ];

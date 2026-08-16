@@ -629,6 +629,26 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether the runtime serializes a literal `false` JSX attribute value
+    /// by *removing* the attribute on intrinsic elements.
+    ///
+    /// The complement of
+    /// [`Dialect::literal_true_attribute_is_presence_only`], from the same
+    /// RFC 07 sentence — "Boolean literals add/remove the attribute" — and
+    /// the same `@solidjs/web@2.0.0-rc.0` probe (2026-08-15): the client
+    /// `setAttribute`/`assign` paths remove the attribute for `false` and
+    /// SSR omits it. For an *enumerated* attribute such as `draggable`,
+    /// removal selects the `auto` default rather than the `"false"` state —
+    /// on draggable-by-default elements (`img`, `a[href]`) that silently
+    /// re-enables dragging.
+    ///
+    /// 1.x's dom-expressions stringifies instead: `draggable={false}`
+    /// renders `draggable="false"` and behaves, so the default answer is
+    /// `false` and only the 2.0 dialect opts in.
+    fn false_attribute_value_removes_attribute(&self) -> bool {
+        false
+    }
+
     /// Which parameters of a control-flow component's children callback are
     /// reactive accessors rather than plain values.
     ///

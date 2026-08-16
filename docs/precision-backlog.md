@@ -8,30 +8,103 @@ change — as opposed to the bounded corrections that land as ordinary fixes.
 Direction legend: **FN** — misses real defects; **FP** — reports correct
 code; **Both** — either, depending on the code.
 
-## Deliberately upstream-faithful (verified, do not "fix")
+## Compiler-faithful heuristics (verified against the 1.x compiler, do not "fix")
 
-These were flagged as suspect heuristics and verified against
-eslint-plugin-solid 0.14.5 (`6d3bc311`), the parity baseline. The checker
-matches upstream on purpose; changing them is a parity divergence to declare,
-not a bug fix.
+These were flagged as suspect eslint-plugin-solid ports and have now been
+verified against the **pinned 1.x compiler**
+(`solid-1x-compiler@79b9b637`, byte-faithful to
+`babel-plugin-jsx-dom-expressions@0.40.7`) — the parity target is Solid's own
+behavior, not upstream's quirks. Each entry below matches the compiler, which
+is why it stays.
 
 - **`on*` event-name detection** (`upstream_compat/shared_reactivity.rs`,
-  `solid1x_attributes.rs`): `starts_with("on")` plus an alphabetic third
-  character is upstream's own `/^on[a-zA-Z]/`. `once`/`only` props qualify
-  under both implementations.
-- **`on:`/`oncapture:` folding in duplicate-prop detection**
-  (`solid1x_syntax.rs::normalize_prop_name`): upstream lowercases every
-  `on*` name and collapses both namespaces onto `on`, so
-  `on:click` + `oncapture:click` *is* a duplicate upstream.
+  `solid1x_attributes.rs`): the compiler's attribute lowering treats *every*
+  `on`-prefixed DOM prop as an event (`plan.key.starts_with("on")`,
+  `to_event_name` = the suffix lowercased), so `once`/`only` genuinely become
+  listeners for events `ce`/`ly` when function-valued, and statically-valued
+  ones are frozen into the template as plain attributes — exactly what
+  `v1/event-handlers` reports. Upstream's `/^on[a-zA-Z]/` is *narrower* than
+  the compiler (`on-foo` is an event to the compiler but invisible to the
+  rule) — a documented FN of a stylistic rule, not an FP.
 - **ASCII-only element-name case classification**
-  (`upstream_compat/mod.rs::is_lowercase_led`): upstream's
-  `isDOMElementName` is `/^[a-z]/`; a non-ASCII-led tag is a component under
-  both.
+  (`upstream_compat/mod.rs::is_lowercase_led`): Babel's `isCompatTag` is
+  `/^[a-z]/`, so a non-ASCII-led tag compiles as a component reference. The
+  checker matches the compiler.
 - **Static `innerHTML` without children is silent**
   (`no-innerhtml`, `allowStatic` default) and **single-line
-  whitespace-only children block `self-closing-comp`** — both match
-  upstream's exact conditions (`isHtml` + children check;
-  `childrenIsEmpty || childrenIsMultilineSpaces`).
+  whitespace-only children block `self-closing-comp`** — configurable
+  stylistic leniencies matching upstream's option defaults; neither can
+  produce a false positive.
+
+## Resolved: false negatives closed 2026-08-16
+
+- **Leaf-owner rules follow the dynamic extent through exact helpers**
+  (`cleanup.rs::helper_forbidden_operations`). `onCleanup`/`flush`/primitive
+  creation in a project function's *synchronous extent* (body minus nested
+  function bodies) throws when the function is called from a leaf scope; the
+  call site in the leaf callback is flagged, naming the helper
+  (`LeafOwnerOperation::via`). Resolution is the exact TypeScript identity,
+  transitive with a cycle guard. Remaining boundaries, deliberate: an
+  unresolved/ambiguous/package callee contributes nothing (package behavior
+  is the contract surface's), IIFEs inside a helper count as nested bodies
+  (silent), and helper calls written inside nested functions within the leaf
+  callback are not the leaf's synchronous extent (silent, correct).
+  The leaf callback must also be a **function literal written directly in the
+  owner's callback argument**: `createTrackedEffect(makeCallback())` evaluates
+  its argument under the enclosing owner *before* any leaf scope exists, and
+  `createTrackedEffect(wrap(() => …))` hands the arrow to an opaque wrapper
+  that decides whether and where it runs — neither is proof, so both are
+  silent (**FN**, deliberate). `fixtures/reactive-ir/leaf-owner/` pins the
+  `onCleanup`, `flush`, and primitive positives, the transitive hop, both
+  the block-bodied and the expression-bodied leaf callback, the nested-body
+  and event-handler negatives, and both argument-position negatives.
+  Cost, accepted: the helper traversal is redone per call site rather than
+  memoized by callee symbol. Depth is capped at 8 with a cycle guard and the
+  walk only starts for a non-primitive call inside a leaf callback, so the
+  fan-out is small; memoizing it is open work.
+- **`draggable={false}` on draggable-by-default elements** (2.0 catalog).
+  The rc.0 runtime removes the attribute on `false` (RFC 07's remove half),
+  and removal selects `auto`, which is draggable on `img` and `a[href]` —
+  flagged with the `draggable="false"` fix hint; 1.x stringifies
+  (`draggable="false"` works) and is deliberately unaffected. The `a` default
+  needs a **proven-present** `href` — a JSX string or the bare spelling. A
+  spread-carried one may not be there, and a dynamic `href={expr}` is removed
+  by the runtime when `expr` is nullish, after which the anchor is *not*
+  draggable by default; both stay clean rather than guessed (**FN**,
+  deliberate). Every other element and the string spelling stay clean too.
+  Pinned in the backend `jsx-correctness` fixture for both dialects,
+  including the dynamic-`href` anchor.
+
+## Resolved: upstream quirks that contradicted the compiler
+
+- **`on:`/`oncapture:` duplicate folding is gone** (2026-08-16,
+  `solid1x_syntax.rs::duplicate_slot`). Upstream folds `onClick`/`onclick`/
+  `on:click`/`oncapture:click` onto one name and reports runtime-legal pairs
+  as duplicates. The compiler lowers `on:evt` to a bubble
+  `addEventListener`, `oncapture:evt` to a capture `addEventListener`, and a
+  non-delegated plain `on*` to one listener per occurrence — all attach, so
+  none of those pairs is dead code. `v1/jsx-no-duplicate-props` now reports
+  event-shaped names only for proven single-winner slots: the delegated
+  `el.$$event = handler` property write (later-wins) and the statically
+  valued template attribute (first-wins, shared with `attr:`). No upstream
+  parity case pins the folding, so the corpus is unaffected;
+  `fixtures/reactive-ir/eslint-compat` pins both directions.
+  The slot model is **DOM lowering, so it applies to intrinsic elements
+  only**. A component's props are a plain object the compiler never lowers:
+  there the slot is the key as written, so `<MyComp onSave={a} onSave={b} />`
+  and `<MyComp on:click={a} on:click={b} />` are real later-wins duplicates
+  (the slot model would have silenced both), while `onClick`/`onclick` and
+  `attr:title`/`title` are distinct keys.
+  The static-value half is a *node-kind* test matching the compiler's inline
+  branch (`StringLiteral`/`NumericLiteral`): `{0x10}` and `{1_000}` freeze,
+  `{-1}`/`{+1}`/`{NaN}`/`{Infinity}` do not.
+
+  **Known inconsistency, not fixed here:** `v1/event-handlers` (SC8001,
+  `solid1x_attributes.rs`) still answers the same "is this value static?"
+  question with `str::parse::<f64>`, so it treats `{-1}` and `{NaN}` as
+  static where `jsx-no-duplicate-props` now does not. That check is an
+  upstream-faithful port and no corpus case separates the two; aligning it on
+  the compiler's node-kind test is open work.
 
 ## Design-change candidates (open)
 
@@ -68,13 +141,42 @@ on `ObjectPropertyFact::shorthand_binding`; `interproc.rs`
 of matching the spelling within the enclosing function. That is scope-exact, so
 the previous block-scoping hole is closed in both directions.
 
-What remains is a **FN**: the binder resolves an imported spelling to the
-*import specifier in this file*, and both sites require the declaration to be
-in the file being summarized, so `{ importedTracked }` naming an accessor
-declared in a sibling module yields no structured property. Reaching it needs
-the same cross-file declaration join the rest of contract generation already
-performs, not a new fact. `fixtures/package-contracts/shorthand-block-scope/`
-pins the resolved cases and this one.
+The cross-file gap is now closed for **named relative imports**: a shorthand
+whose binder declaration is a named import specifier follows the relative
+specifier to the exporting file — exact ESM resolution against the analyzed
+file set, never the filesystem — and matches that file's exported declaration
+in the accessor map exactly as the same-file arm does
+(`interproc.rs::imported_accessor`). What remains fail-closed, by design and
+in each case yielding no structured property:
+
+- **an ambiguous relative specifier.** `./values` can name `values.ts`,
+  `values.tsx`, or `values/index.ts`, and which one a bundler picks depends on
+  resolution settings this pass does not model. When more than one project
+  file matches, `relative_module_file` returns `None` rather than taking the
+  first one enumerated — file order is not evidence, and a proven accessor
+  claim sourced from the wrong module would be worse than no claim. **Pinned**
+  by the fixture's `ambiguousShorthand` (`ambiguous.ts` +
+  `ambiguous/index.ts`, both exporting the accessor).
+- **bare and path-mapped specifiers**, which the resolver rejects outright
+  (it only walks `./` and `../` against the analyzed file set, never the
+  filesystem or `tsconfig` `paths`). *Not* pinned by a fixture case.
+- **namespace and default imports, and re-export chains**
+  (`export { x } from "./elsewhere"`): the join accepts only a named import
+  specifier bound to a same-file export declaration. *Not* pinned by fixture
+  cases; the guards are visible in `imported_accessor` and its
+  `export.module.is_none()` filter.
+
+What the fixture pins today is the same-file resolution set
+(`scopedShorthand`, `unprovenShorthand`, `shadowedShorthand`,
+`writtenShorthand`), the cross-file named-import join
+(`importedAccessorShorthand`), the ambiguity bail (`ambiguousShorthand`), a
+non-accessor import (`importedShorthand`), and a global (`globalShorthand`).
+
+Two resolvers now answer "which file does this relative specifier name":
+`interproc.rs::relative_module_file` and the backend's
+`resolve_relative_export`. They are independently written and can drift.
+Unifying them behind one owner is open work, deliberately not attempted in the
+change that added the ambiguity bail.
 
 ## Partially resolved design changes
 

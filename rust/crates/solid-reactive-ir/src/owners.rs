@@ -498,9 +498,8 @@ fn leaf_gate_decision(
     // The same escalation the owner requirements use: an exported
     // non-component helper has callers the analysis cannot see, so assuming
     // either owned or out-of-band would be a guess.
-    let exported_unproven = nodes[index].exported
-        && context & OWNER_CONTEXT_UNOWNED != 0
-        && !nodes[index].component;
+    let exported_unproven =
+        nodes[index].exported && context & OWNER_CONTEXT_UNOWNED != 0 && !nodes[index].component;
     if conditional || exported_unproven {
         LeafGateDecision::Uncertain
     } else if context & OWNER_CONTEXT_OWNED != 0 {
@@ -680,8 +679,11 @@ pub(crate) fn find_missing_owners(
                 call.span,
             );
             if !root_owned
-                && primitive
-                    .is_some_and(|primitive| lookup.dialect.leaf_owner_requires_owned_call_site(primitive))
+                && primitive.is_some_and(|primitive| {
+                    lookup
+                        .dialect
+                        .leaf_owner_requires_owned_call_site(primitive)
+                })
             {
                 settled_gates.insert(
                     (

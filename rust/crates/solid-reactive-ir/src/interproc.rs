@@ -2092,12 +2092,136 @@ impl StructuredReturnDiscovery<'_, '_> {
     /// cannot be mistaken for this one.
     fn named_accessor(&self, file: &solid_facts::FileFacts, span: Span) -> Option<&SymbolId> {
         let declaration = self.shorthand_value_declaration(file, span)?;
+        self.accessors
+            .iter()
+            .find_map(|(symbol, (_, location))| {
+                (location.path.as_ref() == file.path.as_str()
+                    && u32::try_from(location.start_byte).ok()? == declaration.start
+                    && u32::try_from(location.end_byte).ok()? == declaration.end)
+                    .then_some(symbol)
+            })
+            .or_else(|| self.imported_accessor(file, declaration))
+    }
+
+    /// The accessor a named import specifier re-exports, when `declaration`
+    /// is that specifier's local name span.
+    ///
+    /// The binder resolves an imported shorthand's value to the import
+    /// specifier in this file, where no accessor is declared, and the
+    /// TypeScript entity at that span is the alias symbol rather than the
+    /// original declaration's. For a plain relative specifier the exporting
+    /// file is part of the analyzed project, so the join is exact ESM
+    /// resolution against the project's own file set: the sibling file's
+    /// exported binding of that exact name is the declaration, matched in
+    /// the accessor map exactly as the same-file arm matches. Everything
+    /// else — bare or path-mapped specifiers, namespace and default imports,
+    /// re-export chains, files outside the project — proves nothing and
+    /// stays fail-closed.
+    fn imported_accessor(
+        &self,
+        file: &solid_facts::FileFacts,
+        declaration: Span,
+    ) -> Option<&SymbolId> {
+        let (module, imported) = file.ast.imports.iter().find_map(|import| {
+            import.bindings.iter().find_map(|binding| {
+                (binding.local.span == declaration
+                    && binding.kind == solid_facts::ast::ImportKind::Named
+                    && !binding.type_only)
+                    .then(|| {
+                        (
+                            import.module.as_str(),
+                            binding.imported.as_deref().map_or_else(
+                                || file.source_text(binding.local.span).unwrap_or_default(),
+                                |imported| imported,
+                            ),
+                        )
+                    })
+            })
+        })?;
+        let sibling = self.relative_module_file(file, module)?;
+        let target = sibling
+            .ast
+            .exports
+            .iter()
+            // A re-export (`export { x } from "./elsewhere"`) declares no
+            // binding here; chasing the chain is future work, not a guess.
+            .filter(|export| export.module.is_none() && !export.type_only)
+            .flat_map(|export| export.specifiers.iter().chain(&export.declarations))
+            .find(|specifier| specifier.exported.as_str() == imported)?
+            .local
+            .span;
         self.accessors.iter().find_map(|(symbol, (_, location))| {
-            (location.path.as_ref() == file.path.as_str()
-                && u32::try_from(location.start_byte).ok()? == declaration.start
-                && u32::try_from(location.end_byte).ok()? == declaration.end)
+            (location.path.as_ref() == sibling.path.as_str()
+                && u32::try_from(location.start_byte).ok()? == target.start
+                && u32::try_from(location.end_byte).ok()? == target.end)
                 .then_some(symbol)
         })
+    }
+
+    /// The project file a plain relative import specifier resolves to, by
+    /// textual normalization against the analyzed file set — never the
+    /// filesystem, so a file outside the project cannot resolve. `None` for
+    /// bare specifiers and any path that walks above the root.
+    ///
+    /// Extensionless specifiers are ambiguous on their own: `./values` can
+    /// name `values.ts`, `values.tsx`, or `values/index.ts`, and which one a
+    /// bundler picks depends on resolution settings this pass does not model.
+    /// The suffixes are tried in the usual priority order, but when more than
+    /// one distinct project file matches the specifier the answer is **not**
+    /// the first one enumerated — file order is not evidence — and the
+    /// resolution fails closed with `None`. A contract that would have been
+    /// generated from the wrong module is a wrong proven claim; no claim is
+    /// the correct one. Recorded in `docs/precision-backlog.md`.
+    fn relative_module_file(
+        &self,
+        from: &solid_facts::FileFacts,
+        module: &str,
+    ) -> Option<&solid_facts::FileFacts> {
+        if !module.starts_with("./") && !module.starts_with("../") {
+            return None;
+        }
+        let path = from.path.as_str();
+        let base = path.rsplit_once('/').map_or("", |(directory, _)| directory);
+        let mut segments = base.split('/').collect::<Vec<_>>();
+        for segment in module.split('/') {
+            match segment {
+                "." | "" => {}
+                ".." => {
+                    if segments.pop().is_none_or(|popped| popped.is_empty()) {
+                        return None;
+                    }
+                }
+                other => segments.push(other),
+            }
+        }
+        let joined = segments.join("/");
+        const SUFFIXES: &[&str] = &[
+            "",
+            ".ts",
+            ".tsx",
+            ".mts",
+            ".cts",
+            ".js",
+            ".jsx",
+            "/index.ts",
+            "/index.tsx",
+        ];
+        let mut resolved: Option<&solid_facts::FileFacts> = None;
+        for suffix in SUFFIXES {
+            let target = format!("{joined}{suffix}");
+            for candidate in &self.facts.files {
+                if candidate.path.as_str() != target {
+                    continue;
+                }
+                if resolved
+                    .is_some_and(|existing| existing.path.as_str() != candidate.path.as_str())
+                {
+                    return None;
+                }
+                resolved = Some(candidate);
+            }
+        }
+        resolved
     }
 
     fn leaf(
@@ -2231,9 +2355,17 @@ impl StructuredReturnDiscovery<'_, '_> {
         {
             return Some(returned.clone());
         }
+        // The entity at a shorthand span is the property's (or an import
+        // alias's) symbol, which no source map knows — only when TypeScript's
+        // answer misses every map may the binder's shorthand resolution
+        // speak, so the entity lookup is filtered to known symbols rather
+        // than short-circuiting the join.
         if let Some(symbol) = self
             .entities
             .at(file.path.as_str(), span)
+            .filter(|symbol| {
+                self.accessors.contains_key(*symbol) || self.by_symbol.contains_key(*symbol)
+            })
             .or_else(|| self.named_accessor(file, span))
         {
             if self.accessors.contains_key(symbol) {

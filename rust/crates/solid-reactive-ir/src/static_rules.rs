@@ -11,7 +11,8 @@ use crate::owners::{
 use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::symbols::async_symbol_root;
 use crate::{
-    ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive, location, primitive_name,
+    DraggableSpelling, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive,
+    location, primitive_name,
 };
 use solid_facts::core::Span;
 use typefacts::Location;
@@ -103,15 +104,19 @@ fn function_directly_returns_jsx(
 /// SC8019: `draggable` is enumerated, not boolean. JSX shorthand serializes
 /// an empty value, whose HTML state is `auto`, not `true`.
 ///
-/// Where the dialect's runtime also serializes a literal `true` expression
-/// value as a presence-only attribute (Solid 2.0 — see
-/// [`solid_dialect::Dialect::literal_true_attribute_is_presence_only`] for
-/// the `@solidjs/web@2.0.0-rc.0` probe), `draggable={true}` is the same
-/// defect and is flagged too. `draggable={false}` is deliberately not
-/// flagged: it removes the attribute, which selects `auto` — the element's
-/// default — and matches the author's intent everywhere except the few
-/// draggable-by-default elements; that boundary is documented on the rule
-/// page instead of guessed here.
+/// Where the dialect's runtime also treats boolean literals as attribute
+/// presence (Solid 2.0 — see
+/// [`solid_dialect::Dialect::literal_true_attribute_is_presence_only`] and
+/// [`solid_dialect::Dialect::false_attribute_value_removes_attribute`] for
+/// the `@solidjs/web@2.0.0-rc.0` probes), two literal spellings join the
+/// shorthand: `draggable={true}` renders presence-only (the same
+/// empty-attribute defect), and `draggable={false}` removes the attribute —
+/// which selects `auto` and therefore silently *re-enables* dragging on the
+/// draggable-by-default elements (`img`, and `a` with an `href`). On every
+/// other element removal matches the author's intent and stays clean, and a
+/// proven-`href`-less `a` is not draggable by default, so only the proven
+/// cases report. 1.x stringifies both literals (`draggable="true"` /
+/// `draggable="false"`) and behaves, so neither literal reports there.
 fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for element in &file.ast.jsx_elements {
@@ -125,27 +130,45 @@ fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
                 {
                     continue;
                 }
-                let literal_true = match attribute.value_kind {
-                    solid_facts::ast::JsxAttributeValueKind::Boolean => false,
-                    solid_facts::ast::JsxAttributeValueKind::Expression
-                        if ctx.dialect.literal_true_attribute_is_presence_only() =>
-                    {
-                        // `draggable={true}`: the boolean-literal fact mirrors
-                        // the attribute name span, carrying the literal value.
-                        let is_true_literal = element.boolean_properties.iter().any(|property| {
-                            property.name == attribute.local_name && property.value
-                        });
-                        if !is_true_literal {
-                            continue;
+                let spelling = match attribute.value_kind {
+                    solid_facts::ast::JsxAttributeValueKind::Boolean => {
+                        DraggableSpelling::Shorthand
+                    }
+                    solid_facts::ast::JsxAttributeValueKind::Expression => {
+                        // The boolean-literal fact mirrors the attribute name
+                        // span, carrying the literal value; a non-literal
+                        // expression has no entry and proves nothing.
+                        let literal = element
+                            .boolean_properties
+                            .iter()
+                            .find(|property| property.name == attribute.local_name);
+                        match literal {
+                            Some(property)
+                                if property.value
+                                    && ctx.dialect.literal_true_attribute_is_presence_only() =>
+                            {
+                                DraggableSpelling::LiteralTrue
+                            }
+                            Some(property)
+                                if !property.value
+                                    && ctx.dialect.false_attribute_value_removes_attribute()
+                                    && element_defaults_to_draggable(
+                                        file,
+                                        element,
+                                        element_name,
+                                    ) =>
+                            {
+                                DraggableSpelling::LiteralFalseOnDraggableDefault
+                            }
+                            _ => continue,
                         }
-                        true
                     }
                     _ => continue,
                 };
                 draft.push_defect(
                     "no-implicit-draggable",
                     StaticDefect {
-                        kind: StaticDefectKind::ImplicitDraggableBoolean { literal_true },
+                        kind: StaticDefectKind::ImplicitDraggableBoolean { spelling },
                         location: location(file.path.shared(), attribute.span),
                         analysis_context: element_name.to_owned(),
                         fixes: vec![],
@@ -155,6 +178,36 @@ fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
             }
         }
     }
+}
+
+/// The elements whose `draggable` *auto* state is draggable — WHATWG HTML
+/// "the draggable attribute": `img` elements, and `a` elements with an
+/// `href` attribute.
+///
+/// The `href` must be *proven present* for the default to be proven. A
+/// spread may or may not carry one, and a dynamic value (`href={props.link}`)
+/// is worse than unknown: Solid removes the attribute when the expression is
+/// nullish, and an `a` with no `href` attribute is not draggable by default,
+/// so `draggable={false}` on it is correct code. Only the value forms that
+/// always emit the attribute — a JSX string and the bare (boolean) spelling —
+/// prove the default; everything else leaves the element unflagged rather
+/// than guessed.
+fn element_defaults_to_draggable(
+    file: &solid_facts::FileFacts,
+    element: &solid_facts::ast::JsxElementFact,
+    element_name: &str,
+) -> bool {
+    element_name == "img"
+        || (element_name == "a"
+            && element.attributes.iter().any(|attribute| {
+                attribute.namespace.is_none()
+                    && file.source_text(attribute.local_name) == Some("href")
+                    && matches!(
+                        attribute.value_kind,
+                        solid_facts::ast::JsxAttributeValueKind::String
+                            | solid_facts::ast::JsxAttributeValueKind::Boolean
+                    )
+            }))
 }
 
 /// SC8020: nesting for which the HTML parser changes the authored tree by
@@ -694,7 +747,10 @@ fn destructured_props_use(
     }
     ctx.props_reactivity.names_use(
         declaration,
-        binding.object_slots.iter().map(|slot| slot.property.as_str()),
+        binding
+            .object_slots
+            .iter()
+            .map(|slot| slot.property.as_str()),
     )
 }
 

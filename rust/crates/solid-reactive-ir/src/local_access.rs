@@ -256,7 +256,11 @@ impl LocalAccessContext<'_, '_> {
     pub(crate) fn prop_state(
         &self,
         symbol: &str,
-    ) -> Option<(SymbolId, Location, Option<crate::source_discovery::PropsReactivity>)> {
+    ) -> Option<(
+        SymbolId,
+        Location,
+        Option<crate::source_discovery::PropsReactivity>,
+    )> {
         self.prop_sources.get(symbol).map(|(name, declaration)| {
             (
                 name.clone(),

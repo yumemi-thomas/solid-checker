@@ -3,8 +3,7 @@
 
 use crate::indexes::CachedAstFileIndex;
 use crate::owners::{
-    CachedOwnerFile, SettledGateDecisions, binding_returns_reactive_source,
-    returned_arrow_function,
+    CachedOwnerFile, SettledGateDecisions, binding_returns_reactive_source, returned_arrow_function,
 };
 use crate::{
     ActionInvocation, AsyncRead, CacheRetention, ContractCallback, ContractExport,
@@ -173,8 +172,7 @@ pub(crate) struct SourceDiscoveryContribution {
     pub(crate) summary_source_symbols: Vec<SymbolId>,
     pub(crate) source_owned_write: Vec<(SymbolId, bool)>,
     pub(crate) async_sources: Vec<SymbolId>,
-    pub(crate) source_async_options:
-        Vec<(SymbolId, crate::source_discovery::AsyncSourceOptions)>,
+    pub(crate) source_async_options: Vec<(SymbolId, crate::source_discovery::AsyncSourceOptions)>,
     /// Store bindings whose initializer is provably the value form
     /// (`createStore(value)` / `createOptimisticStore(value)`): no compute
     /// node exists, so the store is not a valid `refresh()` target.
@@ -504,8 +502,11 @@ pub(crate) struct LocalAccessSymbolState {
     pub(crate) async_options: crate::source_discovery::AsyncSourceOptions,
     pub(crate) contract_reads: Option<Vec<(String, String, Location, String)>>,
     pub(crate) source_kind: Option<ReactiveSourceKind>,
-    pub(crate) prop_source:
-        Option<(SymbolId, Location, Option<crate::source_discovery::PropsReactivity>)>,
+    pub(crate) prop_source: Option<(
+        SymbolId,
+        Location,
+        Option<crate::source_discovery::PropsReactivity>,
+    )>,
     pub(crate) source_declaration: Option<Declaration>,
     pub(crate) symbol_name: Option<SymbolId>,
 }
@@ -530,8 +531,14 @@ pub(crate) struct CachedLocalAccesses {
     /// Classification is cross-file — a call site in one file decides
     /// findings in another — so a change here re-enters the symbol into the
     /// changed-dependency set even when both files' sources are untouched.
-    pub(crate) prop_sources:
-        HashMap<SymbolId, (SymbolId, Location, Option<crate::source_discovery::PropsReactivity>)>,
+    pub(crate) prop_sources: HashMap<
+        SymbolId,
+        (
+            SymbolId,
+            Location,
+            Option<crate::source_discovery::PropsReactivity>,
+        ),
+    >,
 }
 
 /// The proven-source symbol at each exact TypeScript reference location:

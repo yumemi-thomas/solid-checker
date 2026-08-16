@@ -17,6 +17,13 @@ is a silent no-op rather than a throw, so this rule stays silent there; an
 unprovable call site (exported helper) is reported as **uncertifiable**.
 `createTrackedEffect` is a leaf owner unconditionally.
 
+The rule also follows the dynamic extent through exactly-resolved helpers: a
+project function that calls `flush()` in its own synchronous extent throws
+just the same when called from a leaf scope, so that call site is flagged,
+naming the helper. Unresolved, ambiguous, or package callees contribute
+nothing here; package behavior stays owned by the contract obligation
+surface.
+
 ## Why is this bad?
 
 Solid 2.0 batches all writes on microtasks; `flush()` drains that queue
