@@ -207,6 +207,13 @@ manifests, resolved versions, and integrities against that lock; the
 `^2.0.0-rc.0` declaration for `@solidjs/signals` therefore cannot drift without
 failing the gate.
 
+Changes under `rust/crates/solid-reactive-ir/` run the bounded package-contract
+torture corpus in `.github/workflows/contract-corpus.yml`. The corpus covers
+runtime-mutated namespaces, conditional semantic branches, getter-backed
+exports, deep re-export barrels, and declaration/runtime disagreement. Its
+checked-in expected outputs are reviewed like snapshots: an unexplained drift
+fails the engine-change gate, and the runner never updates those pins.
+
 Evidence is enforced, not decorative. Contracts emitted by this CLI use
 `inferred`; consumers report them as `unverified` and cannot certify through
 them. Certification accepts `verified`, `reviewed`, `trusted`, and `attested`

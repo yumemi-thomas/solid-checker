@@ -1,0 +1,39 @@
+name: Package contract corpus
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rust/crates/solid-reactive-ir/**"
+      - "packages/cli/scripts/generate-package-contract.mjs"
+      - "scripts/contract-corpus.mjs"
+      - "fixtures/package-contracts/torture-*/**"
+      - "Makefile"
+  pull_request:
+    paths:
+      - "rust/crates/solid-reactive-ir/**"
+      - "packages/cli/scripts/generate-package-contract.mjs"
+      - "scripts/contract-corpus.mjs"
+      - "fixtures/package-contracts/torture-*/**"
+      - "Makefile"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  contract-corpus:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - uses: dtolnay/rust-toolchain@1.97
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Regenerate the bounded package-contract corpus
+        run: make contract-corpus
