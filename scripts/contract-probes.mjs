@@ -6,6 +6,7 @@ import * as solid from "solid-js";
 import * as web from "@solidjs/web";
 
 const request = JSON.parse(process.argv[2]);
+const mode = request.mode ?? "unspecified";
 
 function entrypointLeaves(target, conditions = []) {
   if (typeof target === "string") {
@@ -52,7 +53,7 @@ for (const item of request.packages) {
 }
 
 const probes = [];
-function probe(pkg, entrypoint, name, claim, body) {
+function probe(pkg, entrypoint, name, claim, body, calls = 1) {
   let ok = false;
   let error;
   try {
@@ -64,7 +65,16 @@ function probe(pkg, entrypoint, name, claim, body) {
   } catch (caught) {
     error = String(caught);
   }
-  probes.push({ pkg, entrypoint, name, claim, ok, ...(error ? { error } : {}) });
+  probes.push({
+    pkg,
+    entrypoint,
+    name,
+    claim,
+    mode,
+    calls,
+    ok,
+    ...(error ? { error } : {}),
+  });
 }
 
 probe("solid-js", ".", "createMemo", "returns=accessor", () => {
@@ -85,7 +95,7 @@ probe("solid-js", ".", "createMemo", "callbacks[0]=tracked", () => {
   solid.flush();
   memo();
   return runs > before;
-});
+}, 2);
 
 function probeSplitEffect(pkg, name, create) {
   probe(pkg, ".", name, "callbacks[0]=tracked", () => {
@@ -103,7 +113,7 @@ function probeSplitEffect(pkg, name, create) {
     setSource(1);
     solid.flush();
     return runs > before;
-  });
+  }, 2);
   probe(pkg, ".", name, "callbacks[1]=deferred", () => {
     const [source] = solid.createSignal(0);
     const [other, setOther] = solid.createSignal(0);
@@ -120,7 +130,7 @@ function probeSplitEffect(pkg, name, create) {
     setOther(1);
     solid.flush();
     return applyRuns === before;
-  });
+  }, 2);
 }
 
 probeSplitEffect("solid-js", "createEffect", solid.createEffect);
@@ -139,7 +149,7 @@ probe("solid-js", ".", "createTrackedEffect", "callbacks[0]=tracked", () => {
   setSource(1);
   solid.flush();
   return runs > before;
-});
+}, 2);
 
 probe("solid-js", ".", "children", "returns=accessor", () => {
   return typeof solid.children(() => "child") === "function";
@@ -169,7 +179,7 @@ probe("solid-js", ".", "createProjection", "callbacks[0]=tracked", () => {
   setSource(2);
   solid.flush();
   return projection.value === 2 && runs > before;
-});
+}, 2);
 
 probe("solid-js", ".", "onSettled", "callbacks[0]=deferred", () => {
   const [source, setSource] = solid.createSignal(0);
@@ -183,7 +193,7 @@ probe("solid-js", ".", "onSettled", "callbacks[0]=deferred", () => {
   setSource(1);
   solid.flush();
   return runs === 1;
-});
+}, 2);
 
 probe("solid-js", ".", "createRoot", "callbacks[0]=inline", () => {
   let ran = false;
@@ -219,6 +229,6 @@ probe("@solidjs/web", ".", "memo", "callbacks[0]=tracked", () => {
   solid.flush();
   memo();
   return runs > before;
-});
+}, 2);
 
 process.stdout.write(JSON.stringify({ packages, probes }));

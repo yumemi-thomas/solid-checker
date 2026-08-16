@@ -272,9 +272,14 @@ make contract-conformance
 It enumerates every non-pattern runtime entrypoint and conditional ESM build,
 checks missing/stale exports and function/value kinds, verifies npm version and
 integrity, and requires a passing behavioral probe for every callback and
-reactive-return claim. The normal `scripts/verify.sh` workflow runs its
-conformance half (`scripts/check-bundled-contracts.mjs`); CI's contracts job
-runs the full suite on every push and pull request.
+reactive-return claim. Behavioral probes run the applicable client, server,
+development, and production conditions independently, exercise both the first
+and subsequent callback calls, and report their mode and call count. A claim
+must pass in every mode selected by its entrypoint conditions. `--write` may
+record those passing modes as `probed` row evidence; it never discovers or
+adds an uncontracted behavior. The normal `scripts/verify.sh` workflow runs
+its conformance half (`scripts/check-bundled-contracts.mjs`); CI's contracts
+job runs the full suite on every push and pull request.
 
 A bundled contract for Solid 1.x is embedded alongside them:
 `pkg/contracts/bundled/solid-v1/solid-js.json` pins `solid-js` 1.9.14 and covers the
