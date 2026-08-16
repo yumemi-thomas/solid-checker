@@ -4,6 +4,9 @@ on:
   push:
     tags:
       - "v[0-9]+.[0-9]+.[0-9]+"
+      # Prerelease tags (v0.3.0-beta.0) publish under the npm dist-tag named
+      # by the prerelease identifier instead of latest.
+      - "v[0-9]+.[0-9]+.[0-9]+-*"
 
 permissions:
   contents: read
@@ -150,10 +153,14 @@ jobs:
           for package in dist/packages/binding-*; do
             name=$(node -p "require('./$package/package.json').name")
             version=$(node -p "require('./$package/package.json').version")
+            case "$version" in
+              *-*) dist_tag=${version#*-}; dist_tag=${dist_tag%%.*};;
+              *) dist_tag=latest;;
+            esac
             if npm view "$name@$version" version >/dev/null 2>&1; then
               echo "$name@$version is already published"
             else
-              npm publish "$package"
+              npm publish "$package" --tag "$dist_tag"
             fi
           done
       - name: Publish WASM package
@@ -162,10 +169,14 @@ jobs:
         run: |
           name=$(node -p "require('./dist/wasm/package.json').name")
           version=$(node -p "require('./dist/wasm/package.json').version")
+          case "$version" in
+            *-*) dist_tag=${version#*-}; dist_tag=${dist_tag%%.*};;
+            *) dist_tag=latest;;
+          esac
           if npm view "$name@$version" version >/dev/null 2>&1; then
             echo "$name@$version is already published"
           else
-            npm publish ./dist/wasm
+            npm publish ./dist/wasm --tag "$dist_tag"
           fi
       - name: Publish portable package
         env:
@@ -174,8 +185,12 @@ jobs:
           package=./dist/packages/solid-checker
           name=$(node -p "require('$package/package.json').name")
           version=$(node -p "require('$package/package.json').version")
+          case "$version" in
+            *-*) dist_tag=${version#*-}; dist_tag=${dist_tag%%.*};;
+            *) dist_tag=latest;;
+          esac
           if npm view "$name@$version" version >/dev/null 2>&1; then
             echo "$name@$version is already published"
           else
-            npm publish "$package"
+            npm publish "$package" --tag "$dist_tag"
           fi
