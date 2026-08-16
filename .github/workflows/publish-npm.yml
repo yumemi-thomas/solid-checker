@@ -58,13 +58,17 @@ jobs:
           mkdir -p bin
           TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID" \
             scripts/build-typefacts.sh "bin/solid-typefacts${extension}"
-          cargo build --release --manifest-path rust/Cargo.toml --workspace
+          TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID" \
+            cargo build --release --manifest-path rust/Cargo.toml --workspace
           node scripts/package-rust.mjs \
             --output "dist/${{ matrix.platform }}-${{ matrix.arch }}" \
             --platform "${{ matrix.platform }}" \
             --arch "${{ matrix.arch }}" \
             --version "${GITHUB_REF_NAME#v}" \
             --typefacts "bin/solid-typefacts${extension}"
+          native="dist/${{ matrix.platform }}-${{ matrix.arch }}/native/${{ matrix.platform }}-${{ matrix.arch }}"
+          env -u SOLID_TYPEFACTS_BIN "$native/solid-checker${extension}" \
+            --certify --project fixtures/reactive-ir/tracer-corrected/tsconfig.json
       - uses: actions/upload-artifact@v4
         with:
           name: npm-${{ matrix.platform }}-${{ matrix.arch }}
