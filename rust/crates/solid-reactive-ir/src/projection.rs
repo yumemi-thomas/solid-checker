@@ -124,6 +124,19 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 )
             }),
         ),
+        StaticDefectKind::PackageContractEnvironmentDependent {
+            module,
+            export,
+            reexported,
+        } => (
+            format!(
+                "the reactivity contract for {module} has different certified behavior for conditional runtime targets at {} export {export}; solid-checker has no selected environment and cannot apply one variant without guessing",
+                if *reexported { "re-exported" } else { "imported" }
+            ),
+            format!(
+                "Select and pin the package's runtime conditions before certifying {export}, or publish one environment-independent contract summary. See docs/package-contracts.md for the format."
+            ),
+        ),
         StaticDefectKind::UnknownCallbackExecution {
             package,
             entrypoint,
