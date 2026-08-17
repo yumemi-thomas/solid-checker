@@ -18,12 +18,11 @@ export function Constrained<T extends [(n: number) => void, number]>(pair: T) {
   return <button onClick={pair} />;
 }
 
-// A union that genuinely mixes the two shapes classifies as `mixed`: proven, but
-// proving neither side. `notArray` is the only verdict that licenses the
-// negative, so this falls through to the syntactic path, where a bare identifier
-// is not an array literal.
-type Handlers = [(n: number) => void, number];
-declare const maybe: Handlers | undefined;
+// A union used to sit here too. It no longer does: `tupleShape` reports the meet
+// of a union's constituents, so `Handlers | undefined` is now proven a bound pair
+// and is a positive in `handler-cases.tsx`. The union that still proves nothing —
+// a pair or a plain function — is in `clean-cases.tsx`, because it is silent for
+// a different reason: nothing rules the pair *out*, so nothing proves it in.
 
 // `any` erases the question entirely.
 declare const untyped: any;
@@ -36,7 +35,6 @@ import { external } from "./missing-module";
 export function Unproven() {
   return (
     <div>
-      <button onClick={maybe} />
       <button onClick={untyped} />
       <button onClick={external} />
     </div>

@@ -872,13 +872,35 @@ three cases upstream reports are now declared `typescript-owned`
 real typings by `scripts/parity-tsc-ownership.mjs`. Parity 372/465 → 370/465,
 104 deviations, all declared.
 
+### Closed 2026-08-18: unions of tuples
+
+A union had no `tupleShape` at all — the fact answered only for a type that was
+itself a tuple — so `Handlers | OtherHandlers` and the very common optional
+`Handlers | undefined` both failed closed. `arrayShape` reported `mixed` for the
+optional form, which proves neither side, so the rule went silent on values that
+are a bound pair whenever they are anything.
+
+The fact now answers for a union with its constituents' **meet**: the slots they
+all have, a rest tail only if all carry one, callable only if all are, and the
+largest argument requirement among them. What it reports therefore holds
+whichever constituent the value turns out to be. A single non-tuple constituent
+voids the answer, and nullish constituents are skipped because they carry no
+structure — presence stays `runtimeValueDomain`'s question. The payload and Wire
+table schema are unchanged; this widened when the fact is emitted, not its shape.
+
+`tsc` agrees on every boundary, which is how it was checked: `H1 | H2` and
+`H1 | undefined` are silent (ours, now reported), while `H1 | number[]`,
+`H1 | [number, number]`, and `H1 | [(a,b,c) => void, number]` are each TS2322
+(the type checker's, still silent here).
+
 ### Remaining approximation
 
-A **union** of bound-handler tuples (`Handlers | OtherHandlers`) has no
-`tupleShape`: the fact is emitted only for a type that is itself a tuple, since
-distributing a slot count over constituents would invent a shape none of them
-has. `arrayShape` reports `array` for it, so the rule stays silent. That is a
-fail-closed false negative, not a duplicate — `tsc` accepts such a union.
+A union that mixes a bound pair with a **plain function** (`Handlers |
+((e: MouseEvent) => void)`) has no `tupleShape`: one constituent is not a tuple,
+so no shape is common to every value. `tsc` accepts it, so this is the rule's to
+speak about in principle — but the value may genuinely be a function, and nothing
+proves it is a pair. It stays silent as a deliberate false negative rather than a
+guess. Pinned by `clean-cases.tsx`'s `pairOrFunction`.
 
 ### Not attempted: `rich_transport_member`'s hand-rolled type-text walk
 

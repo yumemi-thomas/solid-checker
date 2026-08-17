@@ -11,14 +11,17 @@ Both questions were once answered by matching `TypeDescriptor.text` against `[`,
 what text could not reach — and, for SC8007, the boundary with the type checker,
 which is what makes it two files that must each stay exactly as they are:
 
-- **`handler-cases.tsx`** — the positives, all of them bound-handler tuples. An
+- **`handler-cases.tsx`** — the positives, all of them bound-handler tuples,
+  including two unions whose every value-carrying constituent is one (a pair of
+  pair types, and the optional `Handlers | undefined`). An
   **aliased tuple renders as its alias**, so `type Handlers = [...]` matched no
   prefix and the rule went silent on a real defect. Also here: a doubly-aliased
   tuple, a tuple returned from a call, a readonly tuple, and an inline literal.
 - **`clean-cases.tsx`** — the negatives, and the fixture's other half. Four are
   the shapes the `tupleShape` narrowing removed (a plain array, a tuple with a
   non-callable first slot, a one-slot tuple, `[1, 2, 3]`, and a first slot
-  requiring three arguments where Solid passes two); two are the `on:`
+  requiring three arguments where Solid passes two, and two unions with a bad
+  constituent); two are the `on:`
   cases; the rest are negatives a weaker classification would break —
   `arrayReturning: () => string[]`, which renders with the same trailing `[]` as
   an array of functions, and `SafeArray<T> extends Array<T>`, which is
@@ -88,7 +91,7 @@ member is typed `(data: any, ...e) => void` — `any`, so the data the handler
 receives is never checked against the data the tuple carries. That unchecked
 seam is the finding, and only this rule can report it.
 
-`clean-cases.tsx` is the mirror image: **eight** `tsc` diagnostics and **zero**
+`clean-cases.tsx` is the mirror image: **ten** `tsc` diagnostics and **zero**
 findings. The rule and the type checker partition the space exactly, and `tsc`
 names each reason:
 
@@ -99,6 +102,8 @@ SafeArray<number>                 missing the following properties: 0, 1
 [(event: MouseEvent) => void]     Property '1' is missing
 [1, 2, 3]                         Type 'number' is not assignable to (data: any, e) => void
 [(a, b, c) => void, number]       Target signature provides too few arguments
+Handlers | ((e) => void)[]        one constituent has no 0/1 members
+Handlers | [number, number]       one constituent's property '0' is incompatible
 on:click={boundPair}              EventHandlerWithOptionsUnion has no bound arm
 on:click={[plain, 1]}             the same
 ~~~

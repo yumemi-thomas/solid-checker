@@ -41,6 +41,15 @@ declare const oneSlot: [(event: MouseEvent) => void];
 // assignable to that. Callability alone cannot see this.
 declare const overArity: [(a: number, b: MouseEvent, c: string) => void, number];
 
+// Unions the meet refuses, each for its own reason. The first two are TS2322 —
+// one constituent is a plain array, one is a bad tuple — so they are the type
+// checker's. The third `tsc` accepts, and it stays a deliberate false negative:
+// the value may be a plain function, so nothing proves it is a pair.
+type Handlers = [(data: number, event: MouseEvent) => void, number];
+declare const pairOrArray: Handlers | ((event: MouseEvent) => void)[];
+declare const pairOrBadHead: Handlers | [number, number];
+declare const pairOrFunction: Handlers | ((event: MouseEvent) => void);
+
 // Ordinary handlers.
 const plain = (event: MouseEvent) => console.log(event);
 function named(event: MouseEvent) {
@@ -66,6 +75,9 @@ export function CleanHandlers() {
       <button onClick={notCallableHead} />
       <button onClick={oneSlot} />
       <button onClick={overArity} />
+      <button onClick={pairOrArray} />
+      <button onClick={pairOrBadHead} />
+      <button onClick={pairOrFunction} />
       <button onClick={[1, 2, 3]} />
       {/* `on:` takes no bound-handler tuple at all, so TypeScript rejects every
           array and tuple here and this rule stays out of it. Both spellings are
