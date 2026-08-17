@@ -38,6 +38,9 @@ npm test --prefix packages/cli
 # here rather than changing the answer silently.
 node scripts/tsc-oracle.mjs provision --dialect all
 node scripts/tsc-oracle-gate.mjs
+# And the parity ledger's own claims: every `status: "policy"` deviation says
+# "TypeScript already reports this", which nothing verified until now.
+node scripts/parity-tsc-ownership.mjs
 
 sh -n scripts/*.sh
 jq empty schema/*.json

@@ -31,8 +31,9 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
 
 use super::{
-    UpstreamCompatContext, binding_initializer, fix_replace, is_lowercase_led, literal_string_type,
-    static_string, static_string_expression, text, violation,
+    UpstreamCompatContext, binding_initializer, fix_replace, is_lowercase_led,
+    jsx_name_is_type_checked, literal_string_type, static_string, static_string_expression, text,
+    violation,
 };
 use crate::StaticViolation;
 
@@ -631,6 +632,9 @@ fn event_handlers(
     // one. There TypeScript is silent and this rule's claim (Solid freezes a
     // statically valued `on*` prop into the template as a plain attribute
     // rather than attaching a listener) is the only one available.
+    // A hyphenated tag is one case TypeScript declines; a hyphenated *attribute
+    // name* is the other, and it is checked per attribute below. Both reopen the
+    // arms the narrowing otherwise hands to TypeScript.
     let custom_element = element_name.contains('-');
     for attribute in element
         .attributes
@@ -666,8 +670,10 @@ fn event_handlers(
             )
         {
             // TypeScript's on a standard element, whatever the name: a known
-            // handler rejects the value, an unknown name does not exist.
-            if !custom_element {
+            // handler rejects the value, an unknown name does not exist. Unless
+            // the name carries a hyphen, which TypeScript never checks --
+            // `onFoo-bar` is accepted on a `<div>` however it is valued.
+            if !custom_element && jsx_name_is_type_checked(name) {
                 continue;
             }
             violations.push(violation(
@@ -704,7 +710,9 @@ fn event_handlers(
             // `onClIcK`, `oncLICK`, and `ondoubleclick` are TS2322 and are now
             // TypeScript's. On a hyphenated tag nothing is declared by Solid,
             // so the advice stands there too.
-            let declared_spelling = custom_element || name == fixed.to_ascii_lowercase();
+            let declared_spelling = custom_element
+                || !jsx_name_is_type_checked(name)
+                || name == fixed.to_ascii_lowercase();
             if fixed != name && declared_spelling {
                 let message = if name.eq_ignore_ascii_case("ondoubleclick") {
                     format!(
@@ -732,7 +740,9 @@ fn event_handlers(
                 ));
                 violations.push(result);
             }
-        } else if custom_element && name.as_bytes().get(2).is_some_and(u8::is_ascii_lowercase) {
+        } else if (custom_element || !jsx_name_is_type_checked(name))
+            && name.as_bytes().get(2).is_some_and(u8::is_ascii_lowercase)
+        {
             // Ambiguous between "ongoing"-style words and an unrecognized
             // handler; two equally valid readings, so this is a suggestion
             // rather than a fix (see attributes rule of the road: only an

@@ -33,10 +33,11 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { CORPUS, caseId, corpusCases, materialize } from "./lib/upstream-cases.mjs";
+
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
-const CORPUS = join(ROOT, "fixtures/upstream-parity");
 const update = process.argv.includes("--update");
-const corpus = JSON.parse(readFileSync(join(CORPUS, "upstream-cases.json"), "utf8"));
+const corpus = corpusCases();
 
 // The three dimensions the comparison ratchets, each its own ledger in
 // `deviations.json` with its own status vocabulary (the README's tables
@@ -86,32 +87,6 @@ const REACTIVITY = {
 };
 const ALL_REACTIVITY = [...new Set(Object.values(REACTIVITY).flat())];
 
-// Upstream's cases call Solid's primitives without importing them: its rules
-// match the name, so the import was never needed. The checker resolves a
-// primitive through its import instead — stricter, and the reason a local
-// function named `createEffect` is not mistaken for Solid's — so a case that
-// never imports would exercise resolution rather than the rule. Supplying the
-// import upstream assumes puts each case back on the rule it was written for.
-const SOLID = {
-  "solid-js": "createSignal createEffect createMemo createComputed createRenderEffect createDeferred createReaction createResource createRoot createContext useContext untrack batch on onMount onCleanup onError runWithOwner getOwner mergeProps splitProps children startTransition useTransition lazy mapArray indexArray For Show Index Switch Match Suspense SuspenseList ErrorBoundary".split(" "),
-  "solid-js/store": "createStore createMutable produce reconcile unwrap modifyMutable".split(" "),
-  "solid-js/web": "render hydrate isServer Portal Dynamic".split(" "),
-};
-
-const withSolidImports = (code) => {
-  const lines = [];
-  for (const [module, names] of Object.entries(SOLID)) {
-    const needed = names.filter(
-      (name) =>
-        new RegExp(`\\b${name}\\b`).test(code) &&
-        !new RegExp(`import[^;]*\\b${name}\\b[^;]*from`, "s").test(code) &&
-        !new RegExp(`(?:const|let|var|function|class)\\s+${name}\\b`).test(code),
-    );
-    if (needed.length) lines.push(`import { ${needed.join(", ")} } from "${module}";`);
-  }
-  return lines.length ? `${lines.join("\n")}\n${code}` : code;
-};
-
 // The rules whose upstream options the checker carries in
 // `.solid-checker/rule-options.json`. A configured case for one of these
 // runs in its own project with the case's options written to that file;
@@ -134,27 +109,6 @@ const materializeProject = (directory) => {
     mkdirSync(join(directory, dirname(path)), { recursive: true });
     writeFileSync(join(directory, path), body);
   }
-};
-// The exact bytes a case is linted as, plus the two harness affixes that
-// surround the case's own text. Keeping the affixes lets the fix-output
-// comparison undo the harness precisely — no guessing at which leading lines
-// were the harness's and which the case's.
-const materialize = (rule, testCase) => {
-  // `jsx-no-undef` is about names that are not defined, so supplying the
-  // import it tests for would delete the case.
-  const code = rule === "jsx-no-undef" ? testCase.code : withSolidImports(testCase.code);
-  // A file with no import or export is a *script* to TypeScript, so its
-  // top-level names join a global scope shared with every other case —
-  // one case's `Component` would define another's undefined reference.
-  // Upstream lints each case as its own file; `export {}` restores that.
-  const scoped = /^\s*(?:import|export)\b/m.test(code) ? code : `${code}\nexport {};`;
-  return {
-    source: `${scoped}\n`,
-    // `withSolidImports` only ever prepends whole lines, so what precedes
-    // the case's own text is exactly the imports it supplied.
-    prefix: code.slice(0, code.length - testCase.code.length),
-    suffix: `${scoped.slice(code.length)}\n`,
-  };
 };
 const writeCase = (directory, id, materialized) =>
   writeFileSync(join(directory, `${id}.tsx`), materialized.source);
@@ -198,7 +152,7 @@ const configured = new Map();
 for (const rule of corpus) {
   for (const kind of ["valid", "invalid"]) {
     rule[kind].forEach((testCase, index) => {
-      const id = `${rule.rule}__${kind}__${String(index).padStart(2, "0")}`;
+      const id = caseId(rule.rule, kind, index);
       const options = testCase.options?.[0];
       const materialized = materialize(rule.rule, testCase);
       if (options && CONFIGURABLE.has(rule.rule)) {

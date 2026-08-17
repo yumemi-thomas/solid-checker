@@ -155,8 +155,8 @@
       "rule": "v1/no-unknown-namespaces",
       "dialect": "v1",
       "expect": "silent",
-      "why": "SC8012's surviving domain. On a component, props are a plain object the compiler never lowers, so an unknown namespace is an ordinary permitted key. Its intrinsic-element domain is TS2322 and is recorded as redundant in docs/precision-backlog.md.",
-      "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const Case = () => <Panel model:value={1} />;\n"
+      "why": "SC8012's surviving arms. On a component, props are a plain object and TypeScript is silent. On an *intrinsic* element a hyphenated local name is silent too -- TypeScript does not type-check a JSX attribute name containing a hyphen, a deliberate exemption for HTML's own hyphenated attributes -- which is upstream's cases 04 and 05 and the hole a first, coarser narrowing opened.",
+      "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const Component = () => <Panel model:value={1} />;\n// A hyphenated local name escapes the excess-property check entirely, so\n// TypeScript declines to look even on an intrinsic element.\nexport const Hyphenated = () => <div class:mt-10={true} />;\nexport const Shorthand = () => <div class:mt-10 />;\n"
     },
     {
       "rule": "v1/event-handlers",
@@ -193,8 +193,8 @@
       "rule": "v1/event-handlers",
       "dialect": "v1",
       "expect": "silent",
-      "why": "SC8001's surviving arms, and the reason the rule was not deleted. `onclick` and `ondblclick` are *declared* props in Solid 1.x, so TypeScript accepts them and the canonical-casing advice is the rule's own. A spread-carried handler type checks while Solid does not attach it. And a hyphenated tag is TS2339 against stock typings, so a project using one has declared it -- the augmentation here is the permissive shape such declarations commonly take -- after which TypeScript is silent about its attributes and the static-value and ambiguous-name arms are the only claims available.",
-      "code": "import type {} from \"solid-js\";\nconst handleClick = () => 42;\n// Solid 1.x exports its JSX namespace from the module, so a custom element\n// is declared by augmenting that module -- not the global scope.\ndeclare module \"solid-js\" {\n  namespace JSX {\n    interface IntrinsicElements {\n      \"my-widget\": { [key: string]: unknown };\n    }\n  }\n}\nexport const Casing = () => <div onclick={handleClick} />;\nexport const Ambiguous = () => <div ondblclick={handleClick} />;\nexport const Spread = () => <div {...{ onClick: handleClick }} />;\nexport const Widget = () => <my-widget onFoo=\"a\" />;\nexport const WidgetAmbiguous = () => <my-widget onlynow={handleClick} />;\n"
+      "why": "SC8001's surviving arms, and the reason the rule was not deleted. `onclick` and `ondblclick` are *declared* props in Solid 1.x, so TypeScript accepts them and the canonical-casing advice is the rule's own. A spread-carried handler type checks while Solid does not attach it. And a hyphenated tag is TS2339 against stock typings, so a project using one has declared it -- the augmentation here is the permissive shape such declarations commonly take -- after which TypeScript is silent about its attributes and the static-value and ambiguous-name arms are the only claims available. A hyphen anywhere in the attribute name has the same effect as a hyphenated tag: TypeScript never checks the name, so the static-value and ambiguous-name arms are the only claims there.",
+      "code": "import type {} from \"solid-js\";\nconst handleClick = () => 42;\n// Solid 1.x exports its JSX namespace from the module, so a custom element\n// is declared by augmenting that module -- not the global scope.\ndeclare module \"solid-js\" {\n  namespace JSX {\n    interface IntrinsicElements {\n      \"my-widget\": { [key: string]: unknown };\n    }\n  }\n}\nexport const Casing = () => <div onclick={handleClick} />;\nexport const Ambiguous = () => <div ondblclick={handleClick} />;\nexport const Spread = () => <div {...{ onClick: handleClick }} />;\nexport const Widget = () => <my-widget onFoo=\"a\" />;\nexport const WidgetAmbiguous = () => <my-widget onlynow={handleClick} />;\n// A hyphenated attribute name is exempt from the excess-property check on a\n// standard element too, so these are the rule's as well.\nexport const HyphenName = () => <div onFoo-bar=\"a\" />;\n"
     },
     {
       "rule": "v1/no-react-specific-props",
@@ -248,8 +248,8 @@
       "rule": "uncalled-accessor",
       "dialect": "v2",
       "expect": "silent",
-      "why": "SC1005's surviving positions, and the reason it was narrowed rather than deleted -- these are the most common real spellings of the bug. String concatenation accepts any operand, a unary operator accepts a function, and a template literal stringifies whatever it is given, so TypeScript permits all three while the rendered output is the accessor's own source text and never updates.",
-      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst [label] = createSignal(\"world\");\nexport const Concat = () => <div>{\"hello \" + label}</div>;\nexport const Unary = () => <div>{!count ? \"empty\" : \"full\"}</div>;\nexport const Template = () => <div>{`count is ${count}`}</div>;\n"
+      "why": "SC1005's surviving positions, and the reason it was narrowed rather than deleted -- these are the most common real spellings of the bug. String concatenation accepts any operand, a unary operator accepts a function, and a template literal stringifies whatever it is given, so TypeScript permits all three while the rendered output is the accessor's own source text and never updates. The native-attribute position survives in one shape for the same reason: TypeScript does not check a hyphenated JSX attribute name, so `data-count={count}` is accepted and the accessor is stringified into the attribute with nothing to say so.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst [label] = createSignal(\"world\");\nexport const Concat = () => <div>{\"hello \" + label}</div>;\nexport const Unary = () => <div>{!count ? \"empty\" : \"full\"}</div>;\nexport const Template = () => <div>{`count is ${count}`}</div>;\nexport const Hyphenated = () => <div data-count={count} />;\n"
     },
     {
       "rule": "expected-function-got-expression",

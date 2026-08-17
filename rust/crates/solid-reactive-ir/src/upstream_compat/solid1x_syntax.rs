@@ -28,7 +28,7 @@ use solid_facts::core::Span;
 
 use super::{
     UpstreamCompatContext, deletion_with_leading_whitespace, fix_replace, is_lowercase_led,
-    static_string_expression, text, violation,
+    jsx_name_is_type_checked, static_string_expression, text, violation,
 };
 use crate::StaticViolation;
 
@@ -535,13 +535,16 @@ fn no_unknown_namespaces(
     // silent, and the claim — the compiler special-cases namespaces only on
     // DOM elements it lowers directly, so the prop arrives inert — is one no
     // type makes.
-    if !component {
-        return;
-    }
+    //
+    // And so does an intrinsic element whose attribute name TypeScript declines
+    // to check at all: a *hyphenated* local name such as `class:mt-10` escapes
+    // the excess-property check entirely (upstream's cases 04 and 05), so the
+    // narrowing must ask per attribute rather than bail on the element.
     for attribute in element
         .attributes
         .iter()
         .filter(|attribute| attribute.namespace.is_some())
+        .filter(|attribute| component || !jsx_name_is_type_checked(text(file, attribute.name)))
     {
         let namespace = text(file, attribute.namespace.expect("filtered to Some above"));
         let local = text(file, attribute.local_name);

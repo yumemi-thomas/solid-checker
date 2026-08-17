@@ -93,6 +93,22 @@ export function Wrong() {
           the prop arrives inert) is one no type makes. The `<Panel on:click>`
           pair above is that surviving arm. */}
       <input model:value={name()} />
+      {/* SC8012 twice, the other surviving arm and the boundary of the argument
+          above: TypeScript does not type-check a JSX attribute name containing a
+          *hyphen* at all — a deliberate exemption for HTML's own hyphenated
+          attributes — so it declines to look here even though the element is
+          intrinsic. A first, coarser narrowing lost these two; upstream's own
+          cases 04 and 05 are this shape. */}
+      <div class:mt-10={true} />
+      <div class:mt-10 />
+      {/* SC8001, the same mechanism on an ordinary element: `onFoo-bar` carries
+          a hyphen, so its name is never checked and the static-value claim is
+          the checker's. */}
+      <div onFoo-bar="a" />
+      {/* SC1005: a hyphenated attribute is the one native-attribute position
+          that survived, for the same reason — the accessor is stringified in
+          and no type objects. */}
+      <div data-count={name} />
       {/* SC8016: childless, and multiline whitespace is not a child */}
       <span class="spacer"></span>
       <span>

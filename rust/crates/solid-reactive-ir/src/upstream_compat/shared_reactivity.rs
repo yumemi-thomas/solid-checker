@@ -855,6 +855,22 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     // `class_object_values_are_truthiness_coerced` and
     // `native_children_attribute_invokes_functions` predicates, which went with
     // them.
+    //
+    // The native-attribute position has one surviving shape, and it is the
+    // boundary of the argument above: TypeScript does not check a JSX attribute
+    // name containing a hyphen at all (a deliberate exemption for HTML's own
+    // hyphenated attributes), so `<div data-count={count} />` is accepted and
+    // the accessor is stringified into the attribute with nothing to say so.
+    if file.ast.jsx_elements.iter().any(|element| {
+        is_lowercase_led(text(file, element.name.span))
+            && element.attributes.iter().any(|attribute| {
+                attribute.namespace.is_none()
+                    && attribute.expression == Some(span)
+                    && !super::jsx_name_is_type_checked(text(file, attribute.name))
+            })
+    }) {
+        return Some("a native JSX attribute");
+    }
     // An untagged template literal stringifies each interpolation, so an
     // accessor there renders its own source text. A *tagged* one hands the
     // interpolations to the tag as values, which may legitimately call

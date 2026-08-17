@@ -48,6 +48,27 @@ pub(super) fn text(file: &FileFacts, span: Span) -> &str {
     file.source_text(span).unwrap_or_default()
 }
 
+/// Whether TypeScript type-checks this JSX attribute name against the element's
+/// attributes type.
+///
+/// It does not check a name containing a hyphen. That is a deliberate JSX
+/// exemption for HTML's own hyphenated custom attributes, and it is broad:
+/// verified against `solid-js@1.9.14` that `data-x`, `my-prop`, `on-foo`,
+/// `html-For`, and the namespaced `class:mt-10` are all accepted on a `<div>`
+/// while `myProp` is TS2322. The duplicate-name check (TS17001) is syntactic and
+/// is *not* exempt, so it still fires on `on-foo` written twice.
+///
+/// Several rules were narrowed on 2026-08-17 on the grounds that an attribute
+/// TypeScript rejects is TypeScript's to report. This is the boundary of that
+/// argument: where TypeScript declines to look, the rule is the only thing that
+/// can speak, so the narrowings ask this before staying silent. The hole it
+/// closes was found by `scripts/parity-tsc-ownership.mjs`, which held a declared
+/// `status: "policy"` deviation to its own claim and caught two upstream
+/// `class:mt-10` cases where the claim was false.
+pub(super) fn jsx_name_is_type_checked(name: &str) -> bool {
+    !name.contains('-')
+}
+
 /// Whether a JSX tag names a DOM element rather than a component.
 ///
 /// JSX's own rule: a lowercase-led tag is an intrinsic element, anything else

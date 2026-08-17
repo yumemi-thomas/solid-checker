@@ -24,6 +24,23 @@ fixture stub. Two passes run, `strict` and non-`strict`, because "the project
 may not be `strict`" is a distinction a ledger entry has to state even though
 the absolute rule refuses it as an exception. TypeScript 5.9.3.
 
+**The parity ledger is held to its own claims.**
+`scripts/parity-tsc-ownership.mjs` compiles the *same bytes* `scripts/parity.mjs`
+lints — the materialization is shared through `scripts/lib/upstream-cases.mjs` so
+the two cannot describe different source — and fails when a deviation declared
+`status: "policy"` sits on a case TypeScript does not report. 57 reasons verified.
+That check found the hyphen exemption above; before it existed, a false
+justification was indistinguishable from a true one.
+
+Its second direction is a **report, not a gate**, and deliberately so: it
+compares diagnostics per *file*, and the upstream corpus is untyped JavaScript,
+so most cases carry incidental implicit-any and cannot-find-name errors that are
+not the rule's subject. Promoting it needs span overlap against the checker's own
+findings, which means parity emitting a machine-readable run artifact. Calling it
+a gate before then would repeat the mistake it was built to catch. The same
+caveat applies to the "does not type-check" count it prints — that is a lower
+bound on corpus cleanliness, not a statement about who owns a defect.
+
 **The gate.** `scripts/tsc-oracle-gate.mjs` enforces
 `fixtures/tsc-oracle/rule-cases.json` in `scripts/verify.sh` and as
 `make tsc-oracle`. A rule whose positive case is also a `tsc` error fails CI, and
@@ -60,6 +77,35 @@ signatures are now byte-faithful in the fixtures that exercise them
 deliberately loose (`static-api`, `static-api-unresolved`, whose subject *is*
 the malformed call) the stub now says so in a comment naming the real signature
 and asserting that no surviving rule's proof depends on the looseness.
+
+### The general mechanism: TypeScript does not check hyphenated JSX attribute names
+
+Found on 2026-08-17 by `scripts/parity-tsc-ownership.mjs`, and it is the boundary
+of every "this attribute is TypeScript's" argument above.
+
+TypeScript exempts a JSX attribute whose **name contains a hyphen** from the
+excess-property check entirely — a deliberate allowance for HTML's own hyphenated
+custom attributes. Verified against `solid-js@1.9.14`: `data-x`, `my-prop`,
+`on-foo`, `html-For`, and the namespaced `class:mt-10` are all accepted on a
+`<div>`, while `myProp` is TS2322. The *duplicate-name* check (TS17001) is
+syntactic and is **not** exempt, so it still fires on `on-foo` written twice.
+
+Three of the narrowings above were written per element rather than per name and
+lost findings to this. All three now ask
+`upstream_compat::jsx_name_is_type_checked` before staying silent:
+
+- **SC8012** — `<div class:mt-10={true} />` and its shorthand are upstream's own
+  cases 04 and 05. They were declared `status: "policy"` on the grounds that
+  TypeScript reports them; it does not. Restored, and the two deviations removed.
+- **SC8001** — `<div onFoo-bar="a" />` has an alphabetic third character, so the
+  rule looks at it, and the name is never type-checked. Its static-value and
+  ambiguous-name arms are restored for any hyphen-bearing name.
+- **SC1005** — `<div data-count={count} />` is the one native-attribute value
+  position that survives: the accessor is stringified into the attribute and no
+  type objects.
+
+All four shapes are pinned in `fixtures/reactive-ir/eslint-compat` and in the
+oracle gate's `silent` cases.
 
 ### Removed: eight rules, 72 findings
 

@@ -41,6 +41,12 @@ tsc-oracle-provision:
 
 tsc-oracle: tsc-oracle-provision
 	node scripts/tsc-oracle-gate.mjs
+	node scripts/parity-tsc-ownership.mjs
+
+# Which upstream cases are not valid TypeScript, and which findings look like
+# duplicates. A discovery report, not a gate.
+tsc-ownership-report: tsc-oracle-provision
+	node scripts/parity-tsc-ownership.mjs --report
 
 # Fixture-findings snapshots: "no finding moved" as a checkable claim.
 coverage: build-rust
