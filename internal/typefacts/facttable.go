@@ -24,4 +24,5 @@ const TypeFactsTableSchemaVersionV9 uint64 = 9
 // unambiguously. It shipped for one commit and the handshake's digest and
 // build-id lockstep make a v10 producer unpairable with any current client.
 const TypeFactsTableSchemaVersionV11 uint64 = 11
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV11
+const TypeFactsTableSchemaVersionV12 uint64 = 12
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV12

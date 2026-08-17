@@ -20,8 +20,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V7: u64 = 7;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V8: u64 = 8;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V9: u64 = 9;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V11: u64 = 11;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V12: u64 = 12;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:556a69ace385c472a734f7570c623372f0fa367c04dd40246d21c4a7c4019b9d";
+    "sha256:2ea02d4f58dbc256540c33e58671010f201ddea72287c7a5a034f5b3e196cccb";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -89,6 +90,8 @@ pub struct EntityDemand {
     pub array_shape: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub tuple_shape: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub library_types: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub reference_space: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -274,6 +277,7 @@ pub const DEMAND_FLAG_CALL_RESULT_DOMAIN: u64 = 1 << 10;
 pub const DEMAND_FLAG_CONSTANT_VALUE: u64 = 1 << 11;
 pub const DEMAND_FLAG_ARRAY_SHAPE: u64 = 1 << 12;
 pub const DEMAND_FLAG_TUPLE_SHAPE: u64 = 1 << 13;
+pub const DEMAND_FLAG_LIBRARY_TYPES: u64 = 1 << 14;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -722,6 +726,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
+            TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
             TYPE_FACTS_TABLE_SCHEMA_V11 => 2047,
             TYPE_FACTS_TABLE_SCHEMA_V9 => 1023,
             TYPE_FACTS_TABLE_SCHEMA_V8 => 511,
@@ -811,6 +816,17 @@ fn decode_entity_run(
         } else {
             None
         };
+        let library_types = if flags & 2048 != 0 {
+            let count = cursor.u64()?;
+            let mut names =
+                Vec::with_capacity(usize::try_from(count).unwrap_or_default().min(1024));
+            for _ in 0..count {
+                names.push(cursor.string_index(strings, "library type")?);
+            }
+            Some(Arc::new(names))
+        } else {
+            None
+        };
         let symbol_unresolved = flags & 64 != 0;
         if symbol_unresolved && !symbol.is_empty() {
             return Err("packed entity cannot be both resolved and unresolved".into());
@@ -831,6 +847,7 @@ fn decode_entity_run(
             constant_value,
             array_shape,
             tuple_shape,
+            library_types,
             reference_space,
             runtime_identity,
         });
@@ -1053,6 +1070,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V8
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V9
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V11
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V12
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1344,6 +1362,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.tuple_shape {
             flags |= DEMAND_FLAG_TUPLE_SHAPE;
         }
+        if demand.library_types {
+            flags |= DEMAND_FLAG_LIBRARY_TYPES;
+        }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());
         push_uvarint(&mut group.1, (flags << 1) | has_query);
@@ -1460,6 +1481,28 @@ mod tests {
         }
         // One entity: start 0, length 1, no symbol, array-shape field.
         for value in [1, 0, 1, 0, 512, tag, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
+    fn library_types_transition(table_schema: u64, count: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, table_schema, 0, 1, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        push_test_string(&mut frame, "Date");
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity: start 0, length 1, no symbol, library-types field.
+        let mut row = vec![1, 0, 1, 0, 2048, count];
+        row.extend(std::iter::repeat_n(3, usize::try_from(count).unwrap()));
+        row.push(0);
+        for value in row {
             push_uvarint(&mut frame, value);
         }
         frame
@@ -1708,6 +1751,20 @@ mod tests {
         );
 
         assert!(decode_table_transition(&tuple_shape_transition(10, 4, 0, 0)).is_err());
+    }
+
+    #[test]
+    fn wire_table_v12_decodes_library_type_sets_and_v11_stays_frozen() {
+        let transition = decode_table_transition(&library_types_transition(12, 2)).unwrap();
+        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        let names = entities[0].library_types.as_deref().unwrap();
+        assert_eq!(names.len(), 2);
+        assert_eq!(&*names[0], "Date");
+        // An absent set stays None rather than an empty list, so "not demanded"
+        // and "nothing from the standard library" remain distinguishable.
+        assert!(decode_table_transition(&library_types_transition(11, 1)).is_err());
         assert!(decode_table_transition(&tuple_shape_transition(11, 4, 9, 0)).is_err());
     }
 

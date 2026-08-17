@@ -23,6 +23,7 @@ const (
 	wireTransitionEntityHasConstantValue
 	wireTransitionEntityHasArrayShape
 	wireTransitionEntityHasTupleShape
+	wireTransitionEntityHasLibraryTypes
 )
 
 const (
@@ -192,6 +193,9 @@ func writeWireTransitionEntityRun(
 		if tableSchema >= TypeFactsTableSchemaVersionV11 && entity.TupleShape != nil {
 			flags |= wireTransitionEntityHasTupleShape
 		}
+		if tableSchema >= TypeFactsTableSchemaVersionV12 && len(entity.LibraryTypes) != 0 {
+			flags |= wireTransitionEntityHasLibraryTypes
+		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
 		}
@@ -244,6 +248,12 @@ func writeWireTransitionEntityRun(
 			w.u64(packed)
 			w.u64(tupleElementZero)
 			w.u64(uint64(entity.TupleShape.ElementZeroMinimumParameters))
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV12 && len(entity.LibraryTypes) != 0 {
+			w.u64(uint64(len(entity.LibraryTypes)))
+			for _, name := range entity.LibraryTypes {
+				w.text(name)
+			}
 		}
 		previousStart = start
 	}

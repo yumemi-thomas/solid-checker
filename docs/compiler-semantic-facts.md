@@ -38,6 +38,20 @@ merely array-*like* types such as an interface extending `Array`. Rendered type
 text never participates. Absence means the fact was not demanded or the span was
 not exactly one expression; it is never evidence of a non-array.
 
+## Library types
+
+`EntityDemand.libraryTypes` produces an optional `EntityFact.libraryTypes`: the
+sorted, deduplicated set of standard-library type names the type at the exact
+demanded span is built from at its top level — itself, its union and intersection
+constituents, and one array-element unwrap. Not an object type's properties, not
+a function's return type.
+
+A name is recorded only when the resolved symbol is declared in a default-library
+file, so a user-declared `Map` is not the global one. Every spelling of the same
+runtime type answers alike: a local alias, an alias imported from another file,
+and the built-in written directly. Absence means nothing at the top level came
+from the standard library — never that the type was unresolved.
+
 ## Tuple shape
 
 `EntityDemand.tupleShape` produces an optional `EntityFact.tupleShape` with

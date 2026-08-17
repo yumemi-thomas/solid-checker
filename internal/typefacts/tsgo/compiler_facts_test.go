@@ -1871,3 +1871,135 @@ export const Unconstrained = () => <loose onClick={[handler, 1]} />;
 		}
 	}
 }
+
+func TestDemandedLibraryTypesResolveThroughSpelling(t *testing.T) {
+	dir := t.TempDir()
+	source := `import { Stamps, Ids } from "./aliases";
+type LocalWhen = Date;
+type Pair = [Date, string];
+interface Map<K, V> { fake: K | V }
+
+declare const written: Date;
+declare const aliased: LocalWhen;
+declare const imported: Stamps;
+declare const setAlias: Ids;
+declare const suffixArray: Date[];
+declare const genericArray: Array<Date>;
+declare const optional: Date | undefined;
+declare const mixedUnion: Date | Set<string>;
+declare const intersected: Date & { tag: "t" };
+declare const globalMap: ReadonlyMap<string, number>;
+declare const bytes: Uint8Array;
+declare const nested: { when: Date };
+declare const returnsDate: () => Date;
+declare const shadowed: Map<string, number>;
+declare const plain: string;
+declare const tuple: Pair;
+
+written;
+aliased;
+imported;
+setAlias;
+suffixArray;
+genericArray;
+optional;
+mixedUnion;
+intersected;
+globalMap;
+bytes;
+nested;
+returnsDate;
+shadowed;
+plain;
+tuple;
+`
+	sourcePath := filepath.Join(dir, "library.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext","lib":["esnext","dom"]},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "aliases.ts"), []byte("export type Stamps = Date[];\nexport type Ids = Set<string>;\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	tests := []struct {
+		expression string
+		want       []string
+	}{
+		// The point of the fact: every spelling of the same runtime type answers
+		// the same, including a local alias and one imported from another file.
+		{`written`, []string{"Date"}},
+		{`aliased`, []string{"Date"}},
+		{`imported`, []string{"Array", "Date"}},
+		{`setAlias`, []string{"Set"}},
+		// `Date[]` and `Array<Date>` are the same runtime value and now answer
+		// alike; the text screen this replaced matched only the first.
+		{`suffixArray`, []string{"Array", "Date"}},
+		{`genericArray`, []string{"Array", "Date"}},
+		// Union and intersection members are as top-level as the type itself; a
+		// nullish member simply contributes nothing.
+		{`optional`, []string{"Date"}},
+		{`mixedUnion`, []string{"Date", "Set"}},
+		{`intersected`, []string{"Date"}},
+		{`globalMap`, []string{"ReadonlyMap"}},
+		{`bytes`, []string{"Uint8Array"}},
+		// Not top level: an object's property and a function's return type. This
+		// is the existing boundary, kept — an unproven member is not a proven one.
+		{`nested`, nil},
+		{`returnsDate`, nil},
+		// A user-declared `Map` shadows the global. Name matching could not tell
+		// these apart; a declaration-file check can.
+		{`shadowed`, nil},
+		{`plain`, nil},
+		// A tuple's own symbol is its tuple target, not the global Array, so only
+		// its element types contribute.
+		{`tuple`, []string{"Date"}},
+	}
+	demands := make([]typefacts.EntityDemand, len(tests))
+	for index, testCase := range tests {
+		start := strings.LastIndex(source, testCase.expression)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.expression)
+		}
+		demands[index] = typefacts.EntityDemand{
+			Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(testCase.expression)},
+			LibraryTypes: true,
+		}
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, testCase := range tests {
+		got := entities[index].LibraryTypes
+		if len(got) != len(testCase.want) {
+			t.Errorf("%s library types = %v, want %v", testCase.expression, got, testCase.want)
+			continue
+		}
+		for position := range got {
+			if got[position] != testCase.want[position] {
+				t.Errorf("%s library types = %v, want %v", testCase.expression, got, testCase.want)
+				break
+			}
+		}
+	}
+
+	undemanded, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location:       demands[0].Location,
+		TypeDescriptor: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := undemanded[0].LibraryTypes; got != nil {
+		t.Errorf("undemanded library types = %v, want absent", got)
+	}
+}

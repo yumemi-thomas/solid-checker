@@ -36,6 +36,7 @@ func TestCompactDemandsRoundTrip(t *testing.T) {
 			ConstantValue:      true,
 			ArrayShape:         true,
 			TupleShape:         true,
+			LibraryTypes:       true,
 			ReferenceSpace:     true,
 			RuntimeIdentity:    true,
 		},

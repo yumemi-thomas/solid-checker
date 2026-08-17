@@ -118,6 +118,7 @@ func entityFactEqual(left, right EntityFact) bool {
 		constantValueEqual(left.ConstantValue, right.ConstantValue) &&
 		left.ArrayShape == right.ArrayShape &&
 		tupleShapeEqual(left.TupleShape, right.TupleShape) &&
+		slices.Equal(left.LibraryTypes, right.LibraryTypes) &&
 		typeDescriptorEqual(left.TypeDescriptor, right.TypeDescriptor) &&
 		resolvedCallEqual(left.ResolvedCall, right.ResolvedCall)
 }

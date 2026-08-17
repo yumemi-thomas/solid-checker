@@ -34,6 +34,13 @@ new facts:
   `callable`. `arrayShape` cannot answer this — it reports `array` for a plain
   array too, and a plain array has no `0`/`1` property, so it is a type error
   rather than your finding. Absence means not proven a tuple.
+- Whether a value is one of a set of well-known runtime types (`Date`, `Map`,
+  `Set`, a typed array): demand `libraryTypes` and match the returned names
+  against your own list. Do not split `typeDescriptor.text` on `|`/`&` and match
+  heads: an alias renders as its own name and matches nothing, `Array<Date>` and
+  `Date[]` are the same value but read differently, and a user-defined type can
+  share a global's name. Absence means nothing at the top level was a library
+  type.
 - Synthetic probe calls and diagnostic filtering: demand `resolvedCall` and
   accept only `valid`.
 - Source-text searches that decide whether an import is type-only or runtime:

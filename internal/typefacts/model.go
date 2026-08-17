@@ -19,6 +19,7 @@ type EntityDemand struct {
 	ConstantValue      bool      `cbor:"constantValue,omitempty" json:"constantValue,omitempty"`
 	ArrayShape         bool      `cbor:"arrayShape,omitempty" json:"arrayShape,omitempty"`
 	TupleShape         bool      `cbor:"tupleShape,omitempty" json:"tupleShape,omitempty"`
+	LibraryTypes       bool      `cbor:"libraryTypes,omitempty" json:"libraryTypes,omitempty"`
 	ReferenceSpace     bool      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
 	RuntimeIdentity    bool      `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 	References         bool      `cbor:"references,omitempty" json:"references,omitempty"`
@@ -64,6 +65,7 @@ type EntityFact struct {
 	ConstantValue      *ConstantValue      `cbor:"constantValue,omitempty" json:"constantValue,omitempty"`
 	ArrayShape         ArrayShape          `cbor:"arrayShape,omitempty" json:"arrayShape,omitempty"`
 	TupleShape         *TupleShape         `cbor:"tupleShape,omitempty" json:"tupleShape,omitempty"`
+	LibraryTypes       []string            `cbor:"libraryTypes,omitempty" json:"libraryTypes,omitempty"`
 	ReferenceSpace     ReferenceSpace      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
 	RuntimeIdentity    RuntimeSymbolID     `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 }

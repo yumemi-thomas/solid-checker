@@ -4,6 +4,10 @@ status: accepted
 
 # V1 adds span-exact tuple shapes
 
+> Historical record. Superseded as active protocol guidance by
+> [ADR 0017](0017-v1-span-exact-library-types.md); Wire table schema v11
+> remains frozen and decodable, and `tupleShape` itself is unchanged.
+
 ## Decision
 
 The sole active lifecycle schema, V1, includes `EntityDemand.tupleShape` and

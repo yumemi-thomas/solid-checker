@@ -276,6 +276,7 @@ func (p *project) SemanticDemandRuns(
 				!demand.ConstantValue &&
 				!demand.ArrayShape &&
 				!demand.TupleShape &&
+				!demand.LibraryTypes &&
 				!demand.ReferenceSpace &&
 				!demand.RuntimeIdentity {
 				continue
@@ -368,6 +369,11 @@ func (p *project) SemanticDemandRuns(
 			if demand.TupleShape {
 				if shapeNode := queryCursor.exactExpressionAt(query.StartByte, query.EndByte); shapeNode != nil {
 					entity.TupleShape = p.tupleShapeAtLocked(shapeNode, &evidence[runIndex])
+				}
+			}
+			if demand.LibraryTypes {
+				if typeNode := queryCursor.exactExpressionAt(query.StartByte, query.EndByte); typeNode != nil {
+					entity.LibraryTypes = p.libraryTypesAtLocked(typeNode, &evidence[runIndex])
 				}
 			}
 			if demand.ResolvedCall {

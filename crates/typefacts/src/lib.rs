@@ -401,6 +401,22 @@ pub struct EntityFact {
     pub array_shape: Option<ArrayShape>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tuple_shape: Option<TupleShape>,
+    /// Standard-library type names the type at this span is built from at its
+    /// top level: itself, its union and intersection constituents, and one
+    /// array-element unwrap. Sorted and deduplicated, so it is a set.
+    ///
+    /// It answers "is this value one of these well-known runtime types" without
+    /// depending on how the type was spelled — an alias, an import, and the
+    /// built-in written directly all resolve to the same name — and only
+    /// declarations in default-library files count, so a user-defined `Map` is
+    /// not the global one. Empty means nothing at the top level came from the
+    /// standard library; it never means the type is unresolved.
+    ///
+    /// Held behind a thin `Arc` like the other large evidence on this row: it is
+    /// demanded at few spans, and a fat slice pointer would cost every retained
+    /// row 16 bytes to carry an absence.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub library_types: Option<Arc<Vec<Arc<str>>>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
@@ -799,10 +815,15 @@ mod tests {
     // have more slots than the source has bytes — and the `Option` rides the
     // callability enum's niche. Boxing it would buy the other 8 bytes back at the
     // price of an allocation per fact; it is three scalars, so it stays inline.
+    //
+    // `library_types` is the opposite call and shows the rule working: as an
+    // `Arc<[Arc<str>]>` it cost 16 bytes on every row to carry an absence, because
+    // a slice pointer is fat. Behind a thin `Arc`, like `resolved_call` and
+    // `type_descriptor` before it, it costs 8.
     #[test]
     fn retained_entity_rows_keep_optional_evidence_bounded() {
         assert!(
-            std::mem::size_of::<EntityFact>() <= 136,
+            std::mem::size_of::<EntityFact>() <= 144,
             "EntityFact is {} bytes; optional evidence exceeded the bounded row budget",
             std::mem::size_of::<EntityFact>()
         );
@@ -842,6 +863,7 @@ mod tests {
                 constant_value: false,
                 array_shape: false,
                 tuple_shape: false,
+                library_types: false,
                 reference_space: false,
                 runtime_identity: false,
             }],
@@ -887,6 +909,7 @@ mod tests {
                 constant_value: false,
                 array_shape: false,
                 tuple_shape: false,
+                library_types: false,
                 reference_space: false,
                 runtime_identity: false,
             },
@@ -905,6 +928,7 @@ mod tests {
                 constant_value: true,
                 array_shape: true,
                 tuple_shape: true,
+                library_types: true,
                 reference_space: true,
                 runtime_identity: true,
             },
@@ -923,6 +947,7 @@ mod tests {
                 constant_value: false,
                 array_shape: false,
                 tuple_shape: false,
+                library_types: false,
                 reference_space: false,
                 runtime_identity: false,
             },
