@@ -2,15 +2,28 @@
 
 `SC8007` · **error** · violation
 
-A conventional `onEvent` prop on a DOM element receives an array- or
-tuple-shaped value.
+A conventional `onEvent` prop on a DOM element receives a `[handler, data]`
+bound-handler pair.
 
 ## What it does
 
-Checks conventional `onEvent` props on lowercase JSX elements. It asks the
-compiler to classify the value's type (`arrayShape`), so an imported or aliased
-tuple is recognized however it is spelled; without that classification it
-conservatively recognizes local array literals and their bindings.
+Checks conventional `onEvent` props on lowercase JSX elements, and reports
+exactly the values Solid's own types accept there: a tuple with both numbered
+slots whose first slot is callable.
+
+That set is the rule's because it is the set `tsc` permits. `onEvent` is typed
+`EventHandlerUnion = EHandler | BoundEventHandler`, and `BoundEventHandler` is
+an interface with members `0` and `1` whose `0` must be callable. A plain array
+has no numbered members, a tuple with a non-callable first slot fails at element
+0, and a one-slot tuple has no `1` — every one of those is already `TS2322`, so
+the rule stays out of them.
+
+The compiler decides tupleness (`tupleShape`), so an imported or aliased tuple is
+recognized however it is spelled. When no type constrains the attribute at all —
+a project whose JSX typings are permissive, where `tsc` says nothing — the rule
+falls back to recognizing local array literals and their bindings, because there
+it is the only thing that can speak. A cast vouches for the value, as upstream
+also honours.
 
 The `on:*` namespaced form is **not** checked. Solid types `onEvent` as
 `EventHandlerUnion = EHandler | BoundEventHandler`, where `BoundEventHandler` is
@@ -22,12 +35,12 @@ reporting it again would duplicate the type checker.
 
 ## Why is this bad?
 
-Solid supports the delegated `[handler, data]` shorthand, and `BoundEventHandler`
-types its first member as `(data: any, ...e) => void` — `any`, so the data the
-handler receives is never checked against the data the tuple carries. The pair
-type-checks and then fails when the event is dispatched. The checker therefore
-treats this as a type-safety boundary, not merely a style preference, and it is
-the only thing that can: the tuple is legal per Solid's own types.
+`BoundEventHandler` types its first member as `(data: any, ...e) => void` —
+`any`, so the data the handler receives is never checked against the data the
+tuple carries. The pair type-checks and then fails when the event is dispatched.
+That unchecked seam is the whole finding, and this rule is the only thing that
+can report it: everything TypeScript *can* check about the pair, it already
+does.
 
 ## Examples
 
@@ -54,16 +67,6 @@ Pass a plain function whose parameters and captured data TypeScript can check.
 If a tuple abstraction is essential, wrap it behind a function at the JSX
 boundary. The rule does not rewrite handlers automatically because it cannot
 infer the intended handler signature.
-
-## Known imprecision
-
-A **plain array** on `onEvent` — `X[]`, `Array<X>`, `ReadonlyArray<X>`, `any[]`,
-`unknown[]` — has no `0`/`1` members either, so it is also already `TS2322`
-against the real `solid-js` typings, and this rule's report there duplicates the
-type checker. Narrowing it needs a finer fact than `arrayShape` provides today:
-the condition that is genuinely this rule's is "a tuple whose first element is
-callable", which is what `BoundEventHandler` accepts and `tsc` therefore permits.
-Tracked in [docs/precision-backlog.md](../../precision-backlog.md).
 
 ## Configuration
 

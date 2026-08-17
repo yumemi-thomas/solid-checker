@@ -24,6 +24,19 @@ interface SafeArray<T> extends Array<T> {
 }
 declare const safe: SafeArray<number>;
 
+// The three shapes the 2026-08-18 narrowing removed. `onClick` is typed
+// `EventHandlerUnion = EHandler | BoundEventHandler`, and `BoundEventHandler` is
+// an interface with members `0` and `1` whose `0` must be callable. Each of
+// these fails that in a different way, and TypeScript rejects each one, so the
+// rule must not speak.
+//
+//   - a plain array has no `0`/`1` members at all;
+//   - a tuple whose first slot is not callable fails at element 0;
+//   - a one-slot tuple has no `1`.
+declare const plainArray: ((event: MouseEvent) => void)[];
+declare const notCallableHead: [number, number];
+declare const oneSlot: [(event: MouseEvent) => void];
+
 // Ordinary handlers.
 const plain = (event: MouseEvent) => console.log(event);
 function named(event: MouseEvent) {
@@ -44,6 +57,11 @@ export function CleanHandlers() {
       <button onClick={named} />
       <button onClick={config.onClick} />
       <button onClick={() => [plain, "data"]} />
+      {/* Narrowed 2026-08-18: each of these is already TS2322. */}
+      <button onClick={plainArray} />
+      <button onClick={notCallableHead} />
+      <button onClick={oneSlot} />
+      <button onClick={[1, 2, 3]} />
       {/* `on:` takes no bound-handler tuple at all, so TypeScript rejects every
           array and tuple here and this rule stays out of it. Both spellings are
           `arrayShape: array` — the narrowing is on the attribute, not the

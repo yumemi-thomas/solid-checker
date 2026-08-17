@@ -816,21 +816,61 @@ absolute rule; upstream case `no-array-handlers__invalid__03` is now a declared
 `typescript-owned` deviation, verified by `scripts/parity-tsc-ownership.mjs`.
 Parity moved 373/465 → 372/465 with 102 deviations, all declared.
 
-### Remaining duplicate in this rule, not yet narrowed
+### Closed 2026-08-18: the plain-array duplicate, via `tupleShape`
 
-A **plain array** on `onEvent` has no `0`/`1` members either, so it is `TS2322`
+A **plain array** on `onEvent` has no `0`/`1` members either, so it was `TS2322`
 too — confirmed for `((event: MouseEvent) => void)[]`, `ReadonlyArray<...>`,
-`any[]`, and `unknown[]`. The rule still reports those, and that report
-duplicates the type checker.
+`any[]`, and `unknown[]` — and the rule reported it anyway.
 
-Narrowing it needs a finer fact than `arrayShape` carries. The condition that is
-genuinely this rule's is not "array or tuple" but **"a tuple whose first element
-is callable"** — exactly what `BoundEventHandler` accepts and `tsc` therefore
-permits; a tuple such as `[1, 2, 3]` is rejected by `tsc` at its first element.
-`arrayShape` deliberately collapses `array` and `tuple` into one verdict, because
-at the time both consumers wanted the union of them. Splitting the verdict and
-adding element-0 callability is a producer change (ADR 0016) and is not attempted
-here. No fixture pins the duplicate, so nothing blesses it.
+`arrayShape` could not settle it, by construction: it reports `array` for a plain
+array and a tuple alike, because both of its consumers wanted the union of them.
+The condition that is genuinely this rule's is not "array or tuple" but **"a
+tuple with both numbered slots whose first is callable"** — exactly what
+`BoundEventHandler` accepts and `tsc` therefore permits.
+
+`tupleShape` (`solid-ts-facts` `01a7150`, ADR 0016) supplies it: fixed slot count,
+whether a rest tail follows, and the first slot's callability, present only when
+the type at the exact span is itself a tuple. The rule now fires on that and
+nothing else. `tsc` names each removed shape's reason precisely, which is how the
+partition was checked:
+
+~~~
+((event: MouseEvent) => void)[]      missing the following properties: 0, 1
+[number, number]                     Types of property '0' are incompatible
+[(event: MouseEvent) => void]        Property '1' is missing
+[1, 2, 3]                            Type 'number' is not assignable to (data: any, e) => void
+~~~
+
+Against the fixture, `handler-cases.tsx` now holds every SC8007 and produces
+**zero** `tsc` diagnostics, while `clean-cases.tsx` produces seven and **zero**
+findings. The rule and the type checker partition the space exactly.
+
+**Contextual typing is what makes this work, and it is load-bearing.** An array
+literal written where the expected type has numbered members acquires fixed
+slots; the same literal in an unconstrained position stays a plain array. So
+`tupleShape` absent *plus* an array literal written here means no bound-handler
+type applies at this attribute — the project's JSX typings are not checking it,
+and the rule is the only thing that can speak, which is the boundary
+`jsx_name_is_type_checked` already draws. The syntactic fallback is kept for
+exactly that case.
+
+The consequence is that `fixtures/reactive-ir/array-shape-v1` had to stop using a
+permissive `IntrinsicElements` index signature: its stub now carries the real
+`EventHandlerUnion`/`BoundEventHandler` signatures, because a looser stub erases
+the contextual typing the rule depends on and the fixture would stop exercising
+its own path. The upstream parity corpus still uses a permissive harness, so
+three cases upstream reports are now declared `typescript-owned`
+(`no-array-handlers__invalid__03`, `__05`, `__07`), each verified against the
+real typings by `scripts/parity-tsc-ownership.mjs`. Parity 372/465 → 370/465,
+104 deviations, all declared.
+
+### Remaining approximation
+
+A **union** of bound-handler tuples (`Handlers | OtherHandlers`) has no
+`tupleShape`: the fact is emitted only for a type that is itself a tuple, since
+distributing a slot count over constituents would invent a shape none of them
+has. `arrayShape` reports `array` for it, so the rule stays silent. That is a
+fail-closed false negative, not a duplicate — `tsc` accepts such a union.
 
 ### Not attempted: `rich_transport_member`'s hand-rolled type-text walk
 

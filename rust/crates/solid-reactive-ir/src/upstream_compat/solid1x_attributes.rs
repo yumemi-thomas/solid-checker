@@ -36,7 +36,7 @@ use super::{
     violation,
 };
 use crate::StaticViolation;
-use typefacts::ArrayShape;
+use typefacts::{ArrayShape, Callability};
 
 pub(super) fn check_file(
     file: &FileFacts,
@@ -857,29 +857,48 @@ fn no_array_handlers(
             continue;
         }
         let array = attribute.expression.is_some_and(|span| {
-            // When the checker classified the whole value's shape, that verdict
-            // is the answer: an array- or tuple-typed value is an array handler
-            // however it was spelled — `handlers` bound in another file, or an
-            // alias naming the tuple — and a value the author gave a
-            // purpose-built type (`pair as SafeArray<number>`) is `NotArray`,
-            // the same vouching upstream honours for casts.
-            //
-            // `Mixed` and `Unknown` prove neither side, so they fall through to
-            // this file's spelling exactly as an absent fact does; there the
-            // cast itself is the bail.
-            match super::expression_array_shape(context, file, span) {
-                Some(shape) if shape.is_array_or_tuple() => return true,
-                Some(ArrayShape::NotArray) => return false,
-                Some(_) | None => {}
+            // `BoundEventHandler` is `{ 0: (data, ...event) => void; 1: any }`,
+            // so TypeScript accepts a value here only when it has both numbered
+            // members and the first is callable. That set — and nothing wider —
+            // is what this rule owns, and `tupleShape` is what decides it: an
+            // alias, a binding in another file, and an inline literal all reduce
+            // to the same slot count and first-slot callability.
+            if let Some(tuple) = super::expression_tuple_shape(context, file, span) {
+                return tuple.has_slot(0)
+                    && tuple.has_slot(1)
+                    && tuple.element_zero == Some(Callability::Callable);
             }
             let source = text(file, span).trim();
+            // A cast vouches for the value, as it does upstream, and it has to
+            // be honoured before any test on this file's spelling: the cast of
+            // an array literal still *starts* with `[`.
             if source.contains(" as ") {
                 return false;
             }
-            looks_like_array_literal(source)
-                || binding_initializer(context, file, span).is_some_and(|(_, _, initializer, _)| {
-                    looks_like_array_literal(initializer.trim_start())
-                })
+            if looks_like_array_literal(source) {
+                // Written here as an array literal, and yet the checker gave it
+                // no fixed slots. Contextual typing is what creates those, so
+                // its absence means no `[handler, data]`-shaped type applies at
+                // this attribute — the ambient JSX typings are not checking it,
+                // and where TypeScript declines to look this rule is the only
+                // thing that can speak. Under Solid's real typings a literal in
+                // a handler position always arrives here as a tuple, so this
+                // branch never competes with a diagnostic.
+                return true;
+            }
+            // A resolved shape that is not a tuple. A plain array has no `0`/`1`
+            // members and is already TS2322, and a proven non-array was never a
+            // handler pair; either way the rule stays out of it. `Mixed` and
+            // `Unknown` prove neither, so they fall through with absence.
+            if matches!(
+                super::expression_array_shape(context, file, span),
+                Some(ArrayShape::Array | ArrayShape::NotArray)
+            ) {
+                return false;
+            }
+            binding_initializer(context, file, span).is_some_and(|(_, _, initializer, _)| {
+                looks_like_array_literal(initializer.trim_start())
+            })
         });
         if array {
             violations.push(violation(

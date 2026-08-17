@@ -37,7 +37,7 @@ use crate::{
 };
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
-use typefacts::{ArrayShape, Location};
+use typefacts::{ArrayShape, Location, TupleShape};
 
 /// The source text a span covers, or `""` when the span is not readable.
 ///
@@ -109,6 +109,25 @@ pub(super) fn expression_array_shape(
         .lookup
         .entity_at(file.path.as_str(), span)
         .and_then(|entity| entity.array_shape)
+}
+
+/// [`expression_array_shape`]'s structural twin: the tuple at exactly this
+/// span, when the demand plan asked for it there.
+///
+/// Present only when the type is *itself* a tuple, so absence is "not proven a
+/// tuple" — for a union, for a plain array, and for anything unresolved alike.
+/// The distinction matters wherever a value has to satisfy numbered members: an
+/// array has no `0` or `1` property, so it is not interchangeable with a
+/// two-slot tuple even though [`ArrayShape::Array`] covers both.
+pub(super) fn expression_tuple_shape(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<TupleShape> {
+    context
+        .lookup
+        .entity_at(file.path.as_str(), span)
+        .and_then(|entity| entity.tuple_shape)
 }
 
 // --- helpers shared by the rule modules ------------------------------------
