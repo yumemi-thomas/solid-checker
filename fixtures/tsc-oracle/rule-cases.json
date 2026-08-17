@@ -208,6 +208,19 @@
       "expect": "silent",
       "why": "SC8017's surviving arms. A string `style` is legal in Solid 1.x, so the string-value advice, the malformed-declaration claim, and the not-CSS-at-all claim are all the rule's own; a `-`-prefixed key is absorbed by the `[key: `-${string}`]` index signature.",
       "code": "const themeColor = \"red\";\nexport const A = () => <div style=\"font-size: 10px;\" />;\nexport const B = () => <div style=\"font-size: 10px; missing-value: ;\" />;\nexport const C = () => <div style={`color: ${themeColor};`} />;\nexport const D = () => <div style={{ \"-webkitAlignContent\": \"center\" }} />;\nexport const E = () => <div style={{ \"flex-grow\": 1 }} />;\n"
+    },
+    {
+      "rule": "v1/jsx-no-duplicate-props",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "why": "SC8003's byte-identical-name arm, narrowed 2026-08-17. Three diagnostics cover it depending on where the two occurrences live: two attributes are TS17001, an attribute followed by a spread is TS2783 (strict pass only, which the absolute rule does not accept as an exception), and two keys in one spread object are TS1117. The rule SURVIVES on differently spelled same-slot props and on the two identical-name orders TypeScript leaves alone -- see the sibling `silent` case.",
+      "allow": [
+        17001,
+        2783,
+        1117,
+        2322
+      ],
+      "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const A = () => <div id=\"a\" id=\"b\" />;\nexport const B = () => <div id=\"a\" {...{ id: \"b\" }} />;\nexport const C = () => <div {...{ id: \"a\", id: \"b\" }} />;\nexport const D = () => <Panel onSave={() => {}} onSave={() => {}} />;\n"
     }
   ]
 }

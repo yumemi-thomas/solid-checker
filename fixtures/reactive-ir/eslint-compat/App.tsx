@@ -19,20 +19,36 @@ const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;
 export function Wrong() {
   return (
     <div>
-      {/* SC8003: the second class wins and the first is dead */}
+      {/* Silent since 2026-08-17: two byte-identical attribute names are
+          TS17001 ("JSX elements cannot have multiple attributes with the same
+          name"), so the duplicate-prop rule was narrowed off that spelling —
+          on intrinsics and components alike (docs/precision-backlog.md). */}
       <div class="card" id="a" class="wide" />
-      {/* SC8003: click is delegated, so both occurrences lower to the
-          property write `el.$$click = handler` and the later assignment
-          wins — the first handler is dead */}
       <button onClick={() => {}} onClick={() => {}} />
-      {/* SC8003 once, and SC8001 no longer: statically string-valued `on*`
-          props are frozen into the template, where the HTML parser keeps the
-          first `onfoo` and the second is dead. `onFoo` does not exist on
-          `HTMLAttributes<HTMLDivElement>`, so the event-handlers rule's
-          attribute warning here was TS2322's sentence and was narrowed away
-          on 2026-08-17 (docs/precision-backlog.md). The duplicate-slot claim
-          is unaffected: the two occurrences are byte-identical names, so
-          TS17001 also speaks — see the SC8003 note below. */}
+      {/* SC8003, the surviving domain: two *differently spelled* props that the
+          DOM lowering folds into one slot. `onClick` and `onclick` both become
+          the delegated `el.$$click = handler` property write, so the later
+          assignment wins and the first handler is dead — and TypeScript sees
+          two distinct, legal properties and says nothing. */}
+      <button onClick={() => {}} onclick={() => {}} />
+      {/* SC8003 again: `attr:title` and `title` share the one static template
+          attribute slot, where the first wins. Also distinctly spelled, so
+          also invisible to TypeScript's duplicate checks. (`attr:` resolves
+          through the user-augmentable `JSX.ExplicitAttributes`, empty by
+          default, so a project reaching this markup has declared the name —
+          the documented way to use `attr:`. TypeScript's complaint about an
+          *undeclared* `attr:` name is a different claim from the slot one.) */}
+      <div attr:title="first" title="second" />
+      {/* SC8003: a spread followed by an attribute. The later attribute
+          legitimately wins, so TypeScript reports nothing even though the two
+          names are identical — the one identical-name order it leaves alone. */}
+      <div {...{ id: "spread" }} id="attribute" />
+      {/* Silent on both counts now. `onFoo` does not exist on
+          `HTMLAttributes<HTMLDivElement>` (TS2322), which was the
+          event-handlers rule's claim here, and the two occurrences are
+          byte-identical names (TS17001), which was the duplicate-prop rule's.
+          Kept as a negative case: it is the exact markup both narrowings were
+          made for. */}
       <div onFoo="a" onFoo="b" />
       {/* SC8001 twice, its surviving readability arm. Solid 1.x declares every
           handler under both spellings, so `onclick` and `ondblclick` are
@@ -48,16 +64,16 @@ export function Wrong() {
           claims available: SC8001 twice. */}
       <my-widget onFoo="a" />
       <my-widget onlynow={() => {}} />
-      {/* SC8003: `0x10` and `0x20` are NumericLiteral nodes, which the
-          compiler inlines into the template (as 16 and 32) — the same
-          first-wins attribute slot. The `on-foo` spelling keeps SC8001 out
-          of the way: its third character is not alphabetic, so the
-          event-handlers rule does not look at it. */}
+      {/* Silent: `0x10` and `0x20` are NumericLiteral nodes the compiler
+          inlines into the template (as 16 and 32), so they do share the
+          first-wins attribute slot — but the two names are byte-identical, so
+          TS17001 covers it. Retained because it is the only fixture case
+          pinning that numeric literals reach the static-value branch at all. */}
       <div on-foo={0x10} on-foo={0x20} />
-      {/* SC8003 twice: a component's props are a plain object, so a repeated
-          key overwrites whatever the DOM lowering would have said about the
-          spelling. The namespaced pair additionally draws SC8012 twice —
-          namespaces reach no compiler special case on a component. */}
+      {/* The component pairs are byte-identical too, so SC8003 is silent and
+          TS17001 speaks. They stay because the namespaced pair still draws
+          SC8012 twice — namespaces reach no compiler special case on a
+          component, where props are a plain object. */}
       <Panel onSave={() => {}} onSave={() => {}} />
       <Panel on:click={() => {}} on:click={() => {}} />
       {/* SC8004: eval with a different spelling */}

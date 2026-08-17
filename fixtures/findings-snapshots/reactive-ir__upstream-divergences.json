@@ -122,16 +122,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/upstream-divergences/proxy-cases.tsx",
-      "start": 637,
-      "end": 638,
-      "fixes": 0
-    },
-    {
       "rule": "v1/primitive-in-leaf-owner",
       "code": "SC3002",
       "kind": "violation",

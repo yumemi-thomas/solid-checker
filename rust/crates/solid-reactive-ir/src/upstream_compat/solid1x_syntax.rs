@@ -20,7 +20,7 @@
 //! upstream corpus case exercises a behaviour difference for it, and an option
 //! nothing proves is a knob that can silently rot.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use solid_facts::FileFacts;
 use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
@@ -70,7 +70,10 @@ fn jsx_no_duplicate_props(
     // a later `onSave` overwrites an earlier one no matter how either is
     // spelled. Applying the DOM model there would silence real duplicates.
     let intrinsic = is_lowercase_led(text(file, element.name.span));
-    let mut candidates = element
+    // Where the duplicate came from, so the narrowing below can tell which
+    // combinations TypeScript already reports. `None` is a direct attribute;
+    // `Some(index)` is a property of the index'th JSX spread.
+    let mut candidates: Vec<(Span, Option<String>, &str, Option<usize>)> = element
         .attributes
         .iter()
         .map(|attribute| {
@@ -83,38 +86,80 @@ fn jsx_no_duplicate_props(
                     .is_some_and(|span| expression_is_static_literal(file, span)),
                 JsxAttributeValueKind::Element | JsxAttributeValueKind::Fragment => false,
             };
+            let name = text(file, attribute.name);
             (
                 attribute.name,
-                duplicate_slot(text(file, attribute.name), static_literal, intrinsic),
+                duplicate_slot(name, static_literal, intrinsic),
+                name,
+                None,
             )
         })
         .collect::<Vec<_>>();
-    for spread in &element.spreads {
+    for (index, spread) in element.spreads.iter().enumerate() {
         candidates.extend(
             super::direct_object_literal_properties(file, spread.argument)
                 .unwrap_or_default()
                 .into_iter()
                 .filter(|property| !property.computed)
                 .map(|property| {
+                    let name = text(file, property.key).trim_matches(['\'', '"']);
                     (
                         property.key,
                         duplicate_slot(
-                            text(file, property.key).trim_matches(['\'', '"']),
+                            name,
                             expression_is_static_literal(file, property.value),
                             intrinsic,
                         ),
+                        name,
+                        Some(index),
                     )
                 }),
         );
     }
-    candidates.sort_by_key(|(span, _)| (span.start, span.end));
+    candidates.sort_by_key(|(span, ..)| (span.start, span.end));
 
-    let mut names = HashSet::new();
-    for (name_span, slot) in candidates {
+    let mut names: HashMap<String, (&str, Option<usize>)> = HashMap::new();
+    let mut seen_slots = HashSet::new();
+    for (name_span, slot, written, origin) in candidates {
         let Some(normalized) = slot else {
             continue;
         };
-        if !names.insert(normalized.clone()) {
+        seen_slots.insert(normalized.clone());
+        if let Some((first_written, first_origin)) =
+            names.insert(normalized.clone(), (written, origin))
+        {
+            // Narrowed 2026-08-17 under AGENTS.md's absolute rule. When both
+            // occurrences are spelled *identically*, TypeScript already makes
+            // this exact claim, and which diagnostic it makes depends on where
+            // the two live -- verified against the real solid-js@1.9.14
+            // typings, on intrinsic elements and components alike:
+            //
+            //   two attributes        TS17001 "JSX elements cannot have
+            //                         multiple attributes with the same name"
+            //   attribute, then spread TS2783 "'class' is specified more than
+            //                         once, so this usage will be overwritten"
+            //   one spread object      TS1117 "An object literal cannot have
+            //                         multiple properties with the same name"
+            //
+            // Two combinations are *not* covered and keep reporting: a spread
+            // followed by an attribute (the later attribute legitimately wins,
+            // so TypeScript says nothing) and two different spread objects.
+            //
+            // What survives regardless of origin is the case this rule exists
+            // for: two *differently spelled* props that the DOM lowering folds
+            // into one slot -- `onClick`/`onclick` both become the delegated
+            // `el.$$click` write, and `attr:title`/`title` share the template
+            // attribute slot. TypeScript sees two distinct, legal properties
+            // and is silent.
+            let typed_duplicate = written == first_written
+                && match (first_origin, origin) {
+                    (None, None) | (None, Some(_)) => true,
+                    (Some(first), Some(current)) => first == current,
+                    (Some(_), None) => false,
+                };
+            if typed_duplicate {
+                continue;
+            }
             let message = if normalized == "class" {
                 "Duplicate `class` props are not allowed; while it might seem to work, it can break unexpectedly. Use `classList` instead."
             } else {
@@ -132,10 +177,10 @@ fn jsx_no_duplicate_props(
         }
     }
 
-    let has_children_prop = names.contains("children");
+    let has_children_prop = seen_slots.contains("children");
     let has_children = !element.children.is_empty();
-    let has_inner_html = names.contains("innerHTML") || names.contains("innerhtml");
-    let has_text_content = names.contains("textContent");
+    let has_inner_html = seen_slots.contains("innerHTML") || seen_slots.contains("innerhtml");
+    let has_text_content = seen_slots.contains("textContent");
     let used = [
         has_children_prop.then_some("`props.children`"),
         has_children.then_some("JSX children"),

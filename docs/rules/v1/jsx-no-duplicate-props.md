@@ -14,6 +14,45 @@ evade the check. It also rejects combinations of JSX children, a `children`
 prop, `innerHTML`, and `textContent`, because each writes the element's
 content.
 
+## Scope: identical spellings are TypeScript's
+
+Narrowed on 2026-08-17 under the absolute rule in
+[AGENTS.md](../../../AGENTS.md): never report what TypeScript already reports.
+
+When the two occurrences are spelled **identically**, TypeScript already makes
+this exact claim. Which diagnostic it makes depends on where the two live —
+verified against the real `solid-js@1.9.14` typings, on intrinsic elements and
+components alike:
+
+| Written as | TypeScript |
+| --- | --- |
+| two attributes | TS17001 "JSX elements cannot have multiple attributes with the same name" |
+| an attribute, then a spread | TS2783 "'id' is specified more than once, so this usage will be overwritten" |
+| two keys in one spread object | TS1117 "An object literal cannot have multiple properties with the same name" |
+
+TS2783 appears only in the `strict` pass, which the absolute rule explicitly
+does not accept as an exception.
+
+Two identical-name orders are **not** covered, and both keep reporting: a
+spread followed by an attribute (the later attribute legitimately wins, so
+TypeScript says nothing — upstream's own case 02) and two *different* spread
+objects.
+
+What survives regardless of origin is the case this rule exists for: two
+**differently spelled** props that the compiler folds into one slot.
+`onClick`/`onclick` both become the delegated `el.$$click` write, and
+`attr:title`/`title` share the static template attribute slot. TypeScript sees
+two distinct, legal properties and is silent.
+
+The child-content conflicts (`children` versus JSX children versus `innerHTML`
+versus `textContent`) are untouched — no type relates those props to each
+other.
+
+Both directions are pinned by `fixtures/tsc-oracle/rule-cases.json` and
+`fixtures/reactive-ir/eslint-compat`. The upstream cases this narrowing stops
+firing for are declared `status: "policy"` in
+`fixtures/upstream-parity/deviations.json`, each naming its diagnostic.
+
 ### Intrinsic elements: the compiler's slot model
 
 Event-shaped names on an **intrinsic element** — the tags the compiler lowers
