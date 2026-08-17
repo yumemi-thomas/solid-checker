@@ -2222,6 +2222,7 @@ mod tests {
             runtime_value_domain: None,
             call_result_domain: None,
             constant_value: None,
+            array_shape: None,
             reference_space: None,
             runtime_identity: "".into(),
         };

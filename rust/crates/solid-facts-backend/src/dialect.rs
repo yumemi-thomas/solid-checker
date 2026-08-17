@@ -79,6 +79,7 @@ pub fn retired_rule(name: &str) -> Option<&'static str> {
 pub struct SemanticDemandCapabilities {
     pub jsx_member_root_symbols: bool,
     pub jsx_static_value_types: bool,
+    pub jsx_handler_array_shapes: bool,
     pub array_map_receiver_types: bool,
 }
 
@@ -86,12 +87,14 @@ impl SemanticDemandCapabilities {
     pub const NONE: Self = Self {
         jsx_member_root_symbols: false,
         jsx_static_value_types: false,
+        jsx_handler_array_shapes: false,
         array_map_receiver_types: false,
     };
     #[cfg(feature = "dialect-v1")]
     const SOLID_1: Self = Self {
         jsx_member_root_symbols: true,
         jsx_static_value_types: true,
+        jsx_handler_array_shapes: true,
         array_map_receiver_types: true,
     };
 }

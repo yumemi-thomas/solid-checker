@@ -35,6 +35,7 @@ fn plan_file(
     let mut type_descriptor_spans = HashSet::new();
     let mut runtime_value_domain_spans = HashSet::new();
     let mut constant_value_spans = HashSet::new();
+    let mut array_shape_spans = HashSet::new();
     let mut async_symbol_spans = HashSet::new();
     let mut async_value_spans = Vec::new();
     // An expression-bodied arrow's return lives on its function fact, so both
@@ -210,6 +211,16 @@ fn plan_file(
             if static_value_type_required {
                 constant_value_spans.insert(expression);
             }
+            // `no-array-handlers` (1.x) asks whether the handler value is an
+            // array or tuple. That is `arrayShape`, not the rendered type: an
+            // aliased tuple renders as its alias, and a trailing `[]` reads the
+            // same on an array of functions and on a function returning an
+            // array. The span already carries a demand, so this adds a field to
+            // an existing entity rather than a new entity that could outrank
+            // another rule's `smallest_contained_*` lookup.
+            if handler && dialect.semantic_demands.jsx_handler_array_shapes {
+                array_shape_spans.insert(expression);
+            }
             // A non-literal `keyed` value on a control-flow component picks
             // the children-callback overload at runtime; source discovery
             // claims the custom-key shape only when the value's demanded
@@ -292,6 +303,7 @@ fn plan_file(
                     .expect("matched above");
                 add_symbol(member.object, false);
                 type_descriptor_spans.insert(member.object);
+                array_shape_spans.insert(member.object);
             }
         }
     }
@@ -422,6 +434,7 @@ fn plan_file(
         planned.callability = type_descriptor_spans.contains(&span);
         planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
         planned.constant_value = constant_value_spans.contains(&span);
+        planned.array_shape = array_shape_spans.contains(&span);
         planned.reference_space = file.ast.imports.iter().any(|import| {
             import
                 .bindings
@@ -486,6 +499,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         runtime_value_domain: false,
         call_result_domain: false,
         constant_value: false,
+        array_shape: false,
         reference_space: false,
         runtime_identity: false,
     }
@@ -545,6 +559,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.runtime_value_domain |= demand.runtime_value_domain;
             current.call_result_domain |= demand.call_result_domain;
             current.constant_value |= demand.constant_value;
+            current.array_shape |= demand.array_shape;
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
         } else {
