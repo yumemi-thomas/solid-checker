@@ -1,0 +1,192 @@
+{
+  "schemaVersion": 1,
+  "note": "One entry per rule whose positive case could plausibly also be a TypeScript error. `scripts/tsc-oracle-gate.mjs` compiles each `code` against the real published typings (fixtures/tsc-oracle/packages.json) and enforces `expect`. See docs/precision-backlog.md for the full redundancy ledger, of which this file is the executable part.",
+  "expectations": {
+    "silent": "TypeScript must report nothing. The rule's claim is therefore its own. A diagnostic here means the rule now duplicates `tsc` and must be narrowed or deleted -- that is the gate AGENTS.md's absolute rule was missing.",
+    "distinct-claim": "TypeScript does report something, but about a different defect than the finding asserts. Requires `allow` (the diagnostic codes seen) and `why` (what the finding claims that the type error does not). Never use this to keep a rule whose claim is the type error's claim.",
+    "removed-because-redundant": "TypeScript must report a diagnostic. The rule that used to fire here was deleted for exactly that reason, and this direction is pinned so that a future Solid release which loosens the type -- making `tsc` silent again -- fails this gate and forces the removal to be reconsidered rather than quietly leaving a hole."
+  },
+  "cases": [
+    {
+      "rule": "invalid-cleanup-return",
+      "dialect": "v2",
+      "expect": "removed-because-redundant",
+      "why": "SC3004, removed 2026-08-17. `EffectFunction` returns `(() => void) | void`, so every spelling the rule proved -- contextual, explicit, returned call, member -- is a type error. `(() => void) | void` is a union, not bare `void`, so return-value-ignoring assignability does not rescue it.",
+      "allow": [
+        2345,
+        2322
+      ],
+      "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\nfunction makeCount(): number {\n  return 1;\n}\nconst teardown = { dispose: () => {}, count: 1 };\ncreateEffect(() => count(), (value) => value + 1);\ncreateEffect(() => count(), (value) => {\n  return value + 1;\n});\ncreateEffect(() => count(), () => makeCount());\ncreateEffect(() => count(), () => teardown.count);\n"
+    },
+    {
+      "rule": "invalid-cleanup-return",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "The legal spellings the removed rule accepted. Pinned so the removal cannot be re-justified by a type that rejects *everything*: the type draws the same line the rule drew, which is what made the rule redundant rather than merely weaker.",
+      "code": "import { createSignal, createEffect, onSettled } from \"solid-js\";\nconst [count] = createSignal(0);\nconst teardown = { dispose: () => {} };\ncreateEffect(() => count(), () => teardown.dispose);\ncreateEffect(() => count(), () => () => {});\ncreateEffect(() => count(), () => undefined);\ncreateEffect(() => count(), () => {});\nonSettled(() => () => {});\n"
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "dialect": "v2",
+      "expect": "removed-because-redundant",
+      "why": "SC9002, removed 2026-08-17. The obligation's whole domain was the *legality* of a returned value, and the type system closes legality: a mixed union and an `unknown` return are type errors, and the second argument being a non-callback value at all is a type error.",
+      "allow": [
+        2345,
+        2322
+      ],
+      "code": "import { createSignal, createEffect, onSettled } from \"solid-js\";\nconst [count] = createSignal(0);\ndeclare const mixed: (() => void) | number;\ndeclare const un: unknown;\ncreateEffect(() => count(), () => mixed);\ncreateEffect(() => count(), () => un);\ncreateEffect(() => count(), undefined);\ncreateEffect(() => count(), null);\ncreateEffect(() => count(), 5);\ncreateEffect(() => count(), \"apply\");\nonSettled(() => mixed);\nonSettled(() => un);\n"
+    },
+    {
+      "rule": "cleanup-return-unresolved",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "The rest of SC9002's domain, and the reason narrowing it was not an option. `any` leaves `tsc` silent, but `any` is missing evidence rather than proof of a defect (AGENTS.md). The `{ effect, error }` bundle is a supported API form -- `EffectBundle` -- so the obligation the rule raised there was noise on idiomatic code, not a limit worth reporting.",
+      "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ndeclare const anyish: any;\nconst applyCount = (value: number) => {};\nconst handleError = (error: unknown) => {};\ncreateEffect(() => count(), () => anyish);\ncreateEffect(() => count(), { effect: applyCount, error: handleError });\n"
+    },
+    {
+      "rule": "invalid-refresh-target",
+      "dialect": "v2",
+      "expect": "removed-because-redundant",
+      "why": "SC7003, removed 2026-08-17. `Refreshable<T> = T & { readonly [$REFRESH]: any }` encodes the source brand *as a type*, so every target shape the rule proved invalid -- a wrapper thunk, a read value, an object literal, a plain accessor, a store child record, and a value-form store -- is TS2345 against it. A valid target type-checks, so the type draws the same line the rule drew.",
+      "allow": [
+        2345
+      ],
+      "code": "import { createSignal, createMemo, createStore, refresh } from \"solid-js\";\nconst [signalGet] = createSignal(0);\nconst memo = createMemo(() => 1);\nconst [state] = createStore({ user: { name: \"a\" } });\nconst target = () => 1;\nexport function Cases() {\n  refresh(() => target());\n  refresh({});\n  refresh(target);\n  refresh(state.user);\n  refresh(state);\n  refresh(memo.name as never);\n  return <div>{signalGet()}</div>;\n}\n"
+    },
+    {
+      "rule": "invalid-refresh-target",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "The valid targets, pinned so the removal cannot be justified by a type that rejects everything. `refresh(memo)` and `refresh(signalGet)` type-check because `createMemo`/`createSignal` return `Refreshable` accessors.",
+      "code": "import { createSignal, createMemo, refresh } from \"solid-js\";\nconst [signalGet] = createSignal(0);\nconst memo = createMemo(() => 1);\nexport function Cases() {\n  refresh(memo);\n  refresh(signalGet);\n  return <div />;\n}\n"
+    },
+    {
+      "rule": "affects-keys-on-accessor",
+      "dialect": "v2",
+      "expect": "removed-because-redundant",
+      "why": "SC7004, removed 2026-08-17. A key on an accessor target selects the one-argument `affects(target: Accessor<unknown> | Store<object>)` overload, whose second parameter does not exist, so TypeScript reports TS2345 on the key itself -- exactly the rule's claim.",
+      "allow": [
+        2345
+      ],
+      "code": "import { createSignal, createMemo, affects } from \"solid-js\";\nconst [signalGet] = createSignal(0);\nconst memo = createMemo(() => 1);\nexport function Cases() {\n  affects(memo, \"name\");\n  affects(signalGet, \"name\");\n  affects(signalGet());\n  return <div />;\n}\n"
+    },
+    {
+      "rule": "affects-keys-on-accessor",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "The legal `affects` forms from the rc.0 doc comment: a bare accessor, a store record, and a record plus one of its own keys.",
+      "code": "import { createMemo, createStore, affects } from \"solid-js\";\nconst memo = createMemo(() => 1);\nconst [state] = createStore({ user: { name: \"a\" } });\nexport function Cases() {\n  affects(memo);\n  affects(state);\n  affects(state, \"user\");\n  affects(state.user, \"name\");\n  return <div />;\n}\n"
+    },
+    {
+      "rule": "refresh-target-unresolved",
+      "dialect": "v2",
+      "expect": "removed-because-redundant",
+      "why": "SC9003, both names, removed 2026-08-17. The obligation asked whether the target carries the source brand, and the brand is a type: an untraceable target is TS2345 and a branded one type-checks, so there was nothing left to be uncertain about.",
+      "allow": [
+        2345
+      ],
+      "code": "import { refresh, affects } from \"solid-js\";\nconst plain = { value: 1 };\nexport function Cases(parameter: { user: { name: string } }) {\n  refresh(plain);\n  refresh(plain.value);\n  affects(plain);\n  affects(parameter.user, \"name\");\n  return <div />;\n}\n"
+    },
+    {
+      "rule": "missing-effect-function",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "SC7001 is independent. The single-argument `createEffect(compute)` overload still exists in rc.0 -- deprecated, and typed to return `never` -- so `tsc` accepts the call. The finding's claim is that the effect never runs, which no part of that signature says.",
+      "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateEffect(() => count());\n"
+    },
+    {
+      "rule": "no-owner-settled-cleanup",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "SC4004 is independent, and it is the consumer that kept the cleanup-return *classification* alive after SC3004 went. Returning a real cleanup from an unowned `onSettled` is perfectly typed; the claim is that nothing will ever dispose it -- an ownership fact.",
+      "code": "import { onSettled } from \"solid-js\";\nonSettled(() => {\n  const timer = setInterval(() => {}, 1000);\n  return () => clearInterval(timer);\n});\n"
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "SC4002 is independent. `onCleanup` takes a `Disposable` and this argument is one; the claim is that no owner is active at the call, which is a runtime ownership fact.",
+      "code": "import { onCleanup } from \"solid-js\";\nonCleanup(() => {});\n"
+    },
+    {
+      "rule": "reactive-read-after-await",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "SC1002 is independent. Reading an accessor after an `await` is type-correct in every respect; the claim is about when the read happens relative to the tracking scope.",
+      "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\ncreateEffect(\n  async () => {\n    await Promise.resolve();\n    return count();\n  },\n  () => {},\n);\n"
+    },
+    {
+      "rule": "v1/no-array-handlers",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC8007 is independent, and this is the case that shows the JSX family is not uniformly redundant: `EventHandlerUnion` includes `BoundEventHandler`, so the `[handler, data]` tuple is *legal* per Solid's own types. The claim is that the bound form defeats handler identity comparison, which no type expresses.",
+      "code": "const handler = (data: number, event: MouseEvent) => {};\nexport const Case = () => <button onClick={[handler, 1]} />;\n"
+    },
+    {
+      "rule": "v1/no-innerhtml",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC8008 is independent. `innerHTML` is a declared prop and a string is its declared type; the claim is that the assignment overwrites the element's children and admits untrusted markup.",
+      "code": "export const Case = () => <div innerHTML={\"<b>x</b>\"}>overwritten</div>;\n"
+    },
+    {
+      "rule": "v1/jsx-no-script-url",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC8004 is independent. `href` is declared `string`; the claim is about the URL scheme the string carries.",
+      "code": "export const Case = () => <a href=\"javascript:void(0)\">dismiss</a>;\n"
+    },
+    {
+      "rule": "v1/no-implicit-draggable",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC8019 is independent. `draggable={false}` is a declared, correctly typed prop; the claim is about what the 2.0 runtime does with the `false` value (removes the attribute, selecting `auto`).",
+      "code": "export const Case = () => <img draggable={false} src=\"/a.png\" />;\n"
+    },
+    {
+      "rule": "v1/jsx-no-duplicate-props",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC8003's surviving domain. Two *differently spelled* props that the compiler lowers into one slot -- `onClick`/`onclick` both become the delegated `el.$$click` write -- are distinct, legal properties to TypeScript. Its byte-identical-name domain is TS17001 and is recorded as redundant in docs/precision-backlog.md.",
+      "code": "const handler = () => {};\nexport const Case = () => <div onClick={handler} onclick={handler} />;\n"
+    },
+    {
+      "rule": "v1/no-unknown-namespaces",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC8012's surviving domain. On a component, props are a plain object the compiler never lowers, so an unknown namespace is an ordinary permitted key. Its intrinsic-element domain is TS2322 and is recorded as redundant in docs/precision-backlog.md.",
+      "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const Case = () => <Panel model:value={1} />;\n"
+    },
+    {
+      "rule": "v1/event-handlers",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "why": "SC8001, audited 2026-08-17 and recorded redundant on intrinsic elements in docs/precision-backlog.md (removal not yet landed). Both arms are covered: an unknown `on*` name does not exist on the element's attribute type, and a statically valued known handler is not assignable to `EventHandlerUnion`. Solid 1.x's only JSX index signature is `[key: `-${string}`]`, so nothing absorbs the name.",
+      "allow": [
+        2322
+      ],
+      "code": "export const Unknown = () => <div onFoo=\"a\" />;\n"
+    },
+    {
+      "rule": "v1/no-react-specific-props",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "why": "SC8011, audited 2026-08-17 and recorded redundant in docs/precision-backlog.md (removal not yet landed). Each React spelling is individually absent from the element's attribute type.",
+      "allow": [
+        2322
+      ],
+      "code": "export const Case = () => <label className=\"field\" />;\n"
+    },
+    {
+      "rule": "v1/style-prop",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "why": "SC8017, audited 2026-08-17 and recorded redundant in docs/precision-backlog.md (removal not yet landed). Both arms are covered by `csstype`: a camelCase key is TS2561 with the kebab-case suggestion, and a unitless number for a length property is TS2322.",
+      "allow": [
+        2561,
+        2322
+      ],
+      "code": "export const Camel = () => <div style={{ maxWidth: 3 }} />;\n"
+    }
+  ]
+}

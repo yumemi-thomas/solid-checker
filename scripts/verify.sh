@@ -32,8 +32,17 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
 npm ci --ignore-scripts --prefix packages/cli
 npm test --prefix packages/cli
 
+# AGENTS.md's absolute rule, as a gate: no rule's positive case may also be a
+# `tsc` error against the real published Solid typings. Provisioning installs
+# the audited package versions and verifies them, so a drifted install fails
+# here rather than changing the answer silently.
+node scripts/tsc-oracle.mjs provision --dialect all
+node scripts/tsc-oracle-gate.mjs
+
 sh -n scripts/*.sh
 jq empty schema/*.json
+jq empty fixtures/tsc-oracle/*.json
+jq empty fixtures/upstream-parity/deviations.json
 find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
 node scripts/dialect-manifests.mjs validate
 node scripts/check-bundled-contracts.mjs

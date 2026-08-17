@@ -8,6 +8,252 @@ change — as opposed to the bounded corrections that land as ordinary fixes.
 Direction legend: **FN** — misses real defects; **FP** — reports correct
 code; **Both** — either, depending on the code.
 
+## The `tsc` redundancy ledger (audited 2026-08-17)
+
+AGENTS.md carries an absolute rule — never report what `tsc` reports, judged
+against the library's *real published typings*. This section is that rule
+applied to every rule in both catalogs, once, with evidence.
+
+**How the evidence was produced.** `scripts/tsc-oracle.mjs` compiles a snippet
+against packages installed from `fixtures/tsc-oracle/packages.json` at the
+versions this repository audits — `solid-js@1.9.14` for the 1.x catalog (the
+version `pkg/contracts/bundled/solid-v1/solid-js.json` was generated from) and
+`solid-js`/`@solidjs/signals`/`@solidjs/web`@`2.0.0-rc.0` for the 2.0 catalog
+(the versions in `pkg/contracts/bundled/runtime-lock.json`). It never reads a
+fixture stub. Two passes run, `strict` and non-`strict`, because "the project
+may not be `strict`" is a distinction a ledger entry has to state even though
+the absolute rule refuses it as an exception. TypeScript 5.9.3.
+
+**The gate.** `scripts/tsc-oracle-gate.mjs` enforces
+`fixtures/tsc-oracle/rule-cases.json` in `scripts/verify.sh` and as
+`make tsc-oracle`. A rule whose positive case is also a `tsc` error now fails
+CI, and a removal justified by a diagnostic fails CI if that diagnostic ever
+disappears. Verified in both directions.
+
+**Why this was invisible for a full cycle.** Every fixture stubs Solid with a
+reduced `solid-js.d.ts`, and two of those stubs were *looser* than the real
+package in exactly the place a rule's proof depended on:
+
+| Stub said | Real package says |
+| --- | --- |
+| `apply: (value: T) => unknown` | `EffectFunction<Prev, Next extends Prev = Prev> = (v: Next, p?: Prev) => (() => void) \| void` |
+| `onSettled(callback: () => unknown)` | `onSettled(callback: () => void \| (() => void))` |
+| `createTrackedEffect(callback: () => unknown)` | `createTrackedEffect(compute: () => void \| (() => void), options?)` |
+| `refresh(target: unknown)` | `refresh<T>(target: Refreshable<T>)`, where `Refreshable<T> = T & { readonly [$REFRESH]: any }` |
+| `affects(target: unknown, key?: PropertyKey)` | `affects(target: Accessor<unknown> \| Store<object>)` / `affects<T extends object>(target: Store<T>, key: keyof T)` |
+
+Each loosening manufactured a defect no real project can produce, and every
+gate stayed green while the rule duplicated `tsc`. The proof-bearing
+signatures are now byte-faithful in the fixtures that exercise them
+(`solid2-precision`, `leaf-owner`, `execution-phases`, `eslint-plugin-corpus`,
+`engine/eslint-reactivity-v2`, `package-callback-producer`); where a stub stays
+deliberately loose (`static-api`, `static-api-unresolved`, whose subject *is*
+the malformed call) the stub now says so in a comment naming the real signature
+and asserting that no surviving rule's proof depends on the looseness.
+
+### Removed: seven rules, 63 findings (601 → 538)
+
+Every one is a **violation the type system already reports on the same code**,
+or an **obligation whose whole domain the type system closes**. All seven are
+2.0-catalog rules, so `scripts/parity.mjs` is unaffected (422/465, all 59
+deviations declared, before and after).
+
+| Code | Rule | Findings | Why |
+| --- | --- | --- | --- |
+| SC3004 | `invalid-cleanup-return` | 29 | Every spelling is TS2345/TS2322 against `EffectFunction`'s `(() => void) \| void` return |
+| SC9002 | `cleanup-return-unresolved` | 18 | Its whole domain was the *legality* of a returned value, which the same type closes |
+| SC7003 | `invalid-refresh-target` | 6 | `Refreshable<T>` is the source brand as a type; every invalid target is TS2345 |
+| SC7003 | `invalid-affects-target` | 2 | Same, against `Accessor<unknown> \| Store<object>` |
+| SC7004 | `affects-keys-on-accessor` | 2 | A key on an accessor target selects the one-argument overload; the key is TS2345 |
+| SC9003 | `refresh-target-unresolved` | 3 | Asked whether the target carries the brand — a question the type answers |
+| SC9003 | `affects-target-unresolved` | 3 | Same |
+
+#### SC3004 `invalid-cleanup-return`
+
+`tsc --noEmit`, real `2.0.0-rc.0` typings, **both** passes (so no `strict`
+argument is available):
+
+~~~
+sc3004.tsx(5,29) TS2345: Argument of type '(value: number) => number' is not assignable to
+  parameter of type 'EffectFunction<number, number> | EffectBundle<number, number>'.
+    Type 'number' is not assignable to type 'void | (() => void)'.
+sc3004.tsx(6,29) TS2345: ... (explicit `return value + 1`)
+sc3004.tsx(7,29) TS2345: ... (`() => makeCount()`, a returned call)
+sc3004.tsx(8,29) TS2322: ... (`() => teardown.count`, a member return)
+~~~
+
+The legal spellings — `() => teardown.dispose`, `() => () => {}`,
+`() => undefined`, `() => {}` — are **accepted**. The type does not merely
+reject more than the rule did; it draws the same line. `(() => void) | void` is
+a union, not bare `void`, so return-value-ignoring assignability does not apply.
+
+#### SC9002 `cleanup-return-unresolved`
+
+The obligation had four sources. Three are TypeScript's, and the fourth is not
+a defect:
+
+- **mixed union / `unknown`** — TS2345 and TS2322 in both passes.
+- **a non-callback second argument** (`undefined`, `null`, `5`, `"apply"`, and
+  1.x-style value threading) — TS2345 in both passes.
+- **an unconstrained generic return** — TS2345.
+- **`any`, and an unresolved wrapper callback** — `tsc` is silent, and that is
+  not licence to report. Absence of a type error because the type is `any` is
+  *missing evidence*, not proof (AGENTS.md's own trap list). More decisively:
+  when the program type-checks, TypeScript has *proven* the returned value
+  legal, so an obligation asserting uncertainty about its legality is noise
+  about code the type system has cleared. The ownership consumer needs no
+  finding for this — it simply does not get a "cleanup was handed over" fact,
+  which is correctly modeled as an absent proof.
+
+One of those unresolved-callback obligations was worse than noise: three of the
+18 sat on `createEffect(compute, { effect, error })`, which is the **supported
+`EffectBundle` form**. `tsc` accepts it; the checker raised an obligation on
+idiomatic code. `rule_quality_process.rs` pins all of these at 0 so a
+reintroduction fails there.
+
+#### SC7003 / SC7004 / SC9003 — the refresh and affects target family
+
+This family was hidden by the same mechanism, one layer deeper: the fixtures
+type `refresh(target: unknown)`, while `@solidjs/signals` brands its
+refreshable sources in the type system —
+
+~~~ts
+export type Refreshable<T> = T & { readonly [$REFRESH]: any };
+export declare function refresh<T>(target: Refreshable<T>): void;
+export declare function affects(target: Accessor<unknown> | Store<object>): void;
+export declare function affects<T extends object>(target: Store<T>, key: keyof T): void;
+~~~
+
+so *every* shape the rules proved invalid is a type error, in both passes:
+
+~~~
+p3.tsx(11,11) TS2345: '() => number' is not assignable to 'Refreshable<() => number>'.
+                        Type '() => number' is not assignable to '{ readonly [$REFRESH]: any; }'.
+p3.tsx(12,11) TS2345: '{}' ... Property '[$REFRESH]' is missing
+p3.tsx(13,11) TS2345: a plain accessor `target` ... '[$REFRESH]' is missing
+p3.tsx(14,11) TS2345: `state.user`, a store child record ... '[$REFRESH]' is missing
+p3.tsx(15,11) TS2345: `affects(signalGet())` — 'number' is not assignable to
+                        'object | Accessor<unknown>'
+p4.tsx(14,11) TS2345: `refresh(valueFormStore)` — only the derived forms are branded
+p4.tsx(6,17)  TS2345: `affects(memo, "name")` — '"name"' is not assignable to 'unique symbol'
+~~~
+
+And the valid targets — `refresh(memo)`, `refresh(signalGet)`, `affects(memo)`,
+`affects(state)`, `affects(state, "user")`, `affects(state.user, "name")` — all
+type-check. Same line, both directions. Zero-argument and over-long calls are
+TS2554 by arity.
+
+**What was kept.** `static_api.rs` still records the `refresh(...)` *write* that
+SC2001 `reactive-write-in-owned-scope` consumes; only the target diagnostics
+went, and the control flow that skips a malformed call still skips it, so a call
+`tsc` rejects records no write. SC2001 is unchanged at 36 findings.
+
+**Do not amputate the runtime half.** The same applies to cleanup: SC3004's
+consumer is gone, but `cleanup.rs::function_returns_cleanup` and the
+`CleanupReturnStatus` classification behind it are load-bearing for SC4002 and
+SC4004, which assert *ownership and disposal* — facts no type expresses. The
+`callResultDomain` and member-return work still serves them; `diagnostics_process.rs`
+pins that a returned call producing a `number` hands over no cleanup while one
+producing a function does.
+
+### Proven redundant, removal specified but not landed
+
+Each of these is proven by the oracle and pinned in
+`fixtures/tsc-oracle/rule-cases.json` as `removed-because-redundant`, which
+means **the gate already treats the removal as decided**. They are not landed
+here because each is a 1.x-catalog rule with upstream parity cases behind it:
+deleting one turns its corpus cases into `fired` deviations that must each be
+declared `status: "policy"` with a reason naming the TypeScript diagnostic, and
+that ledger work is a change per rule rather than a line in this one. **Parity
+must not be used to resurrect any of them** — the absolute rule outranks it.
+
+| Code | Rule | `tsc` evidence (real `1.9.14` typings) |
+| --- | --- | --- |
+| SC8001 | `v1/event-handlers` | Both arms. Unknown name: `<div onFoo="a" />` and `<div onFoo={handler} />` → TS2322 "Property 'onFoo' does not exist on type 'HTMLAttributes<HTMLDivElement>'". Known handler, static value: `onClick="handler"` → TS2322 "Type 'string' is not assignable to type 'EventHandlerUnion<…>'". 1.x's only JSX index signature is `` [key: `-${string}`] ``, so nothing absorbs the name. |
+| SC8011 | `v1/no-react-specific-props` | Each spelling individually: `className` → TS2322, `htmlFor` → TS2322, `key` → TS2322. (A combined element reports only the first excess property, so each was probed on its own element.) |
+| SC8017 | `v1/style-prop` | Both arms, via `csstype`: `style={{ maxWidth: 3 }}` → TS2561 with the kebab-case suggestion; `style={{ "max-width": 3 }}` → TS2322 "Type '3' is not assignable to type 'MaxWidth<…>'". A string `style="color: red"` stays legal, matching the rule. |
+
+### Partially redundant — narrow, do not delete
+
+| Code | Rule | Covered by `tsc` (drop) | Not covered (keep) |
+| --- | --- | --- | --- |
+| SC8003 | `v1/jsx-no-duplicate-props` | Byte-identical attribute names → **TS17001** "JSX elements cannot have multiple attributes with the same name", on intrinsics *and* components. Every duplicate case in `eslint-compat` is this shape. | Differently spelled props the compiler lowers into one slot: `onClick`/`onclick` (both become the delegated `el.$$click` write) and `attr:title`/`title`. `tsc` reports nothing — they are distinct, legal properties. |
+| SC8012 | `v1/no-unknown-namespaces` | An unknown namespace on an **intrinsic** element: `<input model:value={…} />` → TS2322. | The same on a **component**, whose props are a plain object the compiler never lowers: `<Panel model:value={1} />` with `props: Record<string, unknown>` is silent. |
+| SC1007 | `expected-function-got-expression` | A non-callable handler value: `onClick={count()}` → TS2322, and `onClick={props.onSave}` where `onSave: number` → TS2322. | A *callable* value whose read is itself reactive: `onClick={props.onSave}` where `onSave: () => void` is silent, and the claim is about the tracked read, not the type. |
+| SC1005 | `uncalled-accessor` | Both audited arms. As a JSX child, `<div>{count}</div>` → TS2322 "Type 'Accessor<number>' is not assignable to type 'Element'"; as an attribute, `title={count}` → TS2322. In a condition, `if (count)` → **TS2774** "This condition will always return true since this function is always defined. Did you mean to call it instead?" — `strict`-only, which the absolute rule explicitly does not accept as an exception. | Unaudited: the remaining spellings of the rule's domain. Marked **narrow-or-remove pending a full-domain audit** rather than removed on two arms. |
+
+### Independent — keep
+
+Grouped by why no type can express the claim. `tsc` was confirmed silent on a
+positive case for each entry marked ✓; the rest assert a runtime, timing, or
+provenance fact with no type surface at all.
+
+- **Reactivity and timing** — SC1001 `strict-read-untracked`, SC1002
+  `reactive-read-after-await` ✓, SC1006 `untracked-derived-function`, SC9011
+  `reactive-source-uncaptured`, SC5004 `v1/no-async-tracked-scope` ✓
+  (`createMemo(async …)` type-checks: 1.x `EffectFunction` returns `Next`
+  freely and 2.0's `ComputeFunction` admits `PromiseLike`), SC5001/SC5002/SC5003/SC5005
+  (the pending-async and Loading-boundary family). *When* a read happens
+  relative to a tracking scope is not a property of its type.
+- **Ownership and disposal** — SC4001 `no-owner-effect`, SC4002
+  `no-owner-cleanup` ✓ (`onCleanup(() => {})` is a well-typed `Disposable`),
+  SC4003 `no-owner-boundary`, SC4004 `no-owner-settled-cleanup` ✓ (returning a
+  real cleanup from an unowned `onSettled` is perfectly typed; the claim is that
+  nothing will dispose it), SC3001/SC3002/SC3003 (the leaf-scope rules).
+- **Write phase and transactions** — SC2001 `reactive-write-in-owned-scope`,
+  SC2002 `action-called-in-owned-scope`, SC2003 `no-direct-mutation`, SC2004
+  `resolve-in-reactive-scope`. Which scope is active at a call is not typed.
+- **Compiler lowering** — SC8008 `v1/no-innerhtml` ✓ (`innerHTML` is a declared
+  prop and a string is its declared type), SC8004 `v1/jsx-no-script-url` ✓
+  (`href` is `string`; the claim is about the scheme the string carries),
+  SC8019 `no-implicit-draggable` ✓ (`draggable={false}` is well typed; the claim
+  is what the rc.0 runtime does with `false`), SC8020 `valid-jsx-nesting` ✓
+  (`<p><div /></p>` type-checks), SC8007 `v1/no-array-handlers` ✓ — the case that
+  proves the JSX family is not uniformly redundant: `EventHandlerUnion` includes
+  `BoundEventHandler`, so `onClick={[handler, 1]}` is **legal** per Solid's own
+  types.
+- **API shape that survives its own signature** — SC7001
+  `missing-effect-function` ✓: the single-argument `createEffect(compute)`
+  overload still exists in rc.0, deprecated and typed `never`, so the call
+  type-checks and the claim "this effect never runs" is the checker's alone.
+  SC7002 `sync-node-received-async`, SC7005 `http-response-after-flush`,
+  SC7006/SC7007 (the server surface) likewise assert runtime behavior.
+- **Syntax and style, no type surface** — SC1003 `v1/no-destructure` ✓ /
+  `component-props-destructure`, SC1004 `v1/components-return-once` /
+  `component-returns-conditionally`, SC8002 `v1/imports`, SC8006
+  `v1/jsx-uses-vars`, SC8009 `v1/no-proxy-apis` ✓ (a legal import; the claim is
+  target-runtime Proxy support), SC8010 `v1/no-react-deps` ✓
+  (`createEffect(fn, [dep])` type-checks — the array is 1.x's `Init` value),
+  SC8013 `v1/prefer-classlist`, SC8014 `v1/prefer-for`, SC8015
+  `v1/prefer-show`, SC8016 `v1/self-closing-comp` ✓, SC8018
+  `prefer-component-syntax`, SC6001 `primitive-in-directive-application`.
+- **Provenance and contracts** — SC9001, SC9005, SC9006 (the package-contract
+  family). A missing contract is a statement about analyzability, not about a
+  type.
+- **SC8005 `v1/jsx-no-undef`** — kept, with a caveat worth recording. Its
+  surviving domain is an unknown `use:` name (unresolved JSX tags were already
+  made uncertifiable and silent). Against the published typings *alone*,
+  `use:autofocus` is TS2322, because `JSX.Directives` ships empty and is meant
+  to be augmented. In a project that has augmented it — the documented, intended
+  usage — `tsc` is silent, and the checker's claim (no lexical *value* binding
+  exists for that name) is a different question from whether the *type* was
+  declared. Independent, but a narrowing candidate if the two ever collapse.
+
+### Fixture defects surfaced by the audit, not yet fixed
+
+- `fixtures/reactive-ir/import-location` imports `createSignal, createMemo` from
+  `"solid-js/store"`, which is **TS2305** against 1.9.14 — those names are not
+  exported from the store subpath. The SC8009 finding on that statement is not
+  itself the type error's claim (SC8009 is about Proxy-API availability), but the
+  fixture is pinning a rule through code no real project compiles. Rewrite it on
+  a legal import.
+- `fixtures/reactive-ir/solid-1x-sources` has no `node_modules/solid-js`, so
+  dialect selection falls back to the 2.0 default (the documented trap in
+  AGENTS.md) and its 1.x-shaped `createEffect((prev) => …, 0)` was being read as
+  a 2.0 effect. One of the 18 removed SC9002 findings was that artifact. Give it
+  a 1.x stub with the `.gitignore` exception, or move its cases into a fixture
+  that already has one.
+
 ## Compiler-faithful heuristics (verified against the 1.x compiler, do not "fix")
 
 These were flagged as suspect eslint-plugin-solid ports and have now been
@@ -35,6 +281,129 @@ is why it stays.
   whitespace-only children block `self-closing-comp`** — configurable
   stylistic leniencies matching upstream's option defaults; neither can
   produce a false positive.
+
+## Resolved: Solid 2.0 precision corrections 2026-08-17
+
+**Read with the ledger above.** Where an entry below describes SC3004 or SC9002
+as reporting something, that consumer is gone; the *classification* work it
+describes survives because SC4002/SC4004 need it. The entries are kept as
+written rather than rewritten, because they record how the runtime value domain
+came to be trusted — which is still true — and rewriting them would erase the
+reason the removal was safe.
+
+- **Synchronous standard callbacks after `await`** (`static_rules.rs` and
+  `runtime_semantics.rs`): SC1002's accessor-call *and* member-read proofs now
+  continue into a function written directly in an exact built-in
+  `Array`/`ReadonlyArray.prototype.filter` call after a dominating await.
+  Callability is sampled at the argument, not the callee, and the callback must
+  be the literal argument — `filter(makePredicate(fn))` stays silent. Promise
+  callbacks, project-defined or shadowed methods, `async` callbacks, and
+  unresolved package callbacks remain fail-closed.
+- **Cleanup returns classified from the runtime value domain** (`cleanup.rs` and
+  `demand_plan.rs`): identifier returns are demanded with TypeFacts'
+  `runtimeValueDomain` and classified from it rather than from rendered type
+  text, at exactly the peeled span the classifier resolves the entity at (so
+  `return (value)` and `return value as Cleanup` work like the bare form).
+  `CleanupReturnStatus` now separates "proven a function" from "proven legal but
+  not a function", so a proven-`undefined` return can no longer make a callback
+  look like one that returns a cleanup. Mixed domains, `unknown`, `any`, and
+  generics were SC9002 obligations (the rule is removed; they are now just
+  absent cleanup proofs).
+- **Static member cleanup returns** (`cleanup.rs` and `demand_plan.rs`): member
+  return spans now receive the same exact `runtimeValueDomain` demand as
+  identifier returns. A proven static function member is accepted as a
+  cleanup and a proven primitive member was SC3004 (removed; now simply "not a
+  cleanup"). A *mixed* union
+  (`(() => void) | number`), `any`, and a computed member were SC9002 (removed),
+  because their runtime property value is not closed by an exact dispatch
+  proof. An **optional** member (`maybe?: () => void`) is not an obligation: it
+  classifies as legal-but-not-a-cleanup and is silent, exactly as the
+  identifier path treats `(() => void) | undefined`. Verified against the
+  pinned producer for all four spellings.
+- **`runWithOwner` Owner identity** (`owners.rs` and `solid-dialect`): the
+  supplied-owner proof now accepts only a compiler-resolved `Owner` type whose
+  declaration and origin match the active dialect export table. Re-exported
+  aliases are accepted; a user-local `Owner` lookalike and unresolved values
+  remain conditional. This removes the rendered-type-name match without
+  changing the nullable-owner fail-closed behavior.
+- **Assignment target reads** (`solid-facts/src/ast` and
+  `AstFacts::is_plain_assignment_target`): normalized facts distinguish plain
+  assignment from compound/update reads, and only the member that *is* the
+  written target is exempted, so a computed key or destructuring default inside
+  a target stays an SC1001/SC1002 read.
+- **Owner-backed settled cleanup** (`owners.rs`): the owner requirement pass now
+  gates only the duplicate SC4002 for an inline owner-backed `onSettled` callback,
+  and only when the callback is the literal argument; SC3001, genuinely unowned
+  SC4002, and unowned returned-cleanup SC4004 remain distinct. Indirect,
+  exported, and unresolved cases stay conservative.
+- **The lexical leaf pass requires the literal callback and its synchronous
+  extent** (`cleanup.rs`). The leaf-scope rules (SC3001/SC3002/SC3003) used to
+  fire for a primitive written lexically *anywhere* inside the leaf-owner
+  argument, so `onSettled(wrap(() => { onCleanup(fn) }))` reported SC3001 even
+  though `wrap` may stash the callback and run it out-of-band, where no leaf
+  scope exists and the call does not throw. The pass now demands the same two
+  containment facts the dynamic-extent path already did: the argument is a
+  function literal (`callback_argument_literal`) and the call sits in that
+  callback's own synchronous extent (`direct_callback_contains`). A non-literal
+  leaf argument — a wrapper call, a callback-returning call, or an identifier
+  reference — is now uniformly silent for the leaf rules, the same fail-closed
+  answer `owners.rs::apply_settled_requirement_gates` already gave it (**FN**,
+  deliberate: the callback the owner receives is opaque). The genuinely unowned
+  SC4002 and the unowned returned-cleanup SC4004 are unaffected, as are the
+  settled call-site gates. Pinned by `fixtures/reactive-ir/solid2-precision`'s
+  `OwnedSettledCleanup` (literal, still fully reported),
+  `WrappedSettledCleanup`, `settledCleanup` (identifier reference), and
+  `NestedSettledCleanup`.
+
+### Remaining approximations from this slice
+
+- **Resolved 2026-08-17, returned calls are classified from the call result**
+  (`cleanup.rs::returned_call_domain`, `demand_plan.rs`). The TypeFacts
+  interface change this needed has landed: `callResultDomain`
+  (`solid-ts-facts` `559c9031`, ADR 0013) matches a call-like node against the
+  demand's exact start *and end* bytes and classifies the checker type there
+  with the same runtime value-domain classifier, so the callee a call shares a
+  start byte with can never be the subject. `cleanup_return_status` now feeds
+  that domain to the existing `domain_cleanup_return_status`, which closes both
+  directions the old callee probe produced: `return makeCount()` where
+  `makeCount(): number` is SC3004 rather than silent (**FN** closed), and the
+  unowned `onSettled(() => { return makeCount(); })` no longer reports SC4004
+  as though a cleanup were handed over (**FP** closed). `handlers[i]()` is
+  classified from its own signature rather than from a fact about `handlers`,
+  which was the hazard that kept the value domain off call spans before.
+  Both return spellings are covered: an expression-bodied arrow records its
+  return on the function fact, so `returned_callees` now chains
+  `functions[].expression_return` and `() => make()` is demanded exactly like
+  `return make()`. Absent (no exact call-like node) and `unknown` (checker
+  error or recovery type) remain fail-closed, as does a callee whose
+  `resolvedCall` is not `Valid`. Pinned by
+  `fixtures/reactive-ir/solid2-precision`'s `ReturnedCallCleanupReturns` and
+  the two module-level `onSettled` returned-call cases.
+  Across the corpus this discharged 30 SC9002 obligations and proved 13 SC3004
+  returns — all of them a call producing a primitive where a cleanup is
+  expected, such as `createEffect(() => 1, () => read())` and
+  `createEffect(() => count(), () => untrack(() => count()))`.
+  `callability` is no longer demanded at returned-call spans. Cleanup was its
+  only consumer, and demanding it there is not merely dead: callability is read
+  through `smallest_contained_callability`, which selects the smallest entity
+  *contained* in the queried span, so a callability fact on an expression-bodied
+  arrow's own returned call (`(post) => post.includes(id())`) sits inside the
+  callback-argument span and outranks the arrow. That answered "is
+  `post.includes(id())` callable" (no) where `inline_standard_callback` asked
+  "is this argument a callable callback", which silently withdrew the
+  `Array#filter` synchronous proof and with it SC1002 on the accessor read —
+  visible only when the callback body *is* the returned call, since a binary
+  body has no returned callee. The result domain is invisible to that lookup.
+- **Evidence-backed divergence from upstream, `no_direct_mutation`**: with
+  compound-assignment and update facts, the shared port now reports
+  `store.count++` on a props/store member, which eslint-plugin-solid 0.14.5
+  (commit `6d3bc311`) misses — its props branch tests for an ESTree
+  `AssignmentExpression`, and `++` is an `UpdateExpression`. The compound form
+  and an accessor binding's `++` are both parity-correct (upstream reports them
+  via `AssignmentExpression` and `reference.isWrite()` respectively). No upstream
+  case exercises any of these spellings, so parity stays green and there is no
+  `deviations.json` entry to attach; pinned by
+  `fixtures/reactive-ir/v1-reactivity`'s `MutatesInPlace`.
 
 ## Resolved: false negatives closed 2026-08-16
 
@@ -99,12 +468,91 @@ is why it stays.
   branch (`StringLiteral`/`NumericLiteral`): `{0x10}` and `{1_000}` freeze,
   `{-1}`/`{+1}`/`{NaN}`/`{Infinity}` do not.
 
-  **Known inconsistency, not fixed here:** `v1/event-handlers` (SC8001,
-  `solid1x_attributes.rs`) still answers the same "is this value static?"
-  question with `str::parse::<f64>`, so it treats `{-1}` and `{NaN}` as
-  static where `jsx-no-duplicate-props` now does not. That check is an
-  upstream-faithful port and no corpus case separates the two; aligning it on
-  the compiler's node-kind test is open work.
+  `v1/event-handlers` (SC8001, `solid1x_attributes.rs`) now uses the same
+  compiler node-kind predicate, so `{-1}`, `{+1}`, `{NaN}`, and `{Infinity}`
+  are dynamic while radix and separator numeric literals remain static. The
+  shared static-string resolver still covers upstream's proven string locals
+  and literal concatenations. No upstream corpus case separates the two
+  spellings, so parity is unaffected and there is no deviations entry to
+  attach.
+
+  Adding the node-kind predicate was not sufficient on its own: a source-text
+  arm (`text(span).parse::<f64>().is_ok() || static_string(..)`) survived in
+  the same disjunction and decided the answer first, so `{-1}` and `{NaN}`
+  still reported until it was removed. The diagnostic asserts Solid "will treat
+  the value as an attribute", which is only true of the frozen forms, so the
+  text arm was making a false claim rather than a conservative one. Pinned by
+  `fixtures/reactive-ir/eslint-compat`'s `onClick={-1}`/`onClick={NaN}` pair
+  (now clean) alongside the `onFoo="a"`/`onFoo="b"` static duplicates (still
+  reported).
+
+  **FN, deliberate for now**: a non-frozen, non-callable handler value is
+  unreported by the 1.x catalog. `onClick={-1}`, `onClick={NaN}`, and a plain
+  `onClick={someNumber}` binding are all silent — the last one already was, so
+  this is a pre-existing gap the alignment made uniform rather than a new one.
+  SC8001 is the wrong owner for it (its claim is about template freezing);
+  `expected-function-got-expression` is, and it currently fires only for
+  `HandlerCallResult`, not for a non-callable handler binding whose
+  `callability` is already demanded at that span.
+
+## Audited remaining `TypeDescriptor.text` consumers 2026-08-17
+
+The remaining grep hits are deliberately not value-evidence parsers:
+
+- `interproc.rs` uses `text` only to label an unknown-callback diagnostic and
+  generated contract stub; it does not make a proof decision.
+- `shared_reactivity.rs`, `solid1x_structure.rs`, and the array branch of
+  `solid1x_attributes.rs` ask a type-shape question (array/tuple versus a
+  callable value). `callability` now supplies the callable proof; the
+  descriptor text is retained only because the current Type Facts schema has
+  no structural array-shape fact. Missing or unknown callability no longer
+  falls back to primitive text as evidence.
+- `server_rules.rs` asks whether a transport type has a rich serialization
+  member (`Date`, `Map`, `Set`, typed arrays, and so on). Runtime value domain
+  intentionally collapses those object shapes, so rendered type shape remains
+  the only available evidence and an unrecognized shape stays silent.
+
+## Resolved: static attribute values are a fact, not a rendered type 2026-08-17
+
+Bumping `typefacts` for the call-result domain also brought that revision's
+node-selection change ("Classify complete demanded expressions"): a demand
+resolves to the complete expression at its span rather than the deepest node at
+its start byte. That is the correct subject, and it exposed a consumer
+heuristic that had been right only by accident.
+
+`upstream_compat::literal_string_type` recovered a static attribute string by
+parsing `TypeDescriptor.text` for a rendered literal type, decoding JSON-style
+escapes by hand. For `innerHTML={"a" + "b"}` the old selection typed the
+leading `StringLiteral`, so a literal type appeared and the value read as
+static; the complete `BinaryExpression` widens to `string`, so the same test
+called a static value dynamic and `v1/no-innerhtml` reported it (upstream's own
+case asserts it is valid under `allowStatic`).
+
+The fix is the fact the migration guide asks for, not a repaired heuristic:
+`constantValue` (`solid-ts-facts` `fc739a6c`, ADR 0014) is demanded at the
+exact attribute-value span and accepted only as a present `kind: "string"`.
+The producer folds literals, substitution-free templates, transparent
+wrappers, unary signs, same-kind binary `+`, and compiler-resolved immutable
+declarations (`const`, `readonly`, enum members), bounded by a depth limit and
+a declaration cycle guard. Absence is "not proven constant", so a dynamic
+value stays uncertifiable rather than guessed.
+
+This is a precision *gain* in both directions, not only an FP fix:
+`v1/jsx-no-script-url` now proves the scheme in
+`href={"java" + "script:alert(1)"}`, which no literal type ever described, and
+a `const`-referenced value is static wherever it was declared. Pinned by
+`fixtures/reactive-ir/upstream-divergences`'s `FoldedMarkup` and `ScriptUrls`;
+parity returns to fully green at 421/465, and
+`no-array-handlers__valid__10`'s declared deviation was removed because the
+complete-expression selection types its unresolved `SafeArray` cast correctly
+and it no longer deviates.
+
+Deliberately **not** folded into the producer: the *node-kind* tests. The 1.x
+compiler inlines an attribute into the template on a `StringLiteral`/
+`NumericLiteral` branch, so `jsx-no-duplicate-props` must keep asking what was
+written rather than what it evaluates to — `{"a" + "b"}` is not inlined. The
+`v1/event-handlers` inconsistency recorded above was that same syntactic
+question and is now closed; see the note under the duplicate-props entry.
 
 ## Design-change candidates (open)
 
@@ -130,7 +578,7 @@ candidates remain fail closed. Remaining **FN** cases are exported structural
 helpers with unseen external callers, computed members, and receiver
 expressions whose TypeScript facts do not expose an exact value.
 
-### A shorthand property's value is resolved only within its own file
+### Shorthand property values follow exact project-local exports
 
 TypeScript projects a shorthand property's *own* symbol at `{ pathname }` --
 never the referenced value binding's -- so no TypeFacts entity, reference, or
@@ -141,13 +589,14 @@ on `ObjectPropertyFact::shorthand_binding`; `interproc.rs`
 of matching the spelling within the enclosing function. That is scope-exact, so
 the previous block-scoping hole is closed in both directions.
 
-The cross-file gap is now closed for **named relative imports**: a shorthand
-whose binder declaration is a named import specifier follows the relative
+The cross-file gap is now closed for named and default relative imports: a
+shorthand whose binder declaration is an import specifier follows the relative
 specifier to the exporting file — exact ESM resolution against the analyzed
 file set, never the filesystem — and matches that file's exported declaration
 in the accessor map exactly as the same-file arm does
-(`interproc.rs::imported_accessor`). What remains fail-closed, by design and
-in each case yielding no structured property:
+(`interproc.rs::imported_accessor`). Named re-exports, default re-exports,
+export-all chains, and cycles are followed with a cycle guard. What remains
+fail-closed, by design and in each case yielding no structured property:
 
 - **an ambiguous relative specifier.** `./values` can name `values.ts`,
   `values.tsx`, or `values/index.ts`, and which one a bundler picks depends on
@@ -159,24 +608,26 @@ in each case yielding no structured property:
   `ambiguous/index.ts`, both exporting the accessor).
 - **bare and path-mapped specifiers**, which the resolver rejects outright
   (it only walks `./` and `../` against the analyzed file set, never the
-  filesystem or `tsconfig` `paths`). *Not* pinned by a fixture case.
-- **namespace and default imports, and re-export chains**
-  (`export { x } from "./elsewhere"`): the join accepts only a named import
-  specifier bound to a same-file export declaration. *Not* pinned by fixture
-  cases; the guards are visible in `imported_accessor` and its
-  `export.module.is_none()` filter.
+  filesystem or `tsconfig` `paths`).
+- **namespace imports**, which do not identify one accessor value.
+- **unresolved export cycles**, ambiguous re-exports, or unresolved local
+  bindings.
 
 What the fixture pins today is the same-file resolution set
 (`scopedShorthand`, `unprovenShorthand`, `shadowedShorthand`,
 `writtenShorthand`), the cross-file named-import join
 (`importedAccessorShorthand`), the ambiguity bail (`ambiguousShorthand`), a
-non-accessor import (`importedShorthand`), and a global (`globalShorthand`).
+nondeterministic import set (`importedShorthand`, `namespaceShorthand`,
+`bareImportShorthand`, `pathMappedShorthand`, `cyclicReexportShorthand`),
+the default/named/export-all joins (`defaultReexportShorthand`,
+`namedReexportShorthand`, `exportAllShorthand`), and a global
+(`globalShorthand`).
 
-Two resolvers now answer "which file does this relative specifier name":
+The shared `solid_facts::resolve_relative_module_path` helper now answers
+"which file does this relative specifier name" for both
 `interproc.rs::relative_module_file` and the backend's
-`resolve_relative_export`. They are independently written and can drift.
-Unifying them behind one owner is open work, deliberately not attempted in the
-change that added the ambiguity bail.
+`resolve_relative_export`. It is lexical, project-local, and returns no
+answer when extension/index candidates are ambiguous.
 
 ## Partially resolved design changes
 

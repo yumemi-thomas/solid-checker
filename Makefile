@@ -33,6 +33,15 @@ test-cli:
 verify:
 	scripts/verify.sh
 
+# "Does TypeScript already report this?", as a checkable claim. Provisioning
+# installs the audited Solid versions into rust/target/tsc-oracle and refuses
+# to run on a version mismatch.
+tsc-oracle-provision:
+	node scripts/tsc-oracle.mjs provision --dialect all
+
+tsc-oracle: tsc-oracle-provision
+	node scripts/tsc-oracle-gate.mjs
+
 # Fixture-findings snapshots: "no finding moved" as a checkable claim.
 coverage: build-rust
 	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/coverage.mjs
