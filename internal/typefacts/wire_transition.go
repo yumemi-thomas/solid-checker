@@ -297,10 +297,9 @@ func (e *wireTransitionEncoder) planSparseDelta(base, target *FactTable) {
 		}
 		e.pathOps = append(e.pathOps, operation)
 	}
-	// Expanded path rows moved to Rust, but Go deliberately retains the much
-	// smaller canonical symbol store and reference runs. Preserve v5's exact
-	// reference-path patches; replacing a high-fanout symbol wholesale turns a
-	// one-file edit into a six-figure response.
+	// Expanded path rows moved to Rust. The active producer manifest carries
+	// path changes only; Rust derives symbol/reference closure and patches its
+	// retained table without making Go rebuild a duplicate symbol delta.
 	e.planExactSymbolDelta(base, target, manifest)
 }
 

@@ -10,7 +10,7 @@ use std::{fs, path::PathBuf};
 
 use typefacts::{
     decode, encode,
-    v3::{Operation, Request, Response, TYPE_FACTS_SCHEMA_V5},
+    v3::{Operation, Request, Response, TYPE_FACTS_SCHEMA_V1},
 };
 
 fn golden(name: &str) -> Vec<u8> {
@@ -25,7 +25,7 @@ fn request_golden_round_trips_identically() {
     let bytes = golden("typefacts-v3-request-golden.cbor");
     let request: Request = decode(&bytes).expect("decode Go request golden");
 
-    assert_eq!(request.schema, TYPE_FACTS_SCHEMA_V5);
+    assert_eq!(request.schema, TYPE_FACTS_SCHEMA_V1);
     assert_eq!(request.operation, Operation::Analyze);
     assert_eq!(request.request_id, 7);
     assert_eq!(request.state_token, "4");
@@ -46,7 +46,7 @@ fn response_golden_round_trips_identically() {
     let bytes = golden("typefacts-v3-response-golden.cbor");
     let response: Response = decode(&bytes).expect("decode Go response golden");
 
-    assert_eq!(response.schema, TYPE_FACTS_SCHEMA_V5);
+    assert_eq!(response.schema, TYPE_FACTS_SCHEMA_V1);
     assert!(response.ok);
     assert_eq!(response.state_token, "5");
     assert!(!response.table_transition.is_empty());

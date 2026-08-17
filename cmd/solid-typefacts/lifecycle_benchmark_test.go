@@ -98,7 +98,7 @@ func BenchmarkLifecycleWarmReuse(b *testing.B) {
 	projectID := "/project/tsconfig.json"
 	generation := uint64(1)
 	first := session.Lifecycle(ctx, typefacts.LifecycleRequest{
-		Schema: typefacts.TypeFactsSchemaVersionV5, RequestID: 1,
+		Schema: typefacts.TypeFactsSchemaVersionV1, RequestID: 1,
 		Operation: typefacts.LifecycleAnalyze, ProjectID: projectID, Generation: generation,
 		ResetState: true,
 	})
@@ -106,7 +106,7 @@ func BenchmarkLifecycleWarmReuse(b *testing.B) {
 		b.Fatalf("initialize retained state: %+v", first)
 	}
 	request := typefacts.LifecycleRequest{
-		Schema: typefacts.TypeFactsSchemaVersionV5, RequestID: 2,
+		Schema: typefacts.TypeFactsSchemaVersionV1, RequestID: 2,
 		Operation: typefacts.LifecycleAnalyze, ProjectID: projectID, Generation: generation,
 		StateToken: first.StateToken,
 	}

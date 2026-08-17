@@ -15,11 +15,7 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 		name string
 		hash string
 	}{
-		{"typefacts-v5.schema.json", typefacts.TypeFactsSchemaSHA256},
-		{"typefacts-v6.schema.json", typefacts.TypeFactsSchemaV6SHA256},
-		{"typefacts-v7.schema.json", typefacts.TypeFactsSchemaV7SHA256},
-		{"typefacts-v8.schema.json", typefacts.TypeFactsSchemaV8SHA256},
-		{"typefacts-v9.schema.json", typefacts.TypeFactsSchemaV9SHA256},
+		{"typefacts-v1.schema.json", typefacts.TypeFactsSchemaSHA256},
 	} {
 		data, err := os.ReadFile(filepath.Join("..", "..", "schema", schema.name))
 		if err != nil {
@@ -34,7 +30,7 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 
 func TestLifecycleSourcesIsAValidReadOnlyGenerationOperation(t *testing.T) {
 	request := typefacts.LifecycleRequest{
-		Schema:     typefacts.TypeFactsSchemaVersionV5,
+		Schema:     typefacts.TypeFactsSchemaVersionV1,
 		RequestID:  1,
 		Operation:  typefacts.LifecycleSources,
 		ProjectID:  "/project/tsconfig.json",

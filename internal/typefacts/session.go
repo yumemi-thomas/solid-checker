@@ -43,60 +43,26 @@ type retainedSessionState struct {
 // NewSession assumes ownership of backend, including when construction fails.
 // trace may be nil, which disables producer-side tracing.
 func NewSession(backend Project, projectID string, trace Trace) (*Session, error) {
-	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV5)
+	return newSession(backend, projectID, trace)
 }
 
-// NewSessionV6 transfers expanded path-row ownership to the Rust client after
-// every successful transition. V5 remains available as the compatibility
-// adapter for existing consumers.
-func NewSessionV6(backend Project, projectID string, trace Trace) (*Session, error) {
-	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV6)
-}
-
-// NewSessionV7 enables RuntimeValueDomain and emits Wire table schema v4.
-// Frozen v5 and v6 sessions remain available for compatibility.
-func NewSessionV7(backend Project, projectID string, trace Trace) (*Session, error) {
-	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV7)
-}
-
-// NewSessionV8 carries explicit negative symbol-resolution facts and emits
-// Wire table schema v5. Frozen v5-v7 sessions remain available for compatibility.
-func NewSessionV8(backend Project, projectID string, trace Trace) (*Session, error) {
-	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV8)
-}
-
-// NewSessionV9 carries exhaustive resolved-call target candidate sets and
-// emits Wire table schema v6. Frozen v5-v8 sessions remain available for
-// compatibility.
-func NewSessionV9(backend Project, projectID string, trace Trace) (*Session, error) {
-	return newSession(backend, projectID, trace, TypeFactsSchemaVersionV9)
-}
-
-func newSession(backend Project, projectID string, trace Trace, schema uint64) (*Session, error) {
+func newSession(backend Project, projectID string, trace Trace) (*Session, error) {
 	projectID = filepath.Clean(projectID)
 	if projectID == "" || projectID == "." {
 		_ = backend.Close()
 		return nil, errors.New("Type Facts session requires a project identity")
 	}
-	closure, err := newDemandClosure(backend, trace, schema >= TypeFactsSchemaVersionV6)
+	closure, err := newDemandClosure(backend, trace)
 	if err != nil {
 		_ = backend.Close()
 		return nil, err
-	}
-	tableSchema := TypeFactsTableSchemaVersion
-	if schema < TypeFactsSchemaVersionV7 {
-		tableSchema = TypeFactsTableSchemaVersionV3
-	} else if schema < TypeFactsSchemaVersionV8 {
-		tableSchema = TypeFactsTableSchemaVersionV4
-	} else if schema < TypeFactsSchemaVersionV9 {
-		tableSchema = TypeFactsTableSchemaVersionV5
 	}
 	return &Session{
 		closure:    closure,
 		trace:      trace,
 		projectID:  projectID,
-		schema:     schema,
-		transition: wireTransitionEncoder{tableSchema: tableSchema},
+		schema:     TypeFactsSchemaVersionV1,
+		transition: wireTransitionEncoder{tableSchema: TypeFactsTableSchemaVersion},
 	}, nil
 }
 
@@ -133,24 +99,6 @@ func (s *Session) lifecycle(
 	}
 	if request.Schema != s.schema {
 		return fail("invalid-request", fmt.Errorf("unsupported TypeFacts schema %d", request.Schema))
-	}
-	if s.schema < TypeFactsSchemaVersionV7 {
-		for _, demand := range request.Demands {
-			if demand.RuntimeValueDomain {
-				return fail("invalid-demands", errors.New("runtime value domain requires TypeFacts schema v7"))
-			}
-		}
-		if request.CompactDemands != nil {
-			for _, group := range request.CompactDemands.Groups {
-				selected, err := appendCompactDemandsWithFlag(nil, group, request.CompactDemands.Strings, demandFlagRuntimeValueDomain)
-				if err != nil {
-					return fail("invalid-demands", err)
-				}
-				if len(selected) != 0 {
-					return fail("invalid-demands", errors.New("runtime value domain requires TypeFacts schema v7"))
-				}
-			}
-		}
 	}
 	if filepath.Clean(request.ProjectID) != s.projectID {
 		return fail("project-mismatch", ErrGenerationMismatch)
@@ -281,7 +229,7 @@ func (s *Session) lifecycle(
 		transitionInput := wireTransitionInput{
 			ProjectID: s.projectID,
 			Target:    analyzedTable,
-			Sparse:    s.schema >= TypeFactsSchemaVersionV6,
+			Sparse:    true,
 		}
 		if !request.ResetState && s.retained.table != nil {
 			transitionInput.Base = s.retained.table
@@ -337,32 +285,35 @@ func (s *Session) lifecycle(
 		if err := ctx.Err(); err != nil {
 			return fail("analysis-cancelled", err)
 		}
+		if len(request.SymbolQueries) != 0 || request.ReferenceChanges || request.ReleaseAnalysis {
+			if err := s.populateSymbolEvidence(ctx, request, &response, nil); err != nil {
+				if ctx.Err() != nil {
+					return fail("analysis-cancelled", ctx.Err())
+				}
+				return fail("analysis-failed", err)
+			}
+		}
+		if err := ctx.Err(); err != nil {
+			return fail("analysis-cancelled", err)
+		}
 		s.retained.token = nextToken
 		s.retained.tokenText = nextTokenText
 		demandTransaction.commit()
 		demandsPublished = true
 		table := *analyzedTable
 		s.retained.table = &table
-		if s.schema >= TypeFactsSchemaVersionV6 {
-			if err := s.populateSymbolEvidence(ctx, request, &response, nil); err != nil {
-				return fail("analysis-failed", err)
-			}
-			s.closure.releaseTransportRows()
-			// retained.table is an intentionally detached header used to
-			// authenticate the next transition. Clear its borrowed expanded
-			// slices too; otherwise the header alone pins the transferred
-			// backing arrays even though the closure released its copy.
-			s.retained.table.Entities = nil
-			clear(s.retained.table.entityRuns)
-			s.retained.table.entityRuns = nil
-			s.retained.table.Files = nil
-			s.retained.table.sourceDigests = nil
-		}
+		s.closure.releaseTransportRows()
+		// retained.table is an intentionally detached header used to
+		// authenticate the next transition. Clear its borrowed expanded
+		// slices too; otherwise the header alone pins the transferred
+		// backing arrays even though the closure released its copy.
+		s.retained.table.Entities = nil
+		clear(s.retained.table.entityRuns)
+		s.retained.table.entityRuns = nil
+		s.retained.table.Files = nil
+		s.retained.table.sourceDigests = nil
 		analysisPublished = true
 	case LifecycleSymbols:
-		if s.schema < TypeFactsSchemaVersionV6 {
-			return fail("invalid-request", errors.New("symbol evidence requires TypeFacts schema v6 or newer"))
-		}
 		if request.Generation != generation {
 			return fail("generation-mismatch", ErrGenerationMismatch)
 		}

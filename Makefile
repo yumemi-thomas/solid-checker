@@ -35,7 +35,7 @@ test-rust: build
 # Fast, repository-owned structural and latency gates. The symbol-set test
 # catches the exact-growth regression that accounted for most cold allocation.
 benchmark-memory:
-	GOCACHE="$(MEMORY_GOCACHE)" go test ./internal/typefacts -run 'Test(SymbolHandleSetGrowsGeometricallyDuringColdInterning|RetainedContributionSharesCanonicalEntityBacking|PreparedContributionTakesAndCompactsEntityBacking|SparseTransportBorrowsPerFileEntityRuns|StreamedWireTransitionIsByteIdentical|SemanticTableRetainsOnlySourceDigests|RetainedDemandStoreOwnsCompactRunsWithoutExpandedRows|SemanticMaterializationReleasesExpandedCompactDemands|CompactDemandsRoundTrip|V6TransfersExpandedRowsAndKeepsSparseIncrementalProof)'
+	GOCACHE="$(MEMORY_GOCACHE)" go test ./internal/typefacts -run '^Test(SymbolHandleSetGrowsGeometricallyDuringColdInterning|RetainedContributionSharesCanonicalEntityBacking|PreparedContributionTakesAndCompactsEntityBacking|SparseMaterializationLeavesSymbolClosureToClient|SessionTransfersExpandedRowsAndKeepsSparseIncrementalProof|StreamedWireTransitionIsByteIdentical|SemanticTableRetainsOnlySourceDigests|RetainedDemandStoreOwnsCompactRunsWithoutExpandedRows|SemanticMaterializationReleasesExpandedCompactDemands|CompactDemandsRoundTrip|GeneratedCorpusProducesSparseEntityRows|RetainedSparseMaterializationAtScaleMatchesFreshMaterialization)$$'
 	GOCACHE="$(MEMORY_GOCACHE)" go test ./internal/typefacts -run '^$$' \
 		-bench 'Benchmark(ColdSymbolHandleSetMemory|FullTableAnalyzeAtScale|AnalyzeAfterLeafEditAtScale)$$' \
 		-benchmem -count=5

@@ -11,6 +11,10 @@ new facts:
   `(() => void) | number` as mixed callability: demand `runtimeValueDomain`,
   require a present fact, and accept exactly when
   `!domain.may_be_other && !domain.unknown`.
+- Cleanup return validation for a returned call: demand `callResultDomain` at
+  the exact call span and classify that result domain. Do not use the generic
+  `runtimeValueDomain` demand at a call span for this purpose; it describes the
+  callee. Treat an absent or `unknown` call-result domain as fail-closed.
 - Synthetic probe calls and diagnostic filtering: demand `resolvedCall` and
   accept only `valid`.
 - Source-text searches that decide whether an import is type-only or runtime:

@@ -79,9 +79,9 @@ func transportManifest(previous, next *FactTable, builder *closureBuilder, chang
 	return manifest
 }
 
-// rustOwnedTransportManifest names only path rows. V6 symbol rows never enter
-// a Go table, so Rust derives and retains their successor directly from oracle
-// evidence instead of receiving a second symbol delta from Go.
+// rustOwnedTransportManifest names only path rows. The active protocol hands
+// symbol closure ownership to the Rust client, so Go emits no second symbol
+// delta or retained symbol table.
 func rustOwnedTransportManifest(
 	previous *FactTable,
 	changedPaths map[string]struct{},
@@ -95,7 +95,6 @@ func rustOwnedTransportManifest(
 		sourcePaths:    make(map[string]struct{}, len(changedPaths)),
 		entityPaths:    make(map[string]struct{}, len(changedPaths)),
 		filePaths:      make(map[string]struct{}, len(changedPaths)),
-		symbolIDs:      make(map[SymbolID]struct{}),
 		exact:          true,
 	}
 	for path := range changedPaths {

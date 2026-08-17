@@ -18,6 +18,7 @@ const (
 	wireTransitionEntityHasRuntimeIdentity
 	wireTransitionEntityHasRuntimeValueDomain
 	wireTransitionEntitySymbolUnresolved
+	wireTransitionEntityHasCallResultDomain
 )
 
 const (
@@ -154,6 +155,9 @@ func writeWireTransitionEntityRun(
 		if entity.RuntimeValueDomain != nil {
 			flags |= wireTransitionEntityHasRuntimeValueDomain
 		}
+		if tableSchema >= TypeFactsTableSchemaVersionV7 && entity.CallResultDomain != nil {
+			flags |= wireTransitionEntityHasCallResultDomain
+		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
 		}
@@ -177,6 +181,9 @@ func writeWireTransitionEntityRun(
 		}
 		if entity.RuntimeValueDomain != nil {
 			w.u64(wireTransitionRuntimeValueDomainBits(*entity.RuntimeValueDomain))
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV7 && entity.CallResultDomain != nil {
+			w.u64(wireTransitionRuntimeValueDomainBits(*entity.CallResultDomain))
 		}
 		previousStart = start
 	}

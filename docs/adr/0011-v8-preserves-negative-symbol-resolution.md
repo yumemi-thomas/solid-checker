@@ -4,6 +4,10 @@ status: accepted
 
 # V8 preserves explicit negative symbol resolution
 
+> Historical record. Superseded as active protocol guidance by
+> [ADR 0013](0013-v1-call-result-runtime-value-domains.md); the repository now
+> ships one lifecycle schema, V1.
+
 ## Decision
 
 Lifecycle schema v8 adds `EntityFact.symbolUnresolved`. The producer sets it

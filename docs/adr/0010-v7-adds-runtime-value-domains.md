@@ -4,6 +4,10 @@ status: accepted
 
 # V7 adds an opt-in runtime value domain
 
+> Historical record. Superseded as active protocol guidance by
+> [ADR 0013](0013-v1-call-result-runtime-value-domains.md); the repository now
+> ships one lifecycle schema, V1.
+
 ## Decision
 
 Lifecycle schema v7 adds `EntityDemand.runtimeValueDomain`. Its entity fact is

@@ -6,6 +6,7 @@ import (
 
 	"github.com/microsoft/typescript-go/shim/ast"
 	"github.com/microsoft/typescript-go/shim/checker"
+	"github.com/microsoft/typescript-go/shim/scanner"
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts"
 )
 
@@ -55,6 +56,77 @@ func deepestNodeCovering(node *ast.Node, start int, end int) *ast.Node {
 		return false
 	})
 	return best
+}
+
+// exactCallLikeAt selects the call-like expression reached from the demanded
+// start byte only when its emitted source span is exactly the demanded span.
+// Pos includes leading trivia, while all producer locations use SkipTrivia.
+// Walking parents preserves resolvedCall's call-like lookup, but the end check
+// prevents a callee or enclosing expression from answering this field.
+func (c *semanticNodeCursor) exactCallLikeAt(start int, end int) *ast.Node {
+	if c.sourceFile == nil {
+		return nil
+	}
+	for node := c.at(start); node != nil; node = node.Parent {
+		if !isCallLikeExpression(node) || node.End() != end {
+			continue
+		}
+		if scanner.SkipTrivia(c.sourceFile.Text(), node.Pos()) == start {
+			return node
+		}
+	}
+	return nil
+}
+
+// resolvedCallLikeAt keeps the historical start-byte anchor for resolvedCall,
+// but chooses the outermost call-like ancestor contained by the demanded span.
+// Chained calls share a start byte, so stopping at the first ancestor would
+// describe `factory()` instead of `factory()(value)`.
+func (c *semanticNodeCursor) resolvedCallLikeAt(start int, end int) *ast.Node {
+	var first *ast.Node
+	var best *ast.Node
+	for node := c.at(start); node != nil; node = node.Parent {
+		if !isCallLikeExpression(node) {
+			continue
+		}
+		if first == nil {
+			first = node
+		}
+		if node.End() <= end && (best == nil || node.End() > best.End()) {
+			best = node
+		}
+	}
+	if best != nil {
+		return best
+	}
+	return first
+}
+
+// callResultDomainAtLocked applies the same call-resolution recovery guard as
+// resolvedCall before classifying the call expression's result type. A
+// recovery signature can still expose the declared return type, which is not
+// safe evidence for a result-domain query.
+func (p *project) callResultDomainAtLocked(
+	ctx context.Context,
+	sourceFile *ast.SourceFile,
+	node *ast.Node,
+) (typefacts.RuntimeValueDomain, error) {
+	signature := checker.Checker_getResolvedSignature(p.checker, node, nil, checker.CheckModeNormal)
+	if signature == nil {
+		return unknownRuntimeValueDomain(), nil
+	}
+	target := p.checker.GetSymbolAtLocation(node.Expression())
+	if target != nil {
+		target = p.canonicalSymbol(target)
+	}
+	validity, _, err := p.resolvedCallValidityAndCalleeTypeLocked(ctx, sourceFile, node, signature, target)
+	if err != nil {
+		return typefacts.RuntimeValueDomain{}, err
+	}
+	if validity != typefacts.ResolvedCallValid {
+		return unknownRuntimeValueDomain(), nil
+	}
+	return runtimeValueDomainOfType(p.checker, p.checker.GetTypeAtLocation(node)), nil
 }
 
 // SemanticDemandRuns resolves canonically ordered per-file runs under one
@@ -182,6 +254,7 @@ func (p *project) SemanticDemandRuns(
 				!demand.ResolvedCall &&
 				!demand.Callability &&
 				!demand.RuntimeValueDomain &&
+				!demand.CallResultDomain &&
 				!demand.ReferenceSpace &&
 				!demand.RuntimeIdentity {
 				continue
@@ -252,15 +325,21 @@ func (p *project) SemanticDemandRuns(
 					entity.RuntimeValueDomain = &domain
 				}
 			}
+			if demand.CallResultDomain {
+				if callNode := queryCursor.exactCallLikeAt(query.StartByte, query.EndByte); callNode != nil {
+					domain, err := p.callResultDomainAtLocked(ctx, sourceFile, callNode)
+					if err != nil {
+						return nil, err
+					}
+					entity.CallResultDomain = &domain
+				}
+			}
 			if demand.ResolvedCall {
 				// Call lookup is anchored at the first token and walks outward;
 				// callers may demand a statement-sized range including a trailing
 				// semicolon. Type/value domains above instead classify the complete
 				// demanded expression range.
-				node := queryCursor.at(query.StartByte)
-				for node != nil && !isCallLikeExpression(node) {
-					node = node.Parent
-				}
+				node := queryCursor.resolvedCallLikeAt(query.StartByte, query.EndByte)
 				argumentCount := 0
 				if node != nil {
 					argumentCount = len(node.Arguments())

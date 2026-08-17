@@ -3,6 +3,11 @@
 Date: 2026-07-28
 Machine: Apple M4 Pro, darwin/arm64, `GOMAXPROCS=14`
 
+This is a historical performance report. The active lifecycle is schema V1;
+its sparse transition path leaves expanded symbol/reference ownership with the
+Rust client. Sections describing the earlier Go symbol-closure implementation
+are attribution history, not active producer behavior.
+
 ## Acceptance baseline
 
 The corpus contains 49 source modules, 1,000+ demanded symbols, retained
@@ -48,7 +53,7 @@ export identities without emitting a declaration proof.
 Retained: about 17% end-to-end, with explicit tests for gaining an importer and
 for augmentations.
 
-### Stable symbol closure and direct canonical-store patching
+### Historical Go symbol closure and direct canonical-store patching
 
 Equal raw roots, equal raw Full-tier roots, complete prior symbol memo,
 unchanged invalidated alias edges, and an exact reference delta prove an equal

@@ -280,6 +280,8 @@ pub struct EntityFact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_value_domain: Option<RuntimeValueDomain>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub call_result_domain: Option<RuntimeValueDomain>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
     pub runtime_identity: Arc<str>,
@@ -680,7 +682,7 @@ mod tests {
             end_byte: 2,
         };
         let request = v3::Request {
-            schema: v3::TYPE_FACTS_SCHEMA_V5,
+            schema: v3::TYPE_FACTS_SCHEMA_V1,
             request_id: 7,
             operation: v3::Operation::Analyze,
             project_id: "project".into(),
@@ -702,6 +704,7 @@ mod tests {
                 structural_accessor: false,
                 callability: false,
                 runtime_value_domain: false,
+                call_result_domain: false,
                 reference_space: false,
                 runtime_identity: false,
             }],
@@ -743,6 +746,7 @@ mod tests {
                 structural_accessor: false,
                 callability: false,
                 runtime_value_domain: false,
+                call_result_domain: false,
                 reference_space: false,
                 runtime_identity: false,
             },
@@ -757,6 +761,7 @@ mod tests {
                 structural_accessor: true,
                 callability: true,
                 runtime_value_domain: true,
+                call_result_domain: true,
                 reference_space: true,
                 runtime_identity: true,
             },
@@ -771,6 +776,7 @@ mod tests {
                 structural_accessor: false,
                 callability: false,
                 runtime_value_domain: false,
+                call_result_domain: false,
                 reference_space: false,
                 runtime_identity: false,
             },

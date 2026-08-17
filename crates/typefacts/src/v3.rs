@@ -11,25 +11,14 @@ use crate::{
     TypeDescriptor,
 };
 
-pub const TYPE_FACTS_SCHEMA_V5: u64 = 5;
-pub const TYPE_FACTS_SCHEMA_V6: u64 = 6;
-pub const TYPE_FACTS_SCHEMA_V7: u64 = 7;
-pub const TYPE_FACTS_SCHEMA_V8: u64 = 8;
-pub const TYPE_FACTS_SCHEMA_V9: u64 = 9;
+pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V3: u64 = 3;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V4: u64 = 4;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V5: u64 = 5;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V6: u64 = 6;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V7: u64 = 7;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:a4dfff25783d9dd99cf0d44e315a7c01e6c7d132965431ab5624a0975fd549a8";
-pub const TYPE_FACTS_SCHEMA_V6_SHA256: &str =
-    "sha256:adffdee1486dd009bb2599593e09edd4c48804678b4f23002f72e5693ffc606d";
-pub const TYPE_FACTS_SCHEMA_V7_SHA256: &str =
-    "sha256:6939a166249694edf3cf4fe1f81bd687f9b572d331988f2faaa6f2277047d352";
-pub const TYPE_FACTS_SCHEMA_V8_SHA256: &str =
-    "sha256:edbb15dc48793a12230a70305d2586da503f27f26ae5644c43b271661a30b1e1";
-pub const TYPE_FACTS_SCHEMA_V9_SHA256: &str =
-    "sha256:c6f4ffd342381a64ba6220785f7a71f688d15c9abee43bddd6d37c8d790c2e8d";
+    "sha256:7c70b7bcd0b3110386359450dde3233e9db6c1814a349024050d09cd85992bf0";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -89,6 +78,8 @@ pub struct EntityDemand {
     pub callability: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub runtime_value_domain: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub call_result_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub reference_space: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -270,6 +261,7 @@ pub const DEMAND_FLAG_CALLABILITY: u64 = 1 << 6;
 pub const DEMAND_FLAG_REFERENCE_SPACE: u64 = 1 << 7;
 pub const DEMAND_FLAG_RUNTIME_IDENTITY: u64 = 1 << 8;
 pub const DEMAND_FLAG_RUNTIME_VALUE_DOMAIN: u64 = 1 << 9;
+pub const DEMAND_FLAG_CALL_RESULT_DOMAIN: u64 = 1 << 10;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -718,6 +710,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
+            TYPE_FACTS_TABLE_SCHEMA_V7 => 255,
             TYPE_FACTS_TABLE_SCHEMA_V5 | TYPE_FACTS_TABLE_SCHEMA_V6 => 127,
             TYPE_FACTS_TABLE_SCHEMA_V4 => 63,
             _ => 31,
@@ -755,6 +748,11 @@ fn decode_entity_run(
         } else {
             None
         };
+        let call_result_domain = if flags & 128 != 0 {
+            Some(parse_runtime_value_domain(cursor.u64()?)?)
+        } else {
+            None
+        };
         let symbol_unresolved = flags & 64 != 0;
         if symbol_unresolved && !symbol.is_empty() {
             return Err("packed entity cannot be both resolved and unresolved".into());
@@ -771,6 +769,7 @@ fn decode_entity_run(
             resolved_call,
             callability,
             runtime_value_domain,
+            call_result_domain,
             reference_space,
             runtime_identity,
         });
@@ -979,6 +978,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V4
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V5
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V6
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V7
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1258,6 +1258,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.runtime_value_domain {
             flags |= DEMAND_FLAG_RUNTIME_VALUE_DOMAIN;
         }
+        if demand.call_result_domain {
+            flags |= DEMAND_FLAG_CALL_RESULT_DOMAIN;
+        }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());
         push_uvarint(&mut group.1, (flags << 1) | has_query);
@@ -1298,8 +1301,7 @@ mod tests {
     };
 
     use super::{
-        SlotOp, TYPE_FACTS_SCHEMA_SHA256, TYPE_FACTS_SCHEMA_V6_SHA256, TYPE_FACTS_SCHEMA_V7_SHA256,
-        TYPE_FACTS_SCHEMA_V8_SHA256, TransitionMode, decode_table_transition,
+        SlotOp, TYPE_FACTS_SCHEMA_SHA256, TransitionMode, decode_table_transition,
         parse_argument_mapping_reason, parse_argument_mapping_status, parse_call_kind,
         parse_callability, parse_reference_space, parse_resolved_call_validity, push_uvarint,
     };
@@ -1344,6 +1346,24 @@ mod tests {
         frame
     }
 
+    fn call_result_domain_transition(table_schema: u64, domain_bits: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, table_schema, 0, 1, 3] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity: start 0, length 1, no symbol, call-result field.
+        for value in [1, 0, 1, 0, 128, domain_bits, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
     fn unresolved_symbol_transition(table_schema: u64) -> Vec<u8> {
         let mut frame = Vec::new();
         for value in [1, 0, table_schema, 0, 1, 3] {
@@ -1367,24 +1387,9 @@ mod tests {
     fn handshake_hash_matches_frozen_schema() {
         let actual = format!(
             "sha256:{:x}",
-            Sha256::digest(include_bytes!("../../../schema/typefacts-v5.schema.json"))
+            Sha256::digest(include_bytes!("../../../schema/typefacts-v1.schema.json"))
         );
         assert_eq!(actual, TYPE_FACTS_SCHEMA_SHA256);
-        let actual_v6 = format!(
-            "sha256:{:x}",
-            Sha256::digest(include_bytes!("../../../schema/typefacts-v6.schema.json"))
-        );
-        assert_eq!(actual_v6, TYPE_FACTS_SCHEMA_V6_SHA256);
-        let actual_v7 = format!(
-            "sha256:{:x}",
-            Sha256::digest(include_bytes!("../../../schema/typefacts-v7.schema.json"))
-        );
-        assert_eq!(actual_v7, TYPE_FACTS_SCHEMA_V7_SHA256);
-        let actual_v8 = format!(
-            "sha256:{:x}",
-            Sha256::digest(include_bytes!("../../../schema/typefacts-v8.schema.json"))
-        );
-        assert_eq!(actual_v8, TYPE_FACTS_SCHEMA_V8_SHA256);
     }
 
     #[test]
@@ -1439,6 +1444,25 @@ mod tests {
         assert!(entities[0].symbol.is_empty());
         assert!(entities[0].symbol_unresolved);
         assert!(decode_table_transition(&unresolved_symbol_transition(4)).is_err());
+    }
+
+    #[test]
+    fn wire_table_v7_decodes_call_result_domains_and_v6_stays_frozen() {
+        let transition = decode_table_transition(&call_result_domain_transition(7, 4)).unwrap();
+        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert_eq!(
+            entities[0].call_result_domain,
+            Some(crate::RuntimeValueDomain {
+                may_be_callable: false,
+                may_be_undefined: false,
+                may_be_other: true,
+                unknown: false,
+            })
+        );
+        assert!(decode_table_transition(&call_result_domain_transition(7, 16)).is_err());
+        assert!(decode_table_transition(&call_result_domain_transition(6, 4)).is_err());
     }
 
     #[test]

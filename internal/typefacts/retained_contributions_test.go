@@ -2,7 +2,6 @@ package typefacts
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"testing"
@@ -11,6 +10,7 @@ import (
 func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	location := Location{Path: "/project/source.ts", StartByte: 1, EndByte: 2}
 	domain := &RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true}
+	callResultDomain := &RuntimeValueDomain{MayBeOther: true}
 	entities := []EntityFact{
 		{Location: location, Symbol: "symbol"},
 		{
@@ -18,6 +18,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 			TypeDescriptor:     &TypeDescriptor{Text: "Value"},
 			Callability:        CallabilityCallable,
 			RuntimeValueDomain: domain,
+			CallResultDomain:   callResultDomain,
 		},
 	}
 	structural := []SymbolID{"", "accessor"}
@@ -26,7 +27,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 		1,
 		[]EntityDemand{
 			{Location: location, Symbol: true},
-			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true},
+			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true, CallResultDomain: true},
 		},
 		SemanticDemandRunResult{
 			Entities:   entities,
@@ -50,7 +51,8 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	}
 	if contribution.entities[0].Symbol != "symbol" ||
 		contribution.entities[0].Callability != CallabilityCallable ||
-		contribution.entities[0].RuntimeValueDomain != domain {
+		contribution.entities[0].RuntimeValueDomain != domain ||
+		contribution.entities[0].CallResultDomain != callResultDomain {
 		t.Fatalf("compacted entity lost demand fields: %+v", contribution.entities[0])
 	}
 	if !slices.Equal(contribution.descriptorSymbols, []SymbolID{"symbol"}) {
@@ -241,13 +243,11 @@ func TestRetainedContributionStoreReconcilesDescriptorUsers(t *testing.T) {
 	}
 }
 
-var errPreparedContribution = errors.New("fail after semantic contribution preparation")
-
 type preparedContributionFailureBackend struct {
 	transportOnlyBackend
-	failReferences bool
-	semanticCalls  int
-	referenceCalls int
+	failPreparation bool
+	semanticCalls   int
+	referenceCalls  int
 }
 
 func (b *preparedContributionFailureBackend) SemanticDemandRuns(
@@ -256,7 +256,12 @@ func (b *preparedContributionFailureBackend) SemanticDemandRuns(
 	scope SemanticScope,
 ) ([]SemanticDemandRunResult, error) {
 	b.semanticCalls++
-	return b.transportOnlyBackend.SemanticDemandRuns(ctx, runs, scope)
+	results, err := b.transportOnlyBackend.SemanticDemandRuns(ctx, runs, scope)
+	if err == nil && b.failPreparation {
+		b.failPreparation = false
+		results[0].Dependencies = []string{"/project/z.ts", "/project/a.ts"}
+	}
+	return results, err
 }
 
 func (b *preparedContributionFailureBackend) ReferencesBatch(
@@ -264,10 +269,6 @@ func (b *preparedContributionFailureBackend) ReferencesBatch(
 	ids []SymbolID,
 ) (map[SymbolID][]Location, error) {
 	b.referenceCalls++
-	if b.failReferences {
-		b.failReferences = false
-		return nil, errPreparedContribution
-	}
 	return b.transportOnlyBackend.ReferencesBatch(ctx, ids)
 }
 
@@ -282,7 +283,7 @@ func TestRetainedContributionCommitIsTransactional(t *testing.T) {
 		transportOnlyBackend: transportOnlyBackend{source: SourceFile{
 			Path: path, Source: []byte("export const value = 1\n"),
 		}},
-		failReferences: true,
+		failPreparation: true,
 	}
 	closure, err := NewDemandClosure(backend, nil)
 	if err != nil {
@@ -303,11 +304,11 @@ func TestRetainedContributionCommitIsTransactional(t *testing.T) {
 		}},
 	}}
 
-	if _, err := closure.DemandTableForGroups(context.Background(), 1, groups, nil); !errors.Is(err, errPreparedContribution) {
-		t.Fatalf("failed materialization error = %v, want %v", err, errPreparedContribution)
+	if _, err := closure.DemandTableForGroups(context.Background(), 1, groups, nil); err == nil {
+		t.Fatal("failed materialization unexpectedly succeeded")
 	}
-	if backend.semanticCalls != 1 || backend.referenceCalls != 1 {
-		t.Fatalf("backend calls after failure = semantic:%d references:%d, want 1 each",
+	if backend.semanticCalls != 1 || backend.referenceCalls != 0 {
+		t.Fatalf("backend calls after failure = semantic:%d references:%d, want 1 and 0",
 			backend.semanticCalls, backend.referenceCalls)
 	}
 	if closure.retained.get(oldPath) != oldContribution || closure.retained.get(path) != nil {
@@ -324,11 +325,11 @@ func TestRetainedContributionCommitIsTransactional(t *testing.T) {
 	if err != nil {
 		t.Fatalf("retry materialization: %v", err)
 	}
-	if table == nil || len(table.Entities) != 1 {
+	if table == nil || len(table.entityRuns) != 1 || len(table.entityRuns[0].entities) != 1 {
 		t.Fatalf("retry table = %#v, want one entity", table)
 	}
-	if backend.semanticCalls != 2 || backend.referenceCalls != 2 {
-		t.Fatalf("backend calls after retry = semantic:%d references:%d, want 2 each",
+	if backend.semanticCalls != 2 || backend.referenceCalls != 0 {
+		t.Fatalf("backend calls after retry = semantic:%d references:%d, want 2 and 0",
 			backend.semanticCalls, backend.referenceCalls)
 	}
 	if closure.retained.get(oldPath) != nil || closure.retained.get(path) == nil {

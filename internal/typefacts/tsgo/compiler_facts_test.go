@@ -197,6 +197,126 @@ const voidResult = voidCall();
 	}
 }
 
+func TestDemandedCallResultDomainUsesExactCallSpans(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare function makeCount(): number;
+declare function makeThunk(): () => void;
+declare function make(): (() => void) | undefined;
+declare const handlers: Array<() => number>;
+declare const maybe: (() => void) | undefined;
+declare const anyFactory: any;
+declare function takesNumber(value: number): number;
+declare function onCleanup(callback: () => void): void;
+declare function makeNested(): (value: number) => number;
+declare function makeBuilder(): { build(): number };
+declare class Foo { bar(): number; }
+
+onCleanup(() => { return makeCount(); });
+const thunkResult = makeThunk();
+const unionResult = make();
+const indexedResult = handlers[0]();
+const optionalResult = maybe?.();
+const anyResult = anyFactory();
+const recoveryResult = takesNumber("wrong");
+const nestedResult = makeNested()(2);
+const builderResult = makeBuilder().build();
+const newResult = new Foo().bar();
+`
+	sourcePath := filepath.Join(dir, "calls.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	want := []struct {
+		name string
+		want typefacts.RuntimeValueDomain
+	}{
+		{"makeCount()", typefacts.RuntimeValueDomain{MayBeOther: true}},
+		{"makeThunk()", typefacts.RuntimeValueDomain{MayBeCallable: true}},
+		{"make()", typefacts.RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true}},
+		{"handlers[0]()", typefacts.RuntimeValueDomain{MayBeOther: true}},
+		{"maybe?.()", typefacts.RuntimeValueDomain{MayBeUndefined: true}},
+		{"anyFactory()", typefacts.RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true, MayBeOther: true, Unknown: true}},
+		{"takesNumber(" + `"wrong"` + ")", typefacts.RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true, MayBeOther: true, Unknown: true}},
+		{"makeNested()(2)", typefacts.RuntimeValueDomain{MayBeOther: true}},
+		{"makeBuilder().build()", typefacts.RuntimeValueDomain{MayBeOther: true}},
+		{"new Foo().bar()", typefacts.RuntimeValueDomain{MayBeOther: true}},
+	}
+	demands := make([]typefacts.EntityDemand, len(want))
+	for index, testCase := range want {
+		start := strings.LastIndex(source, testCase.name)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.name)
+		}
+		demands[index] = typefacts.EntityDemand{
+			Location: typefacts.Location{
+				Path: sourcePath, StartByte: start, EndByte: start + len(testCase.name),
+			},
+			CallResultDomain: true,
+		}
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, testCase := range want {
+		if entities[index].CallResultDomain == nil {
+			t.Errorf("%s call-result domain is absent", testCase.name)
+			continue
+		}
+		if got := *entities[index].CallResultDomain; got != testCase.want {
+			t.Errorf("%s call-result domain = %+v, want %+v", testCase.name, got, testCase.want)
+		}
+	}
+
+	callStart := strings.LastIndex(source, "makeCount()")
+	callEnd := callStart + len("makeCount()")
+	identifierStart := strings.Index(source, "thunkResult")
+	absence := []typefacts.EntityDemand{
+		{Location: typefacts.Location{Path: sourcePath, StartByte: callStart, EndByte: callStart + len("makeCount")}, CallResultDomain: true},
+		{Location: typefacts.Location{Path: sourcePath, StartByte: callStart, EndByte: callEnd + 1}, CallResultDomain: true},
+		{Location: typefacts.Location{Path: sourcePath, StartByte: callStart + 1, EndByte: callEnd}, CallResultDomain: true},
+		{Location: typefacts.Location{Path: sourcePath, StartByte: identifierStart, EndByte: identifierStart + len("thunkResult")}, CallResultDomain: true},
+	}
+	absenceEntities, err := semantic.SemanticEntities(context.Background(), absence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, entity := range absenceEntities {
+		if entity.CallResultDomain != nil {
+			t.Errorf("absence demand %d unexpectedly returned %+v", index, entity.CallResultDomain)
+		}
+	}
+
+	// Keep the entity span identical while explicitly pinning the legacy domain
+	// to the callee query span. The new field must remain tied to the full exact
+	// call span and describe the produced number instead.
+	calleeLocation := typefacts.Location{Path: sourcePath, StartByte: callStart, EndByte: callStart + len("makeCount")}
+	distinction := []typefacts.EntityDemand{
+		{Location: typefacts.Location{Path: sourcePath, StartByte: callStart, EndByte: callEnd}, QueryLocation: &calleeLocation, RuntimeValueDomain: true},
+		{Location: typefacts.Location{Path: sourcePath, StartByte: callStart, EndByte: callEnd}, CallResultDomain: true},
+	}
+	distinctEntities, err := semantic.SemanticEntities(context.Background(), distinction)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := distinctEntities[0].RuntimeValueDomain; got == nil || !got.MayBeCallable || got.MayBeOther {
+		t.Fatalf("callee runtime domain = %+v, want callable only", got)
+	}
+	if got := distinctEntities[1].CallResultDomain; got == nil || !got.MayBeOther || got.MayBeCallable {
+		t.Fatalf("call-result runtime domain = %+v, want other only", got)
+	}
+}
+
 func TestResolvedCallDistinguishesValidRecoveryAndUnresolved(t *testing.T) {
 	dir := t.TempDir()
 	source := `function takesNumber(value: number): string { return String(value); }
@@ -263,6 +383,40 @@ const unresolved = takesNumber;
 	}
 }
 
+func TestResolvedCallUsesOutermostChainedCall(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare function factory(): (value: number) => string;
+const result = factory()(1);
+`
+	sourcePath := filepath.Join(dir, "calls.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+	start := strings.Index(source, "factory()(1)")
+	entities, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location:     typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len("factory()(1)")},
+		ResolvedCall: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entities) != 1 || entities[0].ResolvedCall == nil {
+		t.Fatalf("resolved chained call entities = %+v", entities)
+	}
+	if got := len(entities[0].ResolvedCall.Arguments); got != 1 {
+		t.Fatalf("resolved chained call arguments = %d, want outer call's 1 argument", got)
+	}
+}
+
 func TestResolvedCallValidityPreservesDiagnosticFallbacks(t *testing.T) {
 	dir := t.TempDir()
 	source := `function takesNumber(value: number): string { return String(value); }
@@ -310,13 +464,15 @@ notCallable();
 		if start < 0 {
 			t.Fatalf("%q not found", testCase.needle)
 		}
+		spanNeedle := strings.TrimSuffix(testCase.needle, ";")
 		demands[index] = typefacts.EntityDemand{
 			Location: typefacts.Location{
 				Path:      sourcePath,
 				StartByte: start,
-				EndByte:   start + len(testCase.needle),
+				EndByte:   start + len(spanNeedle),
 			},
-			ResolvedCall: true,
+			ResolvedCall:     true,
+			CallResultDomain: true,
 		}
 	}
 	entities, err := semantic.SemanticEntities(context.Background(), demands)
@@ -327,6 +483,14 @@ notCallable();
 		call := entities[index].ResolvedCall
 		if call == nil || call.Validity != testCase.want {
 			t.Errorf("%q resolved call = %+v, want validity %q", testCase.needle, call, testCase.want)
+		}
+		domain := entities[index].CallResultDomain
+		if index == 0 {
+			if domain == nil || !domain.MayBeOther || domain.Unknown {
+				t.Errorf("%q call-result domain = %+v, want known non-function", testCase.needle, domain)
+			}
+		} else if domain == nil || !domain.Unknown {
+			t.Errorf("%q call-result domain = %+v, want unknown for recovery", testCase.needle, domain)
 		}
 	}
 }

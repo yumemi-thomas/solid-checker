@@ -109,7 +109,7 @@ func (t *corpusStageTrace) Metrics(name string, values ...typefacts.Metric) {
 
 func corpusRequest(id uint64, operation typefacts.LifecycleOperation, projectID string, generation uint64) typefacts.LifecycleRequest {
 	return typefacts.LifecycleRequest{
-		Schema:     typefacts.TypeFactsSchemaVersionV5,
+		Schema:     typefacts.TypeFactsSchemaVersionV1,
 		RequestID:  id,
 		Operation:  operation,
 		ProjectID:  projectID,

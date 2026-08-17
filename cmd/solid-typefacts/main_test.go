@@ -15,7 +15,7 @@ import (
 
 func TestChunkedLifecycleResponseIsWireIdentical(t *testing.T) {
 	value := typefacts.LifecycleResponse{
-		Schema:          typefacts.TypeFactsSchemaVersionV5,
+		Schema:          typefacts.TypeFactsSchemaVersionV1,
 		RequestID:       9,
 		ProjectID:       "/project/tsconfig.json",
 		Generation:      3,
@@ -58,7 +58,7 @@ type orderedResponder struct {
 
 func (r *orderedResponder) lifecycle(ctx context.Context, request typefacts.LifecycleRequest) typefacts.LifecycleResponse {
 	response := typefacts.LifecycleResponse{
-		Schema: typefacts.TypeFactsSchemaVersionV5, RequestID: request.RequestID,
+		Schema: typefacts.TypeFactsSchemaVersionV1, RequestID: request.RequestID,
 		ProjectID: request.ProjectID, Generation: r.generation,
 	}
 	fail := func(code string) typefacts.LifecycleResponse {
@@ -141,7 +141,7 @@ func (s *servedResponder) receive(t *testing.T) typefacts.LifecycleResponse {
 
 func lifecycleRequestV3(id uint64, operation typefacts.LifecycleOperation, generation uint64) typefacts.LifecycleRequest {
 	return typefacts.LifecycleRequest{
-		Schema: typefacts.TypeFactsSchemaVersionV5, RequestID: id,
+		Schema: typefacts.TypeFactsSchemaVersionV1, RequestID: id,
 		Operation: operation, ProjectID: "/project/tsconfig.json", Generation: generation,
 	}
 }

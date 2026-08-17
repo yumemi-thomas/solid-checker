@@ -15,6 +15,7 @@ type EntityDemand struct {
 	ResolvedCall       bool      `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
 	Callability        bool      `cbor:"callability,omitempty" json:"callability,omitempty"`
 	RuntimeValueDomain bool      `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
+	CallResultDomain   bool      `cbor:"callResultDomain,omitempty" json:"callResultDomain,omitempty"`
 	ReferenceSpace     bool      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
 	RuntimeIdentity    bool      `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 	References         bool      `cbor:"references,omitempty" json:"references,omitempty"`
@@ -56,6 +57,7 @@ type EntityFact struct {
 	ResolvedCall       *Call               `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
 	Callability        Callability         `cbor:"callability,omitempty" json:"callability,omitempty"`
 	RuntimeValueDomain *RuntimeValueDomain `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
+	CallResultDomain   *RuntimeValueDomain `cbor:"callResultDomain,omitempty" json:"callResultDomain,omitempty"`
 	ReferenceSpace     ReferenceSpace      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
 	RuntimeIdentity    RuntimeSymbolID     `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 }
@@ -99,11 +101,12 @@ type FactTable struct {
 	// Hand-built tables may still populate Sources; the wire layer derives
 	// this compact form lazily for compatibility.
 	sourceDigests []SourceDigest
-	// pathSymbols is the compact transport/invalidation view retained by v6
+	// pathSymbols is the compact transport/invalidation view retained by the
+	// active transition
 	// after Rust has taken ownership of the expanded path rows.
 	pathSymbols map[string][]SymbolID
 	// entityRuns borrows the canonical per-file contribution rows until the
-	// v6 transition has streamed them into Rust. It avoids copying those rows
+	// transition has streamed them into the client. It avoids copying those rows
 	// into the generation-wide public Entities slice solely for transport.
 	entityRuns []factTableEntityRun
 }

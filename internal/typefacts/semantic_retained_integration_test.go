@@ -217,9 +217,6 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 	retainedSeen := false
 	asyncCacheSeen := false
 	asyncFactsExist := false
-	symbolCacheSeen := false
-	referenceCacheSeen := false
-	patchedSymbolRowsSeen := false
 	for step, change := range script {
 		if _, err := incremental.Update(ctx, []typefacts.FileChange{change}); err != nil {
 			t.Fatal(err)
@@ -266,15 +263,6 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 				break
 			}
 		}
-		if stats.Retention.CachedSymbolFacts > 0 {
-			symbolCacheSeen = true
-		}
-		if stats.Retention.CachedReferenceFacts > 0 {
-			referenceCacheSeen = true
-		}
-		if stats.Retention.PatchedSymbolRows > 0 {
-			patchedSymbolRowsSeen = true
-		}
 
 		// The fresh oracle: a new project that receives every overlay up
 		// to this step in one update, so its only materialization is a
@@ -313,14 +301,5 @@ func assertRetainedMatchesFreshMaterialization(t *testing.T, root, editFile, oth
 	}
 	if asyncFactsExist && !asyncCacheSeen {
 		t.Fatal("the fixture has async functions but no retained generation carried them; the async-cache parity check is vacuous")
-	}
-	if !symbolCacheSeen {
-		t.Fatal("the edit script never reused a durable symbol fact; the symbol-cache parity check is vacuous")
-	}
-	if !referenceCacheSeen {
-		t.Fatal("the edit script never reused an unchanged reference list; the reference-delta parity check is vacuous")
-	}
-	if !patchedSymbolRowsSeen {
-		t.Fatal("the edit script never patched a retained canonical symbol table; the row-retention parity check is vacuous")
 	}
 }

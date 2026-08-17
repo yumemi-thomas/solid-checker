@@ -54,6 +54,16 @@ This accepts callable values, `undefined`, their unions, and the vacuous
 `never` domain. Consumers should not infer that a missing fact is valid; absence
 means it was not demanded.
 
+## Call-result runtime value domain
+
+The active lifecycle schema V1 includes `EntityDemand.callResultDomain`, which produces
+`EntityFact.callResultDomain` with the same `RuntimeValueDomain` shape. The
+producer answers only when a call-like expression's trivia-normalized start and
+exact end bytes match the demanded span, then classifies
+`Checker.GetTypeAtLocation` for that call expression. It never substitutes the
+callee or an enclosing expression. A missing exact call is absent; checker
+error or recovery types are present with `unknown: true`.
+
 ## Resolved-call validity
 
 `EntityDemand.resolvedCall` always produces a resolved-call fact. Its
@@ -103,7 +113,7 @@ instead of publishing a stale location.
 ## Exhaustive target candidate sets
 
 A valid composite call — one whose callee type is a union — carries no single
-selected declaration. Since lifecycle v9, it may instead carry
+selected declaration. The active V1 schema may instead carry
 `resolvedCall.targets`, a `CallTargetSet` with an explicit `exhaustive` proof
 bit and deterministically ordered, deduplicated candidate declarations. The
 set is emitted only when every union constituent is one closed concrete
@@ -204,8 +214,7 @@ they do not duplicate symbol rows. Retained per-file contributions track
 declaration and parameter source dependencies, so an edit rematerializes only
 facts that could otherwise carry stale locations.
 
-The active lifecycle schema is v8 and the active Wire table model is v5. The
-packed transition framing remains version 1. Frozen lifecycle v5/v6 adapters
-continue to emit Wire table v3, and frozen v7 emits Wire table v4. Go and Rust
-pin the same per-schema digest, so mismatched producer/client versions fail
-during the startup handshake.
+The active lifecycle schema is V1 and the active Wire table model is v7. The
+packed transition framing remains version 1. Go and Rust pin the same schema
+digest, so mismatched producer/client versions fail during the startup
+handshake.

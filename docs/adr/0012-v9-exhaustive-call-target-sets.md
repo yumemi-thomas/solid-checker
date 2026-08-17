@@ -4,6 +4,10 @@ status: accepted
 
 # V9 carries exhaustive resolved-call target candidate sets
 
+> Historical record. Superseded as active protocol guidance by
+> [ADR 0013](0013-v1-call-result-runtime-value-domains.md); the repository now
+> ships one lifecycle schema, V1.
+
 ## Decision
 
 Lifecycle schema v9 adds `Call.Targets`, a `CallTargetSet` holding an explicit

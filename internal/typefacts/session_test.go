@@ -26,7 +26,7 @@ func (b *sessionTestBackend) Close() error {
 
 func lifecycleRequest(id uint64, operation LifecycleOperation, generation uint64) LifecycleRequest {
 	return LifecycleRequest{
-		Schema: TypeFactsSchemaVersionV5, RequestID: id,
+		Schema: TypeFactsSchemaVersionV1, RequestID: id,
 		Operation: operation, ProjectID: "/project/tsconfig.json", Generation: generation,
 	}
 }
@@ -111,159 +111,97 @@ func TestSessionOwnsRetainedLifecycleState(t *testing.T) {
 	}
 }
 
-func TestV6TransfersExpandedRowsAndKeepsSparseIncrementalProof(t *testing.T) {
+func TestSessionTransfersExpandedRowsAndKeepsSparseIncrementalProof(t *testing.T) {
 	t.Parallel()
 	projectID := "/project/tsconfig.json"
 	demand := EntityDemand{
 		Location: Location{Path: "/project/source.ts", StartByte: 7, EndByte: 12},
 		Symbol:   true, References: true,
 	}
-	v5, err := NewSession(newSessionTestBackend(), projectID, nil)
+	session, err := NewSession(newSessionTestBackend(), projectID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer v5.Close()
-	v6, err := NewSessionV6(newSessionTestBackend(), projectID, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer v6.Close()
+	defer session.Close()
 
-	analyze := func(session *Session, schema uint64) LifecycleResponse {
+	analyze := func(session *Session) LifecycleResponse {
 		request := LifecycleRequest{
-			Schema: schema, RequestID: 1, Operation: LifecycleAnalyze,
+			Schema: TypeFactsSchemaVersionV1, RequestID: 1, Operation: LifecycleAnalyze,
 			ProjectID: projectID, Generation: 1, ResetState: true,
 			Demands: []EntityDemand{demand},
 		}
 		return session.Lifecycle(context.Background(), request)
 	}
-	v5Cold := analyze(v5, TypeFactsSchemaVersionV5)
-	v6Cold := analyze(v6, TypeFactsSchemaVersionV6)
-	if !v5Cold.OK || !v6Cold.OK {
-		t.Fatalf("cold responses: v5=%+v v6=%+v", v5Cold.Error, v6Cold.Error)
+	cold := analyze(session)
+	if !cold.OK {
+		t.Fatalf("cold response: %+v", cold.Error)
 	}
-	if len(v6Cold.TableTransition) >= len(v5Cold.TableTransition) {
-		t.Fatal("v6 cold transition still contains Go-materialized symbol rows")
-	}
-	contribution := v6.closure.retained.get("/project/source.ts")
+	contribution := session.closure.retained.get("/project/source.ts")
 	if contribution == nil || contribution.entities != nil || len(contribution.roots) == 0 {
-		t.Fatalf("v6 retained contribution did not transfer rows: %+v", contribution)
+		t.Fatalf("retained contribution did not transfer rows: %+v", contribution)
 	}
-	if len(v6.closure.table.Entities) != 0 || len(v6.closure.table.Files) != 0 ||
-		len(v6.closure.table.sourceDigests) != 0 {
-		t.Fatal("v6 retained an expanded transport table after publication")
+	if len(session.closure.table.Entities) != 0 || len(session.closure.table.Files) != 0 ||
+		len(session.closure.table.sourceDigests) != 0 {
+		t.Fatal("retained an expanded transport table after publication")
 	}
 
 	update := LifecycleRequest{
-		Schema: TypeFactsSchemaVersionV6, RequestID: 2, Operation: LifecycleUpdate,
+		Schema: TypeFactsSchemaVersionV1, RequestID: 2, Operation: LifecycleUpdate,
 		ProjectID: projectID, Generation: 2,
 	}
-	if response := v6.Lifecycle(context.Background(), update); !response.OK {
-		t.Fatalf("v6 update: %+v", response.Error)
+	if response := session.Lifecycle(context.Background(), update); !response.OK {
+		t.Fatalf("update: %+v", response.Error)
 	}
 	next := LifecycleRequest{
-		Schema: TypeFactsSchemaVersionV6, RequestID: 3, Operation: LifecycleAnalyze,
-		ProjectID: projectID, Generation: 2, StateToken: v6Cold.StateToken,
+		Schema: TypeFactsSchemaVersionV1, RequestID: 3, Operation: LifecycleAnalyze,
+		ProjectID: projectID, Generation: 2, StateToken: cold.StateToken,
 	}
-	response := v6.Lifecycle(context.Background(), next)
+	response := session.Lifecycle(context.Background(), next)
 	if !response.OK || len(response.TableTransition) == 0 {
-		t.Fatalf("v6 sparse successor: %+v", response.Error)
+		t.Fatalf("sparse successor: %+v", response.Error)
 	}
-	if contribution := v6.closure.retained.get("/project/source.ts"); contribution == nil ||
+	if contribution := session.closure.retained.get("/project/source.ts"); contribution == nil ||
 		contribution.entities != nil {
-		t.Fatal("v6 sparse successor reacquired expanded retained rows")
+		t.Fatal("sparse successor reacquired expanded retained rows")
 	}
 }
 
-func TestRuntimeValueDomainIsAvailableOnlyInV7(t *testing.T) {
+func TestLatestSemanticDomainsAreAvailableInV1(t *testing.T) {
 	projectID := "/project/tsconfig.json"
 	demand := EntityDemand{
 		Location:           Location{Path: "/project/source.ts", StartByte: 7, EndByte: 12},
-		RuntimeValueDomain: true,
+		RuntimeValueDomain: true, CallResultDomain: true,
 	}
-	for _, open := range []struct {
-		name   string
-		schema uint64
-		new    func(Project, string, Trace) (*Session, error)
-	}{
-		{"v5", TypeFactsSchemaVersionV5, NewSession},
-		{"v6", TypeFactsSchemaVersionV6, NewSessionV6},
-	} {
-		t.Run(open.name, func(t *testing.T) {
-			session, err := open.new(newSessionTestBackend(), projectID, nil)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer session.Close()
-			response := session.Lifecycle(context.Background(), LifecycleRequest{
-				Schema: open.schema, RequestID: 1, Operation: LifecycleAnalyze,
-				ProjectID: projectID, Generation: 1, ResetState: true,
-				Demands: []EntityDemand{demand},
-			})
-			if response.OK || response.Error == nil || response.Error.Code != "invalid-demands" {
-				t.Fatalf("frozen schema accepted runtime value domain: %+v", response)
-			}
-			compact := CompactDemandsV3From([]EntityDemand{demand})
-			response = session.Lifecycle(context.Background(), LifecycleRequest{
-				Schema: open.schema, RequestID: 2, Operation: LifecycleAnalyze,
-				ProjectID: projectID, Generation: 1, ResetState: true,
-				CompactDemands: &compact,
-			})
-			if response.OK || response.Error == nil || response.Error.Code != "invalid-demands" {
-				t.Fatalf("frozen schema accepted compact runtime value domain: %+v", response)
-			}
-		})
-	}
-
-	v7, err := NewSessionV7(newSessionTestBackend(), projectID, nil)
+	session, err := NewSession(newSessionTestBackend(), projectID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer v7.Close()
-	response := v7.Lifecycle(context.Background(), LifecycleRequest{
-		Schema: TypeFactsSchemaVersionV7, RequestID: 1, Operation: LifecycleAnalyze,
+	defer session.Close()
+	response := session.Lifecycle(context.Background(), LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV1, RequestID: 1, Operation: LifecycleAnalyze,
 		ProjectID: projectID, Generation: 1, ResetState: true,
 		Demands: []EntityDemand{demand},
 	})
 	if !response.OK {
-		t.Fatalf("v7 rejected runtime value domain: %+v", response.Error)
+		t.Fatalf("v1 rejected semantic domains: %+v", response.Error)
 	}
-	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersionV4 {
-		t.Fatalf("v7 Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersionV4)
+	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersionV7 {
+		t.Fatalf("active Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersionV7)
 	}
 
-	v8, err := NewSessionV8(newSessionTestBackend(), projectID, nil)
+	compact := CompactDemandsV3From([]EntityDemand{demand})
+	compactSession, err := NewSession(newSessionTestBackend(), projectID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer v8.Close()
-	response = v8.Lifecycle(context.Background(), LifecycleRequest{
-		Schema: TypeFactsSchemaVersionV8, RequestID: 1, Operation: LifecycleAnalyze,
+	defer compactSession.Close()
+	response = compactSession.Lifecycle(context.Background(), LifecycleRequest{
+		Schema: TypeFactsSchemaVersionV1, RequestID: 1, Operation: LifecycleAnalyze,
 		ProjectID: projectID, Generation: 1, ResetState: true,
-		Demands: []EntityDemand{demand},
+		CompactDemands: &compact,
 	})
 	if !response.OK {
-		t.Fatalf("v8 rejected runtime value domain: %+v", response.Error)
-	}
-	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersionV5 {
-		t.Fatalf("v8 Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersionV5)
-	}
-
-	v9, err := NewSessionV9(newSessionTestBackend(), projectID, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer v9.Close()
-	response = v9.Lifecycle(context.Background(), LifecycleRequest{
-		Schema: TypeFactsSchemaVersionV9, RequestID: 1, Operation: LifecycleAnalyze,
-		ProjectID: projectID, Generation: 1, ResetState: true,
-		Demands: []EntityDemand{demand},
-	})
-	if !response.OK {
-		t.Fatalf("v9 rejected runtime value domain: %+v", response.Error)
-	}
-	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersion {
-		t.Fatalf("v9 Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersion)
+		t.Fatalf("v1 rejected compact semantic domains: %+v", response.Error)
 	}
 }
 
@@ -429,19 +367,9 @@ func TestSessionAnalysisTraversesTheRetainedPath(t *testing.T) {
 	if retention.RetainedFiles == 0 {
 		t.Fatalf("no file was retained across the update; retention = %+v", retention)
 	}
-	if retention.CachedSymbolFacts == 0 {
-		t.Fatalf("no durable symbol fact was reused; retention = %+v", retention)
-	}
-	// SharedSymbolChunks is the patch path's signature: only Patch shares
-	// chunks with the preceding store. PatchedSymbolRows cannot stand in for
-	// it — this edit leaves every declaration span in place, so the
-	// recomputed rows are identical and correctly patch nothing.
-	if retention.SharedSymbolChunks == 0 {
-		t.Fatalf("the canonical symbol store was rebuilt rather than patched, so the exact-delta fast path went untested; retention = %+v", retention)
-	}
-	if retention.PatchedSymbolRows != 0 {
-		t.Fatalf("a span-stable edit patched %d identical rows; retention = %+v", retention.PatchedSymbolRows, retention)
-	}
+	// The active V1 session always uses the latest semantic transport path;
+	// retention may legitimately recompute symbol rows when the compiler
+	// invalidates their closure. Retained files are the stable contract here.
 	if len(warmResponse.TableTransition) == 0 {
 		t.Fatalf("warm analyze omitted its generation-advancing transition; retention = %+v", retention)
 	}

@@ -277,7 +277,7 @@ impl Connection {
             command.arg(argument);
         }
         let mut child = command
-            .args(["-schema=9", "-project", project_id])
+            .args(["-schema=1", "-project", project_id])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()
@@ -324,7 +324,7 @@ impl Connection {
             .map_err(|error| SessionError::Handshake(format!("invalid startup frame: {error}")))?;
         let expected = (
             v3::TYPE_FACTS_HANDSHAKE_PROTOCOL,
-            v3::TYPE_FACTS_SCHEMA_V9_SHA256,
+            v3::TYPE_FACTS_SCHEMA_SHA256,
             v3::TYPE_FACTS_BUILD_ID,
         );
         let actual = (
@@ -1503,7 +1503,7 @@ impl Drop for Session {
 
 fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
     Request {
-        schema: v3::TYPE_FACTS_SCHEMA_V9,
+        schema: v3::TYPE_FACTS_SCHEMA_V1,
         request_id: 0,
         operation,
         project_id: project_id.into(),
@@ -1551,11 +1551,11 @@ fn prepare_analyze_response(
     retained: &mut Option<FactTable>,
     retained_state_token: &str,
 ) -> Result<(FactTable, TableChanges), SessionError> {
-    if response.schema != v3::TYPE_FACTS_SCHEMA_V9 {
+    if response.schema != v3::TYPE_FACTS_SCHEMA_V1 {
         return Err(SessionError::InvalidResponse(format!(
             "response schema is {}, expected {}",
             response.schema,
-            v3::TYPE_FACTS_SCHEMA_V9
+            v3::TYPE_FACTS_SCHEMA_V1
         )));
     }
     if response.project_id != expected_project || response.generation != expected_generation {
@@ -1574,7 +1574,7 @@ fn prepare_analyze_response(
         let candidate = retained.as_ref().ok_or_else(|| {
             SessionError::InvalidResponse("reuse response has no retained table".into())
         })?;
-        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V6
+        if candidate.schema() != v3::TYPE_FACTS_TABLE_SCHEMA_V7
             || candidate.project_id() != expected_project
             || candidate.generation() != response.generation
         {
@@ -1596,7 +1596,7 @@ fn prepare_analyze_response(
         .map_err(SessionError::InvalidResponse)?;
     if transition.project_id.as_ref() != response.project_id.as_str()
         || transition.target_generation != response.generation
-        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V6
+        || transition.table_schema != v3::TYPE_FACTS_TABLE_SCHEMA_V7
     {
         return Err(SessionError::InvalidResponse(
             "table transition identity does not match response".into(),
@@ -1654,7 +1654,7 @@ fn table_changes(transition: &WireTableTransition) -> TableChanges {
     }
 }
 
-// V6 path replacements are intentionally unconditional: Rust owns the base
+// Active V1 path replacements are intentionally unconditional: Rust owns the base
 // rows and Go no longer retains them merely to decide equality. Resolve the
 // sparse transport candidates against the canonical retained table here so a
 // source-only edit does not invalidate downstream entity/file consumers.
@@ -1869,7 +1869,7 @@ mod tests {
         files: Vec<crate::FileFact>,
     ) -> FactTable {
         FactTable::from_parts(
-            v3::TYPE_FACTS_TABLE_SCHEMA_V6,
+            v3::TYPE_FACTS_TABLE_SCHEMA_V7,
             1,
             "/p/tsconfig.json",
             sources,
@@ -1887,7 +1887,7 @@ mod tests {
     ) -> WireTableTransition {
         WireTableTransition {
             mode: TransitionMode::Delta,
-            table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V6,
+            table_schema: v3::TYPE_FACTS_TABLE_SCHEMA_V7,
             base_generation,
             target_generation,
             project_id: "/p/tsconfig.json".into(),
@@ -1916,7 +1916,7 @@ mod tests {
 
     fn response(generation: u64, state_token: &str, table_transition: Vec<u8>) -> Response {
         Response {
-            schema: v3::TYPE_FACTS_SCHEMA_V9,
+            schema: v3::TYPE_FACTS_SCHEMA_V1,
             request_id: 1,
             project_id: "/p/tsconfig.json".into(),
             generation,

@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://solid-checker.dev/schema/typefacts-v9.schema.json",
-  "title": "TypeFactsSchema v9 (exhaustive call-target sets)",
-  "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. V9 preserves v8's explicit negative symbol resolution and adds compiler-proven exhaustive resolved-call target candidate sets in Wire table schema v6. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
+  "$id": "https://solid-checker.dev/schema/typefacts-v1.schema.json",
+  "title": "TypeFactsSchema v1 (latest semantic vocabulary)",
+  "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. V1 is the sole active lifecycle schema and carries the latest semantic vocabulary, including exact-span callResultDomain facts on Wire table schema v7. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
   "oneOf": [
     { "$ref": "#/$defs/lifecycleRequest" },
     { "$ref": "#/$defs/lifecycleResponse" }
@@ -45,6 +45,7 @@
         "resolvedCall": { "type": "boolean" },
         "callability": { "type": "boolean" },
         "runtimeValueDomain": { "type": "boolean" },
+        "callResultDomain": { "type": "boolean" },
         "referenceSpace": { "type": "boolean" },
         "runtimeIdentity": { "type": "boolean" },
         "references": { "type": "boolean" },
@@ -87,7 +88,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["groups", "strings"],
-      "description": "Demand snapshot with one string dictionary per frame; index 0 is the empty string. Each group is [pathIndex, packedRows] where packedRows holds unsigned LEB128 (flags << 1 | hasQuery, startDelta, length) triples, each optionally followed by (queryPath, queryStart, queryLength). Bit 9 requests runtimeValueDomain.",
+      "description": "Demand snapshot with one string dictionary per frame; index 0 is the empty string. Each group is [pathIndex, packedRows] where packedRows holds unsigned LEB128 (flags << 1 | hasQuery, startDelta, length) triples, each optionally followed by (queryPath, queryStart, queryLength). Bit 9 requests runtimeValueDomain and bit 10 requests callResultDomain.",
       "properties": {
         "groups": {
           "type": "array",
@@ -110,7 +111,7 @@
       "additionalProperties": false,
       "required": ["schema", "requestId", "operation", "projectId", "generation"],
       "properties": {
-        "schema": { "const": 9 },
+        "schema": { "const": 1 },
         "requestId": { "type": "integer", "minimum": 1 },
         "operation": {
           "enum": ["open", "update", "analyze", "symbols", "sources", "cancel", "close"]
@@ -154,14 +155,14 @@
       "required": ["schema", "requestId", "projectId", "generation", "ok"],
       "description": "Analyze carries at most one opaque tableTransition. The transition proves its base project, generation, and state token and selects full or delta mode internally. An absent transition reuses the retained table.",
       "properties": {
-        "schema": { "const": 9 },
+        "schema": { "const": 1 },
         "requestId": { "type": "integer", "minimum": 1 },
         "projectId": { "type": "string", "minLength": 1 },
         "generation": { "type": "integer", "minimum": 1 },
         "ok": { "type": "boolean" },
         "tableTransition": {
           "$ref": "#/$defs/bytes",
-          "description": "Opaque full-or-delta Wire table transition. V9 emits Wire table schema v6, whose resolved-call rows may carry an exhaustive set of exact target candidate declarations."
+          "description": "Opaque full-or-delta Wire table transition. The active lifecycle schema emits Wire table schema v7, whose entity rows may carry an exact-span call-result runtime value-domain payload."
         },
         "symbolEvidence": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/symbolFact" } },
         "referenceEvidence": { "type": "array", "maxItems": 1000000, "items": { "$ref": "#/$defs/symbolFact" } },

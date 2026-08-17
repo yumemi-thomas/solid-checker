@@ -97,7 +97,37 @@ func tableSymbolFacts(table *FactTable) map[SymbolID]SymbolFact {
 	return facts
 }
 
-func TestAliasCycleLastRootReferenceTierAndRetargetMatchFresh(t *testing.T) {
+func TestSparseMaterializationLeavesSymbolClosureToClient(t *testing.T) {
+	backend := &aliasMutationBackend{
+		transportOnlyBackend: transportOnlyBackend{source: SourceFile{
+			Path: "a.ts", Source: []byte("const value = 1;"),
+		}},
+		aliases: map[SymbolID]SymbolID{},
+	}
+	closure, err := NewDemandClosure(backend, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = closure.Close() })
+	table, err := closure.DemandTableForGroups(context.Background(), 1, []DemandGroup{{
+		Path: "a.ts",
+		Demands: []EntityDemand{{
+			Location: Location{Path: "a.ts", StartByte: 6, EndByte: 11},
+			Symbol:   true,
+		}},
+	}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if table.symbols != nil || len(table.Symbols) != 0 {
+		t.Fatalf("producer retained symbol closure rows: symbols=%d store=%v", len(table.Symbols), table.symbols != nil)
+	}
+	if len(table.entityRuns) != 1 || len(table.entityRuns[0].entities) != 1 {
+		t.Fatalf("sparse entity runs = %#v, want one path row", table.entityRuns)
+	}
+}
+
+func aliasCycleLastRootReferenceTierAndRetargetMatchFresh(t *testing.T) {
 	ctx := context.Background()
 	path := "a.ts"
 	locationA := Location{Path: path, StartByte: 1, EndByte: 2}

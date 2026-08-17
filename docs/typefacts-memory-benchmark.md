@@ -5,6 +5,12 @@ and incremental updates. RSS is not used as a memory target on macOS: `vmmap`
 physical footprint and peak account for reclaimable Go pages, while a forced-GC
 heap profile or `runtime.MemStats.HeapAlloc` measures live Go objects.
 
+The active protocol is lifecycle schema V1 with Wire table schema v7. V1 uses
+the sparse ownership path: Go extracts per-file entity rows and compact
+retention evidence, while the Rust client owns the expanded symbol/reference
+closure. The historical V5/V6 figures below are attribution records, not
+current architecture requirements.
+
 ## Reproduction
 
 Build the same Producer revision and Solid Checker release binary for every
@@ -80,16 +86,13 @@ Major variables were applied and measured separately:
   longer retains the inverse durable-ID mint map.
 
 The remaining Go floor is primarily the TypeScript-Go program/AST plus the
-canonical entity and symbol rows required to construct v5 deltas. Making Go a
-fully stateless semantic oracle requires a new multi-round protocol: v5 can ask
-questions only by source location and cannot request alias/declaration/reference
-facts by symbol ID. Such a protocol should preserve v5 as the compatibility
-adapter rather than forcing full recomputation or sending Rust's retained table
-back to Go.
+canonical entity rows required to construct V1 sparse transitions. Symbol and
+reference closure rows are Rust-owned after transfer, so the producer does not
+rebuild them or retain a duplicate expanded table.
 
 ## Shared transition arena and direct result ownership
 
-The V6 process adapter now creates and owns a private transition arena. Go
+The V1 process adapter now creates and owns a private transition arena. Go
 streams packed rows into it in bounded 64 KiB chunks; Rust validates the
 committed request identity and range before decoding. Standalone producer
 responses remain inline and byte-compatible. Against the inline process
@@ -107,7 +110,7 @@ The next direct-ingestion experiment removed two Go-side ownership stages:
 
 - Retained-contribution preparation compacts `EntityFact` and structural-symbol
   results in place and takes ownership of the TypeScript-Go result arenas.
-- Sparse V6 transport borrows those canonical per-file runs directly instead
+- Sparse V1 transport borrows those canonical per-file runs directly instead
   of copying them into a generation-wide `FactTable.Entities` slice.
 
 The full-table allocation benchmark fell from about 7.97 MiB/op to 7.67
@@ -116,18 +119,21 @@ about 1.24-1.29 ms to 15-22 us. The 5,000-file physical peak moved only from
 443.7 MiB to 443.2 MiB and live heap was unchanged, establishing that the
 remaining floor is the persistent TypeScript-Go program, AST, and binder state
 rather than fact handoff. The ownership changes remain because they remove
-copies, simplify the V6 lifetime, preserve exact transition bytes, and do not
+copies, simplify the V1 lifetime, preserve exact transition bytes, and do not
 regress cached or incremental latency.
 
-## Schema v6 ownership transfer
+## Historical V6 ownership measurements
 
-V6 makes Rust the semantic-closure owner. Go releases expanded source, entity,
+The V6 experiment made Rust the semantic-closure owner. The active V1 path keeps
+that ownership result. Go releases expanded source, entity,
 file, symbol, and reference rows after transfer; it retains the TSGo program
 and compact per-file extraction proof. Rust derives roots, runs alias closure,
 owns reference-tier membership, and patches path-scoped reference evidence.
 Symbol oracle responses reuse the packed transition dictionary codec rather
 than materializing a second large CBOR object graph. See
-[ADR 0009](adr/0009-v6-client-owns-expanded-path-rows.md).
+[ADR 0009](adr/0009-v6-client-owns-expanded-path-rows.md). The measurements in
+this section are historical comparisons and should not be read as a request to
+restore a V5 producer path.
 
 The comparison below uses the same 5,000-file corpus. Latency attribution uses
 the same rebuilt Solid Checker checkout for both versions; physical v5 values

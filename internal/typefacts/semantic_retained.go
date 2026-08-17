@@ -163,7 +163,7 @@ func demandListHash(demands []EntityDemand, seed maphash.Seed) uint64 {
 		}
 		buffer = append(buffer,
 			flag(demand.Symbol), flag(demand.TypeDescriptor), flag(demand.ResolvedCall),
-			flag(demand.Callability), flag(demand.RuntimeValueDomain), flag(demand.References), flag(demand.Async), flag(demand.StructuralAccessor),
+			flag(demand.Callability), flag(demand.RuntimeValueDomain), flag(demand.CallResultDomain), flag(demand.References), flag(demand.Async), flag(demand.StructuralAccessor),
 			flag(demand.ReferenceSpace), flag(demand.RuntimeIdentity),
 		)
 		_, _ = digest.Write(buffer)
@@ -245,65 +245,6 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 	table.Symbols = nil
 	table.symbols = nil
 	table.transport = nil
-	var cachedCanonicalStore *symbolFactStore
-	if p.previousTable != nil {
-		cachedCanonicalStore = p.previousTable.symbols
-		if cachedCanonicalStore == nil {
-			cachedCanonicalStore = newSymbolFactStore(p.previousTable.Symbols)
-		}
-	}
-	builder := &closureBuilder{
-		backend: p.backend,
-		trace:   p.trace,
-	}
-	if !p.sparseTransport {
-		p.maybeResetInterner(cachedCanonicalStore.Len())
-		builder.entities = make(map[Location]*EntityFact)
-		builder.interner = p.interner
-		builder.symbolQueue = p.queueScratch[:0]
-		builder.queueHandles = p.queueHandleScratch[:0]
-		builder.symbolSeen = newSymbolHandleSet(p.interner, p.seenScratch)
-		builder.fullTier = newSymbolHandleSet(p.interner, p.fullScratch)
-		builder.changedSymbols = newChangedSymbolSet(p.interner, p.changedScratch, p.changedIDScratch)
-		builder.factIndexScratch = p.factIndexScratch
-		builder.descriptors = make(map[SymbolID]*TypeDescriptor)
-		builder.cachedReferences = p.symbolReferences
-		builder.cachedCanonicalStore = cachedCanonicalStore
-		builder.invalidatedSymbols = p.invalidatedSymbols
-		builder.symbolFactsBuffer = p.symbolScratch
-		builder.symbolOrderBuffer = table.Symbols
-		builder.removedSymbolCandidates = retainedSymbolCandidates(p.previousTable, p.transportChangedPaths)
-	}
-	// The generation's handle sets and queue live on closure-owned scratch;
-	// hand the backing back for the next generation whichever way this one
-	// ends.
-	releaseLinearScratch := false
-	defer func() {
-		if p.sparseTransport {
-			p.seenScratch = nil
-			p.fullScratch = nil
-			p.changedScratch = nil
-			p.changedIDScratch = nil
-			p.queueScratch = nil
-			p.queueHandleScratch = nil
-			p.factIndexScratch = nil
-			return
-		}
-		p.seenScratch = builder.symbolSeen.members
-		p.fullScratch = builder.fullTier.members
-		p.changedScratch = builder.changedSymbols.set.members
-		if releaseLinearScratch {
-			p.changedIDScratch = nil
-			p.queueScratch = nil
-			p.queueHandleScratch = nil
-			p.factIndexScratch = nil
-		} else {
-			p.changedIDScratch = builder.changedSymbols.ids[:0]
-			p.queueScratch = builder.symbolQueue[:0]
-			p.queueHandleScratch = builder.queueHandles[:0]
-			p.factIndexScratch = builder.factIndexScratch
-		}
-	}()
 	// The async runs are rebuilt every generation, but into retained scratch:
 	// counting first sizes the flat backing exactly, so it never reallocates
 	// and each group's run is a stable capped window into it. The windows are
@@ -401,12 +342,6 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		}
 		path := source.Path
 		asyncFunctions := asyncByPath[path]
-		for _, function := range asyncFunctions {
-			if !p.sparseTransport {
-				builder.enqueueSymbol(function.Symbol)
-				builder.enqueueSymbol(function.Target)
-			}
-		}
 		table.Files = append(table.Files, FileFact{
 			Path:           path,
 			AsyncFunctions: asyncFunctions,
@@ -604,7 +539,6 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		}
 	}
 
-	entityTotal := 0
 	for index := range groups {
 		group := &groups[index]
 		// The source-fact memo's rule (ADR 0001): a contribution is stored
@@ -615,265 +549,51 @@ func (p *DemandClosure) materializeSemanticDemandRetained(
 		if !group.contribution.durable {
 			retention.NonDurableFiles++
 		}
-		entityTotal += len(group.contribution.entities)
 	}
 	retention.RetainedFiles = len(groups) - len(changed)
 	retention.RecomputedFiles = len(changed)
 	stages.demand = time.Since(started)
 	started = time.Now()
-	// Groups are path-sorted and unique, and each immutable contribution was
-	// prepared from one canonical demand run. Concatenation therefore already
-	// is the fact table's canonical location order.
-	var entities []EntityFact
-	if p.sparseTransport {
-		runs := table.entityRuns[:0]
-		if cap(runs) < len(groups) {
-			runs = make([]factTableEntityRun, 0, len(groups))
-		}
-		for index := range groups {
-			contribution := groups[index].contribution
-			if len(contribution.entities) != 0 {
-				runs = append(runs, factTableEntityRun{
-					entities: contribution.entities,
-				})
-			}
-		}
-		table.entityRuns = runs
-	} else {
-		entities = table.Entities[:0]
-		if cap(entities) < entityTotal {
-			entities = make([]EntityFact, 0, entityTotal)
-		}
-		for index := range groups {
-			group := &groups[index]
-			if group.contribution.entities == nil {
-				for _, symbol := range group.contribution.roots {
-					builder.enqueueSymbol(symbol)
-				}
-				for _, symbol := range group.contribution.fullTierSymbols {
-					builder.fullTier.addID(symbol)
-				}
-				continue
-			}
-			start := len(entities)
-			entities = append(entities, group.contribution.entities...)
-			// The canonical table is the retained entity backing store.
-			// Repoint each contribution at its capped path window so the
-			// per-file preparation arrays become collectible.
-			group.contribution.entities = entities[start:len(entities):len(entities)]
-			for entityIndex := range group.contribution.entities {
-				entity := &group.contribution.entities[entityIndex]
-				builder.enqueueSymbol(entity.Symbol)
-				if entity.ResolvedCall != nil {
-					builder.enqueueSymbol(entity.ResolvedCall.Target)
-					if entity.ResolvedCall.Targets != nil {
-						for candidateIndex := range entity.ResolvedCall.Targets.Candidates {
-							builder.enqueueSymbol(entity.ResolvedCall.Targets.Candidates[candidateIndex].Symbol)
-						}
-					}
-				}
-			}
-			for _, entityIndex := range group.contribution.fullTier {
-				builder.fullTier.addID(group.contribution.entities[entityIndex].Symbol)
-			}
-		}
+	// Entity and file rows are handed to the packed transition as per-path
+	// windows. Rust owns the expanded retained table and performs symbol
+	// closure; the producer retains only compact demand contributions.
+	runs := table.entityRuns[:0]
+	if cap(runs) < len(groups) {
+		runs = make([]factTableEntityRun, 0, len(groups))
 	}
-	if p.sparseTransport {
-		// V6 stops here. Entity/call/async facts cross the seam immediately;
-		// Rust owns the symbol worklist, alias fixed point, reference tier, and
-		// retained symbol rows. None of those structures are materialized in Go.
-		stages.assembly = time.Since(started)
-		table.Entities = nil
-		table.Symbols = nil
-		table.symbols = nil
-		// V6 never computes symbol invalidation from a Go table: Rust owns the
-		// complete symbol successor, and rustOwnedTransportManifest contains
-		// path rows only.
-		table.pathSymbols = nil
-		p.nextTableStateID++
-		if p.nextTableStateID == 0 {
-			p.nextTableStateID++
-		}
-		table.stateID = p.nextTableStateID
-		table.transport = rustOwnedTransportManifest(p.previousTable, manifestChangedPaths)
-		if p.retainedPathScratch == nil {
-			p.retainedPathScratch = make(map[string]struct{}, len(groups))
-		}
-		p.retained.commit(groups, p.retainedPathScratch)
-		previousSuppression := p.lastSuppression
-		p.lastSuppression = union
-		p.suppressionScratch = previousSuppression
-		suppressionCommitted = true
-		p.recyclableTable = p.previousTable
-		p.previousTable = nil
-		p.transportChangedPaths = nil
-		p.descriptorSeedScratch = nil
-		p.asyncDemandScratch = nil
-		p.asyncGroupScratch = nil
-		p.symbolReferences = nil
-		p.symbolsByPath = nil
-		p.invalidatedSymbols = nil
-		p.symbolMemoComplete = false
-		releaseLinearScratch = true
-		return table, 0, stages, retention, nil
-	}
-	rootSnapshot := copyHandleMembership(builder.symbolSeen.members, p.rootSnapshotScratch)
-	fullRootSnapshot := copyHandleMembership(builder.fullTier.members, p.fullRootSnapshotScratch)
-	p.rootSnapshotScratch = nil
-	p.fullRootSnapshotScratch = nil
-	snapshotsCommitted := false
-	defer func() {
-		if !snapshotsCommitted {
-			p.rootSnapshotScratch = rootSnapshot
-			p.fullRootSnapshotScratch = fullRootSnapshot
-		}
-	}()
-	stages.assembly = time.Since(started)
-	started = time.Now()
-	var symbols []SymbolFact
-	stableSeeds := equalHandleMembership(rootSnapshot, p.lastRoots) &&
-		equalHandleMembership(fullRootSnapshot, p.lastFullRoots)
-	if stableSeeds {
-		patched, err := builder.patchStableSymbolUniverse(
-			ctx,
-			p.invalidatedSymbols,
-			p.symbolMemoComplete,
-			p.lastFullTier,
-		)
-		if err != nil {
-			return nil, 0, stages, retention, err
-		}
-		if !patched {
-			symbols, err = builder.closeSymbols(ctx)
-			if err != nil {
-				return nil, 0, stages, retention, err
-			}
-		}
-	} else {
-		var err error
-		symbols, err = builder.closeSymbols(ctx)
-		if err != nil {
-			return nil, 0, stages, retention, err
-		}
-	}
-	fullTierSnapshot := copyHandleMembership(builder.fullTier.members, p.fullTierSnapshotScratch)
-	p.fullTierSnapshotScratch = nil
-	p.symbolScratch = builder.symbolFactsBuffer
-	symbolStore := builder.closedSymbolStore
-	if symbolStore == nil {
-		symbolStore = newSymbolFactStore(symbols)
-	}
-	stages.close = time.Since(started)
-	retention.CachedSymbolFacts = builder.cachedSymbolHits
-	retention.RecomputedSymbolFacts = builder.recomputedSymbolFacts
-	retention.CachedReferenceFacts = builder.cachedReferenceHits
-	retention.RecomputedReferences = builder.recomputedReferences
-	retention.PatchedSymbolRows = builder.patchedSymbolRows
-	retention.SharedSymbolChunks = builder.sharedSymbolChunks
-	retention.StableSymbolClosure = builder.stableUniversePatch
-	// symbolsByPath is the only auxiliary index the immutable canonical store
-	// needs. Synchronize it from exact deltas when possible; cold/fallback
-	// closure scans the canonical rows once without retaining a duplicate map.
-	if builder.closedSymbolStore != nil && p.symbolsByPath != nil {
-		for _, id := range builder.removedSymbolIDs {
-			if fact, present := cachedCanonicalStore.Get(id); present {
-				p.unindexSymbolFact(fact)
-			}
-		}
-		for _, id := range builder.changedSymbols.ids {
-			if previous, present := cachedCanonicalStore.Get(id); present {
-				p.unindexSymbolFact(previous)
-			}
-			if fact, present := symbolStore.Get(id); present &&
-				DurableSymbolID(fact.ID) && DurableSymbolID(fact.AliasTarget) && len(fact.Declarations) != 0 {
-				p.indexSymbolFact(fact)
-			}
-		}
-	} else {
-		p.symbolsByPath = nil
-		p.symbolMemoComplete = true
-		symbolStore.Range(func(fact SymbolFact) {
-			if !DurableSymbolID(fact.ID) || !DurableSymbolID(fact.AliasTarget) || len(fact.Declarations) == 0 {
-				p.symbolMemoComplete = false
-				return
-			}
-			p.indexSymbolFact(fact)
-		})
-	}
-	p.symbolReferences = builder.closedReferences
-	clear(p.invalidatedSymbols)
-	table.Symbols = symbols
-	table.symbols = symbolStore
-	table.Entities = entities
-	table.pathSymbols = make(map[string][]SymbolID, len(groups))
 	for index := range groups {
-		group := &groups[index]
-		group.contribution.prepareTransportSeeds()
-		table.pathSymbols[group.path] = group.contribution.roots
-	}
-	for path, functions := range asyncByPath {
-		roots := table.pathSymbols[path]
-		for _, function := range functions {
-			if function.Symbol != "" {
-				roots = append(roots, function.Symbol)
-			}
-			if function.Target != "" {
-				roots = append(roots, function.Target)
-			}
+		contribution := groups[index].contribution
+		if len(contribution.entities) != 0 {
+			runs = append(runs, factTableEntityRun{entities: contribution.entities})
 		}
-		table.pathSymbols[path] = roots
 	}
+	table.entityRuns = runs
+	table.Entities = nil
+	table.Symbols = nil
+	table.symbols = nil
+	table.pathSymbols = nil
+	stages.assembly = time.Since(started)
 	p.nextTableStateID++
 	if p.nextTableStateID == 0 {
-		// Zero is reserved for hand-built/non-retained tables, whose
-		// manifests always take the canonical fallback diff.
 		p.nextTableStateID++
 	}
 	table.stateID = p.nextTableStateID
-	table.transport = transportManifest(p.previousTable, table, builder, manifestChangedPaths)
+	table.transport = rustOwnedTransportManifest(p.previousTable, manifestChangedPaths)
 	if p.retainedPathScratch == nil {
 		p.retainedPathScratch = make(map[string]struct{}, len(groups))
 	}
 	p.retained.commit(groups, p.retainedPathScratch)
-	// Retained contributions and their suppression context commit together
-	// only after every fallible preparation stage has succeeded.
 	previousSuppression := p.lastSuppression
 	p.lastSuppression = union
 	p.suppressionScratch = previousSuppression
 	suppressionCommitted = true
-	p.rootSnapshotScratch = p.lastRoots
-	p.lastRoots = rootSnapshot
-	p.fullRootSnapshotScratch = p.lastFullRoots
-	p.lastFullRoots = fullRootSnapshot
-	p.fullTierSnapshotScratch = p.lastFullTier
-	p.lastFullTier = fullTierSnapshot
-	snapshotsCommitted = true
 	p.recyclableTable = p.previousTable
 	p.previousTable = nil
 	p.transportChangedPaths = nil
-	// The descriptor seed is a generation-local lookup derived entirely from
-	// retained contributions. Its cold-sized buckets otherwise duplicate that
-	// durable state for the whole session; rebuild the small changed-generation
-	// view instead of retaining the cold map.
 	p.descriptorSeedScratch = nil
-	// The canonical chunk store now owns every closed SymbolFact. A spare flat
-	// full-closure buffer is useful only for fallback rebuilds and duplicates
-	// that store after the normal cold path; incremental patches allocate only
-	// their changed subset when this buffer is absent.
-	p.symbolScratch = nil
-	// Async filtering and closure queues are linear working sets, not retained
-	// semantic state. Keep the dense membership snapshots that prove the next
-	// incremental fixed point, but release these duplicate cold-sized rows.
 	p.asyncDemandScratch = nil
 	p.asyncGroupScratch = nil
-	releaseLinearScratch = true
-	if !p.sparseTransport {
-		p.backend.ReleaseAnalysisState()
-	}
-	// The table is transport-only: it exists to be converted to the wire shape
-	// or diffed against its predecessor, and answers no per-location queries.
-	stages.symbol = stages.assembly + stages.sort + stages.close
-	return table, builder.fullTier.len(), stages, retention, nil
+	return table, 0, stages, retention, nil
 }
 
 // ClosureRetention reports how much of a generation's demand closure was

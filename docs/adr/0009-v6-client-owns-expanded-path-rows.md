@@ -1,5 +1,9 @@
 # ADR 0009: v6 makes Rust the semantic-closure owner
 
+> Historical record. Superseded as active protocol guidance by
+> [ADR 0013](0013-v1-call-result-runtime-value-domains.md); the repository now
+> ships one lifecycle schema, V1.
+
 ## Decision
 
 Schema v6 preserves fact semantics while moving the closure and retained

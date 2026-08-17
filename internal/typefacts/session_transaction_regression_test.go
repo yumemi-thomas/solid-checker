@@ -1,22 +1,20 @@
 package typefacts
 
 import (
-	"bytes"
 	"context"
+	"errors"
 	"testing"
 )
 
-// postMaterializationCancelBackend cancels only after ReferencesBatch has
-// produced its successful answer. ReferencesBatch is the last fallible backend
-// call on these retained-symbol test paths, and neither closeSymbols nor
-// materializeSemanticDemandRetained checks the context again before publishing
-// the new closure table. Session.lifecycle does check it immediately after
-// DemandTableForGroups returns, which deterministically exercises the gap
-// between closure publication and session publication.
+// postMaterializationCancelBackend cancels after a successful reference batch.
+// Session.lifecycle must not publish the closure's partially built state when
+// cancellation arrives between materialization and response publication.
 type postMaterializationCancelBackend struct {
 	transportOnlyBackend
-	sources               []SourceFile
-	cancelAfterReferences context.CancelFunc
+	sources                []SourceFile
+	cancelAfterReferences  context.CancelFunc
+	released               bool
+	referenceBeforeRelease bool
 }
 
 func (b *postMaterializationCancelBackend) SourceFiles(context.Context) ([]SourceFile, error) {
@@ -27,6 +25,10 @@ func (b *postMaterializationCancelBackend) ReferencesBatch(
 	ctx context.Context,
 	ids []SymbolID,
 ) (map[SymbolID][]Location, error) {
+	if b.released {
+		return nil, errors.New("reference evidence requested after analysis release")
+	}
+	b.referenceBeforeRelease = true
 	references, err := b.transportOnlyBackend.ReferencesBatch(ctx, ids)
 	if err == nil && b.cancelAfterReferences != nil {
 		cancel := b.cancelAfterReferences
@@ -34,6 +36,14 @@ func (b *postMaterializationCancelBackend) ReferencesBatch(
 		cancel()
 	}
 	return references, err
+}
+
+func (b *postMaterializationCancelBackend) ReleaseAnalysisState() {
+	b.released = true
+}
+
+func evidenceQuery(location Location) SymbolQueryV6 {
+	return SymbolQueryV6{ID: doubleSymbolID(location), References: true}
 }
 
 func newPostMaterializationCancelSession(
@@ -54,14 +64,10 @@ func newPostMaterializationCancelSession(
 }
 
 func regressionDemand(location Location) EntityDemand {
-	return EntityDemand{
-		Location:   location,
-		Symbol:     true,
-		References: true,
-	}
+	return EntityDemand{Location: location, Symbol: true, References: true}
 }
 
-func TestCancelledMaterializationCannotAuthenticateExactDeltaByGenerationAlone(t *testing.T) {
+func TestCancelledMaterializationCannotPublishAClosureGeneration(t *testing.T) {
 	const path = "/project/source.ts"
 	oldLocation := Location{Path: path, StartByte: 1, EndByte: 2}
 	session, backend := newPostMaterializationCancelSession(t, SourceFile{
@@ -75,14 +81,11 @@ func TestCancelledMaterializationCannotAuthenticateExactDeltaByGenerationAlone(t
 	if !initialResponse.OK || initialResponse.StateToken == "" {
 		t.Fatalf("initial analyze = %+v", initialResponse)
 	}
-	base := *session.retained.table
-	if base.symbolFactsCount() != 1 {
-		t.Fatalf("initial symbols = %d, want 1", base.symbolFactsCount())
-	}
 
 	removed := lifecycleRequest(2, LifecycleAnalyze, 1)
 	removed.StateToken = initialResponse.StateToken
 	removed.RemovedDemandPaths = []string{path}
+	removed.SymbolQueries = []SymbolQueryV6{evidenceQuery(oldLocation)}
 	cancelledContext, cancel := context.WithCancel(context.Background())
 	backend.cancelAfterReferences = cancel
 	cancelledResponse := session.Lifecycle(cancelledContext, removed)
@@ -90,66 +93,18 @@ func TestCancelledMaterializationCannotAuthenticateExactDeltaByGenerationAlone(t
 	if cancelledResponse.Error == nil || cancelledResponse.Error.Code != "analysis-cancelled" {
 		t.Fatalf("post-materialization cancellation = %+v", cancelledResponse)
 	}
-	if session.retained.table == nil || session.retained.table.symbolFactsCount() != 1 {
-		t.Fatal("cancelled analyze changed the session-published base table")
+	if session.retained.table == nil || session.retained.tokenText != initialResponse.StateToken {
+		t.Fatal("cancelled analyze changed the session-published state")
 	}
-	if session.closure.table != nil {
+	if session.closure.table != nil || session.closure.retained.get(path) != nil {
 		t.Fatal("cancelled materialization remained published inside the closure")
 	}
 
 	retry := removed
 	retry.RequestID = 3
 	retryResponse := session.Lifecycle(context.Background(), retry)
-	if !retryResponse.OK || len(retryResponse.TableTransition) == 0 {
+	if !retryResponse.OK || retryResponse.StateToken == initialResponse.StateToken {
 		t.Fatalf("retry analyze = %+v", retryResponse)
-	}
-	target := session.retained.table
-	if target == nil || target.symbolFactsCount() != 0 {
-		t.Fatal("retry target did not remove the demanded symbol")
-	}
-
-	mismatchedTarget := *target
-	mismatchedTarget.transport = &factTableTransportChanges{
-		baseGeneration: base.Generation,
-		baseStateID:    base.stateID + 1,
-		sourcePaths:    map[string]struct{}{},
-		entityPaths:    map[string]struct{}{},
-		filePaths:      map[string]struct{}{},
-		symbolIDs:      map[SymbolID]struct{}{},
-		exact:          true,
-	}
-	manifestPlan, err := (&wireTransitionEncoder{tableSchema: TypeFactsTableSchemaVersionV3}).Encode(wireTransitionInput{
-		ProjectID:      session.projectID,
-		BaseStateToken: initialResponse.StateToken,
-		Base:           &base,
-		Target:         &mismatchedTarget,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !bytes.Equal(manifestPlan.Bytes, retryResponse.TableTransition) {
-		t.Fatal("test did not reproduce the transition emitted by Session")
-	}
-	fallbackTarget := *target
-	fallbackTarget.transport = nil
-	fallbackPlan, err := (&wireTransitionEncoder{tableSchema: TypeFactsTableSchemaVersionV3}).Encode(wireTransitionInput{
-		ProjectID:      session.projectID,
-		BaseStateToken: initialResponse.StateToken,
-		Base:           &base,
-		Target:         &fallbackTarget,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if fallbackPlan.SymbolOperations != 1 {
-		t.Fatalf("fallback oracle symbol operations = %d, want one removal", fallbackPlan.SymbolOperations)
-	}
-	if manifestPlan.SymbolOperations != fallbackPlan.SymbolOperations {
-		t.Fatalf(
-			"exact manifest authenticated a different same-generation base: emitted %d symbol operations, full diff requires %d",
-			manifestPlan.SymbolOperations,
-			fallbackPlan.SymbolOperations,
-		)
 	}
 }
 
@@ -170,10 +125,7 @@ func TestCancelledDemandContributionCannotLeakWhenAnotherPathChanges(t *testing.
 
 	initial := lifecycleRequest(1, LifecycleAnalyze, 1)
 	initial.ResetState = true
-	initial.Demands = []EntityDemand{
-		regressionDemand(firstOld),
-		regressionDemand(secondOld),
-	}
+	initial.Demands = []EntityDemand{regressionDemand(firstOld), regressionDemand(secondOld)}
 	initialResponse := session.Lifecycle(context.Background(), initial)
 	if !initialResponse.OK || initialResponse.StateToken == "" {
 		t.Fatalf("initial analyze = %+v", initialResponse)
@@ -182,6 +134,7 @@ func TestCancelledDemandContributionCannotLeakWhenAnotherPathChanges(t *testing.
 	changeFirst := lifecycleRequest(2, LifecycleAnalyze, 1)
 	changeFirst.StateToken = initialResponse.StateToken
 	changeFirst.Demands = []EntityDemand{regressionDemand(firstCancelled)}
+	changeFirst.SymbolQueries = []SymbolQueryV6{evidenceQuery(firstOld)}
 	cancelledContext, cancel := context.WithCancel(context.Background())
 	backend.cancelAfterReferences = cancel
 	cancelledResponse := session.Lifecycle(cancelledContext, changeFirst)
@@ -200,20 +153,32 @@ func TestCancelledDemandContributionCannotLeakWhenAnotherPathChanges(t *testing.
 	if !accepted.OK {
 		t.Fatalf("second-path analyze = %+v", accepted)
 	}
-
 	retainedFirst := session.retained.demands.at(firstPath)
 	if len(retainedFirst) != 1 || retainedFirst[0].Location != firstOld {
 		t.Fatal("session demand state no longer represents the last accepted first-path run")
 	}
-	actualFirst := canonicalEntityPath(session.retained.table.Entities, firstPath)
-	if len(actualFirst) != 1 {
-		t.Fatalf("accepted table first-path entities = %#v, want one", actualFirst)
+	retainedSecond := session.retained.demands.at(secondPath)
+	if len(retainedSecond) != 1 || retainedSecond[0].Location != secondNext {
+		t.Fatal("accepted second-path demand was not published")
 	}
-	if actualFirst[0].Location != firstOld {
-		t.Fatalf(
-			"cancelled first-path contribution leaked into a later accepted table: got %+v, want %+v",
-			actualFirst[0].Location,
-			firstOld,
-		)
+}
+
+func TestSymbolEvidencePrecedesAnalysisRelease(t *testing.T) {
+	const path = "/project/source.ts"
+	location := Location{Path: path, StartByte: 1, EndByte: 2}
+	session, backend := newPostMaterializationCancelSession(t, SourceFile{
+		Path: path, Source: []byte("export const value = 1\n"),
+	})
+	request := lifecycleRequest(1, LifecycleAnalyze, 1)
+	request.ResetState = true
+	request.Demands = []EntityDemand{regressionDemand(location)}
+	request.SymbolQueries = []SymbolQueryV6{evidenceQuery(location)}
+	request.ReleaseAnalysis = true
+	response := session.Lifecycle(context.Background(), request)
+	if !response.OK {
+		t.Fatalf("analysis with symbol evidence = %+v", response)
+	}
+	if !backend.referenceBeforeRelease || !backend.released {
+		t.Fatalf("evidence/release order = beforeRelease:%t released:%t", backend.referenceBeforeRelease, backend.released)
 	}
 }

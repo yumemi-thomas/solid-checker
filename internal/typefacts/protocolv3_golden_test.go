@@ -98,7 +98,7 @@ func goldenWireTable() FactTable {
 func v3GoldenFixtures(t *testing.T) (LifecycleRequest, LifecycleResponse) {
 	t.Helper()
 	request := LifecycleRequest{
-		Schema:     TypeFactsSchemaVersionV5,
+		Schema:     TypeFactsSchemaVersionV1,
 		RequestID:  7,
 		Operation:  LifecycleAnalyze,
 		ProjectID:  "/p/tsconfig.json",
@@ -127,7 +127,7 @@ func v3GoldenFixtures(t *testing.T) (LifecycleRequest, LifecycleResponse) {
 		t.Fatal(err)
 	}
 	response := LifecycleResponse{
-		Schema:          TypeFactsSchemaVersionV5,
+		Schema:          TypeFactsSchemaVersionV1,
 		RequestID:       7,
 		ProjectID:       "/p/tsconfig.json",
 		Generation:      3,

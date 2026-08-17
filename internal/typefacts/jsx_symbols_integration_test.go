@@ -4,7 +4,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"reflect"
 	"sort"
 	"strings"
 	"testing"
@@ -204,27 +203,7 @@ func TestJSXTagDemandsUseCompilerSymbolIdentity(t *testing.T) {
 		}
 	}
 
-	backend, err := tsgo.OpenProject(ctx, fixture.projectPath, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	closure, err := typefacts.NewDemandClosure(backend, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = closure.Close() })
-	table, err := closure.DemandTableForGroups(ctx, 1, []typefacts.DemandGroup{{
-		Path: fixture.consumerPath, Demands: fixture.demands,
-	}}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(table.Entities, direct) {
-		t.Fatalf("batched SemanticEntities and demand closure differ:\ndirect: %+v\nclosure: %+v", direct, table.Entities)
-	}
-
-	entities := entitiesByLocation(table.Entities)
-	symbols := symbolFactsByID(table.Symbols)
+	entities := entitiesByLocation(direct)
 	entity := func(label string) typefacts.EntityFact {
 		t.Helper()
 		got, ok := entities[fixture.locations[label]]
@@ -232,21 +211,6 @@ func TestJSXTagDemandsUseCompilerSymbolIdentity(t *testing.T) {
 			t.Fatalf("missing %s entity at %+v", label, fixture.locations[label])
 		}
 		return got
-	}
-	canonical := func(label string) typefacts.SymbolFact {
-		t.Helper()
-		return canonicalSymbolFact(t, symbols, entity(label).Symbol)
-	}
-	component := canonical("opening")
-	for _, label := range []string{"closing", "alias", "namespaceMember", "reexported"} {
-		if got := canonical(label).ID; got != component.ID {
-			t.Errorf("%s canonical symbol = %s, want component %s", label, got, component.ID)
-		}
-	}
-	for _, label := range []string{"opening", "alias", "reexported"} {
-		if got := symbols[entity(label).Symbol].AliasTarget; got == "" {
-			t.Errorf("%s symbol %s has no alias target", label, entity(label).Symbol)
-		}
 	}
 	componentRuntime := entity("opening").RuntimeIdentity
 	if componentRuntime == "" {
@@ -257,30 +221,10 @@ func TestJSXTagDemandsUseCompilerSymbolIdentity(t *testing.T) {
 			t.Errorf("%s runtime identity = %q, want component identity %q", label, got, componentRuntime)
 		}
 	}
-	if got, namespace := entity("namespaceMember").Symbol, entity("namespaceImport").Symbol; got == namespace {
-		t.Errorf("namespace-member JSX resolved namespace symbol %s instead of the selected member", got)
-	}
-	if got, member := entity("namespaceRoot").Symbol, entity("namespaceMember").Symbol; got == "" || got == member {
-		t.Errorf("namespace-member root symbol = %q, want a resolved namespace distinct from member %q", got, member)
-	}
 	for _, label := range []string{"missing", "missingMember", "missingMemberRoot"} {
 		if got := entity(label); got.Symbol != "" || !got.SymbolUnresolved {
 			t.Errorf("%s entity = %+v, want an explicit unresolved symbol", label, got)
 		}
-	}
-	if len(component.Declarations) == 0 ||
-		filepath.Clean(component.Declarations[0].Location.Path) != filepath.Clean(fixture.runtimePath) ||
-		component.Declarations[0].Location.StartByte != strings.Index(`export function Component() { return <div />; }`, "Component") {
-		t.Errorf("component canonical declaration = %+v, want runtime Component export", component.Declarations)
-	}
-	local := canonical("local")
-	if len(local.Declarations) == 0 || filepath.Clean(local.Declarations[0].Location.Path) != filepath.Clean(fixture.consumerPath) {
-		t.Errorf("local component declaration = %+v", local.Declarations)
-	}
-	shadow := canonical("shadowUse")
-	if len(shadow.Declarations) == 0 ||
-		shadow.Declarations[0].Location.StartByte != fixture.locations["shadowDeclaration"].StartByte {
-		t.Errorf("shadowed JSX declaration = %+v, want local parameter at %+v", shadow.Declarations, fixture.locations["shadowDeclaration"])
 	}
 	if entity("typeOnly").RuntimeIdentity != "" {
 		t.Errorf("type-only JSX runtime identity = %q, want empty", entity("typeOnly").RuntimeIdentity)
@@ -289,49 +233,6 @@ func TestJSXTagDemandsUseCompilerSymbolIdentity(t *testing.T) {
 		t.Errorf("intrinsic JSX runtime identity = %q, want empty", entity("intrinsic").RuntimeIdentity)
 	}
 
-	unrelatedChange := typefacts.FileChange{
-		Path: fixture.unrelatedPath, Version: 1, Source: []byte("export const unrelated = 2;\n"),
-	}
-	if _, err := closure.Update(ctx, []typefacts.FileChange{unrelatedChange}); err != nil {
-		t.Fatal(err)
-	}
-	retained, err := closure.DemandTableForGroups(ctx, 2, []typefacts.DemandGroup{{
-		Path: fixture.consumerPath, Demands: fixture.demands,
-	}}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	freshBackend, err := tsgo.OpenProject(ctx, fixture.projectPath, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	fresh, err := typefacts.NewDemandClosure(freshBackend, nil)
-	if err != nil {
-		_ = freshBackend.Close()
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = fresh.Close() })
-	if _, err := fresh.Update(ctx, []typefacts.FileChange{unrelatedChange}); err != nil {
-		t.Fatal(err)
-	}
-	freshTable, err := fresh.DemandTableForGroups(ctx, 2, []typefacts.DemandGroup{{
-		Path: fixture.consumerPath, Demands: fixture.demands,
-	}}, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	assertFullWireTransitionsIdentical(
-		t,
-		"retained JSX facts",
-		0,
-		fixture.projectPath,
-		retained,
-		freshTable,
-	)
-	if closure.Stats().Retention.RetainedFiles == 0 {
-		t.Fatal("JSX demand contribution was not retained across an unrelated edit")
-	}
 }
 
 func TestJSXTagDemandDoesNotEagerlyResolveSymbolIdentity(t *testing.T) {

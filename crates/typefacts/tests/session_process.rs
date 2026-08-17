@@ -239,6 +239,80 @@ fn runtime_value_domain_survives_full_delta_and_reuse_responses() {
 }
 
 #[test]
+fn call_result_domain_survives_the_process_seam() {
+    let project = repository_root()
+        .join("internal/typefacts/testdata/call-result-domain/tsconfig.json")
+        .canonicalize()
+        .unwrap();
+    let path = project.parent().unwrap().join("calls.ts");
+    let source = fs::read_to_string(&path).unwrap();
+    let demand = |needle: &str| {
+        let start = source.rfind(needle).unwrap();
+        EntityDemand {
+            location: Location {
+                path: path.to_string_lossy().into_owned().into(),
+                start_byte: start as u64,
+                end_byte: (start + needle.len()) as u64,
+            },
+            call_result_domain: true,
+            ..EntityDemand::default()
+        }
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let facts = session
+        .analyze(&AnalysisDemand {
+            entities: vec![
+                demand("makeCount()"),
+                demand("makeThunk()"),
+                demand("make()"),
+            ],
+        })
+        .unwrap();
+    let domains = facts
+        .entities()
+        .map(|entity| entity.call_result_domain)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        domains,
+        vec![
+            Some(RuntimeValueDomain {
+                may_be_callable: false,
+                may_be_undefined: false,
+                may_be_other: true,
+                unknown: false,
+            }),
+            Some(RuntimeValueDomain {
+                may_be_callable: true,
+                may_be_undefined: false,
+                may_be_other: false,
+                unknown: false,
+            }),
+            Some(RuntimeValueDomain {
+                may_be_callable: true,
+                may_be_undefined: true,
+                may_be_other: false,
+                unknown: false,
+            }),
+        ]
+    );
+    let reused = session
+        .analyze(&AnalysisDemand {
+            entities: vec![demand("makeCount()")],
+        })
+        .unwrap();
+    assert_eq!(
+        reused.entities().next().unwrap().call_result_domain,
+        domains[0]
+    );
+    session.close().unwrap();
+}
+
+#[test]
 fn shared_transition_arena_matches_the_inline_process_adapter() {
     let project = project();
     let use_path = project.parent().unwrap().join("use.ts");

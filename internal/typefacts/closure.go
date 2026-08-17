@@ -49,10 +49,10 @@ type ClosureBackend interface {
 	ReleaseAnalysisState()
 }
 
-// symbolEvidenceBackend is the production TSGo oracle seam used by v6. One
+// symbolEvidenceBackend is the production TSGo oracle seam used by the active
+// protocol. One
 // call holds the checker once for the whole batch. The fallback in
-// resolveSymbolEvidence keeps compiler-independent test adapters small while
-// v5 is being retired.
+// resolveSymbolEvidence keeps compiler-independent test adapters small.
 type symbolEvidenceBackend interface {
 	SymbolEvidence(context.Context, []SymbolQueryV6) ([]SymbolFact, error)
 }
@@ -166,34 +166,31 @@ type DemandClosure struct {
 	asyncDemandScratch []EntityDemand
 	asyncGroupScratch  []demandGroup
 	demandSeed         maphash.Seed
-	// sparseTransport is the v6 ownership mode: expanded path rows transfer to
-	// Rust after each encoded transition and only compact closure seeds remain.
-	sparseTransport bool
 }
 
 // NewDemandClosure wraps a live backend, which must satisfy every capability
 // the closure calls. trace may be nil, which disables tracing entirely.
 func NewDemandClosure(backend Project, trace Trace) (*DemandClosure, error) {
-	return newDemandClosure(backend, trace, false)
+	return newDemandClosure(backend, trace)
 }
 
-func newDemandClosure(backend Project, trace Trace, sparseTransport bool) (*DemandClosure, error) {
+func newDemandClosure(backend Project, trace Trace) (*DemandClosure, error) {
 	full, ok := backend.(ClosureBackend)
 	if !ok {
 		return nil, errors.New("demand closure requires the demand-run semantic, async, and reference-batch capabilities")
 	}
 	return &DemandClosure{
-		backend: full, trace: trace, generation: 1, sparseTransport: sparseTransport,
+		backend: full, trace: trace, generation: 1,
 	}, nil
 }
 
-// releaseTransportRows is called only after the packed v6 transition owns all
-// expanded rows. Rust's retained table is then canonical; Go keeps the smaller
-// semantic proof needed to produce sparse successor upserts.
+// releaseTransportRows is called only after the packed transition owns the
+// expanded entity/file rows. The closure keeps only compact retained
+// contributions needed to produce the next transition.
 func (p *DemandClosure) releaseTransportRows() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if !p.sparseTransport || p.table == nil {
+	if p.table == nil {
 		return
 	}
 	for _, contribution := range p.retained.byPath {

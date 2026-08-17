@@ -58,10 +58,10 @@ func TestDemandClosureCanonicalizesDemandAtInputBoundary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(table.Entities) != 2 ||
-		table.Entities[0].Location.StartByte != 1 ||
-		table.Entities[1].Location.StartByte != 10 {
-		t.Fatalf("canonicalized entities = %#v", table.Entities)
+	if len(table.entityRuns) != 1 || len(table.entityRuns[0].entities) != 2 ||
+		table.entityRuns[0].entities[0].Location.StartByte != 1 ||
+		table.entityRuns[0].entities[1].Location.StartByte != 10 {
+		t.Fatalf("canonicalized entity runs = %#v", table.entityRuns)
 	}
 }
 

@@ -27,7 +27,8 @@ type retainedDescriptor struct {
 	descriptor *TypeDescriptor
 }
 
-// releaseTransportRows transfers expanded entity ownership to the v6 client.
+// releaseTransportRows transfers expanded entity ownership to the packed
+// transition after the session has retained the compact contribution.
 // The compact semantic seeds are sufficient to prove and patch later closure
 // generations; source locations and resolved-call bodies remain solely in
 // Rust's retained table.
@@ -160,6 +161,9 @@ func prepareRetainedContribution(
 		}
 		if entity.RuntimeValueDomain != nil {
 			target.RuntimeValueDomain = entity.RuntimeValueDomain
+		}
+		if entity.CallResultDomain != nil {
+			target.CallResultDomain = entity.CallResultDomain
 		}
 		if entity.ReferenceSpace != "" {
 			target.ReferenceSpace = entity.ReferenceSpace

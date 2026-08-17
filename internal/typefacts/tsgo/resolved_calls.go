@@ -341,25 +341,12 @@ func (p *project) resolveCallRunLocked(
 		}
 
 		var calleeType *checker.Type
-		if signature.Flags()&checker.SignatureFlagsIsSignatureCandidateForOverloadFailure != 0 &&
-			!resolvedCallHasSpreadArgument(node) {
-			call.Validity = typefacts.ResolvedCallRecovery
-		} else if p.resolvedCallNeedsDiagnosticsBeforeCalleeType(node) {
-			validity, err := p.resolvedCallDiagnosticValidityLocked(ctx, sourceFile, node)
-			if err != nil {
-				return err
-			}
-			call.Validity = validity
-			if validity == typefacts.ResolvedCallValid {
-				calleeType = p.checker.GetTypeAtLocation(callee)
-			}
-		} else {
-			calleeType = p.checker.GetTypeAtLocation(callee)
-			validity, err := p.resolvedCallValidityLocked(ctx, sourceFile, node, signature, target, calleeType)
-			if err != nil {
-				return err
-			}
-			call.Validity = validity
+		var err error
+		call.Validity, calleeType, err = p.resolvedCallValidityAndCalleeTypeLocked(
+			ctx, sourceFile, node, signature, target,
+		)
+		if err != nil {
+			return err
 		}
 		if returnType := checker.Checker_getReturnTypeOfSignature(p.checker, signature); returnType != nil {
 			call.ReturnTypeText = p.typeDescriptorFor(returnType).Text
@@ -522,6 +509,36 @@ func (p *project) resolvedCallValidityLocked(
 		return proof, nil
 	}
 	return p.resolvedCallDiagnosticValidityLocked(ctx, sourceFile, node)
+}
+
+// resolvedCallValidityAndCalleeTypeLocked is the single recovery policy for
+// resolved calls and call-result domains. The diagnostic-first cases must not
+// inspect a potentially misleading callee type before diagnostics have been
+// checked, and overload-failure signatures are never proof of a valid call.
+func (p *project) resolvedCallValidityAndCalleeTypeLocked(
+	ctx context.Context,
+	sourceFile *ast.SourceFile,
+	node *ast.Node,
+	signature *checker.Signature,
+	target *ast.Symbol,
+) (typefacts.ResolvedCallValidity, *checker.Type, error) {
+	if signature.Flags()&checker.SignatureFlagsIsSignatureCandidateForOverloadFailure != 0 &&
+		!resolvedCallHasSpreadArgument(node) {
+		return typefacts.ResolvedCallRecovery, nil, nil
+	}
+	if p.resolvedCallNeedsDiagnosticsBeforeCalleeType(node) {
+		validity, err := p.resolvedCallDiagnosticValidityLocked(ctx, sourceFile, node)
+		if err != nil {
+			return "", nil, err
+		}
+		if validity == typefacts.ResolvedCallValid {
+			return validity, p.checker.GetTypeAtLocation(node.Expression()), nil
+		}
+		return validity, nil, nil
+	}
+	calleeType := p.checker.GetTypeAtLocation(node.Expression())
+	validity, err := p.resolvedCallValidityLocked(ctx, sourceFile, node, signature, target, calleeType)
+	return validity, calleeType, err
 }
 
 func (p *project) resolvedCallDiagnosticValidityLocked(

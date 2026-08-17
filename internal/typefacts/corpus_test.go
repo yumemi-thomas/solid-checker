@@ -12,10 +12,9 @@ import (
 	"github.com/yumemi-thomas/solid-ts-facts/internal/typefacts/tsgo"
 )
 
-// The closure takes two parallel fast paths and shares symbol-store chunks only
-// above these sizes, so a handful of fixture files leaves all three unexecuted.
-// See closure.go (initialSymbolCount >= 1024, len(ids) >= 1024) and
-// symbol_store.go (symbolFactChunkSize = 256).
+// The generated corpus is deliberately large enough to exercise retained
+// entity-run assembly and the Rust-owned sparse transition without making the
+// producer enumerate a complete symbol closure.
 const (
 	corpusParallelSymbolThreshold = 1024
 	// Resolved-call declarations, owners, and parameters carry embedded
@@ -95,7 +94,7 @@ func writeCorpusFile(tb testing.TB, root, name, contents string) {
 // actually big enough. Without it, a future tweak could shrink the generator
 // below the thresholds and every scale test would keep passing while silently
 // covering only the sequential paths.
-func TestGeneratedCorpusCrossesTheParallelThresholds(t *testing.T) {
+func TestGeneratedCorpusProducesSparseEntityRows(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scale coverage is skipped under -short; the default run includes it")
 	}
@@ -117,13 +116,11 @@ func TestGeneratedCorpusCrossesTheParallelThresholds(t *testing.T) {
 	stats := closure.Stats()
 	t.Logf("corpus: files=%d demands=%d entities=%d symbols=%d fullTier=%d",
 		stats.Files, len(demands), stats.Entities, stats.Symbols, stats.FullTierSymbols)
-	if stats.Symbols < corpusParallelSymbolThreshold {
-		t.Fatalf("corpus closed %d symbols, below the %d parallel threshold; the parallel paths in closeSymbols stay unexecuted",
-			stats.Symbols, corpusParallelSymbolThreshold)
+	if stats.Entities == 0 {
+		t.Fatal("sparse materialization produced no entity rows")
 	}
-	if stats.Symbols > corpusSymbolClosureBudget {
-		t.Fatalf("corpus closed %d symbols, above the %d-row budget; embedded resolved-call identities are expanding the standalone symbol closure",
-			stats.Symbols, corpusSymbolClosureBudget)
+	if stats.Symbols != 0 || stats.FullTierSymbols != 0 {
+		t.Fatalf("producer materialized client-owned symbol rows: symbols=%d fullTier=%d", stats.Symbols, stats.FullTierSymbols)
 	}
 }
 
@@ -139,7 +136,7 @@ func TestRetainedDemandClosureAtScaleMatchesFreshMaterialization(t *testing.T) {
 	assertRetainedMatchesFreshMaterialization(t, root, "mod00.ts", fmt.Sprintf("mod%02d.ts", corpusModules-1))
 }
 
-func TestStableSymbolClosureAtScaleMatchesFreshMaterialization(t *testing.T) {
+func TestRetainedSparseMaterializationAtScaleMatchesFreshMaterialization(t *testing.T) {
 	if testing.Short() {
 		t.Skip("scale coverage is skipped under -short; the default run includes it")
 	}
@@ -180,8 +177,8 @@ func TestStableSymbolClosureAtScaleMatchesFreshMaterialization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !incremental.Stats().Retention.StableSymbolClosure {
-		t.Fatal("stable edit did not exercise the stable Symbol closure path")
+	if incremental.Stats().Retention.RetainedFiles == 0 {
+		t.Fatal("stable edit did not exercise retained sparse rows")
 	}
 
 	fresh, freshBackend := open()
@@ -195,5 +192,5 @@ func TestStableSymbolClosureAtScaleMatchesFreshMaterialization(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertFullWireTransitionsIdentical(t, "stable symbol closure", 0, projectID, retained, whole)
+	assertFullWireTransitionsIdentical(t, "stable sparse materialization", 0, projectID, retained, whole)
 }
