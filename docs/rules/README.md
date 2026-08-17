@@ -105,7 +105,20 @@ behaviour depends on: [v1/event-handlers](v1/event-handlers.md),
 
 An absent file means every catalog rule is enabled with its normal defaults.
 A file naming an unknown rule, an unknown option key, or a non-boolean
-`enabled` value fails the analysis rather than silently changing policy. Rule
+`enabled` value fails the analysis rather than silently changing policy.
+
+**Retired rule identities are the one exception, and they are tolerated rather
+than honoured.** A rule this checker publishes and later removes stays in a
+permanent registry (`solid-facts-backend`'s `dialect::RETIRED_RULES`), so a
+project that had disabled it keeps loading instead of failing on a name the
+checker itself deleted. The rule is gone either way: no catalog declares it, so
+the disable is a no-op — the entry tolerates a stale key, it does not keep the
+rule available behind an option. `docs/precision-backlog.md` records why each
+identity went. As of 2026-08 the retired set is `invalid-cleanup-return`,
+`cleanup-return-unresolved`, `invalid-refresh-target`, `invalid-affects-target`,
+`affects-keys-on-accessor`, `refresh-target-unresolved`,
+`affects-target-unresolved`, and `v1/imports` — all eight removed as duplicates
+of a TypeScript diagnostic. Rule
 names are exact identities: for example, disabling `refresh-target-unresolved`
 would not have disabled `affects-target-unresolved`, even though both findings
 shared the portable code SC9003 (both were removed in 2026-08; the same holds

@@ -1085,7 +1085,13 @@ fn discover_package_directory(
 pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError> {
     discover_rule_options_with(
         project,
-        |rule| dialect::ALL.iter().any(|dialect| (dialect.has_rule)(rule)),
+        // A retired identity is accepted so an existing rule-options document
+        // does not hard-fail on a rule this checker itself deleted. The rule is
+        // gone either way: no catalog declares it, so disabling it is a no-op.
+        |rule| {
+            dialect::ALL.iter().any(|dialect| (dialect.has_rule)(rule))
+                || dialect::retired_rule(rule).is_some()
+        },
         |rule| dialect::by_id("solid-v1").is_some_and(|dialect| (dialect.has_rule)(rule)),
     )
 }
@@ -1252,5 +1258,55 @@ mod tests {
         assert!(Arc::ptr_eq(&initial, &reused));
         assert!(!initial_timings.reused);
         assert!(reused_timings.reused);
+    }
+    /// A rule-options document naming a *removed* rule must load, and one
+    /// naming a rule that never existed must still fail. The first half is the
+    /// migration path for a project that had disabled a rule this checker went
+    /// on to delete; the second is what keeps a typo from silently changing
+    /// policy, which is the reason the validation exists.
+    #[test]
+    fn retired_rule_identities_are_tolerated_and_typos_are_not() {
+        let directory = std::env::temp_dir().join(format!(
+            "solid-checker-retired-rules-{}",
+            std::process::id()
+        ));
+        let options_directory = directory.join(".solid-checker");
+        std::fs::create_dir_all(&options_directory).unwrap();
+        let document = options_directory.join("rule-options.json");
+
+        for retired in crate::dialect::RETIRED_RULES {
+            std::fs::write(
+                &document,
+                format!(
+                    r#"{{ "schemaVersion": 1, "rules": {{ {:?}: {{ "enabled": false }} }} }}"#,
+                    retired.0
+                ),
+            )
+            .unwrap();
+            let loaded = super::discover_rule_options(&directory);
+            assert!(
+                loaded.is_ok(),
+                "a document disabling the retired {:?} must still load: {loaded:?}",
+                retired.0
+            );
+            // And the identity really is gone: nothing in either catalog
+            // declares it, so the disable is a no-op rather than a demotion.
+            assert!(
+                !crate::dialect::ALL
+                    .iter()
+                    .any(|dialect| (dialect.has_rule)(retired.0)),
+                "{:?} is retired but still declared by a catalog",
+                retired.0
+            );
+        }
+
+        std::fs::write(
+            &document,
+            r#"{ "schemaVersion": 1, "rules": { "v1/no-such-rule": { "enabled": false } } }"#,
+        )
+        .unwrap();
+        assert!(super::discover_rule_options(&directory).is_err());
+
+        std::fs::remove_dir_all(&directory).ok();
     }
 }

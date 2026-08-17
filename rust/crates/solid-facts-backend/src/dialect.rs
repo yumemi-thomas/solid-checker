@@ -16,6 +16,61 @@ use solid_reactive_ir::{Finding, PackageContract, PackageContractIssue, Program,
 
 use crate::BackendError;
 
+/// Rule identities this checker used to publish and has since removed, with the
+/// reason, so a project's existing `.solid-checker/rule-options.json` does not
+/// hard-fail on an id that no longer exists.
+///
+/// A rule name in that document is validated against the catalogs, and an
+/// unknown name fails the whole analysis rather than silently changing policy —
+/// which is right for a typo and wrong for a rule the checker itself deleted.
+/// Accepting a retired id is **not** demoting the rule or hiding it behind an
+/// option (AGENTS.md forbids both): the rule cannot fire, no catalog declares
+/// it, and disabling it is a no-op. Only the stale key is tolerated.
+///
+/// Entries are permanent. Removing one turns a tolerated config back into a
+/// fatal error for the same user, so this list only grows.
+pub const RETIRED_RULES: &[(&str, &str)] = &[
+    (
+        "invalid-cleanup-return",
+        "removed 2026-08-17: every illegal return is a TypeScript error against `EffectFunction`'s `(() => void) | void` return type",
+    ),
+    (
+        "cleanup-return-unresolved",
+        "removed 2026-08-17: the obligation's whole domain was the legality of a returned value, which the same type closes",
+    ),
+    (
+        "invalid-refresh-target",
+        "removed 2026-08-17: `Refreshable<T>` brands the target in the type system, so every invalid target is a TypeScript error",
+    ),
+    (
+        "invalid-affects-target",
+        "removed 2026-08-17: same, against `Accessor<unknown> | Store<object>`",
+    ),
+    (
+        "affects-keys-on-accessor",
+        "removed 2026-08-17: a key on an accessor target selects the one-argument overload, so the key is a TypeScript error",
+    ),
+    (
+        "refresh-target-unresolved",
+        "removed 2026-08-17: asked whether the target carries the source brand, which is a question the type answers",
+    ),
+    ("affects-target-unresolved", "removed 2026-08-17: same"),
+    (
+        "v1/imports",
+        "removed 2026-08-17: its one condition — the named module does not export the name — is exactly TS2305's",
+    ),
+];
+
+/// The removal note for a retired rule identity, or `None` if the checker never
+/// published that name.
+#[must_use]
+pub fn retired_rule(name: &str) -> Option<&'static str> {
+    RETIRED_RULES
+        .iter()
+        .find(|(retired, _)| *retired == name)
+        .map(|(_, reason)| *reason)
+}
+
 /// Semantic evidence a dialect's catalog needs Type Facts to acquire.
 ///
 /// These are analysis capabilities, not external rule identities. Renaming a
