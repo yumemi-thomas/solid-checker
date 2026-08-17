@@ -703,12 +703,12 @@ The remaining grep hits are deliberately not value-evidence parsers:
 
 - `interproc.rs` uses `text` only to label an unknown-callback diagnostic and
   generated contract stub; it does not make a proof decision.
-- `shared_reactivity.rs`, `solid1x_structure.rs`, and the array branch of
-  `solid1x_attributes.rs` ask a type-shape question (array/tuple versus a
-  callable value). `callability` now supplies the callable proof; the
-  descriptor text is retained only because the current Type Facts schema has
-  no structural array-shape fact. Missing or unknown callability no longer
-  falls back to primitive text as evidence.
+- `solid1x_structure.rs` and the array branch of `solid1x_attributes.rs` asked
+  a type-shape question (array/tuple versus a callable value) by matching
+  descriptor text, because the Type Facts schema had no structural array-shape
+  fact. **Resolved 2026-08-18** — see the `arrayShape` entry below.
+- `shared_reactivity.rs` does not: its remaining `text` use is not a
+  type-shape test.
 - `server_rules.rs` asks whether a transport type has a rich serialization
   member (`Date`, `Map`, `Set`, typed arrays, and so on). Runtime value domain
   intentionally collapses those object shapes, so rendered type shape remains
@@ -755,6 +755,61 @@ compiler inlines an attribute into the template on a `StringLiteral`/
 written rather than what it evaluates to — `{"a" + "b"}` is not inlined. The
 `v1/event-handlers` inconsistency recorded above was that same syntactic
 question and is now closed; see the note under the duplicate-props entry.
+
+## Resolved: array/tuple shape is a fact, not a rendered type 2026-08-18
+
+Two consumers decided "is this an array or a tuple?" by matching
+`TypeDescriptor.text` against `[`, `readonly `, `Array<`, `ReadonlyArray<`, and a
+trailing `[]`. Both were fail-closed, so both were false negatives, and text
+could not settle the question in two independent ways:
+
+- **An alias renders as its own name.** `type Handlers = [(data: number, event:
+  MouseEvent) => void, number]` renders as `Handlers` and matched no prefix.
+- **A trailing `[]` is ambiguous.** An array of functions (`((n) => void)[]`) and
+  a function returning an array (`() => string[]`) render identically, which is
+  why the screen also had to consult `callability` — and even then it could not
+  see through the alias.
+
+The fix is the fact, not a repaired heuristic: `arrayShape` (`solid-ts-facts`
+`ce4c772`, ADR 0015) classifies the type at the exact demanded expression span
+with the checker's own `isArrayOrTupleType` predicate over the real union
+constituents. `array` requires every constituent to be an array or tuple;
+`notArray` requires none to be, and is a positive claim so the negative is usable
+as proof; `mixed` and `unknown` are proven states that prove neither side.
+Absence stays fail-closed. `expression_descriptor` and `expression_callability`
+had no other callers and were removed with the screen.
+
+Closed false negatives, measured by A/B against the text screen on
+`fixtures/reactive-ir/array-shape-v1`:
+
+- `v1/no-array-handlers` now reports an aliased tuple, a doubly-aliased tuple,
+  and a call returning one — all previously silent.
+- `v1/prefer-for` now offers the `<For each>` autofix when the `.map` receiver is
+  an *alias* for an array (`type Rows = string[]`). The alias hole had been
+  withholding a correct rewrite, which is the same defect reaching a second rule.
+
+### Not attempted: `rich_transport_member`'s hand-rolled type-text walk
+
+`server_rules.rs` asks whether a transport type's object graph contains a
+non-JSON-safe member (`Date`, `Map`, `Set`, `RegExp`, a typed array). It answers
+by splitting `TypeDescriptor.text` on top-level `|`/`&`, stripping a `[]` suffix,
+and matching the head against a name list. It is the second `TypeDescriptor.text`
+consumer named alongside `array_like_type`, and it was deliberately left in place
+when `arrayShape` landed.
+
+The two questions are not the same size. "Is this an array or a tuple?" is a
+bounded predicate the checker already computes and can answer with one closed
+verdict. "Does this object graph contain a non-JSON-safe member?" is open: it
+needs a recursive walk with a cycle guard, a depth bound, a decision about
+whether a nested property counts (the current code says no — an unproven rich
+type is not a proven throw), and a wire representation for "which member, and
+where". That is a fact design of its own, not a field on an existing one.
+
+The current behaviour is fail-closed in the right direction: an unrecognized
+shape stays silent, and name matching cannot invent a member that is not in the
+rendered text. Its live weakness is the same alias hole `arrayShape` just closed
+— `type Timestamps = Date[]` renders as `Timestamps` and is missed — so the
+motivation is real, only larger than one field.
 
 ## Design-change candidates (open)
 

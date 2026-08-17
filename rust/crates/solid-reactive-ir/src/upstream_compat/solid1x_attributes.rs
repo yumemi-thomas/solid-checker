@@ -36,6 +36,7 @@ use super::{
     violation,
 };
 use crate::StaticViolation;
+use typefacts::ArrayShape;
 
 pub(super) fn check_file(
     file: &FileFacts,
@@ -845,19 +846,20 @@ fn no_array_handlers(
             continue;
         }
         let array = attribute.expression.is_some_and(|span| {
-            // When TypeScript resolved the whole value's type, that verdict
-            // is the answer: an array- or tuple-typed value is an array
-            // handler however it was spelled (`handlers` bound in another
-            // file), and a value the author cast to a purpose-built type
-            // (`pair as SafeArray<number>`) renders as that type, not as a
-            // tuple — the same vouching upstream honours for casts. Only
-            // without a resolved type does the rule fall back to this
-            // file's spelling, where the cast itself is the bail.
-            if let Some(descriptor) = super::expression_descriptor(context, file, span) {
-                return super::array_like_type(
-                    descriptor.text.as_ref(),
-                    super::expression_callability(context, file, span),
-                );
+            // When the checker classified the whole value's shape, that verdict
+            // is the answer: an array- or tuple-typed value is an array handler
+            // however it was spelled — `handlers` bound in another file, or an
+            // alias naming the tuple — and a value the author gave a
+            // purpose-built type (`pair as SafeArray<number>`) is `NotArray`,
+            // the same vouching upstream honours for casts.
+            //
+            // `Mixed` and `Unknown` prove neither side, so they fall through to
+            // this file's spelling exactly as an absent fact does; there the
+            // cast itself is the bail.
+            match super::expression_array_shape(context, file, span) {
+                Some(shape) if shape.is_array_or_tuple() => return true,
+                Some(ArrayShape::NotArray) => return false,
+                Some(_) | None => {}
             }
             let source = text(file, span).trim();
             if source.contains(" as ") {

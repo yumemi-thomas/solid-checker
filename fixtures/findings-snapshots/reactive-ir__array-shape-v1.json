@@ -1,0 +1,95 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/no-array-handlers",
+      "code": "SC8007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
+      "start": 2278,
+      "end": 2295,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-array-handlers",
+      "code": "SC8007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
+      "start": 2313,
+      "end": 2329,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-array-handlers",
+      "code": "SC8007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
+      "start": 2347,
+      "end": 2371,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-array-handlers",
+      "code": "SC8007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
+      "start": 2389,
+      "end": 2405,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-array-handlers",
+      "code": "SC8007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
+      "start": 2423,
+      "end": 2479,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/array-shape-v1/map-receiver-cases.tsx",
+      "start": 1076,
+      "end": 1135,
+      "fixes": 1
+    },
+    {
+      "rule": "v1/prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/array-shape-v1/map-receiver-cases.tsx",
+      "start": 1144,
+      "end": 1203,
+      "fixes": 1
+    },
+    {
+      "rule": "v1/prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/array-shape-v1/map-receiver-cases.tsx",
+      "start": 1212,
+      "end": 1269,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/array-shape-v1/map-receiver-cases.tsx",
+      "start": 1439,
+      "end": 1492,
+      "fixes": 0
+    }
+  ]
+}

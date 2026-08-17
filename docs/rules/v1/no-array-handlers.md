@@ -6,27 +6,32 @@ A DOM or custom-element event prop receives an array- or tuple-shaped value.
 
 ## What it does
 
-Checks `on:*` and conventional `onEvent` props on lowercase JSX elements. It
-uses TypeScript's resolved type when available, so an imported or aliased tuple
-is still recognized; without type evidence it conservatively recognizes local
-array literals and their bindings.
+Checks `on:*` and conventional `onEvent` props on lowercase JSX elements. It asks the
+compiler to classify the value's type (`arrayShape`), so an imported or aliased
+tuple is recognized however it is spelled; without that classification it
+conservatively recognizes local array literals and their bindings.
 
 ## Why is this bad?
 
-Solid supports the delegated `[handler, data]` shorthand, but a broadly typed
-array does not prove that its first element is callable or that its data matches
-the handler. Invalid tuples can compile through `unknown[]` or loose inference
-and then fail when the event is dispatched. The checker therefore treats this
-as a type-safety boundary, not merely a style preference.
+Solid supports the delegated `[handler, data]` shorthand, and `BoundEventHandler`
+types its first member as `(data: any, ...e) => void` — `any`, so the data the
+handler receives is never checked against the data the tuple carries. The pair
+type-checks and then fails when the event is dispatched. The checker therefore
+treats this as a type-safety boundary, not merely a style preference, and it is
+the only thing that can: the tuple is legal per Solid's own types.
 
 ## Examples
 
 Incorrect:
 
 ```tsx
-const click: unknown[] = [save, record];
+type SaveHandler = [(data: Record, event: MouseEvent) => void, Record];
+const click: SaveHandler = [save, record];
 <button onClick={click}>Save</button>
 ```
+
+The alias is the point: `click` renders as `SaveHandler`, so nothing about its
+spelling reveals the tuple. `tsc` accepts all of this.
 
 Correct:
 

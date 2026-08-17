@@ -17,6 +17,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/package-*/node_modules/**
 !fixtures/reactive-ir/upstream-divergences/node_modules/
 !fixtures/reactive-ir/upstream-divergences/node_modules/**
+!fixtures/reactive-ir/array-shape-v1/node_modules/
+!fixtures/reactive-ir/array-shape-v1/node_modules/**
 !fixtures/reactive-ir/v1-reactivity/node_modules/
 !fixtures/reactive-ir/v1-reactivity/node_modules/**
 !fixtures/package-contracts/external-reexport/node_modules/

@@ -307,16 +307,12 @@ fn prefer_for(
         // array. `.map` is matched by name, as upstream matches it, and the
         // report is safe on a name alone — but `<For each>` iterates arrays,
         // so rewriting an Immutable.js collection or any other `.map`-bearing
-        // type would change behaviour. TypeScript's descriptor for the
-        // receiver is that proof; without it the report stands and the fix
-        // is withheld.
-        let receiver_is_array = super::expression_descriptor(context, file, member.object)
-            .is_some_and(|descriptor| {
-                super::array_like_type(
-                    descriptor.text.as_ref(),
-                    super::expression_callability(context, file, member.object),
-                )
-            });
+        // type would change behaviour. The checker's array/tuple classification
+        // of the receiver is that proof; anything short of it — `Mixed`,
+        // `Unknown`, or no fact — leaves the report standing and withholds the
+        // fix.
+        let receiver_is_array = super::expression_array_shape(context, file, member.object)
+            .is_some_and(typefacts::ArrayShape::is_array_or_tuple);
         let one_parameter = file
             .ast
             .functions

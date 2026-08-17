@@ -37,7 +37,7 @@ use crate::{
 };
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
-use typefacts::{Callability, Location};
+use typefacts::{ArrayShape, Location};
 
 /// The source text a span covers, or `""` when the span is not readable.
 ///
@@ -78,54 +78,37 @@ pub(super) fn is_lowercase_led(name: &str) -> bool {
     name.starts_with(|character: char| character.is_ascii_lowercase())
 }
 
-/// Whether a type is provably an array or tuple, from its rendering plus the
-/// checker's callability verdict for the same span. A screen, not a parser —
-/// the rules consulting it treat a miss as "not proven", never as proof.
+/// The checker's array/tuple classification for exactly this span, when the
+/// demand plan asked for it there.
 ///
-/// The rendering alone cannot settle a trailing `[]`: a *function* type
-/// returning an array (`() => string[]`) ends the same way an array of
-/// functions (`((n) => void)[]`) does. Callability is the discriminator —
-/// TypeScript derives it from real call signatures, so the function is
-/// `Callable` and the array is `NonCallable` — and only the `NonCallable`
-/// verdict lets the suffix count.
-pub(super) fn array_like_type(descriptor: &str, callability: Option<Callability>) -> bool {
-    descriptor.starts_with('[')
-        || descriptor.starts_with("readonly ")
-        || descriptor.starts_with("Array<")
-        || descriptor.starts_with("ReadonlyArray<")
-        || (descriptor.ends_with("[]") && callability == Some(Callability::NonCallable))
-}
-
-/// The type TypeScript resolved for exactly this span, when the demand plan
-/// asked for it there.
+/// This replaced a screen over rendered type text (`[`, `readonly `, `Array<`,
+/// `ReadonlyArray<`, and a trailing `[]` cross-checked against a callability
+/// verdict). Text could not settle the question in two ways that matter. An
+/// aliased tuple renders as its alias — `type Handlers = [(n: number) => void,
+/// number]` renders as `Handlers` — and failed every prefix, so the rule went
+/// silent on a real defect. And a trailing `[]` reads identically on an array of
+/// functions (`((n) => void)[]`) and a function returning an array
+/// (`() => string[]`), which is why the old screen needed callability at all;
+/// the compiler's own predicate distinguishes them directly and sees through the
+/// alias.
 ///
 /// Exact-span deliberately, not smallest-contained: the smallest demanded
-/// entity inside a call expression is its *callee*, and inside an arrow it
-/// is some inner reference — either would answer for the wrong object. The
-/// rules judging a whole expression's value must see that expression's own
-/// type or nothing.
-pub(super) fn expression_descriptor<'a>(
-    context: &'a UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> Option<&'a typefacts::TypeDescriptor> {
-    context
-        .lookup
-        .entity_at(file.path.as_str(), span)
-        .and_then(|entity| entity.type_descriptor.as_deref())
-}
-
-/// [`expression_descriptor`]'s callability twin: the checker's verdict for
-/// exactly this span, derived from real call signatures, never from text.
-pub(super) fn expression_callability(
+/// entity inside a call expression is its *callee*, and inside an arrow it is
+/// some inner reference — either would answer for the wrong object. The rules
+/// judging a whole expression's value must see that expression's own shape or
+/// nothing.
+///
+/// Absence is fail-closed. So are [`ArrayShape::Mixed`] and
+/// [`ArrayShape::Unknown`]: only [`ArrayShape::NotArray`] proves the negative.
+pub(super) fn expression_array_shape(
     context: &UpstreamCompatContext<'_>,
     file: &FileFacts,
     span: Span,
-) -> Option<Callability> {
+) -> Option<ArrayShape> {
     context
         .lookup
         .entity_at(file.path.as_str(), span)
-        .and_then(|entity| entity.callability)
+        .and_then(|entity| entity.array_shape)
 }
 
 // --- helpers shared by the rule modules ------------------------------------
