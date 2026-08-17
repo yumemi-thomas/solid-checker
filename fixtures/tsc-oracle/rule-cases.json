@@ -161,7 +161,7 @@
       "rule": "v1/event-handlers",
       "dialect": "v1",
       "expect": "removed-because-redundant",
-      "why": "SC8001, audited 2026-08-17 and recorded redundant on intrinsic elements in docs/precision-backlog.md (removal not yet landed). Both arms are covered: an unknown `on*` name does not exist on the element's attribute type, and a statically valued known handler is not assignable to `EventHandlerUnion`. Solid 1.x's only JSX index signature is `[key: `-${string}`]`, so nothing absorbs the name.",
+      "why": "SC8001's unknown-`on*`-name arm, audited 2026-08-17 and recorded redundant in docs/precision-backlog.md (narrowing not yet landed). An unknown name does not exist on the element's attribute type, and Solid 1.x's only JSX index signature is `[key: `-${string}`]`, so nothing absorbs it. The rule SURVIVES on its declared-spelling arms -- see the sibling `silent` case.",
       "allow": [
         2322
       ],
@@ -171,7 +171,7 @@
       "rule": "v1/no-react-specific-props",
       "dialect": "v1",
       "expect": "removed-because-redundant",
-      "why": "SC8011, audited 2026-08-17 and recorded redundant in docs/precision-backlog.md (removal not yet landed). Each React spelling is individually absent from the element's attribute type.",
+      "why": "SC8011's intrinsic-element arm, audited 2026-08-17 and recorded redundant in docs/precision-backlog.md (narrowing not yet landed). Each React spelling is individually absent from the element's attribute type. The rule SURVIVES on components whose props admit the key -- see the sibling `silent` case.",
       "allow": [
         2322
       ],
@@ -181,12 +181,33 @@
       "rule": "v1/style-prop",
       "dialect": "v1",
       "expect": "removed-because-redundant",
-      "why": "SC8017, audited 2026-08-17 and recorded redundant in docs/precision-backlog.md (removal not yet landed). Both arms are covered by `csstype`: a camelCase key is TS2561 with the kebab-case suggestion, and a unitless number for a length property is TS2322.",
+      "why": "SC8017's object-key arms, audited 2026-08-17 and recorded redundant in docs/precision-backlog.md (narrowing not yet landed). Both are covered by `csstype`: a camelCase key is TS2561 with the kebab-case suggestion, and a unitless number for a length is TS2322. The rule SURVIVES on every string-valued `style` -- see the sibling `silent` case.",
       "allow": [
         2561,
         2322
       ],
       "code": "export const Camel = () => <div style={{ maxWidth: 3 }} />;\n"
+    },
+    {
+      "rule": "v1/event-handlers",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC8001's surviving arms, and the reason the rule was not deleted. `onclick` and `ondblclick` are *declared* props in Solid 1.x, so the canonical-casing and ambiguous-name advice is the rule's own; and a spread-carried handler is legal to `tsc` while Solid does not attach it as a listener.",
+      "code": "const handleClick = () => 42;\nexport const Casing = () => <div onclick={handleClick} />;\nexport const Ambiguous = () => <div ondblclick={handleClick} />;\nexport const Spread = () => <div {...{ onClick: handleClick }} />;\n"
+    },
+    {
+      "rule": "v1/no-react-specific-props",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC8011's surviving arm, and upstream's own cases 4, 8 and 9. A component's props are whatever it declares, so a React spelling on a permissive component is an ordinary permitted key and `tsc` is silent.",
+      "code": "const Pascal = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const A = () => <Pascal className=\"greeting\" />;\nexport const B = () => <Pascal htmlFor=\"id\" />;\nexport const C = () => <Pascal key={1} />;\n"
+    },
+    {
+      "rule": "v1/style-prop",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC8017's surviving arms. A string `style` is legal in Solid 1.x, so the string-value advice, the malformed-declaration claim, and the not-CSS-at-all claim are all the rule's own; a `-`-prefixed key is absorbed by the `[key: `-${string}`]` index signature.",
+      "code": "const themeColor = \"red\";\nexport const A = () => <div style=\"font-size: 10px;\" />;\nexport const B = () => <div style=\"font-size: 10px; missing-value: ;\" />;\nexport const C = () => <div style={`color: ${themeColor};`} />;\nexport const D = () => <div style={{ \"-webkitAlignContent\": \"center\" }} />;\nexport const E = () => <div style={{ \"flex-grow\": 1 }} />;\n"
     }
   ]
 }

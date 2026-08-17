@@ -156,22 +156,37 @@ SC4004, which assert *ownership and disposal* — facts no type expresses. The
 pins that a returned call producing a `number` hands over no cleanup while one
 producing a function does.
 
-### Proven redundant, removal specified but not landed
+### Correction 2026-08-17: three rules were mis-classified as fully redundant
 
-Each of these is proven by the oracle and pinned in
-`fixtures/tsc-oracle/rule-cases.json` as `removed-because-redundant`, which
-means **the gate already treats the removal as decided**. They are not landed
-here because each is a 1.x-catalog rule with upstream parity cases behind it:
-deleting one turns its corpus cases into `fired` deviations that must each be
-declared `status: "policy"` with a reason naming the TypeScript diagnostic, and
-that ledger work is a change per rule rather than a line in this one. **Parity
-must not be used to resurrect any of them** — the absolute rule outranks it.
+An earlier pass of this ledger listed `v1/event-handlers`, `v1/no-react-specific-props`,
+and `v1/style-prop` as **proven redundant, removal specified**. That was wrong,
+and the mistake is worth recording because it is the mirror image of the
+fixture-stub trap: each was probed on *one* arm — an unknown attribute name on
+an intrinsic element — and the verdict was generalised to the whole rule. Read
+against each rule's actual upstream domain (`fixtures/upstream-parity/upstream-cases.json`),
+all three have an arm TypeScript does not cover, so all three are **partially
+redundant** and belong in the table below. None was deleted.
 
-| Code | Rule | `tsc` evidence (real `1.9.14` typings) |
+What the full probe found (real `1.9.14` typings, both passes):
+
+| Spelling | `tsc` | Whose claim |
 | --- | --- | --- |
-| SC8001 | `v1/event-handlers` | Both arms. Unknown name: `<div onFoo="a" />` and `<div onFoo={handler} />` → TS2322 "Property 'onFoo' does not exist on type 'HTMLAttributes<HTMLDivElement>'". Known handler, static value: `onClick="handler"` → TS2322 "Type 'string' is not assignable to type 'EventHandlerUnion<…>'". 1.x's only JSX index signature is `` [key: `-${string}`] ``, so nothing absorbs the name. |
-| SC8011 | `v1/no-react-specific-props` | Each spelling individually: `className` → TS2322, `htmlFor` → TS2322, `key` → TS2322. (A combined element reports only the first excess property, so each was probed on its own element.) |
-| SC8017 | `v1/style-prop` | Both arms, via `csstype`: `style={{ maxWidth: 3 }}` → TS2561 with the kebab-case suggestion; `style={{ "max-width": 3 }}` → TS2322 "Type '3' is not assignable to type 'MaxWidth<…>'". A string `style="color: red"` stays legal, matching the rule. |
+| `<div onclick={fn} />` | silent — `onclick` *is* a declared prop | SC8001's canonical-casing advice |
+| `<div ondblclick={fn} />`, `<div onDblClick={fn} />` | silent — both declared | SC8001's ambiguous-name advice |
+| `<div {...{ onClick: fn }} />` | silent | SC8001's `warnOnSpread` arm |
+| `<div onClIcK={fn} />`, `<div oncLICK={fn} />`, `<div onDoubleClick={fn} />`, `<div ondoubleclick={fn} />`, `<div only={fn} />`, `<div onLy="s" />` | TS2322 "Property does not exist" | TypeScript's |
+| `<Pascal className="x" />`, `<Pascal htmlFor="x" />`, `<Pascal key={1} />` with permissive props | silent | SC8011 — and upstream's cases 4, 8, 9 are exactly these |
+| `<Strict className="x" />` where the component declares `{ class?: string }` | TS2322 | TypeScript's |
+| `<div className="x" />`, `<div htmlFor="x" />`, `<div key={1} />` | TS2322 | TypeScript's |
+| `<div style="font-size: 10px; missing-value: ;" />` and every other string-valued `style` | silent — string styles are legal in 1.x | SC8017's string arms, including the malformed-CSS claim |
+| `<div style={{ "-webkitAlignContent": "center" }} />` | silent — the `` [key: `-${string}`] `` index signature absorbs it | SC8017 |
+| `<div style={{ fontSize: 10 }} />`, `{{ COLOR: "x" }}`, `{{ unknownStyleProp: "x" }}` | TS2561/TS2353 | TypeScript's |
+| `<div style={{ "margin-top": -10 }} />` | TS2322 against `MarginTop<…>` | TypeScript's |
+| `<div css={{ … }} />` (a configured extra style prop) | TS2322 | TypeScript's |
+
+The narrowing each needs is the same question — *is this attribute name declared
+on this element's attribute type* — which is a type fact the checker does not
+have. The implementable approximation, per rule, is in the table below.
 
 ### Partially redundant — narrow, do not delete
 
@@ -180,6 +195,9 @@ must not be used to resurrect any of them** — the absolute rule outranks it.
 | SC8003 | `v1/jsx-no-duplicate-props` | Byte-identical attribute names → **TS17001** "JSX elements cannot have multiple attributes with the same name", on intrinsics *and* components. Every duplicate case in `eslint-compat` is this shape. | Differently spelled props the compiler lowers into one slot: `onClick`/`onclick` (both become the delegated `el.$$click` write) and `attr:title`/`title`. `tsc` reports nothing — they are distinct, legal properties. |
 | SC8012 | `v1/no-unknown-namespaces` | An unknown namespace on an **intrinsic** element: `<input model:value={…} />` → TS2322. | The same on a **component**, whose props are a plain object the compiler never lowers: `<Panel model:value={1} />` with `props: Record<string, unknown>` is silent. |
 | SC1007 | `expected-function-got-expression` | A non-callable handler value: `onClick={count()}` → TS2322, and `onClick={props.onSave}` where `onSave: number` → TS2322. | A *callable* value whose read is itself reactive: `onClick={props.onSave}` where `onSave: () => void` is silent, and the claim is about the tracked read, not the type. |
+| SC8001 | `v1/event-handlers` | Every **unknown** `on*` name, in every value form — bare, shorthand, function, string, number: TS2322 "Property does not exist". Also every mixed-case garbage spelling (`onClIcK`, `oncLICK`, `onDoubleClick`, `ondoubleclick`). | The **declared** spellings the rule objects to on style grounds: `onclick` (canonical-casing advice) and `ondblclick`/`onDblClick` (ambiguous-name advice) both type-check. So does the `warnOnSpread` arm — `<div {...{ onClick: fn }} />` is legal to `tsc` and the claim is that Solid does not attach a spread-carried handler. Narrowing predicate: report only for a name the rule recognises as a real DOM handler spelling; drop the unknown-name arm, which is TS2322's own sentence. |
+| SC8011 | `v1/no-react-specific-props` | `className`, `htmlFor`, and `key` on an **intrinsic** element → TS2322 each (probed individually; a combined element reports only the first excess property). The `key` arm is already gated to `is_lowercase_led`, so it goes entirely. | `className`/`htmlFor` on a **component** whose props admit the key — upstream's own cases 4 and 8, `<PascalComponent className="greeting">`. Silent to `tsc` with `props: Record<string, unknown>`, and a *type error* when the component declares `{ class?: string }`, so the answer genuinely depends on the component. Narrowing predicate: gate the `className`/`htmlFor` arms to non-lowercase-led elements. |
+| SC8017 | `v1/style-prop` | The object-key arms: camelCase (`fontSize` → TS2561 with the kebab-case suggestion), an unknown key (`unknownStyleProp` → TS2353), a wrong-case key (`COLOR` → TS2561), a unitless number for a length (`"margin-top": -10` → TS2322 against `MarginTop<…>`), and a configured extra style prop (`css={{…}}` → TS2322). | Every **string-valued** `style`, which is legal in 1.x: `style="font-size: 10px;"`, the template-literal form, and the two semantic claims `tsc` cannot make at all — a declaration with a missing value, and a value that is not CSS. Also `` `-`-prefixed `` keys, which the `` [key: `-${string}`] `` index signature absorbs (`-webkitAlignContent` is silent). Narrowing predicate: keep the string-value and hyphen-prefixed-key arms; drop the object-key arms. |
 | SC1005 | `uncalled-accessor` | Both audited arms. As a JSX child, `<div>{count}</div>` → TS2322 "Type 'Accessor<number>' is not assignable to type 'Element'"; as an attribute, `title={count}` → TS2322. In a condition, `if (count)` → **TS2774** "This condition will always return true since this function is always defined. Did you mean to call it instead?" — `strict`-only, which the absolute rule explicitly does not accept as an exception. | Unaudited: the remaining spellings of the rule's domain. Marked **narrow-or-remove pending a full-domain audit** rather than removed on two arms. |
 
 ### Independent — keep
