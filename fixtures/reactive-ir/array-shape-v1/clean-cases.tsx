@@ -1,5 +1,13 @@
 // The negatives for `v1/no-array-handlers` (SC8007). Every case here must report
 // nothing, and each one would report under a weaker classification.
+//
+// Two of them are silent for a different reason than the rest: `on:` is
+// TypeScript's. `onXxx` is typed `EventHandlerUnion = EHandler |
+// BoundEventHandler`, whose bound arm is an interface with members `0` and `1`,
+// so a tuple is legal there and only this rule can object. `on:xxx` is typed
+// `EventHandlerWithOptionsUnion = EHandler | EventHandlerWithOptions`, which has
+// no bound arm at all — every array and every tuple is already TS2322 — so the
+// arm was narrowed off on 2026-08-18 under AGENTS.md's absolute rule.
 
 // A function *returning* an array renders `() => string[]` — the same trailing
 // `[]` as an array of functions. Only asking the type of the whole expression,
@@ -36,6 +44,14 @@ export function CleanHandlers() {
       <button onClick={named} />
       <button onClick={config.onClick} />
       <button onClick={() => [plain, "data"]} />
+      {/* `on:` takes no bound-handler tuple at all, so TypeScript rejects every
+          array and tuple here and this rule stays out of it. Both spellings are
+          `arrayShape: array` — the narrowing is on the attribute, not the
+          value. */}
+      <div on:click={boundPair} />
+      <div on:click={[plain, 1]} />
     </div>
   );
 }
+
+declare const boundPair: [(data: number, event: MouseEvent) => void, number];

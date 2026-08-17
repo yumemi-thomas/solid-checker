@@ -21,7 +21,8 @@ fixture pins what text could not reach:
   classifies as `notArray`: the fact uses the compiler's own
   `isArrayOrTupleType`, which requires the global `Array`/`ReadonlyArray` type or
   a tuple, because an author who declares a wrapper chose it over an array. That
-  is the same vouching upstream honours for a cast.
+  is the same vouching upstream honours for a cast. The two `on:click` cases are
+  silent for a different reason — see below.
 - **`fail-closed-cases.tsx`** — absence, `mixed`, and `unknown` are "not proven",
   never "not an array". Type parameters (constrained or not), a union mixing both
   shapes, `any`, and an unresolved import all report nothing. These are
@@ -31,8 +32,9 @@ fixture pins what text could not reach:
 
 ## What the text screen actually missed
 
-Measured by reverting the two consumers and re-running this fixture. It found 6
-findings where the fact finds 9, and it lost both autofixes.
+Measured by reverting the two consumers and re-running this fixture. It found 8
+findings where the fact finds 9 — but the overlap is smaller than that suggests:
+2 of its 8 were duplicates of `tsc`, and it lost both autofixes.
 
 | Case | Text screen | `arrayShape` |
 | --- | --- | --- |
@@ -41,8 +43,10 @@ findings where the fact finds 9, and it lost both autofixes.
 | `onClick={makeHandlers()}` (call returning the alias) | silent | **SC8007** |
 | `aliasedArray.map(...)`, `type Rows = string[]` | reports, **no fix** | reports **+ fix** |
 | `aliasedTuple.map(...)` | reports, **no fix** | reports **+ fix** |
+| `on:click={boundPair}` | SC8007 (**duplicates TS2322**) | silent |
+| `on:click={[plain, 1]}` | SC8007 (**duplicates TS2322**) | silent |
 
-Every row is an alias question; no case lost a finding.
+Every row is an alias or a namespace question; no case lost a legitimate finding.
 The `prefer-for` rows are the same alias hole reaching a second rule: an alias for
 `string[]` renders as `Rows`, so the receiver was never *proven* an array and the
 `<For each>` rewrite was withheld from code it was correct for.
@@ -66,9 +70,16 @@ aliased, aliased twice, readonly, inline, or returned from a call. Only this rul
 can object to those, and its claim — the value is a bound-handler tuple where a
 function was meant — is not a type error's claim.
 
-`clean-cases.tsx` contains one case `tsc` *does* reject — `onClick={safe}`, where
-`SafeArray<T> extends Array<T>` — and the checker reports nothing there, so it is
-not a duplicate either.
+`clean-cases.tsx` deliberately contains three cases `tsc` *does* reject, and the
+checker reports none of them, so nothing here duplicates a diagnostic:
+
+- `onClick={safe}` where `SafeArray<T> extends Array<T>` — TS2322, and
+  `arrayShape` calls it `notArray` anyway.
+- the two `on:click` cases — TS2322, because
+  `EventHandlerWithOptionsUnion = EHandler | EventHandlerWithOptions` has no
+  bound arm at all. That arm was narrowed off on 2026-08-18; see
+  `fixtures/upstream-parity/deviations.json`'s
+  `no-array-handlers__invalid__03`.
 
 A **plain array** on `onXxx` (`X[]`, `ReadonlyArray<X>`, `any[]`, `unknown[]`)
 has no `0`/`1` members and is likewise already TS2322. The rule still reports

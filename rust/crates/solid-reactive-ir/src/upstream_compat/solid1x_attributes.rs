@@ -826,6 +826,17 @@ fn event_handlers(
 /// handler is expected. Solid's handler prop accepts a `[handler, data]`
 /// tuple as a type-unsafe shorthand for binding extra data; passing a plain
 /// array where a function was meant compiles but silently does nothing.
+///
+/// The `on:` namespace arm was removed on 2026-08-18 under AGENTS.md's absolute
+/// rule. `onXxx` is typed `EventHandlerUnion = EHandler | BoundEventHandler`,
+/// and `BoundEventHandler` is an interface with members `0` and `1`, so a
+/// `[handler, data]` tuple is legal per solid-js@1.9.14's own types and only
+/// this rule can speak about it. `on:xxx` is typed
+/// `EventHandlerWithOptionsUnion = EHandler | EventHandlerWithOptions`, which
+/// has **no** bound form at all — so every array and every tuple there is
+/// already TS2322, and reporting it again duplicated the type checker.
+/// Confirmed with `node scripts/tsc-oracle.mjs check --dialect v1` against the
+/// real typings, in both the strict and non-strict passes.
 fn no_array_handlers(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
@@ -837,11 +848,11 @@ fn no_array_handlers(
     }
     for attribute in &element.attributes {
         let name = text(file, attribute.name);
-        let handler = attribute
-            .namespace
-            .is_some_and(|namespace| text(file, namespace) == "on")
-            || (name.starts_with("on")
-                && name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic));
+        // Any namespaced attribute is out, not just `on:`. `attr:`/`prop:` were
+        // never handlers, and `on:` is TypeScript's — see the note above.
+        let handler = attribute.namespace.is_none()
+            && name.starts_with("on")
+            && name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic);
         if !handler {
             continue;
         }

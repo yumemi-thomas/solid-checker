@@ -788,6 +788,50 @@ Closed false negatives, measured by A/B against the text screen on
   an *alias* for an array (`type Rows = string[]`). The alias hole had been
   withholding a correct rewrite, which is the same defect reaching a second rule.
 
+### Narrowed in the same pass: `no-array-handlers`' `on:` arm
+
+Writing the fixture against the real typings (`scripts/tsc-oracle.mjs`) showed
+the fixture stub had been hiding a duplicate — the trap `fixtures/tsc-oracle`
+exists for. `solid-js@1.9.14` types the two handler spellings differently:
+
+~~~ts
+type EventHandlerUnion<T, E, EHandler> = EHandler | BoundEventHandler<T, E, EHandler>;
+interface BoundEventHandler<T, E, EHandler> { 0: (data: any, ...e: Parameters<EHandler>) => void; 1: any }
+
+type EventHandlerWithOptionsUnion<T, E, EHandler> = EHandler | EventHandlerWithOptions<T, E, EHandler>;
+interface EventHandlerWithOptions<T, E, EHandler> extends AddEventListenerOptions { handleEvent: EHandler }
+~~~
+
+`onEvent` accepts `BoundEventHandler`, an interface with members `0` and `1`, so
+a `[handler, data]` tuple is legal and only this rule can object to it. `on:event`
+has **no** bound arm, so every array and every tuple there is already `TS2322`:
+
+~~~
+Type '[(data: number, event: MouseEvent) => void, number]' is not assignable to
+type 'EventHandlerWithOptionsUnion<HTMLDivElement, MouseEvent, ...>'
+~~~
+
+in both the strict and non-strict passes. The `on:` arm was removed under the
+absolute rule; upstream case `no-array-handlers__invalid__03` is now a declared
+`typescript-owned` deviation, verified by `scripts/parity-tsc-ownership.mjs`.
+Parity moved 373/465 → 372/465 with 102 deviations, all declared.
+
+### Remaining duplicate in this rule, not yet narrowed
+
+A **plain array** on `onEvent` has no `0`/`1` members either, so it is `TS2322`
+too — confirmed for `((event: MouseEvent) => void)[]`, `ReadonlyArray<...>`,
+`any[]`, and `unknown[]`. The rule still reports those, and that report
+duplicates the type checker.
+
+Narrowing it needs a finer fact than `arrayShape` carries. The condition that is
+genuinely this rule's is not "array or tuple" but **"a tuple whose first element
+is callable"** — exactly what `BoundEventHandler` accepts and `tsc` therefore
+permits; a tuple such as `[1, 2, 3]` is rejected by `tsc` at its first element.
+`arrayShape` deliberately collapses `array` and `tuple` into one verdict, because
+at the time both consumers wanted the union of them. Splitting the verdict and
+adding element-0 callability is a producer change (ADR 0016) and is not attempted
+here. No fixture pins the duplicate, so nothing blesses it.
+
 ### Not attempted: `rich_transport_member`'s hand-rolled type-text walk
 
 `server_rules.rs` asks whether a transport type's object graph contains a
