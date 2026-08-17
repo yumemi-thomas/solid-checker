@@ -324,6 +324,14 @@
     "no-unknown-namespaces__invalid__05": {
       "status": "policy",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element every namespaced prop this rule objects to is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'model:value' does not exist on type 'HTMLAttributes<HTMLDivElement>'\"). Solid resolves its namespaces through mapped types over user-augmentable interfaces plus individually declared `on:*` events, so an unrecognised prefix has nothing to land on. That covers the `style:`/`class:` steer too: neither prefix is declared at all, so `<div class:mt-10={true} />` is a type error regardless of the style preference the rule was expressing -- a genuine gap in Solid's published typings, since the 1.x compiler supports both, but the type error already speaks at that exact span. The rule survives on components, whose props are a plain object: upstream's own cases 06 and 07 still fire, and the claim there -- the compiler special-cases namespaces only on DOM elements it lowers directly, so the prop arrives inert -- is one no type makes. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "reactivity__invalid__18": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: the native-JSX-attribute position is TS2322 against the real solid-js@1.9.14 typings (\"Type 'Accessor<unknown>' is not assignable to type '\\\"submit\\\" | \\\"reset\\\" | \\\"button\\\" | \\\"menu\\\" | undefined'\") -- an accessor is never assignable to a DOM attribute's type, in either dialect. The rule survives on the positions where an uncalled accessor is *legal* to TypeScript and silently wrong at runtime: a string-concatenation binary operand (`\"hello \" + label`, which renders the accessor's own source text), a unary operand, and a template-literal interpolation. Pinned by fixtures/reactive-ir/uncalled-accessor-v2 and fixtures/tsc-oracle/rule-cases.json."
+    },
+    "reactivity__invalid__22": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: the computed-property-access position is TS2538 against the real solid-js@1.9.14 typings (\"Type 'Accessor<number>' cannot be used as an index type\"), in either dialect. The rule survives on the positions where an uncalled accessor is *legal* to TypeScript and silently wrong at runtime: a string-concatenation binary operand (`\"hello \" + label`, which renders the accessor's own source text), a unary operand, and a template-literal interpolation. Pinned by fixtures/reactive-ir/uncalled-accessor-v2 and fixtures/tsc-oracle/rule-cases.json."
     }
   },
   "counts": {

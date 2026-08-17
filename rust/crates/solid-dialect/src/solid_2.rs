@@ -308,25 +308,6 @@ impl Dialect for Solid2 {
         true
     }
 
-    /// Probed on `@solidjs/web@2.0.0-rc.0` (2026-08-15): `ssrClassName({
-    /// active: () => false })` returns `"active"` — the object value is
-    /// coerced with `!!value[key]` after `classListToObject` on both the SSR
-    /// (`dist/server.js`) and client (`dist/dev.js` `className`) paths, so a
-    /// function object in class-object value position is permanently truthy.
-    fn class_object_values_are_truthiness_coerced(&self) -> bool {
-        true
-    }
-
-    /// Code-read on `@solidjs/web@2.0.0-rc.0`: a function reaching child
-    /// insertion is invoked — `insert()` wraps it in an effect and calls it
-    /// (`dist/dev.js:657-696`), and `assign()`'s `children` arm normalizes
-    /// through `flatten()`, which unwraps zero-argument functions by calling
-    /// them. A bare accessor as a `children` attribute value on an intrinsic
-    /// element is therefore live, called usage.
-    fn native_children_attribute_invokes_functions(&self) -> bool {
-        true
-    }
-
     /// Source: `solid-reactive-ir/src/lib.rs` `read_is_under_loading` and
     /// `jsx_element_is_loading`. 2.0's error boundary is `Errored`.
     fn boundary_kind(&self, tag: &str) -> Option<Boundary> {

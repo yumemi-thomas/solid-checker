@@ -944,34 +944,6 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// Whether the DOM runtime coerces `class` object-form values by
-    /// truthiness, so a function object (an uncalled accessor) in value
-    /// position is *always truthy* and the class can never turn off.
-    ///
-    /// Probed on `@solidjs/web@2.0.0-rc.0`: `ssrClassName({ active: () =>
-    /// false })` renders `"active"`, and the client's `className` applies the
-    /// same `!!value[key]` coercion after `classListToObject` — RFC 07's
-    /// "object values are truthiness-coerced", confirmed on both paths. 1.x
-    /// keeps upstream `reactivity` parity, so the default is `false`.
-    fn class_object_values_are_truthiness_coerced(&self) -> bool {
-        false
-    }
-
-    /// Whether a `children` *attribute* on an intrinsic element routes
-    /// through child insertion, which invokes zero-argument functions — so a
-    /// bare accessor there is called reactively and is correct usage, not an
-    /// uncalled-accessor defect.
-    ///
-    /// Code-read on `@solidjs/web@2.0.0-rc.0`: `insert()` wraps a function
-    /// value in an effect and calls it (`dist/dev.js:657-696`), and the
-    /// spread path's `assign()` sends `props.children` through
-    /// `normalize()`/`flatten()`, which unwraps zero-argument functions by
-    /// calling them (`@solidjs/signals` `flatten`). 1.x keeps upstream
-    /// parity, so the default is `false`.
-    fn native_children_attribute_invokes_functions(&self) -> bool {
-        false
-    }
-
     /// Whether `untracked-derived-function` exempts a derived helper whose
     /// every call runs in a tracked compute or a fresh-at-call-time imperative
     /// scope (event handler, deferred/leaf callback, effect apply, untrack).

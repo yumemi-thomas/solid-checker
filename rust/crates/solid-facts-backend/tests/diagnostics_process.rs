@@ -487,17 +487,33 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
     }
     if let Some(findings) = diagnostic_fixture("uncalled-accessor-v2") {
-        // The two class-object values plus the plain native attribute; the
-        // children attribute and the called accessors stay silent.
+        // The three positions TypeScript permits: a string-concatenation
+        // operand, a unary operand, and a template interpolation. The typed
+        // positions the 2026-08-17 narrowing dropped -- a class object value, a
+        // native attribute, and a computed key -- are each a diagnostic of
+        // TypeScript's own, and the children attribute and the called and
+        // passed-on accessors were already silent.
         assert_rule_findings(&findings, "uncalled-accessor", 3);
-        assert!(
-            findings.iter().any(|finding| {
-                finding["message"]
-                    .as_str()
-                    .is_some_and(|message| message.contains("class object value"))
-            }),
-            "{findings:#?}"
-        );
+        for position in ["binary operator", "unary operator", "template literal"] {
+            assert!(
+                findings.iter().any(|finding| {
+                    finding["message"]
+                        .as_str()
+                        .is_some_and(|message| message.contains(position))
+                }),
+                "{position} is a position TypeScript permits and must stay reported: {findings:#?}"
+            );
+        }
+        for typed in ["class object value", "native JSX attribute", "computed property access"] {
+            assert!(
+                findings.iter().all(|finding| {
+                    !finding["message"]
+                        .as_str()
+                        .is_some_and(|message| message.contains(typed))
+                }),
+                "{typed} is TypeScript's; reporting it duplicates a diagnostic: {findings:#?}"
+            );
+        }
     }
 }
 
@@ -519,7 +535,10 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
         return;
     };
     for (rule, expected) in [
-        ("uncalled-accessor", 3),
+        // Two template interpolations. The third was a native JSX attribute,
+        // which TypeScript rejects on its own (TS2322) and the 2026-08-17
+        // narrowing dropped.
+        ("uncalled-accessor", 2),
         ("expected-function-got-expression", 2),
         ("untracked-derived-function", 2),
     ] {

@@ -689,7 +689,7 @@ fn uncalled_accessor(
         if is_called(file, identifier.span) || is_argument(file, identifier.span) {
             continue;
         }
-        let Some(position) = value_position(file, identifier.span, context.dialect) else {
+        let Some(position) = value_position(file, identifier.span) else {
             continue;
         };
         defects.push(StaticDefect {
@@ -876,11 +876,7 @@ fn is_argument(file: &FileFacts, span: Span) -> bool {
 /// upstream's own enumeration. Anywhere else — a bare reference, a return, a
 /// property value — passing the accessor on is idiomatic, and reporting it
 /// would be the false positive upstream's issue #193 describes.
-fn value_position(
-    file: &FileFacts,
-    span: Span,
-    dialect: &dyn solid_dialect::Dialect,
-) -> Option<&'static str> {
+fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     if let Some(operand) = file
         .ast
         .coercive_operands
@@ -893,57 +889,27 @@ fn value_position(
         });
     }
 
-    // Component props are lazy getters and may intentionally receive an
-    // accessor. Native attributes are different: the compiler hands the
-    // expression's value to the DOM operation, so a bare accessor is
-    // stringified/assigned as the function object. Callback-like attributes
-    // remain excluded because their contract expects a function — and, where
-    // the dialect's runtime routes a `children` attribute through child
-    // insertion (which calls zero-argument functions; code-read on
-    // `@solidjs/web@2.0.0-rc.0` `insert`/`flatten`), `children` is a live
-    // callback position too, not a value position.
-    if file.ast.jsx_elements.iter().any(|element| {
-        let element_name = text(file, element.name.span);
-        is_lowercase_led(element_name)
-            && element.attributes.iter().any(|attribute| {
-                let name = text(file, attribute.name);
-                attribute.namespace.is_none()
-                    && attribute.expression == Some(span)
-                    && name != "ref"
-                    && !(name == "children"
-                        && dialect.native_children_attribute_invokes_functions())
-                    && !(name.starts_with("on")
-                        && name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic))
-            })
-    }) {
-        return Some("a native JSX attribute");
-    }
-
-    // The object form of `class` coerces each property value by truthiness
-    // (probed on `@solidjs/web@2.0.0-rc.0`: `ssrClassName({ active: () =>
-    // false })` renders "active"; the client's `className` applies the same
-    // `!!value[key]`). An accessor object is always truthy, so the class is
-    // permanently on and never updates — in the object form directly or
-    // nested in the array form.
-    if dialect.class_object_values_are_truthiness_coerced()
-        && file.ast.object_properties.iter().any(|property| {
-            property.value == span
-                && !property.computed
-                && file.ast.jsx_elements.iter().any(|element| {
-                    is_lowercase_led(text(file, element.name.span))
-                        && element.attributes.iter().any(|attribute| {
-                            attribute.namespace.is_none()
-                                && text(file, attribute.name) == "class"
-                                && attribute
-                                    .expression
-                                    .is_some_and(|expression| expression.contains(property.span))
-                        })
-                })
-        })
-    {
-        return Some("a class object value, which is coerced by truthiness");
-    }
-
+    // Narrowed 2026-08-17 under AGENTS.md's absolute rule. Three of this
+    // rule's six positions are ones the type system closes, in *both*
+    // dialects, so they are gone:
+    //
+    //   a native JSX attribute       `<div title={label} />` is TS2322 --
+    //                                `Accessor<string>` is not assignable to
+    //                                `string` (1.x) or `string |
+    //                                RemoveAttribute` (2.0);
+    //   a class object value         `<div class={{ active: count }} />` is
+    //                                TS2322 against `Record<string, boolean>`
+    //                                in 2.0, the only dialect where the
+    //                                position was enabled;
+    //   a computed property access   `table[label]` is TS2538, "cannot be used
+    //                                as an index type".
+    //
+    // What remains are the positions where an accessor is *legal* to
+    // TypeScript and silently wrong at runtime -- see the returns below. This
+    // also removed the last consumers of the dialect's
+    // `class_object_values_are_truthiness_coerced` and
+    // `native_children_attribute_invokes_functions` predicates, which went with
+    // them.
     // An untagged template literal stringifies each interpolation, so an
     // accessor there renders its own source text. A *tagged* one hands the
     // interpolations to the tag as values, which may legitimately call
@@ -959,14 +925,9 @@ fn value_position(
     {
         return Some("a template literal");
     }
-    if file
-        .ast
-        .members
-        .iter()
-        .any(|member| member.property == span && file.ast.computed_members.contains(&member.span))
-    {
-        return Some("a computed property access");
-    }
+    // The third position the narrowing above removed: a computed key is
+    // TS2538 ("Type 'Accessor<string>' cannot be used as an index type") in
+    // both dialects, so it never reaches this function's callers any more.
     None
 }
 

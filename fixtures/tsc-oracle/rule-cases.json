@@ -231,6 +231,24 @@
         2322
       ],
       "code": "export const A = () => <div foo:boo={null} />;\nexport const B = () => <div style:width=\"100%\" />;\nexport const C = () => <div class:active={true} />;\n"
+    },
+    {
+      "rule": "uncalled-accessor",
+      "dialect": "v2",
+      "expect": "removed-because-redundant",
+      "why": "SC1005's three typed value positions, narrowed 2026-08-17: a native JSX attribute (TS2322 -- an accessor is never assignable to a DOM attribute's type), a class object value (TS2322 against 2.0's `Record<string, boolean>`), and a computed property access (TS2538, \"cannot be used as an index type\"). All three hold in both dialects. The rule SURVIVES on the positions TypeScript permits -- see the sibling `silent` case.",
+      "allow": [
+        2322,
+        2538
+      ],
+      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst [label] = createSignal(\"a\");\nconst [isActive] = createSignal(false);\nconst table: Record<string, number> = { a: 1 };\nexport const Attr = () => <div title={label} />;\nexport const ClassObj = () => <div class={{ active: isActive }} />;\nexport const Computed = () => <div>{table[label]}</div>;\n"
+    },
+    {
+      "rule": "uncalled-accessor",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "SC1005's surviving positions, and the reason it was narrowed rather than deleted -- these are the most common real spellings of the bug. String concatenation accepts any operand, a unary operator accepts a function, and a template literal stringifies whatever it is given, so TypeScript permits all three while the rendered output is the accessor's own source text and never updates.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst [label] = createSignal(\"world\");\nexport const Concat = () => <div>{\"hello \" + label}</div>;\nexport const Unary = () => <div>{!count ? \"empty\" : \"full\"}</div>;\nexport const Template = () => <div>{`count is ${count}`}</div>;\n"
     }
   ]
 }

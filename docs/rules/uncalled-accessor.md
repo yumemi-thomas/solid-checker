@@ -2,6 +2,37 @@
 
 `SC1005` · **warning** · violation
 
+## Scope: three of the six value positions are TypeScript's
+
+Narrowed on 2026-08-17 under the absolute rule in
+[AGENTS.md](../../AGENTS.md): never report what TypeScript already reports.
+
+The rule enumerated six value positions. Three are ones the type system closes,
+in **both** dialects:
+
+| Position | TypeScript |
+| --- | --- |
+| a native JSX attribute | TS2322 — an accessor is never assignable to a DOM attribute's type |
+| a class object value | TS2322 against 2.0's `Record<string, boolean>` (the only dialect where the position was enabled) |
+| a computed property access | TS2538 "cannot be used as an index type" |
+
+Three are positions TypeScript **permits**, and they are the most common real
+spellings of the bug, so the rule keeps them:
+
+- **A string-concatenation binary operand.** `"hello " + label` type-checks,
+  because `+` with a string operand accepts anything — and renders the
+  accessor's own source text. (Arithmetic on a numeric accessor, `count + 1`, is
+  TS2365 and therefore a residual duplicate; separating the two needs a fact
+  that distinguishes concatenation from arithmetic, which is recorded as open in
+  `docs/precision-backlog.md`.)
+- **A unary operand.** `!count` is legal on any value and always truthy.
+- **A template-literal interpolation.** Stringifies whatever it is given.
+
+Both directions are pinned by `fixtures/tsc-oracle/rule-cases.json` and
+`fixtures/reactive-ir/uncalled-accessor-v2`. The upstream cases this narrowing
+stops firing for are declared `status: "policy"` in
+`fixtures/upstream-parity/deviations.json`.
+
 A signal or memo accessor is used as a value without being called.
 
 ## What it does

@@ -22,16 +22,6 @@
       "fixes": 0
     },
     {
-      "rule": "uncalled-accessor",
-      "code": "SC1005",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 1416,
-      "end": 1421,
-      "fixes": 0
-    },
-    {
       "rule": "no-direct-mutation",
       "code": "SC2003",
       "kind": "violation",
