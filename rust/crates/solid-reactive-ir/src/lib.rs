@@ -2223,6 +2223,7 @@ mod tests {
             call_result_domain: None,
             constant_value: None,
             array_shape: None,
+            tuple_shape: None,
             reference_space: None,
             runtime_identity: "".into(),
         };

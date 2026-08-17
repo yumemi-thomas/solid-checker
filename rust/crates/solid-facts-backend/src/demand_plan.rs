@@ -36,6 +36,7 @@ fn plan_file(
     let mut runtime_value_domain_spans = HashSet::new();
     let mut constant_value_spans = HashSet::new();
     let mut array_shape_spans = HashSet::new();
+    let mut tuple_shape_spans = HashSet::new();
     let mut async_symbol_spans = HashSet::new();
     let mut async_value_spans = Vec::new();
     // An expression-bodied arrow's return lives on its function fact, so both
@@ -220,6 +221,13 @@ fn plan_file(
             // another rule's `smallest_contained_*` lookup.
             if handler && dialect.semantic_demands.jsx_handler_array_shapes {
                 array_shape_spans.insert(expression);
+                // Solid's handler prop accepts a `[handler, data]` pair through
+                // an interface with members `0` and `1`. Deciding whether a
+                // value satisfies *that* needs the slot count and the first
+                // slot's callability, which `arrayShape` collapses: it reports
+                // `array` for a plain array too, and a plain array has no
+                // numbered members, so TypeScript already rejects it.
+                tuple_shape_spans.insert(expression);
             }
             // A non-literal `keyed` value on a control-flow component picks
             // the children-callback overload at runtime; source discovery
@@ -435,6 +443,7 @@ fn plan_file(
         planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
         planned.constant_value = constant_value_spans.contains(&span);
         planned.array_shape = array_shape_spans.contains(&span);
+        planned.tuple_shape = tuple_shape_spans.contains(&span);
         planned.reference_space = file.ast.imports.iter().any(|import| {
             import
                 .bindings
@@ -500,6 +509,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         call_result_domain: false,
         constant_value: false,
         array_shape: false,
+        tuple_shape: false,
         reference_space: false,
         runtime_identity: false,
     }
@@ -560,6 +570,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.call_result_domain |= demand.call_result_domain;
             current.constant_value |= demand.constant_value;
             current.array_shape |= demand.array_shape;
+            current.tuple_shape |= demand.tuple_shape;
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
         } else {
