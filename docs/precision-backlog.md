@@ -26,9 +26,19 @@ the absolute rule refuses it as an exception. TypeScript 5.9.3.
 
 **The gate.** `scripts/tsc-oracle-gate.mjs` enforces
 `fixtures/tsc-oracle/rule-cases.json` in `scripts/verify.sh` and as
-`make tsc-oracle`. A rule whose positive case is also a `tsc` error now fails
-CI, and a removal justified by a diagnostic fails CI if that diagnostic ever
-disappears. Verified in both directions.
+`make tsc-oracle`. A rule whose positive case is also a `tsc` error fails CI, and
+a removal justified by a diagnostic fails CI if that diagnostic ever disappears.
+Verified in both directions.
+
+It also enforces **completeness**: every rule in either catalog must have a case,
+or an `EXEMPT` entry in the gate script saying why no snippet can express its
+subject (the package-contract family, whose subject is a third-party artifact;
+`execution-map-incomplete`, unreachable from real source by construction; the
+server-surface and SSR rules, which need a rendering mode rather than a type; and
+`v1/jsx-uses-vars`, which has no diagnostic of its own). That is what turns the
+absolute rule from documentation into a mechanism: a new rule cannot be merged
+without its positive spelling and the oracle's verdict on it. Verified by
+deleting a case and watching the gate name the rule.
 
 **Why this was invisible for a full cycle.** Every fixture stubs Solid with a
 reduced `solid-js.d.ts`, and two of those stubs were *looser* than the real
@@ -209,6 +219,30 @@ entry naming its own diagnostic.
 | SC8012 | `v1/no-unknown-namespaces` | Every namespaced prop on an **intrinsic** element — TS2322. Solid resolves namespaces through mapped types over user-augmentable interfaces plus individually declared `on:*` events, so an unrecognised prefix has nothing to land on. This covered the `style:`/`class:` steer too: **neither prefix is declared at all**, a real gap in Solid's published typings given the 1.x compiler supports both. | The same on a **component**, upstream's cases 06 and 07. Props are a plain object, TypeScript is silent, and the claim — the compiler special-cases namespaces only on DOM elements it lowers directly, so the prop arrives inert — is one no type makes. |
 | SC1007 | `expected-function-got-expression` | The whole **call-result** arm. Both its triggers land on TS2322 at the same attribute: an expression *proven non-callable* is exactly what TypeScript rejects, and a *proven-accessor call* is rejected whenever the accessor's value is not callable (`onClick={count()}` with `count: Accessor<number>`). Deliberately **not** kept for the one spelling TypeScript permits — an accessor holding a function, `onClick={handler()}` — because there the finding would be wrong: a JSX attribute expression is a tracked read, so that handler does update. The dead `HandlerCallResult` defect kind and the `proven_not_callable` helper went with it. | The **reactive-handler-read** arm: a callable handler read out of reactive props or store state. TypeScript is silent, and the claim is a timing one — a native listener receives its function value once during DOM setup, so reading it through reactive props freezes the initial handler. A prop every call site passes statically stays silent. |
 | SC1005 | `uncalled-accessor` (both catalogs) | Three of its six value positions, in both dialects: a native JSX attribute (TS2322 — an accessor is never assignable to a DOM attribute type), a class object value (TS2322 against 2.0's `Record<string, boolean>`), a computed property access (TS2538). This removed the last consumers of the dialect's `class_object_values_are_truthiness_coerced` and `native_children_attribute_invokes_functions` predicates, which went with them. | The three positions TypeScript **permits**, and the most common real spellings of the bug: a string-concatenation binary operand (`"hello " + label` renders the accessor's source text), a unary operand, and a template-literal interpolation. |
+
+### Audited, narrowing specified, not yet landed
+
+**`no-direct-mutation` (SC2003, both catalogs)** — `createStore` returns a
+*shallowly* `Readonly` proxy, so a write to a **root** property is already a type
+error against `@solidjs/signals@2.0.0-rc.0`, for both spellings:
+
+~~~
+mut.tsx(4,29) TS2540: Cannot assign to 'count' because it is a read-only property.  // state.count = 1
+mut.tsx(5,29) TS2540: Cannot assign to 'count' because it is a read-only property.  // state.count++
+~~~
+
+The readonly-ness stops at the top level, so the two arms that matter are
+**silent** to `tsc` and stay the rule's own: a write to a **nested** record
+(`state.user.name = "b"`) and a write to a **props member** (`props.n = 1`).
+Both are cases where the change is simply invisible to the reactive graph.
+
+The narrowing is implementable from facts the checker already has — it resolves
+the member chain and the store's root symbol, so "is the written member the root
+record's own property" is answerable. Not landed here; it needs its own slice
+with the 1.x arm audited separately and its parity cases declared. Pinned in
+both directions meanwhile, the root arm as
+`expect: "redundant-pending-narrowing"` so the debt is visible in CI rather than
+only in prose.
 
 ### Known residual duplicate, inside a surviving position
 

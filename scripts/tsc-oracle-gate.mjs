@@ -79,8 +79,8 @@ for (const [index, testCase] of ledger.cases.entries()) {
     continue;
   }
 
-  // Both remaining expectations require a diagnostic, and require it to be one
-  // the ledger already accounted for. A *new* code means the case changed
+  // The remaining expectations all require a diagnostic, and require it to be
+  // one the ledger already accounted for. A *new* code means the case changed
   // meaning, which has to be re-explained rather than absorbed.
   const allow = new Set(testCase.allow ?? []);
   if (!allow.size) {
@@ -90,10 +90,15 @@ for (const [index, testCase] of ledger.cases.entries()) {
   if (!seen.length) {
     failures.push(
       `${label}: expected TypeScript to report ${[...allow].map((c) => `TS${c}`).join("/")} but it was silent.` +
-        (testCase.expect === "removed-because-redundant"
-          ? `\n    The removal of this rule was justified by that diagnostic. It is gone, so the` +
-            ` defect is now unreported by anyone -- reconsider the removal.`
-          : `\n    The 'distinct-claim' allowance no longer describes anything.`),
+        {
+          "removed-because-redundant":
+            `\n    The removal of this rule was justified by that diagnostic. It is gone, so the` +
+            ` defect is now unreported by anyone -- reconsider the removal.`,
+          "redundant-pending-narrowing":
+            `\n    This case was recorded as a duplicate awaiting narrowing. TypeScript no longer` +
+            ` speaks, so the duplicate is gone and the debt entry should be closed.`,
+          "distinct-claim": `\n    The 'distinct-claim' allowance no longer describes anything.`,
+        }[testCase.expect],
     );
     continue;
   }
@@ -104,6 +109,48 @@ for (const [index, testCase] of ledger.cases.entries()) {
         `${[...allow].map((c) => `TS${c}`).join("/")}); re-explain the case`,
     );
   }
+}
+
+// The mechanism that makes the rule permanent rather than documented: a catalog
+// rule with no case here cannot be judged, so the gate refuses to let one exist
+// silently. A new rule must arrive with its positive spelling and the oracle's
+// verdict on it.
+const EXEMPT = {
+  "package-contract-export-missing": "asks whether a package ships a usable reactivity contract, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
+  "package-contract-callback-missing": "same -- the subject is a third-party package's contract, not Solid's types",
+  "package-contract-missing": "same",
+  "v1/package-contract-export-missing": "same",
+  "v1/package-contract-callback-missing": "same",
+  "v1/package-contract-missing": "same",
+  "execution-map-incomplete": "unreachable from real source by construction (docs/precision-backlog.md): it defends against externally produced or partial compiler facts, so no snippet can trigger it",
+  "v1/execution-map-incomplete": "same",
+  "ssr-client-source-outside-loading-boundary": "needs a server-rendering project, not a snippet: the finding depends on the project rendering mode rather than on any type",
+  "http-response-after-flush": "same -- needs a server-rendering project",
+  "server-function-module-directive": "needs a module-level \"use server\" prologue and the project's server surface",
+  "server-function-rich-argument": "same, plus a project-wide argument-serializer search",
+  "pending-async-forbidden-scope": "needs a pending-state observer in a project with a Loading boundary above it",
+  "v1/jsx-uses-vars": "no diagnostic of its own: it marks a JSX-referenced binding used so an unused-variable pass does not flag it",
+};
+
+const catalogRules = [
+  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v1.json"), "utf8")).rules,
+  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v2.json"), "utf8")).rules,
+].map((rule) => rule.name);
+const declared = new Set(ledger.cases.map((testCase) => testCase.rule));
+const uncovered = [...new Set(catalogRules)].filter(
+  (name) =>
+    !declared.has(name) &&
+    !declared.has(name.replace(/^v1\//, "")) &&
+    !(name in EXEMPT) &&
+    !(name.replace(/^v1\//, "") in EXEMPT),
+);
+for (const name of uncovered) {
+  failures.push(
+    `${name}: no case in fixtures/tsc-oracle/rule-cases.json.` +
+      `\n    Every catalog rule needs its positive spelling here so the oracle can answer` +
+      ` "does TypeScript already report this?". Add a case, or an EXEMPT entry in this` +
+      ` script saying why no snippet can express the rule's subject.`,
+  );
 }
 
 if (report) {
