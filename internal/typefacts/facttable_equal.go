@@ -115,8 +115,16 @@ func entityFactEqual(left, right EntityFact) bool {
 		left.RuntimeIdentity == right.RuntimeIdentity &&
 		runtimeValueDomainEqual(left.RuntimeValueDomain, right.RuntimeValueDomain) &&
 		runtimeValueDomainEqual(left.CallResultDomain, right.CallResultDomain) &&
+		constantValueEqual(left.ConstantValue, right.ConstantValue) &&
 		typeDescriptorEqual(left.TypeDescriptor, right.TypeDescriptor) &&
 		resolvedCallEqual(left.ResolvedCall, right.ResolvedCall)
+}
+
+func constantValueEqual(left, right *ConstantValue) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 func entityFactsEqual(left, right []EntityFact) bool {

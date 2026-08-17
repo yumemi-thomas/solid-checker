@@ -11,6 +11,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	location := Location{Path: "/project/source.ts", StartByte: 1, EndByte: 2}
 	domain := &RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true}
 	callResultDomain := &RuntimeValueDomain{MayBeOther: true}
+	constantValue := &ConstantValue{Kind: ConstantValueString, String: "constant"}
 	entities := []EntityFact{
 		{Location: location, Symbol: "symbol"},
 		{
@@ -19,6 +20,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 			Callability:        CallabilityCallable,
 			RuntimeValueDomain: domain,
 			CallResultDomain:   callResultDomain,
+			ConstantValue:      constantValue,
 		},
 	}
 	structural := []SymbolID{"", "accessor"}
@@ -27,7 +29,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 		1,
 		[]EntityDemand{
 			{Location: location, Symbol: true},
-			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true, CallResultDomain: true},
+			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true, CallResultDomain: true, ConstantValue: true},
 		},
 		SemanticDemandRunResult{
 			Entities:   entities,
@@ -52,7 +54,8 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	if contribution.entities[0].Symbol != "symbol" ||
 		contribution.entities[0].Callability != CallabilityCallable ||
 		contribution.entities[0].RuntimeValueDomain != domain ||
-		contribution.entities[0].CallResultDomain != callResultDomain {
+		contribution.entities[0].CallResultDomain != callResultDomain ||
+		contribution.entities[0].ConstantValue != constantValue {
 		t.Fatalf("compacted entity lost demand fields: %+v", contribution.entities[0])
 	}
 	if !slices.Equal(contribution.descriptorSymbols, []SymbolID{"symbol"}) {

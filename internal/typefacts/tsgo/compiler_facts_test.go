@@ -317,6 +317,134 @@ const newResult = new Foo().bar();
 	}
 }
 
+func TestDemandedConstantValueUsesExactSpansAndBoundedFolding(t *testing.T) {
+	dir := t.TempDir()
+	source := `import { IMPORTED } from "./dep";
+const CONST_A = "a";
+let LET_A = "a";
+enum Choice { Value = 7 }
+class Holder { static readonly Value = "held"; }
+function f(): string { return "dynamic"; }
+function parameterValue(parameter: string) { return parameter; }
+const SELF = SELF;
+
+"<p>Hello</p>" + "<p>world!</p>";
+"plain";
+42;
+1 + 2;
+-3;
++4;
+` + "`foo`;\n`foo${CONST_A}`;\n" + `
+("cast") as string;
+("satisfied") satisfies string;
+("nonnull")!;
+CONST_A + "b";
+IMPORTED + "d";
+LET_A + "b";
+Choice.Value;
+Holder.Value;
+1 + "a";
+f() + "a";
+SELF;
+`
+	sourcePath := filepath.Join(dir, "constants.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "dep.ts"), []byte(`export const IMPORTED = "importe";`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	tests := []struct {
+		expression string
+		want       *typefacts.ConstantValue
+	}{
+		{`"<p>Hello</p>" + "<p>world!</p>"`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueString, String: "<p>Hello</p><p>world!</p>"}},
+		{`"plain"`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueString, String: "plain"}},
+		{`42`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueNumber, Number: 42}},
+		{`1 + 2`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueNumber, Number: 3}},
+		{`-3`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueNumber, Number: -3}},
+		{`+4`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueNumber, Number: 4}},
+		{"`foo`", &typefacts.ConstantValue{Kind: typefacts.ConstantValueString, String: "foo"}},
+		{"`foo${CONST_A}`", nil},
+		{`("cast") as string`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueString, String: "cast"}},
+		{`("satisfied") satisfies string`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueString, String: "satisfied"}},
+		{`("nonnull")!`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueString, String: "nonnull"}},
+		{`CONST_A + "b"`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueString, String: "ab"}},
+		{`IMPORTED + "d"`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueString, String: "imported"}},
+		{`LET_A + "b"`, nil},
+		{`Choice.Value`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueNumber, Number: 7}},
+		{`Holder.Value`, &typefacts.ConstantValue{Kind: typefacts.ConstantValueString, String: "held"}},
+		{`1 + "a"`, nil},
+		{`f() + "a"`, nil},
+		{`parameter`, nil},
+		{`SELF`, nil},
+	}
+	demands := make([]typefacts.EntityDemand, len(tests))
+	for index, testCase := range tests {
+		start := strings.LastIndex(source, testCase.expression)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.expression)
+		}
+		demands[index] = typefacts.EntityDemand{
+			Location:      typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(testCase.expression)},
+			ConstantValue: true,
+		}
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, testCase := range tests {
+		got := entities[index].ConstantValue
+		if testCase.want == nil {
+			if got != nil {
+				t.Errorf("%s constant value = %+v, want absent", testCase.expression, got)
+			}
+			continue
+		}
+		if got == nil || *got != *testCase.want {
+			t.Errorf("%s constant value = %+v, want %+v", testCase.expression, got, testCase.want)
+		}
+	}
+
+	concatenation := tests[0].expression
+	outerStart := strings.LastIndex(source, concatenation)
+	leading := `"<p>Hello</p>"`
+	subNodeEntities, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{
+		{Location: typefacts.Location{Path: sourcePath, StartByte: outerStart, EndByte: outerStart + len(leading)}, ConstantValue: true},
+		{Location: typefacts.Location{Path: sourcePath, StartByte: outerStart, EndByte: outerStart + len(concatenation) - 1}, ConstantValue: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := subNodeEntities[0].ConstantValue; got == nil || got.Kind != typefacts.ConstantValueString || got.String != "<p>Hello</p>" {
+		t.Fatalf("leading literal constant value = %+v", got)
+	}
+	if got := subNodeEntities[1].ConstantValue; got != nil {
+		t.Fatalf("non-exact concatenation span returned %+v", got)
+	}
+	undemanded, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location:       demands[0].Location,
+		TypeDescriptor: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := undemanded[0].ConstantValue; got != nil {
+		t.Fatalf("undemanded constant value returned %+v", got)
+	}
+}
+
 func TestResolvedCallDistinguishesValidRecoveryAndUnresolved(t *testing.T) {
 	dir := t.TempDir()
 	source := `function takesNumber(value: number): string { return String(value); }

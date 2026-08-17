@@ -60,6 +60,21 @@ type RuntimeValueDomain struct {
 	Unknown        bool `cbor:"unknown,omitempty" json:"unknown,omitempty"`
 }
 
+// ConstantValue is a compiler-proven, span-exact primitive value. Kind selects
+// the populated payload; an empty string and numeric zero are real values.
+type ConstantValue struct {
+	Kind   ConstantValueKind `cbor:"kind" json:"kind"`
+	String string            `cbor:"string,omitempty" json:"string,omitempty"`
+	Number float64           `cbor:"number,omitempty" json:"number,omitempty"`
+}
+
+type ConstantValueKind string
+
+const (
+	ConstantValueString ConstantValueKind = "string"
+	ConstantValueNumber ConstantValueKind = "number"
+)
+
 // ReferenceSpace summarizes the semantic meaning of all compiler-resolved
 // references to an imported or aliased symbol.
 type ReferenceSpace string

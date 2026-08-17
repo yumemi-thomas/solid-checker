@@ -2,6 +2,7 @@ package typefacts
 
 import (
 	"fmt"
+	"math"
 )
 
 const (
@@ -19,6 +20,7 @@ const (
 	wireTransitionEntityHasRuntimeValueDomain
 	wireTransitionEntitySymbolUnresolved
 	wireTransitionEntityHasCallResultDomain
+	wireTransitionEntityHasConstantValue
 )
 
 const (
@@ -158,6 +160,9 @@ func writeWireTransitionEntityRun(
 		if tableSchema >= TypeFactsTableSchemaVersionV7 && entity.CallResultDomain != nil {
 			flags |= wireTransitionEntityHasCallResultDomain
 		}
+		if tableSchema >= TypeFactsTableSchemaVersionV8 && entity.ConstantValue != nil {
+			flags |= wireTransitionEntityHasConstantValue
+		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
 		}
@@ -184,6 +189,18 @@ func writeWireTransitionEntityRun(
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV7 && entity.CallResultDomain != nil {
 			w.u64(wireTransitionRuntimeValueDomainBits(*entity.CallResultDomain))
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV8 && entity.ConstantValue != nil {
+			switch entity.ConstantValue.Kind {
+			case ConstantValueString:
+				w.u64(0)
+				w.text(entity.ConstantValue.String)
+			case ConstantValueNumber:
+				w.u64(1)
+				w.u64(math.Float64bits(entity.ConstantValue.Number))
+			default:
+				return fmt.Errorf("entity %d has unknown constant-value kind %q", index, entity.ConstantValue.Kind)
+			}
 		}
 		previousStart = start
 	}

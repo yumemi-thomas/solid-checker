@@ -15,6 +15,11 @@ new facts:
   the exact call span and classify that result domain. Do not use the generic
   `runtimeValueDomain` demand at a call span for this purpose; it describes the
   callee. Treat an absent or `unknown` call-result domain as fail-closed.
+- Static JSX attribute strings for `no-innerhtml`'s `allowStatic` and
+  `jsx-no-script-url`: demand `constantValue` at the exact attribute-value
+  expression span and accept only a present value with `kind: "string"`. Do
+  not recover static strings from literal-type text or `typeDescriptor.text`;
+  absence means not proven static.
 - Synthetic probe calls and diagnostic filtering: demand `resolvedCall` and
   accept only `valid`.
 - Source-text searches that decide whether an import is type-only or runtime:

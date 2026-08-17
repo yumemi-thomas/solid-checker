@@ -165,6 +165,9 @@ func prepareRetainedContribution(
 		if entity.CallResultDomain != nil {
 			target.CallResultDomain = entity.CallResultDomain
 		}
+		if entity.ConstantValue != nil {
+			target.ConstantValue = entity.ConstantValue
+		}
 		if entity.ReferenceSpace != "" {
 			target.ReferenceSpace = entity.ReferenceSpace
 		}

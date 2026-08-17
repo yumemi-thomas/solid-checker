@@ -1,7 +1,22 @@
 # Compiler semantic facts
 
-The package-contract generator can demand five facts without reconstructing
+The package-contract generator can demand semantic facts without reconstructing
 TypeScript semantics from text.
+
+## Constant value
+
+`EntityDemand.constantValue` produces an optional `EntityFact.constantValue`
+with `kind: "string" | "number"` and the matching payload. The producer
+answers only for an expression whose trivia-normalized start and exact end
+match the demanded span. Absence always means not proven constant.
+
+The bounded evaluator folds string and numeric literals, substitution-free
+templates, transparent parentheses/type wrappers/non-null assertions, unary
+numeric signs, and same-kind binary `+`. It follows compiler-resolved symbols
+only to `const` bindings, `readonly` properties, and initialized enum members.
+Calls, parameters, mutable bindings, substituted templates, mixed string and
+number addition, dynamic/error types, cycles, and excessive recursion produce
+no fact.
 
 ## Callability
 

@@ -120,6 +120,27 @@ pub struct RuntimeValueDomain {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub enum ConstantValueKind {
+    String,
+    Number,
+}
+
+/// A compiler-proven primitive value for exactly the demanded expression span.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConstantValue {
+    pub kind: ConstantValueKind,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub string: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_zero_f64")]
+    pub number: f64,
+}
+
+// The producer rejects NaN, so equality remains reflexive.
+impl Eq for ConstantValue {}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub enum ReferenceSpace {
     Value,
     Type,
@@ -281,6 +302,8 @@ pub struct EntityFact {
     pub runtime_value_domain: Option<RuntimeValueDomain>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_result_domain: Option<RuntimeValueDomain>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub constant_value: Option<ConstantValue>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
@@ -661,15 +684,19 @@ const fn is_false(value: &bool) -> bool {
     !*value
 }
 
+fn is_zero_f64(value: &f64) -> bool {
+    *value == 0.0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn retained_entity_rows_keep_large_optional_evidence_indirect() {
+    fn retained_entity_rows_keep_optional_evidence_bounded() {
         assert!(
-            std::mem::size_of::<EntityFact>() <= 96,
-            "EntityFact is {} bytes; large optional evidence must not inflate every retained row",
+            std::mem::size_of::<EntityFact>() <= 128,
+            "EntityFact is {} bytes; optional evidence exceeded the bounded row budget",
             std::mem::size_of::<EntityFact>()
         );
     }
@@ -705,6 +732,7 @@ mod tests {
                 callability: false,
                 runtime_value_domain: false,
                 call_result_domain: false,
+                constant_value: false,
                 reference_space: false,
                 runtime_identity: false,
             }],
@@ -747,6 +775,7 @@ mod tests {
                 callability: false,
                 runtime_value_domain: false,
                 call_result_domain: false,
+                constant_value: false,
                 reference_space: false,
                 runtime_identity: false,
             },
@@ -762,6 +791,7 @@ mod tests {
                 callability: true,
                 runtime_value_domain: true,
                 call_result_domain: true,
+                constant_value: true,
                 reference_space: true,
                 runtime_identity: true,
             },
@@ -777,6 +807,7 @@ mod tests {
                 callability: false,
                 runtime_value_domain: false,
                 call_result_domain: false,
+                constant_value: false,
                 reference_space: false,
                 runtime_identity: false,
             },

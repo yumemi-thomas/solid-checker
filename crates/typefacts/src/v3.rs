@@ -5,10 +5,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, AsyncFunctionFact, CallKind,
-    CallTargetSet, Callability, Declaration, DeclarationOwner, EntityFact, FileFact, Location,
-    ParameterFact, ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration,
-    RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact,
-    TypeDescriptor,
+    CallTargetSet, Callability, ConstantValue, ConstantValueKind, Declaration, DeclarationOwner,
+    EntityFact, FileFact, Location, ParameterFact, ReferenceSpace, ResolvedCall,
+    ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain, SourceBinding, SourceCall,
+    SourceFunction, SourceHash, SymbolFact, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -17,8 +17,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V4: u64 = 4;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V5: u64 = 5;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V6: u64 = 6;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V7: u64 = 7;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V8: u64 = 8;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:7c70b7bcd0b3110386359450dde3233e9db6c1814a349024050d09cd85992bf0";
+    "sha256:a9a13285594eaba9b8c140b309809b3a798e7a351c2c1baeefe674ae528a29f1";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -80,6 +81,8 @@ pub struct EntityDemand {
     pub runtime_value_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub call_result_domain: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub constant_value: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub reference_space: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -262,6 +265,7 @@ pub const DEMAND_FLAG_REFERENCE_SPACE: u64 = 1 << 7;
 pub const DEMAND_FLAG_RUNTIME_IDENTITY: u64 = 1 << 8;
 pub const DEMAND_FLAG_RUNTIME_VALUE_DOMAIN: u64 = 1 << 9;
 pub const DEMAND_FLAG_CALL_RESULT_DOMAIN: u64 = 1 << 10;
+pub const DEMAND_FLAG_CONSTANT_VALUE: u64 = 1 << 11;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -710,6 +714,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
+            TYPE_FACTS_TABLE_SCHEMA_V8 => 511,
             TYPE_FACTS_TABLE_SCHEMA_V7 => 255,
             TYPE_FACTS_TABLE_SCHEMA_V5 | TYPE_FACTS_TABLE_SCHEMA_V6 => 127,
             TYPE_FACTS_TABLE_SCHEMA_V4 => 63,
@@ -753,6 +758,29 @@ fn decode_entity_run(
         } else {
             None
         };
+        let constant_value = if flags & 256 != 0 {
+            Some(match cursor.u64()? {
+                0 => ConstantValue {
+                    kind: ConstantValueKind::String,
+                    string: cursor.string_index(strings, "constant string")?,
+                    number: 0.0,
+                },
+                1 => {
+                    let number = f64::from_bits(cursor.u64()?);
+                    if number.is_nan() {
+                        return Err("packed constant number is NaN".into());
+                    }
+                    ConstantValue {
+                        kind: ConstantValueKind::Number,
+                        string: Arc::from(""),
+                        number,
+                    }
+                }
+                tag => return Err(format!("unknown constant-value tag {tag}")),
+            })
+        } else {
+            None
+        };
         let symbol_unresolved = flags & 64 != 0;
         if symbol_unresolved && !symbol.is_empty() {
             return Err("packed entity cannot be both resolved and unresolved".into());
@@ -770,6 +798,7 @@ fn decode_entity_run(
             callability,
             runtime_value_domain,
             call_result_domain,
+            constant_value,
             reference_space,
             runtime_identity,
         });
@@ -979,6 +1008,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V5
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V6
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V7
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V8
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1261,6 +1291,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.call_result_domain {
             flags |= DEMAND_FLAG_CALL_RESULT_DOMAIN;
         }
+        if demand.constant_value {
+            flags |= DEMAND_FLAG_CONSTANT_VALUE;
+        }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());
         push_uvarint(&mut group.1, (flags << 1) | has_query);
@@ -1359,6 +1392,28 @@ mod tests {
         }
         // One entity: start 0, length 1, no symbol, call-result field.
         for value in [1, 0, 1, 0, 128, domain_bits, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
+    fn constant_value_transition(table_schema: u64, tag: u64, payload: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        let dictionary_count = if tag == 0 { 4 } else { 3 };
+        for value in [1, 0, table_schema, 0, 1, dictionary_count] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        if tag == 0 {
+            push_test_string(&mut frame, "value");
+        }
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity: start 0, length 1, no symbol, constant-value field.
+        for value in [1, 0, 1, 0, 256, tag, payload, 0] {
             push_uvarint(&mut frame, value);
         }
         frame
@@ -1463,6 +1518,42 @@ mod tests {
         );
         assert!(decode_table_transition(&call_result_domain_transition(7, 16)).is_err());
         assert!(decode_table_transition(&call_result_domain_transition(6, 4)).is_err());
+    }
+
+    #[test]
+    fn wire_table_v8_decodes_constant_values_and_v7_stays_frozen() {
+        let string_transition =
+            decode_table_transition(&constant_value_transition(8, 0, 3)).unwrap();
+        let SlotOp::Replace(string_entities) = &string_transition.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert_eq!(
+            string_entities[0].constant_value,
+            Some(crate::ConstantValue {
+                kind: crate::ConstantValueKind::String,
+                string: "value".into(),
+                number: 0.0,
+            })
+        );
+
+        let number_transition =
+            decode_table_transition(&constant_value_transition(8, 1, 42.5_f64.to_bits())).unwrap();
+        let SlotOp::Replace(number_entities) = &number_transition.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert_eq!(
+            number_entities[0].constant_value,
+            Some(crate::ConstantValue {
+                kind: crate::ConstantValueKind::Number,
+                string: "".into(),
+                number: 42.5,
+            })
+        );
+        assert!(decode_table_transition(&constant_value_transition(7, 0, 3)).is_err());
+        assert!(decode_table_transition(&constant_value_transition(8, 2, 0)).is_err());
+        assert!(
+            decode_table_transition(&constant_value_transition(8, 1, f64::NAN.to_bits())).is_err()
+        );
     }
 
     #[test]

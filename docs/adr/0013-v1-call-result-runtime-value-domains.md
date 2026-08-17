@@ -4,6 +4,10 @@ status: accepted
 
 # V1 adds exact-span call-result runtime value domains
 
+> Historical record. Superseded as active protocol guidance by
+> [ADR 0014](0014-v1-span-exact-constant-values.md); Wire table schema v7
+> remains frozen and decodable.
+
 ## Decision
 
 The sole active lifecycle schema, V1, includes `EntityDemand.callResultDomain`

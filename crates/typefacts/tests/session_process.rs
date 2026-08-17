@@ -1,10 +1,80 @@
 use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
-    AnalysisDemand, CallKind, Callability, DemandGroup, Location, Producer, ReferenceSpace,
-    ResolvedCallValidity, RuntimeValueDomain, Session,
+    AnalysisDemand, CallKind, Callability, ConstantValue, ConstantValueKind, DemandGroup, Location,
+    Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain, Session,
     v3::{EntityDemand, FileChange},
 };
+
+#[test]
+fn constant_value_survives_full_delta_and_reuse_responses() {
+    let root =
+        std::env::temp_dir().join(format!("typefacts-constant-value-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let project = root.join("tsconfig.json");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"strict":true,"noEmit":true},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+    let path = root.join("source.ts");
+    let source = "export const value = \"a\" + \"b\";\n";
+    fs::write(&path, source).unwrap();
+    let start = source.find("\"a\" + \"b\"").unwrap();
+    let demand = EntityDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + "\"a\" + \"b\"".len()) as u64,
+        },
+        constant_value: true,
+        ..EntityDemand::default()
+    };
+    let analysis = || AnalysisDemand {
+        entities: vec![demand.clone()],
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let full = session.analyze(&analysis()).unwrap();
+    assert_eq!(
+        full.entities().next().unwrap().constant_value,
+        Some(ConstantValue {
+            kind: ConstantValueKind::String,
+            string: "ab".into(),
+            number: 0.0,
+        })
+    );
+    let reused = session.analyze(&analysis()).unwrap();
+    assert_eq!(reused.entities().next(), full.entities().next());
+    assert!(session.take_last_table_changes().unwrap().unchanged);
+
+    session
+        .update([FileChange {
+            path: path.to_string_lossy().into_owned(),
+            source: b"export const value = \"c\" + \"d\";\n".to_vec(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let delta = session.analyze(&analysis()).unwrap();
+    assert_eq!(
+        delta.entities().next().unwrap().constant_value,
+        Some(ConstantValue {
+            kind: ConstantValueKind::String,
+            string: "cd".into(),
+            number: 0.0,
+        })
+    );
+
+    session.close().unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
 
 #[test]
 fn explicit_unresolved_symbols_survive_the_process_seam() {

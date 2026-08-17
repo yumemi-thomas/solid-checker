@@ -78,6 +78,24 @@ func (c *semanticNodeCursor) exactCallLikeAt(start int, end int) *ast.Node {
 	return nil
 }
 
+// exactExpressionAt selects only an expression whose trivia-normalized source
+// span equals the demand. Unlike covering, it can never answer from a child of
+// the requested expression.
+func (c *semanticNodeCursor) exactExpressionAt(start int, end int) *ast.Node {
+	if c.sourceFile == nil || end <= start {
+		return nil
+	}
+	for node := c.at(start); node != nil; node = node.Parent {
+		if !ast.IsExpression(node) || node.End() != end {
+			continue
+		}
+		if scanner.SkipTrivia(c.sourceFile.Text(), node.Pos()) == start {
+			return node
+		}
+	}
+	return nil
+}
+
 // resolvedCallLikeAt keeps the historical start-byte anchor for resolvedCall,
 // but chooses the outermost call-like ancestor contained by the demanded span.
 // Chained calls share a start byte, so stopping at the first ancestor would
@@ -255,6 +273,7 @@ func (p *project) SemanticDemandRuns(
 				!demand.Callability &&
 				!demand.RuntimeValueDomain &&
 				!demand.CallResultDomain &&
+				!demand.ConstantValue &&
 				!demand.ReferenceSpace &&
 				!demand.RuntimeIdentity {
 				continue
@@ -332,6 +351,11 @@ func (p *project) SemanticDemandRuns(
 						return nil, err
 					}
 					entity.CallResultDomain = &domain
+				}
+			}
+			if demand.ConstantValue {
+				if constantNode := queryCursor.exactExpressionAt(query.StartByte, query.EndByte); constantNode != nil {
+					entity.ConstantValue = p.constantValueAtLocked(constantNode, &evidence[runIndex])
 				}
 			}
 			if demand.ResolvedCall {
