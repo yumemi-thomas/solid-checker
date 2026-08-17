@@ -5,6 +5,16 @@ import { createMutable } from "solid-js/store";
 // cannot trace to a source is a read it reports nothing about, so each of
 // these untracked reads is evidence that the source was discovered at all.
 //
+// This only works because `node_modules/solid-js/package.json` pins a 1.x
+// version -- dialect selection reads it (see solid-facts-backend's dialect.rs).
+// That file was an *empty directory* until 2026-08-17, so the fixture had been
+// running the 2.0 catalog the whole time and every claim below was vacuous:
+// the 1.x-only names came back as six `package-contract-export-missing`
+// obligations and the single-argument `createEffect` drew a spurious
+// `missing-effect-function`. The `.gitignore` exception lines for that
+// directory are part of the fixture -- without them the stub is untracked and
+// the fixture silently un-dialects in CI, which is the trap AGENTS.md records.
+//
 // Two shapes, two mechanisms. createResource returns a tuple, which the
 // bundled contract's single-value `returns` column cannot describe, so
 // Dialect::creates_reactive_source answers for it. createDeferred,

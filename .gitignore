@@ -38,6 +38,11 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/namespace-import-v2/node_modules/**
 !fixtures/reactive-ir/solid2-precision/node_modules/
 !fixtures/reactive-ir/solid2-precision/node_modules/**
+# solid-1x-sources selects the 1.x catalog from this stub. Without the
+# exception the stub is untracked, the fixture falls back to the 2.0 default in
+# CI, and its 1.x-only source factories stop being exercised at all.
+!fixtures/reactive-ir/solid-1x-sources/node_modules/
+!fixtures/reactive-ir/solid-1x-sources/node_modules/**
 !fixtures/reactive-ir/import-location/node_modules/
 !fixtures/reactive-ir/import-location/node_modules/**
 !fixtures/engine/eslint-reactivity-v1/node_modules/

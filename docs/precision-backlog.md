@@ -271,20 +271,48 @@ provenance fact with no type surface at all.
   exists for that name) is a different question from whether the *type* was
   declared. Independent, but a narrowing candidate if the two ever collapse.
 
-### Fixture defects surfaced by the audit, not yet fixed
+### Fixed 2026-08-17: `solid-1x-sources` had been running the 2.0 dialect
 
-- `fixtures/reactive-ir/import-location` imports `createSignal, createMemo` from
-  `"solid-js/store"`, which is **TS2305** against 1.9.14 — those names are not
-  exported from the store subpath. The SC8009 finding on that statement is not
-  itself the type error's claim (SC8009 is about Proxy-API availability), but the
-  fixture is pinning a rule through code no real project compiles. Rewrite it on
-  a legal import.
-- `fixtures/reactive-ir/solid-1x-sources` has no `node_modules/solid-js`, so
-  dialect selection falls back to the 2.0 default (the documented trap in
-  AGENTS.md) and its 1.x-shaped `createEffect((prev) => …, 0)` was being read as
-  a 2.0 effect. One of the 18 removed SC9002 findings was that artifact. Give it
-  a 1.x stub with the `.gitignore` exception, or move its cases into a fixture
-  that already has one.
+The documented `.gitignore` trap, live in the repository.
+`fixtures/reactive-ir/solid-1x-sources/node_modules/solid-js/` existed as an
+**empty directory** — no `package.json`, no `.gitignore` exception, nothing
+tracked — so dialect selection found no 1.x version and fell back to the 2.0
+default. The fixture whose entire stated purpose is "the reactive-source
+factories 1.x has and 2.0 does not" had never exercised the 1.x catalog.
+
+What it was actually asserting: six `package-contract-export-missing`
+obligations, because `createComputed`, `createDeferred`, `createSelector`, and
+`createResource` are not in the 2.0 contract; plus a spurious
+`missing-effect-function` and `no-owner-effect` on 1.x's single-argument
+`createEffect`; plus one of the 18 SC9002 obligations the cleanup-return removal
+dropped, which was this artifact rather than a real obligation.
+
+What it asserts now: thirteen findings, every one a 1.x source factory's
+untracked read — `createSignal`, `createMemo`, `createResource`,
+`createDeferred`, `createSelector`, `createMutable`, `For`, `Index` — exactly the
+"evidence that the source was discovered at all" its comment claims, plus
+`v1/no-proxy-apis` on the store import, `v1/no-async-tracked-scope`, and
+`v1/reactive-read-after-await`.
+
+The stub and its `.gitignore` exception lines are now tracked together, which is
+the only form of this fix that survives CI.
+
+### Withdrawn: `import-location` is not a fixture defect
+
+An earlier pass of this ledger recorded
+`fixtures/reactive-ir/import-location`'s `import { createSignal, createMemo }
+from "solid-js/store"` as a defect, on the grounds that it is TS2305 and no real
+project compiles it. That reading was wrong: importing a name from the wrong
+module **is** `v1/imports`'s subject, so the case is deliberate and correct.
+
+It does raise a live question the ledger should carry rather than assume:
+`v1/imports` (SC8002, 9 findings) asserts that a Solid name lives in a different
+module, and TS2305 "Module '\"solid-js/store\"' has no exported member
+'createSignal'" appears to assert the same thing. The rule also covers a name
+exported by *both* modules as a style preference, where TypeScript is silent, so
+it is at minimum partially redundant. **Unaudited** — it needs the same
+spelling-by-spelling probe the five narrowed rules got, and it is the largest
+remaining candidate.
 
 ## Compiler-faithful heuristics (verified against the 1.x compiler, do not "fix")
 
