@@ -23,6 +23,11 @@ SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/coverage.mjs
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/parity.mjs
+# Holds the parity ledger to its own claims, using the run artifact parity just
+# wrote: a `typescript-owned` deviation must sit on a case TypeScript reports in
+# its own code, and no finding may share a span with a diagnostic unless the
+# difference in claims is written down.
+node scripts/parity-tsc-ownership.mjs
 
 cargo +1.97 build --release --manifest-path "$rust_manifest" \
   -p solid-facts-backend --bin solid-checker-session-bench
@@ -38,9 +43,6 @@ npm test --prefix packages/cli
 # here rather than changing the answer silently.
 node scripts/tsc-oracle.mjs provision --dialect all
 node scripts/tsc-oracle-gate.mjs
-# And the parity ledger's own claims: every `status: "policy"` deviation says
-# "TypeScript already reports this", which nothing verified until now.
-node scripts/parity-tsc-ownership.mjs
 
 sh -n scripts/*.sh
 jq empty schema/*.json

@@ -24,22 +24,55 @@ fixture stub. Two passes run, `strict` and non-`strict`, because "the project
 may not be `strict`" is a distinction a ledger entry has to state even though
 the absolute rule refuses it as an exception. TypeScript 5.9.3.
 
-**The parity ledger is held to its own claims.**
+**The parity ledger is held to its own claims, by span.**
 `scripts/parity-tsc-ownership.mjs` compiles the *same bytes* `scripts/parity.mjs`
 lints — the materialization is shared through `scripts/lib/upstream-cases.mjs` so
-the two cannot describe different source — and fails when a deviation declared
-`status: "policy"` sits on a case TypeScript does not report. 57 reasons verified.
-That check found the hyphen exemption above; before it existed, a false
-justification was indistinguishable from a true one.
+the two cannot describe different source — and reads the run artifact parity now
+writes (`rust/target/upstream-parity/findings.json`: every finding with the byte
+span the checker reported). Both of its directions gate, and both compare spans:
 
-Its second direction is a **report, not a gate**, and deliberately so: it
-compares diagnostics per *file*, and the upstream corpus is untyped JavaScript,
-so most cases carry incidental implicit-any and cannot-find-name errors that are
-not the rule's subject. Promoting it needs span overlap against the checker's own
-findings, which means parity emitting a machine-readable run artifact. Calling it
-a gate before then would repeat the mistake it was built to catch. The same
-caveat applies to the "does not type-check" count it prints — that is a lower
-bound on corpus cleanliness, not a statement about who owns a defect.
+- A deviation declared **`status: "typescript-owned"`** must sit on a case
+  TypeScript reports **in the case's own code**, not in the imports the harness
+  prepends and not via an incidental untyped-corpus error. 45 verified.
+- No **finding may share a span** with a TypeScript diagnostic unless the
+  difference in claims is written down. 30 span matches are declared
+  `ACKNOWLEDGED` with the difference named; 4 are `PENDING_NARROWING` — confirmed
+  duplicates, listed below.
+
+`typescript-owned` is a new status, and splitting it out of `policy` was the fix
+for a flaw in the first version of this check. Plain `policy` predates the whole
+audit and covers *any* deliberate difference from upstream — a name-only allowlist
+this checker does not carry, a stricter demand for an explicit `untrack`. Those
+make no claim about TypeScript, so demanding a diagnostic for them was asking for
+evidence of a claim they never made. Twelve entries stay `policy`; the 45 this
+audit wrote are `typescript-owned` and now verifiable. Verified failing by
+relabelling one entry.
+
+The "does not type-check" count printed under `--report` remains a lower bound on
+corpus cleanliness, not a statement about ownership — 73% is easy to misquote,
+and only the span-matched list below it is an ownership claim.
+
+### Confirmed duplicates awaiting a narrowing
+
+Found by the span comparison, each suppressed in `PENDING_NARROWING` with a
+pointer here rather than left to fail:
+
+- **`v1/jsx-no-duplicate-props`, the `children`-prop-plus-JSX-children pair.**
+  TS2710 is *"'children' are specified twice. The attribute named 'children' will
+  be overwritten."* — word for word the finding's claim. Only that pair is
+  covered: the `innerHTML` and `textContent` combinations draw no diagnostic, so
+  this narrows the child-content arm rather than removing it. Note TS2710 appears
+  only in the `strict` pass, which the absolute rule does not accept as an
+  exception.
+- **`v1/no-innerhtml`, the `dangerouslySetInnerHTML` arm** (upstream cases 09,
+  10, 11). TS2322 *"Property 'dangerouslySetInnerHTML' does not exist"* and the
+  finding *"The dangerouslySetInnerHTML prop is not supported; use innerHTML
+  instead"* are the same claim. The rule's actual `innerHTML` arm is untouched and
+  stays independent.
+
+Both are narrowings, not removals, and each needs its own slice: fixture cases
+for the surviving arms, the upstream cases redeclared, and the finding movement
+explained.
 
 **The gate.** `scripts/tsc-oracle-gate.mjs` enforces
 `fixtures/tsc-oracle/rule-cases.json` in `scripts/verify.sh` and as

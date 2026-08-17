@@ -112,13 +112,26 @@ produced, so a deviation that merely changes *magnitude* — 2-against-1 becomin
 3-against-1, or a fix emitting different text — has to be re-explained instead
 of coasting on a declaration it outgrew.
 
-### `fired` — 36 entries
+### `fired` — 88 entries
 
 | status | count | meaning |
 | --- | --- | --- |
-| `evidence-backed` | 23 | compiler, runtime, type, or contract evidence makes the checker's result more precise than upstream's syntax heuristic |
-| `fact-unavailable` | 11 | the isolated case supplies no fact that proves the relevant Solid or user-code contract, so the checker refuses to guess from a spelling convention |
-| `policy` | 2 | the checker intentionally enforces a stricter explicit-snapshot policy |
+| `evidence-backed` | 19 | compiler, runtime, type, or contract evidence makes the checker's result more precise than upstream's syntax heuristic |
+| `fact-unavailable` | 12 | the isolated case supplies no fact that proves the relevant Solid or user-code contract, so the checker refuses to guess from a spelling convention |
+| `typescript-owned` | 45 | the defect is already a TypeScript diagnostic on this exact code, so AGENTS.md's absolute rule puts it out of scope |
+| `policy` | 12 | the checker intentionally enforces a stricter policy, or declines a name-only allowlist upstream carries |
+
+`typescript-owned` is the only status whose claim is **mechanically verified**.
+`scripts/parity-tsc-ownership.mjs` compiles the same bytes this harness lints
+against the real published `solid-js` typings and fails when such a deviation sits
+on a case TypeScript does not report *in the case's own code* — the harness's
+prepended imports do not count, and neither do the incidental implicit-any and
+cannot-find-name errors an untyped corpus is full of.
+
+It exists precisely because `policy` cannot carry that claim. `policy` covers any
+deliberate difference, including ones that say nothing about TypeScript, so
+demanding a diagnostic for every `policy` entry asked for evidence of a claim
+those entries never made. Splitting the two was the fix.
 
 There used to be a fourth status, `unsupported-option`, for cases enabling a
 non-default upstream option. It emptied when the six option-bearing rules
@@ -132,8 +145,16 @@ These statuses distinguish improvements from scope choices. An
 inference from an unresolved spelling, but can either withhold a diagnostic or
 retain a warning that a real type or package contract would settle. It may
 therefore identify useful future fact coverage when the same pattern occurs in
-real typed code. `policy` requires an explicit project decision. There are no
-known correctness gaps hidden in this ledger.
+real typed code. `policy` requires an explicit project decision, and
+`typescript-owned` requires a diagnostic that a gate re-checks on every run.
+
+There are no known correctness gaps hidden in this ledger — and that sentence is
+now worth more than it was, because the same script also asserts the converse: no
+finding may share a *span* with a TypeScript diagnostic unless the difference in
+the two claims is written down. Thirty such overlaps are declared distinct (mostly
+artefacts of upstream's untyped fragments inventing attribute names); four are
+confirmed duplicates awaiting a narrowing, listed in
+`docs/precision-backlog.md`.
 
 ### `counts` — 3 entries
 

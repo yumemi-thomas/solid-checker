@@ -174,183 +174,183 @@
       "reason": "strict-read-untracked requires one-time component-prop snapshots to be explicit with untrack. The fact that the local is currently unused does not change the execution contract or make the implicit snapshot certifiable."
     },
     "no-react-specific-props__invalid__00": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-react-specific-props__invalid__01": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-react-specific-props__invalid__02": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-react-specific-props__invalid__03": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-react-specific-props__invalid__05": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-react-specific-props__invalid__06": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-react-specific-props__invalid__07": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-react-specific-props__invalid__09": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule, and the whole `key` arm is gone: it was already gated to lowercase-led elements, where `key` is TS2322 against the real solid-js@1.9.14 typings. Nothing is left for the checker to add on a DOM element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "style-prop__invalid__00": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2561 -- `csstype`'s `CSSProperties` reports `fontSize` with the kebab-case suggestion the rule offered. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "style-prop__invalid__01": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2561 -- `backgroundColor`, same shape as case 00. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "style-prop__invalid__03": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2561 -- `COLOR` reports with \"Did you mean to write 'color'?\". The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "style-prop__invalid__04": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2353 -- `unknownStyleProp` does not exist in `CSSProperties`, and there is no kebab form either. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "style-prop__invalid__05": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 on the attribute -- a configured extra style prop (`css`) is not declared on `HTMLAttributes`, so the whole attribute is rejected before its keys matter. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "style-prop__invalid__06": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 on the attribute -- same as case 05 with `styleProps` replacing the default. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "style-prop__invalid__12": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 -- `'font-size': 10` is not assignable to `FontSize<0 | (string & {})>`; a unitless number for a length is a type error. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "style-prop__invalid__13": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 -- `'margin-top': -10` against `MarginTop<…>`, same shape as case 12. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "event-handlers__invalid__00": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'only' does not exist on type 'HTMLAttributes<HTMLDivElement>'\" -- the boolean shorthand form. What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__01": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'only' does not exist\" -- same name with a function value. What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__03": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'onClIcK' does not exist ... Did you mean 'onClick'?\" -- a mis-cased spelling is not declared. What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__04": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'oncLICK' does not exist ... Did you mean 'onclick'?\". What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__05": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'onLy' does not exist\" -- boolean shorthand. What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__06": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'onLy' does not exist\" -- string value. What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__07": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'onLy' does not exist\" -- numeric value. What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__08": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'onLy' does not exist\" -- braced string value. What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__09": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'onLy' does not exist\" -- a proven-static string local. What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__10": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'onDoubleClick' does not exist ... Did you mean 'onDblClick'?\" -- the non-standard name is not declared under any casing. What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "event-handlers__invalid__11": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. Solid 1.x declares every standard handler under both its camelCase and its all-lowercase spelling and `HTMLAttributes` has no `on*` index signature, so on a standard element TypeScript answers this case against the real solid-js@1.9.14 typings: TS2322 \"Property 'ondoubleclick' does not exist ... Did you mean 'ondblclick'?\". What survives: the readability rename for a *declared* spelling (`onclick`, `ondblclick` -- case 02 and case 12 still fire), every arm on a hyphenated tag (TS2339 against stock typings, so a project using one has declared it, commonly permissively, and TypeScript is then silent), and `warnOnSpread` (cases 13-15), which type checks while Solid does not attach a spread-carried listener. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "jsx-no-duplicate-props__invalid__00": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: when both occurrences are spelled *identically*, TypeScript already makes this exact claim, and which diagnostic it makes depends on where the two live. Verified against the real solid-js@1.9.14 typings: two attributes are TS17001 \"JSX elements cannot have multiple attributes with the same name\". What survives is the case this rule exists for -- two *differently spelled* props the DOM lowering folds into one slot (`onClick`/`onclick` both become the delegated `el.$$click` write; `attr:title`/`title` share the static template attribute slot), where TypeScript sees two distinct legal properties -- plus the two identical-name orders it leaves alone: a spread followed by an attribute (case 02, which still fires) and two different spread objects. Pinned by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "jsx-no-duplicate-props__invalid__01": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: when both occurrences are spelled *identically*, TypeScript already makes this exact claim, and which diagnostic it makes depends on where the two live. Verified against the real solid-js@1.9.14 typings: an attribute followed by a spread is TS2783 \"'a' is specified more than once, so this usage will be overwritten\" -- the same sentence this rule wrote. What survives is the case this rule exists for -- two *differently spelled* props the DOM lowering folds into one slot (`onClick`/`onclick` both become the delegated `el.$$click` write; `attr:title`/`title` share the static template attribute slot), where TypeScript sees two distinct legal properties -- plus the two identical-name orders it leaves alone: a spread followed by an attribute (case 02, which still fires) and two different spread objects. Pinned by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "jsx-no-duplicate-props__invalid__03": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: when both occurrences are spelled *identically*, TypeScript already makes this exact claim, and which diagnostic it makes depends on where the two live. Verified against the real solid-js@1.9.14 typings: same as case 01; quoting the spread's key does not change the property name, so TS2783 still applies. What survives is the case this rule exists for -- two *differently spelled* props the DOM lowering folds into one slot (`onClick`/`onclick` both become the delegated `el.$$click` write; `attr:title`/`title` share the static template attribute slot), where TypeScript sees two distinct legal properties -- plus the two identical-name orders it leaves alone: a spread followed by an attribute (case 02, which still fires) and two different spread objects. Pinned by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "jsx-no-duplicate-props__invalid__04": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: when both occurrences are spelled *identically*, TypeScript already makes this exact claim, and which diagnostic it makes depends on where the two live. Verified against the real solid-js@1.9.14 typings: two attributes, TS17001, as case 00. What survives is the case this rule exists for -- two *differently spelled* props the DOM lowering folds into one slot (`onClick`/`onclick` both become the delegated `el.$$click` write; `attr:title`/`title` share the static template attribute slot), where TypeScript sees two distinct legal properties -- plus the two identical-name orders it leaves alone: a spread followed by an attribute (case 02, which still fires) and two different spread objects. Pinned by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "jsx-no-duplicate-props__invalid__05": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: when both occurrences are spelled *identically*, TypeScript already makes this exact claim, and which diagnostic it makes depends on where the two live. Verified against the real solid-js@1.9.14 typings: an attribute followed by a spread, TS2783, as case 01. What survives is the case this rule exists for -- two *differently spelled* props the DOM lowering folds into one slot (`onClick`/`onclick` both become the delegated `el.$$click` write; `attr:title`/`title` share the static template attribute slot), where TypeScript sees two distinct legal properties -- plus the two identical-name orders it leaves alone: a spread followed by an attribute (case 02, which still fires) and two different spread objects. Pinned by fixtures/tsc-oracle/rule-cases.json and fixtures/reactive-ir/eslint-compat."
     },
     "no-unknown-namespaces__invalid__00": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element every namespaced prop this rule objects to is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'model:value' does not exist on type 'HTMLAttributes<HTMLDivElement>'\"). Solid resolves its namespaces through mapped types over user-augmentable interfaces plus individually declared `on:*` events, so an unrecognised prefix has nothing to land on. That covers the `style:`/`class:` steer too: neither prefix is declared at all, so `<div class:mt-10={true} />` is a type error regardless of the style preference the rule was expressing -- a genuine gap in Solid's published typings, since the 1.x compiler supports both, but the type error already speaks at that exact span. The rule survives on components, whose props are a plain object: upstream's own cases 06 and 07 still fire, and the claim there -- the compiler special-cases namespaces only on DOM elements it lowers directly, so the prop arrives inert -- is one no type makes. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-unknown-namespaces__invalid__01": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element every namespaced prop this rule objects to is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'model:value' does not exist on type 'HTMLAttributes<HTMLDivElement>'\"). Solid resolves its namespaces through mapped types over user-augmentable interfaces plus individually declared `on:*` events, so an unrecognised prefix has nothing to land on. That covers the `style:`/`class:` steer too: neither prefix is declared at all, so `<div class:mt-10={true} />` is a type error regardless of the style preference the rule was expressing -- a genuine gap in Solid's published typings, since the 1.x compiler supports both, but the type error already speaks at that exact span. The rule survives on components, whose props are a plain object: upstream's own cases 06 and 07 still fire, and the claim there -- the compiler special-cases namespaces only on DOM elements it lowers directly, so the prop arrives inert -- is one no type makes. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-unknown-namespaces__invalid__02": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element every namespaced prop this rule objects to is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'model:value' does not exist on type 'HTMLAttributes<HTMLDivElement>'\"). Solid resolves its namespaces through mapped types over user-augmentable interfaces plus individually declared `on:*` events, so an unrecognised prefix has nothing to land on. That covers the `style:`/`class:` steer too: neither prefix is declared at all, so `<div class:mt-10={true} />` is a type error regardless of the style preference the rule was expressing -- a genuine gap in Solid's published typings, since the 1.x compiler supports both, but the type error already speaks at that exact span. The rule survives on components, whose props are a plain object: upstream's own cases 06 and 07 still fire, and the claim there -- the compiler special-cases namespaces only on DOM elements it lowers directly, so the prop arrives inert -- is one no type makes. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "no-unknown-namespaces__invalid__03": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element every namespaced prop this rule objects to is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'model:value' does not exist on type 'HTMLAttributes<HTMLDivElement>'\"). Solid resolves its namespaces through mapped types over user-augmentable interfaces plus individually declared `on:*` events, so an unrecognised prefix has nothing to land on. That covers the `style:`/`class:` steer too: neither prefix is declared at all, so `<div class:mt-10={true} />` is a type error regardless of the style preference the rule was expressing -- a genuine gap in Solid's published typings, since the 1.x compiler supports both, but the type error already speaks at that exact span. The rule survives on components, whose props are a plain object: upstream's own cases 06 and 07 still fire, and the claim there -- the compiler special-cases namespaces only on DOM elements it lowers directly, so the prop arrives inert -- is one no type makes. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "reactivity__invalid__18": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: the native-JSX-attribute position is TS2322 against the real solid-js@1.9.14 typings (\"Type 'Accessor<unknown>' is not assignable to type '\\\"submit\\\" | \\\"reset\\\" | \\\"button\\\" | \\\"menu\\\" | undefined'\") -- an accessor is never assignable to a DOM attribute's type, in either dialect. The rule survives on the positions where an uncalled accessor is *legal* to TypeScript and silently wrong at runtime: a string-concatenation binary operand (`\"hello \" + label`, which renders the accessor's own source text), a unary operand, and a template-literal interpolation. Pinned by fixtures/reactive-ir/uncalled-accessor-v2 and fixtures/tsc-oracle/rule-cases.json."
     },
     "reactivity__invalid__22": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule: the computed-property-access position is TS2538 against the real solid-js@1.9.14 typings (\"Type 'Accessor<number>' cannot be used as an index type\"), in either dialect. The rule survives on the positions where an uncalled accessor is *legal* to TypeScript and silently wrong at runtime: a string-concatenation binary operand (`\"hello \" + label`, which renders the accessor's own source text), a unary operand, and a template-literal interpolation. Pinned by fixtures/reactive-ir/uncalled-accessor-v2 and fixtures/tsc-oracle/rule-cases.json."
     },
     "imports__invalid__00": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
     },
     "imports__invalid__01": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
     },
     "imports__invalid__02": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
     },
     "imports__invalid__03": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
     },
     "imports__invalid__04": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
     },
     "imports__invalid__05": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
     },
     "imports__invalid__06": {
-      "status": "policy",
+      "status": "typescript-owned",
       "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
     }
   },

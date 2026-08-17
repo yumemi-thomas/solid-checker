@@ -41,11 +41,15 @@ tsc-oracle-provision:
 
 tsc-oracle: tsc-oracle-provision
 	node scripts/tsc-oracle-gate.mjs
+
+# Needs parity's run artifact (the spans the checker actually reported), so it
+# runs after parity rather than beside it.
+tsc-ownership: tsc-oracle-provision parity
 	node scripts/parity-tsc-ownership.mjs
 
 # Which upstream cases are not valid TypeScript, and which findings look like
 # duplicates. A discovery report, not a gate.
-tsc-ownership-report: tsc-oracle-provision
+tsc-ownership-report: tsc-oracle-provision parity
 	node scripts/parity-tsc-ownership.mjs --report
 
 # Fixture-findings snapshots: "no finding moved" as a checkable claim.

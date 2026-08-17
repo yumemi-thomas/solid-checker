@@ -51,8 +51,16 @@ const LEDGERS = ["fired", "counts", "outputs"];
 // instead of coasting on the declaration it outgrew.
 const VALUE_KEYS = { fired: [], counts: ["ours", "theirs"], outputs: ["ours"] };
 const ALLOWED_STATUSES = {
-  // Whether the rule spoke at all.
-  fired: new Set(["evidence-backed", "fact-unavailable", "policy"]),
+  // Whether the rule spoke at all. `typescript-owned` is `policy`'s narrower
+  // sibling and exists so the claim can be *checked*: it asserts that the defect
+  // is already a TypeScript diagnostic on this exact code, which
+  // `scripts/parity-tsc-ownership.mjs` verifies against the real published
+  // typings. Plain `policy` stays for the deliberate differences that make no
+  // such claim -- a name-only allowlist this checker does not carry, a stricter
+  // demand for an explicit `untrack` -- and those are unverifiable by
+  // construction, which is exactly why they must not share a status with the
+  // ones that are.
+  fired: new Set(["evidence-backed", "fact-unavailable", "policy", "typescript-owned"]),
   // How many times it spoke.
   counts: new Set(["per-site", "rule-split"]),
   // What its fixes produce.
@@ -191,6 +199,35 @@ for (const output of runs) {
     found.get(id).push(finding);
   }
 }
+
+// The run artifact: which findings landed where, keyed by case id, with the byte
+// spans the checker reported. `scripts/parity-tsc-ownership.mjs` compiles the
+// *same bytes* against the real published typings and needs these spans to ask
+// whether a TypeScript diagnostic covers the same expression -- co-presence in a
+// file proves nothing on an untyped corpus, where most cases carry incidental
+// implicit-any errors. Written to the build directory, not committed: it is a
+// product of this run and stale spans would be worse than none.
+writeFileSync(
+  join(project, "findings.json"),
+  `${JSON.stringify(
+    {
+      schemaVersion: 1,
+      cases: Object.fromEntries(
+        [...found].map(([id, findings]) => [
+          id,
+          findings.map((finding) => ({
+            rule: finding.rule,
+            code: finding.id,
+            startByte: finding.primaryLocation.startByte,
+            endByte: finding.primaryLocation.endByte,
+          })),
+        ]),
+      ),
+    },
+    null,
+    2,
+  )}\n`,
+);
 
 // Applies one pass of `fixes` to `source`, the way ESLint's own fixer does —
 // which is what makes the result comparable to a RuleTester `output`, itself
