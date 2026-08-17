@@ -24,12 +24,24 @@ export function CyclicUrl() {
   return <a href={cyclicUrl}>cycle</a>;
 }
 
+// The `dangerouslySetInnerHTML` arm was narrowed to components on 2026-08-17:
+// on an intrinsic element the prop is TS2322 ("Property
+// 'dangerouslySetInnerHTML' does not exist"), which is the arm's own claim. The
+// `@ts-expect-error` that used to sit here was the tell -- the fixture was
+// asserting a rule on code TypeScript rejects.
+//
+// The fix shapes are what this case is for, so they move to a component, whose
+// props admit the key and where TypeScript is silent.
+const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;
+
 export function InnerHtmlFixes() {
   return (
     <>
-      <div dangerouslySetInnerHTML={{ __html: html }} />
+      <Panel dangerouslySetInnerHTML={{ __html: html }} />
       {/* @ts-expect-error: object addition is deliberate regression input. */}
-      <div dangerouslySetInnerHTML={({ __html: html }) + ({})} />
+      <Panel dangerouslySetInnerHTML={({ __html: html }) + ({})} />
+      {/* Negative: on an intrinsic element this is TypeScript's to report. */}
+      <div dangerouslySetInnerHTML={{ __html: html }} />
     </>
   );
 }

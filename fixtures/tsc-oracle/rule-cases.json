@@ -525,6 +525,23 @@
       "expect": "silent",
       "why": "The 1.x arm, and the reason the narrowing is dialect-gated rather than shared. Solid 1.x's `createStore` returns a mutable store type, so none of these four writes produces any diagnostic -- not even the root-property ones TS2540 rejects in 2.0. The 1.x rule is fully independent, and carrying the 2.0 answer across the dialect seam would have silenced it wrongly.",
       "code": "import { createStore } from \"solid-js/store\";\nconst [state] = createStore({ count: 0, user: { name: \"a\" } });\nexport function A() {\n  state.count = 1;\n}\nexport function B() {\n  state.count++;\n}\nexport function C() {\n  state.user.name = \"b\";\n}\nexport function D(props: { n: number }) {\n  props.n = 1;\n}\n"
+    },
+    {
+      "rule": "v1/no-innerhtml",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "why": "SC8008's `dangerouslySetInnerHTML` arm on an intrinsic element, narrowed 2026-08-17. The React prop is not in `JSX.IntrinsicElements`, so it is TS2322 -- word for word the arm's own claim, \"the prop is not supported\". The arm SURVIVES on components and the `innerHTML` arm is untouched; see the sibling `silent` case.",
+      "allow": [
+        2322
+      ],
+      "code": "export const Case = () => <div dangerouslySetInnerHTML={{ __html: \"<p>x</p>\" }} />;\n"
+    },
+    {
+      "rule": "v1/no-innerhtml",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "Both surviving halves. `innerHTML` is a *declared* Solid prop, so the injection-surface and content-conflict claims are the rule's own on every element. And on a component, whose props are whatever it declares, even the React name is a permitted key -- TypeScript is silent, and the claim that Solid's renderer has no special case for it stands alone.",
+      "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const Native = () => <div innerHTML={\"<p>x</p>\"} />;\nexport const Component = () => <Panel dangerouslySetInnerHTML={{ __html: \"<p>x</p>\" }} />;\n"
     }
   ]
 }

@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 420,
-      "end": 443,
+      "start": 579,
+      "end": 602,
       "fixes": 1
     },
     {
@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 453,
-      "end": 482,
+      "start": 612,
+      "end": 641,
       "fixes": 0
     },
     {
@@ -57,8 +57,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 453,
-      "end": 512,
+      "start": 612,
+      "end": 671,
       "fixes": 0
     },
     {
@@ -67,8 +67,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 561,
-      "end": 583,
+      "start": 720,
+      "end": 742,
       "fixes": 0
     },
     {
@@ -77,8 +77,28 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 1190,
-      "end": 1225,
+      "start": 1744,
+      "end": 1792,
+      "fixes": 1
+    },
+    {
+      "rule": "v1/no-innerhtml",
+      "code": "SC8008",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
+      "start": 1925,
+      "end": 1983,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-innerhtml",
+      "code": "SC8008",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
+      "start": 2590,
+      "end": 2625,
       "fixes": 0
     },
     {
@@ -87,8 +107,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 1560,
-      "end": 1583,
+      "start": 2960,
+      "end": 2983,
       "fixes": 0
     },
     {
@@ -97,8 +117,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 1610,
-      "end": 1638,
+      "start": 3010,
+      "end": 3038,
       "fixes": 0
     },
     {

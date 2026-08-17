@@ -65,9 +65,26 @@ fn no_innerhtml(
     element: &JsxElementFact,
     violations: &mut Vec<StaticViolation>,
 ) {
+    // The React prop only reaches this rule on a **component**. On an intrinsic
+    // element `dangerouslySetInnerHTML` is not in `JSX.IntrinsicElements`, so it
+    // is TS2322 ("Property 'dangerouslySetInnerHTML' does not exist on type
+    // 'HTMLAttributes<HTMLDivElement>'") against the real solid-js@1.9.14
+    // typings -- and that is this arm's own sentence, "the prop is not
+    // supported". Narrowed 2026-08-17 after `scripts/parity-tsc-ownership.mjs`
+    // matched the two spans and confirmed the claims are the same.
+    //
+    // A component's props are whatever it declares, so the prop is a permitted
+    // key there, TypeScript is silent, and the claim -- Solid's renderer has no
+    // special case for the name, so it arrives inert -- is the rule's alone.
+    // (The hyphen exemption that reopened three other narrowings does not apply:
+    // this name is fixed and carries none.)
+    let component = !is_lowercase_led(text(file, element.name.span));
     for attribute in &element.attributes {
         let name = text(file, attribute.name);
         if name == "dangerouslySetInnerHTML" {
+            if !component {
+                continue;
+            }
             let mut result = violation(
                 file,
                 "SC8008",

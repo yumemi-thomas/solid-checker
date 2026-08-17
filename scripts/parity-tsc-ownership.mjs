@@ -108,8 +108,6 @@ const USE_DIRECTIVE =
   "TS2322 says the `use:` *attribute* is not declared, because `JSX.Directives` ships empty and is meant to be augmented -- the documented way to use a directive. The finding says no lexical *value* binding exists for the name. In a project that has augmented `Directives` (the only kind that compiles) TypeScript is silent and the finding stands alone, so the two questions only coincide in code no real project has.";
 const ARRAY_HANDLER =
   "TS2322 is about the array's *element* types, not the bound-handler form: upstream's cases pass an untyped or mismatched second element, so the tuple fails to match `BoundEventHandler`'s parameter. The finding's claim is that the bound form defeats handler identity comparison, which holds for a *well typed* tuple -- and there TypeScript is silent, which is the case pinned in fixtures/tsc-oracle/rule-cases.json.";
-const DANGEROUSLY =
-  "TS2322 \"Property 'dangerouslySetInnerHTML' does not exist\" and the finding \"The dangerouslySetInnerHTML prop is not supported; use innerHTML instead\" are the same claim. The rest of this rule -- the actual `innerHTML` arm -- is untouched by that and stays independent.";
 
 // Findings a TypeScript diagnostic covers by span, kept deliberately because the
 // two make *different* claims about the same code. Keyed `<case id>:<rule>`, and
@@ -159,9 +157,6 @@ const ACKNOWLEDGED = {
 const PENDING_NARROWING = {
   "jsx-no-duplicate-props__invalid__06:v1/jsx-no-duplicate-props":
     "TS2710 \"'children' are specified twice. The attribute named 'children' will be overwritten.\" is word for word this finding's claim. Only the `children`-prop-plus-JSX-children pair is covered; the `innerHTML` and `textContent` combinations are not, so this is a narrowing of the child-content arm rather than its removal.",
-  "no-innerhtml__invalid__09:v1/no-innerhtml": DANGEROUSLY,
-  "no-innerhtml__invalid__10:v1/no-innerhtml": DANGEROUSLY,
-  "no-innerhtml__invalid__11:v1/no-innerhtml": DANGEROUSLY,
 };
 
 // Codes that are pure artefacts of linting untyped upstream JavaScript. They are

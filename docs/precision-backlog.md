@@ -64,15 +64,19 @@ pointer here rather than left to fail:
   this narrows the child-content arm rather than removing it. Note TS2710 appears
   only in the `strict` pass, which the absolute rule does not accept as an
   exception.
-- **`v1/no-innerhtml`, the `dangerouslySetInnerHTML` arm** (upstream cases 09,
-  10, 11). TS2322 *"Property 'dangerouslySetInnerHTML' does not exist"* and the
-  finding *"The dangerouslySetInnerHTML prop is not supported; use innerHTML
-  instead"* are the same claim. The rule's actual `innerHTML` arm is untouched and
-  stays independent.
+**Landed 2026-08-17: `v1/no-innerhtml`'s `dangerouslySetInnerHTML` arm** (upstream
+cases 09, 10, 11). TS2322 *"Property 'dangerouslySetInnerHTML' does not exist"* and
+the finding *"The dangerouslySetInnerHTML prop is not supported; use innerHTML
+instead"* are the same claim. Narrowed to components, where props are whatever the
+component declares and TypeScript is silent; the `innerHTML` arm is untouched
+because `innerHTML` is a declared Solid prop and every claim about it is
+independent. Pinned by `upstream-divergences`'s `ReactMarkupProp` — the silent
+intrinsic, the reported component with its rewrite fix, and the reported component
+whose extra object entry leaves no unambiguous rewrite.
 
-Both are narrowings, not removals, and each needs its own slice: fixture cases
-for the surviving arms, the upstream cases redeclared, and the finding movement
-explained.
+The remaining entry is a narrowing, not a removal, and needs its own slice:
+fixture cases for the surviving arm, the upstream case redeclared, and the finding
+movement explained.
 
 **The gate.** `scripts/tsc-oracle-gate.mjs` enforces
 `fixtures/tsc-oracle/rule-cases.json` in `scripts/verify.sh` and as
