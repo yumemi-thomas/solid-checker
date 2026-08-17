@@ -8,7 +8,7 @@ use crate::{
     CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Declaration,
     DeclarationOwner, EntityFact, FileFact, Location, ParameterFact, ReferenceSpace, ResolvedCall,
     ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain, SourceBinding, SourceCall,
-    SourceFunction, SourceHash, SymbolFact, TypeDescriptor,
+    SourceFunction, SourceHash, SymbolFact, TupleShape, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -19,8 +19,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V6: u64 = 6;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V7: u64 = 7;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V8: u64 = 8;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V9: u64 = 9;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V10: u64 = 10;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:8fe3e333cdd7e9a16b8caf431ed34ccbd4b96dcbeb986e23a34a273dd4c2f033";
+    "sha256:b29c35ecf563da1f9e27f8b017902834e1be39e739816b0224b0cf7f2ca608b0";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -86,6 +87,8 @@ pub struct EntityDemand {
     pub constant_value: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub array_shape: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub tuple_shape: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub reference_space: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -270,6 +273,7 @@ pub const DEMAND_FLAG_RUNTIME_VALUE_DOMAIN: u64 = 1 << 9;
 pub const DEMAND_FLAG_CALL_RESULT_DOMAIN: u64 = 1 << 10;
 pub const DEMAND_FLAG_CONSTANT_VALUE: u64 = 1 << 11;
 pub const DEMAND_FLAG_ARRAY_SHAPE: u64 = 1 << 12;
+pub const DEMAND_FLAG_TUPLE_SHAPE: u64 = 1 << 13;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -718,6 +722,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
+            TYPE_FACTS_TABLE_SCHEMA_V10 => 2047,
             TYPE_FACTS_TABLE_SCHEMA_V9 => 1023,
             TYPE_FACTS_TABLE_SCHEMA_V8 => 511,
             TYPE_FACTS_TABLE_SCHEMA_V7 => 255,
@@ -791,6 +796,18 @@ fn decode_entity_run(
         } else {
             None
         };
+        let tuple_shape = if flags & 1024 != 0 {
+            let packed = cursor.u64()?;
+            let element_zero = parse_callability(cursor.u64()?)?;
+            Some(TupleShape {
+                fixed_length: u32::try_from(packed >> 1)
+                    .map_err(|_| "packed tuple fixed length overflows".to_string())?,
+                has_rest: packed & 1 != 0,
+                element_zero: Some(element_zero),
+            })
+        } else {
+            None
+        };
         let symbol_unresolved = flags & 64 != 0;
         if symbol_unresolved && !symbol.is_empty() {
             return Err("packed entity cannot be both resolved and unresolved".into());
@@ -810,6 +827,7 @@ fn decode_entity_run(
             call_result_domain,
             constant_value,
             array_shape,
+            tuple_shape,
             reference_space,
             runtime_identity,
         });
@@ -1031,6 +1049,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V7
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V8
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V9
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V10
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1319,6 +1338,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.array_shape {
             flags |= DEMAND_FLAG_ARRAY_SHAPE;
         }
+        if demand.tuple_shape {
+            flags |= DEMAND_FLAG_TUPLE_SHAPE;
+        }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());
         push_uvarint(&mut group.1, (flags << 1) | has_query);
@@ -1435,6 +1457,24 @@ mod tests {
         }
         // One entity: start 0, length 1, no symbol, array-shape field.
         for value in [1, 0, 1, 0, 512, tag, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
+    fn tuple_shape_transition(table_schema: u64, packed: u64, element_zero: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, table_schema, 0, 1, 3] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity: start 0, length 1, no symbol, tuple-shape field.
+        for value in [1, 0, 1, 0, 1024, packed, element_zero, 0] {
             push_uvarint(&mut frame, value);
         }
         frame
@@ -1617,6 +1657,39 @@ mod tests {
         // than a silently dropped fact.
         assert!(decode_table_transition(&array_shape_transition(8, 0)).is_err());
         assert!(decode_table_transition(&array_shape_transition(9, 4)).is_err());
+    }
+
+    #[test]
+    fn wire_table_v10_decodes_tuple_shapes_and_v9_stays_frozen() {
+        // packed = fixed_length << 1 | has_rest; element zero code 0 = callable.
+        let transition = decode_table_transition(&tuple_shape_transition(10, 5, 0)).unwrap();
+        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert_eq!(
+            entities[0].tuple_shape,
+            Some(crate::TupleShape {
+                fixed_length: 2,
+                has_rest: true,
+                element_zero: Some(Callability::Callable),
+            })
+        );
+
+        let plain = decode_table_transition(&tuple_shape_transition(10, 4, 1)).unwrap();
+        let SlotOp::Replace(plain_entities) = &plain.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert_eq!(
+            plain_entities[0].tuple_shape,
+            Some(crate::TupleShape {
+                fixed_length: 2,
+                has_rest: false,
+                element_zero: Some(Callability::NonCallable),
+            })
+        );
+
+        assert!(decode_table_transition(&tuple_shape_transition(9, 4, 0)).is_err());
+        assert!(decode_table_transition(&tuple_shape_transition(10, 4, 9)).is_err());
     }
 
     #[test]

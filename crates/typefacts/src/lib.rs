@@ -174,6 +174,43 @@ impl ArrayShape {
     }
 }
 
+/// The tuple at exactly the demanded expression span: how many fixed element
+/// slots it has, whether a rest or variadic tail follows, and whether the first
+/// slot holds a callable value.
+///
+/// Emitted only when the type at that span is *itself* a tuple — never for a
+/// union, and never for the global `Array`/`ReadonlyArray` types, which carry a
+/// number index signature instead of fixed slots. Absence therefore means "not
+/// proven a tuple", never "not a tuple".
+///
+/// This is the structural detail [`ArrayShape`] deliberately collapses. Ask for
+/// it when a value has to satisfy an interface with *numbered* members; ask
+/// [`ArrayShape`] when the question is only "is this iterable as an array".
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TupleShape {
+    /// Initial required-or-optional slots, matching the compiler's own
+    /// `fixedLength`.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub fixed_length: u32,
+    /// A rest or variadic tail follows the fixed slots.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub has_rest: bool,
+    /// Callability of the first slot's type, or `Unknown` when there is no
+    /// fixed first slot.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub element_zero: Option<Callability>,
+}
+
+impl TupleShape {
+    /// Whether the tuple has a value at index `index` — from a fixed slot, or
+    /// from the rest tail when one follows.
+    #[must_use]
+    pub const fn has_slot(self, index: u32) -> bool {
+        index < self.fixed_length || (self.has_rest && index <= self.fixed_length)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ReferenceSpace {
@@ -341,6 +378,8 @@ pub struct EntityFact {
     pub constant_value: Option<ConstantValue>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub array_shape: Option<ArrayShape>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tuple_shape: Option<TupleShape>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
@@ -725,14 +764,24 @@ fn is_zero_f64(value: &f64) -> bool {
     *value == 0.0
 }
 
+fn is_zero_u32(value: &u32) -> bool {
+    *value == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // Every retained row pays for every inline optional field, so the budget
+    // rises only after the field has been made as small as it can be. `TupleShape`
+    // cost 16 bytes with a `usize` length and 8 with a `u32` one — a tuple cannot
+    // have more slots than the source has bytes — and the `Option` rides the
+    // callability enum's niche. Boxing it would buy the other 8 bytes back at the
+    // price of an allocation per fact; it is three scalars, so it stays inline.
     #[test]
     fn retained_entity_rows_keep_optional_evidence_bounded() {
         assert!(
-            std::mem::size_of::<EntityFact>() <= 128,
+            std::mem::size_of::<EntityFact>() <= 136,
             "EntityFact is {} bytes; optional evidence exceeded the bounded row budget",
             std::mem::size_of::<EntityFact>()
         );
@@ -771,6 +820,7 @@ mod tests {
                 call_result_domain: false,
                 constant_value: false,
                 array_shape: false,
+                tuple_shape: false,
                 reference_space: false,
                 runtime_identity: false,
             }],
@@ -815,6 +865,7 @@ mod tests {
                 call_result_domain: false,
                 constant_value: false,
                 array_shape: false,
+                tuple_shape: false,
                 reference_space: false,
                 runtime_identity: false,
             },
@@ -832,6 +883,7 @@ mod tests {
                 call_result_domain: true,
                 constant_value: true,
                 array_shape: true,
+                tuple_shape: true,
                 reference_space: true,
                 runtime_identity: true,
             },
@@ -849,6 +901,7 @@ mod tests {
                 call_result_domain: false,
                 constant_value: false,
                 array_shape: false,
+                tuple_shape: false,
                 reference_space: false,
                 runtime_identity: false,
             },

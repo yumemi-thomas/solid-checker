@@ -52,6 +52,25 @@ func Checker_isContextSensitive(recv *checker.Checker, node *ast.Node) bool
 //go:linkname Checker_isArrayOrTupleType github.com/microsoft/typescript-go/internal/checker.(*Checker).isArrayOrTupleType
 func Checker_isArrayOrTupleType(recv *checker.Checker, t *checker.Type) bool
 
+// IsTupleType is the compiler's tuple predicate: a reference whose target
+// carries the tuple object flag. It is narrower than isArrayOrTupleType, which
+// also admits the global Array/ReadonlyArray types, and it is what separates a
+// type with fixed, individually-typed element slots from one with only a number
+// index signature.
+//
+//go:linkname IsTupleType github.com/microsoft/typescript-go/internal/checker.isTupleType
+func IsTupleType(t *checker.Type) bool
+
+// Checker_getTypeArguments returns a type reference's arguments; for a tuple
+// reference those are its element types, in order.
+//
+//go:linkname Checker_getTypeArguments github.com/microsoft/typescript-go/internal/checker.(*Checker).getTypeArguments
+func Checker_getTypeArguments(recv *checker.Checker, t *checker.Type) []*checker.Type
+
+type TupleType = checker.TupleType
+
+const ElementFlagsVariable = checker.ElementFlagsVariable
+
 //go:linkname NewChecker github.com/microsoft/typescript-go/internal/checker.NewChecker
 func NewChecker(program checker.Program, tracer *checker.Tracer) (*checker.Checker, *sync.Mutex)
 

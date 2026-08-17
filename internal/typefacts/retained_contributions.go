@@ -171,6 +171,9 @@ func prepareRetainedContribution(
 		if entity.ArrayShape != "" {
 			target.ArrayShape = entity.ArrayShape
 		}
+		if entity.TupleShape != nil {
+			target.TupleShape = entity.TupleShape
+		}
 		if entity.ReferenceSpace != "" {
 			target.ReferenceSpace = entity.ReferenceSpace
 		}

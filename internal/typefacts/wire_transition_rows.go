@@ -22,6 +22,7 @@ const (
 	wireTransitionEntityHasCallResultDomain
 	wireTransitionEntityHasConstantValue
 	wireTransitionEntityHasArrayShape
+	wireTransitionEntityHasTupleShape
 )
 
 const (
@@ -141,6 +142,20 @@ func writeWireTransitionEntityRun(
 				return fmt.Errorf("entity %d: %w", index, err)
 			}
 		}
+		var tupleElementZero uint64
+		if entity.TupleShape != nil {
+			elementZero := entity.TupleShape.ElementZero
+			if elementZero == "" {
+				elementZero = CallabilityUnknown
+			}
+			tupleElementZero, err = wireTransitionCallabilityCode(elementZero)
+			if err != nil {
+				return fmt.Errorf("entity %d tuple shape: %w", index, err)
+			}
+			if entity.TupleShape.FixedLength < 0 {
+				return fmt.Errorf("entity %d has negative tuple fixed length", index)
+			}
+		}
 
 		start := int64(entity.Location.StartByte)
 		w.signed(start - previousStart)
@@ -173,6 +188,9 @@ func writeWireTransitionEntityRun(
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV9 && entity.ArrayShape != "" {
 			flags |= wireTransitionEntityHasArrayShape
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV10 && entity.TupleShape != nil {
+			flags |= wireTransitionEntityHasTupleShape
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
@@ -215,6 +233,16 @@ func writeWireTransitionEntityRun(
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV9 && entity.ArrayShape != "" {
 			w.u64(arrayShape)
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV10 && entity.TupleShape != nil {
+			// One packed word: the fixed slot count with the rest flag in bit 0,
+			// then element zero's callability code.
+			packed := uint64(entity.TupleShape.FixedLength) << 1
+			if entity.TupleShape.HasRest {
+				packed |= 1
+			}
+			w.u64(packed)
+			w.u64(tupleElementZero)
 		}
 		previousStart = start
 	}

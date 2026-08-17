@@ -28,6 +28,12 @@ new facts:
   array of functions from a function returning an array. `arrayShape` needs no
   companion `callability` demand to make that distinction. Only `notArray`
   proves the negative; `mixed`, `unknown`, and absence are fail-closed.
+- Whether a value satisfies an interface with *numbered* members, such as a
+  `[handler, data]` pair: demand `tupleShape` and require the slot to exist
+  (`fixedLength`, plus `hasRest` for the tail) and `elementZero` to be
+  `callable`. `arrayShape` cannot answer this — it reports `array` for a plain
+  array too, and a plain array has no `0`/`1` property, so it is a type error
+  rather than your finding. Absence means not proven a tuple.
 - Synthetic probe calls and diagnostic filtering: demand `resolvedCall` and
   accept only `valid`.
 - Source-text searches that decide whether an import is type-only or runtime:

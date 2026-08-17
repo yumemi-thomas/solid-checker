@@ -4,6 +4,11 @@ status: accepted
 
 # V1 adds span-exact array shapes
 
+> Historical record. Superseded as active protocol guidance by
+> [ADR 0016](0016-v1-span-exact-tuple-shapes.md); Wire table schema v9
+> remains frozen and decodable. `arrayShape` itself is unchanged and still
+> demanded — 0016 adds the structural detail this one collapses.
+
 ## Decision
 
 The sole active lifecycle schema, V1, includes `EntityDemand.arrayShape` and

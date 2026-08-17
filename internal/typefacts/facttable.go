@@ -18,4 +18,5 @@ const TypeFactsTableSchemaVersionV6 uint64 = 6
 const TypeFactsTableSchemaVersionV7 uint64 = 7
 const TypeFactsTableSchemaVersionV8 uint64 = 8
 const TypeFactsTableSchemaVersionV9 uint64 = 9
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV9
+const TypeFactsTableSchemaVersionV10 uint64 = 10
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV10

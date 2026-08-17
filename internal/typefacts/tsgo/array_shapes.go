@@ -68,3 +68,41 @@ func arrayShapeOfType(typeChecker *checker.Checker, value *checker.Type) typefac
 		return typefacts.ArrayShapeNotArray
 	}
 }
+
+// tupleShapeAtLocked describes the tuple at exactly the demanded expression, or
+// nil when that type is not a tuple.
+//
+// Only a tuple has fixed, individually-typed element slots, which is what a
+// consumer needs to decide whether a value satisfies an interface with numbered
+// members. The global Array/ReadonlyArray types carry a number index signature
+// instead and are deliberately excluded, as is a union: distributing a slot
+// count over constituents would invent a shape none of them has.
+func (p *project) tupleShapeAtLocked(node *ast.Node, evidence *semanticEvidence) *typefacts.TupleShape {
+	if node == nil {
+		return nil
+	}
+	value := p.checker.GetTypeAtLocation(node)
+	if value == nil || value.Flags()&openArrayShapeFlags != 0 || !checker.IsTupleType(value) {
+		return nil
+	}
+	target := value.TargetTupleType()
+	if target == nil {
+		return nil
+	}
+	evidence.descriptor(p.typeDescriptorFor(value))
+
+	shape := typefacts.TupleShape{
+		FixedLength: target.FixedLength(),
+		ElementZero: typefacts.CallabilityUnknown,
+	}
+	for _, flags := range target.ElementFlags() {
+		if flags&checker.ElementFlagsVariable != 0 {
+			shape.HasRest = true
+			break
+		}
+	}
+	if elements := checker.Checker_getTypeArguments(p.checker, value); shape.FixedLength > 0 && len(elements) > 0 {
+		shape.ElementZero = callabilityOfType(p.checker, elements[0])
+	}
+	return &shape
+}

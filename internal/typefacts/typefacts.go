@@ -100,6 +100,30 @@ const (
 	ArrayShapeUnknown  ArrayShape = "unknown"
 )
 
+// TupleShape describes the tuple type at a demanded span: how many fixed
+// element slots it has, whether a rest or variadic tail follows them, and
+// whether the first slot holds a callable value.
+//
+// It is emitted only when the type at the exact demanded span is itself a tuple
+// — never for a union, and never for the global Array/ReadonlyArray types, which
+// have a number index signature instead of fixed slots. Absence therefore means
+// "not proven a tuple", never "not a tuple".
+//
+// This is the structural detail ArrayShape deliberately collapses. A consumer
+// asking whether a value satisfies an interface with numbered members, such as
+// a two-slot bound-handler pair, needs the slot count and the first slot's
+// callability; a consumer asking only "is this iterable as an array" does not.
+type TupleShape struct {
+	// FixedLength counts initial required-or-optional slots, matching the
+	// compiler's own fixedLength.
+	FixedLength int `cbor:"fixedLength,omitempty" json:"fixedLength,omitempty"`
+	// HasRest reports a rest or variadic tail after the fixed slots.
+	HasRest bool `cbor:"hasRest,omitempty" json:"hasRest,omitempty"`
+	// ElementZero is the callability of the first slot's type, or
+	// CallabilityUnknown when there is no fixed first slot.
+	ElementZero Callability `cbor:"elementZero,omitempty" json:"elementZero,omitempty"`
+}
+
 // ReferenceSpace summarizes the semantic meaning of all compiler-resolved
 // references to an imported or aliased symbol.
 type ReferenceSpace string

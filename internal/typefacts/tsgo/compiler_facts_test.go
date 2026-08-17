@@ -1613,3 +1613,221 @@ neverValue;
 		t.Errorf("undemanded array shape = %q, want absent", got)
 	}
 }
+
+func TestDemandedTupleShapeDescribesSlotsAndFirstElement(t *testing.T) {
+	dir := t.TempDir()
+	source := `declare const pair: [(data: number, event: MouseEvent) => void, number];
+declare const numbers: [number, number, number];
+declare const single: [(event: MouseEvent) => void];
+declare const optionalTail: [(event: MouseEvent) => void, number?];
+declare const restTail: [(event: MouseEvent) => void, ...number[]];
+declare const spreadOnly: [...((event: MouseEvent) => void)[]];
+declare const roPair: readonly [(event: MouseEvent) => void, number];
+type Handlers = [(data: number, event: MouseEvent) => void, number];
+declare const aliased: Handlers;
+declare const plainArray: ((event: MouseEvent) => void)[];
+declare const readonlyArray: ReadonlyArray<(event: MouseEvent) => void>;
+declare const maybePair: Handlers | undefined;
+declare const notArray: (event: MouseEvent) => void;
+declare const anyValue: any;
+declare const empty: [];
+
+pair;
+numbers;
+single;
+optionalTail;
+restTail;
+spreadOnly;
+roPair;
+aliased;
+plainArray;
+readonlyArray;
+maybePair;
+notArray;
+anyValue;
+empty;
+`
+	sourcePath := filepath.Join(dir, "tuples.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext","lib":["esnext","dom"]},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	tests := []struct {
+		expression string
+		want       *typefacts.TupleShape
+	}{
+		{`pair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		// A tuple whose first slot is not callable. Structurally a tuple, but
+		// nothing a numbered-member interface expecting a function would accept.
+		{`numbers`, &typefacts.TupleShape{FixedLength: 3, ElementZero: typefacts.CallabilityNonCallable}},
+		{`single`, &typefacts.TupleShape{FixedLength: 1, ElementZero: typefacts.CallabilityCallable}},
+		// An optional slot still counts toward fixedLength, matching the compiler.
+		{`optionalTail`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		{`restTail`, &typefacts.TupleShape{FixedLength: 1, HasRest: true, ElementZero: typefacts.CallabilityCallable}},
+		{`roPair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		// The alias is transparent, exactly as it is to arrayShape.
+		{`aliased`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		{`empty`, &typefacts.TupleShape{FixedLength: 0, ElementZero: typefacts.CallabilityUnknown}},
+		// Arrays have a number index signature, not fixed slots. This is the
+		// distinction arrayShape collapses and the duplicate it left open.
+		{`plainArray`, nil},
+		{`readonlyArray`, nil},
+		// The compiler normalizes a spread-only tuple to the array type it is
+		// equivalent to, so this is not a tuple by the time we see it. That is
+		// TypeScript's reduction, not ours, and it is why no case here produces
+		// a zero fixed length with a rest tail.
+		{`spreadOnly`, nil},
+		// A union is not itself a tuple; distributing a slot count would invent
+		// a shape no constituent has.
+		{`maybePair`, nil},
+		{`notArray`, nil},
+		{`anyValue`, nil},
+	}
+	demands := make([]typefacts.EntityDemand, len(tests))
+	for index, testCase := range tests {
+		start := strings.LastIndex(source, testCase.expression)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.expression)
+		}
+		demands[index] = typefacts.EntityDemand{
+			Location:   typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(testCase.expression)},
+			TupleShape: true,
+		}
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, testCase := range tests {
+		got := entities[index].TupleShape
+		if testCase.want == nil {
+			if got != nil {
+				t.Errorf("%s tuple shape = %+v, want absent", testCase.expression, got)
+			}
+			continue
+		}
+		if got == nil || *got != *testCase.want {
+			t.Errorf("%s tuple shape = %+v, want %+v", testCase.expression, got, testCase.want)
+		}
+	}
+
+	undemanded, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+		Location:   demands[0].Location,
+		ArrayShape: true,
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := undemanded[0].TupleShape; got != nil {
+		t.Errorf("undemanded tuple shape = %+v, want absent", got)
+	}
+	if got := undemanded[0].ArrayShape; got != typefacts.ArrayShapeArray {
+		t.Errorf("array shape of a tuple = %q, want %q", got, typefacts.ArrayShapeArray)
+	}
+}
+
+// Contextual typing decides whether a JSX array literal becomes a tuple, and
+// consumers depend on that: a literal in a position typed by an interface with
+// numbered members gets fixed slots, while the same literal in an unconstrained
+// position stays a plain array. The distinction is what lets a consumer tell
+// "the checker examined this and it is not a valid pair" from "nothing here
+// constrains it".
+func TestContextualTypingDecidesJsxLiteralTupleness(t *testing.T) {
+	dir := t.TempDir()
+	globals := `declare namespace JSX {
+  interface EventHandler<T, E> { (e: E & { currentTarget: T; target: Element }): void }
+  interface BoundEventHandler<T, E, EH extends EventHandler<T, any> = EventHandler<T, E>> {
+    0: (data: any, ...e: Parameters<EH>) => void;
+    1: any;
+  }
+  type EventHandlerUnion<T, E, EH extends EventHandler<T, any> = EventHandler<T, E>> =
+    EH | BoundEventHandler<T, E, EH>;
+  interface IntrinsicElements {
+    button: { onClick?: EventHandlerUnion<HTMLButtonElement, MouseEvent> };
+    loose: any;
+  }
+  interface Element {}
+}
+`
+	source := `declare const handler: (data: number, event: MouseEvent) => void;
+
+export const Pair = () => <button onClick={[handler, 1]} />;
+export const NotAPair = () => <button onClick={[1, 2, 3]} />;
+export const Unconstrained = () => <loose onClick={[handler, 1]} />;
+`
+	sourcePath := filepath.Join(dir, "contextual.tsx")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"jsx":"preserve","module":"esnext","target":"esnext","lib":["esnext","dom"]},"include":["*.tsx","*.d.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "globals.d.ts"), []byte(globals), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	tests := []struct {
+		name    string
+		literal string
+		nth     int
+		want    *typefacts.TupleShape
+	}{
+		{"bound pair", "[handler, 1]", 0, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		{"wrong element types", "[1, 2, 3]", 0, &typefacts.TupleShape{FixedLength: 3, ElementZero: typefacts.CallabilityNonCallable}},
+		// Same literal, unconstrained position: no fixed slots at all.
+		{"unconstrained", "[handler, 1]", 1, nil},
+	}
+	for _, testCase := range tests {
+		start, seen := -1, -1
+		for offset := 0; ; {
+			index := strings.Index(source[offset:], testCase.literal)
+			if index < 0 {
+				break
+			}
+			seen++
+			start = offset + index
+			offset = start + 1
+			if seen == testCase.nth {
+				break
+			}
+		}
+		if start < 0 {
+			t.Fatalf("%s: %q not found", testCase.name, testCase.literal)
+		}
+		entities, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{{
+			Location:   typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(testCase.literal)},
+			TupleShape: true,
+			ArrayShape: true,
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		got := entities[0].TupleShape
+		switch {
+		case testCase.want == nil && got != nil:
+			t.Errorf("%s tuple shape = %+v, want absent", testCase.name, got)
+		case testCase.want != nil && (got == nil || *got != *testCase.want):
+			t.Errorf("%s tuple shape = %+v, want %+v", testCase.name, got, testCase.want)
+		}
+		// Every one of them is array-shaped, which is precisely why arrayShape
+		// alone could not separate them.
+		if entities[0].ArrayShape != typefacts.ArrayShapeArray {
+			t.Errorf("%s array shape = %q, want %q", testCase.name, entities[0].ArrayShape, typefacts.ArrayShapeArray)
+		}
+	}
+}

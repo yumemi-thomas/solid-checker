@@ -117,8 +117,16 @@ func entityFactEqual(left, right EntityFact) bool {
 		runtimeValueDomainEqual(left.CallResultDomain, right.CallResultDomain) &&
 		constantValueEqual(left.ConstantValue, right.ConstantValue) &&
 		left.ArrayShape == right.ArrayShape &&
+		tupleShapeEqual(left.TupleShape, right.TupleShape) &&
 		typeDescriptorEqual(left.TypeDescriptor, right.TypeDescriptor) &&
 		resolvedCallEqual(left.ResolvedCall, right.ResolvedCall)
+}
+
+func tupleShapeEqual(left, right *TupleShape) bool {
+	if left == nil || right == nil {
+		return left == right
+	}
+	return *left == *right
 }
 
 func constantValueEqual(left, right *ConstantValue) bool {
