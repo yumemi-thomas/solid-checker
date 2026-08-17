@@ -413,7 +413,7 @@ mod tests {
         );
         assert_eq!(
             solid_v1_rules::Rule::ALL.len() - 24,
-            18,
+            17,
             "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
         assert_eq!(

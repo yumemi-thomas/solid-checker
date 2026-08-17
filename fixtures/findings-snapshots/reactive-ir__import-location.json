@@ -2,18 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/imports",
-      "code": "SC8002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/import-location/App.tsx",
-      "start": 562,
-      "end": 573,
-      "fixes": 1,
-      "message": "\"createStore\" is imported from \"solid-js\", which does not export it; solid-js exports it from \"solid-js/store\"",
-      "hint": "Import \"createStore\" from \"solid-js/store\". The export lists are extracted from the installed package, so this is where that version actually exports the name."
-    },
-    {
       "rule": "v1/package-contract-export-missing",
       "code": "SC9001",
       "kind": "uncertifiable",
@@ -26,18 +14,6 @@
       "hint": "Add an export summary for createStore to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/imports",
-      "code": "SC8002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/import-location/App.tsx",
-      "start": 854,
-      "end": 860,
-      "fixes": 1,
-      "message": "\"Portal\" is imported from \"solid-js\", which does not export it; solid-js exports it from \"solid-js/web\"",
-      "hint": "Import \"Portal\" from \"solid-js/web\". The export lists are extracted from the installed package, so this is where that version actually exports the name."
-    },
-    {
       "rule": "v1/package-contract-export-missing",
       "code": "SC9001",
       "kind": "uncertifiable",
@@ -48,30 +24,6 @@
       "fixes": 0,
       "message": "the reactivity contract for solid-js has no entrypoint/export summary for imported export Portal; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
       "hint": "Add an export summary for Portal to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
-    },
-    {
-      "rule": "v1/imports",
-      "code": "SC8002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/import-location/App.tsx",
-      "start": 1857,
-      "end": 1862,
-      "fixes": 0,
-      "message": "\"Store\" is imported from \"solid-js\", which does not export it; solid-js exports it from \"solid-js/store\"",
-      "hint": "Import \"Store\" from \"solid-js/store\". The export lists are extracted from the installed package, so this is where that version actually exports the name."
-    },
-    {
-      "rule": "v1/imports",
-      "code": "SC8002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/import-location/App.tsx",
-      "start": 2035,
-      "end": 2041,
-      "fixes": 1,
-      "message": "\"unwrap\" is imported from \"solid-js\", which does not export it; solid-js exports it from \"solid-js/store\"",
-      "hint": "Import \"unwrap\" from \"solid-js/store\". The export lists are extracted from the installed package, so this is where that version actually exports the name."
     },
     {
       "rule": "v1/package-contract-export-missing",
@@ -98,18 +50,6 @@
       "hint": "Proxies are unavailable on engines without ES2015 Proxy support."
     },
     {
-      "rule": "v1/imports",
-      "code": "SC8002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/import-location/App.tsx",
-      "start": 2206,
-      "end": 2218,
-      "fixes": 0,
-      "message": "\"createSignal\" is imported from \"solid-js/store\", which does not export it; solid-js exports it from \"solid-js\"",
-      "hint": "Import \"createSignal\" from \"solid-js\". The export lists are extracted from the installed package, so this is where that version actually exports the name."
-    },
-    {
       "rule": "v1/package-contract-export-missing",
       "code": "SC9001",
       "kind": "uncertifiable",
@@ -122,18 +62,6 @@
       "hint": "Add an export summary for createSignal to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/imports",
-      "code": "SC8002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/import-location/App.tsx",
-      "start": 2220,
-      "end": 2230,
-      "fixes": 0,
-      "message": "\"createMemo\" is imported from \"solid-js/store\", which does not export it; solid-js exports it from \"solid-js\"",
-      "hint": "Import \"createMemo\" from \"solid-js\". The export lists are extracted from the installed package, so this is where that version actually exports the name."
-    },
-    {
       "rule": "v1/package-contract-export-missing",
       "code": "SC9001",
       "kind": "uncertifiable",
@@ -144,18 +72,6 @@
       "fixes": 0,
       "message": "the reactivity contract for solid-js/store has no entrypoint/export summary for imported export createMemo; solid-checker cannot tell whether it reads reactive values, takes tracked callbacks, or returns accessors, so code flowing through it cannot be certified",
       "hint": "Add an export summary for createMemo to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
-    },
-    {
-      "rule": "v1/imports",
-      "code": "SC8002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/import-location/App.tsx",
-      "start": 2402,
-      "end": 2408,
-      "fixes": 0,
-      "message": "\"render\" is imported from \"solid-js\", which does not export it; solid-js exports it from \"solid-js/web\"",
-      "hint": "Import \"render\" from \"solid-js/web\". The export lists are extracted from the installed package, so this is where that version actually exports the name."
     },
     {
       "rule": "v1/package-contract-export-missing",

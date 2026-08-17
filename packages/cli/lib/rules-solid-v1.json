@@ -24,7 +24,6 @@
     { "code": "SC5004", "name": "v1/no-async-tracked-scope", "severity": "warning", "uncertifiable": false },
     { "code": "SC9011", "name": "v1/reactive-source-uncaptured", "severity": "warning", "uncertifiable": true },
     { "code": "SC8001", "name": "v1/event-handlers", "severity": "warning", "uncertifiable": false },
-    { "code": "SC8002", "name": "v1/imports", "severity": "warning", "uncertifiable": false },
     { "code": "SC8003", "name": "v1/jsx-no-duplicate-props", "severity": "error", "uncertifiable": false },
     { "code": "SC8004", "name": "v1/jsx-no-script-url", "severity": "error", "uncertifiable": false },
     { "code": "SC8005", "name": "v1/jsx-no-undef", "severity": "error", "uncertifiable": false },

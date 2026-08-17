@@ -16,7 +16,10 @@ documentation.
 > subpath discussion below describes the `1.x` branch's wire-version-2 contract
 > shape, which this branch does not have: here the bundled 1.x contract is
 > keyed by export name and the subpath question is answered by
-> `Dialect::export_modules`, reported as SC8002 (`v1/imports`).
+> `Dialect::export_modules`. SC8002 (`v1/imports`) reported the mismatch until
+> 2026-08-17, when it was removed as a duplicate of TS2305 ("Module
+> '"solid-js/web"' has no exported member 'createEffect'"); the export index
+> itself is unaffected and still answers the question for the contract layer.
 >
 > That index is *generated* from the installed package, not read from this
 > file, and the two are cross-checked: a dialect test asserts every name in
@@ -54,9 +57,13 @@ subpath — `.`, `./store`, `./web` — and the emitted sets are exact: an expor
 appears only under the subpaths that actually provide it, and the generator
 refuses to emit a document that lists `createStore` under `.`. Wrong-subpath
 imports are the import gate's business rather than the contract's:
-`import { createStore } from "solid-js"` is reported as SC8002
-([`v1/imports`](rules/v1/imports.md)), answered by `Dialect::export_modules`
-from the per-subpath export index generated from the installed package. (The
+`import { createStore } from "solid-js"` *was* reported as SC8002
+(`v1/imports`), answered by `Dialect::export_modules` from the per-subpath
+export index generated from the installed package. That rule was removed on
+2026-08-17: its one condition -- the named module does not export the name -- is
+exactly TS2305's, so the diagnostic duplicated the type checker
+(docs/precision-backlog.md). `Dialect::export_modules` and the generated index
+remain, and are still consumed by the contract layer. (The
 `1.x` branch instead ships wire-version-2 contract units whose `scope` carries
 a `moduleSubpath` and reports the mismatch as its own rule,
 `package-contract-subpath-mismatch` / SC9010 — neither the shape nor the rule

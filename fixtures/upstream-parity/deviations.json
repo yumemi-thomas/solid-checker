@@ -332,6 +332,34 @@
     "reactivity__invalid__22": {
       "status": "policy",
       "reason": "Narrowed under AGENTS.md's absolute rule: the computed-property-access position is TS2538 against the real solid-js@1.9.14 typings (\"Type 'Accessor<number>' cannot be used as an index type\"), in either dialect. The rule survives on the positions where an uncalled accessor is *legal* to TypeScript and silently wrong at runtime: a string-concatenation binary operand (`\"hello \" + label`, which renders the accessor's own source text), a unary operand, and a template-literal interpolation. Pinned by fixtures/reactive-ir/uncalled-accessor-v2 and fixtures/tsc-oracle/rule-cases.json."
+    },
+    "imports__invalid__00": {
+      "status": "policy",
+      "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "imports__invalid__01": {
+      "status": "policy",
+      "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "imports__invalid__02": {
+      "status": "policy",
+      "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "imports__invalid__03": {
+      "status": "policy",
+      "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "imports__invalid__04": {
+      "status": "policy",
+      "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "imports__invalid__05": {
+      "status": "policy",
+      "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "imports__invalid__06": {
+      "status": "policy",
+      "reason": "Removed under AGENTS.md's absolute rule. SC8002 fired on exactly one condition -- the module named in the import does not export the name -- and that is exactly TS2305's condition: \"Module '\\\"solid-js/web\\\"' has no exported member 'createEffect'\", in both a strict and a non-strict pass, for value and type positions alike (verified against the real solid-js@1.9.14 typings). There was no second arm: a name exported by *both* modules already returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Offering a module-rewrite autofix is explicitly not an exception to the rule. Pinned by fixtures/tsc-oracle/rule-cases.json."
     }
   },
   "counts": {
@@ -361,36 +389,6 @@
     }
   },
   "outputs": {
-    "imports__invalid__00": {
-      "ours": "import { createEffect } from \"solid-js\";",
-      "status": "different-strategy",
-      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Here the wrong declaration is the whole file, and upstream's replacement statement ends with a newline, so its recorded output carries a trailing \"\\n\" that an in-place specifier rewrite has no reason to add."
-    },
-    "imports__invalid__01": {
-      "ours": "import { createEffect } from \"solid-js\";\nimport { createSignal } from \"solid-js\";",
-      "status": "different-strategy",
-      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Upstream merges `createEffect` into the existing \"solid-js\" declaration; the in-place rewrite leaves two declarations of \"solid-js\", which is legal TypeScript and imports exactly the same two bindings."
-    },
-    "imports__invalid__02": {
-      "ours": "import type { Component } from \"solid-js\";\nimport { createSignal } from \"solid-js\";\nconsole.log('hi');",
-      "status": "different-strategy",
-      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Upstream's merge moves `Component` out of `import type` and into the value import, dropping the type-only modifier; the in-place rewrite keeps `import type { Component } from \"solid-js\"`, which is what verbatimModuleSyntax and isolatedModules require of a type-only name. Ours is the safer text here, not merely a different one."
-    },
-    "imports__invalid__03": {
-      "ours": "import { createSignal } from \"solid-js\";\nimport \"solid-js\";",
-      "status": "different-strategy",
-      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Upstream consumes the side-effect declaration `import \"solid-js\";` by giving it the named clause; the in-place rewrite leaves it standing next to the corrected import. A bare `import \"solid-js\"` alongside a named import of the same module is redundant but inert -- it requests the same module record that is already being loaded."
-    },
-    "imports__invalid__04": {
-      "ours": "import { createSignal } from \"solid-js\";\nimport {} from \"solid-js\";",
-      "status": "different-strategy",
-      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. As imports__invalid__03, with an empty clause (`import {} from \"solid-js\";`) as the declaration upstream fills and the checker leaves standing."
-    },
-    "imports__invalid__05": {
-      "ours": "import { createEffect } from \"solid-js\";\nimport { render } from \"solid-js/web\";",
-      "status": "different-strategy",
-      "reason": "Upstream's imports fix relocates the specifier: it deletes the name from the wrong declaration and splices it into a declaration of the right module. The checker's fix rewrites the offending module specifier string in place instead, so no name moves between statements. Both end with a program importing the same bindings from the same modules. Both declarations are wrong in this case -- `createEffect` from \"solid-js/web\" and `render` from \"solid-js\" -- and the checker corrects both in one pass. ESLint applies one pass and skips the second fix because it overlaps the first's insertion into the same declaration, so upstream's recorded output still imports `render` from \"solid-js\", where it is not exported. Upstream's output is an intermediate state a second lint pass would carry further; ours is the finished program."
-    },
     "no-react-deps__invalid__00": {
       "ours": "createEffect(() => {\n        console.log(signal());\n      });",
       "status": "tighter-cleanup",

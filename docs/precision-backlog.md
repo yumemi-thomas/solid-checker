@@ -51,12 +51,13 @@ deliberately loose (`static-api`, `static-api-unresolved`, whose subject *is*
 the malformed call) the stub now says so in a comment naming the real signature
 and asserting that no surviving rule's proof depends on the looseness.
 
-### Removed: seven rules, 63 findings (601 → 538)
+### Removed: eight rules, 72 findings
 
 Every one is a **violation the type system already reports on the same code**,
-or an **obligation whose whole domain the type system closes**. All seven are
-2.0-catalog rules, so `scripts/parity.mjs` is unaffected (422/465, all 59
-deviations declared, before and after).
+or an **obligation whose whole domain the type system closes**. The first seven
+are 2.0-catalog rules, so they left `scripts/parity.mjs` untouched; the eighth,
+`v1/imports`, is a 1.x rule and its seven upstream cases are declared
+`status: "policy"`.
 
 | Code | Rule | Findings | Why |
 | --- | --- | --- | --- |
@@ -67,6 +68,7 @@ deviations declared, before and after).
 | SC7004 | `affects-keys-on-accessor` | 2 | A key on an accessor target selects the one-argument overload; the key is TS2345 |
 | SC9003 | `refresh-target-unresolved` | 3 | Asked whether the target carries the brand — a question the type answers |
 | SC9003 | `affects-target-unresolved` | 3 | Same |
+| SC8002 | `v1/imports` | 9 | Its one condition — the named module does not export the name — is exactly TS2305's; audited later, see below |
 
 #### SC3004 `invalid-cleanup-return`
 
@@ -305,14 +307,23 @@ from "solid-js/store"` as a defect, on the grounds that it is TS2305 and no real
 project compiles it. That reading was wrong: importing a name from the wrong
 module **is** `v1/imports`'s subject, so the case is deliberate and correct.
 
-It does raise a live question the ledger should carry rather than assume:
-`v1/imports` (SC8002, 9 findings) asserts that a Solid name lives in a different
-module, and TS2305 "Module '\"solid-js/store\"' has no exported member
-'createSignal'" appears to assert the same thing. The rule also covers a name
-exported by *both* modules as a style preference, where TypeScript is silent, so
-it is at minimum partially redundant. **Unaudited** — it needs the same
-spelling-by-spelling probe the five narrowed rules got, and it is the largest
-remaining candidate.
+It did raise a live question, and auditing it removed an eighth rule.
+`v1/imports` (SC8002) fired on exactly one condition — the module named in the
+import does not export the name — which is exactly TS2305's condition:
+
+~~~
+imp.tsx(1,10) TS2305: Module '"solid-js/web"' has no exported member 'createEffect'.
+imp.tsx(2,10) TS2305: Module '"solid-js"' has no exported member 'render'.
+imp.tsx(3,15) TS2305: Module '"solid-js/store"' has no exported member 'Component'.
+~~~
+
+Both passes, and value and type positions alike. The second arm I assumed it had
+does not exist: a name exported by *both* modules returns early, so the style
+preference upstream expresses for `import { Show } from "solid-js/web"` was never
+reported here — verified silent, and pinned as such. Its module-rewrite autofix
+was genuinely useful, and offering an autofix is explicitly not an exception.
+**Removed**, 9 findings; `Dialect::export_modules` and the generated per-subpath
+export index remain, still consumed by the contract layer.
 
 ## Compiler-faithful heuristics (verified against the 1.x compiler, do not "fix")
 

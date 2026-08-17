@@ -2,18 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/imports",
-      "code": "SC8002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 720,
-      "end": 731,
-      "fixes": 1,
-      "message": "\"createStore\" is imported from \"solid-js\", which does not export it; solid-js exports it from \"solid-js/store\"",
-      "hint": "Import \"createStore\" from \"solid-js/store\". The export lists are extracted from the installed package, so this is where that version actually exports the name."
-    },
-    {
       "rule": "v1/no-proxy-apis",
       "code": "SC8009",
       "kind": "violation",

@@ -48,8 +48,8 @@ that exact rule in the shared project configuration described below.
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
 | Shared concepts (24 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
-| Version-only concepts | 18 rules: `v1/no-async-tracked-scope` plus the SC8001–SC8017 ESLint-era surface | 12 rules: actions, `flush`, `resolve`, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 42 rules | 36 rules |
+| Version-only concepts | 17 rules: `v1/no-async-tracked-scope` plus the SC8001–SC8017 ESLint-era surface | 12 rules: actions, `flush`, `resolve`, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
+| Catalog size | 41 rules | 36 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -238,7 +238,6 @@ plugin keeps its rule names under the `v1/` namespace.
 | SC6001 | [v1/primitive-in-directive-application](v1/primitive-in-directive-application.md) | error |
 | SC7001 | [v1/missing-effect-function](v1/missing-effect-function.md) | error |
 | SC8001 | [v1/event-handlers](v1/event-handlers.md) | warning |
-| SC8002 | [v1/imports](v1/imports.md) | warning |
 | SC8003 | [v1/jsx-no-duplicate-props](v1/jsx-no-duplicate-props.md) | error |
 | SC8004 | [v1/jsx-no-script-url](v1/jsx-no-script-url.md) | error |
 | SC8005 | [v1/jsx-no-undef](v1/jsx-no-undef.md) | error |

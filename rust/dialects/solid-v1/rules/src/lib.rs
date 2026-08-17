@@ -226,7 +226,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::EventHandlers => {
             "the native JSX attribute spelling does not match Solid's event-handler contract"
         }
-        Rule::Imports => "the import resolves to a module that does not own this Solid export",
         Rule::JsxNoDuplicateProps => "the same JSX property is assigned more than once",
         Rule::JsxNoScriptUrl => "the statically resolved URL uses the javascript: scheme",
         Rule::JsxNoUndef => "the JSX name has no value-space binding in lexical scope",

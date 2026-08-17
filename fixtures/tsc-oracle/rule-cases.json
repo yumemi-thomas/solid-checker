@@ -266,6 +266,23 @@
       "expect": "silent",
       "why": "SC1007's surviving arm. A callable handler read out of reactive props type checks, so TypeScript is silent, and the claim is a timing one no type expresses: a native listener receives its function value once during DOM setup, so reading it through reactive props freezes the initial handler. The accessor-holding-a-function call is here too, as the spelling the removal deliberately stopped reporting.",
       "code": "import { createSignal } from \"solid-js\";\nconst [handler] = createSignal(() => {});\nconst Comp = (props: { onSave: () => void }) => (\n  <div>\n    <button onClick={props.onSave} />\n    <button onClick={handler()} />\n  </div>\n);\nexport default Comp;\n"
+    },
+    {
+      "rule": "v1/imports",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "why": "SC8002, removed 2026-08-17. The rule fired on exactly one condition -- the module named in the import does not export the name -- which is exactly TS2305's condition, for value and type positions alike. It had no second arm: a name exported by both modules returned early, so the style preference upstream expresses for `import { Show } from \"solid-js/web\"` was never reported here. Its module-rewrite autofix was genuinely useful, and offering an autofix is explicitly not an exception.",
+      "allow": [
+        2305
+      ],
+      "code": "import { createEffect } from \"solid-js/web\";\nimport { render } from \"solid-js\";\nimport type { Component } from \"solid-js/store\";\nexport const use = { createEffect, render };\nexport type C = Component;\n"
+    },
+    {
+      "rule": "v1/imports",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "The case SC8002 already returned early on, kept to show the removal took nothing with it: 1.x's web entry re-exports nine control-flow components, so `Show` is exported by both modules and TypeScript is silent. Upstream reports this as a style preference; this checker never did.",
+      "code": "import { Show } from \"solid-js/web\";\nexport const use = { Show };\n"
     }
   ]
 }

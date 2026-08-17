@@ -12,16 +12,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/imports",
-      "code": "SC8002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/store-subpath/wrong-subpath.tsx",
-      "start": 9,
-      "end": 20,
-      "fixes": 1
-    },
-    {
       "rule": "v1/package-contract-export-missing",
       "code": "SC9001",
       "kind": "uncertifiable",

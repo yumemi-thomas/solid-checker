@@ -49,7 +49,6 @@ pub enum Rule {
     // identifiers used for no-unused-vars, and TypeScript reference facts
     // already model those uses, so nothing here ever emits it.
     EventHandlers,
-    Imports,
     JsxNoDuplicateProps,
     JsxNoScriptUrl,
     JsxNoUndef,
@@ -87,7 +86,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 42] = [
+    pub const ALL: [Self; 41] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -107,7 +106,6 @@ impl Rule {
         Self::NoAsyncTrackedScope,
         Self::ReactiveSourceUncaptured,
         Self::EventHandlers,
-        Self::Imports,
         Self::JsxNoDuplicateProps,
         Self::JsxNoScriptUrl,
         Self::JsxNoUndef,
@@ -174,7 +172,6 @@ impl Rule {
                 ("SC9011", "v1/reactive-source-uncaptured", "warning", true)
             }
             Self::EventHandlers => ("SC8001", "v1/event-handlers", "warning", false),
-            Self::Imports => ("SC8002", "v1/imports", "warning", false),
             Self::JsxNoDuplicateProps => ("SC8003", "v1/jsx-no-duplicate-props", "error", false),
             Self::JsxNoScriptUrl => ("SC8004", "v1/jsx-no-script-url", "error", false),
             Self::JsxNoUndef => ("SC8005", "v1/jsx-no-undef", "error", false),
@@ -342,7 +339,6 @@ mod tests {
         for (code, name) in [
             ("SC5004", "no-async-tracked-scope"),
             ("SC8001", "event-handlers"),
-            ("SC8002", "imports"),
             ("SC8003", "jsx-no-duplicate-props"),
             ("SC8004", "jsx-no-script-url"),
             ("SC8005", "jsx-no-undef"),

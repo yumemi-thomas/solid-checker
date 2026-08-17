@@ -21,7 +21,6 @@
 
 mod shared_reactivity;
 mod solid1x_attributes;
-mod solid1x_imports;
 pub mod solid1x_options;
 mod solid1x_structure;
 mod solid1x_syntax;
@@ -619,7 +618,6 @@ fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiag
         solid1x_syntax::check_file(file, context, &mut violations);
         solid1x_attributes::check_file(file, context, &mut violations);
         solid1x_structure::check_file(file, context, &mut violations);
-        solid1x_imports::check_file(file, context, &mut violations);
         solid1x_undef::check_file(file, context, &mut violations);
     }
     shared_reactivity::check_file(file, context, &mut violations, &mut defects);
