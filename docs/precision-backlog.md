@@ -825,24 +825,32 @@ too — confirmed for `((event: MouseEvent) => void)[]`, `ReadonlyArray<...>`,
 `arrayShape` could not settle it, by construction: it reports `array` for a plain
 array and a tuple alike, because both of its consumers wanted the union of them.
 The condition that is genuinely this rule's is not "array or tuple" but **"a
-tuple with both numbered slots whose first is callable"** — exactly what
-`BoundEventHandler` accepts and `tsc` therefore permits.
+tuple with both numbered slots whose first can be called with `(data, event)`"**
+— exactly what `BoundEventHandler` accepts and `tsc` therefore permits.
 
-`tupleShape` (`solid-ts-facts` `01a7150`, ADR 0016) supplies it: fixed slot count,
-whether a rest tail follows, and the first slot's callability, present only when
-the type at the exact span is itself a tuple. The rule now fires on that and
-nothing else. `tsc` names each removed shape's reason precisely, which is how the
-partition was checked:
+`tupleShape` (`solid-ts-facts` `b9d1a8e`, ADR 0016) supplies it: fixed slot count,
+whether a rest tail follows, and the first slot's callability *and minimum
+arity*, present only when the type at the exact span is itself a tuple. The rule
+now fires on that and nothing else. `tsc` names each removed shape's reason
+precisely, which is how the partition was checked:
 
 ~~~
 ((event: MouseEvent) => void)[]      missing the following properties: 0, 1
 [number, number]                     Types of property '0' are incompatible
 [(event: MouseEvent) => void]        Property '1' is missing
 [1, 2, 3]                            Type 'number' is not assignable to (data: any, e) => void
+[(a, b, c) => void, number]          Target signature provides too few arguments
 ~~~
 
+The last row is the arity residual, closed by an amendment to ADR 0016.
+`elementZero` says the slot is callable, which does not settle whether it can be
+*invoked* with the two arguments Solid passes: `BoundEventHandler` types slot 0
+as `(data: any, ...e: Parameters<EHandler>) => void`, and `EventHandler` takes
+one parameter. A handler requiring three is callable, and not callable here.
+Adding `elementZeroMinimumParameters` took the fixture's SC8007 count from 6 to 5.
+
 Against the fixture, `handler-cases.tsx` now holds every SC8007 and produces
-**zero** `tsc` diagnostics, while `clean-cases.tsx` produces seven and **zero**
+**zero** `tsc` diagnostics, while `clean-cases.tsx` produces eight and **zero**
 findings. The rule and the type checker partition the space exactly.
 
 **Contextual typing is what makes this work, and it is load-bearing.** An array

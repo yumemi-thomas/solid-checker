@@ -36,6 +36,10 @@ declare const safe: SafeArray<number>;
 declare const plainArray: ((event: MouseEvent) => void)[];
 declare const notCallableHead: [number, number];
 declare const oneSlot: [(event: MouseEvent) => void];
+// Callable, but not callable *here*: Solid invokes slot 0 with exactly
+// `(data, event)`, and a handler requiring a third argument is not
+// assignable to that. Callability alone cannot see this.
+declare const overArity: [(a: number, b: MouseEvent, c: string) => void, number];
 
 // Ordinary handlers.
 const plain = (event: MouseEvent) => console.log(event);
@@ -61,6 +65,7 @@ export function CleanHandlers() {
       <button onClick={plainArray} />
       <button onClick={notCallableHead} />
       <button onClick={oneSlot} />
+      <button onClick={overArity} />
       <button onClick={[1, 2, 3]} />
       {/* `on:` takes no bound-handler tuple at all, so TypeScript rejects every
           array and tuple here and this rule stays out of it. Both spellings are

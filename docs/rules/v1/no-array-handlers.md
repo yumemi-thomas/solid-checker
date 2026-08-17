@@ -9,14 +9,16 @@ bound-handler pair.
 
 Checks conventional `onEvent` props on lowercase JSX elements, and reports
 exactly the values Solid's own types accept there: a tuple with both numbered
-slots whose first slot is callable.
+slots whose first slot can be called with `(data, event)`.
 
 That set is the rule's because it is the set `tsc` permits. `onEvent` is typed
 `EventHandlerUnion = EHandler | BoundEventHandler`, and `BoundEventHandler` is
-an interface with members `0` and `1` whose `0` must be callable. A plain array
-has no numbered members, a tuple with a non-callable first slot fails at element
-0, and a one-slot tuple has no `1` — every one of those is already `TS2322`, so
-the rule stays out of them.
+an interface whose `0` is `(data: any, ...e: Parameters<EHandler>) => void` and
+whose `1` is `any`. A plain array has no numbered members, a tuple with a
+non-callable first slot fails at element 0, a one-slot tuple has no `1`, and a
+first slot requiring three arguments is not assignable to a two-argument
+signature — every one of those is already `TS2322`, so the rule stays out of
+them.
 
 The compiler decides tupleness (`tupleShape`), so an imported or aliased tuple is
 recognized however it is spelled. When no type constrains the attribute at all —

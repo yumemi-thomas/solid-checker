@@ -1263,7 +1263,7 @@ dependencies = [
 [[package]]
 name = "typefacts"
 version = "0.9.0"
-source = "git+https://github.com/yumemi-thomas/solid-ts-facts?rev=01a715055e5fe94120e9a86bee715ad5f3eb40ff#01a715055e5fe94120e9a86bee715ad5f3eb40ff"
+source = "git+https://github.com/yumemi-thomas/solid-ts-facts?rev=b9d1a8e2075d7fb8c30b8d851069ad062ceb7910#b9d1a8e2075d7fb8c30b8d851069ad062ceb7910"
 dependencies = [
  "ciborium",
  "serde",

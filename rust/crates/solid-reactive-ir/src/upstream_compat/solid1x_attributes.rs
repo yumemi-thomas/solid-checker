@@ -36,7 +36,7 @@ use super::{
     violation,
 };
 use crate::StaticViolation;
-use typefacts::{ArrayShape, Callability};
+use typefacts::ArrayShape;
 
 pub(super) fn check_file(
     file: &FileFacts,
@@ -864,9 +864,11 @@ fn no_array_handlers(
             // alias, a binding in another file, and an inline literal all reduce
             // to the same slot count and first-slot callability.
             if let Some(tuple) = super::expression_tuple_shape(context, file, span) {
-                return tuple.has_slot(0)
-                    && tuple.has_slot(1)
-                    && tuple.element_zero == Some(Callability::Callable);
+                // Slot 0 is typed `(data: any, ...e: Parameters<EHandler>) => void`
+                // and `EventHandler` takes one parameter, so Solid calls it with
+                // exactly two arguments. A handler requiring three is not
+                // assignable and is TS2322 — callable, but not callable *here*.
+                return tuple.has_slot(0) && tuple.has_slot(1) && tuple.element_zero_accepts(2);
             }
             let source = text(file, span).trim();
             // A cast vouches for the value, as it does upstream, and it has to

@@ -17,7 +17,8 @@ which is what makes it two files that must each stay exactly as they are:
   tuple, a tuple returned from a call, a readonly tuple, and an inline literal.
 - **`clean-cases.tsx`** — the negatives, and the fixture's other half. Four are
   the shapes the `tupleShape` narrowing removed (a plain array, a tuple with a
-  non-callable first slot, a one-slot tuple, `[1, 2, 3]`); two are the `on:`
+  non-callable first slot, a one-slot tuple, `[1, 2, 3]`, and a first slot
+  requiring three arguments where Solid passes two); two are the `on:`
   cases; the rest are negatives a weaker classification would break —
   `arrayReturning: () => string[]`, which renders with the same trailing `[]` as
   an array of functions, and `SafeArray<T> extends Array<T>`, which is
@@ -52,8 +53,10 @@ never *proven* an array, so the `<For each>` rewrite was withheld from code it
 was correct for.
 
 **`tupleShape` (ADR 0016) closed the duplicates `arrayShape` could not.**
-`arrayShape` alone reports 9 SC8007 here; `tupleShape` narrows that to 5,
-removing exactly the four `tsc` already rejects:
+`arrayShape` calls every row below `array`, so it could not exclude any of them.
+`tupleShape` narrows SC8007 here to 5, removing exactly the five `tsc` already
+rejects — the last row needing the minimum-arity field, which alone took the
+count from 6 to 5:
 
 | Case | `arrayShape` only | `tupleShape` | `tsc` says |
 | --- | --- | --- | --- |
@@ -61,6 +64,7 @@ removing exactly the four `tsc` already rejects:
 | `onClick={notCallableHead}` | SC8007 | silent | property `0` incompatible |
 | `onClick={oneSlot}` | SC8007 | silent | property `1` missing |
 | `onClick={[1, 2, 3]}` | SC8007 | silent | element 0 not a handler |
+| `onClick={overArity}` | SC8007 | silent | signature provides too few arguments |
 
 No legitimate finding was lost in either step.
 
@@ -84,7 +88,7 @@ member is typed `(data: any, ...e) => void` — `any`, so the data the handler
 receives is never checked against the data the tuple carries. That unchecked
 seam is the finding, and only this rule can report it.
 
-`clean-cases.tsx` is the mirror image: **seven** `tsc` diagnostics and **zero**
+`clean-cases.tsx` is the mirror image: **eight** `tsc` diagnostics and **zero**
 findings. The rule and the type checker partition the space exactly, and `tsc`
 names each reason:
 
@@ -94,6 +98,7 @@ SafeArray<number>                 missing the following properties: 0, 1
 [number, number]                  Types of property '0' are incompatible
 [(event: MouseEvent) => void]     Property '1' is missing
 [1, 2, 3]                         Type 'number' is not assignable to (data: any, e) => void
+[(a, b, c) => void, number]       Target signature provides too few arguments
 on:click={boundPair}              EventHandlerWithOptionsUnion has no bound arm
 on:click={[plain, 1]}             the same
 ~~~
