@@ -249,6 +249,23 @@
       "expect": "silent",
       "why": "SC1005's surviving positions, and the reason it was narrowed rather than deleted -- these are the most common real spellings of the bug. String concatenation accepts any operand, a unary operator accepts a function, and a template literal stringifies whatever it is given, so TypeScript permits all three while the rendered output is the accessor's own source text and never updates.",
       "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst [label] = createSignal(\"world\");\nexport const Concat = () => <div>{\"hello \" + label}</div>;\nexport const Unary = () => <div>{!count ? \"empty\" : \"full\"}</div>;\nexport const Template = () => <div>{`count is ${count}`}</div>;\n"
+    },
+    {
+      "rule": "expected-function-got-expression",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "why": "SC1007's call-result arm, removed 2026-08-17. Both triggers land on TS2322 at the same attribute: an expression proven non-callable is exactly what TypeScript rejects, and a proven-accessor call is rejected whenever the accessor's value is not callable. The one spelling TypeScript permits -- an accessor holding a function -- is one where the finding would be wrong, because a JSX attribute expression is a tracked read and that handler does update. The rule SURVIVES on the reactive-handler-read arm; see the sibling `silent` case.",
+      "allow": [
+        2322
+      ],
+      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst Comp = (props: { n: number }) => (\n  <div>\n    <button onClick={count()} />\n    <button onClick={props.n} />\n  </div>\n);\nexport default Comp;\n"
+    },
+    {
+      "rule": "expected-function-got-expression",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "SC1007's surviving arm. A callable handler read out of reactive props type checks, so TypeScript is silent, and the claim is a timing one no type expresses: a native listener receives its function value once during DOM setup, so reading it through reactive props freezes the initial handler. The accessor-holding-a-function call is here too, as the spelling the removal deliberately stopped reporting.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [handler] = createSignal(() => {});\nconst Comp = (props: { onSave: () => void }) => (\n  <div>\n    <button onClick={props.onSave} />\n    <button onClick={handler()} />\n  </div>\n);\nexport default Comp;\n"
     }
   ]
 }

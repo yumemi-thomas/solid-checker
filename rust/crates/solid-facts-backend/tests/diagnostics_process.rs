@@ -504,7 +504,11 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                 "{position} is a position TypeScript permits and must stay reported: {findings:#?}"
             );
         }
-        for typed in ["class object value", "native JSX attribute", "computed property access"] {
+        for typed in [
+            "class object value",
+            "native JSX attribute",
+            "computed property access",
+        ] {
             assert!(
                 findings.iter().all(|finding| {
                     !finding["message"]
@@ -539,7 +543,10 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
         // which TypeScript rejects on its own (TS2322) and the 2026-08-17
         // narrowing dropped.
         ("uncalled-accessor", 2),
-        ("expected-function-got-expression", 2),
+        // One: the reactive `props.onSave` read. The call-result arm went on
+        // 2026-08-17 -- a handler expression proven non-callable, or a
+        // non-callable accessor call, is TS2322 at that same attribute.
+        ("expected-function-got-expression", 1),
         ("untracked-derived-function", 2),
     ] {
         assert_rule_findings(&reactivity_findings, rule, expected);

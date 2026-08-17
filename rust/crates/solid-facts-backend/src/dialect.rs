@@ -265,11 +265,6 @@ mod tests {
                 attribute: "onClick".into(),
                 expression: "sampleHandler".into(),
             },
-            StaticDefectKind::HandlerCallResult {
-                attribute: "onClick".into(),
-                callee: "sampleHandler".into(),
-                call: "sampleHandler()".into(),
-            },
             StaticDefectKind::UncalledAccessor {
                 name: "sampleAccessor".into(),
                 position: "sample expression".into(),

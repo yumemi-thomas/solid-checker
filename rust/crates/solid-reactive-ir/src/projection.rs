@@ -200,16 +200,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Wrap the read so it happens when the event fires: {attribute}={{event => {expression}(event)}}."
             ),
         ),
-        StaticDefectKind::HandlerCallResult {
-            attribute,
-            callee,
-            call,
-        } => (
-            format!(
-                "{attribute} is given the result of calling {callee}, not a function; the call runs once during setup and its value is bound as the listener"
-            ),
-            format!("Wrap it: {attribute}={{() => {call}}}, or pass the function itself uncalled."),
-        ),
         StaticDefectKind::UncalledAccessor { name, position } => (
             format!(
                 "accessor {name:?} is used as a value in {position}; the expression receives the accessor function itself, not the value it holds, and never updates"
@@ -272,7 +262,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         | StaticDefectKind::UntrackedDerivedFunction { .. }
         | StaticDefectKind::ReactiveSourceUncaptured { .. }
         | StaticDefectKind::ReactiveHandlerRead { .. }
-        | StaticDefectKind::HandlerCallResult { .. }
         | StaticDefectKind::UncalledAccessor { .. }
         | StaticDefectKind::DirectMutation { .. } => {
             "the invalid API shape is statically present at this call"
@@ -508,13 +497,7 @@ pub fn project_findings(
         let handler_spans: std::collections::HashSet<_> = program
             .static_defects
             .iter()
-            .filter(|defect| {
-                matches!(
-                    defect.kind,
-                    StaticDefectKind::ReactiveHandlerRead { .. }
-                        | StaticDefectKind::HandlerCallResult { .. }
-                )
-            })
+            .filter(|defect| matches!(defect.kind, StaticDefectKind::ReactiveHandlerRead { .. }))
             .map(|defect| {
                 (
                     defect.location.path.clone(),

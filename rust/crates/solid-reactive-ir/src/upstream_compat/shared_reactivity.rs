@@ -34,7 +34,6 @@
 use solid_facts::FileFacts;
 use solid_facts::ast::{FunctionFact, IdentifierRole};
 use solid_facts::core::Span;
-use typefacts::Callability;
 
 use super::{UpstreamCompatContext, is_lowercase_led, text};
 use crate::owners::containing_ast_function;
@@ -558,81 +557,27 @@ fn expected_function_got_expression(
                     continue;
                 }
             }
-            // The binding must be a call spanning the whole expression. A bare
-            // reference is the correct form, and a call merely *inside* the
-            // expression — `onClick={() => save(id())}` — is the fix, not the
-            // defect, so the call's span must be the expression minus its
-            // surrounding whitespace.
-            let call_span = trimmed_span(file, expression);
-            let Some(call) = file.ast.calls.iter().find(|call| call.span == call_span) else {
-                continue;
-            };
-            let proven_accessor = context
-                .entities
-                .at(file.path.as_str(), call.callee)
-                .is_some_and(|symbol| {
-                    context.accessors.contains_key(symbol)
-                        && context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
-                });
-            if !proven_accessor && !proven_not_callable(context, file, expression) {
-                continue;
-            }
-            defects.push(StaticDefect {
-                kind: StaticDefectKind::HandlerCallResult {
-                    attribute: name.to_owned(),
-                    callee: text(file, call.callee).to_owned(),
-                    call: text(file, call.span).to_owned(),
-                },
-                location: location(file.path.shared(), expression),
-                analysis_context: String::new(),
-                fixes: vec![],
-                uncertain: false,
-            });
+            // The call-result arm was removed on 2026-08-17 under AGENTS.md's
+            // absolute rule. It fired for a handler expression that is itself a
+            // call, on either of two triggers, and neither survives:
+            //
+            //   * the expression is *proven non-callable* -- which is exactly
+            //     when TypeScript reports TS2322 ("Type 'number' is not
+            //     assignable to type 'EventHandlerUnion<…>'") at that same
+            //     attribute, so the finding was the type error restated;
+            //   * the callee is a proven accessor -- which lands on the same
+            //     TS2322 whenever the accessor's value is not callable
+            //     (`onClick={count()}` with `count: Accessor<number>`). The one
+            //     spelling TypeScript permits is an accessor holding a
+            //     function, `onClick={handler()}`, and there the finding would
+            //     be *wrong*: a JSX attribute expression is a tracked read, so
+            //     that handler does update.
+            //
+            // What remains above is the reactive-handler-read arm, where the
+            // value is callable, TypeScript is silent, and the claim is that a
+            // native listener is installed once from a value that changes.
         }
     }
-}
-
-/// Whether the expression's resolved type provably cannot be a listener.
-///
-/// The primary proof is the checker's own [`typefacts::Callability`] verdict,
-/// which TypeScript derives from the actual call signatures of every union
-/// constituent — never from rendered type text. Missing or unknown
-/// callability is not evidence that a value is non-callable, so this helper
-/// stays silent unless the compiler provides a closed non-callable answer.
-///
-/// An array- or tuple-shaped type is exempt from the callability proof even
-/// though it has no call signatures: Solid's handler props accept a bound
-/// `[handler, data]` pair, so a call returning one is a factory for a valid
-/// listener, not a mistake.
-fn proven_not_callable(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    expression: Span,
-) -> bool {
-    // Exact-span facts first: the smallest *contained* entity of a call
-    // expression is its callee, whose callability describes the accessor
-    // being called, not the value the call produced.
-    let descriptor = super::expression_descriptor(context, file, expression);
-    let callability = super::expression_callability(context, file, expression);
-    if descriptor
-        .is_some_and(|descriptor| super::array_like_type(descriptor.text.as_ref(), callability))
-    {
-        return false;
-    }
-    match callability {
-        Some(Callability::NonCallable) => true,
-        Some(Callability::Callable | Callability::Mixed) => false,
-        Some(Callability::Unknown) | None => false,
-    }
-}
-
-/// The sub-span of `span` with surrounding whitespace stripped, so a span
-/// can be compared against an exact AST node span without comparing text.
-fn trimmed_span(file: &FileFacts, span: Span) -> Span {
-    let source = text(file, span);
-    let leading = source.len() - source.trim_start().len();
-    let trailing = source.len() - source.trim_end().len();
-    Span::new(span.start + leading as u32, span.end - trailing as u32)
 }
 
 /// The function written at exactly this span, if the argument is a literal

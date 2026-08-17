@@ -342,11 +342,6 @@ pub enum StaticDefectKind {
         attribute: String,
         expression: String,
     },
-    HandlerCallResult {
-        attribute: String,
-        callee: String,
-        call: String,
-    },
     UncalledAccessor {
         name: String,
         position: String,

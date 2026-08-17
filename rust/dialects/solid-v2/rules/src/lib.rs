@@ -458,8 +458,7 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
-        StaticDefectKind::ReactiveHandlerRead { .. }
-        | StaticDefectKind::HandlerCallResult { .. } => Rule::ExpectedFunctionGotExpression,
+        StaticDefectKind::ReactiveHandlerRead { .. } => Rule::ExpectedFunctionGotExpression,
         StaticDefectKind::UncalledAccessor { .. } => Rule::UncalledAccessor,
         StaticDefectKind::DirectMutation { .. } => Rule::NoDirectMutation,
     };

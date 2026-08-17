@@ -92,16 +92,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/expected-function-got-expression",
-      "code": "SC1007",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 2601,
-      "end": 2608,
-      "fixes": 0
-    },
-    {
       "rule": "v1/reactive-source-uncaptured",
       "code": "SC9011",
       "kind": "uncertifiable",
