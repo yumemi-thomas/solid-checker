@@ -36,8 +36,8 @@ span the checker reported). Both of its directions gate, and both compare spans:
   prepends and not via an incidental untyped-corpus error. 45 verified.
 - No **finding may share a span** with a TypeScript diagnostic unless the
   difference in claims is written down. 30 span matches are declared
-  `ACKNOWLEDGED` with the difference named; 4 are `PENDING_NARROWING` — confirmed
-  duplicates, listed below.
+  `ACKNOWLEDGED` with the difference named, and `PENDING_NARROWING` is **empty** —
+  both duplicates it caught have been narrowed away (below).
 
 `typescript-owned` is a new status, and splitting it out of `policy` was the fix
 for a flaw in the first version of this check. Plain `policy` predates the whole
@@ -52,18 +52,22 @@ The "does not type-check" count printed under `--report` remains a lower bound o
 corpus cleanliness, not a statement about ownership — 73% is easy to misquote,
 and only the span-matched list below it is an ownership claim.
 
-### Confirmed duplicates awaiting a narrowing
+### Duplicates the span comparison caught, both now narrowed
 
 Found by the span comparison, each suppressed in `PENDING_NARROWING` with a
 pointer here rather than left to fail:
 
-- **`v1/jsx-no-duplicate-props`, the `children`-prop-plus-JSX-children pair.**
-  TS2710 is *"'children' are specified twice. The attribute named 'children' will
-  be overwritten."* — word for word the finding's claim. Only that pair is
-  covered: the `innerHTML` and `textContent` combinations draw no diagnostic, so
-  this narrows the child-content arm rather than removing it. Note TS2710 appears
-  only in the `strict` pass, which the absolute rule does not accept as an
-  exception.
+**Landed 2026-08-17: `v1/jsx-no-duplicate-props`'s `children`-prop-plus-JSX-children
+pair.** TS2710 is *"'children' are specified twice. The attribute named 'children'
+will be overwritten."* — word for word the finding's claim, in **both** passes and
+on components as well as intrinsic elements. (An earlier draft of this entry said
+strict-only; that was a misreading — the strict-only diagnostic in this family is
+TS2783, for the attribute-then-spread duplicate.) Only that exact pair is covered:
+`innerHTML` with `textContent`, and `innerHTML` with JSX children, draw no
+diagnostic at all, so a set including either still reports — the finding then
+asserts more than TS2710 does even where TS2710 also fires. Pinned by
+`eslint-compat`: the two surviving conflicts report, and the children pair is a
+negative on both an intrinsic element and a component.
 **Landed 2026-08-17: `v1/no-innerhtml`'s `dangerouslySetInnerHTML` arm** (upstream
 cases 09, 10, 11). TS2322 *"Property 'dangerouslySetInnerHTML' does not exist"* and
 the finding *"The dangerouslySetInnerHTML prop is not supported; use innerHTML
@@ -74,9 +78,7 @@ independent. Pinned by `upstream-divergences`'s `ReactMarkupProp` — the silent
 intrinsic, the reported component with its rewrite fix, and the reported component
 whose extra object entry leaves no unambiguous rewrite.
 
-The remaining entry is a narrowing, not a removal, and needs its own slice:
-fixture cases for the surviving arm, the upstream case redeclared, and the finding
-movement explained.
+Both are landed, and the ownership gate's confirmed-duplicate list is empty.
 
 **The gate.** `scripts/tsc-oracle-gate.mjs` enforces
 `fixtures/tsc-oracle/rule-cases.json` in `scripts/verify.sh` and as

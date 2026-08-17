@@ -364,6 +364,10 @@
     "no-innerhtml__invalid__11": {
       "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. On an intrinsic element `dangerouslySetInnerHTML` is not in `JSX.IntrinsicElements`, so it is TS2322 (\"Property 'dangerouslySetInnerHTML' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") against the real solid-js@1.9.14 typings -- word for word this arm's own claim, \"the prop is not supported\". Confirmed by scripts/parity-tsc-ownership.mjs, which matched the two spans. The arm survives on a component, whose props are whatever it declares: there TypeScript is silent and the claim (Solid's renderer has no special case for the React name, so the prop arrives inert) is the rule's alone. The actual `innerHTML` arm is untouched -- `innerHTML` is a declared Solid prop and every claim about it is independent."
+    },
+    "jsx-no-duplicate-props__invalid__06": {
+      "status": "typescript-owned",
+      "reason": "Narrowed under AGENTS.md's absolute rule. The `children`-prop-plus-JSX-children pair is TS2710 -- \"'children' are specified twice. The attribute named 'children' will be overwritten.\" -- which is word for word this arm's claim, in both the strict and non-strict passes and on components as well as intrinsic elements. Confirmed by scripts/parity-tsc-ownership.mjs, which matched the two spans. Only that exact pair is covered: `innerHTML` with `textContent`, and `innerHTML` with JSX children, draw no diagnostic at all, so any set including them still reports -- the finding then asserts more than TS2710 does even where TS2710 also fires. Upstream's case 07 (`innerHTML` with `textContent`) still fires, which is the other half."
     }
   },
   "counts": {

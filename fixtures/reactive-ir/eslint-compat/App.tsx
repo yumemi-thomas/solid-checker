@@ -81,8 +81,24 @@ export function Wrong() {
       {/* SC8004 again: the browser decodes &#9; to a tab before URL parsing,
           so a character reference does not disarm it */}
       <a href="java&#9;script:alert(1)">tricky</a>
-      {/* SC8008: parses as HTML and overwrites the child */}
+      {/* SC8008, and SC8003 for the content conflict: `innerHTML` and JSX
+          children both write the element's content, and no type relates them —
+          both are declared props with legal values, so TypeScript is silent. */}
       <div innerHTML={"<b>x</b>"}>overwritten</div>
+      {/* SC8003 again, the other conflict no type describes. */}
+      <div innerHTML="x" textContent="y" />
+      {/* Silent since 2026-08-17: the `children`-prop-plus-JSX-children pair is
+          TS2710 ("'children' are specified twice. The attribute named 'children'
+          will be overwritten."), word for word the rule's claim — in both passes
+          and on components too. Only that exact pair was narrowed away; a set
+          that also includes innerHTML or textContent still reports, because the
+          finding then asserts more than TS2710 does. */}
+      <div children={<i />}>
+        <span />
+      </div>
+      <Panel children={<i />}>
+        <span />
+      </Panel>
       {/* SC8011: three React names Solid does not forward */}
       <label className="field" htmlFor="name" key="k">Name</label>
       {/* Silent since 2026-08-17: on an intrinsic element an unrecognised

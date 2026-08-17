@@ -150,14 +150,11 @@ const ACKNOWLEDGED = {
 };
 
 // Findings a TypeScript diagnostic covers by span where the two make the **same**
-// claim. These are confirmed duplicates awaiting a narrowing, each with an entry
-// in docs/precision-backlog.md. Suppressing the failure here is a debt marker,
-// not a resting place -- the same role `redundant-pending-narrowing` plays in the
-// oracle gate.
-const PENDING_NARROWING = {
-  "jsx-no-duplicate-props__invalid__06:v1/jsx-no-duplicate-props":
-    "TS2710 \"'children' are specified twice. The attribute named 'children' will be overwritten.\" is word for word this finding's claim. Only the `children`-prop-plus-JSX-children pair is covered; the `innerHTML` and `textContent` combinations are not, so this is a narrowing of the child-content arm rather than its removal.",
-};
+// claim: confirmed duplicates awaiting a narrowing, each with an entry in
+// docs/precision-backlog.md. Suppressing the failure here is a debt marker, not a
+// resting place -- the same role `redundant-pending-narrowing` plays in the oracle
+// gate. Empty as of 2026-08-17: both entries it held were narrowed.
+const PENDING_NARROWING = {};
 
 // Codes that are pure artefacts of linting untyped upstream JavaScript. They are
 // never a rule's subject, so they never establish that TypeScript owns a defect.

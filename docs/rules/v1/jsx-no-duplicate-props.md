@@ -44,9 +44,16 @@ What survives regardless of origin is the case this rule exists for: two
 `attr:title`/`title` share the static template attribute slot. TypeScript sees
 two distinct, legal properties and is silent.
 
-The child-content conflicts (`children` versus JSX children versus `innerHTML`
-versus `textContent`) are untouched — no type relates those props to each
-other.
+Of the child-content conflicts, one pair is also TypeScript's: a `children`
+**prop** together with JSX children is TS2710, *"'children' are specified twice.
+The attribute named 'children' will be overwritten."* — the same sentence this
+rule writes, in both passes and on components too. That exact pair was narrowed
+away on 2026-08-17.
+
+Every other combination stays, because no type relates those props to each other:
+`innerHTML` with `textContent`, and `innerHTML` with JSX children, draw no
+diagnostic at all. A set that includes one of them still reports even when TS2710
+also fires, because the finding then asserts a conflict the type error does not.
 
 Both directions are pinned by `fixtures/tsc-oracle/rule-cases.json` and
 `fixtures/reactive-ir/eslint-compat`. The upstream cases this narrowing stops

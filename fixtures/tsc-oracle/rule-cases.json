@@ -542,6 +542,23 @@
       "expect": "silent",
       "why": "Both surviving halves. `innerHTML` is a *declared* Solid prop, so the injection-surface and content-conflict claims are the rule's own on every element. And on a component, whose props are whatever it declares, even the React name is a permitted key -- TypeScript is silent, and the claim that Solid's renderer has no special case for it stands alone.",
       "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const Native = () => <div innerHTML={\"<p>x</p>\"} />;\nexport const Component = () => <Panel dangerouslySetInnerHTML={{ __html: \"<p>x</p>\" }} />;\n"
+    },
+    {
+      "rule": "v1/jsx-no-duplicate-props",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "why": "SC8003's `children`-prop-plus-JSX-children pair, narrowed 2026-08-17. TS2710 -- \"'children' are specified twice. The attribute named 'children' will be overwritten.\" -- is word for word the arm's claim, in both passes and on components as well as intrinsic elements. Only that exact pair; see the sibling `silent` case for the content conflicts no type describes.",
+      "allow": [
+        2710
+      ],
+      "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const Intrinsic = () => <div children={<i />}><span /></div>;\nexport const Component = () => <Panel children={<i />}><span /></Panel>;\n"
+    },
+    {
+      "rule": "v1/jsx-no-duplicate-props",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "The child-content conflicts no type relates: `innerHTML` with `textContent`, and `innerHTML` with JSX children. Both are declared props whose values are legal, so TypeScript says nothing about them overwriting each other -- which is why only the `children` pair was narrowed away and the arm survives.",
+      "code": "export const Both = () => <div innerHTML=\"x\" textContent=\"y\" />;\nexport const WithChildren = () => <div innerHTML=\"x\"><span /></div>;\n"
     }
   ]
 }
