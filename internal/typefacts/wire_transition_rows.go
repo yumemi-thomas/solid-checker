@@ -152,8 +152,8 @@ func writeWireTransitionEntityRun(
 			if err != nil {
 				return fmt.Errorf("entity %d tuple shape: %w", index, err)
 			}
-			if entity.TupleShape.FixedLength < 0 {
-				return fmt.Errorf("entity %d has negative tuple fixed length", index)
+			if entity.TupleShape.FixedLength < 0 || entity.TupleShape.ElementZeroMinimumParameters < 0 {
+				return fmt.Errorf("entity %d has a negative tuple count", index)
 			}
 		}
 
@@ -189,7 +189,7 @@ func writeWireTransitionEntityRun(
 		if tableSchema >= TypeFactsTableSchemaVersionV9 && entity.ArrayShape != "" {
 			flags |= wireTransitionEntityHasArrayShape
 		}
-		if tableSchema >= TypeFactsTableSchemaVersionV10 && entity.TupleShape != nil {
+		if tableSchema >= TypeFactsTableSchemaVersionV11 && entity.TupleShape != nil {
 			flags |= wireTransitionEntityHasTupleShape
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
@@ -234,7 +234,7 @@ func writeWireTransitionEntityRun(
 		if tableSchema >= TypeFactsTableSchemaVersionV9 && entity.ArrayShape != "" {
 			w.u64(arrayShape)
 		}
-		if tableSchema >= TypeFactsTableSchemaVersionV10 && entity.TupleShape != nil {
+		if tableSchema >= TypeFactsTableSchemaVersionV11 && entity.TupleShape != nil {
 			// One packed word: the fixed slot count with the rest flag in bit 0,
 			// then element zero's callability code.
 			packed := uint64(entity.TupleShape.FixedLength) << 1
@@ -243,6 +243,7 @@ func writeWireTransitionEntityRun(
 			}
 			w.u64(packed)
 			w.u64(tupleElementZero)
+			w.u64(uint64(entity.TupleShape.ElementZeroMinimumParameters))
 		}
 		previousStart = start
 	}

@@ -200,6 +200,13 @@ pub struct TupleShape {
     /// fixed first slot.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub element_zero: Option<Callability>,
+    /// The fewest arguments any call signature of the first slot's type
+    /// requires. This is what decides whether the slot can be invoked with a
+    /// given argument count: a function accepting fewer parameters than it is
+    /// handed is fine, one requiring more is not. Zero when the slot is absent
+    /// or not callable, so read it together with `element_zero`.
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub element_zero_min_parameters: u32,
 }
 
 impl TupleShape {
@@ -208,6 +215,14 @@ impl TupleShape {
     #[must_use]
     pub const fn has_slot(self, index: u32) -> bool {
         index < self.fixed_length || (self.has_rest && index <= self.fixed_length)
+    }
+
+    /// Whether the first slot is callable with `arguments` arguments — callable
+    /// at all, and not requiring more than that many.
+    #[must_use]
+    pub fn element_zero_accepts(self, arguments: u32) -> bool {
+        self.element_zero == Some(Callability::Callable)
+            && self.element_zero_min_parameters <= arguments
     }
 }
 

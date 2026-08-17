@@ -19,9 +19,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V6: u64 = 6;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V7: u64 = 7;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V8: u64 = 8;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V9: u64 = 9;
-pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V10: u64 = 10;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V11: u64 = 11;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:b29c35ecf563da1f9e27f8b017902834e1be39e739816b0224b0cf7f2ca608b0";
+    "sha256:556a69ace385c472a734f7570c623372f0fa367c04dd40246d21c4a7c4019b9d";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -722,7 +722,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
-            TYPE_FACTS_TABLE_SCHEMA_V10 => 2047,
+            TYPE_FACTS_TABLE_SCHEMA_V11 => 2047,
             TYPE_FACTS_TABLE_SCHEMA_V9 => 1023,
             TYPE_FACTS_TABLE_SCHEMA_V8 => 511,
             TYPE_FACTS_TABLE_SCHEMA_V7 => 255,
@@ -799,11 +799,14 @@ fn decode_entity_run(
         let tuple_shape = if flags & 1024 != 0 {
             let packed = cursor.u64()?;
             let element_zero = parse_callability(cursor.u64()?)?;
+            let element_zero_min_parameters = u32::try_from(cursor.u64()?)
+                .map_err(|_| "packed tuple parameter count overflows".to_string())?;
             Some(TupleShape {
                 fixed_length: u32::try_from(packed >> 1)
                     .map_err(|_| "packed tuple fixed length overflows".to_string())?,
                 has_rest: packed & 1 != 0,
                 element_zero: Some(element_zero),
+                element_zero_min_parameters,
             })
         } else {
             None
@@ -1049,7 +1052,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V7
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V8
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V9
-        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V10
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V11
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1462,7 +1465,12 @@ mod tests {
         frame
     }
 
-    fn tuple_shape_transition(table_schema: u64, packed: u64, element_zero: u64) -> Vec<u8> {
+    fn tuple_shape_transition(
+        table_schema: u64,
+        packed: u64,
+        element_zero: u64,
+        min_parameters: u64,
+    ) -> Vec<u8> {
         let mut frame = Vec::new();
         for value in [1, 0, table_schema, 0, 1, 3] {
             push_uvarint(&mut frame, value);
@@ -1474,7 +1482,7 @@ mod tests {
             push_uvarint(&mut frame, value);
         }
         // One entity: start 0, length 1, no symbol, tuple-shape field.
-        for value in [1, 0, 1, 0, 1024, packed, element_zero, 0] {
+        for value in [1, 0, 1, 0, 1024, packed, element_zero, min_parameters, 0] {
             push_uvarint(&mut frame, value);
         }
         frame
@@ -1660,9 +1668,9 @@ mod tests {
     }
 
     #[test]
-    fn wire_table_v10_decodes_tuple_shapes_and_v9_stays_frozen() {
+    fn wire_table_v11_decodes_tuple_shapes_and_v10_stays_frozen() {
         // packed = fixed_length << 1 | has_rest; element zero code 0 = callable.
-        let transition = decode_table_transition(&tuple_shape_transition(10, 5, 0)).unwrap();
+        let transition = decode_table_transition(&tuple_shape_transition(11, 5, 0, 2)).unwrap();
         let SlotOp::Replace(entities) = &transition.paths[0].entities else {
             panic!("entity row was not replaced");
         };
@@ -1672,10 +1680,14 @@ mod tests {
                 fixed_length: 2,
                 has_rest: true,
                 element_zero: Some(Callability::Callable),
+                element_zero_min_parameters: 2,
             })
         );
+        assert!(entities[0].tuple_shape.unwrap().element_zero_accepts(2));
+        // The same callable slot, asked for one fewer argument than it requires.
+        assert!(!entities[0].tuple_shape.unwrap().element_zero_accepts(1));
 
-        let plain = decode_table_transition(&tuple_shape_transition(10, 4, 1)).unwrap();
+        let plain = decode_table_transition(&tuple_shape_transition(11, 4, 1, 0)).unwrap();
         let SlotOp::Replace(plain_entities) = &plain.paths[0].entities else {
             panic!("entity row was not replaced");
         };
@@ -1685,11 +1697,18 @@ mod tests {
                 fixed_length: 2,
                 has_rest: false,
                 element_zero: Some(Callability::NonCallable),
+                element_zero_min_parameters: 0,
             })
         );
+        assert!(
+            !plain_entities[0]
+                .tuple_shape
+                .unwrap()
+                .element_zero_accepts(2)
+        );
 
-        assert!(decode_table_transition(&tuple_shape_transition(9, 4, 0)).is_err());
-        assert!(decode_table_transition(&tuple_shape_transition(10, 4, 9)).is_err());
+        assert!(decode_table_transition(&tuple_shape_transition(10, 4, 0, 0)).is_err());
+        assert!(decode_table_transition(&tuple_shape_transition(11, 4, 9, 0)).is_err());
     }
 
     #[test]

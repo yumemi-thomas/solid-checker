@@ -23,6 +23,25 @@ Wire table schema v10 appends entity flag bit 10, carrying one packed word
 selects the fact. Retained contributions, demand hashes, and row equality carry
 the field so full, delta, and reuse responses are equivalent.
 
+## Amendment: `elementZeroMinimumParameters` (Wire table schema v11)
+
+`elementZero` says whether the first slot is callable, which is not enough to
+decide whether it can be *invoked*: a function requiring more arguments than a
+caller supplies is not assignable to that caller's signature, even though it is
+callable. `TupleShape` therefore also carries `elementZeroMinimumParameters`, the
+fewest arguments any of the slot's call signatures requires — the minimum across
+overloads, matching assignability, since the checker needs only one compatible
+signature. Optional and rest parameters lower it; it is zero when the slot is
+absent or not callable, so it must be read together with `elementZero`.
+
+Wire table schema v11 extends the tuple payload with one trailing count.
+**v10 is retired rather than frozen.** Every prior bump added a flag bit, leaving
+older frames unambiguously decodable; this one changed an existing field's
+payload, so a v10 row cannot be read without knowing which of the two layouts
+produced it. v10 shipped for a single commit, and the handshake's schema digest
+and build-id lockstep make a v10 producer unpairable with any current client, so
+retiring it is honest where keeping it half-decodable would not be.
+
 ## Relationship to `arrayShape`
 
 [ADR 0015](0015-v1-span-exact-array-shapes.md) answers "is this iterable as an

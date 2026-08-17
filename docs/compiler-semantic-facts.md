@@ -41,7 +41,8 @@ not exactly one expression; it is never evidence of a non-array.
 ## Tuple shape
 
 `EntityDemand.tupleShape` produces an optional `EntityFact.tupleShape` with
-`fixedLength`, `hasRest`, and `elementZero` (a callability). It is present only
+`fixedLength`, `hasRest`, `elementZero` (a callability), and
+`elementZeroMinimumParameters`. It is present only
 when the type at the exact demanded span is *itself* a tuple — never for a
 union, and never for the global `Array`/`ReadonlyArray` types, which have a
 number index signature rather than fixed slots.
@@ -50,6 +51,12 @@ Use it, rather than `arrayShape`, when a value has to satisfy an interface with
 numbered members: an array has no `0` or `1` property and is not interchangeable
 with a two-slot tuple. `fixedLength` counts optional slots, matching the
 compiler, so "is there a value at index n" must also consider `hasRest`.
+
+`elementZero` alone cannot decide whether the first slot can be *invoked*: a
+function requiring more arguments than a caller supplies is not assignable to
+that caller's signature, even though it is callable.
+`elementZeroMinimumParameters` is the fewest arguments any of its call
+signatures requires, so a consumer checks both.
 
 Contextual typing decides tupleness for an array literal. A literal written
 where the expected type has numbered members acquires fixed slots; the same

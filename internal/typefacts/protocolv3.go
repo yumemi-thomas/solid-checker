@@ -6,7 +6,7 @@ const TypeFactsSchemaVersionV1 uint64 = 1
 
 const (
 	TypeFactsHandshakeProtocol uint64 = 1
-	TypeFactsSchemaSHA256             = "sha256:b29c35ecf563da1f9e27f8b017902834e1be39e739816b0224b0cf7f2ca608b0"
+	TypeFactsSchemaSHA256             = "sha256:556a69ace385c472a734f7570c623372f0fa367c04dd40246d21c4a7c4019b9d"
 )
 
 type ServiceHandshake struct {

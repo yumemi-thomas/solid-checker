@@ -122,6 +122,12 @@ type TupleShape struct {
 	// ElementZero is the callability of the first slot's type, or
 	// CallabilityUnknown when there is no fixed first slot.
 	ElementZero Callability `cbor:"elementZero,omitempty" json:"elementZero,omitempty"`
+	// ElementZeroMinimumParameters is the fewest arguments any call signature of
+	// the first slot's type requires. A caller can pass more than a function
+	// accepts only if the function accepts them, so this is what decides whether
+	// the slot can be invoked with a given argument count. Zero when the slot is
+	// absent or not callable.
+	ElementZeroMinimumParameters int `cbor:"elementZeroMinimumParameters,omitempty" json:"elementZeroMinimumParameters,omitempty"`
 }
 
 // ReferenceSpace summarizes the semantic meaning of all compiler-resolved

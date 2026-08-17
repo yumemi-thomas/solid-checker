@@ -103,6 +103,24 @@ func (p *project) tupleShapeAtLocked(node *ast.Node, evidence *semanticEvidence)
 	}
 	if elements := checker.Checker_getTypeArguments(p.checker, value); shape.FixedLength > 0 && len(elements) > 0 {
 		shape.ElementZero = callabilityOfType(p.checker, elements[0])
+		shape.ElementZeroMinimumParameters = minimumParameterCount(p.checker, elements[0])
 	}
 	return &shape
+}
+
+// minimumParameterCount is the fewest arguments any call signature of value
+// requires. Overloads take the minimum, matching assignability: the checker
+// needs only one compatible signature. A type with no call signatures answers
+// zero, which callers must read together with the callability verdict.
+func minimumParameterCount(typeChecker *checker.Checker, value *checker.Type) int {
+	if value == nil {
+		return 0
+	}
+	minimum := 0
+	for index, signature := range typeChecker.GetSignaturesOfType(value, checker.SignatureKindCall) {
+		if count := signature.MinArgumentCount(); index == 0 || count < minimum {
+			minimum = count
+		}
+	}
+	return minimum
 }

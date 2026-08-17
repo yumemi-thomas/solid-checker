@@ -18,5 +18,10 @@ const TypeFactsTableSchemaVersionV6 uint64 = 6
 const TypeFactsTableSchemaVersionV7 uint64 = 7
 const TypeFactsTableSchemaVersionV8 uint64 = 8
 const TypeFactsTableSchemaVersionV9 uint64 = 9
-const TypeFactsTableSchemaVersionV10 uint64 = 10
-const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV10
+
+// v10 is retired rather than frozen: v11 extended the tuple-shape payload it
+// introduced instead of adding a new flag, so a v10 row cannot be decoded
+// unambiguously. It shipped for one commit and the handshake's digest and
+// build-id lockstep make a v10 producer unpairable with any current client.
+const TypeFactsTableSchemaVersionV11 uint64 = 11
+const TypeFactsTableSchemaVersion uint64 = TypeFactsTableSchemaVersionV11

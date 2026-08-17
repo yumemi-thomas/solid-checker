@@ -12,7 +12,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	domain := &RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true}
 	callResultDomain := &RuntimeValueDomain{MayBeOther: true}
 	constantValue := &ConstantValue{Kind: ConstantValueString, String: "constant"}
-	tupleShape := &TupleShape{FixedLength: 2, ElementZero: CallabilityCallable}
+	tupleShape := &TupleShape{FixedLength: 2, ElementZero: CallabilityCallable, ElementZeroMinimumParameters: 2}
 	entities := []EntityFact{
 		{Location: location, Symbol: "symbol"},
 		{

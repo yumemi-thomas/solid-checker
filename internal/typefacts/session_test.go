@@ -185,8 +185,8 @@ func TestLatestSemanticDomainsAreAvailableInV1(t *testing.T) {
 	if !response.OK {
 		t.Fatalf("v1 rejected semantic domains: %+v", response.Error)
 	}
-	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersionV10 {
-		t.Fatalf("active Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersionV10)
+	if got := decodeTransitionEnvelopeForTest(t, response.TableTransition).schema; got != TypeFactsTableSchemaVersionV11 {
+		t.Fatalf("active Wire table schema = %d, want %d", got, TypeFactsTableSchemaVersionV11)
 	}
 
 	compact := CompactDemandsV3From([]EntityDemand{demand})

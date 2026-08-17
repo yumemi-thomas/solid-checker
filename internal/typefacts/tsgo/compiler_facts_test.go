@@ -1617,6 +1617,9 @@ neverValue;
 func TestDemandedTupleShapeDescribesSlotsAndFirstElement(t *testing.T) {
 	dir := t.TempDir()
 	source := `declare const pair: [(data: number, event: MouseEvent) => void, number];
+declare const overArity: [(a: number, b: MouseEvent, c: string) => void, number];
+declare const optionalArity: [(a: number, b: MouseEvent, c?: string) => void, number];
+declare const restArity: [(...args: unknown[]) => void, number];
 declare const numbers: [number, number, number];
 declare const single: [(event: MouseEvent) => void];
 declare const optionalTail: [(event: MouseEvent) => void, number?];
@@ -1633,6 +1636,9 @@ declare const anyValue: any;
 declare const empty: [];
 
 pair;
+overArity;
+optionalArity;
+restArity;
 numbers;
 single;
 optionalTail;
@@ -1665,17 +1671,24 @@ empty;
 		expression string
 		want       *typefacts.TupleShape
 	}{
-		{`pair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		{`pair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		// The first slot is callable but demands more arguments than a caller
+		// with two will supply, which callability alone cannot express.
+		{`overArity`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 3}},
+		// Optional and rest parameters lower the requirement, matching
+		// assignability.
+		{`optionalArity`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		{`restArity`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
 		// A tuple whose first slot is not callable. Structurally a tuple, but
 		// nothing a numbered-member interface expecting a function would accept.
 		{`numbers`, &typefacts.TupleShape{FixedLength: 3, ElementZero: typefacts.CallabilityNonCallable}},
-		{`single`, &typefacts.TupleShape{FixedLength: 1, ElementZero: typefacts.CallabilityCallable}},
+		{`single`, &typefacts.TupleShape{FixedLength: 1, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
 		// An optional slot still counts toward fixedLength, matching the compiler.
-		{`optionalTail`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
-		{`restTail`, &typefacts.TupleShape{FixedLength: 1, HasRest: true, ElementZero: typefacts.CallabilityCallable}},
-		{`roPair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		{`optionalTail`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
+		{`restTail`, &typefacts.TupleShape{FixedLength: 1, HasRest: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
+		{`roPair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
 		// The alias is transparent, exactly as it is to arrayShape.
-		{`aliased`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		{`aliased`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
 		{`empty`, &typefacts.TupleShape{FixedLength: 0, ElementZero: typefacts.CallabilityUnknown}},
 		// Arrays have a number index signature, not fixed slots. This is the
 		// distinction arrayShape collapses and the duplicate it left open.
@@ -1787,7 +1800,7 @@ export const Unconstrained = () => <loose onClick={[handler, 1]} />;
 		nth     int
 		want    *typefacts.TupleShape
 	}{
-		{"bound pair", "[handler, 1]", 0, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		{"bound pair", "[handler, 1]", 0, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
 		{"wrong element types", "[1, 2, 3]", 0, &typefacts.TupleShape{FixedLength: 3, ElementZero: typefacts.CallabilityNonCallable}},
 		// Same literal, unconstrained position: no fixed slots at all.
 		{"unconstrained", "[handler, 1]", 1, nil},
