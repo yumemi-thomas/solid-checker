@@ -274,6 +274,7 @@ func (p *project) SemanticDemandRuns(
 				!demand.RuntimeValueDomain &&
 				!demand.CallResultDomain &&
 				!demand.ConstantValue &&
+				!demand.ArrayShape &&
 				!demand.ReferenceSpace &&
 				!demand.RuntimeIdentity {
 				continue
@@ -356,6 +357,11 @@ func (p *project) SemanticDemandRuns(
 			if demand.ConstantValue {
 				if constantNode := queryCursor.exactExpressionAt(query.StartByte, query.EndByte); constantNode != nil {
 					entity.ConstantValue = p.constantValueAtLocked(constantNode, &evidence[runIndex])
+				}
+			}
+			if demand.ArrayShape {
+				if shapeNode := queryCursor.exactExpressionAt(query.StartByte, query.EndByte); shapeNode != nil {
+					entity.ArrayShape = p.arrayShapeAtLocked(shapeNode, &evidence[runIndex])
 				}
 			}
 			if demand.ResolvedCall {

@@ -4,6 +4,10 @@ status: accepted
 
 # V1 adds span-exact constant values
 
+> Historical record. Superseded as active protocol guidance by
+> [ADR 0015](0015-v1-span-exact-array-shapes.md); Wire table schema v8
+> remains frozen and decodable.
+
 ## Decision
 
 The sole active lifecycle schema, V1, includes `EntityDemand.constantValue`

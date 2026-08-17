@@ -17,6 +17,7 @@ type EntityDemand struct {
 	RuntimeValueDomain bool      `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
 	CallResultDomain   bool      `cbor:"callResultDomain,omitempty" json:"callResultDomain,omitempty"`
 	ConstantValue      bool      `cbor:"constantValue,omitempty" json:"constantValue,omitempty"`
+	ArrayShape         bool      `cbor:"arrayShape,omitempty" json:"arrayShape,omitempty"`
 	ReferenceSpace     bool      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
 	RuntimeIdentity    bool      `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 	References         bool      `cbor:"references,omitempty" json:"references,omitempty"`
@@ -60,6 +61,7 @@ type EntityFact struct {
 	RuntimeValueDomain *RuntimeValueDomain `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
 	CallResultDomain   *RuntimeValueDomain `cbor:"callResultDomain,omitempty" json:"callResultDomain,omitempty"`
 	ConstantValue      *ConstantValue      `cbor:"constantValue,omitempty" json:"constantValue,omitempty"`
+	ArrayShape         ArrayShape          `cbor:"arrayShape,omitempty" json:"arrayShape,omitempty"`
 	ReferenceSpace     ReferenceSpace      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
 	RuntimeIdentity    RuntimeSymbolID     `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 }

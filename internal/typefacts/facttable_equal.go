@@ -116,6 +116,7 @@ func entityFactEqual(left, right EntityFact) bool {
 		runtimeValueDomainEqual(left.RuntimeValueDomain, right.RuntimeValueDomain) &&
 		runtimeValueDomainEqual(left.CallResultDomain, right.CallResultDomain) &&
 		constantValueEqual(left.ConstantValue, right.ConstantValue) &&
+		left.ArrayShape == right.ArrayShape &&
 		typeDescriptorEqual(left.TypeDescriptor, right.TypeDescriptor) &&
 		resolvedCallEqual(left.ResolvedCall, right.ResolvedCall)
 }

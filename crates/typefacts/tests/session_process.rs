@@ -1,10 +1,88 @@
 use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
-    AnalysisDemand, CallKind, Callability, ConstantValue, ConstantValueKind, DemandGroup, Location,
-    Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain, Session,
+    AnalysisDemand, ArrayShape, CallKind, Callability, ConstantValue, ConstantValueKind,
+    DemandGroup, Location, Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain,
+    Session,
     v3::{EntityDemand, FileChange},
 };
+
+/// The fact's reason for existing, end to end: an aliased tuple renders as its
+/// alias, so no text test can see the tuple. The alias also lives in another
+/// file, which makes the delta leg a test of the recorded dependency — an edit
+/// to the alias must re-derive the shape rather than reuse a stale row.
+#[test]
+fn array_shape_follows_a_cross_file_alias_through_full_delta_and_reuse() {
+    let root = std::env::temp_dir().join(format!("typefacts-array-shape-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let project = root.join("tsconfig.json");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"strict":true,"noEmit":true},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+    let types = root.join("types.ts");
+    fs::write(
+        &types,
+        "export type Handlers = [(n: number) => void, number];\n",
+    )
+    .unwrap();
+    let path = root.join("source.ts");
+    let source = concat!(
+        "import type { Handlers } from \"./types\";\n",
+        "declare const pair: Handlers;\n",
+        "export const used = pair;\n",
+    );
+    fs::write(&path, source).unwrap();
+    let start = source.find("pair;").unwrap();
+    let demand = EntityDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + "pair".len()) as u64,
+        },
+        array_shape: true,
+        ..EntityDemand::default()
+    };
+    let analysis = || AnalysisDemand {
+        entities: vec![demand.clone()],
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let full = session.analyze(&analysis()).unwrap();
+    assert_eq!(
+        full.entities().next().unwrap().array_shape,
+        Some(ArrayShape::Array)
+    );
+    let reused = session.analyze(&analysis()).unwrap();
+    assert_eq!(reused.entities().next(), full.entities().next());
+    assert!(session.take_last_table_changes().unwrap().unchanged);
+
+    // The alias becomes a function type. Nothing in source.ts changed, so a
+    // fact that did not record its dependency would answer Array forever.
+    session
+        .update([FileChange {
+            path: types.to_string_lossy().into_owned(),
+            source: b"export type Handlers = (n: number) => void;\n".to_vec(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let delta = session.analyze(&analysis()).unwrap();
+    assert_eq!(
+        delta.entities().next().unwrap().array_shape,
+        Some(ArrayShape::NotArray)
+    );
+
+    session.close().unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
 
 #[test]
 fn constant_value_survives_full_delta_and_reuse_responses() {

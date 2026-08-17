@@ -1492,3 +1492,124 @@ func TestReferenceSpaceClassifiesQualifiedTypeNames(t *testing.T) {
 		}
 	}
 }
+
+func TestDemandedArrayShapeUsesCompilerArrayPredicateAtExactSpans(t *testing.T) {
+	dir := t.TempDir()
+	source := `type Handlers = [(data: number, event: MouseEvent) => void, number];
+interface SafeArray<T> extends Array<T> {}
+
+declare const aliasedTuple: Handlers;
+declare const bareTuple: [(d: number) => void, number];
+declare const readonlyTuple: readonly [string, number];
+declare const arrayGeneric: Array<string>;
+declare const readonlyArrayGeneric: ReadonlyArray<string>;
+declare const suffixArray: string[];
+declare const functionArray: ((n: number) => void)[];
+declare const arrayReturningFunction: () => string[];
+declare const plainFunction: (event: MouseEvent) => void;
+declare const plainString: string;
+declare const safeArrayValue: SafeArray<number>;
+declare const maybeTuple: Handlers | undefined;
+declare const anyValue: any;
+declare const neverValue: never;
+function genericSubject<T>(genericValue: T) { genericValue; }
+
+aliasedTuple;
+bareTuple;
+readonlyTuple;
+arrayGeneric;
+readonlyArrayGeneric;
+suffixArray;
+functionArray;
+arrayReturningFunction;
+plainFunction;
+plainString;
+safeArrayValue;
+maybeTuple;
+anyValue;
+neverValue;
+[(n: number) => n * n, 2];
+`
+	sourcePath := filepath.Join(dir, "shapes.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext","lib":["esnext","dom"]},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	tests := []struct {
+		expression string
+		want       typefacts.ArrayShape
+	}{
+		// An alias renders as its own name and defeats every text test; the
+		// compiler predicate sees through it to the tuple. This is the case the
+		// fact exists for.
+		{`aliasedTuple`, typefacts.ArrayShapeArray},
+		{`bareTuple`, typefacts.ArrayShapeArray},
+		{`readonlyTuple`, typefacts.ArrayShapeArray},
+		{`arrayGeneric`, typefacts.ArrayShapeArray},
+		{`readonlyArrayGeneric`, typefacts.ArrayShapeArray},
+		{`suffixArray`, typefacts.ArrayShapeArray},
+		// An array of functions and a function returning an array render with the
+		// same trailing `[]`. Asking the type, not the text, separates them
+		// without a second callability fact.
+		{`functionArray`, typefacts.ArrayShapeArray},
+		{`arrayReturningFunction`, typefacts.ArrayShapeNotArray},
+		{`plainFunction`, typefacts.ArrayShapeNotArray},
+		{`plainString`, typefacts.ArrayShapeNotArray},
+		// Array-*like* is deliberately not enough: its author chose an interface
+		// over an array.
+		{`safeArrayValue`, typefacts.ArrayShapeNotArray},
+		{`maybeTuple`, typefacts.ArrayShapeMixed},
+		{`anyValue`, typefacts.ArrayShapeUnknown},
+		{`neverValue`, typefacts.ArrayShapeUnknown},
+		{`genericValue`, typefacts.ArrayShapeUnknown},
+		{`[(n: number) => n * n, 2]`, typefacts.ArrayShapeArray},
+	}
+	demands := make([]typefacts.EntityDemand, len(tests))
+	for index, testCase := range tests {
+		start := strings.LastIndex(source, testCase.expression)
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.expression)
+		}
+		demands[index] = typefacts.EntityDemand{
+			Location:   typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(testCase.expression)},
+			ArrayShape: true,
+		}
+	}
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, testCase := range tests {
+		if got := entities[index].ArrayShape; got != testCase.want {
+			t.Errorf("%s array shape = %q, want %q", testCase.expression, got, testCase.want)
+		}
+	}
+
+	// A span that is not exactly one expression yields no field at all, and an
+	// undemanded fact stays absent. Both are distinct from ArrayShapeUnknown:
+	// the producer did not look.
+	literal := `[(n: number) => n * n, 2]`
+	literalStart := strings.LastIndex(source, literal)
+	boundary, err := semantic.SemanticEntities(context.Background(), []typefacts.EntityDemand{
+		{Location: typefacts.Location{Path: sourcePath, StartByte: literalStart, EndByte: literalStart + len(literal) - 1}, ArrayShape: true},
+		{Location: typefacts.Location{Path: sourcePath, StartByte: literalStart, EndByte: literalStart + len(literal)}, TypeDescriptor: true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := boundary[0].ArrayShape; got != "" {
+		t.Errorf("non-exact span array shape = %q, want absent", got)
+	}
+	if got := boundary[1].ArrayShape; got != "" {
+		t.Errorf("undemanded array shape = %q, want absent", got)
+	}
+}

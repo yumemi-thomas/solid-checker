@@ -5,7 +5,7 @@ and incremental updates. RSS is not used as a memory target on macOS: `vmmap`
 physical footprint and peak account for reclaimable Go pages, while a forced-GC
 heap profile or `runtime.MemStats.HeapAlloc` measures live Go objects.
 
-The active protocol is lifecycle schema V1 with Wire table schema v8. V1 uses
+The active protocol is lifecycle schema V1 with Wire table schema v9. V1 uses
 the sparse ownership path: Go extracts per-file entity rows and compact
 retention evidence, while the Rust client owns the expanded symbol/reference
 closure. The historical V5/V6 figures below are attribution records, not

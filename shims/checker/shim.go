@@ -40,6 +40,18 @@ func Checker_isTypeIdenticalTo(recv *checker.Checker, source *checker.Type, targ
 //go:linkname Checker_isContextSensitive github.com/microsoft/typescript-go/internal/checker.(*Checker).isContextSensitive
 func Checker_isContextSensitive(recv *checker.Checker, node *ast.Node) bool
 
+// Checker_isArrayOrTupleType is the compiler's own array/tuple predicate: a
+// reference whose target is the global Array or ReadonlyArray type, or a
+// reference to a tuple target. It deliberately excludes merely array-*like*
+// types — an interface extending Array, or anything else assignable to
+// ReadonlyArray<any> — because those are purpose-built types whose author
+// chose them over an array, and the rules reading this fact honour that
+// choice. Type aliases are transparent to it, which is the point: an aliased
+// tuple answers the same as the tuple it names.
+//
+//go:linkname Checker_isArrayOrTupleType github.com/microsoft/typescript-go/internal/checker.(*Checker).isArrayOrTupleType
+func Checker_isArrayOrTupleType(recv *checker.Checker, t *checker.Type) bool
+
 //go:linkname NewChecker github.com/microsoft/typescript-go/internal/checker.NewChecker
 func NewChecker(program checker.Program, tracer *checker.Tracer) (*checker.Checker, *sync.Mutex)
 

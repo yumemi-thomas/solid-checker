@@ -68,6 +68,7 @@ const (
 	demandFlagRuntimeValueDomain = 1 << 9
 	demandFlagCallResultDomain   = 1 << 10
 	demandFlagConstantValue      = 1 << 11
+	demandFlagArrayShape         = 1 << 12
 )
 
 // stringTableV3 interns strings in first-occurrence order; index 0 is "".
@@ -156,6 +157,9 @@ func CompactDemandsV3From(demands []EntityDemand) CompactDemandsV3 {
 		if demand.ConstantValue {
 			flags |= demandFlagConstantValue
 		}
+		if demand.ArrayShape {
+			flags |= demandFlagArrayShape
+		}
 		header := flags << 1
 		if demand.QueryLocation != nil {
 			header |= 1
@@ -235,6 +239,7 @@ func (compact CompactDemandsV3) Expand() ([]EntityDemand, error) {
 				RuntimeValueDomain: flags&demandFlagRuntimeValueDomain != 0,
 				CallResultDomain:   flags&demandFlagCallResultDomain != 0,
 				ConstantValue:      flags&demandFlagConstantValue != 0,
+				ArrayShape:         flags&demandFlagArrayShape != 0,
 			}
 			if header&1 != 0 {
 				queryPathIndex, next, err := takeCompactUvarint(rest)
@@ -366,6 +371,7 @@ func appendCompactDemandsWithFlag(
 				RuntimeValueDomain: flags&demandFlagRuntimeValueDomain != 0,
 				CallResultDomain:   flags&demandFlagCallResultDomain != 0,
 				ConstantValue:      flags&demandFlagConstantValue != 0,
+				ArrayShape:         flags&demandFlagArrayShape != 0,
 			}
 		}
 		if header&1 != 0 {

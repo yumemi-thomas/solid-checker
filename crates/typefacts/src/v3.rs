@@ -4,9 +4,9 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, AsyncFunctionFact, CallKind,
-    CallTargetSet, Callability, ConstantValue, ConstantValueKind, Declaration, DeclarationOwner,
-    EntityFact, FileFact, Location, ParameterFact, ReferenceSpace, ResolvedCall,
+    ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
+    CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Declaration,
+    DeclarationOwner, EntityFact, FileFact, Location, ParameterFact, ReferenceSpace, ResolvedCall,
     ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain, SourceBinding, SourceCall,
     SourceFunction, SourceHash, SymbolFact, TypeDescriptor,
 };
@@ -18,8 +18,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V5: u64 = 5;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V6: u64 = 6;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V7: u64 = 7;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V8: u64 = 8;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V9: u64 = 9;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:a9a13285594eaba9b8c140b309809b3a798e7a351c2c1baeefe674ae528a29f1";
+    "sha256:8fe3e333cdd7e9a16b8caf431ed34ccbd4b96dcbeb986e23a34a273dd4c2f033";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -83,6 +84,8 @@ pub struct EntityDemand {
     pub call_result_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub constant_value: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub array_shape: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub reference_space: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -266,6 +269,7 @@ pub const DEMAND_FLAG_RUNTIME_IDENTITY: u64 = 1 << 8;
 pub const DEMAND_FLAG_RUNTIME_VALUE_DOMAIN: u64 = 1 << 9;
 pub const DEMAND_FLAG_CALL_RESULT_DOMAIN: u64 = 1 << 10;
 pub const DEMAND_FLAG_CONSTANT_VALUE: u64 = 1 << 11;
+pub const DEMAND_FLAG_ARRAY_SHAPE: u64 = 1 << 12;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -714,6 +718,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
+            TYPE_FACTS_TABLE_SCHEMA_V9 => 1023,
             TYPE_FACTS_TABLE_SCHEMA_V8 => 511,
             TYPE_FACTS_TABLE_SCHEMA_V7 => 255,
             TYPE_FACTS_TABLE_SCHEMA_V5 | TYPE_FACTS_TABLE_SCHEMA_V6 => 127,
@@ -781,6 +786,11 @@ fn decode_entity_run(
         } else {
             None
         };
+        let array_shape = if flags & 512 != 0 {
+            Some(parse_array_shape(cursor.u64()?)?)
+        } else {
+            None
+        };
         let symbol_unresolved = flags & 64 != 0;
         if symbol_unresolved && !symbol.is_empty() {
             return Err("packed entity cannot be both resolved and unresolved".into());
@@ -799,6 +809,7 @@ fn decode_entity_run(
             runtime_value_domain,
             call_result_domain,
             constant_value,
+            array_shape,
             reference_space,
             runtime_identity,
         });
@@ -817,6 +828,16 @@ fn parse_runtime_value_domain(value: u64) -> Result<RuntimeValueDomain, String> 
         may_be_other: value & 4 != 0,
         unknown: value & 8 != 0,
     })
+}
+
+fn parse_array_shape(value: u64) -> Result<ArrayShape, String> {
+    match value {
+        0 => Ok(ArrayShape::Array),
+        1 => Ok(ArrayShape::NotArray),
+        2 => Ok(ArrayShape::Mixed),
+        3 => Ok(ArrayShape::Unknown),
+        _ => Err(format!("unknown array-shape tag {value}")),
+    }
 }
 
 fn parse_callability(value: u64) -> Result<Callability, String> {
@@ -1009,6 +1030,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V6
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V7
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V8
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V9
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1294,6 +1316,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.constant_value {
             flags |= DEMAND_FLAG_CONSTANT_VALUE;
         }
+        if demand.array_shape {
+            flags |= DEMAND_FLAG_ARRAY_SHAPE;
+        }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());
         push_uvarint(&mut group.1, (flags << 1) | has_query);
@@ -1392,6 +1417,24 @@ mod tests {
         }
         // One entity: start 0, length 1, no symbol, call-result field.
         for value in [1, 0, 1, 0, 128, domain_bits, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
+    fn array_shape_transition(table_schema: u64, tag: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, table_schema, 0, 1, 3] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity: start 0, length 1, no symbol, array-shape field.
+        for value in [1, 0, 1, 0, 512, tag, 0] {
             push_uvarint(&mut frame, value);
         }
         frame
@@ -1554,6 +1597,26 @@ mod tests {
         assert!(
             decode_table_transition(&constant_value_transition(8, 1, f64::NAN.to_bits())).is_err()
         );
+    }
+
+    #[test]
+    fn wire_table_v9_decodes_array_shapes_and_v8_stays_frozen() {
+        for (tag, expected) in [
+            (0, crate::ArrayShape::Array),
+            (1, crate::ArrayShape::NotArray),
+            (2, crate::ArrayShape::Mixed),
+            (3, crate::ArrayShape::Unknown),
+        ] {
+            let transition = decode_table_transition(&array_shape_transition(9, tag)).unwrap();
+            let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+                panic!("entity row was not replaced");
+            };
+            assert_eq!(entities[0].array_shape, Some(expected));
+        }
+        // The field is v9-only, and an out-of-range tag is a decode error rather
+        // than a silently dropped fact.
+        assert!(decode_table_transition(&array_shape_transition(8, 0)).is_err());
+        assert!(decode_table_transition(&array_shape_transition(9, 4)).is_err());
     }
 
     #[test]

@@ -18,6 +18,26 @@ Calls, parameters, mutable bindings, substituted templates, mixed string and
 number addition, dynamic/error types, cycles, and excessive recursion produce
 no fact.
 
+## Array shape
+
+`EntityDemand.arrayShape` produces `EntityFact.arrayShape`:
+
+- `array` — every union constituent is a reference to the global `Array` or
+  `ReadonlyArray` type, or a tuple.
+- `notArray` — no constituent is. A positive claim, so the negative is usable
+  as proof.
+- `mixed` — a union that genuinely holds both. Proven, but proves neither side.
+- `unknown` — `any`, `unknown`, `never`, an error type, or an instantiable
+  type. Not proven in either direction.
+
+The producer answers only for an expression whose trivia-normalized start and
+exact end match the demanded span, so an array of functions is never confused
+with a function returning an array. The predicate is the checker's own
+`isArrayOrTupleType`, which sees through type aliases and deliberately excludes
+merely array-*like* types such as an interface extending `Array`. Rendered type
+text never participates. Absence means the fact was not demanded or the span was
+not exactly one expression; it is never evidence of a non-array.
+
 ## Callability
 
 `EntityDemand.callability` produces `EntityFact.callability`:

@@ -139,6 +139,41 @@ pub struct ConstantValue {
 // The producer rejects NaN, so equality remains reflexive.
 impl Eq for ConstantValue {}
 
+/// The checker's array/tuple classification for exactly the demanded expression
+/// span, derived from its own `isArrayOrTupleType` predicate over the real union
+/// constituents. Rendered type text never participates, so an aliased tuple
+/// classifies as the tuple it names.
+///
+/// `Array` is narrower than "array-like": a type merely assignable to
+/// `ReadonlyArray<any>` — an interface extending `Array`, or any other
+/// purpose-built wrapper — is `NotArray`, because its author chose that type
+/// over an array.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ArrayShape {
+    /// Every constituent is an array or tuple type.
+    Array,
+    /// No constituent is an array or tuple type. A positive claim, so a
+    /// consumer may rely on the negative.
+    NotArray,
+    /// A union that genuinely mixes the two. Proven, but proves neither side.
+    Mixed,
+    /// `any`, `unknown`, `never`, an error type, or an instantiable type the
+    /// predicate cannot settle. Not proven in either direction.
+    Unknown,
+}
+
+impl ArrayShape {
+    /// Whether this classification proves an array or tuple. `Mixed` and
+    /// `Unknown` prove nothing and answer `false`, so a caller reading only
+    /// this cannot mistake an unproven shape for a negative — ask for
+    /// [`ArrayShape::NotArray`] explicitly when the negative must be proven.
+    #[must_use]
+    pub const fn is_array_or_tuple(self) -> bool {
+        matches!(self, Self::Array)
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum ReferenceSpace {
@@ -304,6 +339,8 @@ pub struct EntityFact {
     pub call_result_domain: Option<RuntimeValueDomain>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub constant_value: Option<ConstantValue>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub array_shape: Option<ArrayShape>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reference_space: Option<ReferenceSpace>,
     #[serde(default, skip_serializing_if = "str::is_empty")]
@@ -733,6 +770,7 @@ mod tests {
                 runtime_value_domain: false,
                 call_result_domain: false,
                 constant_value: false,
+                array_shape: false,
                 reference_space: false,
                 runtime_identity: false,
             }],
@@ -776,6 +814,7 @@ mod tests {
                 runtime_value_domain: false,
                 call_result_domain: false,
                 constant_value: false,
+                array_shape: false,
                 reference_space: false,
                 runtime_identity: false,
             },
@@ -792,6 +831,7 @@ mod tests {
                 runtime_value_domain: true,
                 call_result_domain: true,
                 constant_value: true,
+                array_shape: true,
                 reference_space: true,
                 runtime_identity: true,
             },
@@ -808,6 +848,7 @@ mod tests {
                 runtime_value_domain: false,
                 call_result_domain: false,
                 constant_value: false,
+                array_shape: false,
                 reference_space: false,
                 runtime_identity: false,
             },

@@ -21,6 +21,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 			RuntimeValueDomain: domain,
 			CallResultDomain:   callResultDomain,
 			ConstantValue:      constantValue,
+			ArrayShape:         ArrayShapeArray,
 		},
 	}
 	structural := []SymbolID{"", "accessor"}
@@ -29,7 +30,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 		1,
 		[]EntityDemand{
 			{Location: location, Symbol: true},
-			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true, CallResultDomain: true, ConstantValue: true},
+			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true, CallResultDomain: true, ConstantValue: true, ArrayShape: true},
 		},
 		SemanticDemandRunResult{
 			Entities:   entities,
@@ -55,7 +56,8 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 		contribution.entities[0].Callability != CallabilityCallable ||
 		contribution.entities[0].RuntimeValueDomain != domain ||
 		contribution.entities[0].CallResultDomain != callResultDomain ||
-		contribution.entities[0].ConstantValue != constantValue {
+		contribution.entities[0].ConstantValue != constantValue ||
+		contribution.entities[0].ArrayShape != ArrayShapeArray {
 		t.Fatalf("compacted entity lost demand fields: %+v", contribution.entities[0])
 	}
 	if !slices.Equal(contribution.descriptorSymbols, []SymbolID{"symbol"}) {

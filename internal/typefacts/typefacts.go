@@ -75,6 +75,31 @@ const (
 	ConstantValueNumber ConstantValueKind = "number"
 )
 
+// ArrayShape is the compiler's array/tuple classification for a demanded
+// expression, derived from the checker's own isArrayOrTupleType predicate over
+// the actual union constituents. Rendered type text never participates, so an
+// aliased tuple classifies as its tuple rather than as the alias's name.
+//
+// ArrayShapeArray means every constituent is a reference to the global Array or
+// ReadonlyArray type, or a tuple. It is deliberately narrower than "array-like":
+// an interface extending Array, or any other type merely assignable to
+// ReadonlyArray<any>, classifies as ArrayShapeNotArray, because its author chose
+// that type over an array.
+//
+// ArrayShapeNotArray is a positive claim — no constituent is an array or tuple —
+// and is what makes the negative usable as proof. ArrayShapeMixed and
+// ArrayShapeUnknown are both "not proven either way": Mixed for a union that
+// genuinely mixes the two, Unknown for any, unknown, never, error, or an
+// unresolvable type.
+type ArrayShape string
+
+const (
+	ArrayShapeArray    ArrayShape = "array"
+	ArrayShapeNotArray ArrayShape = "notArray"
+	ArrayShapeMixed    ArrayShape = "mixed"
+	ArrayShapeUnknown  ArrayShape = "unknown"
+)
+
 // ReferenceSpace summarizes the semantic meaning of all compiler-resolved
 // references to an imported or aliased symbol.
 type ReferenceSpace string

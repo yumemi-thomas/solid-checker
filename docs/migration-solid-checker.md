@@ -20,6 +20,14 @@ new facts:
   expression span and accept only a present value with `kind: "string"`. Do
   not recover static strings from literal-type text or `typeDescriptor.text`;
   absence means not proven static.
+- Array/tuple shape questions, such as whether a JSX event-handler value is an
+  array or whether a `.map` receiver is a real array: demand `arrayShape` at the
+  exact expression span. Do not test `typeDescriptor.text` for `[`, `Array<`,
+  `ReadonlyArray<`, `readonly `, or a trailing `[]`; an aliased tuple renders as
+  its alias and defeats all of them, and a trailing `[]` cannot distinguish an
+  array of functions from a function returning an array. `arrayShape` needs no
+  companion `callability` demand to make that distinction. Only `notArray`
+  proves the negative; `mixed`, `unknown`, and absence are fail-closed.
 - Synthetic probe calls and diagnostic filtering: demand `resolvedCall` and
   accept only `valid`.
 - Source-text searches that decide whether an import is type-only or runtime:

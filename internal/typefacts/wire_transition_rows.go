@@ -21,6 +21,7 @@ const (
 	wireTransitionEntitySymbolUnresolved
 	wireTransitionEntityHasCallResultDomain
 	wireTransitionEntityHasConstantValue
+	wireTransitionEntityHasArrayShape
 )
 
 const (
@@ -133,6 +134,13 @@ func writeWireTransitionEntityRun(
 				return fmt.Errorf("entity %d: %w", index, err)
 			}
 		}
+		var arrayShape uint64
+		if entity.ArrayShape != "" {
+			arrayShape, err = wireTransitionArrayShapeCode(entity.ArrayShape)
+			if err != nil {
+				return fmt.Errorf("entity %d: %w", index, err)
+			}
+		}
 
 		start := int64(entity.Location.StartByte)
 		w.signed(start - previousStart)
@@ -162,6 +170,9 @@ func writeWireTransitionEntityRun(
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV8 && entity.ConstantValue != nil {
 			flags |= wireTransitionEntityHasConstantValue
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV9 && entity.ArrayShape != "" {
+			flags |= wireTransitionEntityHasArrayShape
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
@@ -201,6 +212,9 @@ func writeWireTransitionEntityRun(
 			default:
 				return fmt.Errorf("entity %d has unknown constant-value kind %q", index, entity.ConstantValue.Kind)
 			}
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV9 && entity.ArrayShape != "" {
+			w.u64(arrayShape)
 		}
 		previousStart = start
 	}
@@ -523,6 +537,21 @@ func wireTransitionCallabilityCode(value Callability) (uint64, error) {
 		return 3, nil
 	default:
 		return 0, fmt.Errorf("unknown callability %q", value)
+	}
+}
+
+func wireTransitionArrayShapeCode(value ArrayShape) (uint64, error) {
+	switch value {
+	case ArrayShapeArray:
+		return 0, nil
+	case ArrayShapeNotArray:
+		return 1, nil
+	case ArrayShapeMixed:
+		return 2, nil
+	case ArrayShapeUnknown:
+		return 3, nil
+	default:
+		return 0, fmt.Errorf("unknown array shape %q", value)
 	}
 }
 
