@@ -178,10 +178,16 @@ impl ArrayShape {
 /// slots it has, whether a rest or variadic tail follows, and whether the first
 /// slot holds a callable value.
 ///
-/// Emitted only when the type at that span is *itself* a tuple — never for a
-/// union, and never for the global `Array`/`ReadonlyArray` types, which carry a
-/// number index signature instead of fixed slots. Absence therefore means "not
-/// proven a tuple", never "not a tuple".
+/// Emitted when the type at that span resolves to a tuple: itself a tuple, or a
+/// union whose every value-carrying constituent is one. Never for the global
+/// `Array`/`ReadonlyArray` types, which carry a number index signature instead of
+/// fixed slots. Absence means "not proven a tuple", never "not a tuple".
+///
+/// For a union the fields are the constituents' meet — the slots they all have,
+/// callable only if all are, and the largest argument requirement among them — so
+/// what it reports holds whichever constituent the value turns out to be. Nullish
+/// constituents are skipped, so an optional tuple still describes the tuple it is
+/// when present; pair it with `runtime_value_domain` if presence also matters.
 ///
 /// This is the structural detail [`ArrayShape`] deliberately collapses. Ask for
 /// it when a value has to satisfy an interface with *numbered* members; ask

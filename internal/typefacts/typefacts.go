@@ -104,10 +104,18 @@ const (
 // element slots it has, whether a rest or variadic tail follows them, and
 // whether the first slot holds a callable value.
 //
-// It is emitted only when the type at the exact demanded span is itself a tuple
-// — never for a union, and never for the global Array/ReadonlyArray types, which
-// have a number index signature instead of fixed slots. Absence therefore means
-// "not proven a tuple", never "not a tuple".
+// It is emitted when the type at the exact demanded span resolves to a tuple:
+// itself a tuple, or a union whose every value-carrying constituent is one. It is
+// never emitted for the global Array/ReadonlyArray types, which have a number
+// index signature instead of fixed slots. Absence means "not proven a tuple",
+// never "not a tuple".
+//
+// For a union the fields are the constituents' meet — the slots they all have,
+// callable only if all are, and the largest argument requirement among them — so
+// what it reports holds whichever constituent the value turns out to be. Nullish
+// constituents carry no structure and are skipped, so an optional tuple still
+// describes the tuple it is when present; a consumer that also needs the value to
+// be present should read RuntimeValueDomain.
 //
 // This is the structural detail ArrayShape deliberately collapses. A consumer
 // asking whether a value satisfies an interface with numbered members, such as

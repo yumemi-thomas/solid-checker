@@ -1631,6 +1631,13 @@ declare const aliased: Handlers;
 declare const plainArray: ((event: MouseEvent) => void)[];
 declare const readonlyArray: ReadonlyArray<(event: MouseEvent) => void>;
 declare const maybePair: Handlers | undefined;
+type OtherHandlers = [(data: string, event: MouseEvent) => void, string];
+declare const bothPairs: Handlers | OtherHandlers;
+declare const unionOverArity: Handlers | [(a: number, b: MouseEvent, c: string) => void, number];
+declare const unionBadHead: Handlers | [number, number];
+declare const unionRest: Handlers | [(e: MouseEvent) => void, ...number[]];
+declare const unionFunction: Handlers | ((e: MouseEvent) => void);
+declare const unionArray: Handlers | number[];
 declare const notArray: (event: MouseEvent) => void;
 declare const anyValue: any;
 declare const empty: [];
@@ -1649,6 +1656,12 @@ aliased;
 plainArray;
 readonlyArray;
 maybePair;
+bothPairs;
+unionOverArity;
+unionBadHead;
+unionRest;
+unionFunction;
+unionArray;
 notArray;
 anyValue;
 empty;
@@ -1699,9 +1712,23 @@ empty;
 		// TypeScript's reduction, not ours, and it is why no case here produces
 		// a zero fixed length with a rest tail.
 		{`spreadOnly`, nil},
-		// A union is not itself a tuple; distributing a slot count would invent
-		// a shape no constituent has.
-		{`maybePair`, nil},
+		// A union answers with the meet of its constituents. A nullish
+		// constituent carries no structure and is skipped, so an optional pair
+		// still describes the pair it is when present.
+		{`maybePair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		{`bothPairs`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		// The meet takes the strictest demand: a caller must satisfy whichever
+		// constituent it gets.
+		{`unionOverArity`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 3}},
+		// One head is not callable, so the union's is not provably callable.
+		{`unionBadHead`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityMixed, ElementZeroMinimumParameters: 2}},
+		// Slots are kept only where both have them: the rest tail is not shared,
+		// so the fixed length drops to the shorter one.
+		{`unionRest`, &typefacts.TupleShape{FixedLength: 1, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		// A constituent that is not a tuple voids the whole answer -- there is no
+		// shape every value of this type has.
+		{`unionFunction`, nil},
+		{`unionArray`, nil},
 		{`notArray`, nil},
 		{`anyValue`, nil},
 	}

@@ -70,27 +70,61 @@ func arrayShapeOfType(typeChecker *checker.Checker, value *checker.Type) typefac
 }
 
 // tupleShapeAtLocked describes the tuple at exactly the demanded expression, or
-// nil when that type is not a tuple.
+// nil when that type does not resolve to one.
 //
 // Only a tuple has fixed, individually-typed element slots, which is what a
 // consumer needs to decide whether a value satisfies an interface with numbered
 // members. The global Array/ReadonlyArray types carry a number index signature
-// instead and are deliberately excluded, as is a union: distributing a slot
-// count over constituents would invent a shape none of them has.
+// instead and are deliberately excluded.
+//
+// A union answers when every constituent that can hold a value is a tuple. The
+// result is their conservative meet -- the slots they all have, and the strictest
+// demand any of them makes -- so a consumer reading it learns only what holds
+// whichever constituent the value turns out to be. Nullish constituents carry no
+// structure and are skipped; a consumer that also needs the value to be present
+// should read runtimeValueDomain.
 func (p *project) tupleShapeAtLocked(node *ast.Node, evidence *semanticEvidence) *typefacts.TupleShape {
 	if node == nil {
 		return nil
 	}
 	value := p.checker.GetTypeAtLocation(node)
-	if value == nil || value.Flags()&openArrayShapeFlags != 0 || !checker.IsTupleType(value) {
+	if value == nil || value.Flags()&openArrayShapeFlags != 0 {
+		return nil
+	}
+	var merged *typefacts.TupleShape
+	for _, constituent := range value.Distributed() {
+		if constituent == nil || constituent.Flags()&openArrayShapeFlags != 0 {
+			return nil
+		}
+		if constituent.Flags()&(checker.TypeFlagsUndefined|checker.TypeFlagsNull|checker.TypeFlagsVoid) != 0 {
+			continue
+		}
+		shape := tupleShapeOfType(p.checker, constituent)
+		if shape == nil {
+			return nil
+		}
+		if merged == nil {
+			merged = shape
+			continue
+		}
+		*merged = meetTupleShapes(*merged, *shape)
+	}
+	if merged == nil {
+		return nil
+	}
+	evidence.descriptor(p.typeDescriptorFor(value))
+	return merged
+}
+
+// tupleShapeOfType describes one non-union type, or nil when it is not a tuple.
+func tupleShapeOfType(typeChecker *checker.Checker, value *checker.Type) *typefacts.TupleShape {
+	if !checker.IsTupleType(value) {
 		return nil
 	}
 	target := value.TargetTupleType()
 	if target == nil {
 		return nil
 	}
-	evidence.descriptor(p.typeDescriptorFor(value))
-
 	shape := typefacts.TupleShape{
 		FixedLength: target.FixedLength(),
 		ElementZero: typefacts.CallabilityUnknown,
@@ -101,11 +135,35 @@ func (p *project) tupleShapeAtLocked(node *ast.Node, evidence *semanticEvidence)
 			break
 		}
 	}
-	if elements := checker.Checker_getTypeArguments(p.checker, value); shape.FixedLength > 0 && len(elements) > 0 {
-		shape.ElementZero = callabilityOfType(p.checker, elements[0])
-		shape.ElementZeroMinimumParameters = minimumParameterCount(p.checker, elements[0])
+	if elements := checker.Checker_getTypeArguments(typeChecker, value); shape.FixedLength > 0 && len(elements) > 0 {
+		shape.ElementZero = callabilityOfType(typeChecker, elements[0])
+		shape.ElementZeroMinimumParameters = minimumParameterCount(typeChecker, elements[0])
 	}
 	return &shape
+}
+
+// meetTupleShapes keeps only what both shapes guarantee: a slot exists if both
+// have it, a rest tail only if both carry one, the first slot is callable only
+// if it is in both, and the argument requirement is the larger of the two, since
+// a caller has to satisfy whichever constituent it gets.
+func meetTupleShapes(left, right typefacts.TupleShape) typefacts.TupleShape {
+	met := typefacts.TupleShape{
+		FixedLength: min(left.FixedLength, right.FixedLength),
+		HasRest:     left.HasRest && right.HasRest,
+		ElementZero: left.ElementZero,
+		ElementZeroMinimumParameters: max(
+			left.ElementZeroMinimumParameters,
+			right.ElementZeroMinimumParameters,
+		),
+	}
+	switch {
+	case left.ElementZero == right.ElementZero:
+	case left.ElementZero == typefacts.CallabilityUnknown || right.ElementZero == typefacts.CallabilityUnknown:
+		met.ElementZero = typefacts.CallabilityUnknown
+	default:
+		met.ElementZero = typefacts.CallabilityMixed
+	}
+	return met
 }
 
 // minimumParameterCount is the fewest arguments any call signature of value

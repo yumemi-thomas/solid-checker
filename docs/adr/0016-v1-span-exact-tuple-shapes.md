@@ -11,9 +11,20 @@ optional `EntityFact.tupleShape`. The fact carries the fixed slot count, whether
 a rest or variadic tail follows, and the callability of the first slot's type,
 for the type at the demanded trivia-normalized start and exact end bytes.
 
-It is emitted only when that type is *itself* a tuple: never for a union, whose
-constituents may disagree, and never for the global `Array`/`ReadonlyArray`
-types, which carry a number index signature rather than fixed slots. The
+It is emitted when that type resolves to a tuple — itself a tuple, or a union
+whose every value-carrying constituent is one — and never for the global
+`Array`/`ReadonlyArray` types, which carry a number index signature rather than
+fixed slots. A union reports the constituents' **meet**: the slots they all have,
+a rest tail only if all carry one, callable only if all are, and the largest
+argument requirement among them, so what it reports holds whichever constituent
+the value turns out to be. A single non-tuple constituent voids the answer, since
+then no shape is common to every value. Nullish constituents carry no structure
+and are skipped, so an optional tuple still describes the tuple it is when
+present; a consumer that also needs presence should read `runtimeValueDomain`.
+
+The meet is a widening of the original rule ("itself a tuple"), not a format
+change: the payload and Wire table schema are unchanged, and producer and client
+ship in build-id lockstep regardless. The
 compiler's own `isTupleType` is the predicate and its `fixedLength` and element
 flags are the source of the counts, so a spread-only tuple that TypeScript has
 already reduced to an array type is reported as the array it became.
