@@ -85,7 +85,13 @@ export function Wrong() {
       <div innerHTML={"<b>x</b>"}>overwritten</div>
       {/* SC8011: three React names Solid does not forward */}
       <label className="field" htmlFor="name" key="k">Name</label>
-      {/* SC8012: not a Solid namespace, so not a directive */}
+      {/* Silent since 2026-08-17: on an intrinsic element an unrecognised
+          namespace is TS2322 ("Property 'model:value' does not exist on type
+          'InputHTMLAttributes<HTMLInputElement>'"), so SC8012 was narrowed to
+          components — where props are a plain object and the claim (the
+          compiler special-cases namespaces only on DOM elements it lowers, so
+          the prop arrives inert) is one no type makes. The `<Panel on:click>`
+          pair above is that surviving arm. */}
       <input model:value={name()} />
       {/* SC8016: childless, and multiline whitespace is not a child */}
       <span class="spacer"></span>

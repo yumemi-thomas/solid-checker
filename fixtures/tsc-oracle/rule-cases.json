@@ -221,6 +221,16 @@
         2322
       ],
       "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const A = () => <div id=\"a\" id=\"b\" />;\nexport const B = () => <div id=\"a\" {...{ id: \"b\" }} />;\nexport const C = () => <div {...{ id: \"a\", id: \"b\" }} />;\nexport const D = () => <Panel onSave={() => {}} onSave={() => {}} />;\n"
+    },
+    {
+      "rule": "v1/no-unknown-namespaces",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "why": "SC8012's intrinsic-element arm, narrowed 2026-08-17. Solid resolves its JSX namespaces through mapped types over user-augmentable interfaces plus individually declared `on:*` events, so an unrecognised prefix has nothing to land on and is TS2322. The `style:`/`class:` prefixes are not declared at all, so the rule's style steer was reporting a type error too. The rule SURVIVES on components -- see the sibling `silent` case.",
+      "allow": [
+        2322
+      ],
+      "code": "export const A = () => <div foo:boo={null} />;\nexport const B = () => <div style:width=\"100%\" />;\nexport const C = () => <div class:active={true} />;\n"
     }
   ]
 }

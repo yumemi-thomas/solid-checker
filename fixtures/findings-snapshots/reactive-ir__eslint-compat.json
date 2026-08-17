@@ -142,23 +142,13 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-unknown-namespaces",
-      "code": "SC8012",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 5208,
-      "end": 5219,
-      "fixes": 0
-    },
-    {
       "rule": "v1/self-closing-comp",
       "code": "SC8016",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 5311,
-      "end": 5332,
+      "start": 5760,
+      "end": 5781,
       "fixes": 1
     },
     {
@@ -167,8 +157,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 5346,
-      "end": 5352,
+      "start": 5795,
+      "end": 5801,
       "fixes": 1
     }
   ]

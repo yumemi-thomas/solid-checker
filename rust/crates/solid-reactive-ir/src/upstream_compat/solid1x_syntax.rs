@@ -513,6 +513,31 @@ fn no_unknown_namespaces(
         .no_unknown_namespaces
         .allowed_namespaces;
     let component = !is_lowercase_led(text(file, element.name.span));
+    // Narrowed 2026-08-17 under AGENTS.md's absolute rule: on an intrinsic
+    // element every namespaced prop this rule objects to is already TS2322
+    // against the real solid-js@1.9.14 typings. Solid resolves its namespaces
+    // through mapped types over user-augmentable interfaces (`Directives`,
+    // `ExplicitProperties`, `ExplicitAttributes`, `ExplicitBoolAttributes`,
+    // `CustomEvents`) plus individually declared `on:*` events, so an
+    // unrecognised prefix has nothing to land on:
+    //
+    //   TS2322: Property 'model:value' does not exist on type
+    //           'HTMLAttributes<HTMLDivElement>'.
+    //
+    // That covers the `style:`/`class:` steer as well: neither prefix is
+    // declared at all, so `<div class:active={true} />` is a type error
+    // regardless of the style preference this rule was expressing. (A genuine
+    // gap in Solid's published typings, since the 1.x compiler does support
+    // both — but the type error is already speaking at that exact span, and
+    // compensating for the typings is not this checker's job.)
+    //
+    // A component keeps the rule: its props are a plain object, TypeScript is
+    // silent, and the claim — the compiler special-cases namespaces only on
+    // DOM elements it lowers directly, so the prop arrives inert — is one no
+    // type makes.
+    if !component {
+        return;
+    }
     for attribute in element
         .attributes
         .iter()
