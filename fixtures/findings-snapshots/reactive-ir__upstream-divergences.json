@@ -147,18 +147,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
-      "start": 426,
-      "end": 431,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/style-prop",
-      "code": "SC8017",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
-      "start": 465,
-      "end": 473,
+      "start": 1688,
+      "end": 1709,
       "fixes": 1
     },
     {
@@ -167,9 +157,29 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
-      "start": 520,
-      "end": 521,
+      "start": 1818,
+      "end": 1827,
       "fixes": 0
+    },
+    {
+      "rule": "v1/style-prop",
+      "code": "SC8017",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
+      "start": 1923,
+      "end": 1928,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/style-prop",
+      "code": "SC8017",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
+      "start": 1964,
+      "end": 1972,
+      "fixes": 1
     },
     {
       "rule": "v1/strict-read-untracked",

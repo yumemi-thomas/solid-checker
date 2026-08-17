@@ -204,6 +204,38 @@
     "no-react-specific-props__invalid__09": {
       "status": "policy",
       "reason": "Narrowed under AGENTS.md's absolute rule, and the whole `key` arm is gone: it was already gated to lowercase-led elements, where `key` is TS2322 against the real solid-js@1.9.14 typings. Nothing is left for the checker to add on a DOM element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "style-prop__invalid__00": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2561 -- `csstype`'s `CSSProperties` reports `fontSize` with the kebab-case suggestion the rule offered. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "style-prop__invalid__01": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2561 -- `backgroundColor`, same shape as case 00. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "style-prop__invalid__03": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2561 -- `COLOR` reports with \"Did you mean to write 'color'?\". The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "style-prop__invalid__04": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2353 -- `unknownStyleProp` does not exist in `CSSProperties`, and there is no kebab form either. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "style-prop__invalid__05": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 on the attribute -- a configured extra style prop (`css`) is not declared on `HTMLAttributes`, so the whole attribute is rejected before its keys matter. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "style-prop__invalid__06": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 on the attribute -- same as case 05 with `styleProps` replacing the default. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "style-prop__invalid__12": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 -- `'font-size': 10` is not assignable to `FontSize<0 | (string & {})>`; a unitless number for a length is a type error. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "style-prop__invalid__13": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 -- `'margin-top': -10` against `MarginTop<…>`, same shape as case 12. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     }
   },
   "counts": {

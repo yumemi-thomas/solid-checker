@@ -292,6 +292,36 @@ fn style_prop(
             violations.push(result);
             continue;
         }
+        // The *object-key* checks below are TypeScript's on an intrinsic
+        // element, and only there. `JSX.IntrinsicElements` types a `style`
+        // object as `csstype`'s `CSSProperties`, and TypeScript's
+        // excess-property check applies to exactly the same subject this rule
+        // inspects — a fresh object literal written in place — so against the
+        // real solid-js@1.9.14 typings a camelCase key is TS2561 with the
+        // kebab-case suggestion, an unknown key is TS2353, and a unitless
+        // number for a length is TS2322 against `MarginTop<…>`. Narrowed
+        // 2026-08-17 under AGENTS.md's absolute rule.
+        //
+        // On a component the answer is not given: its props are whatever it
+        // declares, so `<Panel style={{ fontSize: 10 }} />` is a permitted key
+        // when `Panel` takes `Record<string, unknown>` and a type error when it
+        // declares `JSX.CSSProperties`. Where TypeScript is silent the key is
+        // still wrong the moment the component forwards it to the DOM, so the
+        // rule keeps speaking there.
+        //
+        // The *string-form* check above is unaffected: a string `style` is
+        // legal in Solid 1.x on every element, and two of its claims — a
+        // declaration with a missing value, and a value that is not CSS at all
+        // — are ones no type can make.
+        //
+        // One key shape survives on an intrinsic element too: `CSSProperties`
+        // carries `[key: `-${string}`]: string | number | undefined`, so a
+        // vendor-prefixed key is absorbed by the index signature and stays
+        // silent whatever it is spelled — verified for `-webkitAlignContent`,
+        // `-webkit-align-content`, and `-fooBar`. Upstream's own case 02 is
+        // exactly that spelling, so gating the whole object on component-ness
+        // would have dropped a finding no type makes.
+        let object_keys_are_typed = is_lowercase_led(text(file, element.name.span));
         // Upstream inspects only a style value that is itself an object
         // literal, and only that object's own entries — an object built by a
         // helper call, or nested as some entry's value, is left alone.
@@ -309,6 +339,14 @@ fn style_prop(
             let name = (!property.computed)
                 .then(|| text(file, property.key).trim_matches(['\'', '"']))
                 .filter(|name| !name.is_empty());
+            // The narrowing, per key rather than per element: on an intrinsic
+            // element TypeScript answers for every key its `CSSProperties`
+            // describes, and declines only the `-`-prefixed ones its index
+            // signature absorbs. A computed key names nothing, so it is also
+            // TypeScript's to complain about or not.
+            if object_keys_are_typed && !name.is_some_and(|name| name.starts_with('-')) {
+                continue;
+            }
             match name {
                 // Custom properties are CSS's own escape hatch; upstream
                 // skips `--` names entirely.
