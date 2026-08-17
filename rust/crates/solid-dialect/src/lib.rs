@@ -499,6 +499,26 @@ pub trait Dialect: Sync {
         false
     }
 
+    /// Whether this dialect's store type makes the **root record's own
+    /// properties** `readonly`, so a direct write to one is already a
+    /// TypeScript error and this checker must not report it as well.
+    ///
+    /// 2.0 returns a shallowly `Readonly` proxy from `createStore`, so
+    /// `state.count = 1` and `state.count++` are both TS2540 ("Cannot assign to
+    /// 'count' because it is a read-only property") against
+    /// `@solidjs/signals@2.0.0-rc.0`. The readonly-ness stops at the top level:
+    /// `state.user.name = "b"` type-checks, and so does every write through a
+    /// props object, so those stay this checker's to report.
+    ///
+    /// 1.x is the opposite and the default is `false`: its `createStore` returns
+    /// a mutable store type, and the same four writes produce **no** diagnostic
+    /// at all (verified against `solid-js@1.9.14`). The 1.x rule is therefore
+    /// fully independent -- which is exactly why this is asked of the dialect
+    /// instead of assumed from the 2.0 answer.
+    fn store_root_properties_are_readonly(&self) -> bool {
+        false
+    }
+
     /// Whether a store's own setter callback write-enables the *original*
     /// store proxy for the duration of the callback.
     ///

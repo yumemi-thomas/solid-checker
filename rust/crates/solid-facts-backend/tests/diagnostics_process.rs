@@ -247,6 +247,9 @@ fn solid2_precision_corrections_are_end_to_end() {
         ("invalid-cleanup-return", 0),
         ("cleanup-return-unresolved", 0),
         ("strict-read-untracked", 5),
+        // Still four, but not the same four: the 2026-08-17 narrowing traded the
+        // three root-record writes for the nested, cast, and props writes
+        // asserted by span below. A count alone cannot tell those apart.
         ("no-direct-mutation", 4),
         ("cleanup-in-forbidden-scope", 1),
         ("no-owner-cleanup", 3),
@@ -281,6 +284,34 @@ fn solid2_precision_corrections_are_end_to_end() {
         !starts("strict-read-untracked").contains(&start_of("profile.name =")),
         "a plain assignment target is a write, not a read"
     );
+
+    // 2.0's store proxy is shallowly `Readonly`, so a write to a *root*
+    // property is TS2540 and no longer this checker's. The shallowness and the
+    // cast escape hatch are what remain, and each is pinned by span -- the
+    // count above is satisfied by four findings either way, so only these
+    // assertions distinguish the narrowing from a regression that dropped the
+    // wrong three.
+    for root_write in ["profile.name = ", "profile.count += ", "profile.count++"] {
+        assert!(
+            !starts("no-direct-mutation").contains(&start_of(root_write)),
+            "a root store property is TS2540, so {root_write:?} is TypeScript's to report"
+        );
+    }
+    for kept in [
+        // The readonly-ness stops at the top level.
+        "profile.user.name = ",
+        // A cast erases it, so TypeScript falls silent and the write is still
+        // dropped. `member_root` resolves through the cast, which is why the
+        // narrowing demands a bare-identifier root.
+        "(profile as { user: { name: string } }).user = ",
+        // A props member is not readonly at all.
+        "props.n = ",
+    ] {
+        assert!(
+            starts("no-direct-mutation").contains(&start_of(kept)),
+            "{kept:?} is a write TypeScript accepts and the checker must still report"
+        );
+    }
     assert!(
         starts("strict-read-untracked").contains(&start_of("props.index")),
         "a computed key inside an assignment target is still a read"

@@ -261,6 +261,14 @@ impl Dialect for Solid2 {
         primitive == Primitive::OnSettled
     }
 
+    /// `createStore` returns `Readonly<T>` over the root record
+    /// (`@solidjs/signals@2.0.0-rc.0`), so a write to one of its own properties
+    /// is TS2540 and belongs to TypeScript. Nested records and props objects are
+    /// not readonly and stay this checker's.
+    fn store_root_properties_are_readonly(&self) -> bool {
+        true
+    }
+
     /// Source: rc.0 store setters put the store into the Writing set for the
     /// duration of the draft callback, so `setStore(d => { store.value = 7 })`
     /// commits through the original proxy (probed: the write lands after

@@ -22,26 +22,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-direct-mutation",
-      "code": "SC2003",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 1658,
-      "end": 1668,
-      "fixes": 0
-    },
-    {
-      "rule": "no-direct-mutation",
-      "code": "SC2003",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 2767,
-      "end": 2777,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",

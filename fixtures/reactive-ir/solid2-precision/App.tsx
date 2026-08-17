@@ -171,6 +171,13 @@ export function ReturnedCallCleanupReturns() {
 
 // A direct assignment writes without reading the old store value. Compound
 // assignment and update expressions do read it and retain SC1001.
+//
+// SC2003 is silent on all three since 2026-08-17: 2.0's `createStore` returns a
+// shallowly `Readonly` proxy, so a write to one of the *root* record's own
+// properties is TS2540 ("Cannot assign to 'count' because it is a read-only
+// property") and belongs to TypeScript. The SC1001 read claims are unaffected --
+// they are about tracking, not assignability. 1.x's store type is mutable
+// throughout, so `fixtures/reactive-ir/v1-reactivity` keeps all three findings.
 export function StoreAssignmentTargets() {
   const [profile] = createStore({ name: "Ada", count: 0 });
   profile.name = "Grace";
@@ -178,6 +185,23 @@ export function StoreAssignmentTargets() {
   profile.count++;
   const snapshot = profile.name;
   return <div>{snapshot}</div>;
+}
+
+// SC2003's surviving arms in 2.0, each a write TypeScript accepts.
+export function StoreWritesTypeScriptAccepts(props: { n: number }) {
+  const [profile] = createStore({ user: { name: "Ada" } });
+  // The readonly-ness is shallow, so a *nested* record's property is writable
+  // as far as the type is concerned -- and still dropped by the runtime.
+  profile.user.name = "Grace";
+  // A cast erases the readonly from a *root* property, so TypeScript falls
+  // silent while the write is dropped exactly as before. This is the case that
+  // exercises the narrowing's identifier guard: `member_root` resolves through
+  // the cast, so comparing the written member's object against the root span
+  // alone would have handed this to a diagnostic that does not exist.
+  (profile as { user: { name: string } }).user = { name: "Ida" };
+  // A props member is not readonly at all.
+  props.n = 1;
+  return <div>{profile.user.name}</div>;
 }
 
 // Only the member that IS the written target is a write. A computed key and a

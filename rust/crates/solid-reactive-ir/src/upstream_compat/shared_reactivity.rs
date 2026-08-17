@@ -728,6 +728,33 @@ fn no_direct_mutation(
         } else {
             DirectMutationTarget::AccessorBinding
         };
+        // A write to the root record's *own* property is TS2540 where the
+        // dialect's store type is `Readonly` at that level -- 2.0 -- so it is
+        // TypeScript's, not this rule's. The readonly-ness is shallow, so a
+        // nested record and a props object both stay here; 1.x's store type is
+        // mutable throughout, and its rule is unaffected.
+        //
+        // The root must be a bare identifier. `(state as { count: number }).count
+        // = 1` casts the readonly away, so TypeScript falls silent there while
+        // the write is still dropped at runtime -- and `member_root` resolves
+        // through the cast, so a span comparison alone would have handed that
+        // case to a TypeScript diagnostic that does not exist.
+        if target == DirectMutationTarget::Store
+            && context.dialect.store_root_properties_are_readonly()
+            && file
+                .ast
+                .members
+                .iter()
+                .find(|member| member.span == assignment.target)
+                .is_some_and(|member| member.object == root)
+            && file
+                .ast
+                .identifiers
+                .iter()
+                .any(|identifier| identifier.span == root)
+        {
+            continue;
+        }
         // 2.0 write-enables the original store proxy for the duration of its
         // own setter's draft callback (probed on rc.0: the write commits;
         // through another store's setter it is silently dropped). A write

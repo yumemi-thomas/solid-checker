@@ -303,8 +303,8 @@
       "rule": "no-direct-mutation",
       "dialect": "v2",
       "expect": "silent",
-      "why": "SC2003's uncovered arms. `Readonly` on a store's return type is *shallow*, so a write to a nested record (`state.user.name = \"b\"`) type-checks, and a props member is not readonly at all -- in both cases the claim is that the change is invisible to the reactive graph. Its root-record arm is TS2540 and is tracked as a pending narrowing; see the sibling case.",
-      "code": "import { createStore } from \"solid-js\";\nconst [state] = createStore({ count: 0, user: { name: \"a\" } });\nexport function Nested() {\n  state.user.name = \"b\";\n}\nexport function Props(props: { n: number }) {\n  props.n = 1;\n}\n"
+      "why": "SC2003's surviving arms in 2.0, each a write TypeScript accepts while the runtime drops it. The cast is the one that constrains the implementation: `member_root` resolves through it, so the narrowing must require the written member's object to be a bare *identifier* rather than merely equal to the resolved root span.",
+      "code": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0, user: { name: \"Ada\" } });\n// The readonly-ness is shallow.\nexport function Nested() {\n  profile.user.name = \"Grace\";\n}\n// A cast erases it from a root property too.\nexport function Cast() {\n  (profile as { count: number }).count = 1;\n}\n// A props member is not readonly at all.\nexport function Props(props: { n: number }) {\n  props.n = 1;\n}\n"
     },
     {
       "rule": "reactive-source-uncaptured",
@@ -512,12 +512,19 @@
     {
       "rule": "no-direct-mutation",
       "dialect": "v2",
-      "expect": "redundant-pending-narrowing",
-      "why": "SC2003's root-record arm is a known duplicate. `createStore` returns a shallowly `Readonly` proxy, so a write to a *root* property is TS2540 (\"Cannot assign to 'count' because it is a read-only property\") for both the assignment and the update form. The narrowing -- report only for a nested record or a props member, which the checker can tell apart from the member chain it already resolves -- is specified in docs/precision-backlog.md and not yet landed.",
+      "expect": "removed-because-redundant",
+      "why": "SC2003's root-record arm, narrowed 2026-08-17 in the 2.0 catalog only. `createStore` returns a shallowly `Readonly` proxy there, so a write to a root property is TS2540 for both the assignment and the update form. Solid 1.x is the opposite -- its store type is mutable throughout and the same writes produce no diagnostic at all -- so the 1.x rule is untouched, which is why the predicate is asked of the dialect. The rule SURVIVES on nested records, casts, and props members; see the sibling `silent` case.",
       "allow": [
         2540
       ],
       "code": "import { createStore } from \"solid-js\";\nconst [state] = createStore({ count: 0 });\nexport function Assign() {\n  state.count = 1;\n}\nexport function Update() {\n  state.count++;\n}\n"
+    },
+    {
+      "rule": "v1/no-direct-mutation",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "The 1.x arm, and the reason the narrowing is dialect-gated rather than shared. Solid 1.x's `createStore` returns a mutable store type, so none of these four writes produces any diagnostic -- not even the root-property ones TS2540 rejects in 2.0. The 1.x rule is fully independent, and carrying the 2.0 answer across the dialect seam would have silenced it wrongly.",
+      "code": "import { createStore } from \"solid-js/store\";\nconst [state] = createStore({ count: 0, user: { name: \"a\" } });\nexport function A() {\n  state.count = 1;\n}\nexport function B() {\n  state.count++;\n}\nexport function C() {\n  state.user.name = \"b\";\n}\nexport function D(props: { n: number }) {\n  props.n = 1;\n}\n"
     }
   ]
 }

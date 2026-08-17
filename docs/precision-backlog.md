@@ -266,29 +266,41 @@ entry naming its own diagnostic.
 | SC1007 | `expected-function-got-expression` | The whole **call-result** arm. Both its triggers land on TS2322 at the same attribute: an expression *proven non-callable* is exactly what TypeScript rejects, and a *proven-accessor call* is rejected whenever the accessor's value is not callable (`onClick={count()}` with `count: Accessor<number>`). Deliberately **not** kept for the one spelling TypeScript permits — an accessor holding a function, `onClick={handler()}` — because there the finding would be wrong: a JSX attribute expression is a tracked read, so that handler does update. The dead `HandlerCallResult` defect kind and the `proven_not_callable` helper went with it. | The **reactive-handler-read** arm: a callable handler read out of reactive props or store state. TypeScript is silent, and the claim is a timing one — a native listener receives its function value once during DOM setup, so reading it through reactive props freezes the initial handler. A prop every call site passes statically stays silent. |
 | SC1005 | `uncalled-accessor` (both catalogs) | Three of its six value positions, in both dialects: a native JSX attribute (TS2322 — an accessor is never assignable to a DOM attribute type), a class object value (TS2322 against 2.0's `Record<string, boolean>`), a computed property access (TS2538). This removed the last consumers of the dialect's `class_object_values_are_truthiness_coerced` and `native_children_attribute_invokes_functions` predicates, which went with them. | The three positions TypeScript **permits**, and the most common real spellings of the bug: a string-concatenation binary operand (`"hello " + label` renders the accessor's source text), a unary operand, and a template-literal interpolation. |
 
-### Audited, narrowing specified, not yet landed
+### Narrowed 2026-08-17: `no-direct-mutation`, in the 2.0 catalog only
 
-**`no-direct-mutation` (SC2003, both catalogs)** — `createStore` returns a
-*shallowly* `Readonly` proxy, so a write to a **root** property is already a type
-error against `@solidjs/signals@2.0.0-rc.0`, for both spellings:
+2.0's `createStore` returns a shallowly `Readonly` proxy, so a write to a
+**root** record property is already a type error against
+`@solidjs/signals@2.0.0-rc.0`, for both spellings:
 
 ~~~
 mut.tsx(4,29) TS2540: Cannot assign to 'count' because it is a read-only property.  // state.count = 1
 mut.tsx(5,29) TS2540: Cannot assign to 'count' because it is a read-only property.  // state.count++
 ~~~
 
-The readonly-ness stops at the top level, so the two arms that matter are
-**silent** to `tsc` and stay the rule's own: a write to a **nested** record
-(`state.user.name = "b"`) and a write to a **props member** (`props.n = 1`).
-Both are cases where the change is simply invisible to the reactive graph.
+**Solid 1.x is the opposite**, and this is why the predicate is asked of the
+dialect rather than assumed: its `createStore` returns a *mutable* store type,
+and the same four writes produce **no diagnostic at all** against
+`solid-js@1.9.14`. The 1.x rule is fully independent and untouched — carrying the
+2.0 answer across the seam would have silenced it wrongly, which is exactly the
+failure AGENTS.md warns about.
 
-The narrowing is implementable from facts the checker already has — it resolves
-the member chain and the store's root symbol, so "is the written member the root
-record's own property" is answerable. Not landed here; it needs its own slice
-with the 1.x arm audited separately and its parity cases declared. Pinned in
-both directions meanwhile, the root arm as
-`expect: "redundant-pending-narrowing"` so the debt is visible in CI rather than
-only in prose.
+Three shapes survive in 2.0, each a write TypeScript accepts and the runtime
+drops:
+
+- **A nested record's property.** The readonly-ness stops at the top level, so
+  `profile.user.name = "Grace"` type-checks.
+- **A cast.** `(profile as { count: number }).count = 1` erases the readonly.
+  This one constrains the implementation: `member_root` resolves *through* the
+  cast, so comparing the written member's object against the resolved root span
+  alone would have handed this case to a diagnostic that does not exist. The
+  narrowing therefore requires the object to be a bare **identifier**.
+- **A props member**, which is not readonly at all.
+
+Coverage 526 → 524; the three root writes went and two of the surviving shapes
+were added as fixture cases, because the fixture had none. The finding *count*
+happens to land on four either way, so `diagnostics_process.rs` asserts each
+surviving spelling and each dropped one **by span** — a count alone cannot tell
+this narrowing from a regression that dropped the wrong three.
 
 ### Known residual duplicate, inside a surviving position
 
