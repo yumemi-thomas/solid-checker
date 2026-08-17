@@ -22,13 +22,43 @@
       "fixes": 0
     },
     {
+      "rule": "v1/jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 1769,
+      "end": 1774,
+      "fixes": 0
+    },
+    {
       "rule": "v1/event-handlers",
       "code": "SC8001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 1423,
-      "end": 1432,
+      "start": 2223,
+      "end": 2230,
+      "fixes": 1
+    },
+    {
+      "rule": "v1/event-handlers",
+      "code": "SC8001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 2256,
+      "end": 2266,
+      "fixes": 1
+    },
+    {
+      "rule": "v1/event-handlers",
+      "code": "SC8001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 2575,
+      "end": 2584,
       "fixes": 0
     },
     {
@@ -37,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 1433,
-      "end": 1442,
+      "start": 2605,
+      "end": 2612,
       "fixes": 0
     },
     {
@@ -47,8 +77,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 1433,
-      "end": 1438,
+      "start": 2996,
+      "end": 3002,
       "fixes": 0
     },
     {
@@ -57,18 +87,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 1815,
-      "end": 1821,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2166,
-      "end": 2172,
+      "start": 3347,
+      "end": 3353,
       "fixes": 0
     },
     {
@@ -77,8 +97,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2200,
-      "end": 2208,
+      "start": 3381,
+      "end": 3389,
       "fixes": 1
     },
     {
@@ -87,8 +107,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2220,
-      "end": 2228,
+      "start": 3401,
+      "end": 3409,
       "fixes": 0
     },
     {
@@ -97,8 +117,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2220,
-      "end": 2228,
+      "start": 3401,
+      "end": 3409,
       "fixes": 1
     },
     {
@@ -107,8 +127,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2310,
-      "end": 2330,
+      "start": 3491,
+      "end": 3511,
       "fixes": 0
     },
     {
@@ -117,8 +137,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2493,
-      "end": 2518,
+      "start": 3674,
+      "end": 3699,
       "fixes": 0
     },
     {
@@ -127,8 +147,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2598,
-      "end": 2626,
+      "start": 3779,
+      "end": 3807,
       "fixes": 0
     },
     {
@@ -137,8 +157,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2598,
-      "end": 2643,
+      "start": 3779,
+      "end": 3824,
       "fixes": 0
     },
     {
@@ -147,8 +167,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2851,
-      "end": 2862,
+      "start": 4032,
+      "end": 4043,
       "fixes": 0
     },
     {
@@ -157,8 +177,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2954,
-      "end": 2975,
+      "start": 4135,
+      "end": 4156,
       "fixes": 1
     },
     {
@@ -167,8 +187,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2989,
-      "end": 2995,
+      "start": 4170,
+      "end": 4176,
       "fixes": 1
     }
   ]

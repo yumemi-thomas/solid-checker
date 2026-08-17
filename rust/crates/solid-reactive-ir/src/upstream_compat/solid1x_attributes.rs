@@ -612,6 +612,26 @@ fn event_handlers(
     if element_name.contains('.') || !is_lowercase_led(element_name) {
         return; // bail if this is not a DOM/SVG element or web component
     }
+    // Narrowed 2026-08-17 under AGENTS.md's absolute rule. Solid 1.x's JSX
+    // types declare every standard handler under both its camelCase and its
+    // all-lowercase spelling, and `HTMLAttributes` has no `on*` index
+    // signature, so on a standard element TypeScript answers two of this
+    // rule's three attribute arms outright:
+    //
+    //   * an unknown `on*` name is TS2322 "Property 'onFoo' does not exist on
+    //     type 'HTMLAttributes<HTMLDivElement>'" -- in every value form,
+    //     including the boolean shorthand;
+    //   * a statically valued *known* handler is TS2322 "Type 'string' is not
+    //     assignable to type 'EventHandlerUnion<…>'", and no static value is
+    //     ever assignable, so that arm has no residue either.
+    //
+    // A **hyphenated** tag is different: `<my-element />` is TS2339 against
+    // stock typings, so any project that actually uses one has augmented
+    // `JSX.IntrinsicElements` with its own declaration -- commonly a permissive
+    // one. There TypeScript is silent and this rule's claim (Solid freezes a
+    // statically valued `on*` prop into the template as a plain attribute
+    // rather than attaching a listener) is the only one available.
+    let custom_element = element_name.contains('-');
     for attribute in element
         .attributes
         .iter()
@@ -645,6 +665,11 @@ fn event_handlers(
                 JsxAttributeValueKind::Boolean | JsxAttributeValueKind::String
             )
         {
+            // TypeScript's on a standard element, whatever the name: a known
+            // handler rejects the value, an unknown name does not exist.
+            if !custom_element {
+                continue;
+            }
             violations.push(violation(
                 file,
                 "SC8001",
@@ -671,7 +696,16 @@ fn event_handlers(
             event_name(name)
         };
         if let Some(fixed) = fixed {
-            if fixed != name {
+            // The rename advice survives only where the name as written is a
+            // *declared* spelling, so TypeScript accepts it and the remaining
+            // objection is readability. Solid 1.x declares each handler as
+            // both `onClick` and `onclick`, so that is the all-lowercase form:
+            // `onclick` is silent to `tsc` and keeps its advice, while
+            // `onClIcK`, `oncLICK`, and `ondoubleclick` are TS2322 and are now
+            // TypeScript's. On a hyphenated tag nothing is declared by Solid,
+            // so the advice stands there too.
+            let declared_spelling = custom_element || name == fixed.to_ascii_lowercase();
+            if fixed != name && declared_spelling {
                 let message = if name.eq_ignore_ascii_case("ondoubleclick") {
                     format!(
                         "The {name} prop should be renamed to {fixed}, because it's not a standard event handler."
@@ -698,11 +732,15 @@ fn event_handlers(
                 ));
                 violations.push(result);
             }
-        } else if name.as_bytes().get(2).is_some_and(u8::is_ascii_lowercase) {
+        } else if custom_element && name.as_bytes().get(2).is_some_and(u8::is_ascii_lowercase) {
             // Ambiguous between "ongoing"-style words and an unrecognized
             // handler; two equally valid readings, so this is a suggestion
             // rather than a fix (see attributes rule of the road: only an
             // unambiguous fix is emitted).
+            //
+            // Reached only on a hyphenated tag: an unrecognised `on*` name on a
+            // standard element does not exist on its attribute type, which is
+            // TS2322's sentence, not this rule's.
             let handler_name = format!("on{}{}", name[2..3].to_ascii_uppercase(), &name[3..]);
             let attr_name = format!("attr:{name}");
             violations.push(violation(

@@ -192,8 +192,8 @@
       "rule": "v1/event-handlers",
       "dialect": "v1",
       "expect": "silent",
-      "why": "SC8001's surviving arms, and the reason the rule was not deleted. `onclick` and `ondblclick` are *declared* props in Solid 1.x, so the canonical-casing and ambiguous-name advice is the rule's own; and a spread-carried handler is legal to `tsc` while Solid does not attach it as a listener.",
-      "code": "const handleClick = () => 42;\nexport const Casing = () => <div onclick={handleClick} />;\nexport const Ambiguous = () => <div ondblclick={handleClick} />;\nexport const Spread = () => <div {...{ onClick: handleClick }} />;\n"
+      "why": "SC8001's surviving arms, and the reason the rule was not deleted. `onclick` and `ondblclick` are *declared* props in Solid 1.x, so TypeScript accepts them and the canonical-casing advice is the rule's own. A spread-carried handler type checks while Solid does not attach it. And a hyphenated tag is TS2339 against stock typings, so a project using one has declared it -- the augmentation here is the permissive shape such declarations commonly take -- after which TypeScript is silent about its attributes and the static-value and ambiguous-name arms are the only claims available.",
+      "code": "import type {} from \"solid-js\";\nconst handleClick = () => 42;\n// Solid 1.x exports its JSX namespace from the module, so a custom element\n// is declared by augmenting that module -- not the global scope.\ndeclare module \"solid-js\" {\n  namespace JSX {\n    interface IntrinsicElements {\n      \"my-widget\": { [key: string]: unknown };\n    }\n  }\n}\nexport const Casing = () => <div onclick={handleClick} />;\nexport const Ambiguous = () => <div ondblclick={handleClick} />;\nexport const Spread = () => <div {...{ onClick: handleClick }} />;\nexport const Widget = () => <my-widget onFoo=\"a\" />;\nexport const WidgetAmbiguous = () => <my-widget onlynow={handleClick} />;\n"
     },
     {
       "rule": "v1/no-react-specific-props",
