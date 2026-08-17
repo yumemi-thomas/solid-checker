@@ -1110,6 +1110,27 @@ fn shorthand_property_values_resolve_through_block_scope() {
         "missing proven cross-file shorthand return"
     );
 
+    for (export, property, label) in [
+        (
+            "defaultReexportShorthand",
+            "defaultFromBarrel",
+            "defaultFromBarrel",
+        ),
+        ("namedReexportShorthand", "chainedTracked", "chainedTracked"),
+        ("exportAllShorthand", "starTracked", "starTracked"),
+    ] {
+        assert_eq!(
+            without_claim_evidence(&exports[export]["returns"]),
+            serde_json::json!({
+                "kind": "object",
+                "properties": {
+                    property: { "kind": "accessor", "label": label }
+                }
+            }),
+            "missing proven re-export shorthand return for {export}"
+        );
+    }
+
     // Each of these names a binding that is provably not a local accessor, or
     // one this file's scope tree does not declare. A same-spelled accessor is
     // in the enclosing function for the first two; none of them may borrow it.
@@ -1123,6 +1144,10 @@ fn shorthand_property_values_resolve_through_block_scope() {
         // module it happened to see first.
         "ambiguousShorthand",
         "globalShorthand",
+        "namespaceShorthand",
+        "bareImportShorthand",
+        "pathMappedShorthand",
+        "cyclicReexportShorthand",
     ] {
         assert_eq!(
             exports[export]["returns"],

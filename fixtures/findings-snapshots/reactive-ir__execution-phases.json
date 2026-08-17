@@ -10,36 +10,6 @@
       "start": 309,
       "end": 316,
       "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/execution-phases/App.tsx",
-      "start": 309,
-      "end": 316,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/execution-phases/App.tsx",
-      "start": 347,
-      "end": 354,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/execution-phases/App.tsx",
-      "start": 375,
-      "end": 382,
-      "fixes": 0
     }
   ]
 }

@@ -223,20 +223,6 @@ impl LeafOwnerOperationKind {
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct InvalidCleanupReturn {
-    pub primitive: String,
-    pub location: Location,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct UnresolvedCleanupReturn {
-    pub primitive: String,
-    pub location: Location,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct StaticViolation {
     pub id: String,
     pub rule: String,
@@ -1059,8 +1045,6 @@ pub struct Program {
     pub writes: Vec<ReactiveWrite>,
     pub actions: Vec<ActionInvocation>,
     pub leaf_operations: Vec<LeafOwnerOperation>,
-    pub invalid_cleanup_returns: Vec<InvalidCleanupReturn>,
-    pub unresolved_cleanup_returns: Vec<UnresolvedCleanupReturn>,
     pub static_violations: Vec<StaticViolation>,
     pub static_defects: Vec<StaticDefect>,
     pub directive_creations: Vec<PrimitiveCreation>,
@@ -2236,10 +2220,13 @@ mod tests {
                 end_byte: start + 1,
             },
             symbol: symbol.into(),
+            symbol_unresolved: false,
             type_descriptor: None,
             resolved_call: None,
             callability: None,
             runtime_value_domain: None,
+            call_result_domain: None,
+            constant_value: None,
             reference_space: None,
             runtime_identity: "".into(),
         };

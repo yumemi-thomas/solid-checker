@@ -169,10 +169,7 @@ impl CatalogWording for Catalog {
                     hint,
                 )
             }
-            FindingSeed::Action(_)
-            | FindingSeed::AsyncRead(_)
-            | FindingSeed::InvalidCleanupReturn(_)
-            | FindingSeed::UnresolvedCleanupReturn(_) => {
+            FindingSeed::Action(_) | FindingSeed::AsyncRead(_) => {
                 panic!("Solid 1.x projector received a disabled 2.0-only finding seed")
             }
         }

@@ -33,12 +33,24 @@ fn plan_file(
     let structural_accessors = structural_accessor_spans(dialect, file);
     let mut symbol_spans = HashMap::new();
     let mut type_descriptor_spans = HashSet::new();
+    let mut runtime_value_domain_spans = HashSet::new();
+    let mut constant_value_spans = HashSet::new();
     let mut async_symbol_spans = HashSet::new();
     let mut async_value_spans = Vec::new();
+    // An expression-bodied arrow's return lives on its function fact, so both
+    // spellings of a returned call have to reach the callee's resolved-call
+    // demand and the call-result demand below; cleanup classification treats
+    // `() => make()` and `return make()` identically.
     let returned_callees = file
         .ast
         .returns
         .iter()
+        .chain(
+            file.ast
+                .functions
+                .iter()
+                .filter_map(|function| function.expression_return.as_ref()),
+        )
         .filter_map(|returned| returned.callee)
         .collect::<HashSet<_>>();
     let mut add_symbol = |span, references| {
@@ -171,9 +183,12 @@ fn plan_file(
                     || attribute
                         .namespace
                         .is_some_and(|namespace| file.source_text(namespace) == Some("on")));
-            // The 1.x catalog also recovers string values from literal
-            // string *types*: `no-innerhtml`'s allowStatic acceptance, and
-            // `jsx-no-script-url` for URL-carrying attributes.
+            // The 1.x catalog also recovers static string *values*:
+            // `no-innerhtml`'s allowStatic acceptance, and `jsx-no-script-url`
+            // for URL-carrying attributes. That is the constant-value fact, not
+            // the rendered type: a literal type is only incidentally a value,
+            // and it is absent for a folded constant such as `"a" + "b"`, whose
+            // type widens to `string`.
             let static_value_type_required = dialect.semantic_demands.jsx_static_value_types
                 && matches!(
                     name,
@@ -191,6 +206,9 @@ fn plan_file(
             if handler || static_value_type_required {
                 add_symbol(expression, false);
                 type_descriptor_spans.insert(expression);
+            }
+            if static_value_type_required {
+                constant_value_spans.insert(expression);
             }
             // A non-literal `keyed` value on a control-flow component picks
             // the children-callback overload at runtime; source discovery
@@ -277,16 +295,43 @@ fn plan_file(
             }
         }
     }
-    for returned in &file.ast.returns {
-        if let Some(callee) = returned.callee
-            && let Some(call) = file.ast.calls.iter().find(|call| call.callee == callee)
-        {
-            let mut planned = demand(typefacts_location(&path, call.span));
-            planned.callability = true;
-            demands.push(planned);
+    // Cleanup classification asks what a returned call *produces*. That is the
+    // `callResultDomain` demand, not `runtimeValueDomain`: a call and its callee
+    // share a start byte, so a value-domain fact at a call span describes the
+    // callee. The producer matches the call-result demand against a call-like
+    // node whose start *and end* bytes are exactly the demanded span, and emits
+    // no field when none matches, so the subject can never be the callee.
+    //
+    // Only the result domain is demanded here. `callability` at a call span
+    // answers a question no consumer asks any more — cleanup classification
+    // reads the result — and demanding it is actively harmful: callability is
+    // consumed through `smallest_contained_callability`, which picks the
+    // smallest *contained* entity carrying the fact, so a callability entity on
+    // an expression-bodied arrow's own returned call (`(post) => post.f(x)`)
+    // sits inside the callback-argument span and outranks the arrow, answering
+    // "is `post.f(x)` callable" where the caller asked "is this argument a
+    // callable callback". The result domain is invisible to that lookup.
+    for call in &file.ast.calls {
+        if !returned_callees.contains(&call.callee) {
+            continue;
         }
-        if returned.value == solid_facts::ast::ReturnValueKind::Identifier {
+        let mut planned = demand(typefacts_location(&path, call.span));
+        planned.call_result_domain = true;
+        demands.push(planned);
+    }
+    for returned in &file.ast.returns {
+        if matches!(
+            returned.value,
+            solid_facts::ast::ReturnValueKind::Identifier
+                | solid_facts::ast::ReturnValueKind::Member
+        ) {
+            // Cleanup-return classification resolves the returned entity at
+            // `returned.span` — the peeled expression, so `return (value)` and
+            // `return value as Cleanup` name the identifier, not the wrapper.
+            // The symbol and the value-domain demand must name that same span
+            // or the fact never materializes at all.
             add_symbol(returned.span, false);
+            runtime_value_domain_spans.insert(returned.span);
         }
         for value in returned
             .elements()
@@ -308,6 +353,24 @@ fn plan_file(
                     }
                 }
             }
+        }
+    }
+    // An expression-bodied arrow's return is recorded on its function fact,
+    // not in `ast.returns`, so `() => value` needs the same pair of demands
+    // at the same span the block-bodied form uses.
+    for returned in file
+        .ast
+        .functions
+        .iter()
+        .filter_map(|function| function.expression_return.as_ref())
+    {
+        if matches!(
+            returned.value,
+            solid_facts::ast::ReturnValueKind::Identifier
+                | solid_facts::ast::ReturnValueKind::Member
+        ) {
+            add_symbol(returned.span, false);
+            runtime_value_domain_spans.insert(returned.span);
         }
     }
     for call in &file.ast.calls {
@@ -357,6 +420,8 @@ fn plan_file(
         planned.r#async = async_symbol_spans.contains(&span);
         planned.type_descriptor = type_descriptor_spans.contains(&span);
         planned.callability = type_descriptor_spans.contains(&span);
+        planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
+        planned.constant_value = constant_value_spans.contains(&span);
         planned.reference_space = file.ast.imports.iter().any(|import| {
             import
                 .bindings
@@ -419,6 +484,8 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         structural_accessor: false,
         callability: false,
         runtime_value_domain: false,
+        call_result_domain: false,
+        constant_value: false,
         reference_space: false,
         runtime_identity: false,
     }
@@ -476,6 +543,8 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.structural_accessor |= demand.structural_accessor;
             current.callability |= demand.callability;
             current.runtime_value_domain |= demand.runtime_value_domain;
+            current.call_result_domain |= demand.call_result_domain;
+            current.constant_value |= demand.constant_value;
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
         } else {

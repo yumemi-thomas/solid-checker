@@ -1,26 +1,34 @@
-//! Cleanup-return and leaf-owner diagnostics.
+//! Leaf-owner diagnostics, and the cleanup-return *classification* the
+//! ownership rules consume.
 //!
-//! Detects `onCleanup`/leaf-owner misuse and validates the values returned to
-//! cleanup-accepting owners. The owner-analysis subsystem asks this module
-//! whether a callback returns a cleanup (`function_returns_cleanup`); the
-//! pipeline's leaf-and-cleanup stage drives the other two entry points.
+//! Detects `onCleanup`/leaf-owner misuse, and answers the owner-analysis
+//! subsystem's question "does this callback hand the owner a cleanup"
+//! (`function_returns_cleanup`), which SC4002 and SC4004 depend on.
+//!
+//! It deliberately reports nothing about a returned value's *legality*. Solid
+//! 2.0 types the effect callback's return as `(() => void) | void`
+//! (`EffectFunction` in `@solidjs/signals`), so every illegal return is
+//! already a TypeScript error and AGENTS.md's absolute rule puts it out of
+//! scope; the classification below survives because ownership and disposal are
+//! not expressible as a type. See `docs/precision-backlog.md` for the ledger
+//! entry and the `tsc` evidence.
 
 use std::collections::HashMap;
 
 use solid_dialect::{CleanupRule, Primitive};
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
-use typefacts::{Callability, Location, ResolvedCallValidity};
+use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
 use super::{
-    Fix, InvalidCleanupReturn, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId,
-    TextEdit, UnresolvedCleanupReturn, location, primitive_name,
+    Fix, LeafOwnerOperation, PrimitiveName, SemanticLookup, SymbolId, TextEdit, location,
+    primitive_name,
 };
 use crate::execution_role::direct_callback_contains;
 use crate::owners::{callback_owner_at_call, containing_ast_function};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 
-/// Runs the project-level leaf-owner and cleanup-return stage.
+/// Runs the project-level leaf-owner stage.
 pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     draft.leaf_operations.extend(
         parallel_file_results(&ctx.facts.files, |file| {
@@ -29,12 +37,6 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
         .into_iter()
         .flatten(),
     );
-    for (invalid, unresolved) in parallel_file_results(&ctx.facts.files, |file| {
-        cleanup_returns_for_file(ctx.semantic_lookup, file, ctx.symbol_names)
-    }) {
-        draft.invalid_cleanup_returns.extend(invalid);
-        draft.unresolved_cleanup_returns.extend(unresolved);
-    }
 }
 
 pub(super) fn leaf_owner_operations_for_file(
@@ -89,12 +91,33 @@ pub(super) fn leaf_owner_operations_for_file(
             .primitive()
             .filter(|primitive| dialect.leaf_owner_requires_owned_call_site(*primitive))
             .map(|_| location(file.path.shared(), owner_call.span));
-        // The dynamic-extent path needs the leaf callback itself, not just
-        // the argument text it was written in, and the answer is the same
-        // for every call in the region — compute it once per owner call.
-        let leaf_callback = leaf_callback_literal(file, region);
+        // Both leaf-scope paths need the leaf callback itself, not just the
+        // argument text it was written in, and the answer is the same for
+        // every call in the region — compute it once per owner call.
+        //
+        // The argument must be a function *literal* — the callback the owner
+        // receives — because `createTrackedEffect(makeCb())` evaluates
+        // `makeCb()` at argument-evaluation time under the *enclosing* owner,
+        // and `onSettled(wrap(cb))` hands `cb` to `wrap`, which decides
+        // whether and where it runs. In neither case is a leaf scope proven
+        // to exist where the call is written, so nothing in the argument
+        // region is proven to throw and this pass stays silent. That is the
+        // same fail-closed answer the owner pipeline gives a non-literal leaf
+        // argument (`apply_settled_requirement_gates`, which keeps the
+        // ordinary unowned-cleanup requirement rather than deduplicating it
+        // against a leaf finding it cannot prove).
+        let Some(leaf_callback) = callback_argument_literal(file, region) else {
+            continue;
+        };
         for call in &file.ast.calls {
             if call.span == owner_call.span || !region.contains(call.span) {
+                continue;
+            }
+            // And the call must sit in that callback's own synchronous
+            // extent: a call inside a nested function (an event handler built
+            // in the callback) runs later, in that function's scope, where
+            // the leaf scope is no longer live.
+            if !direct_callback_contains(file, leaf_callback.span, call.span) {
                 continue;
             }
             let primitive = primitive_name(
@@ -109,24 +132,6 @@ pub(super) fn leaf_owner_operations_for_file(
                 // Not a primitive: an exactly-resolved in-project helper
                 // called here runs its synchronous extent in this leaf
                 // scope, so a forbidden operation inside it executes here.
-                //
-                // Two containment facts have to hold before that reasoning
-                // applies, and neither follows from the argument span alone.
-                // The argument must be a function *literal* — the callback
-                // the owner receives — because `createTrackedEffect(makeCb())`
-                // evaluates `makeCb()` at argument-evaluation time under the
-                // *enclosing* owner, and `createTrackedEffect(wrap(cb))`
-                // hands `cb` to `wrap`, which decides whether and where it
-                // runs. And the call must sit in that callback's own
-                // synchronous extent: a helper call inside a nested function
-                // (an event handler built in the callback) runs later, in
-                // that function's scope. Anything else stays silent.
-                let Some(callback) = leaf_callback else {
-                    continue;
-                };
-                if !direct_callback_contains(file, callback, call.span) {
-                    continue;
-                }
                 let mut kinds = Vec::new();
                 let mut visited = Vec::new();
                 helper_forbidden_operations(
@@ -183,20 +188,24 @@ pub(super) fn leaf_owner_operations_for_file(
     operations
 }
 
-/// The span of the function literal written *directly* in a leaf owner's
-/// callback argument, or `None` when the argument is any other expression.
+/// The function literal written *directly* in a callback argument, or `None`
+/// when the argument is any other expression.
 ///
-/// The leaf-owner rules reason about what runs inside the callback the owner
-/// receives, and only a literal in argument position makes the enclosing
-/// argument text and that callback the same region. `owner(makeCb())` and
-/// `owner(wrap(() => …))` both contain a call — the first evaluated under the
-/// enclosing owner before the leaf scope exists, the second handed to an
-/// opaque wrapper — so neither is proof and both fail closed here.
+/// Every rule that reasons about what runs inside the callback a callee
+/// receives needs this, and only a literal in argument position makes the
+/// enclosing argument text and that callback the same region.
+/// `owner(makeCb())` and `owner(wrap(() => …))` both contain a call — the
+/// first evaluated under the enclosing owner before the leaf scope exists, the
+/// second handed to an opaque wrapper that decides whether and when it runs —
+/// so neither is proof and both fail closed here.
 ///
 /// Parentheses and whitespace are the only fillers a literal tolerates
 /// between the argument's bounds and its own; anything else means the
 /// function is an operand rather than the argument.
-fn leaf_callback_literal(file: &FileFacts, argument: Span) -> Option<Span> {
+pub(crate) fn callback_argument_literal(
+    file: &FileFacts,
+    argument: Span,
+) -> Option<&solid_facts::ast::FunctionFact> {
     let function = file
         .ast
         .functions_within(argument)
@@ -210,7 +219,7 @@ fn leaf_callback_literal(file: &FileFacts, argument: Span) -> Option<Span> {
             .all(|byte| byte.is_ascii_whitespace() || byte == b'(' || byte == b')')
     };
     (filler(file.source.get(start..inner_start)?) && filler(file.source.get(inner_end..end)?))
-        .then_some(function.span)
+        .then_some(function)
 }
 
 /// The leaf-owner operation kind a call performs under `dialect`, or `None`
@@ -321,142 +330,33 @@ fn helper_forbidden_operations(
     }
 }
 
-pub(super) fn cleanup_returns_for_file<'a, 'f>(
-    lookup: &SemanticLookup<'a>,
-    file: &'f FileFacts,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
-) -> (Vec<InvalidCleanupReturn>, Vec<UnresolvedCleanupReturn>)
-where
-    'a: 'f,
-{
-    let entities = lookup.entities();
-    let mut invalid = Vec::new();
-    let mut unresolved = Vec::new();
-    for call in &file.ast.calls {
-        let dialect = lookup.dialect;
-        let primitive = primitive_name(
-            file.path.as_str(),
-            call.callee,
-            call.static_callee(&file.source),
-            entities,
-            symbol_names,
-            dialect,
-        );
-        // Returning a cleanup is a per-dialect idea: 1.x threads an effect's
-        // return value to the next run as `prev`, so nothing there reads a
-        // returned function as cleanup and this loop never starts.
-        let Some(kind) = primitive.as_ref().and_then(PrimitiveName::primitive) else {
-            continue;
-        };
-        if !dialect.accepts_cleanup_return(kind) {
-            continue;
-        }
-        let [callback_index] = dialect.callback_positions(kind) else {
-            continue;
-        };
-        let Some(argument) = call.arguments.get(*callback_index) else {
-            continue;
-        };
-        let Some((callback_file, callback)) = callback_function(lookup, file, argument.span) else {
-            unresolved.push(UnresolvedCleanupReturn {
-                primitive: primitive
-                    .expect("matched cleanup-return primitive")
-                    .to_string(),
-                location: location(file.path.shared(), argument.span),
-            });
-            continue;
-        };
-        let primitive = primitive.expect("matched cleanup-return primitive");
-        if callback.r#async {
-            invalid.push(InvalidCleanupReturn {
-                primitive: primitive.to_string(),
-                location: location(callback_file.path.shared(), callback.span),
-            });
-            continue;
-        }
-        let returns =
-            callback
-                .expression_return
-                .iter()
-                .chain(callback_file.ast.returns.iter().filter(|returned| {
-                    containing_ast_function(&callback_file.ast, returned.span)
-                        .is_some_and(|function| function.span == callback.span)
-                }));
-        for returned in returns {
-            match cleanup_return_status(lookup, callback_file, returned) {
-                CleanupReturnStatus::Valid => {}
-                CleanupReturnStatus::Invalid => {
-                    invalid.push(InvalidCleanupReturn {
-                        primitive: primitive.to_string(),
-                        location: expand_parenthesized_location(
-                            callback_file,
-                            returned.argument.unwrap_or(returned.span),
-                        ),
-                    });
-                }
-                CleanupReturnStatus::Unresolved => {
-                    unresolved.push(UnresolvedCleanupReturn {
-                        primitive: primitive.to_string(),
-                        location: location(
-                            callback_file.path.as_str(),
-                            returned.argument.unwrap_or(returned.span),
-                        ),
-                    });
-                }
-            }
-        }
-    }
-    (invalid, unresolved)
-}
-
-fn callback_function<'a, 'f>(
-    lookup: &SemanticLookup<'a>,
-    call_file: &'f solid_facts::FileFacts,
-    argument: Span,
-) -> Option<(
-    &'f solid_facts::FileFacts,
-    &'f solid_facts::ast::FunctionFact,
-)>
-where
-    'a: 'f,
-{
-    if let Some(function) = call_file
-        .ast
-        .functions
-        .iter()
-        .filter(|function| argument.contains(function.span))
-        .max_by_key(|function| function.span.end - function.span.start)
-    {
-        return Some((call_file, function));
-    }
-    let symbol = lookup.entities().at(call_file.path.as_str(), argument)?;
-    lookup.function_for_symbol(symbol)
-}
-
+/// What one `return` in a cleanup-accepting callback proves about the value
+/// the owner receives.
+///
+/// Only `ValidFunction` is load-bearing now: it is the ownership fact
+/// `function_returns_cleanup` (SC4002/SC4004) asks for — "does this hand the
+/// owner an actual cleanup function". The other three outcomes are the ways
+/// that proof can fail, and they are kept apart because they fail for
+/// materially different reasons; collapsing them would hide that
+/// `return nothing` where `nothing: undefined` is *legal* and merely hands the
+/// owner nothing, which is not the same as a value the owner cannot use.
+///
+/// None of them is a finding. Legality is TypeScript's: `EffectFunction`
+/// returns `(() => void) | void`, so an unusable value is a type error and
+/// reporting it again would duplicate `tsc`.
 enum CleanupReturnStatus {
-    Valid,
+    /// Proven to be a function: an owner that reads returned cleanups
+    /// registers it.
+    ValidFunction,
+    /// Proven legal but not proven to be a function — `undefined`, `void`, or
+    /// a domain admitting only a function or `undefined`. No claim that a
+    /// cleanup was returned.
+    ValidNonFunction,
+    /// Proven to be a value an owner cannot use as cleanup — which is exactly
+    /// the domain `tsc` rejects, so it only means "no cleanup here".
     Invalid,
+    /// Neither proven; no cleanup may be assumed.
     Unresolved,
-}
-
-fn expand_parenthesized_location(file: &solid_facts::FileFacts, span: Span) -> Location {
-    let mut start = usize::try_from(span.start).unwrap_or(0);
-    let mut end = usize::try_from(span.end).unwrap_or(file.source.len());
-    while start > 0
-        && end < file.source.len()
-        && file.source.as_bytes()[start - 1] == b'('
-        && file.source.as_bytes()[end] == b')'
-    {
-        start -= 1;
-        end += 1;
-    }
-    location(
-        file.path.as_str(),
-        Span::new(
-            u32::try_from(start).unwrap_or(span.start),
-            u32::try_from(end).unwrap_or(span.end),
-        ),
-    )
 }
 
 fn terminal_cleanup_fix(
@@ -507,9 +407,28 @@ fn cleanup_return_status(
 ) -> CleanupReturnStatus {
     let entities = lookup.entities();
     match returned.value {
-        solid_facts::ast::ReturnValueKind::Undefined
-        | solid_facts::ast::ReturnValueKind::Function => CleanupReturnStatus::Valid,
-        solid_facts::ast::ReturnValueKind::Member => CleanupReturnStatus::Unresolved,
+        solid_facts::ast::ReturnValueKind::Undefined => CleanupReturnStatus::ValidNonFunction,
+        solid_facts::ast::ReturnValueKind::Function => CleanupReturnStatus::ValidFunction,
+        solid_facts::ast::ReturnValueKind::Member => {
+            // Computed dispatch is not an exact property proof: the key may
+            // select any member at runtime. Static member expressions have a
+            // complete-expression value-domain fact at this exact return
+            // span, so classify those from the same evidence as identifiers.
+            if file
+                .ast
+                .computed_members
+                .binary_search(&returned.span)
+                .is_ok()
+            {
+                CleanupReturnStatus::Unresolved
+            } else {
+                domain_cleanup_return_status(
+                    lookup
+                        .entity_at(file.path.as_str(), returned.span)
+                        .and_then(|entity| entity.runtime_value_domain.as_ref()),
+                )
+            }
+        }
         solid_facts::ast::ReturnValueKind::Other => CleanupReturnStatus::Invalid,
         solid_facts::ast::ReturnValueKind::Call => {
             let Some(callee) = returned.callee else {
@@ -522,14 +441,14 @@ fn cleanup_return_status(
             if !resolved {
                 return CleanupReturnStatus::Unresolved;
             }
-            match returned_call_callability(lookup, file, callee) {
-                Some(Callability::Callable) => CleanupReturnStatus::Valid,
-                // TypeFacts does not yet distinguish voidish from other
-                // non-callable return types. Refuse to infer that distinction
-                // from rendered type text.
-                Some(Callability::NonCallable | Callability::Mixed | Callability::Unknown)
-                | None => CleanupReturnStatus::Unresolved,
-            }
+            // The *result* of the call, never its callee: `callResultDomain` is
+            // matched by the producer against a call-like node occupying exactly
+            // the demanded span, so `makeCount()` where `makeCount(): number`
+            // classifies as the number it produces rather than the callable
+            // `makeCount`. An absent field (no exact call-like node) and an
+            // `unknown` domain (a checker error or recovery type) both stay
+            // fail-closed in `domain_cleanup_return_status`.
+            domain_cleanup_return_status(returned_call_domain(lookup, file, callee))
         }
         solid_facts::ast::ReturnValueKind::Identifier => {
             let Some(symbol) = entities.get(&location(file.path.shared(), returned.span)) else {
@@ -546,10 +465,49 @@ fn cleanup_return_status(
                     })
             });
             if function {
-                CleanupReturnStatus::Valid
+                CleanupReturnStatus::ValidFunction
             } else {
-                CleanupReturnStatus::Unresolved
+                domain_cleanup_return_status(
+                    lookup
+                        .entity_at(file.path.as_str(), returned.span)
+                        .and_then(|entity| entity.runtime_value_domain.as_ref()),
+                )
             }
+        }
+    }
+}
+
+/// Classifies a cleanup return from the compiler's runtime value domain.
+///
+/// The producer derives this from checker types, flags, constraints,
+/// assignability, union constituents, and call signatures — never from
+/// rendered type text — so aliases, `any`, `unknown`, and recovery types
+/// arrive as `unknown` and stay fail-closed here instead of being guessed from
+/// spelling. A missing fact (the demand was not planned, or the compiler had
+/// no answer) is likewise unresolved.
+fn domain_cleanup_return_status(domain: Option<&RuntimeValueDomain>) -> CleanupReturnStatus {
+    let Some(domain) = domain.filter(|domain| !domain.unknown) else {
+        return CleanupReturnStatus::Unresolved;
+    };
+    match (
+        domain.may_be_callable,
+        domain.may_be_other,
+        domain.may_be_undefined,
+    ) {
+        // Only ever a function, or only ever a function or `undefined`: legal
+        // either way, but only the first proves a cleanup was handed over.
+        (true, false, false) => CleanupReturnStatus::ValidFunction,
+        (true, false, true) => CleanupReturnStatus::ValidNonFunction,
+        // Never a function and never voidish: the owner is handed a value it
+        // cannot use, on every execution that reaches this return.
+        (false, true, false) => CleanupReturnStatus::Invalid,
+        // Only `undefined`/`void`.
+        (false, false, true) => CleanupReturnStatus::ValidNonFunction,
+        // A domain that admits both a legal and an illegal value proves
+        // neither, and `never` (a known empty domain) describes a value this
+        // return never produces.
+        (true, true, _) | (false, true, true) | (false, false, false) => {
+            CleanupReturnStatus::Unresolved
         }
     }
 }
@@ -576,10 +534,14 @@ fn cleanup_return_is_function(
 ) -> bool {
     match returned.value {
         solid_facts::ast::ReturnValueKind::Function => true,
+        // Only a *proven function* registers a cleanup. `return nothing` where
+        // `nothing: undefined` is a legal return that hands the owner nothing,
+        // so it must not make the enclosing callback look like one that
+        // returns a cleanup.
         solid_facts::ast::ReturnValueKind::Identifier => {
             matches!(
                 cleanup_return_status(lookup, file, returned),
-                CleanupReturnStatus::Valid
+                CleanupReturnStatus::ValidFunction
             )
         }
         solid_facts::ast::ReturnValueKind::Call => {
@@ -591,7 +553,10 @@ fn cleanup_return_is_function(
                 .and_then(|entity| entity.resolved_call.as_ref())
                 .is_some_and(|call| call.validity == ResolvedCallValidity::Valid);
             valid_call
-                && returned_call_callability(lookup, file, callee) == Some(Callability::Callable)
+                && matches!(
+                    domain_cleanup_return_status(returned_call_domain(lookup, file, callee)),
+                    CleanupReturnStatus::ValidFunction
+                )
         }
         solid_facts::ast::ReturnValueKind::Undefined
         | solid_facts::ast::ReturnValueKind::Member
@@ -599,13 +564,19 @@ fn cleanup_return_is_function(
     }
 }
 
-fn returned_call_callability(
-    lookup: &SemanticLookup<'_>,
+/// The runtime value domain of what a returned call *produces*.
+///
+/// Resolved at the call's own span, where the producer answers only for a
+/// call-like node matching that span exactly. A callee-shaped fact can
+/// therefore never be substituted, which is what made the older callability
+/// probe classify `makeCount()` from `makeCount`.
+fn returned_call_domain<'a>(
+    lookup: &'a SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     callee: Span,
-) -> Option<Callability> {
+) -> Option<&'a RuntimeValueDomain> {
     let call = lookup.call_by_callee(file, callee)?;
     lookup
         .entity_at(file.path.as_str(), call.span)
-        .and_then(|entity| entity.callability)
+        .and_then(|entity| entity.call_result_domain.as_ref())
 }

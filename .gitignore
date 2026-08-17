@@ -36,6 +36,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/no-owner-v1/node_modules/**
 !fixtures/reactive-ir/namespace-import-v2/node_modules/
 !fixtures/reactive-ir/namespace-import-v2/node_modules/**
+!fixtures/reactive-ir/solid2-precision/node_modules/
+!fixtures/reactive-ir/solid2-precision/node_modules/**
 !fixtures/reactive-ir/import-location/node_modules/
 !fixtures/reactive-ir/import-location/node_modules/**
 !fixtures/engine/eslint-reactivity-v1/node_modules/

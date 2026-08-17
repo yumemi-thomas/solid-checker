@@ -532,39 +532,30 @@ pub(super) fn violation(
     }
 }
 
-/// The string value a type proves an expression to hold: a literal string
-/// type (`"javascript:alert(1)"`) renders with its exact contents, so the
-/// value is known wherever the binding was written — another file, an
-/// inferred `const` — where a same-file text trace cannot follow. Exact-span
-/// only: a literal-typed *operand* of a larger expression proves nothing
-/// about the whole.
+/// The string value the compiler proves an expression to hold, wherever the
+/// value was written — another file, an inferred `const`, an enum member —
+/// which a same-file text trace cannot follow.
+///
+/// This is the `constantValue` fact, not the rendered type. A literal type is
+/// only incidentally a value: it is absent the moment a constant is *folded*
+/// rather than written, so `innerHTML={"a" + "b"}` widens to `string` and
+/// reads as non-static even though upstream's own static evaluation accepts
+/// it. The producer folds literals, substitution-free templates, transparent
+/// wrappers, unary signs, same-kind binary `+`, and immutable declarations,
+/// and answers only for a complete expression occupying exactly this span — a
+/// constant *operand* of a larger expression still proves nothing about the
+/// whole. Absence is "not proven constant", so every caller stays fail-closed.
 pub(super) fn literal_string_type(
     context: &UpstreamCompatContext<'_>,
     file: &FileFacts,
     span: Span,
 ) -> Option<String> {
-    let descriptor = expression_descriptor(context, file, span)?;
-    let rendered = descriptor.text.as_ref();
-    let inner = rendered.strip_prefix('"')?.strip_suffix('"')?;
-    // TypeScript renders the literal with JSON-style escapes; decode the
-    // common ones and refuse anything else rather than mis-decode it.
-    let mut value = String::with_capacity(inner.len());
-    let mut characters = inner.chars();
-    while let Some(character) = characters.next() {
-        if character != '\\' {
-            value.push(character);
-            continue;
-        }
-        match characters.next() {
-            Some('"') => value.push('"'),
-            Some('\\') => value.push('\\'),
-            Some('n') => value.push('\n'),
-            Some('r') => value.push('\r'),
-            Some('t') => value.push('\t'),
-            _ => return None,
-        }
-    }
-    Some(value)
+    let constant = context
+        .lookup
+        .entity_at(file.path.as_str(), span)
+        .and_then(|entity| entity.constant_value.as_ref())?;
+    (constant.kind == typefacts::ConstantValueKind::String)
+        .then(|| constant.string.as_ref().to_owned())
 }
 
 /// Everything one file's upstream-compat checks may consult.

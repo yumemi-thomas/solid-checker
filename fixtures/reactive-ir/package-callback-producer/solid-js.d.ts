@@ -1,6 +1,6 @@
 declare module "solid-js" {
   export function createMemo<T>(compute: () => T): () => T;
-  export function onSettled(callback: () => unknown): void;
+  export function onSettled(callback: () => void | (() => void)): void;
 }
 
 declare namespace JSX {

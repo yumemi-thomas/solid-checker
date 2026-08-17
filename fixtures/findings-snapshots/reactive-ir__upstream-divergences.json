@@ -72,6 +72,36 @@
       "fixes": 0
     },
     {
+      "rule": "v1/no-innerhtml",
+      "code": "SC8008",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
+      "start": 1190,
+      "end": 1225,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/jsx-no-script-url",
+      "code": "SC8004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
+      "start": 1560,
+      "end": 1583,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/jsx-no-script-url",
+      "code": "SC8004",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
+      "start": 1610,
+      "end": 1638,
+      "fixes": 0
+    },
+    {
       "rule": "v1/no-proxy-apis",
       "code": "SC8009",
       "kind": "violation",

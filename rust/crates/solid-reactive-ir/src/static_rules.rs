@@ -2,6 +2,7 @@
 //! checks that need discovered sources and TypeScript facts, but none of the
 //! reactive stages behind them.
 
+use crate::cleanup::callback_argument_literal;
 use crate::execution_role::{allowed_callback_spans, semantic_execution_role};
 use crate::identity::SymbolId;
 use crate::owners::{
@@ -9,12 +10,14 @@ use crate::owners::{
     enclosing_function_label, function_binding_name,
 };
 use crate::pipeline::{AnalysisContext, ProgramDraft};
+use crate::runtime_semantics::is_proven_array_filter;
 use crate::symbols::async_symbol_root;
 use crate::{
     DraggableSpelling, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive,
     location, primitive_name,
 };
 use solid_facts::core::Span;
+use std::collections::HashSet;
 use typefacts::Location;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.
@@ -799,7 +802,8 @@ fn binding_initializes_reactive_store(
 /// TypeScript-side dominance analysis; store-path and props member reads are
 /// proven against the straight-line awaits the AST facts record
 /// (`unconditional_awaits`), with the same precision guards — no conditional
-/// dominance, no nested closures.
+/// dominance, no nested closures except the separately proven synchronous
+/// Array#filter callback path.
 fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     // The producer reports an async-function fact for every project
     // function, so both per-function steps below must stay cheap: the file
@@ -827,6 +831,7 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             let Some(analysis_context) = tracked_async_computation_context(ctx, function) else {
                 continue;
             };
+            let mut reported_calls = HashSet::new();
             for call in &function.calls_after_await {
                 let Some(symbol) = ctx.entities.get(call) else {
                     continue;
@@ -857,6 +862,7 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                     start_byte: call.start_byte,
                     end_byte: call.end_byte,
                 };
+                reported_calls.insert((call.path.to_string(), call.start_byte, call.end_byte));
                 draft.push_defect(
                     "reactive-read-after-await",
                     StaticDefect {
@@ -872,9 +878,106 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             }
             if let Some(site) = member_site {
                 member_reads_after_await(ctx, draft, site, &analysis_context);
+                let (file, ast_function, boundary) = site;
+                for filter in file.ast.calls_within(ast_function.body) {
+                    if filter.span.start < boundary
+                        || containing_ast_function(&file.ast, filter.span)
+                            .is_none_or(|owner| owner.span != ast_function.span)
+                    {
+                        continue;
+                    }
+                    let Some(callback) = inline_standard_callback(ctx, file, filter) else {
+                        continue;
+                    };
+                    // The callback body runs before the awaiting computation
+                    // resumes, so its reads are the awaiting function's reads:
+                    // the same accessor-call and member-read proofs apply, with
+                    // the callback itself as the owning function.
+                    member_reads_after_await(
+                        ctx,
+                        draft,
+                        (file, callback, boundary),
+                        &analysis_context,
+                    );
+                    for callback_call in file.ast.calls_within(callback.body) {
+                        if callback_call.span.start < boundary
+                            || containing_ast_function(&file.ast, callback_call.span)
+                                .is_none_or(|owner| owner.span != callback.span)
+                        {
+                            continue;
+                        }
+                        let Some(symbol) = ctx
+                            .entities
+                            .get(&location(file.path.shared(), callback_call.callee))
+                        else {
+                            continue;
+                        };
+                        let Some((name, _)) = ctx.accessors.get(symbol) else {
+                            continue;
+                        };
+                        let key = (
+                            file.path.to_string(),
+                            u64::from(callback_call.callee.start),
+                            u64::from(callback_call.callee.end),
+                        );
+                        if !reported_calls.insert(key) {
+                            continue;
+                        }
+                        let display = callback_call.static_callee(&file.source).unwrap_or(name);
+                        draft.push_defect(
+                            "reactive-read-after-await",
+                            StaticDefect {
+                                kind: StaticDefectKind::ReactiveReadAfterAwait {
+                                    accessor: display.to_string(),
+                                },
+                                location: location(file.path.shared(), callback_call.callee),
+                                analysis_context: analysis_context.clone(),
+                                fixes: vec![],
+                                uncertain: false,
+                            },
+                        );
+                    }
+                }
             }
         }
     }
+}
+
+/// The function a standard-library method provably invokes *inline*, or
+/// `None` when nothing proves that.
+///
+/// Three separate facts have to hold, and none of them follows from the
+/// spelling `.filter`:
+///
+/// - the callee resolves to the exact built-in `Array`/`ReadonlyArray`
+///   `filter` declaration (a project-defined or shadowed `filter` resolves
+///   elsewhere and a `Promise#then` callback is deferred, not inline);
+/// - the argument itself is potentially callable — sampled at the *argument*
+///   span, the position `argument_behavior` classifies, never at the callee,
+///   whose callability answers a different question;
+/// - the callback is the literal function written in argument position.
+///   `rows.filter(makePredicate(post => …))` hands the arrow to a wrapper that
+///   may stash it and run it under a later tracking scope, so it is not proof.
+///
+/// An `async` callback suspends at its own first await, so its body is not one
+/// synchronous extent and stays outside this proof.
+fn inline_standard_callback<'f>(
+    ctx: &AnalysisContext<'_>,
+    file: &'f solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+) -> Option<&'f solid_facts::ast::FunctionFact> {
+    let argument = call.arguments.first()?;
+    let resolved = ctx
+        .semantic_lookup
+        .resolved_callee_call(file, call.callee)?;
+    let callability = ctx
+        .semantic_lookup
+        .smallest_contained_callability(file.path.as_str(), argument.span);
+    if !is_proven_array_filter(resolved, callability) {
+        return None;
+    }
+    let callback = callback_argument_literal(file, argument.span)?;
+    (!callback.r#async).then_some(callback)
 }
 
 /// The resolved location of an async function's member-read analysis: its
@@ -1001,6 +1104,9 @@ fn member_reads_after_await(
             .iter()
             .any(|candidate| candidate.object == member.span)
         {
+            continue;
+        }
+        if file.ast.is_plain_assignment_target(member.span) {
             continue;
         }
         let Some(symbol) = ctx

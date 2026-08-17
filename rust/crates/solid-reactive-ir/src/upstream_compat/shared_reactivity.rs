@@ -596,9 +596,9 @@ fn expected_function_got_expression(
 ///
 /// The primary proof is the checker's own [`typefacts::Callability`] verdict,
 /// which TypeScript derives from the actual call signatures of every union
-/// constituent — never from rendered type text. The descriptor-text screen
-/// below is only the fallback for spans whose callability was not demanded,
-/// and only for the primitive types that can never hold a function.
+/// constituent — never from rendered type text. Missing or unknown
+/// callability is not evidence that a value is non-callable, so this helper
+/// stays silent unless the compiler provides a closed non-callable answer.
 ///
 /// An array- or tuple-shaped type is exempt from the callability proof even
 /// though it has no call signatures: Solid's handler props accept a bound
@@ -622,32 +622,8 @@ fn proven_not_callable(
     match callability {
         Some(Callability::NonCallable) => true,
         Some(Callability::Callable | Callability::Mixed) => false,
-        Some(Callability::Unknown) | None => descriptor
-            .map(|descriptor| descriptor.text.as_ref())
-            .or_else(|| {
-                // No fact at the exact span: fall back to the contained
-                // descriptor the rule consulted before exact demands
-                // existed. Text-screened, so a callee's function type never
-                // reads as "not callable".
-                context
-                    .lookup
-                    .smallest_contained_descriptor(file.path.as_str(), expression)
-                    .map(|descriptor| descriptor.text.as_ref())
-            })
-            .is_some_and(is_not_callable_text),
+        Some(Callability::Unknown) | None => false,
     }
-}
-
-/// The descriptor-text fallback: only the primitive types that can never
-/// hold a function count. Anything structural, generic, aliased, or
-/// unresolved is left alone, because a type this cannot read is not proof of
-/// anything.
-fn is_not_callable_text(descriptor: &str) -> bool {
-    matches!(
-        descriptor,
-        "string" | "number" | "boolean" | "bigint" | "symbol" | "void" | "null" | "undefined"
-    ) || descriptor.starts_with('"')
-        || descriptor.parse::<f64>().is_ok()
 }
 
 /// The sub-span of `span` with surrounding whitespace stripped, so a span

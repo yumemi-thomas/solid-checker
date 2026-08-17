@@ -649,6 +649,13 @@ impl LocalAccessContext<'_, '_> {
             {
                 continue;
             }
+            // A plain assignment writes this exact member without reading its
+            // old value. Compound assignments, updates, and members nested
+            // inside a target (a computed key, a destructuring default) are
+            // retained as reads.
+            if file.ast.is_plain_assignment_target(member.span) {
+                continue;
+            }
             let object = location(file.path.shared(), member.object);
             let Some(symbol) = self.entities.get(&object) else {
                 continue;

@@ -12,16 +12,6 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 243,
-      "end": 252,
-      "fixes": 0
-    },
-    {
       "rule": "primitive-in-leaf-owner",
       "code": "SC3002",
       "kind": "violation",
@@ -100,76 +90,6 @@
       "start": 522,
       "end": 531,
       "fixes": 1
-    },
-    {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 522,
-      "end": 531,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-cleanup-return",
-      "code": "SC3004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 589,
-      "end": 591,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-cleanup-return",
-      "code": "SC3004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 622,
-      "end": 631,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-cleanup-return",
-      "code": "SC3004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 670,
-      "end": 689,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-cleanup-return",
-      "code": "SC3004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 704,
-      "end": 718,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-cleanup-return",
-      "code": "SC3004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 751,
-      "end": 765,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-cleanup-return",
-      "code": "SC3004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 900,
-      "end": 902,
-      "fixes": 0
     },
     {
       "rule": "no-owner-cleanup",
@@ -259,26 +179,6 @@
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
       "start": 3600,
       "end": 3608,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 3600,
-      "end": 3610,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 4743,
-      "end": 4765,
       "fixes": 0
     }
   ]

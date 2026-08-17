@@ -4,9 +4,9 @@
 use crate::cache::{CachedLateStages, same_compiler_semantics};
 use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_slice_results};
 use crate::{
-    BuildTimings, ExecutionRole, Fix, FunctionBoundary, OwnerRequirement, PrimitiveName, TextEdit,
-    containing_function_indexed, function_indices_by_path, jsx_primitive_name, known_primitive,
-    location, primitive_name,
+    BuildTimings, ExecutionRole, Fix, FunctionBoundary, OwnerRequirement,
+    OwnerRequirementOperation, PrimitiveName, TextEdit, containing_function_indexed,
+    function_indices_by_path, jsx_primitive_name, known_primitive, location, primitive_name,
 };
 
 use std::{
@@ -45,6 +45,9 @@ pub(crate) fn collect_project(
         })
         .flatten();
     if let Some((cached, gates)) = cached {
+        // `cache.missing_owners` is stored *after* the requirement gates ran,
+        // so the cached vector is already gated. Re-running them here would be
+        // pure repeated work on the fast path.
         draft.missing_owners = cached;
         apply_settled_gates(&mut draft.leaf_operations, &gates);
         timings.owner_fixed_point_reused = true;
@@ -62,6 +65,7 @@ pub(crate) fn collect_project(
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
+        apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
         timings.absorb_owner(&owner_timings);
         cache.missing_owners = Some(draft.missing_owners.clone());
         cache.settled_gates = Some(gates);
@@ -74,6 +78,7 @@ pub(crate) fn collect_project(
         );
         draft.missing_owners.extend(requirements);
         apply_settled_gates(&mut draft.leaf_operations, &gates);
+        apply_settled_requirement_gates(ctx.semantic_lookup, &mut draft.missing_owners, &gates);
         timings.owner_recomputed_files = u64::try_from(ctx.facts.files.len()).unwrap_or(u64::MAX);
     }
 }
@@ -530,6 +535,59 @@ pub(crate) fn apply_settled_gates(
                 true
             }
         }
+    });
+}
+
+/// The owner pass sees `onCleanup` as a normal owner requirement while the
+/// leaf pass sees the same call as SC3001. For an owned inline `onSettled`
+/// callback, keep the leaf finding and remove only the duplicate SC4002
+/// requirement. Out-of-band and uncertain gates remain conservative.
+///
+/// Only a function literal written *directly* in the owner's argument is that
+/// callback: `onSettled(wrap(() => { onCleanup(dispose); }))` hands the arrow
+/// to an opaque wrapper that may run it out-of-band, where the cleanup really
+/// is unowned, so it keeps its SC4002.
+fn apply_settled_requirement_gates(
+    lookup: &SemanticLookup<'_>,
+    requirements: &mut Vec<OwnerRequirement>,
+    decisions: &SettledGateDecisions,
+) {
+    if requirements.is_empty() {
+        return;
+    }
+    // Resolved once per owned gate rather than once per requirement, and
+    // through the path and span indexes rather than linear file/call scans.
+    let owned_callbacks = decisions
+        .iter()
+        .filter(|(_, decision)| **decision == LeafGateDecision::Owned)
+        .filter_map(|((path, start, end), _)| {
+            let file = lookup.file_by_path(path)?;
+            let span = Span::new(u32::try_from(*start).ok()?, u32::try_from(*end).ok()?);
+            let argument = file.ast.call_at(span)?.arguments.first()?;
+            let callback = crate::cleanup::callback_argument_literal(file, argument.span)?;
+            Some((file, callback))
+        })
+        .collect::<Vec<_>>();
+    if owned_callbacks.is_empty() {
+        return;
+    }
+    requirements.retain(|requirement| {
+        if requirement.operation != OwnerRequirementOperation::Cleanup {
+            return true;
+        }
+        let Ok(start) = u32::try_from(requirement.location.start_byte) else {
+            return true;
+        };
+        let Ok(end) = u32::try_from(requirement.location.end_byte) else {
+            return true;
+        };
+        let cleanup = Span::new(start, end);
+        !owned_callbacks.iter().any(|(file, callback)| {
+            requirement.location.path.as_ref() == file.path.as_str()
+                && callback.body.contains(cleanup)
+                && containing_ast_function(&file.ast, cleanup)
+                    .is_some_and(|function| function.span == callback.span)
+        })
     });
 }
 
@@ -1741,9 +1799,17 @@ pub(crate) fn run_with_owner_callback_owner(
     {
         // TypeScript may preserve a user alias's name rather than render its
         // nullable expansion, so absence of the word `null` is not proof.
-        // The Solid export itself (including a flow-narrowed Owner | null)
-        // renders as Owner; everything else stays conditional.
-        if descriptor.text.trim() == "Owner" {
+        // The compiler-resolved alias declaration and origin module must be
+        // the dialect's own Owner export; a user-local type with the same
+        // spelling has no such role. Nullable/union types remain Creates here
+        // only when the selected type itself is the Solid Owner branch, and
+        // the existing call-site analysis keeps unresolved values conditional.
+        if descriptor.alias_declarations.iter().any(|declaration| {
+            lookup
+                .dialect
+                .type_role(descriptor.origin_module.as_ref(), declaration.name.as_ref())
+                == Some(solid_dialect::TypeRole::Owner)
+        }) {
             return Some(solid_dialect::CallbackOwner::Creates);
         }
     }

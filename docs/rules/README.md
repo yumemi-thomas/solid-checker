@@ -48,8 +48,8 @@ that exact rule in the shared project configuration described below.
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
 | Shared concepts (24 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
-| Version-only concepts | 18 rules: `v1/no-async-tracked-scope` plus the SC8001–SC8017 ESLint-era surface | 19 rules: actions, `flush`, returned cleanup, `resolve`, async computations and their SSR hydration options, `refresh`/`affects`, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 42 rules | 43 rules |
+| Version-only concepts | 18 rules: `v1/no-async-tracked-scope` plus the SC8001–SC8017 ESLint-era surface | 12 rules: actions, `flush`, `resolve`, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
+| Catalog size | 42 rules | 36 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -106,9 +106,10 @@ behaviour depends on: [v1/event-handlers](v1/event-handlers.md),
 An absent file means every catalog rule is enabled with its normal defaults.
 A file naming an unknown rule, an unknown option key, or a non-boolean
 `enabled` value fails the analysis rather than silently changing policy. Rule
-names are exact identities: for example, disabling `invalid-refresh-target`
-does not disable `invalid-affects-target`, even though both findings share the
-portable code SC7003. There is deliberately no separate per-ESLint-options
+names are exact identities: for example, disabling `refresh-target-unresolved`
+would not have disabled `affects-target-unresolved`, even though both findings
+shared the portable code SC9003 (both were removed in 2026-08; the same holds
+for any pair sharing a code). There is deliberately no separate per-ESLint-options
 channel; the npm adapter runs one analysis per project. Each configurable
 rule's page documents its additional options and defaults.
 
@@ -148,7 +149,6 @@ rule's page documents its additional options and defaults.
 | SC3001 | [cleanup-in-forbidden-scope](cleanup-in-forbidden-scope.md) | error |
 | SC3002 | [primitive-in-leaf-owner](primitive-in-leaf-owner.md) | error |
 | SC3003 | [flush-in-forbidden-scope](flush-in-forbidden-scope.md) | error |
-| SC3004 | [invalid-cleanup-return](invalid-cleanup-return.md) | error |
 
 ## Ownership
 
@@ -180,9 +180,6 @@ rule's page documents its additional options and defaults.
 | --- | --- | --- |
 | SC7001 | [missing-effect-function](missing-effect-function.md) | error |
 | SC7002 | [sync-node-received-async](sync-node-received-async.md) | error |
-| SC7003 | [invalid-refresh-target](invalid-refresh-target.md) | error |
-| SC7003 | [invalid-affects-target](invalid-affects-target.md) | error |
-| SC7004 | [affects-keys-on-accessor](affects-keys-on-accessor.md) | error |
 | SC7005 | [http-response-after-flush](http-response-after-flush.md) | warning |
 | SC7006 | [server-function-module-directive](server-function-module-directive.md) | error |
 | SC7007 | [server-function-rich-argument](server-function-rich-argument.md) | error |
@@ -198,9 +195,6 @@ is conditional rather than a proven-unconditional failure; its page says so.
 | Code | Rule | Severity |
 | --- | --- | --- |
 | SC9001 | [package-contract-export-missing](package-contract-export-missing.md) | error |
-| SC9002 | [cleanup-return-unresolved](cleanup-return-unresolved.md) | error |
-| SC9003 | [refresh-target-unresolved](refresh-target-unresolved.md) | error |
-| SC9003 | [affects-target-unresolved](affects-target-unresolved.md) | error |
 | SC9004 | [execution-map-incomplete](execution-map-incomplete.md) | error |
 | SC9006 | [package-contract-callback-missing](package-contract-callback-missing.md) | error |
 | SC9005 | [package-contract-missing](package-contract-missing.md) | error |

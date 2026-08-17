@@ -24,6 +24,12 @@ still silently dropped at runtime and stays a finding, as does any write
 outside a setter. 1.x setters never unlock the proxy, so the `v1/` twin has no
 such exemption.
 
+Read-modify-write spellings are writes in both dialects: `store.count += 1` and
+`store.count++` reach the proxy with a value that is dropped, and both also read
+the old value, so [strict-read-untracked](strict-read-untracked.md) reports the
+read alongside this write. A plain `=` reads nothing and produces this finding
+alone.
+
 The warning tier mirrors eslint-plugin-solid's `reactivity` policy for this
 defect and stays consistent across the two dialects. It does not mean the
 write is speculative: every finding is a proven mutation that bypasses the

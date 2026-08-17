@@ -563,8 +563,7 @@ pub fn analysis_metrics(
             .static_defects
             .iter()
             .filter(|defect| defect.kind.is_unresolved_obligation())
-            .count()
-        + program.unresolved_cleanup_returns.len();
+            .count();
     Metrics {
         files_analyzed: facts
             .files
@@ -584,8 +583,6 @@ pub fn analysis_metrics(
             + program.leaf_operations.len()
             + program.missing_owners.len()
             + program.async_reads.len()
-            + program.invalid_cleanup_returns.len()
-            + program.unresolved_cleanup_returns.len()
             + program.directive_creations.len()
             + program.static_violations.len()
             + program.static_defects.len(),

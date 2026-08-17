@@ -79,12 +79,11 @@ Implemented rule slices are:
 - `cleanup-in-forbidden-scope`;
 - `primitive-in-leaf-owner`;
 - `flush-in-forbidden-scope`;
-- `invalid-cleanup-return` (with `cleanup-return-unresolved` when TS-Go cannot
-  prove a returned call or identifier);
 - `missing-effect-function`;
 - `sync-node-received-async`;
-- `invalid-refresh-target` and `invalid-affects-target`, including refresh
-  writes flowing through the owned-scope rule;
+- `refresh` writes flowing through the owned-scope rule (the refresh/affects
+  *target* rules were removed: `Refreshable<T>` is the brand as a type, so
+  every invalid target is already a TypeScript error);
 - `primitive-in-directive-application`, covering owner-attaching primitives
   (value-form state constructors are exempt) in direct application callbacks
   and in closures returned through forwarded directive factories;

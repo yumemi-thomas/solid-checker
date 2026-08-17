@@ -17,6 +17,15 @@ This is the static counterpart of Solid's dev-mode `STRICT_READ_UNTRACKED` warni
 and it mirrors where the runtime actually installs strict-read contexts (component
 and effect bodies). Two consequences, both probed against `solid-js@2.0.0-rc.0`:
 
+- **Plain assignment targets are writes, not reads.** `store.name = next` is
+  diagnosed by `no-direct-mutation` without also reporting `store.name` here.
+  Only the member that *is* the written target is exempt: read-modify-write
+  forms such as `store.count += 1` and `store.count++` keep the read finding
+  because the old value is evaluated, and so do reads nested inside a target —
+  the computed key in `rows[props.index].done = true` and the default in
+  `({ name: local = fallback.name } = incoming)` are both evaluated to perform
+  the write.
+
 - **Module scope is not reported.** A module-scope read runs before any component
   exists; the runtime opens no strict-read window there and never warns. A
   deliberate module-scope snapshot is legal, undiagnosed Solid, so this rule stays

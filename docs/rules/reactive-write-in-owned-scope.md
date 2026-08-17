@@ -91,4 +91,4 @@ using it on application state reintroduces the feedback loops this rule prevents
 ## Related
 
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the same constraint for actions
-- [invalid-refresh-target](invalid-refresh-target.md) — what `refresh()` accepts
+- [action-called-in-owned-scope](action-called-in-owned-scope.md) — the action form of the same restriction

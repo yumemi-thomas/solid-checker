@@ -18,10 +18,9 @@ use crate::symbols::{add_solid_import_names, patch_typescript_indexes};
 use crate::timings::{ReactiveIrStage, StageClock};
 use crate::{
     ActionInvocation, AsyncRead, BuildError, BuildTimings, ContractExport,
-    ContractGenerationObligation, InvalidCleanupReturn, LeafOwnerOperation, ObligationCounts,
-    OwnerRequirement, PackageContract, PrimitiveCreation, Program, ReactiveRead,
-    ReactiveSourceKind, ReactiveWrite, RuleOptions, Solid1xRuleOptions, StaticDefect,
-    StaticViolation, UnresolvedCleanupReturn, location_order,
+    ContractGenerationObligation, LeafOwnerOperation, ObligationCounts, OwnerRequirement,
+    PackageContract, PrimitiveCreation, Program, ReactiveRead, ReactiveSourceKind, ReactiveWrite,
+    RuleOptions, Solid1xRuleOptions, StaticDefect, StaticViolation, location_order,
 };
 use crate::{
     cleanup, directives, owners, reactive_analysis, server_rules, static_api, static_rules,
@@ -42,8 +41,6 @@ pub(crate) struct ProgramDraft {
     pub(crate) static_violations: Vec<StaticViolation>,
     pub(crate) static_defects: Vec<StaticDefect>,
     pub(crate) leaf_operations: Vec<LeafOwnerOperation>,
-    pub(crate) invalid_cleanup_returns: Vec<InvalidCleanupReturn>,
-    pub(crate) unresolved_cleanup_returns: Vec<UnresolvedCleanupReturn>,
     pub(crate) directive_creations: Vec<PrimitiveCreation>,
     pub(crate) missing_owners: Vec<OwnerRequirement>,
     pub(crate) contract_exports: Arc<BTreeMap<String, ContractExport>>,
@@ -77,10 +74,6 @@ impl ProgramDraft {
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.action_invocations
             .sort_by(|left, right| location_order(&left.location, &right.location));
-        self.invalid_cleanup_returns
-            .sort_by(|left, right| location_order(&left.location, &right.location));
-        self.unresolved_cleanup_returns
-            .sort_by(|left, right| location_order(&left.location, &right.location));
         self.static_violations
             .sort_by(|left, right| location_order(&left.location, &right.location));
         self.static_defects
@@ -98,8 +91,6 @@ impl ProgramDraft {
             writes: self.writes,
             actions: self.action_invocations,
             leaf_operations: self.leaf_operations,
-            invalid_cleanup_returns: self.invalid_cleanup_returns,
-            unresolved_cleanup_returns: self.unresolved_cleanup_returns,
             static_violations: self.static_violations,
             static_defects: self.static_defects,
             directive_creations: self.directive_creations,

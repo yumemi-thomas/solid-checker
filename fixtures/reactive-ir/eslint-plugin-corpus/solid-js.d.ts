@@ -41,15 +41,21 @@ declare module "solid-js" {
     options?: { ownedWrite?: boolean },
   ): [Accessor<T>, Setter<T>];
   export function createContext<T>(value: T): unknown;
+  // Byte-faithful to `@solidjs/signals@2.0.0-rc.0`'s
+  // `EffectFunction<Prev, Next extends Prev = Prev> = (v: Next, p?: Prev) => (() => void) | void`
+  // and `onSettled(callback: () => void | (() => void))`. Do not loosen these:
+  // a stub that returns `unknown` manufactures cleanup-return defects no real
+  // project can produce, which is how the removed SC3004/SC9002 pair survived
+  // for a full cycle (docs/precision-backlog.md).
   export function createEffect<T>(
     compute: () => T,
-    apply: (value: T) => unknown,
+    apply: (value: T, previous?: T) => (() => void) | void,
   ): void;
   export function createEffect<T>(
     compute: () => T,
     apply: {
-      effect: (value: T) => unknown;
-      error?: (error: unknown, cleanup: () => void) => unknown;
+      effect: (value: T, previous?: T) => (() => void) | void;
+      error?: (error: unknown, cleanup: () => void) => (() => void) | void;
     },
   ): void;
   export function createMemo<T>(compute: () => T): Accessor<T>;
@@ -59,7 +65,7 @@ declare module "solid-js" {
   ): Accessor<T>;
   export function createRenderEffect<T>(
     compute: () => T,
-    apply: (value: T) => unknown,
+    apply: (value: T, previous?: T) => (() => void) | void,
   ): void;
   export function createRoot<T>(callback: () => T): T;
   export function createSignal<T>(
@@ -77,14 +83,16 @@ declare module "solid-js" {
     compute: () => T,
     seed: T,
   ): [T, (update: (draft: T) => void) => void];
-  export function createTrackedEffect(callback: () => unknown): void;
+  // Byte-faithful to `@solidjs/signals@2.0.0-rc.0`'s
+  // `createTrackedEffect(compute: () => void | (() => void), options?)`.
+  export function createTrackedEffect(callback: () => void | (() => void)): void;
   export function flush<T = void>(callback?: () => T): T;
   export function mapArray<T, U>(
     items: Accessor<T[]>,
     map: (item: T) => U,
   ): Accessor<U[]>;
   export function onCleanup(callback: () => void): void;
-  export function onSettled(callback: () => unknown): void;
+  export function onSettled(callback: () => void | (() => void)): void;
   export function refresh(target: unknown): void;
   export function merge<T, U>(defaults: T, props: U): T & U;
   export function omit<T extends object, K extends keyof T>(

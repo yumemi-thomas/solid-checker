@@ -31,6 +31,20 @@ export function Mutates() {
   return <button onClick={toggle}>{String(store.open)}</button>;
 }
 
+// Read-modify-write forms drop the write through the same readonly proxy.
+// Upstream's rule sees the compound form (an ESTree AssignmentExpression) and
+// reports it, but a member `++` is an UpdateExpression its props branch never
+// looks at; no upstream case covers either spelling. The checker reports both,
+// because what reaches the proxy is identical.
+export function MutatesInPlace() {
+  const [store] = createStore({ count: 0 });
+  const bump = () => {
+    store.count += 1;
+    store.count++;
+  };
+  return <button onClick={bump}>{String(store.count)}</button>;
+}
+
 // v1/no-async-tracked-scope: tracking stops at the first await, so theme() is
 // never a dependency and the effect stops responding to it.
 export function AsyncEffect() {

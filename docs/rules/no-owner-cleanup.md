@@ -12,7 +12,12 @@ When the call sits in an exported function whose call sites are outside the
 project, the finding is reported as **uncertifiable** instead: solid-checker cannot
 prove callers provide an owner. Like the SC9xxx rules, the uncertifiable form
 carries **error** severity; the catalog's **warning** applies to the proven
-violation form.
+violation form. An owner-backed `onSettled` callback is a leaf scope, so its
+`onCleanup` call is owned by `cleanup-in-forbidden-scope` (SC3001), not duplicated
+here. That de-duplication needs the callback to be the function literal written
+directly in the owner's argument: `onSettled(wrap(() => { onCleanup(fn) }))` hands
+the callback to a wrapper that may run it out-of-band, so it keeps SC4002, as do
+genuinely out-of-band and module-scope calls.
 
 ## Why is this bad?
 

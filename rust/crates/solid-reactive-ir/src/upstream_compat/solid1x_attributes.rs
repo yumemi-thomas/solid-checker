@@ -13,7 +13,9 @@
 //! case this reads the resolved TypeScript type through
 //! [`UpstreamCompatContext::lookup`] instead of guessing from source text —
 //! the same "ask what was proven, not what the syntax suggests" preference
-//! [`super::shared_reactivity`] documents for its own rules.
+//! [`super::shared_reactivity`] documents for its own rules. The compiler's
+//! template/static branch is the exception: it is a syntax-node-kind rule, so
+//! this module delegates that exact predicate to `solid1x_syntax`.
 //!
 //! # Options
 //!
@@ -594,28 +596,25 @@ fn event_handlers(
             if static_string_expression(context, file, span).is_some() {
                 return true;
             }
-            // Neither a literal nor an obviously-static local: for a plain
-            // reference — one identifier or member read, nothing else — ask
-            // what TypeScript resolved it to. Only that shape: the entity
-            // recorded for a compound expression's span carries the type of
-            // its *leading token* (`'a' === x ? f : 'b'` answers `"a"`), so
-            // consulting it for anything larger manufactures a static
-            // verdict upstream's constant folder would never reach.
-            (file.ast.identifiers.iter().any(|id| id.span == span)
-                || file.ast.members.iter().any(|member| member.span == span))
-                && super::expression_descriptor(context, file, span).is_some_and(|descriptor| {
-                    static_string_or_number_type(descriptor.text.as_ref())
-                })
+            // The pinned compiler freezes only a StringLiteral or
+            // NumericLiteral expression. In particular, `-1` is a unary
+            // expression and `NaN` is an identifier, even though TypeScript
+            // renders both as a primitive number. Keep this syntactic test in
+            // lockstep with jsx-no-duplicate-props rather than parsing a
+            // rendered type descriptor.
+            super::solid1x_syntax::expression_is_static_literal(file, span)
         });
+        // No source-text fallback here. Parsing the written text with
+        // `str::parse::<f64>` accepted exactly the spellings the compiler does
+        // *not* freeze — `-1` (unary), `NaN` and `Infinity` (identifiers) —
+        // and it sat in this disjunction, so it decided the answer before the
+        // syntactic test above could. The diagnostic claims Solid "will treat
+        // the value as an attribute", which is only true for the frozen forms.
         if type_is_static
             || matches!(
                 attribute.value_kind,
                 JsxAttributeValueKind::Boolean | JsxAttributeValueKind::String
             )
-            || attribute.expression.is_some_and(|span| {
-                let value = text(file, span).trim();
-                value.parse::<f64>().is_ok() || static_string(file, span).is_some()
-            })
         {
             violations.push(violation(
                 file,
@@ -791,20 +790,6 @@ fn no_array_handlers(
 
 fn looks_like_array_literal(source: &str) -> bool {
     source.starts_with('[')
-}
-
-/// Whether a rendered type is statically a string or number: the primitives
-/// themselves, a string/number/template literal type, or a union of those.
-/// The naive `|` split is conservative: a `|` inside a generic or a quoted
-/// literal splits into parts that fail the per-part test, so a type this
-/// cannot read is never called static.
-fn static_string_or_number_type(descriptor: &str) -> bool {
-    descriptor.split('|').map(str::trim).all(|part| {
-        matches!(part, "string" | "number")
-            || part.starts_with('"')
-            || part.starts_with('`')
-            || part.parse::<f64>().is_ok()
-    })
 }
 
 /// `v1/prefer-classlist` (SC8013) — a `class`/`className` prop set from a

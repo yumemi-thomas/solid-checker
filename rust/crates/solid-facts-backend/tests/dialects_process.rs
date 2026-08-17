@@ -1365,6 +1365,34 @@ fn run_with_owner_distinguishes_null_definite_and_nullable_owners_in_both_dialec
             }),
             "{dialect} treated an aliased nullable owner as definitely present: {findings:#?}"
         );
+
+        let effect_after = |owner: &str| {
+            let owner = source.find(owner).unwrap();
+            (owner + source[owner..].find("createEffect").unwrap()) as u64
+        };
+        let reexported = effect_after("runWithOwner(reExportedOwner");
+        let local = effect_after("runWithOwner(localOwner");
+        let unresolved = effect_after("runWithOwner(unresolvedOwner");
+        assert!(
+            owners
+                .iter()
+                .all(|finding| { finding["primaryLocation"]["startByte"] != reexported }),
+            "{dialect} rejected a re-exported Solid Owner: {findings:#?}"
+        );
+        assert!(
+            owners.iter().any(|finding| {
+                finding["primaryLocation"]["startByte"] == local
+                    && finding["kind"] == "uncertifiable"
+            }),
+            "{dialect} accepted a user-local type named Owner: {findings:#?}"
+        );
+        assert!(
+            owners.iter().any(|finding| {
+                finding["primaryLocation"]["startByte"] == unresolved
+                    && finding["kind"] == "uncertifiable"
+            }),
+            "{dialect} treated an unresolved owner as definitely present: {findings:#?}"
+        );
     }
 }
 

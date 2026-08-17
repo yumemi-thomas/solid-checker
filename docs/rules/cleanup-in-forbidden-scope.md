@@ -14,6 +14,16 @@ live children-capable owner (a component body, memo, `createRoot`, …). When th
 `onCleanup` call is the trailing statement of the callback, solid-checker offers
 a safe fix that rewrites it to a `return`.
 
+"Lexically contained" means the leaf callback is a function **literal written
+directly in the owner's argument**, and the `onCleanup` sits in that literal's
+own synchronous extent. `onSettled(wrap(() => onCleanup(dispose)))` and
+`onSettled(makeCallback())` hand the owner a callback this analysis cannot
+see — a wrapper may stash it and run it out-of-band, where there is no leaf
+scope and no throw — and a call inside a nested function the callback merely
+builds runs later, in that function's scope. All of those stay silent here;
+a genuinely unowned cleanup is still reported by
+[no-owner-cleanup](no-owner-cleanup.md).
+
 `onSettled` is only a leaf owner when it is called *owner-backed*. Called
 out-of-band — from an event handler, with no owner at all, or inside another
 leaf scope — the rc.0 runtime enqueues the callback as a plain function instead:
@@ -82,7 +92,6 @@ and component bodies — just not inside leaf owners.
 
 ## Related
 
-- [invalid-cleanup-return](invalid-cleanup-return.md) — what the return value may be
 - [primitive-in-leaf-owner](primitive-in-leaf-owner.md) — the same constraint for primitives
 - [no-owner-cleanup](no-owner-cleanup.md) — `onCleanup` with no owner at all
 - [no-owner-settled-cleanup](no-owner-settled-cleanup.md) — the out-of-band `onSettled` defect (a returned cleanup that is dropped)

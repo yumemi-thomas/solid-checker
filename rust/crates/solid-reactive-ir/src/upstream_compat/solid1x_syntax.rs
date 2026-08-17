@@ -278,7 +278,7 @@ fn duplicate_slot(
 /// fraction and exponent), and the `0x`/`0o`/`0b` and legacy-octal radix
 /// forms, each allowing `_` separators. A `BigInt` (`1n`) is a distinct node
 /// kind and is rejected. The string-literal path is unchanged.
-fn expression_is_static_literal(file: &FileFacts, span: Span) -> bool {
+pub(super) fn expression_is_static_literal(file: &FileFacts, span: Span) -> bool {
     let trimmed = text(file, span).trim();
     let trimmed = trimmed
         .strip_prefix('{')

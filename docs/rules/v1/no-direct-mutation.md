@@ -12,6 +12,15 @@ or mutating state a signal or store holds without going through `setSignal`/
 `setStore`. Part of the fine-grained decomposition of eslint-plugin-solid's
 monolithic `reactivity` rule.
 
+Read-modify-write spellings count as writes: `store.count += 1` and
+`store.count++` both reach the readonly proxy with a value that is dropped.
+Upstream reports the compound form (its props branch tests for an ESTree
+`AssignmentExpression`, which covers every compound operator) and reports an
+accessor binding's `++` through the write reference ESLint's scope analysis
+records, but never sees a *member* `++`, which is an `UpdateExpression`. No
+upstream test case covers either spelling, so this is an evidence-backed
+divergence with no parity case attached rather than a declared deviation.
+
 The warning tier deliberately mirrors that upstream rule's advisory policy.
 It does not mean the write is speculative: every finding is a proven mutation
 that bypasses the reactive setter.

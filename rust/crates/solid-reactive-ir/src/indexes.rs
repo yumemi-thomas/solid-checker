@@ -1521,14 +1521,22 @@ impl<'a> SemanticLookup<'a> {
             .filter(|symbol| !symbol.is_empty())
     }
 
-    /// The type descriptor of the smallest typed entity contained in a span.
+    /// The type descriptor at `span`, falling back to the smallest typed entity
+    /// contained in it for legacy consumers that deliberately query a region
+    /// rather than one complete expression. Exact facts win: a descriptor on
+    /// the demanded expression can never be replaced by an inner callee or
+    /// member just because that entity happens to be smaller.
     pub(super) fn smallest_contained_descriptor(
         &self,
         path: &str,
         span: Span,
     ) -> Option<&'a TypeDescriptor> {
-        self.smallest_contained(path, span, |entity| entity.type_descriptor.is_some())
+        self.entity_at(path, span)
             .and_then(|entity| entity.type_descriptor.as_deref())
+            .or_else(|| {
+                self.smallest_contained(path, span, |entity| entity.type_descriptor.is_some())
+                    .and_then(|entity| entity.type_descriptor.as_deref())
+            })
             .or_else(|| {
                 let symbol = self.entities.at(path, span)?;
                 self.descriptors_by_symbol
@@ -1812,15 +1820,20 @@ impl<'a> SemanticLookup<'a> {
             .any(|function| self.function_is_component(file, function))
     }
 
-    /// Compiler-derived callability for the smallest demanded entity in a
-    /// span, falling back to another demanded occurrence of the same symbol.
+    /// Compiler-derived callability at `span`, falling back to the smallest
+    /// contained demanded entity only for callers that intentionally query a
+    /// region, then to another demanded occurrence of the same symbol.
     pub(super) fn smallest_contained_callability(
         &self,
         path: &str,
         span: Span,
     ) -> Option<Callability> {
-        self.smallest_contained(path, span, |entity| entity.callability.is_some())
+        self.entity_at(path, span)
             .and_then(|entity| entity.callability)
+            .or_else(|| {
+                self.smallest_contained(path, span, |entity| entity.callability.is_some())
+                    .and_then(|entity| entity.callability)
+            })
             .or_else(|| {
                 let symbol = self.entities.at(path, span)?;
                 self.callability_by_symbol

@@ -12,6 +12,7 @@ pub mod core;
 
 mod project;
 
+pub use core::resolve_relative_module_path;
 pub use project::{
     FileFacts, JoinError, ProjectFacts, TypeScriptChanges, TypeScriptSymbol, TypeScriptTable,
 };

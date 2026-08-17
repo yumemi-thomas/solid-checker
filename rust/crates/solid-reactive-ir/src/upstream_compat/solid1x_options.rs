@@ -285,8 +285,8 @@ mod tests {
                 | "v1/no-unknown-namespaces"
                 | "v1/no-destructure"
                 | "v1/no-array-handlers"
-                | "invalid-refresh-target"
-                | "invalid-affects-target"
+                | "no-owner-cleanup"
+                | "no-owner-settled-cleanup"
                 | "strict-read-untracked"
         )
     }
@@ -384,7 +384,7 @@ mod tests {
               "rules": {
                 "v1/no-array-handlers": { "enabled": false },
                 "v1/no-innerhtml": { "enabled": false, "allowStatic": false },
-                "invalid-refresh-target": { "enabled": false },
+                "no-owner-cleanup": { "enabled": false },
                 "strict-read-untracked": { "enabled": true }
               }
             }"#,
@@ -396,8 +396,8 @@ mod tests {
         assert!(!options.is_enabled("v1/no-innerhtml"));
         assert!(options.is_enabled("strict-read-untracked"));
         assert!(options.is_enabled("v1/no-destructure"));
-        assert!(!options.is_enabled("invalid-refresh-target"));
-        assert!(options.is_enabled("invalid-affects-target"));
+        assert!(!options.is_enabled("no-owner-cleanup"));
+        assert!(options.is_enabled("no-owner-settled-cleanup"));
         assert!(!options.solid1x.no_innerhtml.allow_static);
     }
 

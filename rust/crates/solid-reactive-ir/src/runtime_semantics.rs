@@ -148,6 +148,23 @@ pub(super) fn argument_behavior(
     }
 }
 
+/// Whether the compiler-resolved call is the synchronous callback position of
+/// the built-in Array/ReadonlyArray `filter`. The standard-library bit and
+/// owner chain are both required; a project-defined or unresolved `.filter`
+/// must not inherit Array runtime behavior from its spelling.
+pub(super) fn is_proven_array_filter(
+    call: &ResolvedCall,
+    actual_callability: Option<Callability>,
+) -> bool {
+    call.declaration.as_ref().is_some_and(|declaration| {
+        declaration.standard_library
+            && declaration.name.as_ref() == "filter"
+            && declaration_owner_in(declaration, &["Array", "ReadonlyArray"])
+            && argument_behavior(call, actual_callability, 0)
+                == Some(RuntimeArgumentBehavior::InlineCallback)
+    })
+}
+
 pub(super) fn resolved_parameter(call: &ResolvedCall, argument: usize) -> Option<&ParameterFact> {
     call.arguments
         .iter()
@@ -269,6 +286,7 @@ mod tests {
         ResolvedCall {
             target: Arc::from(name),
             return_type_text: Arc::from("unknown"),
+            targets: None,
             validity: ResolvedCallValidity::Valid,
             kind: if name == "construct" {
                 CallKind::Construct

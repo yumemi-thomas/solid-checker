@@ -22,16 +22,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-extended-invalid.tsx",
-      "start": 295,
-      "end": 313,
-      "fixes": 0
-    },
-    {
       "rule": "reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -109,16 +99,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-invalid.tsx",
       "start": 545,
       "end": 549,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/after-await-valid.tsx",
-      "start": 601,
-      "end": 619,
       "fixes": 0
     },
     {
@@ -392,16 +372,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-invalid.tsx",
-      "start": 151,
-      "end": 171,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
@@ -442,16 +412,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-invalid.tsx",
-      "start": 308,
-      "end": 322,
-      "fixes": 0
-    },
-    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
@@ -459,16 +419,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-invalid.tsx",
       "start": 384,
       "end": 396,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-invalid.tsx",
-      "start": 421,
-      "end": 451,
       "fixes": 0
     },
     {
@@ -512,16 +462,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-invalid.tsx",
-      "start": 556,
-      "end": 607,
-      "fixes": 0
-    },
-    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
@@ -542,16 +482,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-valid.tsx",
-      "start": 282,
-      "end": 304,
-      "fixes": 0
-    },
-    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
@@ -562,16 +492,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-valid.tsx",
-      "start": 357,
-      "end": 372,
-      "fixes": 0
-    },
-    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
@@ -579,16 +499,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-valid.tsx",
       "start": 501,
       "end": 513,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-extended-valid.tsx",
-      "start": 529,
-      "end": 576,
       "fixes": 0
     },
     {
@@ -606,16 +516,6 @@
       "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-invalid.tsx",
-      "start": 207,
-      "end": 219,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-invalid.tsx",
       "start": 207,
       "end": 219,
@@ -642,30 +542,10 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-invalid.tsx",
-      "start": 312,
-      "end": 321,
-      "fixes": 0
-    },
-    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-invalid.tsx",
-      "start": 398,
-      "end": 404,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-invalid.tsx",
       "start": 398,
       "end": 404,
@@ -679,16 +559,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-valid.tsx",
       "start": 105,
       "end": 117,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-valid.tsx",
-      "start": 147,
-      "end": 165,
       "fixes": 0
     },
     {
@@ -709,16 +579,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-valid.tsx",
       "start": 247,
       "end": 259,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/effect-apply-valid.tsx",
-      "start": 417,
-      "end": 423,
       "fixes": 0
     },
     {
@@ -752,16 +612,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
-      "start": 166,
-      "end": 185,
-      "fixes": 0
-    },
-    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
@@ -779,16 +629,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
       "start": 220,
       "end": 231,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
-      "start": 220,
-      "end": 233,
       "fixes": 0
     },
     {
@@ -812,16 +652,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
-      "start": 262,
-      "end": 281,
-      "fixes": 0
-    },
-    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
@@ -842,16 +672,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
-      "start": 310,
-      "end": 329,
-      "fixes": 0
-    },
-    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
@@ -869,16 +689,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
       "start": 358,
       "end": 366,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
-      "start": 358,
-      "end": 391,
       "fixes": 0
     },
     {
@@ -1059,26 +869,6 @@
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx",
       "start": 140,
       "end": 152,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx",
-      "start": 177,
-      "end": 192,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-scope-valid.tsx",
-      "start": 211,
-      "end": 222,
       "fixes": 0
     },
     {

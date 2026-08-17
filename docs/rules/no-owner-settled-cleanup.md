@@ -78,4 +78,4 @@ explicitly instead of returning it there.
 ## Related
 
 - [no-owner-cleanup](no-owner-cleanup.md) — `onCleanup` without an owner
-- [invalid-cleanup-return](invalid-cleanup-return.md) — what a returned cleanup may be
+- [no-owner-effect](no-owner-effect.md) — an effect with no owner at all

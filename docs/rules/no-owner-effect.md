@@ -16,6 +16,10 @@ cannot prove callers provide an owner. Like the SC9xxx rules, the uncertifiable 
 carries **error** severity; the catalog's **warning** applies to the proven
 violation form.
 
+For `runWithOwner`, a supplied owner is treated as definite only when TypeScript's
+resolved type declaration is the active Solid dialect's exported `Owner` type.
+Same-spelled user types and unresolved values remain conditional.
+
 ## Why is this bad?
 
 Owners are Solid's disposal mechanism: when a component or root is disposed, every

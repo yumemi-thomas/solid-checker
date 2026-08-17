@@ -29,10 +29,6 @@
       "status": "evidence-backed",
       "reason": "The checker reports a conditional return only when the condition is proven reactive (SC1004); upstream reports the shape regardless of what the condition reads (noEarlyReturn)."
     },
-    "event-handlers__valid__01": {
-      "status": "evidence-backed",
-      "reason": "TypeScript proves 'string' + some_func() is a string ('+' with a string operand always yields one), so the onLy value is provably never a listener; upstream's constant folder cannot fold past the call and stays silent."
-    },
     "jsx-no-undef__invalid__00": {
       "status": "fact-unavailable",
       "reason": "Upstream's own scope walk decides a plain JSX tag is undefined; this checker asks TypeScript, and a span with no entity is missing evidence rather than proof that no binding exists. The rule therefore fails closed on an unresolved tag and stays silent. `use:` directive names still report, because the structural binder returns an explicit negative there rather than an absence."
@@ -80,10 +76,6 @@
     "jsx-no-undef__invalid__15": {
       "status": "policy",
       "reason": "Upstream treats a bare control-flow tag as a forgotten `solid-js` import: it reports `autoImport` and splices the name in, keyed off a hard-coded Show/For/Index/Switch/Match list. That is a name-only allowlist, which this checker does not carry -- an unresolved tag is uncertifiable whatever it is spelled, so no report and no fix. The upstream fix remains covered as formatting logic by the rule's own tests."
-    },
-    "no-array-handlers__valid__10": {
-      "status": "evidence-backed",
-      "reason": "SafeArray is undeclared in this corpus case, so the cast fails to resolve and TypeScript types the expression as the tuple itself, which the checker correctly reports as an array handler. In a real project the cast resolves to SafeArray<number> and the checker honours it, exactly as upstream intends."
     },
     "no-destructure__valid__10": {
       "status": "evidence-backed",

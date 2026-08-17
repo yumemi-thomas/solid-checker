@@ -9,10 +9,9 @@ use std::time::Instant;
 use typefacts::Location;
 
 use crate::{
-    ActionInvocation, AsyncRead, DraggableSpelling, EvidenceStep, Finding, InvalidCleanupReturn,
-    LeafOwnerOperation, OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveWrite,
-    RuleMetadata, SolveTimings, StaticDefect, StaticDefectKind, StaticViolation,
-    UnresolvedCleanupReturn, finish_findings,
+    ActionInvocation, AsyncRead, DraggableSpelling, EvidenceStep, Finding, LeafOwnerOperation,
+    OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveWrite, RuleMetadata,
+    SolveTimings, StaticDefect, StaticDefectKind, StaticViolation, finish_findings,
 };
 
 /// The few phrases where shared static-defect concepts use dialect APIs.
@@ -298,7 +297,6 @@ fn uppercase_first(value: &str) -> String {
 pub struct CatalogCapabilities {
     pub actions: bool,
     pub async_reads: bool,
-    pub cleanup_returns: bool,
     /// Whether module-scope reads are reported by the strict-read rule.
     /// The rc.0 runtime installs strict-read contexts only inside component
     /// and effect bodies (probed: a module-scope signal or memo read emits no
@@ -318,7 +316,6 @@ impl CatalogCapabilities {
     pub const SOLID_1: Self = Self {
         actions: false,
         async_reads: false,
-        cleanup_returns: false,
         module_scope_strict_reads: true,
         handler_expression_owns_strict_read: false,
     };
@@ -326,7 +323,6 @@ impl CatalogCapabilities {
     pub const SOLID_2: Self = Self {
         actions: true,
         async_reads: true,
-        cleanup_returns: true,
         module_scope_strict_reads: false,
         handler_expression_owns_strict_read: true,
     };
@@ -355,8 +351,6 @@ pub enum FindingSeed<'a> {
     OwnedWrite(&'a ReactiveWrite),
     Action(&'a ActionInvocation),
     LeafOperation(&'a LeafOwnerOperation),
-    InvalidCleanupReturn(&'a InvalidCleanupReturn),
-    UnresolvedCleanupReturn(&'a UnresolvedCleanupReturn),
     StaticViolation(&'a StaticViolation),
     StaticDefect(&'a StaticDefect),
     DirectiveCreation(&'a PrimitiveCreation),
@@ -437,16 +431,6 @@ pub fn project_findings(
             .iter()
             .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
     );
-    if capabilities.cleanup_returns {
-        findings.extend(
-            program.invalid_cleanup_returns.iter().map(|invalid| {
-                project_finding(FindingSeed::InvalidCleanupReturn(invalid), catalog)
-            }),
-        );
-        findings.extend(program.unresolved_cleanup_returns.iter().map(|unresolved| {
-            project_finding(FindingSeed::UnresolvedCleanupReturn(unresolved), catalog)
-        }));
-    }
     findings.extend(
         program
             .static_defects
@@ -637,8 +621,6 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             finding.subject_kind = "package".into();
         }
         FindingSeed::Action(_)
-        | FindingSeed::InvalidCleanupReturn(_)
-        | FindingSeed::UnresolvedCleanupReturn(_)
         | FindingSeed::DirectiveCreation(_)
         | FindingSeed::OwnerRequirement(_) => {}
     }
@@ -651,8 +633,6 @@ fn primary_location(seed: FindingSeed<'_>) -> Location {
         FindingSeed::OwnedWrite(value) => value.location.clone(),
         FindingSeed::Action(value) => value.location.clone(),
         FindingSeed::LeafOperation(value) => value.location.clone(),
-        FindingSeed::InvalidCleanupReturn(value) => value.location.clone(),
-        FindingSeed::UnresolvedCleanupReturn(value) => value.location.clone(),
         FindingSeed::StaticViolation(value) => value.location.clone(),
         FindingSeed::StaticDefect(value) => value.location.clone(),
         FindingSeed::DirectiveCreation(value) => value.location.clone(),
@@ -682,8 +662,6 @@ mod tests {
                 FindingSeed::OwnedWrite(_) => "write",
                 FindingSeed::Action(_) => "action",
                 FindingSeed::LeafOperation(_) => "leaf",
-                FindingSeed::InvalidCleanupReturn(_) => "invalid-cleanup",
-                FindingSeed::UnresolvedCleanupReturn(_) => "unresolved-cleanup",
                 FindingSeed::StaticViolation(_) => "static-violation",
                 FindingSeed::StaticDefect(_) => "static-defect",
                 FindingSeed::DirectiveCreation(_) => "directive",
@@ -734,14 +712,6 @@ mod tests {
                 options_opaque: false,
                 ssr_client_hole: false,
             }],
-            invalid_cleanup_returns: vec![InvalidCleanupReturn {
-                primitive: "onSettled".into(),
-                location: location(5),
-            }],
-            unresolved_cleanup_returns: vec![UnresolvedCleanupReturn {
-                primitive: "createEffect".into(),
-                location: location(6),
-            }],
             ..Program::default()
         };
 
@@ -756,7 +726,7 @@ mod tests {
                 .iter()
                 .map(|finding| finding.message.as_str())
                 .collect::<Vec<_>>(),
-            ["action", "async", "invalid-cleanup", "unresolved-cleanup"]
+            ["action", "async"]
         );
     }
 

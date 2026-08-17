@@ -89,6 +89,11 @@ export function Right() {
           compiler never freezes it into the template: each occurrence
           attaches its own listener and neither is dead. */}
       <div on-foo={-1} on-foo={-2} />
+      {/* The same compiler-faithful distinction applies to event-handlers:
+          `-1` and `NaN` are primitive numbers to TypeScript, but neither is a
+          StringLiteral/NumericLiteral node that the compiler freezes. */}
+      <div onClick={-1} />
+      <div onClick={NaN} />
       {/* Two distinct keys on a props object — the component boundary has no
           case folding to merge them. */}
       <Panel onClick={() => {}} onclick={() => {}} />

@@ -17,7 +17,7 @@ use oxc_ast::ast::{
     JSXElementName, JSXExpression, LogicalExpression, LogicalOperator, ModuleExportName,
     NewExpression, ObjectProperty, ObjectPropertyKind, PropertyKey, PropertyKind, ReturnStatement,
     SpreadElement, StaticMemberExpression, TSModuleDeclarationName, UnaryExpression,
-    VariableDeclarator,
+    UpdateExpression, VariableDeclarator,
 };
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::{ParseOptions, Parser};
@@ -575,6 +575,10 @@ pub struct AssignmentFact {
     pub target: Span,
     pub value_span: Span,
     pub value: AssignmentValueKind,
+    /// Whether evaluating the assignment reads the previous target value.
+    /// Plain `=` does not; compound assignments and update expressions do.
+    #[serde(default)]
+    pub reads_target: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_initializer: Option<Span>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -608,6 +612,23 @@ pub enum ReturnValueKind {
 }
 
 impl AstFacts {
+    /// Whether `span` is *exactly* the target an assignment overwrites without
+    /// reading the previous value — plain `=` and nothing else.
+    ///
+    /// Span identity is the whole point: a span merely *contained* in the
+    /// target is a genuine read. `state.rows[props.index].done = true` writes
+    /// one member and reads `props.index` to address it, and
+    /// `({ a: local = profile.fallback } = obj)` reads `profile.fallback` to
+    /// build the default. Compound assignments and update expressions are
+    /// excluded outright: they evaluate the old value before storing the new
+    /// one, so their target is a read as well as a write.
+    #[must_use]
+    pub fn is_plain_assignment_target(&self, span: Span) -> bool {
+        self.assignments
+            .iter()
+            .any(|assignment| !assignment.reads_target && assignment.target == span)
+    }
+
     /// Peel only syntax that preserves the runtime value of an expression.
     ///
     /// The parser already exposes the equivalent node-level operation as
@@ -1656,33 +1677,57 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     }
 
     fn visit_assignment_expression(&mut self, expression: &AssignmentExpression<'a>) {
-        if expression.operator == AssignmentOperator::Assign {
-            let inner = expression.right.get_inner_expression();
-            self.assignments.push(AssignmentFact {
-                target: span(expression.left.span()),
-                value_span: span(expression.right.span()),
-                value: match expression.right {
+        let plain = expression.operator == AssignmentOperator::Assign;
+        let inner = expression.right.get_inner_expression();
+        self.assignments.push(AssignmentFact {
+            target: span(expression.left.span()),
+            value_span: span(expression.right.span()),
+            value: if plain {
+                match expression.right {
                     Expression::ArrayExpression(_) => AssignmentValueKind::Array,
                     Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
                         AssignmentValueKind::Function
                     }
                     _ => AssignmentValueKind::Other,
-                },
-                call_initializer: match inner {
+                }
+            } else {
+                AssignmentValueKind::Other
+            },
+            reads_target: !plain,
+            call_initializer: if plain {
+                match inner {
                     Expression::CallExpression(call) => Some(span(call.span)),
                     _ => None,
-                },
-                array_slots: match &expression.left {
+                }
+            } else {
+                None
+            },
+            array_slots: if plain {
+                match &expression.left {
                     AssignmentTarget::ArrayAssignmentTarget(array) => array
                         .elements
                         .iter()
                         .map(|element| element.as_ref().map(|element| span(element.span())))
                         .collect(),
                     _ => Vec::new(),
-                },
-            });
-        }
+                }
+            } else {
+                Vec::new()
+            },
+        });
         walk::walk_assignment_expression(self, expression);
+    }
+
+    fn visit_update_expression(&mut self, expression: &UpdateExpression<'a>) {
+        self.assignments.push(AssignmentFact {
+            target: span(expression.argument.span()),
+            value_span: span(expression.span()),
+            value: AssignmentValueKind::Other,
+            reads_target: true,
+            call_initializer: None,
+            array_slots: Vec::new(),
+        });
+        walk::walk_update_expression(self, expression);
     }
 
     fn visit_formal_parameter(&mut self, parameter: &FormalParameter<'a>) {
@@ -2576,6 +2621,48 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
                     .get(region.consequent.start as usize..region.consequent.end as usize)
                     .is_some_and(|consequent| consequent.contains("callbacks.push(fn)"))
         }));
+    }
+
+    #[test]
+    fn assignment_facts_distinguish_plain_compound_and_update_reads() {
+        let source = "let value = 0; value = 1; value += 2; value++;";
+        let facts = extract("assignments.ts", source).unwrap();
+        let reads = facts
+            .assignments
+            .iter()
+            .map(|assignment| {
+                (
+                    source
+                        .get(assignment.target.start as usize..assignment.target.end as usize)
+                        .unwrap(),
+                    assignment.reads_target,
+                )
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            reads,
+            vec![("value", false), ("value", true), ("value", true)]
+        );
+    }
+
+    #[test]
+    fn only_the_written_target_itself_is_a_plain_assignment_target() {
+        let source = "state.rows[props.index].done = true; state.count += 1; ({ a: local = fallback.name } = incoming);";
+        let facts = extract("targets.ts", source).unwrap();
+        let plain = |text: &str| {
+            let start = u32::try_from(source.find(text).unwrap()).unwrap();
+            facts.is_plain_assignment_target(Span::new(
+                start,
+                start + u32::try_from(text.len()).unwrap(),
+            ))
+        };
+        // The written member is a write; the computed key that addresses it,
+        // the compound target that evaluates its old value, and the default
+        // that builds a destructured value are all genuine reads.
+        assert!(plain("state.rows[props.index].done"));
+        assert!(!plain("props.index"));
+        assert!(!plain("state.count"));
+        assert!(!plain("fallback.name"));
     }
 
     #[test]

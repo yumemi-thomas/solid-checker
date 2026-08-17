@@ -234,6 +234,7 @@ pub enum Boundary {
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub enum TypeRole {
     Component,
+    Owner,
     Accessor,
     Signal,
     Store,
@@ -1019,6 +1020,7 @@ pub trait Dialect: Sync {
             return None;
         }
         match name {
+            "Owner" => Some(TypeRole::Owner),
             "Accessor" | "SourceAccessor" | "Resource" | "InitializedResource" => {
                 Some(TypeRole::Accessor)
             }

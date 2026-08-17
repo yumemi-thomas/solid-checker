@@ -189,24 +189,12 @@ impl StaticApiContext<'_> {
             // `refresh(source, force)` is legal, if inert).
             let invalid_arity =
                 call.arguments.is_empty() || !is_refresh && call.arguments.len() > 2;
+            // Reported by `tsc`, so not reported here: both signatures are
+            // fixed-arity (`refresh<T>(target: Refreshable<T>)`,
+            // `affects(target)` / `affects(target, key)`), so a zero-argument
+            // call and an over-long `affects` are TS2554. The call is still
+            // skipped: a call with no target proves nothing about a write.
             if invalid_arity {
-                result.violations.push(StaticViolation {
-                    id: "SC7003".into(),
-                    rule: format!("invalid-{primitive}-target"),
-                    message: if is_refresh {
-                        "refresh() requires the original derived signal, store, or projection binding to recompute as its argument".into()
-                    } else {
-                        "affects() takes a source target and at most one optional store property key; extra keys are not a path".into()
-                    },
-                    hint: if is_refresh {
-                        "Pass the original refreshable binding directly: refresh(source). Wrapper thunks and already-read values are not refresh targets.".into()
-                    } else {
-                        "Call affects(source) for signals, affects(store) for a store record, or affects(store, \"key\") for one property. Mark multiple properties with separate calls or target the nested record directly.".into()
-                    },
-                    location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
-                    fixes: vec![],
-                });
                 continue;
             }
             let target = &call.arguments[0];
@@ -227,22 +215,14 @@ impl StaticApiContext<'_> {
                     | ArgumentValueKind::Undefined
             ) || target.primitive_literal
                 || target.container_literal;
+            // Also `tsc`'s. `Refreshable<T> = T & { readonly [$REFRESH]: any }`
+            // is the brand *as a type*, so a thunk, a read value, a literal,
+            // `null`, and `undefined` are all TS2345 against it; `affects`
+            // takes `Accessor<unknown> | Store<object>` and rejects the same
+            // set. The type draws exactly the line this rule drew, in both
+            // directions — a valid target is accepted — which is what makes it
+            // redundant rather than merely stricter.
             if !is_identifier && proven_non_source {
-                result.violations.push(StaticViolation {
-                    id: "SC7003".into(),
-                    rule: format!("invalid-{primitive}-target"),
-                    message: format!(
-                        "{primitive}() received a wrapper, read value, or literal instead of the original Solid source binding; the brand on the binding created by createSignal, createMemo, or createStore is how Solid identifies what to recompute"
-                    ),
-                    hint: if is_refresh {
-                        "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: refresh(user), not refresh(user()) or refresh(() => user()).".into()
-                    } else {
-                        "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: affects(user), not affects(user()).".into()
-                    },
-                    location: location(file.path.shared(), target.span),
-                    analysis_context: String::new(),
-                    fixes: vec![],
-                });
                 continue;
             }
             let symbol = if is_identifier {
@@ -256,21 +236,15 @@ impl StaticApiContext<'_> {
                 member_chain_root(file, target.value_span.unwrap_or(target.span))
                     .and_then(|root| self.entities.at(file.path.as_str(), root))
             };
-            let target_location = location(file.path.shared(), target.span);
             let Some((symbol, kind)) =
                 symbol.and_then(|symbol| Some((symbol, self.source_kinds.get(symbol).copied()?)))
             else {
-                result.violations.push(StaticViolation {
-                    id: "SC9003".into(),
-                    rule: format!("{primitive}-target-unresolved"),
-                    message: format!(
-                        "cannot trace the target of {primitive}() back to a Solid source; solid-checker cannot prove it is a branded accessor, store, or projection, so this call may throw at runtime"
-                    ),
-                    hint: "Pass the binding created by createSignal, createMemo, createStore, or createProjection directly. If the source is re-exported or wrapped by a package, declare that export's return kind in the package's reactivity contract so the brand survives the import.".into(),
-                    location: target_location,
-                    analysis_context: String::new(),
-                    fixes: vec![],
-                });
+                // The obligation this used to raise asked whether the target
+                // carries the source brand — and the brand is a type
+                // (`Refreshable<T>`), so TypeScript answers it completely: an
+                // unbranded target is TS2345 and a branded one type-checks.
+                // An unprovable target therefore needs no finding, only the
+                // absence of a write claim below.
                 continue;
             };
             // A member or call chain rooted at an accessor reads a plain
@@ -278,22 +252,10 @@ impl StaticApiContext<'_> {
             // (probed: refresh(memo.name) and affects(memo.name) both throw
             // INVALID_*_TARGET in dev). Chains on store bases are accepted
             // above the brand: child proxies carry it.
+            // `refresh(memo.name)` reads a plain property off the accessor
+            // function, which carries no brand — and is therefore TS2345
+            // against `Refreshable<T>` just like the wrapper forms above.
             if !is_identifier && kind == ReactiveSourceKind::Accessor {
-                result.violations.push(StaticViolation {
-                    id: "SC7003".into(),
-                    rule: format!("invalid-{primitive}-target"),
-                    message: format!(
-                        "{primitive}() received a wrapper, read value, or literal instead of the original Solid source binding; the brand on the binding created by createSignal, createMemo, or createStore is how Solid identifies what to recompute"
-                    ),
-                    hint: if is_refresh {
-                        "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: refresh(user), not refresh(user()) or refresh(() => user()).".into()
-                    } else {
-                        "Pass the accessor or store exactly as returned by its create call, uncalled and unwrapped: affects(user), not affects(user()).".into()
-                    },
-                    location: target_location,
-                    analysis_context: String::new(),
-                    fixes: vec![],
-                });
                 continue;
             }
             // Only the derived store forms own a compute node the runtime
@@ -302,36 +264,22 @@ impl StaticApiContext<'_> {
             // throws INVALID_REFRESH_TARGET in dev (probed, rc.0). A store
             // whose construction form is unknown (contracts, unproven
             // argument shapes) is never in this set, so acceptance is kept.
+            // The value form's return type is not `Refreshable`: only
+            // `createStore(fn, initial)`, `createProjection`, and the
+            // function-form optimistic store brand their result, so
+            // `refresh(valueFormStore)` is TS2345 (verified against
+            // `@solidjs/signals@2.0.0-rc.0`). Still skipped, because a call
+            // the runtime rejects records no write.
             if is_refresh
                 && kind == ReactiveSourceKind::Store
                 && self.value_form_stores.contains(symbol)
             {
-                result.violations.push(StaticViolation {
-                    id: "SC7003".into(),
-                    rule: "invalid-refresh-target".into(),
-                    message: "refresh() targets a store created with the value form createStore(value); such a store has no computation to re-run, and Solid throws INVALID_REFRESH_TARGET here in dev".into(),
-                    hint: "Refreshable stores are the derived forms: createStore(fn, initial), createProjection, and function-form createOptimisticStore. Update a value-form store through its setter, or move the derivation into the function form and refresh that binding.".into(),
-                    location: target_location,
-                    analysis_context: String::new(),
-                    fixes: vec![],
-                });
                 continue;
             }
+            // A key on an accessor target selects the one-argument `affects`
+            // overload, whose second parameter does not exist, so TypeScript
+            // reports TS2345 on the key itself. Nothing left for SC7004.
             if !is_refresh {
-                if is_identifier
-                    && kind == ReactiveSourceKind::Accessor
-                    && call.arguments.len() == 2
-                {
-                    result.violations.push(StaticViolation {
-                        id: "SC7004".into(),
-                        rule: "affects-keys-on-accessor".into(),
-                        message: "affects() received a property key but its target is a signal accessor; a key narrows a store record to one slot, and an accessor is already a single slot".into(),
-                        hint: "Drop the key for signal targets (affects(source)), or pass the owning store record if you meant to mark one property (affects(store, \"todos\")).".into(),
-                        location: location(file.path.shared(), call.callee),
-                        analysis_context: String::new(),
-                        fixes: vec![],
-                    });
-                }
                 continue;
             }
             if file.ast.any_function_body_containing(call.span) {

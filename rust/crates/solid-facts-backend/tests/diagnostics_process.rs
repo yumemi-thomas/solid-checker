@@ -63,7 +63,13 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // Two inline plus flushNow() reached through its helper from
                 // a block-bodied and an expression-bodied leaf callback.
                 ("flush-in-forbidden-scope", 4),
-                ("invalid-cleanup-return", 6),
+                // The six returns that used to be reported here are the
+                // domain `EffectFunction`'s `(() => void) | void` return type
+                // rejects, so the value-legality rules are gone; the fixture
+                // keeps them as sources because the ownership rules still
+                // classify them.
+                ("invalid-cleanup-return", 0),
+                ("cleanup-return-unresolved", 0),
             ][..],
         ),
         (
@@ -78,12 +84,15 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // options.sync into their node, so their three sync: true
                 // async derives are negative cases now.
                 ("sync-node-received-async", 3),
-                // Wrapper, literal, zero-arg, value-form store, value-form
-                // store child record, and a member chain on an accessor.
-                // refresh(target, extra) is runtime-legal and not counted.
-                ("invalid-refresh-target", 6),
-                ("invalid-affects-target", 2),
-                ("affects-keys-on-accessor", 2),
+                // The refresh/affects target rules were removed on
+                // 2026-08-17: `Refreshable<T>` brands the target in the type
+                // system, so every spelling this fixture writes -- wrapper,
+                // literal, zero-arg, value-form store, store child record,
+                // accessor member chain, and a key on an accessor -- is a
+                // TS2345. Pinned at 0 so a reintroduction fails here.
+                ("invalid-refresh-target", 0),
+                ("invalid-affects-target", 0),
+                ("affects-keys-on-accessor", 0),
                 ("reactive-write-in-owned-scope", 1),
             ],
         ),
@@ -194,6 +203,128 @@ fn settled_leaf_rules_follow_call_site_ownership() {
             .count(),
         1,
         "{cleanup:#?}"
+    );
+}
+
+#[test]
+fn solid2_precision_corrections_are_end_to_end() {
+    let Some(findings) = diagnostic_fixture("solid2-precision") else {
+        return;
+    };
+    let source = include_str!("../../../../fixtures/reactive-ir/solid2-precision/App.tsx");
+    let start_of = |needle: &str| {
+        source
+            .find(needle)
+            .unwrap_or_else(|| panic!("fixture landmark {needle:?}")) as u64
+    };
+    let starts = |rule: &str| {
+        findings_for_rule(&findings, rule)
+            .iter()
+            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+            .collect::<Vec<_>>()
+    };
+
+    // Each count pins one side of a proof. SC1002: the accessor call and the
+    // store member read inside the exact `Array#filter` callback, and nothing
+    // for the Promise, shadowed, unresolved, or wrapper-built callbacks.
+    // The cleanup-return *value* rules are gone (every illegal return is a
+    // TypeScript error against the real `EffectFunction` signature), so the
+    // contextual, explicit, parenthesized, `as`-cast, member, and returned-call
+    // spellings this fixture still writes are pinned through the ownership
+    // rules below instead of through a legality finding.
+    // SC1001/SC2003: a plain store write is a write only,
+    // while the compound and update forms also read their target and a
+    // computed key stays a read. SC3001/SC4002/SC4004: the one owner-backed
+    // settled cleanup written as a literal callback reports SC3001 without a
+    // duplicate SC4002; the wrapper-built, identifier-referenced, and
+    // out-of-band cleanups are SC4002 only. The returned-call block adds three
+    // SC3004 (a produced `number` in both return spellings, plus the unowned
+    // one), one SC9002 (`any`), and one SC4004 (a produced function is a real
+    // cleanup); a produced function, `(() => void) | undefined`, and `void`
+    // are legal and silent.
+    for (rule, expected) in [
+        ("reactive-read-after-await", 2),
+        ("invalid-cleanup-return", 0),
+        ("cleanup-return-unresolved", 0),
+        ("strict-read-untracked", 5),
+        ("no-direct-mutation", 4),
+        ("cleanup-in-forbidden-scope", 1),
+        ("no-owner-cleanup", 3),
+        ("no-owner-settled-cleanup", 2),
+    ] {
+        assert_rule_findings(&findings, rule, expected);
+    }
+
+    // The leaf rules need the literal callback *and* the call's place in its
+    // own synchronous extent. Past this landmark every leaf-owner call in the
+    // fixture is wrapper-built, handed over as an identifier reference, or
+    // has its onCleanup in a nested function the callback merely builds — no
+    // leaf scope is proven at any of them, so SC3001 stops here while the
+    // genuinely unowned SC4002 continues.
+    let non_literal_leaf = start_of("// `wrap` may stash");
+    assert!(
+        starts("cleanup-in-forbidden-scope")
+            .iter()
+            .all(|start| *start < non_literal_leaf),
+        "a leaf callback that is not the literal argument proves no leaf scope"
+    );
+    assert_eq!(
+        starts("no-owner-cleanup")
+            .iter()
+            .filter(|start| **start > non_literal_leaf)
+            .count(),
+        3,
+        "the wrapped, referenced, and out-of-band cleanups stay unowned"
+    );
+
+    assert!(
+        !starts("strict-read-untracked").contains(&start_of("profile.name =")),
+        "a plain assignment target is a write, not a read"
+    );
+    assert!(
+        starts("strict-read-untracked").contains(&start_of("props.index")),
+        "a computed key inside an assignment target is still a read"
+    );
+
+    // `filter(makePredicate(post => …))` hands the arrow to a wrapper, so the
+    // accessor call inside it is not proven to run before the await resumes.
+    let wrapped_callback = start_of("makePredicate((post)");
+    assert!(
+        starts("reactive-read-after-await")
+            .iter()
+            .all(|start| *start < wrapped_callback),
+        "a wrapper-built filter callback is not a proven synchronous read"
+    );
+
+    // A returned call is still classified from its result, not from its
+    // callable callee — the ownership half of that work is what survives the
+    // removal of the legality rules. `return makeCount()` produces a number,
+    // so no cleanup is handed over and SC4004 must not fire; the neighbouring
+    // `onSettled(() => makeThunk())` produces a function and must.
+    // Anchored on the module-level spellings: the returned expression is the
+    // reported span, and both callees also appear inside the component above.
+    let returned_call = start_of("makeCount();\n});");
+    let unowned_thunk =
+        start_of("onSettled(() => makeThunk())") + u64::try_from("onSettled(".len()).unwrap();
+    assert!(
+        !starts("no-owner-settled-cleanup").contains(&returned_call),
+        "a call producing a number hands the owner no cleanup to leak"
+    );
+    assert!(
+        starts("no-owner-settled-cleanup").contains(&unowned_thunk),
+        "a call producing a function is an unowned returned cleanup"
+    );
+
+    // `return nothing` where `nothing: undefined` is a legal cleanup return
+    // that hands the owner nothing, so it is not a returned cleanup that would
+    // make these unowned callbacks SC4004.
+    let typed_undefined = start_of("// `nothing` is provably");
+    assert!(
+        findings
+            .iter()
+            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+            .all(|start| start < typed_undefined),
+        "a proven-`undefined` cleanup return is silent in every cleanup rule"
     );
 }
 
@@ -398,12 +529,14 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
     let Some(unresolved_findings) = diagnostic_fixture("static-api-unresolved") else {
         return;
     };
-    // Two identifier targets each (a plain object and an untraceable
-    // parameter), plus one member-chain target each whose root is not a
-    // proven source: `refresh(plain.value)` and `affects(state.user, "name")`
-    // on a parameter — unresolved, never proven-invalid.
-    assert_rule_findings(&unresolved_findings, "refresh-target-unresolved", 3);
-    assert_rule_findings(&unresolved_findings, "affects-target-unresolved", 3);
+    // These six obligations asked whether the target carries the source
+    // brand, and the brand is a type (`Refreshable<T>`), so TypeScript answers
+    // the question outright: an unbranded target is TS2345, a branded one type
+    // checks. The obligations were removed on 2026-08-17 and are pinned at 0;
+    // the fixture keeps its unresolved targets so a reintroduction is caught
+    // by the same cases that used to justify them.
+    assert_rule_findings(&unresolved_findings, "refresh-target-unresolved", 0);
+    assert_rule_findings(&unresolved_findings, "affects-target-unresolved", 0);
 }
 
 #[test]
@@ -412,12 +545,12 @@ fn static_violation_evidence_describes_the_actual_proof() {
         return;
     };
     assert!(
-        findings_for_rule(&static_api, "invalid-affects-target")
+        findings_for_rule(&static_api, "sync-node-received-async")
             .into_iter()
             .all(|finding| {
                 finding["evidence"][0]["message"]
                     .as_str()
-                    .is_some_and(|message| message.contains("affects call"))
+                    .is_some_and(|message| message.contains("sync computation"))
             })
     );
 

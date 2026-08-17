@@ -11,6 +11,13 @@ Flags `flush()` calls that are lexically contained in a `createTrackedEffect`
 callback, or in an `onSettled` callback whose call is proven to execute under a
 live children-capable owner.
 
+"Lexically contained" means the leaf callback is a function **literal written
+directly in the owner's argument**, and the `flush()` sits in that literal's own
+synchronous extent. `createTrackedEffect(wrap(() => flush()))` and
+`createTrackedEffect(makeCallback())` hand the owner a callback this analysis
+cannot see, and a call inside a nested function the callback merely builds runs
+later, in that function's scope; both stay silent.
+
 `onSettled` called out-of-band (from an event handler, with no owner, or inside
 another leaf scope) runs its callback as a plain queued function where `flush()`
 is a silent no-op rather than a throw, so this rule stays silent there; an

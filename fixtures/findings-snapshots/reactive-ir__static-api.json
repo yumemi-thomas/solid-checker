@@ -42,16 +42,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 203,
-      "end": 212,
-      "fixes": 0
-    },
-    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
@@ -69,16 +59,6 @@
       "path": "fixtures/reactive-ir/static-api/App.tsx",
       "start": 435,
       "end": 447,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 457,
-      "end": 461,
       "fixes": 0
     },
     {
@@ -102,16 +82,6 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 486,
-      "end": 487,
-      "fixes": 0
-    },
-    {
       "rule": "no-owner-effect",
       "code": "SC4001",
       "kind": "violation",
@@ -129,16 +99,6 @@
       "path": "fixtures/reactive-ir/static-api/App.tsx",
       "start": 490,
       "end": 502,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 512,
-      "end": 519,
       "fixes": 0
     },
     {
@@ -149,16 +109,6 @@
       "path": "fixtures/reactive-ir/static-api/App.tsx",
       "start": 603,
       "end": 615,
-      "fixes": 0
-    },
-    {
-      "rule": "cleanup-return-unresolved",
-      "code": "SC9002",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 625,
-      "end": 662,
       "fixes": 0
     },
     {
@@ -199,106 +149,6 @@
       "path": "fixtures/reactive-ir/static-api/App.tsx",
       "start": 1257,
       "end": 1269,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-refresh-target",
-      "code": "SC7003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 1528,
-      "end": 1542,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-refresh-target",
-      "code": "SC7003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 1553,
-      "end": 1555,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-refresh-target",
-      "code": "SC7003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 1558,
-      "end": 1565,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-refresh-target",
-      "code": "SC7003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 1644,
-      "end": 1649,
-      "fixes": 0
-    },
-    {
-      "rule": "affects-keys-on-accessor",
-      "code": "SC7004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 1652,
-      "end": 1659,
-      "fixes": 0
-    },
-    {
-      "rule": "affects-keys-on-accessor",
-      "code": "SC7004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 1678,
-      "end": 1685,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-affects-target",
-      "code": "SC7003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 1704,
-      "end": 1711,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-affects-target",
-      "code": "SC7003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 1746,
-      "end": 1754,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-refresh-target",
-      "code": "SC7003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 2176,
-      "end": 2186,
-      "fixes": 0
-    },
-    {
-      "rule": "invalid-refresh-target",
-      "code": "SC7003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 2717,
-      "end": 2728,
       "fixes": 0
     },
     {

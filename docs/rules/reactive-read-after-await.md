@@ -16,11 +16,31 @@ branches, loops, `switch`, and `try`/`finally` precisely (both-branch awaits
 dominate; a conditional or looped await does not). Store-path and props **member
 reads** are proven against the function's straight-line awaits: an await with no
 conditional, logical, loop, switch, or try construct between the function entry
-and the expression dominates every later read in the same function body. Both
-proofs exclude nested closures — a callback created after the await has its own
-tracking story. Props member reads follow the component's caller classification
-(see [strict-read-untracked](strict-read-untracked.md)): proven-static props are
-not reactive and stay silent; unprovable ones are reported as **uncertifiable**.
+and the expression dominates every later read in the same function body. Props
+member reads follow the component's caller classification (see
+[strict-read-untracked](strict-read-untracked.md)): proven-static props are not
+reactive and stay silent; unprovable ones are reported as **uncertifiable**.
+
+Both proofs exclude nested closures by default, with one proven exception. A
+function written **directly** in the argument of the exact built-in
+`Array`/`ReadonlyArray.prototype.filter` runs inline, before the awaiting
+computation resumes, so both proofs continue into that callback's body with the
+callback as the owning function. The exception is deliberately narrow, and each
+of these keeps it from applying:
+
+- a `.filter` that does not resolve to the built-in declaration — a
+  project-defined or shadowed method, or an unresolved/package callee;
+- an argument that is not the literal function — `filter(makePredicate(fn))`
+  hands the callback to a wrapper that may run it later;
+- an `async` callback, which suspends at its own first await;
+- a deferred standard callback such as `Promise#then`;
+- an awaiting function with no *straight-line* await, since the member-read
+  site the extension hangs off requires one — a `try`-wrapped await disables
+  it even though accessor-call dominance alone would have proven the read.
+
+Nothing else in the standard library is treated as synchronous yet, and the
+extension reports only inside the awaiting function's own directly written
+filter callbacks (it does not recurse into a filter nested in another one).
 
 ## Why is this bad?
 

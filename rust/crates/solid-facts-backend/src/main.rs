@@ -974,45 +974,17 @@ fn resolve_relative_export(
     source: &Path,
     module: &str,
 ) -> Result<PathBuf, Box<dyn std::error::Error>> {
-    if !module.starts_with('.') {
+    let project_paths = facts.files.iter().map(|file| file.path.as_str());
+    let Some(target) =
+        solid_facts::resolve_relative_module_path(&source.to_string_lossy(), module, project_paths)
+    else {
         return Err(format!(
-            "emit package contract: cannot statically expand external export-all {module:?} from {}",
+            "emit package contract: cannot resolve export-all {module:?} from {}",
             source.display()
         )
         .into());
-    }
-    let base = source
-        .parent()
-        .unwrap_or_else(|| Path::new("."))
-        .join(module);
-    let candidates = [
-        base.clone(),
-        base.with_extension("ts"),
-        base.with_extension("tsx"),
-        base.with_extension("mts"),
-        base.with_extension("js"),
-        base.with_extension("jsx"),
-        base.with_extension("mjs"),
-        base.join("index.ts"),
-        base.join("index.tsx"),
-        base.join("index.js"),
-        base.join("index.mjs"),
-    ];
-    for candidate in candidates {
-        if let Ok(candidate) = candidate.canonicalize()
-            && facts
-                .files
-                .iter()
-                .any(|file| same_canonical_path(Path::new(file.path.as_str()), &candidate))
-        {
-            return Ok(candidate);
-        }
-    }
-    Err(format!(
-        "emit package contract: cannot resolve export-all {module:?} from {}",
-        source.display()
-    )
-    .into())
+    };
+    Ok(PathBuf::from(target))
 }
 
 fn same_canonical_path(left: &Path, right: &Path) -> bool {

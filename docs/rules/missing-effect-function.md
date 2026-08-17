@@ -69,4 +69,4 @@ everything it needs in compute.
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — reads in the apply phase
-- [invalid-cleanup-return](invalid-cleanup-return.md) — what apply may return
+- [no-owner-effect](no-owner-effect.md) — an effect with no owner at all

@@ -125,10 +125,16 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     // that register no dependency. Those incidental findings are deliberate;
     // this pins them so a false-positive regression moves an assertion
     // instead of hiding in an unasserted snapshot.
+    //
+    // The `cleanup-return-unresolved` entries are pinned at 0 rather than
+    // deleted: this is the noise that rule produced on *valid* upstream code,
+    // and three of those obligations sat on the legal `{ effect, error }`
+    // bundle form. Keeping the assertion means reintroducing the rule fails
+    // here instead of quietly returning.
     let incidental = HashMap::from([
         (
             "after-await-valid.tsx",
-            [("cleanup-return-unresolved", 1)].as_slice(),
+            [("cleanup-return-unresolved", 0)].as_slice(),
         ),
         (
             "component-return-valid.tsx",
@@ -136,11 +142,11 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "effect-apply-valid.tsx",
-            [("no-owner-effect", 3), ("cleanup-return-unresolved", 2)].as_slice(),
+            [("no-owner-effect", 3), ("cleanup-return-unresolved", 0)].as_slice(),
         ),
         (
             "effect-apply-extended-valid.tsx",
-            [("no-owner-effect", 4), ("cleanup-return-unresolved", 3)].as_slice(),
+            [("no-owner-effect", 4), ("cleanup-return-unresolved", 0)].as_slice(),
         ),
         ("leaf-valid.tsx", [("no-owner-effect", 2)].as_slice()),
         (
@@ -155,7 +161,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "owned-scope-valid.tsx",
-            [("no-owner-effect", 1), ("cleanup-return-unresolved", 2)].as_slice(),
+            [("no-owner-effect", 1), ("cleanup-return-unresolved", 0)].as_slice(),
         ),
     ]);
     for (file, rules) in incidental {

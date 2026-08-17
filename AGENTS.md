@@ -65,9 +65,45 @@ If an existing change overlaps the requested edit, understand it first and make
 the smallest compatible patch. Do not “clean up” unrelated code while working
 on a semantic issue.
 
+## Absolute rule: never report what TypeScript already reports
+
+**If `tsc` reports a diagnostic for the same code against the library's real
+published typings, this checker must not report it.** This is not a preference
+to balance against others; it is a hard boundary on what the project is for.
+
+The checker exists to prove defects the type system *cannot* express —
+reactivity, ownership, execution phase and timing, compiler lowering, and
+package runtime behavior. A rule that fires where `tsc` already errors adds no
+information, doubles the noise on broken code, and quietly makes the checker a
+worse type checker instead of a better reactivity checker.
+
+Applying the rule:
+
+- **Test against the real package typings, not a fixture stub.** This is the
+  trap that hides violations of this rule. A stub that types a callback return
+  as `unknown` where the real package types it `(() => void) | void` manufactures
+  a defect that cannot exist in a real project. Before adding or keeping a rule,
+  write the case against the *published* types and run `tsc --noEmit` on it.
+- **Fixture stubs must never be looser than the real package** in any way that
+  creates a finding. If a stub must be reduced for other reasons, keep every
+  signature that a rule's proof depends on byte-faithful to the real one, and
+  say so in the fixture README.
+- **Different claim about the same code is allowed; duplicate claim is not.**
+  Reporting that a returned cleanup is never disposed (an ownership fact) is
+  legitimate even where `tsc` also complains about that expression's type,
+  provided the finding asserts something the type error does not.
+- **These are not exceptions**: better wording than `tsc`, offering an autofix,
+  "the user may not run `tsc`", "the project may not be `strict`", or the rule
+  being cheap to keep. If the type system covers it, it is the type system's.
+- When a rule turns out to be TypeScript's job, delete it and record the
+  removal in docs/precision-backlog.md with the `tsc` output that proves it.
+  Do not demote it to a warning or hide it behind an option.
+
 ## Precision contract
 
 This project certifies behavior; it is not a syntax-pattern collection.
+
+- Never duplicate a TypeScript diagnostic — see the absolute rule above.
 
 - Report a violation only when semantic facts and the execution model prove it.
 - When a required fact, symbol, call target, package contract, or compiler

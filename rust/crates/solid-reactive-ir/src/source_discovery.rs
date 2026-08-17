@@ -1408,7 +1408,10 @@ pub(crate) fn discover_sources(
         else {
             continue;
         };
-        if role == solid_dialect::TypeRole::Component {
+        if matches!(
+            role,
+            solid_dialect::TypeRole::Component | solid_dialect::TypeRole::Owner
+        ) {
             continue;
         }
         let declaration = source_declarations.get(symbol);
@@ -1453,7 +1456,7 @@ pub(crate) fn discover_sources(
                     kind,
                 ));
             }
-            solid_dialect::TypeRole::Component => unreachable!(),
+            solid_dialect::TypeRole::Component | solid_dialect::TypeRole::Owner => unreachable!(),
         }
     }
     for file in &facts.files {

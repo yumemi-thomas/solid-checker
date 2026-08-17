@@ -85,33 +85,6 @@ impl CatalogWording for Catalog {
                 location: Some(action.location.clone()),
             }]),
             FindingSeed::LeafOperation(operation) => leaf_operation_wording(operation),
-            FindingSeed::InvalidCleanupReturn(invalid) => FindingWording::new(
-                Rule::InvalidCleanupReturn.metadata(),
-                format!(
-                    "{} callback returns a value that is not a cleanup function; Solid treats this return value as cleanup, and anything other than a function or undefined throws in dev",
-                    invalid.primitive
-                ),
-                "Return a cleanup function or nothing at all. An async callback can never return valid cleanup because it implicitly returns a Promise; make the callback synchronous and start the async work inside it.",
-            )
-            .with_evidence(vec![EvidenceStep {
-                message: "the callback statically returns a non-function value, including an implicit Promise from an async callback".into(),
-                location: Some(invalid.location.clone()),
-            }]),
-            FindingSeed::UnresolvedCleanupReturn(unresolved) => FindingWording::new(
-                Rule::CleanupReturnUnresolved.metadata(),
-                format!(
-                    "cannot prove that the {} callback returns only a cleanup function or undefined; an unresolved return value may throw at runtime",
-                    unresolved.primitive
-                ),
-                "Make the return shape explicit at each return site: return a function literal, a named local function, or nothing. Returns of member expressions, call results, or values that cross files defeat this analysis.",
-            )
-            .with_evidence(vec![EvidenceStep {
-                message: format!(
-                    "the return value of the {} callback cannot be resolved statically",
-                    unresolved.primitive
-                ),
-                location: Some(unresolved.location.clone()),
-            }]),
             FindingSeed::StaticDefect(defect) => static_defect_wording(defect),
             FindingSeed::StaticViolation(violation) => static_violation_wording(violation),
             FindingSeed::DirectiveCreation(creation) => FindingWording::new(
@@ -422,21 +395,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::ServerFunctionRichArgument => {
             "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
         }
-        Rule::InvalidRefreshTarget => {
-            "the refresh call's arity or target shape violates the branded-source contract"
-        }
-        Rule::InvalidAffectsTarget => {
-            "the affects call's arity or target shape violates the branded-source contract"
-        }
-        Rule::AffectsKeysOnAccessor => {
-            "the proven target is an accessor, but the call also supplies store path keys"
-        }
-        Rule::RefreshTargetUnresolved => {
-            "the refresh target has no provenance tying it to a branded Solid source"
-        }
-        Rule::AffectsTargetUnresolved => {
-            "the affects target has no provenance tying it to a branded Solid source"
-        }
         Rule::StrictReadUntracked
         | Rule::ReactiveReadAfterAwait
         | Rule::UncalledAccessor
@@ -454,7 +412,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::CleanupInForbiddenScope
         | Rule::PrimitiveInLeafOwner
         | Rule::FlushInForbiddenScope
-        | Rule::InvalidCleanupReturn
         | Rule::NoOwnerEffect
         | Rule::NoOwnerCleanup
         | Rule::NoOwnerBoundary
@@ -468,7 +425,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::PackageContractExportMissing
         | Rule::PackageContractCallbackMissing
         | Rule::PackageContractMissing
-        | Rule::CleanupReturnUnresolved
         | Rule::ExecutionMapIncomplete => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name

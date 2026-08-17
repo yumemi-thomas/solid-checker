@@ -6,6 +6,12 @@
 import { createMemo } from "solid-js";
 import { helper, importedTracked } from "./values";
 import { ambiguousTracked } from "./ambiguous";
+import defaultFromBarrel from "./barrel";
+import { chainedTracked, starTracked } from "./barrel2";
+import * as namespace from "./values";
+import { cycleTracked } from "./cycle-a";
+import { helper as bareHelper } from "bare-package";
+import { importedTracked as mappedTracked } from "@internal/values";
 
 // Same spelling as the block-scoped accessor in `unprovenShorthand`, and not
 // reactive. Nothing may promote it.
@@ -51,6 +57,34 @@ export function importedAccessorShorthand() {
   // join follows the relative specifier to the exporting file's declaration
   // and matches the accessor exactly — never by spelling.
   return { importedTracked };
+}
+
+export function defaultReexportShorthand() {
+  return { defaultFromBarrel };
+}
+
+export function namedReexportShorthand() {
+  return { chainedTracked };
+}
+
+export function exportAllShorthand() {
+  return { starTracked };
+}
+
+export function namespaceShorthand() {
+  return { namespace };
+}
+
+export function bareImportShorthand() {
+  return { bareHelper };
+}
+
+export function pathMappedShorthand() {
+  return { mappedTracked };
+}
+
+export function cyclicReexportShorthand() {
+  return { cycleTracked };
 }
 
 export function ambiguousShorthand() {

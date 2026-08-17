@@ -31,7 +31,6 @@ pub enum Rule {
     CleanupInForbiddenScope,
     PrimitiveInLeafOwner,
     FlushInForbiddenScope,
-    InvalidCleanupReturn,
     NoOwnerEffect,
     NoOwnerCleanup,
     NoOwnerBoundary,
@@ -43,17 +42,11 @@ pub enum Rule {
     PrimitiveInDirectiveApplication,
     MissingEffectFunction,
     SyncNodeReceivedAsync,
-    InvalidRefreshTarget,
-    InvalidAffectsTarget,
-    AffectsKeysOnAccessor,
     HttpResponseAfterFlush,
     ServerFunctionModuleDirective,
     ServerFunctionRichArgument,
     PackageContractExportMissing,
     PackageContractMissing,
-    CleanupReturnUnresolved,
-    RefreshTargetUnresolved,
-    AffectsTargetUnresolved,
     ExecutionMapIncomplete,
     PackageContractCallbackMissing,
 }
@@ -70,7 +63,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 43] = [
+    pub const ALL: [Self; 36] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -89,7 +82,6 @@ impl Rule {
         Self::CleanupInForbiddenScope,
         Self::PrimitiveInLeafOwner,
         Self::FlushInForbiddenScope,
-        Self::InvalidCleanupReturn,
         Self::NoOwnerEffect,
         Self::NoOwnerCleanup,
         Self::NoOwnerBoundary,
@@ -101,17 +93,11 @@ impl Rule {
         Self::PrimitiveInDirectiveApplication,
         Self::MissingEffectFunction,
         Self::SyncNodeReceivedAsync,
-        Self::InvalidRefreshTarget,
-        Self::InvalidAffectsTarget,
-        Self::AffectsKeysOnAccessor,
         Self::HttpResponseAfterFlush,
         Self::ServerFunctionModuleDirective,
         Self::ServerFunctionRichArgument,
         Self::PackageContractExportMissing,
         Self::PackageContractMissing,
-        Self::CleanupReturnUnresolved,
-        Self::RefreshTargetUnresolved,
-        Self::AffectsTargetUnresolved,
         Self::ExecutionMapIncomplete,
         Self::PackageContractCallbackMissing,
     ];
@@ -162,7 +148,6 @@ impl Rule {
             }
             Self::PrimitiveInLeafOwner => ("SC3002", "primitive-in-leaf-owner", "error", false),
             Self::FlushInForbiddenScope => ("SC3003", "flush-in-forbidden-scope", "error", false),
-            Self::InvalidCleanupReturn => ("SC3004", "invalid-cleanup-return", "error", false),
             Self::NoOwnerEffect => ("SC4001", "no-owner-effect", "warning", false),
             Self::NoOwnerCleanup => ("SC4002", "no-owner-cleanup", "warning", false),
             Self::NoOwnerBoundary => ("SC4003", "no-owner-boundary", "warning", false),
@@ -208,9 +193,6 @@ impl Rule {
             // code identifies the defect (an invalid or unresolved target),
             // while the name identifies the surface it was found on
             // (`refresh` versus `affects`).
-            Self::InvalidRefreshTarget => ("SC7003", "invalid-refresh-target", "error", false),
-            Self::InvalidAffectsTarget => ("SC7003", "invalid-affects-target", "error", false),
-            Self::AffectsKeysOnAccessor => ("SC7004", "affects-keys-on-accessor", "error", false),
             // The post-flush drop is real but conditional: a Loading
             // boundary that settles *before* the shell flush (fast data,
             // renderToString, deferStream) still applies its writes, so the
@@ -232,9 +214,6 @@ impl Rule {
                 ("SC9001", "package-contract-export-missing", "error", true)
             }
             Self::PackageContractMissing => ("SC9005", "package-contract-missing", "error", true),
-            Self::CleanupReturnUnresolved => ("SC9002", "cleanup-return-unresolved", "error", true),
-            Self::RefreshTargetUnresolved => ("SC9003", "refresh-target-unresolved", "error", true),
-            Self::AffectsTargetUnresolved => ("SC9003", "affects-target-unresolved", "error", true),
             Self::ExecutionMapIncomplete => ("SC9004", "execution-map-incomplete", "error", true),
             Self::PackageContractCallbackMissing => {
                 ("SC9006", "package-contract-callback-missing", "error", true)
@@ -330,18 +309,30 @@ mod tests {
         for (code, name) in [
             ("SC2004", "resolve-in-reactive-scope"),
             ("SC7002", "sync-node-received-async"),
-            ("SC7003", "invalid-refresh-target"),
-            ("SC7003", "invalid-affects-target"),
-            ("SC7004", "affects-keys-on-accessor"),
             ("SC7005", "http-response-after-flush"),
             ("SC7006", "server-function-module-directive"),
             ("SC7007", "server-function-rich-argument"),
-            ("SC9003", "refresh-target-unresolved"),
-            ("SC9003", "affects-target-unresolved"),
         ] {
             assert!(
                 Rule::from_identity(code, name).is_some(),
                 "IR static-violation identity {code}/{name} does not resolve in the v2 catalog"
+            );
+        }
+        // The refresh/affects target identities were removed on 2026-08-17:
+        // `Refreshable<T>` brands the target *in the type system*, so every
+        // invalid target is TS2345 and every "cannot prove the brand"
+        // obligation asks a question the type already answers. Asserted absent
+        // so a reintroduction has to argue with this comment.
+        for (code, name) in [
+            ("SC7003", "invalid-refresh-target"),
+            ("SC7003", "invalid-affects-target"),
+            ("SC7004", "affects-keys-on-accessor"),
+            ("SC9003", "refresh-target-unresolved"),
+            ("SC9003", "affects-target-unresolved"),
+        ] {
+            assert!(
+                Rule::from_identity(code, name).is_none(),
+                "{code}/{name} duplicates a TypeScript diagnostic and was removed"
             );
         }
     }

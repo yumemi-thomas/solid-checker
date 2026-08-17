@@ -2111,47 +2111,42 @@ impl StructuredReturnDiscovery<'_, '_> {
     /// TypeScript entity at that span is the alias symbol rather than the
     /// original declaration's. For a plain relative specifier the exporting
     /// file is part of the analyzed project, so the join is exact ESM
-    /// resolution against the project's own file set: the sibling file's
-    /// exported binding of that exact name is the declaration, matched in
-    /// the accessor map exactly as the same-file arm matches. Everything
-    /// else — bare or path-mapped specifiers, namespace and default imports,
-    /// re-export chains, files outside the project — proves nothing and
-    /// stays fail-closed.
+    /// resolution against the project's own file set: direct exports,
+    /// named/default re-exports, and export-all chains are followed with a
+    /// cycle guard, then matched in the accessor map exactly as the
+    /// same-file arm matches. Bare or path-mapped specifiers, namespace
+    /// imports, ambiguous modules, and unresolved cycles prove nothing and
+    /// stay fail-closed.
     fn imported_accessor(
         &self,
         file: &solid_facts::FileFacts,
         declaration: Span,
     ) -> Option<&SymbolId> {
         let (module, imported) = file.ast.imports.iter().find_map(|import| {
+            if import.type_only {
+                return None;
+            }
             import.bindings.iter().find_map(|binding| {
                 (binding.local.span == declaration
-                    && binding.kind == solid_facts::ast::ImportKind::Named
+                    && matches!(
+                        binding.kind,
+                        solid_facts::ast::ImportKind::Named | solid_facts::ast::ImportKind::Default
+                    )
                     && !binding.type_only)
                     .then(|| {
                         (
                             import.module.as_str(),
-                            binding.imported.as_deref().map_or_else(
-                                || file.source_text(binding.local.span).unwrap_or_default(),
-                                |imported| imported,
-                            ),
+                            binding.imported.as_deref().unwrap_or("default"),
                         )
                     })
             })
         })?;
         let sibling = self.relative_module_file(file, module)?;
-        let target = sibling
-            .ast
-            .exports
-            .iter()
-            // A re-export (`export { x } from "./elsewhere"`) declares no
-            // binding here; chasing the chain is future work, not a guess.
-            .filter(|export| export.module.is_none() && !export.type_only)
-            .flat_map(|export| export.specifiers.iter().chain(&export.declarations))
-            .find(|specifier| specifier.exported.as_str() == imported)?
-            .local
-            .span;
+        let mut visiting = HashSet::new();
+        let (target_path, target) =
+            self.resolve_export_binding(sibling.path.as_str(), imported, &mut visiting)?;
         self.accessors.iter().find_map(|(symbol, (_, location))| {
-            (location.path.as_ref() == sibling.path.as_str()
+            (location.path.as_ref() == target_path
                 && u32::try_from(location.start_byte).ok()? == target.start
                 && u32::try_from(location.end_byte).ok()? == target.end)
                 .then_some(symbol)
@@ -2177,51 +2172,124 @@ impl StructuredReturnDiscovery<'_, '_> {
         from: &solid_facts::FileFacts,
         module: &str,
     ) -> Option<&solid_facts::FileFacts> {
-        if !module.starts_with("./") && !module.starts_with("../") {
+        let paths = self.lookup.files().iter().map(|file| file.path.as_str());
+        let path = solid_facts::resolve_relative_module_path(from.path.as_str(), module, paths)?;
+        self.lookup.file_by_path(path)
+    }
+
+    fn resolve_export_binding(
+        &self,
+        path: &str,
+        exported: &str,
+        visiting: &mut HashSet<(String, String)>,
+    ) -> Option<(String, Span)> {
+        let key = (path.to_owned(), exported.to_owned());
+        if !visiting.insert(key.clone()) {
             return None;
         }
-        let path = from.path.as_str();
-        let base = path.rsplit_once('/').map_or("", |(directory, _)| directory);
-        let mut segments = base.split('/').collect::<Vec<_>>();
-        for segment in module.split('/') {
-            match segment {
-                "." | "" => {}
-                ".." => {
-                    if segments.pop().is_none_or(|popped| popped.is_empty()) {
-                        return None;
-                    }
-                }
-                other => segments.push(other),
+        let result = (|| {
+            let file = self.lookup.file_by_path(path)?;
+            let direct = file
+                .ast
+                .exports
+                .iter()
+                .filter(|export| !export.type_only && export.module.is_none())
+                .flat_map(|export| export.specifiers.iter().chain(&export.declarations))
+                .filter(|specifier| !specifier.type_only && specifier.exported.as_str() == exported)
+                .map(|specifier| specifier.local.span)
+                .collect::<Vec<_>>();
+            if direct.len() > 1 {
+                return None;
             }
-        }
-        let joined = segments.join("/");
-        const SUFFIXES: &[&str] = &[
-            "",
-            ".ts",
-            ".tsx",
-            ".mts",
-            ".cts",
-            ".js",
-            ".jsx",
-            "/index.ts",
-            "/index.tsx",
-        ];
-        let mut resolved: Option<&solid_facts::FileFacts> = None;
-        for suffix in SUFFIXES {
-            let target = format!("{joined}{suffix}");
-            for candidate in &self.facts.files {
-                if candidate.path.as_str() != target {
+            if let Some(local) = direct.first().copied() {
+                return self.resolve_export_local(file, local, visiting);
+            }
+
+            let mut result = None;
+            for export in file
+                .ast
+                .exports
+                .iter()
+                .filter(|export| !export.type_only && export.module.is_some())
+            {
+                let source_name = match export.kind {
+                    solid_facts::ast::ExportKind::Named => export
+                        .specifiers
+                        .iter()
+                        .find(|specifier| {
+                            !specifier.type_only && specifier.exported.as_str() == exported
+                        })
+                        .and_then(|specifier| {
+                            file.source_text(specifier.local.span).map(|name| {
+                                name.trim_matches(|character| character == '"' || character == '\'')
+                            })
+                        }),
+                    solid_facts::ast::ExportKind::All if exported != "default" => Some(exported),
+                    _ => None,
+                };
+                let Some(source_name) = source_name else {
                     continue;
-                }
-                if resolved
-                    .is_some_and(|existing| existing.path.as_str() != candidate.path.as_str())
+                };
+                let module = export.module.as_deref()?;
+                let sibling = self.relative_module_file(file, module)?;
+                let candidate =
+                    self.resolve_export_binding(sibling.path.as_str(), source_name, visiting);
+                let Some(candidate) = candidate else {
+                    continue;
+                };
+                if let Some(existing) = &result
+                    && existing != &candidate
                 {
                     return None;
                 }
-                resolved = Some(candidate);
+                result = Some(candidate);
             }
+            result
+        })();
+        visiting.remove(&key);
+        result
+    }
+
+    fn resolve_export_local(
+        &self,
+        file: &solid_facts::FileFacts,
+        local: Span,
+        visiting: &mut HashSet<(String, String)>,
+    ) -> Option<(String, Span)> {
+        let symbol = self.lookup.entities().at(file.path.as_str(), local);
+        if let Some((import, binding)) = file
+            .ast
+            .imports
+            .iter()
+            .flat_map(|import| import.bindings.iter().map(move |binding| (import, binding)))
+            .find(|(_, binding)| {
+                !binding.type_only
+                    && matches!(
+                        binding.kind,
+                        solid_facts::ast::ImportKind::Named | solid_facts::ast::ImportKind::Default
+                    )
+                    && (binding.local.span == local
+                        || symbol.is_some_and(|symbol| {
+                            self.lookup
+                                .entities()
+                                .at(file.path.as_str(), binding.local.span)
+                                == Some(symbol)
+                        }))
+            })
+        {
+            let sibling = self.relative_module_file(file, import.module.as_str())?;
+            let imported = binding.imported.as_deref().unwrap_or("default");
+            return self.resolve_export_binding(sibling.path.as_str(), imported, visiting);
         }
-        resolved
+        let declaration = symbol.and_then(|symbol| {
+            file.ast.bindings.iter().find_map(|binding| {
+                binding.names.iter().find_map(|name| {
+                    (self.lookup.entities().at(file.path.as_str(), name.span) == Some(symbol))
+                        .then_some(name.span)
+                })
+            })
+        });
+        Some((file.path.to_string(), declaration.unwrap_or(local)))
     }
 
     fn leaf(

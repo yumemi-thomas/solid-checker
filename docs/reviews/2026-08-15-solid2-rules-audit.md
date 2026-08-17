@@ -153,7 +153,7 @@ The reviewed contract `solid-dialect/contracts/solid-v2/solidjs-web.json` attest
 
 - Full mapping of the official dev-diagnostics table; the runtime-only exclusions (`RUN_WITH_DISPOSED_OWNER`, infinite loops, `REACTIVITY_HALTED`, `INVARIANT_VIOLATION`) survive scrutiny.
 - Control-flow callback shapes match rc.0 types **verbatim** (keyed raw / `keyed={false}` accessor / custom-key both / `Repeat` plain number; `Show`/`Match` keyed raw), with fixtures pinning each.
-- SC3004 invalid-cleanup-return matches the runtime's validation sites exactly, including `return null` ≠ `undefined` and async-callback rejection; `unobserved` correctly excluded.
+- SC3004 invalid-cleanup-return matches the runtime's validation sites exactly, including `return null` ≠ `undefined` and async-callback rejection; `unobserved` correctly excluded. **(Superseded 2026-08-17: the rule was removed — `EffectFunction`'s real return type makes every one of those sites a `tsc` error. See docs/precision-backlog.md.)**
 - SC7004, zero-arg `refresh()`, thunk-`refresh` rejection, `affects` arity — all anchored on real dev throw sites.
 - SC2001's `refresh()`-invalidation half **is** covered (fixtures prove it), and `ownedWrite` is modeled end-to-end, matching `CONFIG_OWNED_WRITE`.
 - SC1002's dominance guards (conditional awaits, loops, nested closures exempt; both-branch and try/finally fire) are precise and pinned.
