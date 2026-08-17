@@ -142,36 +142,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-react-specific-props",
-      "code": "SC8011",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2720,
-      "end": 2737,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/no-react-specific-props",
-      "code": "SC8011",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2738,
-      "end": 2752,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/no-react-specific-props",
-      "code": "SC8011",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2753,
-      "end": 2760,
-      "fixes": 1
-    },
-    {
       "rule": "v1/no-unknown-namespaces",
       "code": "SC8012",
       "kind": "violation",

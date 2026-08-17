@@ -180,15 +180,33 @@ fn no_innerhtml(
 }
 
 /// `v1/no-react-specific-props` (SC8011) — the React prop spellings
-/// `className`/`htmlFor`, deprecated in Solid since 1.4, and a `key` prop on
-/// a DOM element, which Solid has no use for outside `<For>`/`<Index>` (and
-/// even there the list primitives take identity from the array items, not a
-/// prop).
+/// `className`/`htmlFor`, deprecated in Solid since 1.4, on a **component**.
+///
+/// Narrowed 2026-08-17 under AGENTS.md's absolute rule. On an intrinsic
+/// element `className`, `htmlFor`, and `key` are each individually TS2322
+/// ("Property 'className' does not exist on type 'HTMLAttributes<…>'") against
+/// the real 1.9.14 JSX typings, so reporting them there duplicated `tsc`. The
+/// `key` arm was intrinsic-only and is gone entirely.
+///
+/// What remains is the arm no type covers, and it is upstream's own cases 4
+/// and 8: `<PascalComponent className="greeting">`. A component's props are
+/// whatever it declares, so the React spelling is a permitted key on a
+/// permissive component — `tsc` is silent — while a component declaring
+/// `{ class?: string }` makes it a type error, which is the type system's to
+/// report. The rule therefore speaks only where the answer is not already
+/// given, and its claim there is the migration one: Solid forwards `class`,
+/// not `className`.
 fn no_react_specific_props(
     file: &FileFacts,
     element: &JsxElementFact,
     violations: &mut Vec<StaticViolation>,
 ) {
+    // An intrinsic element's attributes are typed by `JSX.IntrinsicElements`,
+    // where none of these names exists. Only a component's props can admit
+    // them.
+    if is_lowercase_led(text(file, element.name.span)) {
+        return;
+    }
     let names = element
         .attributes
         .iter()
@@ -223,33 +241,6 @@ fn no_react_specific_props(
                     to,
                 ));
             }
-            violations.push(result);
-        }
-    }
-    if is_lowercase_led(text(file, element.name.span)) {
-        for attribute in element
-            .attributes
-            .iter()
-            .filter(|attribute| text(file, attribute.name) == "key")
-        {
-            let mut result = violation(
-                file,
-                "SC8011",
-                "no-react-specific-props",
-                "Elements in a <For> or <Index> list do not need a key prop.",
-                "No DOM element has a key prop; this is a holdover from React and the compiler passes it straight through as an inert attribute.",
-                attribute.span,
-                vec![],
-            );
-            // The deletion swallows the whitespace separating the attribute
-            // from what precedes it too — removing only the attribute's own
-            // span would leave a doubled space (`<div  />`) behind.
-            result.fixes.push(fix_replace(
-                file,
-                super::deletion_with_leading_whitespace(&file.source, attribute.span),
-                "remove the key prop",
-                "",
-            ));
             violations.push(result);
         }
     }

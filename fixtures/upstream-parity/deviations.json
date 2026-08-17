@@ -172,6 +172,38 @@
     "reactivity__valid__73": {
       "status": "policy",
       "reason": "strict-read-untracked requires one-time component-prop snapshots to be explicit with untrack. The fact that the local is currently unused does not change the execution contract or make the implicit snapshot certifiable."
+    },
+    "no-react-specific-props__invalid__00": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "no-react-specific-props__invalid__01": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "no-react-specific-props__invalid__02": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "no-react-specific-props__invalid__03": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "no-react-specific-props__invalid__05": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "no-react-specific-props__invalid__06": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "no-react-specific-props__invalid__07": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule: `className`, `htmlFor`, and `key` do not exist on `JSX.IntrinsicElements`, so on a DOM element each is already TS2322 against the real solid-js@1.9.14 typings (\"Property 'className' does not exist on type 'HTMLAttributes<HTMLDivElement>'\") and reporting it again duplicated the type checker. The rule now speaks only for a component, whose props may legitimately admit the key -- upstream's own cases 04 and 08 -- where no type answers the question. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+    },
+    "no-react-specific-props__invalid__09": {
+      "status": "policy",
+      "reason": "Narrowed under AGENTS.md's absolute rule, and the whole `key` arm is gone: it was already gated to lowercase-led elements, where `key` is TS2322 against the real solid-js@1.9.14 typings. Nothing is left for the checker to add on a DOM element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     }
   },
   "counts": {
@@ -255,11 +287,6 @@
       "ours": "const value = createMemo(() => computeExpensiveValue(a(), b()));",
       "status": "tighter-cleanup",
       "reason": "One shared edit across no-react-deps__invalid__00, 01, 03, 04 and 05: the checker's deletion swallows the `,` that separated the dependency array from the callback (deletion_with_leading_comma), leaving `createEffect(fn)`; upstream removes only the argument's own range and leaves `createEffect(fn, )` behind. A trailing comma in an argument list has been legal since ES2017, so both texts are the same program -- ours is just the one a reader would have written."
-    },
-    "no-react-specific-props__invalid__09": {
-      "ours": "let el = <div />",
-      "status": "tighter-cleanup",
-      "reason": "Removing the React-only `key` attribute, the checker's deletion also takes the whitespace that separated it from the tag name (deletion_with_leading_whitespace), emitting `<div />`; upstream removes the attribute's own range and leaves `<div  />` with the double space. The same element, and the only no-react-specific-props case where the fix is a deletion rather than a rename -- the other nine agree byte for byte."
     }
   }
 }
