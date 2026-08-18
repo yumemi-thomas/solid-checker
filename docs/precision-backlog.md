@@ -699,7 +699,10 @@ reason the removal was safe.
 
 ## Audited remaining `TypeDescriptor.text` consumers 2026-08-17
 
-The remaining grep hits are deliberately not value-evidence parsers:
+**No consumer decides anything from `TypeDescriptor.text` any more** (verified
+2026-08-18). Every remaining hit either labels a message or is a doc comment; the
+two that made proof decisions were replaced by facts, below. The audit is kept
+because it is what made the replacements findable:
 
 - `interproc.rs` uses `text` only to label an unknown-callback diagnostic and
   generated contract stub; it does not make a proof decision.
@@ -709,10 +712,10 @@ The remaining grep hits are deliberately not value-evidence parsers:
   fact. **Resolved 2026-08-18** — see the `arrayShape` entry below.
 - `shared_reactivity.rs` does not: its remaining `text` use is not a
   type-shape test.
-- `server_rules.rs` asks whether a transport type has a rich serialization
-  member (`Date`, `Map`, `Set`, typed arrays, and so on). Runtime value domain
-  intentionally collapses those object shapes, so rendered type shape remains
-  the only available evidence and an unrecognized shape stays silent.
+- `server_rules.rs` asked whether a transport type has a rich serialization
+  member (`Date`, `Map`, `Set`, typed arrays, and so on). **Resolved
+  2026-08-18** — see the `libraryTypes` entry below. Its one remaining use of
+  `text` quotes the author's type in the message; the decision never reads it.
 
 ## Resolved: static attribute values are a fact, not a rendered type 2026-08-17
 
