@@ -47,7 +47,7 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # codegen change is deliberately absent because 1.x parity means matching
 # babel-plugin-jsx-dom-expressions@0.40.7 exactly.
 solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "79b9b63721c59b0acfd72348438bbb6e090ec81c", default-features = false }
-typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "2a1576733d4f69f036f10f699d77630828b7c77a" }
+typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "3d51c40407b4de4490230eb298f9896dac3b0fc4" }
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"
 oxc_ast = "0.118"

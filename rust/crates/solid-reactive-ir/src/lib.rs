@@ -2224,6 +2224,7 @@ mod tests {
             constant_value: None,
             array_shape: None,
             tuple_shape: None,
+            library_types: None,
             reference_space: None,
             runtime_identity: "".into(),
         };

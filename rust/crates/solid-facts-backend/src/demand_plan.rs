@@ -37,6 +37,7 @@ fn plan_file(
     let mut constant_value_spans = HashSet::new();
     let mut array_shape_spans = HashSet::new();
     let mut tuple_shape_spans = HashSet::new();
+    let mut library_type_spans = HashSet::new();
     let mut async_symbol_spans = HashSet::new();
     let mut async_value_spans = Vec::new();
     // An expression-bodied arrow's return lives on its function fact, so both
@@ -406,6 +407,15 @@ fn plan_file(
                     // structurally typed object and primitive arguments.
                     type_descriptor_spans.insert(argument.span);
                     async_symbol_spans.insert(argument.span);
+                    // `server-function-rich-argument` asks whether the value is
+                    // one of a few standard-library runtime types. That is a
+                    // declaration identity, not a rendered name: an alias hides
+                    // `Date[]` behind its own spelling, and a user-declared type
+                    // can share a global's name. The span already carries a
+                    // demand, so this adds a field to an existing entity.
+                    if dialect.semantic_demands.server_argument_library_types {
+                        library_type_spans.insert(argument.span);
+                    }
                 }
                 solid_facts::ast::ArgumentValueKind::Function
                 | solid_facts::ast::ArgumentValueKind::AsyncFunction => {
@@ -444,6 +454,7 @@ fn plan_file(
         planned.constant_value = constant_value_spans.contains(&span);
         planned.array_shape = array_shape_spans.contains(&span);
         planned.tuple_shape = tuple_shape_spans.contains(&span);
+        planned.library_types = library_type_spans.contains(&span);
         planned.reference_space = file.ast.imports.iter().any(|import| {
             import
                 .bindings
@@ -510,6 +521,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         constant_value: false,
         array_shape: false,
         tuple_shape: false,
+        library_types: false,
         reference_space: false,
         runtime_identity: false,
     }
@@ -571,6 +583,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.constant_value |= demand.constant_value;
             current.array_shape |= demand.array_shape;
             current.tuple_shape |= demand.tuple_shape;
+            current.library_types |= demand.library_types;
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
         } else {

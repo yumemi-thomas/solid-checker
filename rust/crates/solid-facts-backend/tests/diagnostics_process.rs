@@ -497,7 +497,13 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // Date, Set, Map, RegExp (module-level directive), Float64Array, and
         // the Set of the mixed call; lone/trailing Uint8Array, plain JSON
         // shapes, and the unresolvable inline `new Date()` stay silent.
-        assert_rule_findings(&findings, "server-function-rich-argument", 6);
+        //
+        // Plus the two imported aliases, `Stamps = Date[]` and `Ids =
+        // Set<string>`, added when the rule started reading `libraryTypes`
+        // instead of the rendered type text — both render as their own name and
+        // matched nothing before. `Boxed`, whose Date is a nested property,
+        // stays silent: that boundary is unchanged.
+        assert_rule_findings(&findings, "server-function-rich-argument", 8);
         if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
             assert!(
                 enabled.is_empty(),

@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 786,
-      "end": 790,
+      "start": 1217,
+      "end": 1221,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 792,
-      "end": 796,
+      "start": 1223,
+      "end": 1227,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 851,
-      "end": 857,
+      "start": 1282,
+      "end": 1288,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 904,
-      "end": 911,
+      "start": 1335,
+      "end": 1342,
       "fixes": 0
     },
     {
@@ -47,8 +47,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 980,
-      "end": 987,
+      "start": 1411,
+      "end": 1418,
       "fixes": 0
     },
     {
@@ -57,8 +57,28 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 1329,
-      "end": 1333,
+      "start": 1749,
+      "end": 1755,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
+      "start": 1822,
+      "end": 1825,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
+      "start": 1993,
+      "end": 1997,
       "fixes": 0
     }
   ]

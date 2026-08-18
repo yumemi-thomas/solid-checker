@@ -902,28 +902,46 @@ speak about in principle — but the value may genuinely be a function, and noth
 proves it is a pair. It stays silent as a deliberate false negative rather than a
 guess. Pinned by `clean-cases.tsx`'s `pairOrFunction`.
 
-### Not attempted: `rich_transport_member`'s hand-rolled type-text walk
+### Closed 2026-08-18: `rich_transport_member`, via `libraryTypes`
 
-`server_rules.rs` asks whether a transport type's object graph contains a
-non-JSON-safe member (`Date`, `Map`, `Set`, `RegExp`, a typed array). It answers
-by splitting `TypeDescriptor.text` on top-level `|`/`&`, stripping a `[]` suffix,
-and matching the head against a name list. It is the second `TypeDescriptor.text`
-consumer named alongside `array_like_type`, and it was deliberately left in place
-when `arrayShape` landed.
+`server_rules.rs` asked whether a server-function argument is one of a few
+runtime types JSON cannot carry (`Date`, `Map`, `Set`, `RegExp`, a typed array).
+It answered by splitting `TypeDescriptor.text` on top-level `|`/`&`, stripping a
+`[]` suffix, and matching the head against a name list. It was the second
+`TypeDescriptor.text` consumer named alongside `array_like_type`, and it was
+deliberately left alone when `arrayShape` landed on the grounds that its question
+was open-ended.
 
-The two questions are not the same size. "Is this an array or a tuple?" is a
-bounded predicate the checker already computes and can answer with one closed
-verdict. "Does this object graph contain a non-JSON-safe member?" is open: it
-needs a recursive walk with a cycle guard, a depth bound, a decision about
-whether a nested property counts (the current code says no — an unproven rich
-type is not a proven throw), and a wire representation for "which member, and
-where". That is a fact design of its own, not a field on an existing one.
+That framing was wrong, and worth recording. The open-ended question is "does
+this object graph contain a non-JSON-safe member" — a recursive walk needing a
+cycle guard, a depth bound, and a nesting policy. But that is not the question
+this rule asks. It asks only about the **top level**, by deliberate design ("an
+unproven rich type is not a proven throw"), and a bounded top-level question is
+exactly the kind a fact can answer.
 
-The current behaviour is fail-closed in the right direction: an unrecognized
-shape stays silent, and name matching cannot invent a member that is not in the
-rendered text. Its live weakness is the same alias hole `arrayShape` just closed
-— `type Timestamps = Date[]` renders as `Timestamps` and is missed — so the
-motivation is real, only larger than one field.
+`libraryTypes` (`solid-ts-facts` `3d51c40`, ADR 0017) answers it: the sorted set
+of standard-library type names the type at the exact span is built from at its
+top level — itself, its union and intersection members, and one array-element
+unwrap. A name is recorded only when the resolved symbol is declared in a
+default-library file. The rule keeps its own list of which names matter, and that
+a lone `Uint8Array` has a natural HTTP encoding; the fact carries no policy.
+
+Three defects text could not avoid, all closed:
+
+- **An alias renders as its own name.** `type Stamps = Date[]` matched nothing,
+  declared locally or imported from another module. Measured on
+  `fixtures/reactive-ir/server-function-rich-args`: the text walk found 6
+  findings, the fact finds 8.
+- **`Array<Date>` and `Date[]` are the same runtime value** and only the second
+  matched.
+- **A user-declared type could match a global's name.** `Map` from the project's
+  own code is now excluded by its declaration file, not hoped away by spelling.
+
+The nesting boundary is unchanged and still pinned: `Boxed = { title: string;
+when: Date }` reports nothing, because an object's properties are not top level.
+`tsc` cannot duplicate any of this — the argument's type matches its parameter's
+type by construction, so no diagnostic is possible; the claim is entirely about
+runtime transport.
 
 ## Design-change candidates (open)
 

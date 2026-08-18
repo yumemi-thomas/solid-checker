@@ -30,3 +30,24 @@ export async function savePlain(payload: { title: string }) {
   "use server";
   return payload.title;
 }
+
+// The alias cases. Each parameter's type renders as its own name, so the text
+// walk this rule used to do matched nothing on any of them.
+export async function saveStamps(stamps: Stamps) {
+  "use server";
+  return stamps.length;
+}
+
+export async function saveIds(ids: Ids) {
+  "use server";
+  return ids.size;
+}
+
+export async function saveBoxed(box: Boxed) {
+  "use server";
+  return box.title;
+}
+
+export type Stamps = Date[];
+export type Ids = Set<string>;
+export type Boxed = { title: string; when: Date };

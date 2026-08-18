@@ -366,14 +366,21 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                 if argument.spread || argument.value != ArgumentValueKind::Identifier {
                     continue;
                 }
-                let Some(descriptor) = ctx
+                let Some(entity) = ctx
                     .semantic_lookup
                     .entity_at(file.path.as_str(), argument.span)
-                    .and_then(|entity| entity.type_descriptor.as_ref())
                 else {
                     continue;
                 };
-                let Some(matched) = rich_transport_member(&descriptor.text) else {
+                let Some(library_types) = entity.library_types.as_deref() else {
+                    continue;
+                };
+                let Some(matched) = rich_transport_member(library_types) else {
+                    continue;
+                };
+                // The descriptor is quoted in the message so the report names the
+                // type the author wrote; the decision above never reads it.
+                let Some(descriptor) = entity.type_descriptor.as_ref() else {
                     continue;
                 };
                 // Natural HTTP encodings: a lone Uint8Array/ArrayBuffer
@@ -424,19 +431,25 @@ struct RichMember {
 /// The documented constrained set — "Dates, Maps, Sets, typed arrays" (RFC
 /// 10 and the rich-args entry's own docs) — plus `RegExp`, which the doc
 /// covers as "etc." and the probe confirms throws. `ReadonlyMap`/
-/// `ReadonlySet` are TypeScript views of the same runtime values. Matching
-/// is against the argument's *top-level* type text: union/intersection
-/// members and `[]` array suffixes are walked, nested object properties are
-/// not (an unproven rich type is not a proven throw).
-fn rich_transport_member(text: &str) -> Option<RichMember> {
-    top_level_members(text).find_map(|member| {
-        let member = member.trim();
-        let member = member.strip_suffix("[]").unwrap_or(member).trim();
-        let head = member
-            .split_once('<')
-            .map_or(member, |(head, _)| head)
-            .trim();
-        let matched = match head {
+/// `ReadonlySet` are TypeScript views of the same runtime values.
+///
+/// The names come from `libraryTypes`, the compiler's own identities for the
+/// standard-library types the argument's type is built from at its top level:
+/// itself, its union and intersection members, and one array-element unwrap.
+/// Nested object properties are not included, which keeps the rule's existing
+/// boundary — an unproven rich member is not a proven throw.
+///
+/// This replaced a walk over `TypeDescriptor.text` that split on top-level
+/// `|`/`&` and matched the head of each member. Text could not answer it: an
+/// alias renders as its own name, so `type Stamps = Date[]` matched nothing
+/// whether declared here or imported; `Array<Date>` and `Date[]` are the same
+/// runtime value but only the second matched; and a user-declared `Map` matched
+/// the global. The name list stays here because which types are interesting —
+/// and that a lone `Uint8Array` has a natural HTTP encoding — is this rule's
+/// knowledge, not the compiler's.
+fn rich_transport_member(library_types: &[std::sync::Arc<str>]) -> Option<RichMember> {
+    library_types.iter().find_map(|name| {
+        let matched = match name.as_ref() {
             "Date" => "Date",
             "Map" | "ReadonlyMap" => "Map",
             "Set" | "ReadonlySet" => "Set",
@@ -457,27 +470,6 @@ fn rich_transport_member(text: &str) -> Option<RichMember> {
             natural_encoding: false,
         })
     })
-}
-
-/// Splits a type text on top-level `|` and `&`, ignoring separators nested
-/// inside `<>`, `()`, `[]`, or `{}`.
-fn top_level_members(text: &str) -> impl Iterator<Item = &str> {
-    let mut members = Vec::new();
-    let mut depth = 0_i32;
-    let mut start = 0;
-    for (offset, byte) in text.bytes().enumerate() {
-        match byte {
-            b'<' | b'(' | b'[' | b'{' => depth += 1,
-            b'>' | b')' | b']' | b'}' => depth -= 1,
-            b'|' | b'&' if depth == 0 => {
-                members.push(&text[start..offset]);
-                start = offset + 1;
-            }
-            _ => {}
-        }
-    }
-    members.push(&text[start..]);
-    members.into_iter()
 }
 
 /// Whether anything in the project installs an argument serializer: a value
@@ -521,52 +513,67 @@ fn project_enables_rich_arguments(ctx: &AnalysisContext<'_>) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{rich_transport_member, top_level_members};
+    use super::rich_transport_member;
+    use std::sync::Arc;
 
-    #[test]
-    fn rich_member_matching_walks_top_level_members_only() {
-        assert_eq!(rich_transport_member("Date").unwrap().member, "Date");
-        assert_eq!(
-            rich_transport_member("Map<string, number>").unwrap().member,
-            "Map"
-        );
-        assert_eq!(
-            rich_transport_member("ReadonlySet<string>").unwrap().member,
-            "Set"
-        );
-        assert_eq!(rich_transport_member("RegExp").unwrap().member, "RegExp");
-        assert_eq!(
-            rich_transport_member("Date | undefined").unwrap().member,
-            "Date"
-        );
-        assert_eq!(rich_transport_member("Date[]").unwrap().member, "Date");
-        assert_eq!(
-            rich_transport_member("Float64Array").unwrap().member,
-            "a typed array"
-        );
-        assert!(
-            !rich_transport_member("Float64Array")
-                .unwrap()
-                .natural_encoding
-        );
-        assert!(
-            rich_transport_member("Uint8Array<ArrayBufferLike>")
-                .unwrap()
-                .natural_encoding
-        );
-        // Nested rich types are not top-level and stay silent.
-        assert!(rich_transport_member("{ when: Date }").is_none());
-        assert!(rich_transport_member("Array<Date>").is_none());
-        assert!(rich_transport_member("string").is_none());
-        assert!(rich_transport_member("MapLike").is_none());
-        assert!(rich_transport_member("(a: Date) => void").is_none());
+    fn names(values: &[&str]) -> Vec<Arc<str>> {
+        values.iter().map(|value| Arc::from(*value)).collect()
     }
 
     #[test]
-    fn top_level_split_respects_nesting() {
+    fn rich_member_matching_reads_library_type_names() {
         assert_eq!(
-            top_level_members("Map<string | number, Set<Date>> | null").collect::<Vec<_>>(),
-            ["Map<string | number, Set<Date>> ", " null"]
+            rich_transport_member(&names(&["Date"])).unwrap().member,
+            "Date"
         );
+        assert_eq!(
+            rich_transport_member(&names(&["Map"])).unwrap().member,
+            "Map"
+        );
+        assert_eq!(
+            rich_transport_member(&names(&["ReadonlySet"]))
+                .unwrap()
+                .member,
+            "Set"
+        );
+        assert_eq!(
+            rich_transport_member(&names(&["RegExp"])).unwrap().member,
+            "RegExp"
+        );
+        // A union contributes every member, so an optional Date still matches.
+        assert_eq!(
+            rich_transport_member(&names(&["Date"])).unwrap().member,
+            "Date"
+        );
+        // An array of Dates arrives as both names; either order matches Date and
+        // `Array` is simply not in the set this rule cares about.
+        assert_eq!(
+            rich_transport_member(&names(&["Array", "Date"]))
+                .unwrap()
+                .member,
+            "Date"
+        );
+        assert_eq!(
+            rich_transport_member(&names(&["Float64Array"]))
+                .unwrap()
+                .member,
+            "a typed array"
+        );
+        assert!(
+            !rich_transport_member(&names(&["Float64Array"]))
+                .unwrap()
+                .natural_encoding
+        );
+        assert!(
+            rich_transport_member(&names(&["Uint8Array"]))
+                .unwrap()
+                .natural_encoding
+        );
+        // Nothing interesting, and nothing at all. A user-declared `MapLike` is
+        // not a library type and never reaches this list; the producer decides
+        // that from the declaration file, not from the name.
+        assert!(rich_transport_member(&names(&["Array"])).is_none());
+        assert!(rich_transport_member(&names(&["String"])).is_none());
+        assert!(rich_transport_member(&[]).is_none());
     }
 }

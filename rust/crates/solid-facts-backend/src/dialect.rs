@@ -81,6 +81,7 @@ pub struct SemanticDemandCapabilities {
     pub jsx_static_value_types: bool,
     pub jsx_handler_array_shapes: bool,
     pub array_map_receiver_types: bool,
+    pub server_argument_library_types: bool,
 }
 
 impl SemanticDemandCapabilities {
@@ -89,6 +90,17 @@ impl SemanticDemandCapabilities {
         jsx_static_value_types: false,
         jsx_handler_array_shapes: false,
         array_map_receiver_types: false,
+        server_argument_library_types: false,
+    };
+    /// Only the 2.0 catalog carries `server-function-rich-argument`, so only it
+    /// pays for the library-type identities that rule reads.
+    #[cfg(feature = "dialect-v2")]
+    const SOLID_2: Self = Self {
+        jsx_member_root_symbols: false,
+        jsx_static_value_types: false,
+        jsx_handler_array_shapes: false,
+        array_map_receiver_types: false,
+        server_argument_library_types: true,
     };
     #[cfg(feature = "dialect-v1")]
     const SOLID_1: Self = Self {
@@ -96,6 +108,7 @@ impl SemanticDemandCapabilities {
         jsx_static_value_types: true,
         jsx_handler_array_shapes: true,
         array_map_receiver_types: true,
+        server_argument_library_types: false,
     };
 }
 
@@ -241,7 +254,7 @@ static SOLID_V2: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
-    semantic_demands: SemanticDemandCapabilities::NONE,
+    semantic_demands: SemanticDemandCapabilities::SOLID_2,
     package_contract_finding: solid_v2_rules::package_contract_finding,
     bundled_packages: &["solid-js", "@solidjs/web"],
     bundled_contract: crate::diagnostics::bundled_contract_v2,
