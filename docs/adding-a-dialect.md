@@ -32,7 +32,10 @@ ship.
    export module in `solid-dialect/src/exports/mod.rs` and consume it from the
    vocabulary implementation. Review contracts live below
    `solid-dialect/contracts/<id>/`; runtime contracts live below
-   `pkg/contracts/bundled/<id>/`.
+   `pkg/contracts/bundled/<id>/`. Steps 3 and 4 are the per-package workflow —
+   the manifest fields, the package-path environment variables, the
+   generate/check gate, and what a version bump obliges — documented in
+   [Adding a package to a dialect](package-contracts.md#adding-a-package-to-a-dialect).
 5. Register one `solid_facts_backend::dialect::Dialect` value in
    `rust/crates/solid-facts-backend/src/dialect.rs`, including its compiler,
    catalog, documentation, and bundled-package functions. Add it to `ALL`, map

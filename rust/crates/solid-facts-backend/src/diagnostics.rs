@@ -125,6 +125,10 @@ struct DiagnosticIdentity {
     project_id: String,
     generation: u64,
     contracts: Vec<[u8; 32]>,
+    /// Contracts refused for describing another version. These produce
+    /// findings but never enter `contracts`, so without them a retained
+    /// analysis from before a contract went stale would still answer.
+    stale_contracts: Vec<StaleContract>,
     explicit_contract_paths: Vec<String>,
     /// Per-rule options are re-read from disk on every analysis, so an
     /// edited `.solid-checker/rule-options.json` invalidates a retained
@@ -182,7 +186,7 @@ impl DiagnosticSession {
         bundled_solid_js: Option<PackageContract>,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
         let ir_started = Instant::now();
-        let contracts = load_package_contracts_with(
+        let loaded = load_package_contracts_reporting(
             self.dialect,
             project,
             facts,
@@ -194,10 +198,12 @@ impl DiagnosticSession {
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
             generation: facts.generation.get(),
-            contracts: contracts
+            contracts: loaded
+                .contracts
                 .iter()
                 .map(PackageContract::analysis_fingerprint)
                 .collect(),
+            stale_contracts: loaded.stale.clone(),
             explicit_contract_paths: explicit_contract_paths.to_vec(),
             rule_options: rule_options.clone(),
         };
@@ -217,7 +223,7 @@ impl DiagnosticSession {
         let (program, _) = self.builder.build_with_contracts_shared(
             facts,
             self.dialect.vocabulary,
-            &contracts,
+            &loaded.contracts,
             &rule_options,
         )?;
         let reactive_ir = ir_started.elapsed();
@@ -227,7 +233,7 @@ impl DiagnosticSession {
             project,
             sources,
             facts,
-            contracts,
+            loaded,
             program,
             &identity,
         )?);
@@ -313,26 +319,36 @@ fn finish_analysis(
     project: &Path,
     sources: &[SourceFile],
     facts: &ProjectFacts,
-    contracts: Vec<PackageContract>,
+    loaded: LoadedContracts,
     program: Arc<Program>,
     identity: &DiagnosticIdentity,
 ) -> Result<DiagnosticAnalysis, BackendError> {
+    let LoadedContracts {
+        contracts,
+        stale: stale_contracts,
+    } = loaded;
+    let stale_contracts = stale_contracts.as_slice();
     let statuses = package_contract_statuses_with(
         dialect,
         project,
         facts,
         &identity.explicit_contract_paths,
         &contracts,
+        stale_contracts,
     )?;
-    let missing_contracts = statuses
+    let unusable = statuses
         .iter()
-        .filter(|status| matches!(status.status.as_str(), "missing" | "unverified"))
+        .filter(|status| status.needs_action())
         .collect::<Vec<_>>();
     let mut metrics = analysis_metrics(facts, &program, &contracts);
-    metrics.proof_obligations += missing_contracts.len();
-    metrics.unresolved_obligations += missing_contracts.len();
+    metrics.proof_obligations += unusable.len();
+    metrics.unresolved_obligations += unusable.len();
+    let stale_by_package = stale_contracts
+        .iter()
+        .map(|entry| (entry.package.as_str(), entry))
+        .collect::<HashMap<_, _>>();
     let mut findings = dialect.solve(&program);
-    findings.extend(missing_contracts.into_iter().map(|status| {
+    findings.extend(unusable.into_iter().map(|status| {
         let location = facts
             .files
             .iter()
@@ -348,14 +364,30 @@ fn finish_analysis(
                 start_byte: 0,
                 end_byte: 0,
             });
+        let kind = match status.status.as_str() {
+            "unverified" => PackageContractIssueKind::Unverified,
+            "stale" => stale_by_package.get(status.name.as_str()).map_or(
+                PackageContractIssueKind::Missing,
+                |entry| {
+                    if entry.bundled {
+                        PackageContractIssueKind::StaleBundled {
+                            audited_version: entry.contract_version.clone(),
+                            installed_version: entry.installed_version.clone(),
+                        }
+                    } else {
+                        PackageContractIssueKind::Stale {
+                            contract_version: entry.contract_version.clone(),
+                            installed_version: entry.installed_version.clone(),
+                        }
+                    }
+                },
+            ),
+            _ => PackageContractIssueKind::Missing,
+        };
         (dialect.package_contract_finding)(&PackageContractIssue {
             package: status.name.clone(),
             contract_path: status.contract_path.clone(),
-            status: if status.status == "unverified" {
-                PackageContractIssueKind::Unverified
-            } else {
-                PackageContractIssueKind::Missing
-            },
+            status: kind,
             location,
         })
     }));
@@ -674,6 +706,24 @@ pub(crate) fn bundled_contract_v1(package: &str) -> Result<Option<PackageContrac
     })
 }
 
+/// A contract that was discovered, parsed, and then refused because it
+/// describes a different release than the installed one.
+///
+/// Loading is the only place that reads both the contract and the installed
+/// manifest, so it is also the only place that can report this without a second
+/// pass over the filesystem. Carrying the refusal forward is what lets analysis
+/// report drift as a finding instead of rediscovering it.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct StaleContract {
+    pub package: String,
+    pub contract_path: String,
+    pub contract_version: String,
+    pub installed_version: String,
+    /// Whether the refused contract was this checker's own bundled artifact,
+    /// which the consumer cannot regenerate.
+    pub bundled: bool,
+}
+
 pub fn load_package_contracts(
     dialect: &'static Dialect,
     project: &Path,
@@ -694,6 +744,33 @@ pub fn load_package_contracts_with(
     explicit_paths: &[String],
     bundled_solid_js: Option<PackageContract>,
 ) -> Result<Vec<PackageContract>, BackendError> {
+    Ok(
+        load_package_contracts_reporting(
+            dialect,
+            project,
+            facts,
+            explicit_paths,
+            bundled_solid_js,
+        )?
+        .contracts,
+    )
+}
+
+/// As [`load_package_contracts_with`], but also returns the contracts that were
+/// refused for describing another version.
+///
+/// A stale contract is not an error: it is the same epistemic state as a
+/// missing one — no usable summary for the installed package — and it is
+/// reported the same way, as an uncertifiable finding. A *malformed* contract
+/// still fails the analysis, because that is a broken file rather than drift.
+pub fn load_package_contracts_reporting(
+    dialect: &'static Dialect,
+    project: &Path,
+    facts: &ProjectFacts,
+    explicit_paths: &[String],
+    bundled_solid_js: Option<PackageContract>,
+) -> Result<LoadedContracts, BackendError> {
+    let mut stale = Vec::new();
     let mut contracts = HashMap::<String, PackageContract>::new();
     let modules = imported_package_roots(facts);
     let modules = modules.iter().map(String::as_str).collect::<HashSet<_>>();
@@ -701,46 +778,89 @@ pub fn load_package_contracts_with(
         .parent()
         .ok_or_else(|| BackendError::Contract("tsconfig has no parent".into()))?;
     let mut bundled_solid_js = bundled_solid_js;
+    // Each tier records its refusal under the module it was discovered for. A
+    // later tier that supplies a usable contract clears the earlier refusal:
+    // a stale published contract is not a defect when the project ships its own
+    // override for the installed version.
+    let refuse = |stale: &mut Vec<StaleContract>, entry: StaleContract| {
+        stale.retain(|existing| existing.package != entry.package);
+        stale.push(entry);
+    };
     for module in &modules {
         let bundled = if *module == "solid-js" && bundled_solid_js.is_some() {
             bundled_solid_js.take()
         } else {
             (dialect.bundled_contract)(module)?
         };
-        if let Some(bundled) = bundled
-            && contract_matches_installed_package(project_directory, module, &bundled)?
-        {
-            contracts.insert(bundled.package.name.clone(), bundled);
+        if let Some(bundled) = bundled {
+            let installed = installed_package_manifest(project_directory, module)?;
+            let installed = installed.as_ref().map(|(_, manifest)| manifest);
+            if contract_matches_manifest(installed, &bundled) {
+                contracts.insert(bundled.package.name.clone(), bundled);
+            } else {
+                refuse(
+                    &mut stale,
+                    StaleContract {
+                        package: (*module).to_owned(),
+                        contract_path: bundled.source_path.clone(),
+                        contract_version: bundled.package.version.clone(),
+                        installed_version: installed_version(installed),
+                        bundled: true,
+                    },
+                );
+            }
         }
     }
     for module in &modules {
         if let Some(path) = discover_contract(project_directory, module)? {
             let contract = read_package_contract(&path)?;
-            validate_contract_identity(project_directory, module, &contract)?;
-            contracts.insert(contract.package.name.clone(), contract);
+            match classify_identity(project_directory, module, &contract)? {
+                Some(entry) => refuse(&mut stale, entry),
+                None => {
+                    contracts.insert(contract.package.name.clone(), contract);
+                }
+            }
         }
     }
     for module in &modules {
         if let Some(path) = discover_local_contract(project_directory, module)? {
             let contract = read_package_contract(&path)?;
-            validate_contract_identity(project_directory, module, &contract)?;
-            contracts.insert(contract.package.name.clone(), contract);
+            match classify_identity(project_directory, module, &contract)? {
+                Some(entry) => refuse(&mut stale, entry),
+                None => {
+                    contracts.insert(contract.package.name.clone(), contract);
+                }
+            }
         }
     }
     for path in explicit_paths {
         let contract = read_package_contract(Path::new(path))?;
         if modules.contains(contract.package.name.as_str()) {
-            validate_contract_identity(
-                project_directory,
-                contract.package.name.as_str(),
-                &contract,
-            )?;
+            let module = contract.package.name.clone();
+            if let Some(entry) = classify_identity(project_directory, &module, &contract)? {
+                refuse(&mut stale, entry);
+                continue;
+            }
         }
         contracts.insert(contract.package.name.clone(), contract);
     }
+    // A tier that supplied a usable contract wins over any earlier refusal for
+    // the same package.
+    stale.retain(|entry| !contracts.contains_key(&entry.package));
     let mut contracts = contracts.into_values().collect::<Vec<_>>();
     contracts.sort_by(|left, right| left.package.name.cmp(&right.package.name));
-    Ok(contracts)
+    stale.sort_by(|left, right| left.package.cmp(&right.package));
+    Ok(LoadedContracts { contracts, stale })
+}
+
+/// The contracts one analysis will use, and the ones it refused as stale.
+pub struct LoadedContracts {
+    pub contracts: Vec<PackageContract>,
+    pub stale: Vec<StaleContract>,
+}
+
+fn installed_version(manifest: Option<&PackageManifest>) -> String {
+    manifest.map_or_else(|| "unknown".to_owned(), |manifest| manifest.version.clone())
 }
 
 fn package_root(module: &str) -> &str {
@@ -803,7 +923,24 @@ pub fn discovered_contract_paths(
 pub struct PackageContractStatus {
     pub name: String,
     pub status: String,
+    /// Why the status is what it is, when the status alone does not say it —
+    /// the two disagreeing versions behind `stale`, for instance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail: Option<String>,
+    /// What the user should do about this status, or `None` when the contract
+    /// already certifies. Built by [`contract_remedy`] so the report and the
+    /// analysis error cannot print divergent instructions.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remedy: Option<String>,
     pub contract_path: String,
+}
+
+impl PackageContractStatus {
+    /// Whether this status blocks contract-backed certification. These are the
+    /// statuses `--check-contracts` counts and exits non-zero on.
+    pub fn needs_action(&self) -> bool {
+        matches!(self.status.as_str(), "missing" | "unverified" | "stale")
+    }
 }
 
 fn contract_evidence_is_certifiable(contract: &PackageContract) -> bool {
@@ -826,40 +963,91 @@ struct PackageManifest {
     optional_dependencies: HashMap<String, serde_json::Value>,
 }
 
-fn contract_matches_installed_package(
+/// The installed package directory and its parsed manifest, read once.
+///
+/// Ambient-module and virtual test projects have no installed package and no
+/// manifest; both cases yield `None`, which every caller reads as "there is no
+/// installed version to disagree with".
+fn installed_package_manifest(
     project_directory: &Path,
     module: &str,
-    contract: &PackageContract,
-) -> Result<bool, BackendError> {
+) -> Result<Option<(PathBuf, PackageManifest)>, BackendError> {
     let Some(directory) = discover_package_directory(project_directory, module)? else {
-        // Ambient-module and virtual test projects have no package manifest.
-        return Ok(true);
+        return Ok(None);
     };
-    let manifest = match fs::read(directory.join("package.json")) {
-        Ok(data) => serde_json::from_slice::<PackageManifest>(&data)?,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(true),
-        Err(error) => return Err(error.into()),
-    };
-    Ok(manifest.version == contract.package.version)
+    match fs::read(directory.join("package.json")) {
+        Ok(data) => Ok(Some((directory, serde_json::from_slice(&data)?))),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(error.into()),
+    }
 }
 
-fn validate_contract_identity(
+/// Whether a contract describes the version of the package that is actually
+/// installed. A contract that describes another version is stale: it was
+/// audited against an artifact this project no longer has.
+fn contract_matches_manifest(
+    manifest: Option<&PackageManifest>,
+    contract: &PackageContract,
+) -> bool {
+    manifest.is_none_or(|manifest| manifest.version == contract.package.version)
+}
+
+/// The command that regenerates a project-owned contract for `module`.
+///
+/// A project-owned contract overrides both a package-published contract and a
+/// bundled one, so this is the remedy for every stale or missing tier. It is
+/// built in one place because the analysis error and the `--check-contracts`
+/// report must not print divergent instructions. `package_root` is the
+/// installed package directory when discovery found one, so the printed
+/// command stays correct under hoisting.
+pub fn contract_regeneration_command(
+    project_directory: &Path,
+    module: &str,
+    package_root: Option<&Path>,
+) -> String {
+    // Printed relative to the project when the package lives under it, which
+    // is the common case and keeps the command short enough to read; a hoisted
+    // package keeps its absolute path so the command stays runnable.
+    let root = package_root.map_or_else(
+        || format!("node_modules/{module}"),
+        |path| {
+            path.strip_prefix(project_directory)
+                .unwrap_or(path)
+                .display()
+                .to_string()
+        },
+    );
+    format!(
+        "solid-checker contract generate --package-root {root} \
+  --output .solid-checker/contracts/{module}/solid-reactivity.json"
+    )
+}
+
+/// Validates a discovered contract's identity, returning the refusal when it
+/// describes a version other than the installed one.
+///
+/// A wrong *name* is still an error: a file claiming to be another package's
+/// contract is malformed, not merely out of date. A wrong *version* is drift,
+/// and drift is reported as an uncertifiable finding so one upgraded dependency
+/// does not take the whole run down with it.
+fn classify_identity(
     project_directory: &Path,
     module: &str,
     contract: &PackageContract,
-) -> Result<(), BackendError> {
+) -> Result<Option<StaleContract>, BackendError> {
     validate_discovered_contract_name(module, contract)?;
-    if !contract_matches_installed_package(project_directory, module, contract)? {
-        let directory = discover_package_directory(project_directory, module)?
-            .expect("version mismatch requires an installed package");
-        let manifest: PackageManifest =
-            serde_json::from_slice(&fs::read(directory.join("package.json"))?)?;
-        return Err(BackendError::Contract(format!(
-            "contract for {module:?} declares version {:?}, but the installed package is version {:?}",
-            contract.package.version, manifest.version
-        )));
+    let installed = installed_package_manifest(project_directory, module)?;
+    let installed = installed.as_ref().map(|(_, manifest)| manifest);
+    if contract_matches_manifest(installed, contract) {
+        return Ok(None);
     }
-    Ok(())
+    Ok(Some(StaleContract {
+        package: module.to_owned(),
+        contract_path: contract.source_path.clone(),
+        contract_version: contract.package.version.clone(),
+        installed_version: installed_version(installed),
+        bundled: false,
+    }))
 }
 
 /// Reports imported packages whose own manifest indicates that they integrate
@@ -883,75 +1071,148 @@ pub fn package_contract_statuses(
         .collect::<HashMap<_, _>>();
     let mut statuses = Vec::new();
     for module in imported_package_roots(facts) {
+        // One walk and one manifest read per module: the installed version and
+        // the solid-dependency probe both come from this single read, and every
+        // tier below compares against it instead of reading it again.
+        let installed = installed_package_manifest(project_directory, &module)?;
+        let installed_manifest = installed.as_ref().map(|(_, manifest)| manifest);
+        let package_directory = installed.as_ref().map(|(directory, _)| directory.clone());
         let bundled = (dialect.bundled_contract)(module.as_str())?;
         let is_bundled_package = bundled.is_some();
-        let bundled_path = if let Some(contract) = bundled.as_ref()
-            && contract_matches_installed_package(project_directory, &module, contract)?
-        {
-            Some(contract.source_path.as_str())
-        } else {
-            None
-        };
-        let package_directory = discover_package_directory(project_directory, &module)?;
-        let uses_solid = package_directory
-            .as_deref()
-            .map(package_uses_solid)
-            .transpose()?
-            .unwrap_or(false);
+        let bundled_path = bundled
+            .as_ref()
+            .filter(|contract| contract_matches_manifest(installed_manifest, contract))
+            .map(|contract| contract.source_path.as_str());
+        let uses_solid = installed_manifest.is_some_and(manifest_uses_solid);
         if !is_bundled_package && !uses_solid {
             continue;
         }
+        // A tier whose contract describes another version is reported as
+        // `stale`, not raised as an error: this report exists to tell the user
+        // which contracts need regenerating, so it must survive exactly the
+        // drift that stops analysis.
+        let classify = |contract: &PackageContract, fresh: &'static str| {
+            if !contract_matches_manifest(installed_manifest, contract) {
+                (
+                    "stale",
+                    Some(format!(
+                        "the contract describes {} {}, but {} is installed",
+                        contract.package.name,
+                        contract.package.version,
+                        installed_manifest
+                            .map_or("another version", |manifest| manifest.version.as_str())
+                    )),
+                )
+            } else if contract_evidence_is_certifiable(contract) {
+                (fresh, None)
+            } else {
+                (
+                    "unverified",
+                    Some(format!(
+                        "the contract's evidence is {:?}: its claims were generated, not reviewed",
+                        contract.evidence.kind
+                    )),
+                )
+            }
+        };
         let local = discover_local_contract(project_directory, &module)?;
         let published = discover_contract(project_directory, &module)?;
-        let (status, contract_path) = if let Some(contract) = explicit.get(&module) {
-            validate_contract_identity(project_directory, &module, contract)?;
-            (
-                if contract_evidence_is_certifiable(contract) {
-                    "explicit"
-                } else {
-                    "unverified"
-                },
-                contract.source_path.clone(),
-            )
+        // `audited` is set only when the winning tier is the checker's own
+        // bundled artifact, which the consumer cannot regenerate. Every other
+        // tier is a file the project owns.
+        let (status, detail, contract_path, audited) = if let Some(contract) = explicit.get(&module)
+        {
+            validate_discovered_contract_name(&module, contract)?;
+            let (status, detail) = classify(contract, "explicit");
+            (status, detail, contract.source_path.clone(), None)
         } else if let Some(path) = local {
             let contract = read_package_contract(&path)?;
-            validate_contract_identity(project_directory, &module, &contract)?;
-            (
-                if contract_evidence_is_certifiable(&contract) {
-                    "local"
-                } else {
-                    "unverified"
-                },
-                contract.source_path,
-            )
+            validate_discovered_contract_name(&module, &contract)?;
+            let (status, detail) = classify(&contract, "local");
+            (status, detail, contract.source_path, None)
         } else if let Some(path) = published {
             let contract = read_package_contract(&path)?;
-            validate_contract_identity(project_directory, &module, &contract)?;
-            (
-                if contract_evidence_is_certifiable(&contract) {
-                    "published"
-                } else {
-                    "unverified"
-                },
-                contract.source_path,
-            )
+            validate_discovered_contract_name(&module, &contract)?;
+            let (status, detail) = classify(&contract, "published");
+            (status, detail, contract.source_path, None)
         } else if let Some(path) = bundled_path {
-            ("bundled", path.into())
+            ("bundled", None, path.into(), None)
+        } else if let Some(contract) = bundled.as_ref() {
+            // The dialect ships a contract for this package, but audited
+            // another version. That is staleness, not absence: reporting it as
+            // a missing contract would point the user at a generation command
+            // for a package whose contract they do not own.
+            (
+                "stale",
+                Some(format!(
+                    "this checker audited {module} {}, but {} is installed",
+                    contract.package.version,
+                    installed_manifest
+                        .map_or("another version", |manifest| manifest.version.as_str())
+                )),
+                contract.source_path.clone(),
+                Some(contract.package.version.as_str()),
+            )
         } else {
             (
                 "missing",
+                None,
                 local_contract_path(project_directory, &module)
                     .to_string_lossy()
                     .into_owned(),
+                None,
             )
         };
+        let remedy = contract_remedy(
+            project_directory,
+            status,
+            &module,
+            package_directory.as_deref(),
+            audited,
+        );
         statuses.push(PackageContractStatus {
             name: module,
             status: status.into(),
+            detail,
+            remedy,
             contract_path,
         });
     }
     Ok(statuses)
+}
+
+/// The action that resolves a non-certifying contract status, or `None` when
+/// the status already certifies.
+///
+/// `unverified` deliberately has no regeneration command: generation never
+/// promotes inferred claims, so re-running it would loop the user. The review
+/// checklist is the actual next step.
+fn contract_remedy(
+    project_directory: &Path,
+    status: &str,
+    module: &str,
+    package_directory: Option<&Path>,
+    audited_bundled_version: Option<&str>,
+) -> Option<String> {
+    match status {
+        // A bundled contract is the checker's own audited artifact. The
+        // consumer cannot regenerate it, so the remedy names the two real
+        // options instead of a command they should not run.
+        "stale" if audited_bundled_version.is_some() => Some(format!(
+            "install the audited version of {module}, or upgrade solid-checker to a release that \
+             audits the installed one"
+        )),
+        "missing" | "stale" => Some(contract_regeneration_command(
+            project_directory,
+            module,
+            package_directory,
+        )),
+        "unverified" => Some(format!(
+            "review the generated checklist beside the contract and record reviewed evidence; \
+             regenerating {module:?} will not promote its inferred claims"
+        )),
+        _ => None,
+    }
 }
 
 /// As [`package_contract_statuses`], but classifies from an already-loaded
@@ -966,10 +1227,15 @@ pub fn package_contract_statuses_with(
     facts: &ProjectFacts,
     explicit_paths: &[String],
     contracts: &[PackageContract],
+    stale_contracts: &[StaleContract],
 ) -> Result<Vec<PackageContractStatus>, BackendError> {
     let project_directory = project
         .parent()
         .ok_or_else(|| BackendError::Contract("tsconfig has no parent".into()))?;
+    let stale_by_package = stale_contracts
+        .iter()
+        .map(|entry| (entry.package.as_str(), entry))
+        .collect::<HashMap<_, _>>();
     let explicit_sources = explicit_paths
         .iter()
         .map(String::as_str)
@@ -990,33 +1256,77 @@ pub fn package_contract_statuses_with(
         if !bundled && !uses_solid {
             continue;
         }
-        let (status, contract_path) = match by_name.get(module.as_str()) {
-            Some(contract) if !contract_evidence_is_certifiable(contract) => {
-                ("unverified", contract.source_path.clone())
-            }
-            Some(contract) if explicit_sources.contains(contract.source_path.as_str()) => {
-                ("explicit", contract.source_path.clone())
-            }
-            Some(contract) if contract.source_path.starts_with("bundled://") => {
-                ("bundled", contract.source_path.clone())
-            }
-            Some(contract)
-                if Path::new(&contract.source_path)
-                    == local_contract_path(project_directory, &module) =>
-            {
-                ("local", contract.source_path.clone())
-            }
-            Some(contract) => ("published", contract.source_path.clone()),
-            None => (
-                "missing",
-                local_contract_path(project_directory, &module)
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
-        };
+        // A refusal recorded during loading wins: the package has a contract
+        // file, it just describes another release, and saying "missing" would
+        // send the user looking for a file that is already there.
+        let (status, detail, contract_path) =
+            if let Some(entry) = stale_by_package.get(module.as_str()) {
+                (
+                    "stale",
+                    Some(if entry.bundled {
+                        format!(
+                            "this checker audited {module} {}, but {} is installed",
+                            entry.contract_version, entry.installed_version
+                        )
+                    } else {
+                        format!(
+                            "the contract describes {module} {}, but {} is installed",
+                            entry.contract_version, entry.installed_version
+                        )
+                    }),
+                    entry.contract_path.clone(),
+                )
+            } else {
+                let (status, contract_path) = match by_name.get(module.as_str()) {
+                    Some(contract) if !contract_evidence_is_certifiable(contract) => {
+                        ("unverified", contract.source_path.clone())
+                    }
+                    Some(contract) if explicit_sources.contains(contract.source_path.as_str()) => {
+                        ("explicit", contract.source_path.clone())
+                    }
+                    Some(contract) if contract.source_path.starts_with("bundled://") => {
+                        ("bundled", contract.source_path.clone())
+                    }
+                    Some(contract)
+                        if Path::new(&contract.source_path)
+                            == local_contract_path(project_directory, &module) =>
+                    {
+                        ("local", contract.source_path.clone())
+                    }
+                    Some(contract) => ("published", contract.source_path.clone()),
+                    None => (
+                        "missing",
+                        local_contract_path(project_directory, &module)
+                            .to_string_lossy()
+                            .into_owned(),
+                    ),
+                };
+                let detail = match status {
+                "unverified" => by_name.get(module.as_str()).map(|contract| {
+                    format!(
+                        "the contract's evidence is {:?}: its claims were generated, not reviewed",
+                        contract.evidence.kind
+                    )
+                }),
+                _ => None,
+            };
+                (status, detail, contract_path)
+            };
+        let remedy = contract_remedy(
+            project_directory,
+            status,
+            &module,
+            package_directory.as_deref(),
+            stale_by_package
+                .get(module.as_str())
+                .filter(|entry| entry.bundled)
+                .map(|entry| entry.contract_version.as_str()),
+        );
         statuses.push(PackageContractStatus {
             name: module,
             status: status.into(),
+            detail,
+            remedy,
             contract_path,
         });
     }
@@ -1042,17 +1352,22 @@ fn package_uses_solid(directory: &Path) -> Result<bool, BackendError> {
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
         Err(error) => return Err(error.into()),
     };
-    Ok([
-        manifest.dependencies,
-        manifest.peer_dependencies,
-        manifest.optional_dependencies,
+    Ok(manifest_uses_solid(&manifest))
+}
+
+/// As [`package_uses_solid`], for a manifest a caller has already read.
+fn manifest_uses_solid(manifest: &PackageManifest) -> bool {
+    [
+        &manifest.dependencies,
+        &manifest.peer_dependencies,
+        &manifest.optional_dependencies,
     ]
     .iter()
     .any(|dependencies| {
         dependencies
             .keys()
             .any(|name| name == "solid-js" || name.starts_with("@solidjs/"))
-    }))
+    })
 }
 
 fn discover_contract(directory: &Path, module: &str) -> Result<Option<PathBuf>, BackendError> {

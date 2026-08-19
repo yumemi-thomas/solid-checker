@@ -159,22 +159,82 @@ The same `--emit-contract` workflow can generate this file when the package
 source and a TypeScript project for it are available, or it can be authored
 against the contract schema and checked with `--validate-contract`.
 
-Before checking, inspect imported Solid-dependent packages and their contract
-coverage:
+## Checking contract coverage and freshness
+
+Inspect imported Solid-dependent packages and their contract coverage:
 
 ```sh
-solid-checker --project app/tsconfig.json --check-contracts
+solid-checker contract check
 ```
 
-The command reports bundled, published, local, explicit, unverified, and
-missing contracts. It exits with status 1 when a package whose manifest
-depends on or peers with Solid has no certifiable contract.
+`solid-checker --project app/tsconfig.json --check-contracts` is the same
+report; `contract check` accepts the same `--project`, `--format`, and
+`--contract` options and defaults to `tsconfig.json` and text output. Each
+package is reported as exactly one status:
 
-Normal analysis performs the same completeness check. A missing contract emits
-the uncertifiable `SC9005 package-contract-missing` finding at the package
-import, changes the snapshot status to `uncertifiable`, and causes `--certify`
-to exit with status 1. This behavior is shared by one-shot and retained-daemon
-checks. Use `--check-contracts` when only the focused coverage report is needed.
+| Status | Meaning | Certifies |
+| --- | --- | --- |
+| `bundled` | This checker's own audited contract matches the installed version. | yes |
+| `published` | The package ships a contract for its installed version. | yes |
+| `local` | A project-owned contract under `.solid-checker/contracts/`. | yes |
+| `explicit` | A contract passed with `--contract`. | yes |
+| `unverified` | A contract whose evidence is `inferred`; its claims were never reviewed. | no |
+| `stale` | A contract that describes a **different version** than the one installed. | no |
+| `missing` | No contract for a package whose manifest depends on or peers with Solid. | no |
+
+Every non-certifying status prints the action that resolves it, and the command
+exits with status 1 when any package needs action, so it works as a CI gate.
+The JSON format reports, per package, a `remedy` field carrying the same action
+and a `detail` field naming the reason when the status alone does not say it
+(the two disagreeing versions behind `stale`, the evidence kind behind
+`unverified`). Both are omitted for a status that certifies. The report also
+carries `missing` (the count of packages needing action) and `stale` (the drift
+subset of that count).
+
+### Stale contracts
+
+A contract names the exact package version it was generated and reviewed
+against. When the installed version moves — an upgrade, a lockfile refresh, a
+different resolution — the contract stops being evidence about the package the
+project actually has, and the checker refuses to apply it.
+
+For a project-owned or published contract, the remedy is to regenerate and
+re-review it:
+
+```sh
+solid-checker contract generate --package-root node_modules/reactive-package \
+  --output .solid-checker/contracts/reactive-package/solid-reactivity.json
+```
+
+Regeneration rewrites the contract and its review checklist; the checklist
+still has to be reviewed, because generation never promotes inferred claims to
+reviewed ones. For a *bundled* contract the remedy is different and the report
+says so: the consumer does not own that artifact, so the options are to install
+the version this checker audited or to upgrade `solid-checker` to a release
+that audits the installed one.
+
+Analysis fails closed on the contract without failing the run. The stale
+contract is refused — a contract for another version is not weaker evidence, it
+is evidence about a different artifact — and the package is reported exactly as
+an uncontracted one: an uncertifiable `SC9005 package-contract-missing` finding
+at the package import, snapshot status `uncertifiable`, and `--certify` exiting
+1. The message states which case applies, naming both versions rather than
+claiming no contract exists, and the hint carries the same remedy the report
+prints.
+
+Refusing the contract without stopping the run is what keeps one upgraded
+dependency from blanking out every other finding in the project, which matters
+most in an editor. It does not weaken enforcement: the project cannot certify
+until the contract is regenerated and reviewed.
+
+A *malformed* contract — unparseable, wrong schema version, wrong package name,
+mismatched artifact hashes — still fails the analysis outright. That is a broken
+file rather than drift, and no finding can describe a document the loader could
+not read.
+
+Missing and unverified contracts take the same path and have always done so.
+This behavior is shared by one-shot and retained-daemon checks. Use
+`contract check` when only the focused coverage report is needed.
 
 Validate contracts and their artifacts without opening a TypeScript project:
 
@@ -300,6 +360,192 @@ installed on an object is considered deferred only when that object is
 caller-owned or returned. A callable constructor parameter is considered
 retained only when it is a TypeScript parameter property on an object passed to
 an exact compiler-resolved retaining runtime position, such as a Proxy handler.
+
+## Adding a package to a dialect
+
+This section is for maintainers of this repository, adding a package that a
+dialect models directly. Application developers generating a contract for a
+dependency want [Checking contract coverage and
+freshness](#checking-contract-coverage-and-freshness) instead.
+
+### The generate/check model
+
+Dialect contract artifacts are **derived from a declaration plus an installed
+package**, and every one of them is checked by regenerating it and comparing:
+
+```sh
+make contracts        # write the artifacts
+make contracts-check  # regenerate into memory and fail on any difference
+```
+
+`make contracts-check` runs in CI's `rust-engine` job on every push and pull
+request, after installing the exact pinned releases. A checked-in artifact that
+no longer matches what the generator produces from the pinned package is a
+failure, not something the next run quietly fixes. Adding a package therefore
+means adding its declaration; the artifacts follow from it, and the gate keeps
+them honest.
+
+**Only half of a contract is derived, and the halves are checked differently.**
+The *export set* is a syntactic fact read from the package's declarations with
+the same parser the checker runs on user code, following `export *` and
+`export { x } from` chains — so drift in it is caught mechanically. The
+*reactive semantics* — whether a function opens a root, establishes an owner,
+returns a live store or a snapshot — cannot be derived from a signature and are
+hand-authored tables inside `solid-contract-gen`, each carrying its evidence.
+`--check` proves the artifact matches the tables; it cannot prove the tables
+match the runtime. That is what the runtime probes below are for, and why a
+version bump is a re-audit rather than a regeneration.
+
+### Declaring the package
+
+Add one entry to the `contracts` array of `rust/dialects/<id>/dialect.json`:
+
+```json
+{
+  "package": "@solidjs/web",
+  "packagePathEnv": "SOLID_V2_SOLIDJS_WEB_PACKAGE",
+  "defaultPackagePath": "node_modules/@solidjs/web",
+  "generatorTarget": "solid-v2/solidjs-web",
+  "reviewContract": "rust/crates/solid-dialect/contracts/solid-v2/solidjs-web.json",
+  "exportsIndex": "rust/crates/solid-dialect/src/exports/solid_v2_solidjs_web.rs",
+  "bundledContract": "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+  "probeRuntime": true
+}
+```
+
+Every field except `probeRuntime`, `composeScript`, and `composeInputs` is
+required, `generatorTarget` must start with `<id>/`, and no two entries may
+share a `generatorTarget` or declare the same package twice.
+
+A contract that is **reviewed against a package rather than derived from it**
+declares `"generated": false` and carries only `package` and `bundledContract`:
+
+```json
+{
+  "package": "@solid-primitives/scheduled",
+  "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-scheduled.json",
+  "generated": false
+}
+```
+
+There is nothing for `make contracts` to regenerate from, so it skips these
+entries. Supplying any generator field alongside `"generated": false` is an
+error rather than being ignored: a half-filled entry is someone leaving fields
+out of a generated contract, and that must not pass as a deliberate
+hand-authored one. Such an entry is still declared, because the manifest is the
+inventory of every package a dialect models — see [The manifest is the complete
+inventory](#the-manifest-is-the-complete-inventory). `node scripts/dialect-manifests.mjs validate` — part
+of the universal check set — enforces all of that and fails on any declared
+artifact that does not exist, so a half-added package cannot ship as a dialect
+that silently models nothing.
+
+`packagePathEnv` exists because this repository has no root `package.json` and
+therefore no `node_modules` to read the audited releases from. Generation and
+drift checks read a package path from that variable, falling back to
+`defaultPackagePath`. Point each one at an installation of the exact pinned
+version:
+
+```sh
+mkdir -p /tmp/contract-packages && cd /tmp/contract-packages
+npm init -y >/dev/null
+npm install --ignore-scripts --no-audit --no-fund \
+  solid-js-1x@npm:solid-js@1.9.14 solid-js@2.0.0-rc.0 @solidjs/web@2.0.0-rc.0
+```
+
+```sh
+SOLID_V1_SOLID_JS_PACKAGE=/tmp/contract-packages/node_modules/solid-js-1x \
+SOLID_V2_SOLID_JS_PACKAGE=/tmp/contract-packages/node_modules/solid-js \
+SOLID_V2_SOLIDJS_WEB_PACKAGE=/tmp/contract-packages/node_modules/@solidjs/web \
+  make contracts-check
+```
+
+### Steps
+
+1. **Declare it** in `rust/dialects/<id>/dialect.json`, as above.
+2. **Teach the generator its semantics.** Add the `generatorTarget` and its
+   reviewed callback/return tables to `solid-contract-gen`
+   (`rust/crates/solid-facts-backend/src/bin/solid-contract-gen.rs`). Read the
+   runtime implementation for each claim; a signature does not carry it.
+3. **Generate** with `make contracts`, which writes the review contract and the
+   Rust export index for every declared package.
+4. **Register the export index** in `rust/crates/solid-dialect/src/exports/mod.rs`
+   and consume it from the vocabulary implementation.
+5. **Produce the bundled runtime contract** at the declared `bundledContract`
+   path, and decode it in `diagnostics.rs`. Its evidence URI must be
+   `bundled://<id>/<package-slug>.json`, matching the artifact path.
+6. **Verify** with `make contracts-check` and `make contract-conformance`.
+
+For a whole new dialect rather than one package, follow
+[adding-a-dialect.md](adding-a-dialect.md), which wraps these steps in the
+vocabulary, compiler, catalog, and detection work.
+
+### Runtime probes and the lock
+
+Set `probeRuntime` when the contract's claims are checked against an installed
+release. `node scripts/check-bundled-contracts.mjs` then installs the exact
+pinned release, checks its export surface and npm integrity, verifies every edge
+in `pkg/contracts/bundled/runtime-lock.json`, and executes every declared
+behavior probe in client, server, development, and production condition modes.
+
+`node scripts/check-contract-pins.mjs`, in the same target, covers what probing
+cannot reach. The probe suite proves a package's identity by installing it and
+reading npm's hidden lockfile, so a contract it does not install — a
+hand-authored overlay, or a dialect whose runtime is not probed — would be
+pinned by a version string alone. A version string is not a pin: republished or
+mutated contents keep the version, and the contract would still claim to
+describe them. So every bundled contract records the integrity of the exact
+tarball it was audited against, that integrity is checked against the registry,
+and a contract recording none fails.
+
+`--write` records passing modes as `probed` row evidence on claims that already
+exist. **It does not repair a lock or probe mismatch, and must not be taught
+to.** A probe failure means the package does not behave the way the contract
+says; a lock mismatch means the package that was probed is not the package that
+was audited. Neither is drift in a derived artifact, and neither is fixed by
+regenerating.
+
+### Composed artifacts
+
+When a bundled artifact is assembled from checked-in inputs rather than
+generated directly from a package, declare `composeScript` and `composeInputs`.
+`node scripts/dialect-manifests.mjs check-composed-contracts` runs each script
+with `--check`, failing when the checked-in artifact is stale relative to its
+inputs. The Solid 1.x contract works this way: it is composed from a per-subpath
+export census and the reviewed semantics map.
+
+### Version bumps
+
+A pinned version is an audit boundary, not a dependency range. Moving one means
+regenerating the artifacts *and* re-reading the claims the generator's tables
+assert, because `--check` compares the artifact to those tables and has nothing
+to say about whether they still describe the runtime. A newer prerelease is
+reviewed, never silently substituted. Consumers see the same boundary from the
+other side: an installed version other than the audited one is refused and
+reported as a stale contract.
+
+### The manifest is the complete inventory
+
+Every gate above enumerates the contracts a manifest **declares**, which leaves
+one hole they cannot see: a package a dialect models but no entry names is
+covered by nothing at all. It silently has no contract, and every project
+importing it reports `SC9005` forever.
+
+`every_modeled_package_is_declared_in_the_assembly_manifest`, in
+`rust/crates/solid-facts-backend/src/dialect.rs`, closes it by deriving the
+expected set from the dialect instead of the manifest. A package is modeled when
+the vocabulary owns one of its modules (`Dialect::modules`) or the backend
+compiles a contract in for it (`Dialect::bundled_packages`); the two sets must
+match the declared packages exactly. An undeclared modeled package fails, and so
+does a declaration for a package the dialect neither owns nor bundles, which is
+dead weight.
+
+Module specifiers collapse to package roots first, the same way contract
+discovery resolves them: `solid-js/store` and `@solidjs/web/frames` are subpaths
+of one installed package, not packages of their own.
+
+The check runs with `cargo test -p solid-facts-backend --lib`, and therefore in
+`make verify`. It reads the checked-in `dialect.json` files directly, so it
+fails on the manifest as committed rather than on a regenerated copy.
 
 ## Bundled and ecosystem contracts
 

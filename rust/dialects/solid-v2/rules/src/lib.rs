@@ -130,13 +130,37 @@ impl CatalogWording for Catalog {
             }
             FindingSeed::AsyncRead(read) => async_read_wording(read),
             FindingSeed::PackageContractIssue(issue) => {
-                let (condition, hint) = match issue.status {
+                let (condition, hint) = match &issue.status {
+                    PackageContractIssueKind::Stale {
+                        contract_version,
+                        installed_version,
+                    } => (
+                        format!(
+                            "has a reactivity contract for version {contract_version}, but version {installed_version} is installed"
+                        ),
+                        format!(
+                            "The contract is evidence about a release this project no longer installs. Regenerate it with `solid-checker contract generate --package-root node_modules/{package} --output .solid-checker/contracts/{package}/solid-reactivity.json`, then review the checklist written beside it. A project-owned contract overrides a package-published one, so this is the remedy for either.",
+                            package = issue.package
+                        ),
+                    ),
+                    PackageContractIssueKind::StaleBundled {
+                        audited_version,
+                        installed_version,
+                    } => (
+                        format!(
+                            "is audited by this checker at version {audited_version}, but version {installed_version} is installed"
+                        ),
+                        format!(
+                            "Bundled contracts describe one exact release. Install {} {audited_version}, or upgrade solid-checker to a release that audits {installed_version}.",
+                            issue.package
+                        ),
+                    ),
                     PackageContractIssueKind::Unverified => (
-                        "has only an unverified generated reactivity contract",
+                        "has only an unverified generated reactivity contract".to_owned(),
                         "Verify the generated contract against the exact package artifacts and behavioral probes, then record verified, reviewed, or attested evidence.".into(),
                     ),
                     PackageContractIssueKind::Missing => (
-                        "has no reactivity contract",
+                        "has no reactivity contract".to_owned(),
                         format!(
                             "Create a local contract at {}, or pass one explicitly with --contract <PATH>. If you maintain {}, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format.",
                             issue.contract_path, issue.package

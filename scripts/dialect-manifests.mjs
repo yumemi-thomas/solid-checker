@@ -6,7 +6,6 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 export const root = fileURLToPath(new URL("..", import.meta.url));
-const dialectsRoot = join(root, "rust", "dialects");
 
 function fail(message) {
   throw new Error(`dialect manifest: ${message}`);
@@ -19,7 +18,8 @@ function requiredString(value, field, source) {
 }
 
 /** Loads and validates every checked-in dialect assembly manifest. */
-export function loadDialectManifests({ requireArtifacts = false } = {}) {
+export function loadDialectManifests({ requireArtifacts = false, projectRoot = root } = {}) {
+  const dialectsRoot = join(projectRoot, "rust", "dialects");
   const manifests = readdirSync(dialectsRoot, { withFileTypes: true })
     .filter(entry => entry.isDirectory() && entry.name.startsWith("solid-v"))
     .map(entry => {
@@ -32,48 +32,74 @@ export function loadDialectManifests({ requireArtifacts = false } = {}) {
         fail(`${source} id ${manifest.id} must match directory ${entry.name}`);
       }
       requiredString(manifest.ruleManifest, "ruleManifest", source);
-      if (requireArtifacts && !existsSync(join(root, manifest.ruleManifest))) {
+      if (requireArtifacts && !existsSync(join(projectRoot, manifest.ruleManifest))) {
         fail(`${source} references missing ${manifest.ruleManifest}`);
       }
       if (!Array.isArray(manifest.contracts) || manifest.contracts.length === 0) {
         fail(`${source} requires at least one contract`);
       }
       for (const contract of manifest.contracts) {
-        for (const field of [
-          "package",
+        // A contract is generated from an installed package unless it says
+        // otherwise. `generated: false` declares a hand-authored bundled
+        // overlay — reviewed against the package rather than derived from it,
+        // so it has no generator target, no review contract, and no export
+        // index. It is still declared, because the manifest is the inventory
+        // of every package a dialect models and a package missing from it is
+        // covered by no gate at all.
+        const generated = contract.generated !== false;
+        if (typeof contract.generated !== "undefined" && typeof contract.generated !== "boolean") {
+          fail(`${source} contracts[].generated must be a boolean`);
+        }
+        const generatorFields = [
           "packagePathEnv",
           "defaultPackagePath",
           "generatorTarget",
           "reviewContract",
           "exportsIndex",
-          "bundledContract",
-        ]) {
+        ];
+        for (const field of generated
+          ? ["package", ...generatorFields, "bundledContract"]
+          : ["package", "bundledContract"]) {
           requiredString(contract[field], `contracts[].${field}`, source);
         }
-        if (!contract.generatorTarget.startsWith(`${manifest.id}/`)) {
+        if (!generated) {
+          // Refused rather than ignored: a half-filled entry means someone
+          // meant to declare a generated contract and left fields out, which
+          // must not pass as a deliberate hand-authored one.
+          for (const field of generatorFields) {
+            if (typeof contract[field] !== "undefined") {
+              fail(`${source} contracts[].${field} is not allowed when generated is false`);
+            }
+          }
+        }
+        if (generated && !contract.generatorTarget.startsWith(`${manifest.id}/`)) {
           fail(`${source} generatorTarget ${contract.generatorTarget} must start with ${manifest.id}/`);
         }
-        for (const path of [contract.reviewContract, contract.exportsIndex, contract.bundledContract]) {
-          if (requireArtifacts && !existsSync(join(root, path))) {
+        const artifacts = generated
+          ? [contract.reviewContract, contract.exportsIndex, contract.bundledContract]
+          : [contract.bundledContract];
+        for (const path of artifacts) {
+          if (requireArtifacts && !existsSync(join(projectRoot, path))) {
             fail(`${source} references missing ${path}`);
           }
         }
-        if (contract.composeScript && !existsSync(join(root, contract.composeScript))) {
+        if (contract.composeScript && !existsSync(join(projectRoot, contract.composeScript))) {
           fail(`${source} references missing ${contract.composeScript}`);
         }
         for (const input of contract.composeInputs ?? []) {
           requiredString(input, "contracts[].composeInputs[]", source);
-          if (requireArtifacts && !existsSync(join(root, input))) {
+          if (requireArtifacts && !existsSync(join(projectRoot, input))) {
             fail(`${source} references missing ${input}`);
           }
         }
       }
-      return { ...manifest, source: relative(root, source) };
+      return { ...manifest, source: relative(projectRoot, source) };
     })
     .sort((left, right) => left.id.localeCompare(right.id));
 
   const ids = new Set();
   const targets = new Set();
+  const packages = new Set();
   const ruleManifests = new Set();
   for (const manifest of manifests) {
     if (ids.has(manifest.id)) fail(`duplicate id ${manifest.id}`);
@@ -83,6 +109,11 @@ export function loadDialectManifests({ requireArtifacts = false } = {}) {
     }
     ruleManifests.add(manifest.ruleManifest);
     for (const contract of manifest.contracts) {
+      if (packages.has(`${manifest.id}/${contract.package}`)) {
+        fail(`${manifest.id} declares ${contract.package} twice`);
+      }
+      packages.add(`${manifest.id}/${contract.package}`);
+      if (contract.generated === false) continue;
       if (targets.has(contract.generatorTarget)) {
         fail(`duplicate generatorTarget ${contract.generatorTarget}`);
       }
@@ -101,6 +132,10 @@ function run(command, args) {
 function generateContracts(check) {
   for (const manifest of loadDialectManifests()) {
     for (const contract of manifest.contracts) {
+      // Hand-authored overlays have nothing to regenerate from; their artifact
+      // is reviewed, not derived. `make contract-conformance` is what checks
+      // them.
+      if (contract.generated === false) continue;
       const packagePath = process.env[contract.packagePathEnv] ?? contract.defaultPackagePath;
       const args = [
         "+1.97",

@@ -28,6 +28,20 @@ solid-checker contract generate \
   --output .solid-checker/contracts/solid-dnd/solid-reactivity.json
 ```
 
+Check which dependencies still need one, and which have a contract that no
+longer matches the installed version:
+
+```sh
+solid-checker contract check
+```
+
+Packages are reported as `bundled`, `published`, `local`, `explicit`,
+`unverified`, `stale`, or `missing`; every status that cannot certify prints
+the command that resolves it, and the command exits non-zero when any package
+needs action. `stale` means the contract was generated against a different
+version of the package than the installed one — regenerate and re-review it
+after an upgrade.
+
 Use `--conditions browser,import` for a specific conditional export
 environment. Generation uses implementation facts plus published declaration
 call signatures, merges compatible conditional targets conservatively, and
