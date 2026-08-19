@@ -265,6 +265,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ExpectedFunctionGotExpression
         | Rule::NoDirectMutation
         | Rule::ReactiveSourceUncaptured
+        | Rule::ReactiveDispatchUnresolved
         | Rule::PreferComponentSyntax
         | Rule::NoImplicitDraggable
         | Rule::ValidJsxNesting
@@ -305,6 +306,9 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
+        StaticDefectKind::ReactiveDispatchUnresolved { .. }
+        | StaticDefectKind::ReactiveCallbackUnresolved { .. }
+        | StaticDefectKind::StructuredReturnUnresolved { .. } => Rule::ReactiveDispatchUnresolved,
         StaticDefectKind::ReactiveHandlerRead { .. }
         | StaticDefectKind::HandlerValueUnresolved { .. } => Rule::ExpectedFunctionGotExpression,
         StaticDefectKind::UncalledAccessor { .. } => Rule::UncalledAccessor,

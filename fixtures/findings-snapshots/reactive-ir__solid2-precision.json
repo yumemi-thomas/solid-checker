@@ -62,6 +62,16 @@
       "fixes": 0
     },
     {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 3343,
+      "end": 3387,
+      "fixes": 0
+    },
+    {
       "rule": "async-outside-loading-boundary",
       "code": "SC5003",
       "kind": "violation",
@@ -79,6 +89,16 @@
       "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
       "start": 3751,
       "end": 3758,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/solid2-precision/App.tsx",
+      "start": 6241,
+      "end": 6256,
       "fixes": 0
     },
     {

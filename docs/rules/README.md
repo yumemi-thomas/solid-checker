@@ -201,7 +201,9 @@ SC7005–SC7007 describe the 2.0 server surface (`@solidjs/web`'s HTTP response
 head and core server functions) and exist only in the 2.0 catalog: Solid 1.x
 has neither. SC7005 is a **warning** by design — the post-flush drop only
 occurs when the boundary settles after the shell flush, so the static finding
-is conditional rather than a proven-unconditional failure; its page says so.
+is conditional rather than a proven-unconditional failure. If the analyzed
+project cannot establish whether SSR exists, SC7005 is additionally marked
+uncertifiable rather than treating a missing server import as proof of CSR.
 
 ## Uncertifiable (analysis limits)
 
@@ -212,6 +214,7 @@ is conditional rather than a proven-unconditional failure; its page says so.
 | SC9006 | [package-contract-callback-missing](package-contract-callback-missing.md) | error |
 | SC9005 | [package-contract-missing](package-contract-missing.md) | error |
 | SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning |
+| SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning |
 
 Five of the fine-grained rules decomposed out of `eslint-plugin-solid`'s
 `reactivity` (see [the migration table](#solidreactivity--the-fine-grained-rules))
@@ -274,6 +277,7 @@ plugin keeps its rule names under the `v1/` namespace.
 | SC9006 | [v1/package-contract-callback-missing](v1/package-contract-callback-missing.md) | error |
 | SC9005 | [v1/package-contract-missing](v1/package-contract-missing.md) | error |
 | SC9011 | [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) | warning |
+| SC9012 | [v1/reactive-dispatch-unresolved](v1/reactive-dispatch-unresolved.md) | warning |
 
 ## Migrating from eslint-plugin-solid
 

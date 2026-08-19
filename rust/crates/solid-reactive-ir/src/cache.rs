@@ -9,7 +9,7 @@ use crate::pipeline::available_analysis_workers;
 use crate::{
     ActionInvocation, AsyncRead, CacheRetention, ContractCallback, ContractExport,
     ContractGenerationObligation, FunctionNode, OwnerRequirement, Program, ReactiveRead,
-    ReactiveSourceKind, ReactiveWrite, RuleOptions,
+    ReactiveSourceKind, ReactiveWrite, RuleOptions, StaticDefect,
 };
 
 use std::{
@@ -259,6 +259,7 @@ pub(crate) enum InterproceduralResultDependencyState {
 pub(crate) struct CachedInterproceduralResultFile {
     pub(crate) dependencies: HashSet<InterproceduralResultDependency>,
     pub(crate) reads: Vec<ReactiveRead>,
+    pub(crate) dispatch_obligations: Vec<StaticDefect>,
     pub(crate) compiler: Arc<solid_facts::compiler::ExecutionMap>,
 }
 

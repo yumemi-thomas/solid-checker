@@ -44,6 +44,7 @@ pub enum Rule {
     NoDirectMutation,
     NoAsyncTrackedScope,
     ReactiveSourceUncaptured,
+    ReactiveDispatchUnresolved,
     // The eslint-plugin-solid 0.14.5 rule surface, one identity per upstream
     // rule. `jsx-uses-vars` is catalog-only: upstream exists to mark JSX
     // identifiers used for no-unused-vars, and TypeScript reference facts
@@ -86,7 +87,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 41] = [
+    pub const ALL: [Self; 42] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -105,6 +106,7 @@ impl Rule {
         Self::NoDirectMutation,
         Self::NoAsyncTrackedScope,
         Self::ReactiveSourceUncaptured,
+        Self::ReactiveDispatchUnresolved,
         Self::EventHandlers,
         Self::JsxNoDuplicateProps,
         Self::JsxNoScriptUrl,
@@ -170,6 +172,9 @@ impl Rule {
             Self::NoAsyncTrackedScope => ("SC5004", "v1/no-async-tracked-scope", "warning", false),
             Self::ReactiveSourceUncaptured => {
                 ("SC9011", "v1/reactive-source-uncaptured", "warning", true)
+            }
+            Self::ReactiveDispatchUnresolved => {
+                ("SC9012", "v1/reactive-dispatch-unresolved", "warning", true)
             }
             Self::EventHandlers => ("SC8001", "v1/event-handlers", "warning", false),
             Self::JsxNoDuplicateProps => ("SC8003", "v1/jsx-no-duplicate-props", "error", false),

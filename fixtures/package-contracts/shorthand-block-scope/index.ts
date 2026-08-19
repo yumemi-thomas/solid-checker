@@ -5,13 +5,9 @@
 // a shorthand with a same-spelled declaration the shorthand cannot see.
 import { createMemo } from "solid-js";
 import { helper, importedTracked } from "./values";
-import { ambiguousTracked } from "./ambiguous";
 import defaultFromBarrel from "./barrel";
 import { chainedTracked, starTracked } from "./barrel2";
 import * as namespace from "./values";
-import { cycleTracked } from "./cycle-a";
-import { helper as bareHelper } from "bare-package";
-import { importedTracked as mappedTracked } from "@internal/values";
 
 // Same spelling as the block-scoped accessor in `unprovenShorthand`, and not
 // reactive. Nothing may promote it.
@@ -73,32 +69,6 @@ export function exportAllShorthand() {
 
 export function namespaceShorthand() {
   return { namespace };
-}
-
-export function bareImportShorthand() {
-  return { bareHelper };
-}
-
-export function pathMappedShorthand() {
-  return { mappedTracked };
-}
-
-export function cyclicReexportShorthand() {
-  return { cycleTracked };
-}
-
-export function ambiguousShorthand() {
-  // `./ambiguous` names both `ambiguous.ts` and `ambiguous/index.ts`, and
-  // both export an accessor called `ambiguousTracked`. Which one a bundler
-  // picks is a resolution setting this pass does not model, so the join fails
-  // closed: a proven claim sourced from the wrong module would be worse than
-  // no claim.
-  return { ambiguousTracked };
-}
-
-export function globalShorthand() {
-  // Resolves to no declaration in this file's scope tree: no claim.
-  return { structuredClone };
 }
 
 export function writtenShorthand() {

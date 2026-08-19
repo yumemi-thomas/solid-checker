@@ -186,6 +186,34 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Describe {callee} in its package's solid-reactivity.json — which arguments it tracks and what it returns — or keep the function in the project so its body is analysed. See docs/package-contracts.md."
             ),
         ),
+        StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (
+            if let Some(member) = member {
+                format!(
+                    "{callee} invokes .{member} on a caller-supplied value, but the exact runtime implementation cannot be selected and the possible implementations do not have one proven reactive-read behavior"
+                )
+            } else {
+                format!(
+                    "the runtime target of {callee} cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior"
+                )
+            },
+            "Narrow the value to one exact implementation, or wrap the alternatives in an adapter whose body is available to solid-checker and has one explicit reactive behavior.".into(),
+        ),
+        StaticDefectKind::ReactiveCallbackUnresolved { callee } => (
+            format!(
+                "{callee} invokes its callback synchronously after tracking has ended, but the exact callback body cannot be resolved; whether it reads reactive state in that untracked extent cannot be certified"
+            ),
+            "Pass an exact synchronous function literal directly, or keep the callback body in the project in a form solid-checker can inspect.".into(),
+        ),
+        StaticDefectKind::StructuredReturnUnresolved {
+            function,
+            property,
+            reason,
+        } => (
+            format!(
+                "exported function {function} returns shorthand property {property:?}, but its runtime value cannot be resolved exactly ({reason}); whether that property is a reactive accessor or store path cannot be certified"
+            ),
+            "Use an exact project-relative named/default import, return an explicitly resolved local binding, or provide an audited package contract for the external value.".into(),
+        ),
         StaticDefectKind::ReactiveHandlerRead {
             attribute,
             expression,
@@ -274,6 +302,15 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::UnknownCallbackExecution { .. } => {
             "TypeScript resolved the callable parameter, but no exact runtime contract proves when the external helper invokes it"
+        }
+        StaticDefectKind::ReactiveDispatchUnresolved { .. } => {
+            "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven"
+        }
+        StaticDefectKind::ReactiveCallbackUnresolved { .. } => {
+            "the built-in callback position is type-correct and synchronous, but the callback body's reactive reads are not available for proof"
+        }
+        StaticDefectKind::StructuredReturnUnresolved { .. } => {
+            "the exported shorthand value is type-correct, but its exact runtime binding and reactive return behavior are not proven"
         }
         StaticDefectKind::HandlerValueUnresolved { .. } if defect.uncertain => {
             "TypeScript deliberately skips this hyphenated JSX attribute name, and the runtime handler shape is not closed by the available compiler facts"

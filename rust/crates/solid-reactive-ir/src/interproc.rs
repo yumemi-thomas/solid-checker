@@ -15,7 +15,7 @@ use std::{
 use solid_dialect::Primitive;
 use solid_facts::ProjectFacts;
 use solid_facts::core::Span;
-use typefacts::{CallKind, Location};
+use typefacts::{CallKind, Location, ResolvedCallValidity};
 
 use super::runtime_semantics::{
     RuntimeArgumentBehavior, argument_behavior, potentially_callable,
@@ -24,8 +24,9 @@ use super::runtime_semantics::{
 use super::{
     ContractAnalysis, ContractCallback, ContractExport, ContractGenerationObligation,
     ContractGraph, ContractReturn, ContractSemantics, EntitySymbols, ExecutionRole,
-    FunctionBoundary, ProjectIndexes, ReactiveRead, ReactiveSourceKind, SemanticLookup, SymbolId,
-    allowed_callback_spans, assigned_member_function_contains, containing_summary_function_indexed,
+    FunctionBoundary, ProjectIndexes, ReactiveRead, ReactiveSourceKind, SemanticLookup,
+    StaticDefect, StaticDefectKind, SymbolId, allowed_callback_spans,
+    assigned_member_function_contains, containing_summary_function_indexed,
     contract_callback_execution, contract_export_summaries, contract_export_summaries_incremental,
     function_indices_by_path, functions_for_path, location, location_order, primitive_name,
     propagate_returned_summary_deltas, propagate_summary_deltas, push_contract_callback,
@@ -186,6 +187,7 @@ impl FunctionBoundary for SummaryNode {
 #[derive(Clone)]
 pub(super) struct InterproceduralResult {
     pub(super) reads: Arc<[ReactiveRead]>,
+    pub(super) dispatch_obligations: Arc<[StaticDefect]>,
     pub(super) exports: Arc<BTreeMap<String, ContractExport>>,
     pub(super) contract_generation_obligations: Arc<[ContractGenerationObligation]>,
     pub(super) factory_instances: usize,
@@ -1632,6 +1634,62 @@ struct StructuredReturnDiscovery<'a, 'facts> {
 }
 
 impl StructuredReturnDiscovery<'_, '_> {
+    /// Why a shorthand return value cannot be resolved strongly enough to
+    /// prove either a reactive leaf or an exact non-reactive project value.
+    /// `None` means the binder/import graph closed the question.
+    fn unresolved_shorthand_reason(
+        &self,
+        file: &solid_facts::FileFacts,
+        span: Span,
+    ) -> Option<String> {
+        let property = file
+            .ast
+            .object_properties
+            .iter()
+            .find(|property| property.value == span && property.key == property.value)?;
+        let Some(declaration) = property.shorthand_binding else {
+            return Some(
+                "the shorthand resolves only through a global or unavailable binding".into(),
+            );
+        };
+        let Some((module, binding)) = file.ast.imports.iter().find_map(|import| {
+            import
+                .bindings
+                .iter()
+                .find(|binding| binding.local.span == declaration)
+                .map(|binding| (import.module.as_str(), binding))
+        }) else {
+            // A local declaration is exact. Whether it is reactive is answered
+            // by the local accessor/source indexes, so absence there is a
+            // proven non-reactive result rather than uncertainty.
+            return None;
+        };
+        if binding.type_only || matches!(binding.kind, solid_facts::ast::ImportKind::Namespace) {
+            return None;
+        }
+        if !matches!(
+            binding.kind,
+            solid_facts::ast::ImportKind::Named | solid_facts::ast::ImportKind::Default
+        ) {
+            return None;
+        }
+        if !module.starts_with("./") && !module.starts_with("../") {
+            return Some(format!(
+                "{module:?} is a bare or path-mapped specifier with no exact project-local target"
+            ));
+        }
+        if self.relative_module_file(file, module).is_none() {
+            return Some(format!(
+                "relative specifier {module:?} has no single project-local target"
+            ));
+        }
+        // The module target itself is exact, which closes the question. A
+        // missing or cyclic export past that point is a TypeScript resolution
+        // diagnostic (for example TS2303), not an independent checker
+        // obligation, so it is deliberately not walked here.
+        None
+    }
+
     fn parameter_return(
         &self,
         file: &solid_facts::FileFacts,
@@ -2877,7 +2935,11 @@ pub(super) struct InterproceduralResultReadContext<'a, 'b> {
 fn interprocedural_result_reads_for_file(
     file: &solid_facts::FileFacts,
     context: &InterproceduralResultReadContext<'_, '_>,
-) -> (Vec<ReactiveRead>, HashSet<InterproceduralResultDependency>) {
+) -> (
+    Vec<ReactiveRead>,
+    Vec<StaticDefect>,
+    HashSet<InterproceduralResultDependency>,
+) {
     let InterproceduralResultReadContext {
         result:
             InterproceduralResultView {
@@ -2895,6 +2957,7 @@ fn interprocedural_result_reads_for_file(
         lookup,
     } = context;
     let mut result = Vec::new();
+    let mut dispatch_obligations = Vec::new();
     let mut dependencies = HashSet::new();
     let mut seen = HashSet::new();
     let allowed = allowed_callback_spans(file, lookup);
@@ -2903,38 +2966,89 @@ fn interprocedural_result_reads_for_file(
             continue;
         }
         let callee = location(file.path.shared(), call.callee);
-        let Some(symbol) = lookup.callee_symbol(file, call.callee) else {
+        let label = call
+            .static_callee(&file.source)
+            .map(str::to_owned)
+            .unwrap_or_else(|| "dynamic call".into());
+        let valid_call = lookup
+            .resolved_callee_call(file, call.callee)
+            .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
+        let candidate_symbols = lookup.callee_symbols(file, call.callee);
+        if candidate_symbols.is_empty()
+            && file
+                .ast
+                .computed_members
+                .binary_search(&file.ast.peel_ts_sugar_span(call.callee))
+                .is_ok()
+        {
+            if valid_call {
+                dispatch_obligations.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: label,
+                        member: None,
+                    },
+                    location: callee,
+                    analysis_context: "computed-call-target-unresolved".into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+            }
+            continue;
+        }
+        let ambiguous_candidates = (candidate_symbols.len() > 1).then_some(&candidate_symbols);
+        let Some(symbol) = candidate_symbols
+            .first()
+            .map(SymbolId::as_str)
+            .or_else(|| lookup.callee_symbol(file, call.callee))
+        else {
             continue;
         };
         dependencies.insert(InterproceduralResultDependency::Symbol(SymbolId::from(
             symbol,
         )));
-        let (label, mut effective, target) = if let Some(target) = by_symbol.get(symbol).copied() {
+        let (label, mut effective, target) = if let Some(candidates) = ambiguous_candidates {
+            let mut candidate_summaries = Vec::with_capacity(candidates.len());
+            for candidate in candidates {
+                dependencies.insert(InterproceduralResultDependency::Symbol(candidate.clone()));
+                if let Some(index) = by_symbol.get(candidate) {
+                    candidate_summaries.push(&summaries[*index]);
+                }
+            }
+            let equivalent = candidate_summaries.len() == candidates.len()
+                && candidate_summaries
+                    .split_first()
+                    .is_some_and(|(first, rest)| {
+                        rest.iter()
+                            .all(|candidate| equivalent_summary_reads(candidate, first))
+                    });
+            if !equivalent {
+                dispatch_obligations.push(StaticDefect {
+                    kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                        callee: label,
+                        member: None,
+                    },
+                    location: callee,
+                    analysis_context: "runtime-call-targets-diverge".into(),
+                    fixes: vec![],
+                    uncertain: true,
+                });
+                continue;
+            }
             (
-                nodes[target]
-                    .name
-                    .clone()
-                    .or_else(|| call.static_callee(&file.source).map(str::to_owned))
-                    .unwrap_or_else(|| "helper".into()),
+                label,
+                candidate_summaries[0].to_vec(),
+                by_symbol.get(&candidates[0]).copied(),
+            )
+        } else if let Some(target) = by_symbol.get(symbol).copied() {
+            (
+                nodes[target].name.clone().unwrap_or(label),
                 summaries[target].to_vec(),
                 Some(target),
             )
         } else if let Some(summary) = returned_bindings.get(symbol) {
-            (
-                call.static_callee(&file.source)
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| "returned helper".into()),
-                summary.clone(),
-                None,
-            )
+            (label, summary.clone(), None)
         } else if contract_callbacks.contains_key(symbol) {
-            (
-                call.static_callee(&file.source)
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| "contract callback".into()),
-                Vec::new(),
-                None,
-            )
+            (label, Vec::new(), None)
         } else {
             continue;
         };
@@ -2971,21 +3085,41 @@ fn interprocedural_result_reads_for_file(
                 let Some(argument) = call.arguments.get(*parameter) else {
                     continue;
                 };
-                let Some(implementation) =
-                    lookup.member_value_symbol_at(file, argument.span, property)
-                else {
+                let implementations = lookup.member_value_symbols_at(file, argument.span, property);
+                let mut member_summaries = Vec::with_capacity(implementations.len());
+                for implementation in &implementations {
+                    dependencies.insert(InterproceduralResultDependency::Symbol(
+                        implementation.clone(),
+                    ));
+                    if let Some(index) = by_symbol.get(implementation) {
+                        member_summaries.push(&summaries[*index]);
+                    }
+                }
+                let equivalent = member_summaries.len() == implementations.len()
+                    && member_summaries.split_first().is_some_and(|(first, rest)| {
+                        rest.iter()
+                            .all(|candidate| equivalent_summary_reads(candidate, first))
+                    });
+                if !equivalent {
+                    if valid_call {
+                        dispatch_obligations.push(StaticDefect {
+                            kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                                callee: label.clone(),
+                                member: Some(property.clone()),
+                            },
+                            location: location(file.path.shared(), argument.span),
+                            analysis_context: if implementations.is_empty() {
+                                "parameter-member-target-unresolved".into()
+                            } else {
+                                "parameter-member-targets-diverge".into()
+                            },
+                            fixes: vec![],
+                            uncertain: true,
+                        });
+                    }
                     continue;
-                };
-                dependencies.insert(InterproceduralResultDependency::Symbol(
-                    implementation.clone(),
-                ));
-                let Some(member_summary) = by_symbol
-                    .get(&implementation)
-                    .map(|index| &summaries[*index][..])
-                else {
-                    continue;
-                };
-                for read in member_summary {
+                }
+                for read in member_summaries[0].iter() {
                     push_unique_summary_read(&mut effective, read.clone());
                 }
             }
@@ -3092,7 +3226,7 @@ fn interprocedural_result_reads_for_file(
             }
         }
     }
-    (result, dependencies)
+    (result, dispatch_obligations, dependencies)
 }
 
 fn cached_reactive_source(
@@ -4005,6 +4139,7 @@ fn interprocedural_reads(
         cache.files.values().map(|file| file.reads.len()).sum()
     });
     let mut result = Vec::with_capacity(result_capacity);
+    let mut dispatch_obligations = Vec::new();
     let mut result_reused_files = 0;
     let mut result_recomputed_files = 0;
     let result_view = InterproceduralResultView {
@@ -4031,9 +4166,10 @@ fn interprocedural_reads(
             let per_file = parallel_file_results(&facts.files, |file| {
                 interprocedural_result_reads_for_file(file, &result_read_context)
             });
-            for (file, (reads, dependencies)) in facts.files.iter().zip(per_file) {
+            for (file, (reads, obligations, dependencies)) in facts.files.iter().zip(per_file) {
                 result_recomputed_files += 1;
                 result.extend(reads.iter().cloned());
+                dispatch_obligations.extend(obligations.iter().cloned());
                 for dependency in &dependencies {
                     add_interprocedural_dependency_user(&mut cache.dependency_users, dependency);
                 }
@@ -4042,6 +4178,7 @@ fn interprocedural_reads(
                     CachedInterproceduralResultFile {
                         dependencies,
                         reads,
+                        dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
                     },
                 );
@@ -4087,12 +4224,14 @@ fn interprocedural_reads(
                 {
                     result_reused_files += 1;
                     result.extend(cached.reads.iter().cloned());
+                    dispatch_obligations.extend(cached.dispatch_obligations.iter().cloned());
                     continue;
                 }
                 result_recomputed_files += 1;
-                let (reads, dependencies) =
+                let (reads, obligations, dependencies) =
                     interprocedural_result_reads_for_file(file, &result_read_context);
                 result.extend(reads.iter().cloned());
+                dispatch_obligations.extend(obligations.iter().cloned());
                 if let Some(previous) = cache.files.remove(file.path.as_str()) {
                     for dependency in previous.dependencies.difference(&dependencies) {
                         remove_interprocedural_dependency_user(
@@ -4120,6 +4259,7 @@ fn interprocedural_reads(
                     CachedInterproceduralResultFile {
                         dependencies,
                         reads,
+                        dispatch_obligations: obligations,
                         compiler: file.compiler.clone(),
                     },
                 );
@@ -4144,7 +4284,75 @@ fn interprocedural_reads(
     } else {
         for file in &facts.files {
             result_recomputed_files += 1;
-            result.extend(interprocedural_result_reads_for_file(file, &result_read_context).0);
+            let (reads, obligations, _) =
+                interprocedural_result_reads_for_file(file, &result_read_context);
+            result.extend(reads);
+            dispatch_obligations.extend(obligations);
+        }
+    }
+    // An exported helper that invokes a member supplied by a parameter has
+    // callers outside the analyzed project. Even if every visible call site
+    // selects one exact implementation, those unseen callers keep its
+    // reactive-read contract open. Record that boundary instead of exporting
+    // an empty (and therefore falsely safe) summary.
+    for node in nodes.iter().filter(|node| node.exported) {
+        let Some(&file) = project_indexes.files_by_path.get(node.path.as_str()) else {
+            continue;
+        };
+        let Some(function) = project_indexes
+            .ast_files_by_path
+            .get(file.path.as_str())
+            .and_then(|index| index.function_by_span(node.span))
+        else {
+            continue;
+        };
+        let allowed = allowed_callback_spans(file, context.lookup);
+        let direct_member = file.ast.calls.iter().find_map(|call| {
+            if !function.body.contains(call.span)
+                || !containing_ast_function(&file.ast, call.span)
+                    .is_some_and(|owner| owner.span == function.span)
+            {
+                return None;
+            }
+            if semantic_execution_role(
+                file,
+                call.callee,
+                &allowed,
+                entities,
+                symbol_names,
+                context.lookup,
+            ) == ExecutionRole::TrackedJsx
+            {
+                return None;
+            }
+            if context
+                .lookup
+                .resolved_callee_call(file, call.callee)
+                .and_then(|resolved| resolved.declaration.as_ref())
+                .is_some_and(|declaration| declaration.standard_library)
+            {
+                return None;
+            }
+            let (receiver, property) = context.lookup.member_callee_receiver(file, call.callee)?;
+            node.parameters
+                .iter()
+                .any(|parameter| parameter == &receiver)
+                .then_some(property)
+        });
+        if let Some(property) = direct_member {
+            dispatch_obligations.push(StaticDefect {
+                kind: StaticDefectKind::ReactiveDispatchUnresolved {
+                    callee: node
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| "exported helper".into()),
+                    member: Some(property.clone()),
+                },
+                location: location(Arc::from(node.path.as_str()), node.span),
+                analysis_context: "exported-parameter-member-dispatch".into(),
+                fixes: vec![],
+                uncertain: true,
+            });
         }
     }
     let factory_instances = returned_bindings
@@ -4206,6 +4414,65 @@ fn interprocedural_reads(
             }
         }
     }
+    let structured_discovery = StructuredReturnDiscovery {
+        facts,
+        nodes: &nodes,
+        indexes: &indexes,
+        by_symbol: &by_symbol,
+        summaries: &summaries,
+        returned: &returned,
+        structured_returns: &structured_returns,
+        accessors,
+        source_kinds,
+        source_primitives,
+        bundled_returns,
+        contract_returns,
+        entities,
+        symbol_names,
+        lookup,
+    };
+    for node in nodes.iter().filter(|node| node.exported) {
+        let Some(file) = lookup.file_by_path(node.path.as_str()) else {
+            continue;
+        };
+        let Some(function) = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == node.span)
+        else {
+            continue;
+        };
+        for property in function
+            .expression_return
+            .iter()
+            .chain(file.ast.returns.iter().filter(|returned| {
+                containing_ast_function(&file.ast, returned.span)
+                    .is_some_and(|owner| owner.span == function.span)
+            }))
+            .flat_map(|returned| returned.properties())
+        {
+            let Some(reason) =
+                structured_discovery.unresolved_shorthand_reason(file, property.value)
+            else {
+                continue;
+            };
+            dispatch_obligations.push(StaticDefect {
+                kind: StaticDefectKind::StructuredReturnUnresolved {
+                    function: node
+                        .name
+                        .clone()
+                        .unwrap_or_else(|| "exported function".into()),
+                    property: property.name.to_string(),
+                    reason,
+                },
+                location: location(file.path.shared(), property.value),
+                analysis_context: "exported-structured-return".into(),
+                fixes: vec![],
+                uncertain: true,
+            });
+        }
+    }
     let contract_analysis = ContractAnalysis {
         summaries: &summaries,
         returned: &returned,
@@ -4238,6 +4505,7 @@ fn interprocedural_reads(
     let results_and_exports = phase_started.elapsed();
     InterproceduralResult {
         reads: result.into(),
+        dispatch_obligations: dispatch_obligations.into(),
         exports,
         contract_generation_obligations: contract_generation_obligations.into(),
         factory_instances,

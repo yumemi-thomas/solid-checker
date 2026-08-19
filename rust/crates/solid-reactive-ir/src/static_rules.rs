@@ -910,6 +910,13 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                         continue;
                     }
                     let Some(callback) = inline_standard_callback(ctx, file, filter) else {
+                        report_opaque_standard_callback(
+                            ctx,
+                            draft,
+                            file,
+                            filter,
+                            &analysis_context,
+                        );
                         continue;
                     };
                     // The callback body runs before the awaiting computation
@@ -1001,6 +1008,45 @@ fn inline_standard_callback<'f>(
     }
     let callback = callback_argument_literal(file, argument.span)?;
     (!callback.r#async).then_some(callback)
+}
+
+/// Preserve the proof obligation for an exact built-in synchronous callback
+/// position whose body cannot be inspected. Invalid argument shapes do not
+/// reach `is_proven_array_filter` and remain TypeScript-owned.
+fn report_opaque_standard_callback(
+    ctx: &AnalysisContext<'_>,
+    draft: &mut ProgramDraft,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    analysis_context: &str,
+) {
+    let Some(argument) = call.arguments.first() else {
+        return;
+    };
+    let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
+        return;
+    };
+    let callability = ctx
+        .semantic_lookup
+        .smallest_contained_callability(file.path.as_str(), argument.span);
+    if !is_proven_array_filter(resolved, callability) {
+        return;
+    }
+    draft.push_defect(
+        "reactive-dispatch-unresolved",
+        StaticDefect {
+            kind: StaticDefectKind::ReactiveCallbackUnresolved {
+                callee: call
+                    .static_callee(&file.source)
+                    .unwrap_or("Array.prototype.filter")
+                    .to_owned(),
+            },
+            location: location(file.path.shared(), argument.span),
+            analysis_context: analysis_context.to_owned(),
+            fixes: vec![],
+            uncertain: false,
+        },
+    );
 }
 
 /// The resolved location of an async function's member-read analysis: its

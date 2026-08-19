@@ -1,0 +1,45 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-structured-unresolved/App.ts",
+      "start": 462,
+      "end": 472,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-structured-unresolved/App.ts",
+      "start": 530,
+      "end": 543,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-structured-unresolved/App.ts",
+      "start": 600,
+      "end": 616,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-structured-unresolved/App.ts",
+      "start": 670,
+      "end": 685,
+      "fixes": 0
+    }
+  ]
+}

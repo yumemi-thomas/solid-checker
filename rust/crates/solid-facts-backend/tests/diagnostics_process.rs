@@ -651,10 +651,10 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
         ("recursive", 1, "readA"),
         ("returned-closure", 1, "readCount"),
         ("store-flow", 1, "\"state.count\""),
-        // Four: the class, object, and generic-function calls, plus
-        // `invoke(objectReader, …)` whose receiver is exactly one object at
-        // that site. The sibling `invoke(cond ? a : b, …)` stays silent.
-        ("interprocedural-methods-v2", 4, "count"),
+        // Five: class, object, generic-function, the exact object passed to
+        // `invoke`, and the conditional whose candidates have equivalent
+        // reactive summaries. Divergent and computed dispatch are SC9012.
+        ("interprocedural-methods-v2", 5, "count"),
     ] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             return;

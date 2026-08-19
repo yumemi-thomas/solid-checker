@@ -255,6 +255,9 @@ pub(crate) fn collect_project<'facts>(
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.strict_read_obligations += interprocedural.reads.len();
     draft.reads.extend(interprocedural.reads.iter().cloned());
+    for obligation in interprocedural.dispatch_obligations.iter() {
+        draft.push_defect("reactive-dispatch-unresolved", obligation.clone());
+    }
     static_rules::component_returns_conditionally(ctx, draft);
     draft.contract_exports = interprocedural.exports.clone();
     draft.contract_generation_obligations =

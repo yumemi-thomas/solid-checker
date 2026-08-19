@@ -559,6 +559,61 @@
       "expect": "silent",
       "why": "The child-content conflicts no type relates: `innerHTML` with `textContent`, and `innerHTML` with JSX children. Both are declared props whose values are legal, so TypeScript says nothing about them overwriting each other -- which is why only the `children` pair was narrowed away and the arm survives.",
       "code": "export const Both = () => <div innerHTML=\"x\" textContent=\"y\" />;\nexport const WithChildren = () => <div innerHTML=\"x\"><span /></div>;\n"
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "Both object implementations satisfy the same TypeScript interface, but one reads a signal and the other is inert. TypeScript deliberately does not express reactive-read behavior, so the runtime union must remain an explicit proof obligation rather than being narrowed to either candidate.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst reactive = { read() { return count(); } };\nconst quiet = { read() { return 0; } };\nfunction invoke(reader: { read(): number }) { return reader.read(); }\nexport function App() {\n  const value = invoke(Math.random() > 0.5 ? reactive : quiet);\n  return <div>{value}</div>;\n}\n"
+    },
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "Solid 1.x has the same structural TypeScript boundary: both implementations type-check, while only one reads a signal. The shared dispatch analysis must preserve that unresolved reactive behavior under the v1 rule identity.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst reactive = { read() { return count(); } };\nconst quiet = { read() { return 0; } };\nfunction invoke(reader: { read(): number }) { return reader.read(); }\nexport function App() {\n  const value = invoke(Math.random() > 0.5 ? reactive : quiet);\n  return <div>{value}</div>;\n}\n"
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "dialect": "v2",
+      "expect": "removed-because-redundant",
+      "allow": [
+        2349
+      ],
+      "why": "Calling a computed numeric element is already TS2349. SC9012 requires a TypeScript-valid call and must not duplicate that invalid-call diagnostic merely because the runtime target is unresolved.",
+      "code": "const values = [1, 2];\nexport function App() {\n  const value = values[Math.random() > 0.5 ? 0 : 1]();\n  return <div>{value}</div>;\n}\n"
+    },
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "allow": [
+        2349
+      ],
+      "why": "The v1 projection shares the same hard TypeScript boundary: an invalid computed call remains TypeScript-owned and does not become a reactivity proof obligation.",
+      "code": "const values = [1, 2];\nexport function App() {\n  const value = values[Math.random() > 0.5 ? 0 : 1]();\n  return <div>{value}</div>;\n}\n"
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "dialect": "v2",
+      "expect": "silent",
+      "why": "The published API accepts the wrapper result as a leaf callback, but the wrapper decides what function actually reaches createTrackedEffect. A specific forbidden operation is not proven and safety is not proven, so the leaf path must remain explicit as SC9012.",
+      "code": "import { createTrackedEffect, onCleanup } from \"solid-js\";\ndeclare function wrap(callback: () => void): () => void;\ncreateTrackedEffect(wrap(() => onCleanup(() => {})));\n"
+    },
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "Solid 1.x createReaction has the same type-correct opaque-callback boundary. The wrapper may preserve, replace, defer, or eagerly run the arrow, so neither a leaf violation nor leaf safety is provable.",
+      "code": "import { createReaction, onCleanup } from \"solid-js\";\ndeclare function wrap(callback: () => void): () => void;\nconst track = createReaction(wrap(() => onCleanup(() => {})));\ntrack(() => 1);\n"
+    },
+    {
+      "rule": "v1/reactive-dispatch-unresolved",
+      "dialect": "v1",
+      "expect": "silent",
+      "why": "A global shorthand return is valid TypeScript, but the project-local binder cannot prove whether the runtime value is a reactive leaf. SC9012 keeps the exported structured return explicitly uncertifiable.",
+      "code": "export function factory() {\n  return { structuredClone };\n}\n"
     }
   ]
 }

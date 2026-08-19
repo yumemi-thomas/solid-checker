@@ -340,6 +340,29 @@ pub enum StaticDefectKind {
         source: String,
         callee: String,
     },
+    /// A type-correct call can reach more than one runtime implementation,
+    /// and those implementations do not have one equivalent reactive-read
+    /// summary. Silence would certify whichever implementation happened not
+    /// to be selected by the analyzer.
+    ReactiveDispatchUnresolved {
+        callee: String,
+        member: Option<String>,
+    },
+    /// An exact synchronous callback position is known, but the callback
+    /// value's body is not an inspectable synchronous function literal. The
+    /// enclosing operation is type-correct, so silence would certify behavior
+    /// that neither the AST nor a contract proves.
+    ReactiveCallbackUnresolved {
+        callee: String,
+    },
+    /// An exported structured return contains a shorthand value whose exact
+    /// binding cannot be joined to the analyzed project. Omitting the property
+    /// would make a possibly-reactive return look inert.
+    StructuredReturnUnresolved {
+        function: String,
+        property: String,
+        reason: String,
+    },
     ReactiveHandlerRead {
         attribute: String,
         expression: String,
@@ -376,6 +399,9 @@ impl StaticDefectKind {
                 | Self::PackageContractEnvironmentDependent { .. }
                 | Self::UnknownCallbackExecution { .. }
                 | Self::ReactiveSourceUncaptured { .. }
+                | Self::ReactiveDispatchUnresolved { .. }
+                | Self::ReactiveCallbackUnresolved { .. }
+                | Self::StructuredReturnUnresolved { .. }
         )
     }
 

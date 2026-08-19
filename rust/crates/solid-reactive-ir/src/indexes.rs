@@ -1089,28 +1089,24 @@ impl<'a> SemanticLookup<'a> {
         Some((receiver.clone(), property_name))
     }
 
-    /// The single implementation `value.property` resolves to, or `None`.
+    /// Every exact implementation `value.property` may resolve to.
     ///
-    /// Used per call site, so an argument that is exactly one object proves
-    /// what runs there. Anything else -- an unresolved value, or a
-    /// conditional that could be either of two objects -- is not a proof and
-    /// answers `None`.
-    pub(super) fn member_value_symbol_at(
+    /// This retains a finite runtime union rather than silently selecting one
+    /// candidate. Consumers may certify it only after proving every candidate
+    /// has equivalent behavior; an empty result is missing evidence, not
+    /// safety.
+    pub(super) fn member_value_symbols_at(
         &self,
         file: &FileFacts,
         value: Span,
         property_name: &str,
-    ) -> Option<SymbolId> {
+    ) -> Vec<SymbolId> {
         let mut symbols = Vec::new();
         let mut visited = HashSet::new();
         self.member_value_symbols(file, value, property_name, &mut visited, &mut symbols);
         symbols.sort_unstable();
         symbols.dedup();
-        if symbols.len() == 1 {
-            symbols.pop()
-        } else {
-            None
-        }
+        symbols
     }
 
     /// Resolve `parameter.member()` through the exact project call sites of

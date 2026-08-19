@@ -4,5 +4,6 @@
     "paths": {
       "@internal/*": ["*"]
     }
-  }
+  },
+  "files": ["index.ts"]
 }
