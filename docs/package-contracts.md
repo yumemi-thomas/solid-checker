@@ -159,22 +159,72 @@ The same `--emit-contract` workflow can generate this file when the package
 source and a TypeScript project for it are available, or it can be authored
 against the contract schema and checked with `--validate-contract`.
 
-Before checking, inspect imported Solid-dependent packages and their contract
-coverage:
+## Checking contract coverage and freshness
+
+Inspect imported Solid-dependent packages and their contract coverage:
 
 ```sh
-solid-checker --project app/tsconfig.json --check-contracts
+solid-checker contract check
 ```
 
-The command reports bundled, published, local, explicit, unverified, and
-missing contracts. It exits with status 1 when a package whose manifest
-depends on or peers with Solid has no certifiable contract.
+`solid-checker --project app/tsconfig.json --check-contracts` is the same
+report; `contract check` accepts the same `--project`, `--format`, and
+`--contract` options and defaults to `tsconfig.json` and text output. Each
+package is reported as exactly one status:
 
-Normal analysis performs the same completeness check. A missing contract emits
-the uncertifiable `SC9005 package-contract-missing` finding at the package
-import, changes the snapshot status to `uncertifiable`, and causes `--certify`
-to exit with status 1. This behavior is shared by one-shot and retained-daemon
-checks. Use `--check-contracts` when only the focused coverage report is needed.
+| Status | Meaning | Certifies |
+| --- | --- | --- |
+| `bundled` | This checker's own audited contract matches the installed version. | yes |
+| `published` | The package ships a contract for its installed version. | yes |
+| `local` | A project-owned contract under `.solid-checker/contracts/`. | yes |
+| `explicit` | A contract passed with `--contract`. | yes |
+| `unverified` | A contract whose evidence is `inferred`; its claims were never reviewed. | no |
+| `stale` | A contract that describes a **different version** than the one installed. | no |
+| `missing` | No contract for a package whose manifest depends on or peers with Solid. | no |
+
+Every non-certifying status prints the action that resolves it, and the command
+exits with status 1 when any package needs action, so it works as a CI gate.
+The JSON format reports, per package, a `remedy` field carrying the same action
+and a `detail` field naming the reason when the status alone does not say it
+(the two disagreeing versions behind `stale`, the evidence kind behind
+`unverified`). Both are omitted for a status that certifies. The report also
+carries `missing` (the count of packages needing action) and `stale` (the drift
+subset of that count).
+
+### Stale contracts
+
+A contract names the exact package version it was generated and reviewed
+against. When the installed version moves — an upgrade, a lockfile refresh, a
+different resolution — the contract stops being evidence about the package the
+project actually has, and the checker refuses to apply it.
+
+For a project-owned or published contract, the remedy is to regenerate and
+re-review it:
+
+```sh
+solid-checker contract generate --package-root node_modules/reactive-package \
+  --output .solid-checker/contracts/reactive-package/solid-reactivity.json
+```
+
+Regeneration rewrites the contract and its review checklist; the checklist
+still has to be reviewed, because generation never promotes inferred claims to
+reviewed ones. For a *bundled* contract the remedy is different and the report
+says so: the consumer does not own that artifact, so the options are to install
+the version this checker audited or to upgrade `solid-checker` to a release
+that audits the installed one.
+
+Analysis fails closed on a stale contract rather than continuing without it: a
+contract for another version is not weaker evidence, it is evidence about a
+different artifact. The error names both versions and the same regeneration
+command the report prints, so a stale contract surfaces the same way whether it
+is found by `contract check` or by an ordinary run.
+
+Normal analysis performs the same completeness check for *missing* contracts. A
+missing contract emits the uncertifiable `SC9005 package-contract-missing`
+finding at the package import, changes the snapshot status to `uncertifiable`,
+and causes `--certify` to exit with status 1. This behavior is shared by
+one-shot and retained-daemon checks. Use `contract check` when only the focused
+coverage report is needed.
 
 Validate contracts and their artifacts without opening a TypeScript project:
 

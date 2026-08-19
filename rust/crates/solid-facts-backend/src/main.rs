@@ -193,34 +193,66 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             &facts,
             &request.contract_paths,
         )?;
-        let missing = statuses
+        let actionable = statuses
             .iter()
-            .filter(|status| matches!(status.status.as_str(), "missing" | "unverified"))
+            .filter(|status| status.needs_action())
             .collect::<Vec<_>>();
+        let stale = statuses
+            .iter()
+            .filter(|status| status.status == "stale")
+            .count();
+        // The contract report has no "default" rendering distinct from text,
+        // and `contract check` is meant to be run with no flags at all, so the
+        // unspecified format resolves to text instead of failing.
         match request.format.as_str() {
             "json" => {
                 let report = serde_json::json!({
                     "packages": statuses,
-                    "missing": missing.len(),
+                    // `missing` keeps its original meaning: the number of
+                    // packages whose contract cannot certify. `stale` breaks
+                    // out the drift subset so CI can report it separately.
+                    "missing": actionable.len(),
+                    "stale": stale,
                 });
                 let mut stdout = io::stdout().lock();
                 stdout.write_all(&json_output::go_compatible(&report, true)?)?;
                 stdout.write_all(b"\n")?;
             }
-            "text" => {
+            "text" | "default" => {
                 for status in &statuses {
                     println!(
                         "{}: {} ({})",
                         status.name, status.status, status.contract_path
                     );
+                    if let Some(detail) = &status.detail {
+                        println!("  {detail}");
+                    }
+                    if let Some(remedy) = &status.remedy {
+                        println!("  -> {remedy}");
+                    }
                 }
                 if statuses.is_empty() {
                     println!("No imported Solid packages need contracts.");
+                } else if actionable.is_empty() {
+                    println!(
+                        "\nEvery imported Solid package has a contract for its installed version."
+                    );
+                } else {
+                    println!(
+                        "\n{} of {} package contracts need action{}.",
+                        actionable.len(),
+                        statuses.len(),
+                        if stale > 0 {
+                            format!(" ({stale} stale)")
+                        } else {
+                            String::new()
+                        }
+                    );
                 }
             }
             format => return Err(format!("unsupported format {format:?}").into()),
         }
-        return Ok(i32::from(!missing.is_empty()));
+        return Ok(i32::from(!actionable.is_empty()));
     }
     if diagnostics {
         let (analysis, diagnostic_timings) = analyze_project_measured_with(
@@ -426,7 +458,9 @@ fn print_help() {
            --format <default|text|json> Output format (default: default)\n\
            --dialect <ID>               Solid dialect (default: detect from solid-js; fallback: solid-v2)\n\
            --certify                    Exit 1 unless the project is certified\n\
-           --check-contracts            Report imported Solid packages without contracts\n\
+           --check-contracts            Report imported Solid packages whose contract is\n\
+                                        missing, unverified, or stale (audited against a\n\
+                                        version this project no longer installs)\n\
            --contract <PATH>            Override/discover a package contract (repeatable)\n\
            --validate-contract <PATH>   Validate a contract and artifact hashes\n\
            --emit-contract <PATH>       Write a generated solid-reactivity.json contract\n\

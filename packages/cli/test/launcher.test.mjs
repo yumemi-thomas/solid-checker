@@ -81,3 +81,39 @@ test("loads the current platform's optional native package", () => {
     rmSync(dependencyRoot, { recursive: true, force: true });
   }
 });
+
+test("contract check forwards --check-contracts and the native exit code", () => {
+  const directory = mkdtempSync(join(tmpdir(), "solid-checker-cli-"));
+  const native = join(directory, "solid-checker-native");
+  const capture = join(directory, "arguments");
+  writeFileSync(native, `#!/bin/sh
+printf '%s\n' "$@" > "$SOLID_CHECKER_TEST_CAPTURE"
+printf 'reactive-package: stale\n'
+exit 1
+`);
+  chmodSync(native, 0o700);
+
+  const result = spawnSync(process.execPath, [
+    new URL("../bin/solid-checker.mjs", import.meta.url).pathname,
+    "contract",
+    "check",
+    "--project",
+    "tsconfig.json"
+  ], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      SOLID_CHECKER_NATIVE_BIN: native,
+      SOLID_CHECKER_TEST_CAPTURE: capture
+    }
+  });
+
+  // A package needing action must reach CI as a non-zero exit, not just as text.
+  assert.equal(result.status, 1);
+  assert.equal(result.stdout, "reactive-package: stale\n");
+  assert.deepEqual(readFileSync(capture, "utf8").trim().split("\n"), [
+    "--check-contracts",
+    "--project",
+    "tsconfig.json"
+  ]);
+});
