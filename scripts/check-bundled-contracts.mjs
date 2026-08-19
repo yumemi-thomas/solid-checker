@@ -22,12 +22,79 @@ import { loadDialectManifests, root } from "./dialect-manifests.mjs";
 // combination outright. A dialect's non-probed packages are installed
 // alongside its probed ones so those peers resolve to the audited release
 // rather than whatever npm would pick.
+const probeModes = [
+  { name: "client", conditions: ["browser"] },
+  { name: "server", conditions: ["node"] },
+  { name: "development", conditions: ["browser", "development"] },
+  { name: "production", conditions: ["browser", "production"] },
+];
+
+/**
+ * The condition modes a contract's claims are stated for.
+ *
+ * A contract may deliberately describe fewer than all four. Solid 1.x resolves
+ * a genuinely different artifact under `node` — one where createEffect never
+ * runs and memos never re-run — so a contract that states client semantics is
+ * not making a claim about it. Restricting the modes records that boundary
+ * instead of leaving the suite to check a claim the contract never made; the
+ * server build needs its own contract, which is a separate artifact and not yet
+ * written.
+ */
+const contractModes = contract =>
+  contract.probeModes
+    ? probeModes.filter(mode => contract.probeModes.includes(mode.name))
+    : probeModes;
+let failures = 0;
+const fail = message => {
+  failures++;
+  console.error(`FAIL ${message}`);
+};
+const pass = message => console.log(`ok   ${message}`);
+const unprobedPath = join(root, "pkg/contracts/bundled/unprobed-claims.json");
+let unprobed = { schemaVersion: 1, claims: [] };
+try {
+  unprobed = JSON.parse(readFileSync(unprobedPath, "utf8"));
+} catch (error) {
+  fail(`cannot read ${unprobedPath}: ${error.message}`);
+}
+if (unprobed.schemaVersion !== 1 || !Array.isArray(unprobed.claims)) {
+  fail(`${unprobedPath} must use schemaVersion 1 with a claims array`);
+}
+const unprobedUsed = new Set();
+/** Whether a claim is declared unprobeable, marking the declaration as used. */
+const isUnprobed = (dialect, packageName, name, claim) => {
+  const index = unprobed.claims.findIndex(
+    entry =>
+      entry.dialect === dialect &&
+      entry.package === packageName &&
+      entry.export === name &&
+      entry.claim === claim,
+  );
+  if (index === -1) return false;
+  if (!unprobed.claims[index].reason) {
+    fail(`${unprobedPath} entry for ${packageName} ${name} ${claim} has no reason`);
+  }
+  unprobedUsed.add(index);
+  return true;
+};
+
+const runtimeLockPath = join(root, "pkg/contracts/bundled/runtime-lock.json");
+let runtimeLock = { schemaVersion: 1, packages: {} };
+try {
+  runtimeLock = JSON.parse(readFileSync(runtimeLockPath, "utf8"));
+} catch (error) {
+  fail(`cannot read ${runtimeLockPath}: ${error.message}`);
+}
+if (runtimeLock.schemaVersion !== 1 || !runtimeLock.packages || typeof runtimeLock.packages !== "object") {
+  fail(`${runtimeLockPath} must use runtime-lock schemaVersion 1`);
+}
+
 const manifests = loadDialectManifests({ requireArtifacts: true });
 // A dialect may need several workers: the 1.x core and the scheduled overlay
 // import different packages, and a worker's bare imports are what tie it to the
 // install it runs in. Every worker of a dialect runs in every condition mode.
 const probeWorkers = {
-  "solid-v1": ["scripts/contract-probes-solid-v1.mjs"],
+  "solid-v1": ["scripts/contract-probes-solid-v1-core.mjs", "scripts/contract-probes-solid-v1.mjs"],
   "solid-v2": ["scripts/contract-probes.mjs"],
 };
 const definitions = manifests.flatMap(manifest =>
@@ -37,6 +104,7 @@ const definitions = manifests.flatMap(manifest =>
       file: contract.bundledContract,
       name: contract.package,
       dialect: manifest.id,
+      modes: contractModes(contract),
     })),
 );
 const peerDefinitions = manifests.flatMap(manifest =>
@@ -49,29 +117,6 @@ const peerDefinitions = manifests.flatMap(manifest =>
     })),
 );
 const write = process.argv.includes("--write");
-const probeModes = [
-  { name: "client", conditions: ["browser"] },
-  { name: "server", conditions: ["node"] },
-  { name: "development", conditions: ["browser", "development"] },
-  { name: "production", conditions: ["browser", "production"] },
-];
-let failures = 0;
-const fail = message => {
-  failures++;
-  console.error(`FAIL ${message}`);
-};
-const pass = message => console.log(`ok   ${message}`);
-const runtimeLockPath = join(root, "pkg/contracts/bundled/runtime-lock.json");
-let runtimeLock = { schemaVersion: 1, packages: {} };
-try {
-  runtimeLock = JSON.parse(readFileSync(runtimeLockPath, "utf8"));
-} catch (error) {
-  fail(`cannot read ${runtimeLockPath}: ${error.message}`);
-}
-if (runtimeLock.schemaVersion !== 1 || !runtimeLock.packages || typeof runtimeLock.packages !== "object") {
-  fail(`${runtimeLockPath} must use runtime-lock schemaVersion 1`);
-}
-
 function modeApplies(entrypoint, mode) {
   const conditions = new Set(entrypoint.conditions ?? []);
   const environment = new Set(["browser", "node", "client", "server", "development", "production"]);
@@ -269,10 +314,13 @@ for (const installation of installations) {
     name,
     directory: join(installation.directory, "node_modules", ...name.split("/")),
   }));
+  const dialectModes = probeModes.filter(mode =>
+    installation.probed.some(contract => contract.modes.includes(mode)),
+  );
   for (const source of installation.workers) {
     const worker = join(installation.directory, source.split("/").at(-1));
     copyFileSync(join(root, source), worker);
-    for (const mode of probeModes) {
+    for (const mode of dialectModes) {
       const execution = spawnSync(
         "node",
         [
@@ -523,7 +571,7 @@ for (const item of contracts) {
   for (const [entrypoint, entry] of Object.entries(item.contract.entrypoints)) {
     for (const [name, summary] of Object.entries(entry.exports)) {
       declaredByTarget.set(targetKey(item.dialect, item.name, entrypoint, name), summary);
-      for (const mode of probeModes.filter(candidate => modeApplies(entry, candidate))) {
+      for (const mode of item.modes.filter(candidate => modeApplies(entry, candidate))) {
         const selected = summaryForMode(summary, mode);
         if (!selected) {
           fail(`${item.file} ${entrypoint}:${name} has no unambiguous summary in ${mode.name}`);
@@ -539,7 +587,9 @@ for (const item of contracts) {
           const key = `${item.dialect}:${item.name}:${entrypoint}:${name}:${claim}`;
           const modeResults = results.get(key) ?? [];
           const result = modeResults.find(candidate => candidate.mode === mode.name);
-          if (!result) {
+          if (isUnprobed(item.dialect, item.name, name, claim)) {
+            pass(`${item.name} ${entrypoint}:${name} ${claim} (declared unprobeable)`);
+          } else if (!result) {
             fail(`${item.file} ${entrypoint}:${name} ${claim} has no probe in ${mode.name}`);
           } else if (!result.ok) {
             fail(
@@ -554,6 +604,10 @@ for (const item of contracts) {
   }
 }
 for (const observation of observed.discoveredClaims) {
+  const stating = contracts.find(
+    item => item.dialect === observation.dialect && item.name === observation.pkg,
+  );
+  if (stating && !stating.modes.some(mode => mode.name === observation.mode)) continue;
   const target = targetKey(
     observation.dialect,
     observation.pkg,
@@ -584,6 +638,15 @@ for (const observation of observed.discoveredClaims) {
 }
 if (incompleteness.length > 0) {
   console.error(`incompleteness reports: ${incompleteness.length}`);
+}
+
+// An exemption that no longer matches a claim has outlived its reason.
+for (const [index, entry] of unprobed.claims.entries()) {
+  if (!unprobedUsed.has(index)) {
+    fail(
+      `${unprobedPath} exempts ${entry.package} ${entry.export} ${entry.claim}, which no contract claims`,
+    );
+  }
 }
 
 if (failures > 0) process.exit(1);

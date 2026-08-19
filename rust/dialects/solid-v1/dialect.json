@@ -14,6 +14,12 @@
       "composeScript": "scripts/generate-bundled-solid1-contract.mjs",
       "composeInputs": [
         "pkg/contracts/bundled/solid-v1/solid-js-runtime-surface.json"
+      ],
+      "probeRuntime": true,
+      "probeModes": [
+        "client",
+        "development",
+        "production"
       ]
     },
     {

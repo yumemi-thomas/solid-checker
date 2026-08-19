@@ -47,6 +47,13 @@ release's peer range is `solid-js@^1.6.12`. Its exact npm version and integrity
 are pinned, and its claims are runtime-probed in all four condition modes
 against `solid-js@1.9.14` in a Solid 1.x install root of their own.
 
+The 1.x core contract is runtime-probed too, in the client, development and
+production modes it states. It does not state the server mode: under `node`,
+1.x resolves a build where `createEffect` never runs and memos never re-run, and
+that build needs its own contract rather than a footnote in this one.
+`unprobed-claims.json` records the two claims a probe cannot adjudicate, with
+the reason each.
+
 Probing found that `leading` and `leadingAndTrailing` do not behave the same way
 everywhere: their server branch returns early and never invokes the scheduler
 factory, so the `inline` claim on parameter 0 is true off the server only. Those
