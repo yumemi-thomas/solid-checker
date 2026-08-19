@@ -361,6 +361,147 @@ caller-owned or returned. A callable constructor parameter is considered
 retained only when it is a TypeScript parameter property on an object passed to
 an exact compiler-resolved retaining runtime position, such as a Proxy handler.
 
+## Adding a package to a dialect
+
+This section is for maintainers of this repository, adding a package that a
+dialect models directly. Application developers generating a contract for a
+dependency want [Checking contract coverage and
+freshness](#checking-contract-coverage-and-freshness) instead.
+
+### The generate/check model
+
+Dialect contract artifacts are **derived from a declaration plus an installed
+package**, and every one of them is checked by regenerating it and comparing:
+
+```sh
+make contracts        # write the artifacts
+make contracts-check  # regenerate into memory and fail on any difference
+```
+
+`make contracts-check` runs in CI's `rust-engine` job on every push and pull
+request, after installing the exact pinned releases. A checked-in artifact that
+no longer matches what the generator produces from the pinned package is a
+failure, not something the next run quietly fixes. Adding a package therefore
+means adding its declaration; the artifacts follow from it, and the gate keeps
+them honest.
+
+**Only half of a contract is derived, and the halves are checked differently.**
+The *export set* is a syntactic fact read from the package's declarations with
+the same parser the checker runs on user code, following `export *` and
+`export { x } from` chains — so drift in it is caught mechanically. The
+*reactive semantics* — whether a function opens a root, establishes an owner,
+returns a live store or a snapshot — cannot be derived from a signature and are
+hand-authored tables inside `solid-contract-gen`, each carrying its evidence.
+`--check` proves the artifact matches the tables; it cannot prove the tables
+match the runtime. That is what the runtime probes below are for, and why a
+version bump is a re-audit rather than a regeneration.
+
+### Declaring the package
+
+Add one entry to the `contracts` array of `rust/dialects/<id>/dialect.json`:
+
+```json
+{
+  "package": "@solidjs/web",
+  "packagePathEnv": "SOLID_V2_SOLIDJS_WEB_PACKAGE",
+  "defaultPackagePath": "node_modules/@solidjs/web",
+  "generatorTarget": "solid-v2/solidjs-web",
+  "reviewContract": "rust/crates/solid-dialect/contracts/solid-v2/solidjs-web.json",
+  "exportsIndex": "rust/crates/solid-dialect/src/exports/solid_v2_solidjs_web.rs",
+  "bundledContract": "pkg/contracts/bundled/solid-v2/solidjs-web.json",
+  "probeRuntime": true
+}
+```
+
+Every field except `probeRuntime`, `composeScript`, and `composeInputs` is
+required, `generatorTarget` must start with `<id>/`, and no two entries may
+share a `generatorTarget`. `node scripts/dialect-manifests.mjs validate` — part
+of the universal check set — enforces all of that and fails on any declared
+artifact that does not exist, so a half-added package cannot ship as a dialect
+that silently models nothing.
+
+`packagePathEnv` exists because this repository has no root `package.json` and
+therefore no `node_modules` to read the audited releases from. Generation and
+drift checks read a package path from that variable, falling back to
+`defaultPackagePath`. Point each one at an installation of the exact pinned
+version:
+
+```sh
+mkdir -p /tmp/contract-packages && cd /tmp/contract-packages
+npm init -y >/dev/null
+npm install --ignore-scripts --no-audit --no-fund \
+  solid-js-1x@npm:solid-js@1.9.14 solid-js@2.0.0-rc.0 @solidjs/web@2.0.0-rc.0
+```
+
+```sh
+SOLID_V1_SOLID_JS_PACKAGE=/tmp/contract-packages/node_modules/solid-js-1x \
+SOLID_V2_SOLID_JS_PACKAGE=/tmp/contract-packages/node_modules/solid-js \
+SOLID_V2_SOLIDJS_WEB_PACKAGE=/tmp/contract-packages/node_modules/@solidjs/web \
+  make contracts-check
+```
+
+### Steps
+
+1. **Declare it** in `rust/dialects/<id>/dialect.json`, as above.
+2. **Teach the generator its semantics.** Add the `generatorTarget` and its
+   reviewed callback/return tables to `solid-contract-gen`
+   (`rust/crates/solid-facts-backend/src/bin/solid-contract-gen.rs`). Read the
+   runtime implementation for each claim; a signature does not carry it.
+3. **Generate** with `make contracts`, which writes the review contract and the
+   Rust export index for every declared package.
+4. **Register the export index** in `rust/crates/solid-dialect/src/exports/mod.rs`
+   and consume it from the vocabulary implementation.
+5. **Produce the bundled runtime contract** at the declared `bundledContract`
+   path, and decode it in `diagnostics.rs`. Its evidence URI must be
+   `bundled://<id>/<package-slug>.json`, matching the artifact path.
+6. **Verify** with `make contracts-check` and `make contract-conformance`.
+
+For a whole new dialect rather than one package, follow
+[adding-a-dialect.md](adding-a-dialect.md), which wraps these steps in the
+vocabulary, compiler, catalog, and detection work.
+
+### Runtime probes and the lock
+
+Set `probeRuntime` when the contract's claims are checked against an installed
+release. `node scripts/check-bundled-contracts.mjs` then installs the exact
+pinned release, checks its export surface and npm integrity, verifies every edge
+in `pkg/contracts/bundled/runtime-lock.json`, and executes every declared
+behavior probe in client, server, development, and production condition modes.
+
+`--write` records passing modes as `probed` row evidence on claims that already
+exist. **It does not repair a lock or probe mismatch, and must not be taught
+to.** A probe failure means the package does not behave the way the contract
+says; a lock mismatch means the package that was probed is not the package that
+was audited. Neither is drift in a derived artifact, and neither is fixed by
+regenerating.
+
+### Composed artifacts
+
+When a bundled artifact is assembled from checked-in inputs rather than
+generated directly from a package, declare `composeScript` and `composeInputs`.
+`node scripts/dialect-manifests.mjs check-composed-contracts` runs each script
+with `--check`, failing when the checked-in artifact is stale relative to its
+inputs. The Solid 1.x contract works this way: it is composed from a per-subpath
+export census and the reviewed semantics map.
+
+### Version bumps
+
+A pinned version is an audit boundary, not a dependency range. Moving one means
+regenerating the artifacts *and* re-reading the claims the generator's tables
+assert, because `--check` compares the artifact to those tables and has nothing
+to say about whether they still describe the runtime. A newer prerelease is
+reviewed, never silently substituted. Consumers see the same boundary from the
+other side: an installed version other than the audited one is refused and
+reported as a stale contract.
+
+### Known gap
+
+The drift gate enumerates the contracts a manifest **declares**. A package that
+a dialect's vocabulary knows about but that no manifest entry names is not
+caught by any check — it simply has no contract, and every project importing it
+reports `SC9005` forever. Nothing derives the expected contract set from the
+vocabulary and fails on the difference.
+
 ## Bundled and ecosystem contracts
 
 Verified contracts for `solid-js` and `@solidjs/web` are embedded in the
