@@ -318,8 +318,30 @@ fn reactive_source_uncaptured(
     context: &UpstreamCompatContext<'_>,
     defects: &mut Vec<StaticDefect>,
 ) {
+    // Nothing here can report unless some call hands a bare, proven, non-store
+    // source to a callee. That is two map lookups per identifier argument, and
+    // answering it first skips resolving the file's primitives -- the dominant
+    // cost -- on every file that has no such call at all.
+    let hands_over_a_source = |call: &solid_facts::ast::CallFact| {
+        call.arguments.iter().any(|argument| {
+            argument.value == ArgumentValueKind::Identifier
+                && context
+                    .entities
+                    .at(file.path.as_str(), argument.span)
+                    .is_some_and(|symbol| {
+                        context.accessors.contains_key(symbol)
+                            && context.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
+                    })
+        })
+    };
+    if !file.ast.calls.iter().any(hands_over_a_source) {
+        return;
+    }
     let primitives = context.lookup.primitives(file);
     for (index, call) in file.ast.calls.iter().enumerate() {
+        if !hands_over_a_source(call) {
+            continue;
+        }
         // A dialect primitive is described by definition, and a call the
         // engine resolved into the project has a body it already walked.
         if known_primitive(&primitives.calls[index]).is_some()

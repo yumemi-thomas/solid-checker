@@ -4295,6 +4295,10 @@ fn interprocedural_reads(
     // selects one exact implementation, those unseen callers keep its
     // reactive-read contract open. Record that boundary instead of exporting
     // an empty (and therefore falsely safe) summary.
+    // `allowed_callback_spans` walks every call in the file. A file usually
+    // holds several exported helpers, so computing it per node made this
+    // O(exported nodes x calls) where O(files x calls) is enough.
+    let mut allowed_by_path: HashMap<&str, Vec<Span>> = HashMap::new();
     for node in nodes.iter().filter(|node| node.exported) {
         let Some(&file) = project_indexes.files_by_path.get(node.path.as_str()) else {
             continue;
@@ -4306,7 +4310,9 @@ fn interprocedural_reads(
         else {
             continue;
         };
-        let allowed = allowed_callback_spans(file, context.lookup);
+        let allowed = allowed_by_path
+            .entry(file.path.as_str())
+            .or_insert_with(|| allowed_callback_spans(file, context.lookup));
         let direct_member = file.ast.calls.iter().find_map(|call| {
             if !function.body.contains(call.span)
                 || !containing_ast_function(&file.ast, call.span)
@@ -4317,7 +4323,7 @@ fn interprocedural_reads(
             if semantic_execution_role(
                 file,
                 call.callee,
-                &allowed,
+                allowed,
                 entities,
                 symbol_names,
                 context.lookup,

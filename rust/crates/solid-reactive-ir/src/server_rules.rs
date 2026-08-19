@@ -352,7 +352,10 @@ fn push_module_directive_finding(
 /// throw (probed); `enableRichArguments()` or a configured `serializeArgs`
 /// removes the throw entirely (probed).
 fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    let serializer = project_rich_argument_serializer(ctx);
+    // The serializer proof is a project-wide scan of every call. Only a client
+    // call to a server function can consume it, and most projects have none,
+    // so resolve it on first use rather than on entry.
+    let mut serializer_proof = None;
     for file in &ctx.facts.files {
         // A call site inside server-side code never crosses the client
         // transport: in-process SSR and server-to-server calls run the
@@ -413,7 +416,10 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
             }
             for (index, argument) in call.arguments.iter().enumerate() {
                 if argument.spread {
-                    if serializer != SerializerProof::Enabled {
+                    if *serializer_proof
+                        .get_or_insert_with(|| project_rich_argument_serializer(ctx))
+                        != SerializerProof::Enabled
+                    {
                         push_rich_argument_uncertainty(
                             draft,
                             file,
@@ -443,12 +449,18 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     if argument_is_proven_json_safe(argument, entity) {
                         continue;
                     }
-                    if serializer != SerializerProof::Enabled {
+                    if *serializer_proof
+                        .get_or_insert_with(|| project_rich_argument_serializer(ctx))
+                        != SerializerProof::Enabled
+                    {
                         push_rich_argument_uncertainty(
                             draft,
                             file,
                             argument.span,
-                            if serializer == SerializerProof::Unresolved {
+                            if *serializer_proof
+                                .get_or_insert_with(|| project_rich_argument_serializer(ctx))
+                                == SerializerProof::Unresolved
+                            {
                                 "neither the argument's JSON safety nor the project's serializer configuration can be resolved exactly"
                             } else {
                                 "the argument's complete JSON safety cannot be proven from the available type and literal facts"
@@ -474,7 +486,8 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                 {
                     continue;
                 }
-                match serializer {
+                match *serializer_proof.get_or_insert_with(|| project_rich_argument_serializer(ctx))
+                {
                     SerializerProof::Enabled => return,
                     SerializerProof::Unresolved => {
                         push_rich_argument_uncertainty(
