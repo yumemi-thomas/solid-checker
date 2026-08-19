@@ -10,14 +10,57 @@
     "scheduled": {
       "kind": "function",
       "callbacks": [
-        { "parameter": 0, "execution": "deferred" }
+        {
+          "parameter": 0,
+          "execution": "deferred"
+        }
       ]
     },
     "leading": {
       "kind": "function",
       "callbacks": [
-        { "parameter": 0, "execution": "inline" },
-        { "parameter": 1, "execution": "deferred" }
+        {
+          "parameter": 0,
+          "execution": "inline"
+        },
+        {
+          "parameter": 1,
+          "execution": "deferred"
+        }
+      ],
+      "variants": [
+        {
+          "conditions": [
+            "browser"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 0,
+                "execution": "inline"
+              },
+              {
+                "parameter": 1,
+                "execution": "deferred"
+              }
+            ]
+          }
+        },
+        {
+          "conditions": [
+            "node"
+          ],
+          "summary": {
+            "kind": "function",
+            "callbacks": [
+              {
+                "parameter": 1,
+                "execution": "deferred"
+              }
+            ]
+          }
+        }
       ]
     },
     "create-scheduled": {
@@ -27,18 +70,32 @@
         "label": "scheduled invalidation"
       },
       "callbacks": [
-        { "parameter": 0, "execution": "inline" }
+        {
+          "parameter": 0,
+          "execution": "inline"
+        }
       ]
     }
   },
   "entrypoints": {
     ".": {
       "exports": {
-        "scheduled": ["debounce", "scheduleIdle", "throttle"],
-        "leading": ["leading", "leadingAndTrailing"],
-        "create-scheduled": ["createScheduled"]
+        "scheduled": [
+          "debounce",
+          "scheduleIdle",
+          "throttle"
+        ],
+        "leading": [
+          "leading",
+          "leadingAndTrailing"
+        ],
+        "create-scheduled": [
+          "createScheduled"
+        ]
       },
-      "conditions": ["import"]
+      "conditions": [
+        "import"
+      ]
     }
   },
   "evidence": {

@@ -2,27 +2,13 @@
   "schemaVersion": 1,
   "auditedAt": "2026-08-15",
   "packages": {
-    "solid-js@2.0.0-rc.0": {
-      "dependencies": {
-        "@solidjs/signals": {
-          "range": "^2.0.0-rc.0",
-          "version": "2.0.0-rc.0",
-          "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA=="
-        },
-        "csstype": {
-          "range": "^3.1.0",
-          "version": "3.2.3",
-          "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="
-        },
-        "seroval": {
-          "range": "~1.5.4",
-          "version": "1.5.6",
-          "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA=="
-        },
-        "seroval-plugins": {
-          "range": "~1.5.4",
-          "version": "1.5.6",
-          "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ=="
+    "@solid-primitives/scheduled@1.5.3": {
+      "dependencies": {},
+      "peerDependencies": {
+        "solid-js": {
+          "range": "^1.6.12",
+          "version": "1.9.14",
+          "integrity": "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ=="
         }
       }
     },
@@ -53,9 +39,6 @@
     "csstype@3.2.3": {
       "dependencies": {}
     },
-    "seroval@1.5.6": {
-      "dependencies": {}
-    },
     "seroval-plugins@1.5.6": {
       "dependencies": {},
       "peerDependencies": {
@@ -63,6 +46,52 @@
           "range": "^1.0",
           "version": "1.5.6",
           "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA=="
+        }
+      }
+    },
+    "seroval@1.5.6": {
+      "dependencies": {}
+    },
+    "solid-js@1.9.14": {
+      "dependencies": {
+        "csstype": {
+          "range": "^3.1.0",
+          "version": "3.2.3",
+          "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="
+        },
+        "seroval": {
+          "range": "~1.5.4",
+          "version": "1.5.6",
+          "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA=="
+        },
+        "seroval-plugins": {
+          "range": "~1.5.4",
+          "version": "1.5.6",
+          "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ=="
+        }
+      }
+    },
+    "solid-js@2.0.0-rc.0": {
+      "dependencies": {
+        "@solidjs/signals": {
+          "range": "^2.0.0-rc.0",
+          "version": "2.0.0-rc.0",
+          "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA=="
+        },
+        "csstype": {
+          "range": "^3.1.0",
+          "version": "3.2.3",
+          "integrity": "sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ=="
+        },
+        "seroval": {
+          "range": "~1.5.4",
+          "version": "1.5.6",
+          "integrity": "sha512-rVQVWjjSvlINzaQPZH5JFqsqEsIWdTxY3iJZCnTL/5gQbXIRooVZKI60tVCkOVfzcRPejboxO2t0P89dg5mQaA=="
+        },
+        "seroval-plugins": {
+          "range": "~1.5.4",
+          "version": "1.5.6",
+          "integrity": "sha512-HXuLAX2pu/UByPpaeo/TaMfvMIi+1QqIoPJYCcAtU8QkVNwgR6MPlGuCQTErV1JwraaMbYaWVIBX7mppzGLATQ=="
         }
       }
     }

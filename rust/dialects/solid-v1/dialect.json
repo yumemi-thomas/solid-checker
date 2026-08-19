@@ -19,7 +19,8 @@
     {
       "package": "@solid-primitives/scheduled",
       "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-scheduled.json",
-      "generated": false
+      "generated": false,
+      "probeRuntime": true
     }
   ]
 }

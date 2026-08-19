@@ -487,6 +487,25 @@ pinned release, checks its export surface and npm integrity, verifies every edge
 in `pkg/contracts/bundled/runtime-lock.json`, and executes every declared
 behavior probe in client, server, development, and production condition modes.
 
+**Probing is grouped by dialect, one install root each.** A single shared
+install cannot host them: `@solid-primitives/scheduled` peers on
+`solid-js@^1.6.12` while the 2.0 contracts pin `2.0.0-rc.0`, and npm refuses the
+combination. Each dialect installs its probed packages *and* its non-probed ones,
+so a peer resolves to the release that dialect audits rather than whatever npm
+would pick — and `runtime-lock.json` pins the transitive closure of both.
+
+Each dialect names its probe worker in `scripts/check-bundled-contracts.mjs`.
+The worker is copied into that dialect's install root and run from there, so its
+bare `import "solid-js"` resolves to that dialect's release; the shared harness
+in `scripts/lib/contract-probe-harness.mjs` travels with it. A worker cannot be
+shared across dialects because driving a probe is version-specific: 2.0 settles
+with `flush()`, and 1.x has no such function. A dialect that declares
+`probeRuntime` contracts with no worker is an error, not a silent skip.
+
+Probe identity is `(dialect, package, entrypoint, export, claim)`. The dialect
+is part of it because both dialects declare `solid-js` at different versions,
+and a name-only key would merge two different packages' observations.
+
 `node scripts/check-contract-pins.mjs`, in the same target, covers what probing
 cannot reach. The probe suite proves a package's identity by installing it and
 reading npm's hidden lockfile, so a contract it does not install — a
