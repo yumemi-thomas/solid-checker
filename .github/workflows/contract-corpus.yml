@@ -27,13 +27,19 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache: false
       - uses: dtolnay/rust-toolchain@1.97
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      # This job builds the same debug workspace the CI engine job does, on the
+      # same image and toolchain, so it restores that job's dependency cache
+      # instead of compiling the dependency graph from nothing. CI's engine job
+      # owns the entry; this one only reads it.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: engine-debug
+          save-if: false
+      - uses: ./.github/actions/typefacts
       - name: Regenerate the bounded package-contract corpus
         run: make contract-corpus

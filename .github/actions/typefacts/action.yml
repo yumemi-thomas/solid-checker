@@ -1,0 +1,98 @@
+name: TypeFacts producer
+description: >
+  Restores, or else builds, the TypeFacts producer at the revision
+  rust/Cargo.toml pins the client to.
+
+# Six jobs across five workflows need this binary, and every one of them used to
+# clone the producer repository and run a cold Go build to get it. The binary is
+# a pure function of the pinned revision and the build id -- the handshake
+# rejects any other pairing -- so it is cacheable on exactly those two things,
+# and on a hit no Go toolchain is needed at all.
+inputs:
+  build-id:
+    description: >
+      Build id linked into the producer. Must equal the id the Rust client is
+      built with, or the startup handshake fails. A build id that varies per
+      commit (a release tag, a sha) can never hit the cache; pass cache: false
+      with one rather than writing an entry no run will read.
+    default: dev
+  output:
+    description: Producer path, relative to working-directory.
+    default: bin/solid-typefacts
+  working-directory:
+    description: >
+      Tree holding the pin to read and the script to run. Defaults to the
+      checkout; the performance workflow points it at a merge-base worktree.
+    default: .
+  go-version:
+    description: >
+      Only used on a cache miss. It is part of the cache key so that pinning it
+      later invalidates binaries the floating toolchain produced.
+    default: stable
+  cache:
+    description: Whether to cache the built binary.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - id: pin
+      shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        revision=$(
+          sed -n 's/^typefacts = .*rev = "\([0-9a-f]\{40\}\)".*/\1/p' rust/Cargo.toml
+        )
+        if [ -z "$revision" ]; then
+          echo "typefacts: no rev pinned in rust/Cargo.toml" >&2
+          exit 1
+        fi
+        echo "revision=$revision" >> "$GITHUB_OUTPUT"
+        # A cache entry archives the paths it was saved from, so two callers
+        # wanting the same binary at two different paths -- the performance
+        # workflow wants one in the checkout and one in a merge-base worktree --
+        # must not share a key, or the second reports a hit and extracts over
+        # the first.
+        location=$(printf '%s/%s' "${{ inputs.working-directory }}" "${{ inputs.output }}" |
+          tr -c 'A-Za-z0-9._-' '-')
+        echo "key=typefacts-${{ runner.os }}-${{ runner.arch }}-go-${{ inputs.go-version }}-$revision-${{ inputs.build-id }}-$location" >> "$GITHUB_OUTPUT"
+
+    # Cache paths resolve against the workspace, not against working-directory,
+    # so this composes both for the repository checkout and for the performance
+    # workflow's merge-base worktree outside it.
+    - id: restore
+      if: inputs.cache == 'true'
+      uses: actions/cache@v4
+      with:
+        path: |
+          ${{ inputs.working-directory }}/${{ inputs.output }}
+          ${{ inputs.working-directory }}/${{ inputs.output }}.buildinfo
+        key: ${{ steps.pin.outputs.key }}
+
+    - if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ inputs.go-version }}
+        # The producer's go.sum only exists inside the checkout this step has
+        # not made yet; the binary cache above is what makes the build skippable.
+        cache: false
+
+    # On a hit this is the stamp check in build-typefacts.sh and nothing else,
+    # which is also what makes a later `make` target that depends on the
+    # producer stop rebuilding it.
+    - shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        TYPEFACTS_BUILD_ID: ${{ inputs.build-id }}
+      run: scripts/build-typefacts.sh "${{ inputs.output }}"
+
+    - shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      run: |
+        # A restored binary that cannot run is worse than no cache: it would
+        # fail later, inside an unrelated gate.
+        if [ ! -x "${{ inputs.output }}" ]; then
+          echo "typefacts: ${{ inputs.output }} is missing or not executable" >&2
+          exit 1
+        fi
+        echo "typefacts ${{ steps.pin.outputs.revision }} (build id ${{ inputs.build-id }})"

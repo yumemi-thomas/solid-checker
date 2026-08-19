@@ -13,16 +13,25 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache: false
       - uses: dtolnay/rust-toolchain@1.97
         with:
           components: clippy,rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          # Named, not defaulted to the job name, because the corpus workflows
+          # build the same debug workspace and restore this entry.
+          shared-key: engine-debug
+          # Cache scopes are per branch: a pull request reads main's caches but
+          # writes its own, which no later run on main can read. Writing them
+          # anyway pushed the repository over the 10GB ceiling, and GitHub
+          # evicted the caches on main that every run does read. Restore
+          # everywhere, save only where the entry has readers.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # Every gate below wants the producer, and `make` rebuilt it once per
+      # target. This restores it, and the stamp it carries is what makes the
+      # `make` dependencies no-ops.
+      - uses: ./.github/actions/typefacts
       - run: cargo fmt --manifest-path rust/Cargo.toml --all -- --check
       - run: cargo clippy --manifest-path rust/Cargo.toml --workspace --all-targets
       - name: Check single-dialect composition builds
@@ -89,10 +98,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache: false
       - uses: dtolnay/rust-toolchain@1.97
       - uses: actions/setup-node@v4
         with:
@@ -100,14 +105,30 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          # The release workflow compiles the same release dependency graph, so
+          # it reads this key instead of keeping a second copy of every entry.
+          # Keyed on the runner image rather than the platform because the
+          # release builds linux-x64 on 22.04 on purpose: a dependency's C
+          # objects compiled against a newer image's headers have no business
+          # being linked into that artifact. Identical images share; 22.04
+          # compiles its own.
+          shared-key: release-${{ matrix.runner }}-${{ matrix.arch }}
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      # The build id is CI's rather than the commit's on purpose: it is an
+      # opaque handshake identity, and a per-commit one made the producer
+      # uncacheable across every one of these four platforms. The revision it is
+      # built from is still pinned, and it is still linked into both halves of
+      # the pairing, so a mismatched producer still fails loudly.
+      - uses: ./.github/actions/typefacts
+        with:
+          build-id: ci
+          output: bin/solid-typefacts${{ matrix.platform == 'win32' && '.exe' || '' }}
       - name: Build one-version native package
         env:
-          SOLID_CHECKER_BUILD_ID: ci-${{ github.sha }}
+          SOLID_CHECKER_BUILD_ID: ci
         run: |
           extension=""
           if [[ "${{ matrix.platform }}" == "win32" ]]; then extension=".exe"; fi
-          TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID" \
-            scripts/build-typefacts.sh "bin/solid-typefacts${extension}"
           TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID" \
             cargo build --release --manifest-path rust/Cargo.toml --workspace
           node scripts/package-rust.mjs \
@@ -147,6 +168,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: npm ci
         working-directory: packages/wasm
       - run: npm run build
@@ -163,6 +185,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+          cache: npm
+          cache-dependency-path: packages/cli/package-lock.json
       - run: sh -n scripts/*.sh
       # The script tests import the oracle harness, which resolves `typescript`
       # through packages/cli. `make test-cli` installs it too, but that runs

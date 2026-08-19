@@ -26,6 +26,28 @@ if [ -z "$revision" ]; then
   exit 1
 fi
 
+# The pinned revision and the build id are the whole identity of this binary:
+# the revision fixes the source, and the handshake -- protocol version, schema
+# digest, build id -- rejects any other pairing with the client. Recording that
+# pair next to the output lets a repeat call skip the clone and the Go build
+# rather than redo them. Several `make` targets each depend on this one, and CI
+# restores the output from a cache keyed on the same pair.
+#
+# The Go toolchain version is deliberately not part of the identity: it is not
+# part of the handshake, and including it would make every toolchain bump a
+# cache miss on a binary that is still the correct one. A release never reuses
+# anything anyway, because its build id is the tag. Set TYPEFACTS_REBUILD=1 to
+# force a rebuild.
+stamp="$output.buildinfo"
+built="revision=$revision build-id=$build_id"
+if [ "${TYPEFACTS_REBUILD:-0}" != "1" ] &&
+   [ -x "$output" ] &&
+   [ -f "$stamp" ] &&
+   [ "$(cat "$stamp")" = "$built" ]; then
+  echo "build-typefacts: $output already at $revision (build id $build_id)"
+  exit 0
+fi
+
 if [ ! -d "$checkout/.git" ]; then
   rm -rf "$checkout"
   git clone --quiet --filter=blob:none "$repo" "$checkout"
@@ -36,5 +58,10 @@ fi
 git -C "$checkout" -c advice.detachedHead=false checkout --quiet "$revision"
 
 mkdir -p "$(dirname -- "$output")"
+# Dropped before the build, not after: a stamp left next to a binary a failed
+# build may have already replaced would make the next call skip a rebuild it
+# needs.
+rm -f "$stamp"
 ( cd "$checkout" && go build -ldflags "-X main.buildID=$build_id" -o "$output" ./cmd/solid-typefacts )
+printf '%s' "$built" > "$stamp"
 echo "build-typefacts: $output at $revision (build id $build_id)"

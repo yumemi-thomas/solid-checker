@@ -40,6 +40,29 @@ a performance check and report against that baseline. These are wall-time
 benchmarks because the end-to-end analysis includes the Type Facts child
 process, which CPU simulation does not follow.
 
+## Continuous integration caches
+
+Two rules keep the workflows from paying twice for the same build, and both are
+easy to break by copying an existing step.
+
+A cache entry is only worth writing where some later run can read it. Cache
+scopes are per branch: a pull request reads the caches on `main` and writes its
+own, which nothing on `main` will ever read, and a tag's scope is unreadable
+even by the next tag. Writing them anyway took this repository past GitHub's
+10GB ceiling, at which point the entries every run *does* read were evicted and
+each build started cold. So `Swatinem/rust-cache` restores everywhere and saves
+only on `main` (`save-if`), release workflows restore and never save, and the
+jobs that merely consume another job's dependency build — the corpus workflows —
+name that job's `shared-key` with `save-if: false`.
+
+Where two jobs compile the same thing, they should share one entry rather than
+keep two. The release native build shares the CI release key, keyed on the
+runner image rather than the platform, because linux-x64 ships from 22.04 on
+purpose and a dependency's C objects from a newer image have no business in that
+artifact. The `Performance` workflow caches a whole benchmark runtime under its
+commit sha, which is what stops it from building the base binaries a previous
+run already built; it caches binaries only, never a measurement.
+
 ## Semantic changes
 
 Add positive and negative fixtures, expose only the required facts, represent
