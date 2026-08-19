@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust package test test-rust test-cli verify verify-performance corpus contract-corpus contract-conformance contracts contracts-check coverage coverage-update parity parity-update clean
+.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-conformance contracts contracts-check coverage coverage-update parity parity-update tsc-oracle tsc-oracle-provision tsc-ownership tsc-ownership-report clean
 
 build: build-rust
 
@@ -16,6 +16,12 @@ build-rust: build-typefacts
 	mkdir -p bin
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) --workspace
 	cp rust/target/debug/solid-checker-rust bin/solid-checker-rust
+
+# A fresh source build for gates. Unlike build-rust this does not rebuild the
+# pinned TypeFacts producer or overwrite the packaged/check-in binary under bin/.
+build-checker-debug:
+	cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
+	  -p solid-facts-backend --bin solid-checker-rust
 
 package: build-typefacts
 	SOLID_CHECKER_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" TYPEFACTS_BUILD_ID="$(SOLID_CHECKER_BUILD_ID)" cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) --workspace
@@ -39,8 +45,11 @@ verify:
 tsc-oracle-provision:
 	node scripts/tsc-oracle.mjs provision --dialect all
 
-tsc-oracle: tsc-oracle-provision
-	node scripts/tsc-oracle-gate.mjs
+# Needs the checker as well as the compiler: each case declares what TypeScript
+# says *and* what this checker says about the same bytes.
+tsc-oracle: tsc-oracle-provision build-checker-debug
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
 
 # Needs parity's run artifact (the spans the checker actually reported), so it
 # runs after parity rather than beside it.

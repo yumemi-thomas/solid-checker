@@ -15,7 +15,8 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::cleanup::function_returns_cleanup;
+use crate::cleanup::{CleanupReturnProof, function_cleanup_return_proof};
+use crate::effect_api::ProofStatus;
 use crate::execution_role::{argument_references_callback_symbol, execution_role, function_symbol};
 use crate::identity::SymbolId;
 use crate::indexes::{CrossFileProofDigest, EntitySymbols, ProjectIndexes, SemanticLookup};
@@ -206,6 +207,16 @@ pub(crate) fn containing_ast_function(
 pub(crate) const OWNER_CONTEXT_OWNED: u8 = 1;
 pub(crate) const OWNER_CONTEXT_UNOWNED: u8 = 2;
 pub(crate) const OWNER_CONTEXT_LEAF: u8 = 4;
+/// The owned/unowned split originates in a function whose Solid component
+/// identity is only conventional. Preserve this provenance through inheriting
+/// callback edges so diagnostics do not misdescribe it as nullable
+/// `runWithOwner` state.
+pub(crate) const OWNER_CONTEXT_COMPONENT_UNCERTAIN: u8 = 8;
+/// At least one concrete execution path is proved unowned. This differs from
+/// the possible-unowned half of a conditional owner or ambiguous component:
+/// one proven unowned invocation is enough to prove an ownership defect even
+/// when other invocations may be owned.
+pub(crate) const OWNER_CONTEXT_PROVEN_UNOWNED: u8 = 16;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum OwnerEdgeKind {
@@ -259,6 +270,7 @@ pub(crate) struct OwnerNode {
     pub(crate) symbol: Option<SymbolId>,
     pub(crate) exported: bool,
     pub(crate) component: bool,
+    pub(crate) component_uncertain: bool,
     pub(crate) seed_context: u8,
 }
 
@@ -368,12 +380,20 @@ fn owner_node(
                         && candidate.span.contains(function.span)
                 })
         });
-    let component = lookup.function_is_component(file, function);
+    let component_status = lookup.function_component_status(file, function);
+    let component = component_status == crate::indexes::ComponentStatus::Proven;
+    let component_uncertain = component_status == crate::indexes::ComponentStatus::Uncertain;
     let mut seed_context = compiler_owner_context(&file.compiler, function.body);
-    if component {
-        seed_context |= OWNER_CONTEXT_OWNED;
-    } else if exported && name.is_some() {
-        seed_context |= OWNER_CONTEXT_UNOWNED;
+    match component_status {
+        crate::indexes::ComponentStatus::Proven => seed_context |= OWNER_CONTEXT_OWNED,
+        crate::indexes::ComponentStatus::Uncertain => {
+            seed_context |=
+                OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_COMPONENT_UNCERTAIN;
+        }
+        crate::indexes::ComponentStatus::No if exported && name.is_some() => {
+            seed_context |= OWNER_CONTEXT_UNOWNED;
+        }
+        crate::indexes::ComponentStatus::No => {}
     }
     OwnerNode {
         path: file.path.to_string(),
@@ -382,6 +402,7 @@ fn owner_node(
         symbol,
         exported,
         component,
+        component_uncertain,
         seed_context,
     }
 }
@@ -395,7 +416,9 @@ fn compiler_owner_context(facts: &solid_facts::compiler::ExecutionMap, body: Spa
             context
                 | match region.kind {
                     solid_facts::compiler::OwnershipRegionKind::Owned => OWNER_CONTEXT_OWNED,
-                    solid_facts::compiler::OwnershipRegionKind::Unowned => OWNER_CONTEXT_UNOWNED,
+                    solid_facts::compiler::OwnershipRegionKind::Unowned => {
+                        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+                    }
                     solid_facts::compiler::OwnershipRegionKind::Leaf => OWNER_CONTEXT_LEAF,
                     solid_facts::compiler::OwnershipRegionKind::Unknown => 0,
                 }
@@ -461,6 +484,7 @@ pub(crate) struct OwnerRequirementCandidate {
     pub(crate) owner: Option<Span>,
     pub(crate) report_mask: u8,
     pub(crate) allow_uncertain: bool,
+    pub(crate) runtime_uncertain: bool,
     pub(crate) settled_target: Option<OwnerTarget>,
     /// For call-site-gated leaf owners (2.0 `onSettled`): the owner call's
     /// span, published as a [`LeafGateDecision`] once the graph settles so
@@ -594,7 +618,10 @@ fn apply_settled_requirement_gates(
 #[derive(Clone, Copy)]
 pub(crate) struct OwnerRequirementStatus {
     pub(crate) uncertain: bool,
+    pub(crate) runtime_uncertain: bool,
+    pub(crate) caller_uncertain: bool,
     pub(crate) conditional_owner: bool,
+    pub(crate) component_uncertain: bool,
     pub(crate) report: bool,
 }
 
@@ -657,7 +684,7 @@ pub(crate) fn find_missing_owners(
                 if let Some(owner) = owner {
                     edges.push((owner, target_index, OwnerEdgeKind::Preserve));
                 } else {
-                    contexts[target_index] |= OWNER_CONTEXT_UNOWNED;
+                    contexts[target_index] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
                 }
             }
             for edge in owner_callback_edges(
@@ -688,7 +715,10 @@ pub(crate) fn find_missing_owners(
                 if let Some(owner) = invocation_owner {
                     edges.push((owner, target_index, edge.kind));
                 } else {
-                    contexts[target_index] |= owner_edge_context(edge.kind, OWNER_CONTEXT_UNOWNED);
+                    contexts[target_index] |= owner_edge_context(
+                        edge.kind,
+                        OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+                    );
                 }
             }
         }
@@ -708,7 +738,7 @@ pub(crate) fn find_missing_owners(
                 callback.span,
                 entities,
             ) {
-                contexts[index] |= OWNER_CONTEXT_UNOWNED;
+                contexts[index] |= OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED;
             }
         }
     }
@@ -769,17 +799,29 @@ pub(crate) fn find_missing_owners(
                 // `createTrackedEffect` before the dialect extraction; that
                 // omission was the gap, not the rule.
                 Some(
-                    Primitive::CreateEffect
+                    primitive @ (Primitive::CreateEffect
                     | Primitive::CreateRenderEffect
-                    | Primitive::CreateTrackedEffect,
-                ) if !root_owned => Some(("effect", context & OWNER_CONTEXT_UNOWNED != 0)),
+                    | Primitive::CreateTrackedEffect),
+                ) if !root_owned => {
+                    let registration =
+                        crate::effect_api::classify_effect_call(file, call, primitive, lookup)
+                            .owner_registration;
+                    (registration != ProofStatus::No).then_some((
+                        "effect",
+                        context & OWNER_CONTEXT_UNOWNED != 0,
+                        registration == ProofStatus::Uncertain,
+                    ))
+                }
                 Some(Primitive::OnCleanup) if !root_owned => Some((
                     "cleanup",
                     context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
+                    false,
                 )),
-                Some(Primitive::OnSettled)
-                    if !root_owned
-                        && call.arguments.first().is_some_and(|argument| {
+                Some(Primitive::OnSettled) if !root_owned => {
+                    let proof = call
+                        .arguments
+                        .first()
+                        .and_then(|argument| {
                             owner_callback_index(
                                 &nodes,
                                 &nodes_by_path,
@@ -788,44 +830,81 @@ pub(crate) fn find_missing_owners(
                                 argument.span,
                                 entities,
                             )
-                            .and_then(|index| {
-                                let node = &nodes[index];
-                                let callback_file = facts
-                                    .files
-                                    .iter()
-                                    .find(|candidate| candidate.path.as_str() == node.path)?;
-                                let callback = callback_file
-                                    .ast
-                                    .functions
-                                    .iter()
-                                    .find(|candidate| candidate.span == node.span)?;
-                                Some(function_returns_cleanup(lookup, callback_file, callback))
-                            })
-                            .unwrap_or(false)
-                        }) =>
-                {
-                    Some((
-                        "settled-cleanup",
-                        context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
-                    ))
+                        })
+                        .and_then(|index| {
+                            let node = &nodes[index];
+                            let callback_file = facts
+                                .files
+                                .iter()
+                                .find(|candidate| candidate.path.as_str() == node.path)?;
+                            let callback = callback_file
+                                .ast
+                                .functions
+                                .iter()
+                                .find(|candidate| candidate.span == node.span)?;
+                            Some(function_cleanup_return_proof(
+                                lookup,
+                                callback_file,
+                                callback,
+                            ))
+                        })
+                        .unwrap_or(CleanupReturnProof::Unresolved);
+                    match proof {
+                        CleanupReturnProof::Function => Some((
+                            "settled-cleanup",
+                            context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
+                            false,
+                        )),
+                        CleanupReturnProof::OptionalFunction => Some((
+                            "settled-cleanup",
+                            context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
+                            true,
+                        )),
+                        CleanupReturnProof::Unresolved
+                            if lookup.resolved_callee_call(file, call.callee).is_some_and(
+                                |resolved| {
+                                    resolved.validity == typefacts::ResolvedCallValidity::Valid
+                                },
+                            ) =>
+                        {
+                            Some((
+                                "settled-cleanup",
+                                context & (OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF) != 0,
+                                true,
+                            ))
+                        }
+                        CleanupReturnProof::Unresolved => None,
+                        CleanupReturnProof::NoFunction => None,
+                    }
                 }
                 _ => None,
             };
-            if let Some((operation, report)) = operation {
-                let conditional_owner = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                    == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
-                let uncertain = conditional_owner
-                    || containing_function_indexed(
-                        &nodes,
-                        &nodes_by_path,
-                        file.path.as_str(),
-                        call.span,
-                    )
-                    .is_some_and(|index| {
+            if let Some((operation, report, runtime_uncertain)) = operation {
+                let owner_index = containing_function_indexed(
+                    &nodes,
+                    &nodes_by_path,
+                    file.path.as_str(),
+                    call.span,
+                );
+                let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+                let component_uncertain = !proven_unowned
+                    && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
+                        || owner_index.is_some_and(|index| nodes[index].component_uncertain));
+                let conditional_owner = !component_uncertain
+                    && !proven_unowned
+                    && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+                        == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                let caller_uncertain = !proven_unowned
+                    && owner_index.is_some_and(|index| {
                         nodes[index].exported
                             && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
                             && !nodes[index].component
+                            && !nodes[index].component_uncertain
                     });
+                let uncertain = runtime_uncertain
+                    || conditional_owner
+                    || caller_uncertain
+                    || component_uncertain;
                 let operation_span = if operation == "settled-cleanup" {
                     call.arguments
                         .first()
@@ -841,7 +920,10 @@ pub(crate) fn find_missing_owners(
                     operation_span,
                     OwnerRequirementStatus {
                         uncertain,
+                        runtime_uncertain,
+                        caller_uncertain,
                         conditional_owner,
+                        component_uncertain,
                         report,
                     },
                 );
@@ -869,8 +951,20 @@ pub(crate) fn find_missing_owners(
             ) {
                 continue;
             }
-            let conditional_owner = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+            let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+            let component_uncertain = !proven_unowned
+                && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
+                    || containing_function_indexed(
+                        &nodes,
+                        &nodes_by_path,
+                        file.path.as_str(),
+                        element.span,
+                    )
+                    .is_some_and(|index| nodes[index].component_uncertain));
+            let conditional_owner = !component_uncertain
+                && !proven_unowned
+                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+                    == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
@@ -878,8 +972,11 @@ pub(crate) fn find_missing_owners(
                 file.path.as_str(),
                 Span::new(element.span.start, element.name.span.end),
                 OwnerRequirementStatus {
-                    uncertain: conditional_owner,
+                    uncertain: conditional_owner || component_uncertain,
+                    runtime_uncertain: false,
+                    caller_uncertain: false,
                     conditional_owner,
+                    component_uncertain,
                     report: context & OWNER_CONTEXT_UNOWNED != 0,
                 },
             );
@@ -974,15 +1071,27 @@ pub(crate) fn discover_owner_file(
             // other effect constructors, and its earlier absence there was
             // the two passes' drift, not a narrower contract.
             Some(
-                Primitive::CreateEffect
+                primitive @ (Primitive::CreateEffect
                 | Primitive::CreateRenderEffect
-                | Primitive::CreateTrackedEffect,
-            ) => Some(("effect", OWNER_CONTEXT_UNOWNED, None, call.callee)),
+                | Primitive::CreateTrackedEffect),
+            ) => {
+                let registration =
+                    crate::effect_api::classify_effect_call(file, call, primitive, lookup)
+                        .owner_registration;
+                (registration != ProofStatus::No).then_some((
+                    "effect",
+                    OWNER_CONTEXT_UNOWNED,
+                    None,
+                    call.callee,
+                    registration == ProofStatus::Uncertain,
+                ))
+            }
             Some(Primitive::OnCleanup) => Some((
                 "cleanup",
                 OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_LEAF,
                 None,
                 call.callee,
+                false,
             )),
             Some(Primitive::OnSettled) => Some((
                 "settled-cleanup",
@@ -993,10 +1102,13 @@ pub(crate) fn discover_owner_file(
                 call.arguments
                     .first()
                     .map_or(call.callee, |argument| argument.span),
+                false,
             )),
             _ => None,
         };
-        if let Some((operation, report_mask, settled_target, operation_span)) = operation {
+        if let Some((operation, report_mask, settled_target, operation_span, runtime_uncertain)) =
+            operation
+        {
             let settled_gate = known_primitive(&call_primitives[call_index])
                 .filter(|primitive| dialect.leaf_owner_requires_owned_call_site(*primitive))
                 .map(|_| call.span);
@@ -1006,6 +1118,7 @@ pub(crate) fn discover_owner_file(
                 owner,
                 report_mask,
                 allow_uncertain: true,
+                runtime_uncertain,
                 settled_target,
                 settled_gate,
             });
@@ -1038,6 +1151,7 @@ pub(crate) fn discover_owner_file(
                 owner: owner_at(element.span),
                 report_mask: OWNER_CONTEXT_UNOWNED,
                 allow_uncertain: false,
+                runtime_uncertain: false,
                 settled_target: None,
                 settled_gate: None,
             });
@@ -1153,7 +1267,10 @@ pub(crate) fn find_missing_owners_incremental(
             }) {
                 outgoing[source].push((target, edge.kind));
             } else {
-                contexts[target] |= owner_edge_context(edge.kind, OWNER_CONTEXT_UNOWNED);
+                contexts[target] |= owner_edge_context(
+                    edge.kind,
+                    OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
+                );
             }
         }
     }
@@ -1189,7 +1306,7 @@ pub(crate) fn find_missing_owners_incremental(
                 );
             }
             if candidate.operation == "settled-cleanup" {
-                let returns_cleanup = candidate
+                let cleanup_proof = candidate
                     .settled_target
                     .as_ref()
                     .and_then(|target| {
@@ -1203,11 +1320,32 @@ pub(crate) fn find_missing_owners_incremental(
                             .functions
                             .iter()
                             .find(|function| function.span == node.span)?;
-                        Some(function_returns_cleanup(lookup, callback_file, callback))
+                        Some(function_cleanup_return_proof(
+                            lookup,
+                            callback_file,
+                            callback,
+                        ))
                     })
-                    .unwrap_or(false);
-                if !returns_cleanup {
-                    continue;
+                    .unwrap_or(CleanupReturnProof::Unresolved);
+                let settled_call_valid = file.ast.calls.iter().any(|call| {
+                    call.arguments
+                        .first()
+                        .is_some_and(|argument| argument.span == candidate.operation_span)
+                        && lookup
+                            .resolved_callee_call(file, call.callee)
+                            .is_some_and(|resolved| {
+                                resolved.validity == typefacts::ResolvedCallValidity::Valid
+                            })
+                });
+                match cleanup_proof {
+                    CleanupReturnProof::NoFunction => continue,
+                    CleanupReturnProof::Function => {}
+                    CleanupReturnProof::OptionalFunction => {
+                        // The callback may return a cleanup. Preserve that as
+                        // runtime uncertainty instead of certifying it absent.
+                    }
+                    CleanupReturnProof::Unresolved if settled_call_valid => {}
+                    CleanupReturnProof::Unresolved => continue,
                 }
             }
             let owner_index = candidate.owner.and_then(|span| {
@@ -1217,15 +1355,52 @@ pub(crate) fn find_missing_owners_incremental(
                     .copied()
             });
             let context = owner_index.map_or(OWNER_CONTEXT_UNOWNED, |index| contexts[index]);
-            let conditional_owner = context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
-                == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
-            let uncertain = conditional_owner
-                || (candidate.allow_uncertain
-                    && owner_index.is_some_and(|index| {
-                        nodes[index].exported
-                            && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
-                            && !nodes[index].component
-                    }));
+            let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+            let component_uncertain = !proven_unowned
+                && (context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0
+                    || owner_index.is_some_and(|index| nodes[index].component_uncertain));
+            let conditional_owner = !component_uncertain
+                && !proven_unowned
+                && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+                    == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+            let caller_uncertain = candidate.allow_uncertain
+                && !proven_unowned
+                && owner_index.is_some_and(|index| {
+                    nodes[index].exported
+                        && contexts[index] & OWNER_CONTEXT_UNOWNED != 0
+                        && !nodes[index].component
+                        && !nodes[index].component_uncertain
+                });
+            let cleanup_return_uncertain = candidate.operation == "settled-cleanup"
+                && candidate
+                    .settled_target
+                    .as_ref()
+                    .and_then(|target| {
+                        resolve_owner_target(file.path.as_str(), target, &nodes_by_span, &by_symbol)
+                    })
+                    .and_then(|index| {
+                        let node = &nodes[index];
+                        let callback_file = indexes.files_by_path.get(node.path.as_str())?;
+                        let callback = callback_file
+                            .ast
+                            .functions
+                            .iter()
+                            .find(|function| function.span == node.span)?;
+                        Some(function_cleanup_return_proof(
+                            lookup,
+                            callback_file,
+                            callback,
+                        ))
+                    })
+                    .is_none_or(|proof| {
+                        matches!(
+                            proof,
+                            CleanupReturnProof::OptionalFunction | CleanupReturnProof::Unresolved
+                        )
+                    });
+            let runtime_uncertain = candidate.runtime_uncertain || cleanup_return_uncertain;
+            let uncertain =
+                runtime_uncertain || conditional_owner || caller_uncertain || component_uncertain;
             push_owner_requirement(
                 &mut requirements,
                 &mut seen,
@@ -1234,7 +1409,10 @@ pub(crate) fn find_missing_owners_incremental(
                 candidate.operation_span,
                 OwnerRequirementStatus {
                     uncertain,
+                    runtime_uncertain,
+                    caller_uncertain,
                     conditional_owner,
+                    component_uncertain,
                     report: context & candidate.report_mask != 0,
                 },
             );
@@ -1291,7 +1469,7 @@ pub(crate) const fn owner_edge_context(kind: OwnerEdgeKind, source: u8) -> u8 {
     match kind {
         OwnerEdgeKind::Preserve => source,
         OwnerEdgeKind::Owned => OWNER_CONTEXT_OWNED,
-        OwnerEdgeKind::Unowned => OWNER_CONTEXT_UNOWNED,
+        OwnerEdgeKind::Unowned => OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED,
         OwnerEdgeKind::Conditional => OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED,
         OwnerEdgeKind::Leaf => OWNER_CONTEXT_LEAF,
     }
@@ -1327,7 +1505,10 @@ pub(crate) fn push_owner_requirement(
             operation: crate::OwnerRequirementOperation::from_internal(operation),
             location,
             uncertain: status.uncertain,
+            runtime_uncertain: status.runtime_uncertain,
+            caller_uncertain: status.caller_uncertain,
             conditional_owner: status.conditional_owner,
+            component_uncertain: status.component_uncertain,
             report: status.report,
         });
     }
@@ -1637,7 +1818,7 @@ pub(crate) fn inside_non_component_function(
     }
     file.ast.functions_body_containing(span).any(|function| {
         function_binding_name(file, function).is_some()
-            && !lookup.function_is_component(file, function)
+            && !lookup.function_may_be_component(file, function)
     })
 }
 
@@ -2297,7 +2478,7 @@ pub(crate) fn enclosing_render_function(
     span: Span,
     lookup: &SemanticLookup<'_>,
 ) -> bool {
-    lookup.inside_component(file, span)
+    lookup.inside_component(file, span) || lookup.inside_possible_component(file, span)
 }
 
 pub(crate) fn function_is_solid_callback(
@@ -2459,7 +2640,8 @@ pub(crate) fn analysis_context(
 #[cfg(test)]
 mod tests {
     use super::{
-        OWNER_CONTEXT_LEAF, OWNER_CONTEXT_OWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
+        OWNER_CONTEXT_COMPONENT_UNCERTAIN, OWNER_CONTEXT_LEAF, OWNER_CONTEXT_OWNED,
+        OWNER_CONTEXT_PROVEN_UNOWNED, OWNER_CONTEXT_UNOWNED, OwnerEdgeKind, OwnerNode,
         binding_returns_reactive_source, callback_owner_edge_kind, compiler_owner_context,
         compose_owner_edge, inside_owner_providing_region, owner_edge_context,
         propagate_owner_contexts, returned_arrow_function, seed_contexts,
@@ -2537,7 +2719,14 @@ mod tests {
         );
         assert_eq!(
             owner_edge_context(OwnerEdgeKind::Unowned, OWNER_CONTEXT_OWNED),
-            OWNER_CONTEXT_UNOWNED
+            OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_PROVEN_UNOWNED
+        );
+        assert_eq!(
+            owner_edge_context(
+                OwnerEdgeKind::Preserve,
+                OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_COMPONENT_UNCERTAIN,
+            ),
+            OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_COMPONENT_UNCERTAIN
         );
         assert_eq!(
             owner_edge_context(OwnerEdgeKind::Conditional, 0),
@@ -2598,6 +2787,7 @@ mod tests {
             symbol: None,
             exported: false,
             component: seed_context & OWNER_CONTEXT_OWNED != 0,
+            component_uncertain: false,
             seed_context,
         }
     }

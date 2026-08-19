@@ -384,7 +384,10 @@ mod tests {
                 operation: OwnerRequirementOperation::Cleanup,
                 location: location(5),
                 uncertain: false,
+                runtime_uncertain: false,
+                caller_uncertain: false,
                 conditional_owner: false,
+                component_uncertain: false,
                 report: true,
             }],
             async_reads: vec![AsyncRead {
@@ -398,6 +401,7 @@ mod tests {
                 declared_loading: false,
                 options_opaque: false,
                 ssr_client_hole: false,
+                server_rendering_unresolved: false,
             }],
             static_defects: defect_kinds
                 .into_iter()
@@ -466,6 +470,7 @@ mod tests {
             "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1006", "SC1007", "SC2001",
             "SC2003", "SC3001", "SC3002", "SC4001", "SC4002", "SC4003", "SC6001", "SC7001",
             "SC8018", "SC8019", "SC8020", "SC9001", "SC9004", "SC9005", "SC9006", "SC9011",
+            "SC9012",
         ]);
         assert_eq!(shared, expected);
         assert_eq!(
@@ -473,22 +478,22 @@ mod tests {
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            24
+            25
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            24
+            25
         );
         assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 24,
+            solid_v1_rules::Rule::ALL.len() - 25,
             17,
             "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
         assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 24,
+            solid_v2_rules::Rule::ALL.len() - 25,
             12,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );

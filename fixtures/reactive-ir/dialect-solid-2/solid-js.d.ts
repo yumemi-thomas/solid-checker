@@ -4,7 +4,12 @@ declare namespace JSX {
 }
 
 declare module "solid-js" {
-  export function createEffect<T>(compute: ((prev?: T) => T) | undefined, apply?: T | ((value: T) => void)): void;
+  type ComputeFunction<Prev, Next extends Prev = Prev> = (value: Prev) => PromiseLike<Next> | AsyncIterable<Next> | Next;
+  type EffectFunction<Prev, Next extends Prev = Prev> = (value: Next, previous?: Prev) => (() => void) | void;
+  type EffectBundle<Prev, Next extends Prev = Prev> = { effect: EffectFunction<Prev, Next>; error: (error: unknown, cleanup: () => void) => void };
+  export function createEffect<T>(compute: ComputeFunction<undefined | T, T>, effect: EffectFunction<T, T> | EffectBundle<T, T>, options?: { name?: string }): void;
+  /** @deprecated The client runtime throws MISSING_EFFECT_FN. */
+  export function createEffect<T>(compute: ComputeFunction<undefined | T, T>): never;
   export function createSignal<T>(v: T): [() => T, (n: T) => void];
   export function batch<T>(fn: () => T): T;
   export function onMount(fn: () => void): void;

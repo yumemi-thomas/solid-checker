@@ -1,4 +1,12 @@
-import { Reader, genericRead, invoke, objectReader, quietReader } from "./source";
+import {
+  Reader,
+  equivalentReader,
+  genericRead,
+  handlerTable,
+  invoke,
+  objectReader,
+  quietReader,
+} from "./source";
 
 export function ClassCall() {
   const value = new Reader().read("class");
@@ -15,6 +23,19 @@ export function AmbiguousCall() {
     Math.random() > 0.5 ? objectReader : quietReader,
     "ambiguous",
   );
+  return <div>{value}</div>;
+}
+
+export function EquivalentConditionalCall() {
+  const value = invoke(
+    Math.random() > 0.5 ? objectReader : equivalentReader,
+    "equivalent",
+  );
+  return <div>{value}</div>;
+}
+
+export function ComputedCall() {
+  const value = handlerTable[Math.random() > 0.5 ? 0 : 1]();
   return <div>{value}</div>;
 }
 

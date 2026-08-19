@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@internal/*": ["*"]
+    },
+    "strict": true,
+    "target": "ES2022"
+  },
+  "include": ["*.ts", "ambiguous/*.ts"]
+}

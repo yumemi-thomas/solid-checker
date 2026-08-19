@@ -7,11 +7,30 @@ support is intentionally excluded.
 
 ## What it does
 
-Reports imports from `solid-js/store`, direct `new Proxy` and `Proxy.revocable`
+Reports runtime imports from `solid-js/store`, direct `new Proxy` and `Proxy.revocable`
 calls, `mergeProps` inputs that may require lazy proxying, and call/member
 expressions inside JSX spreads that make Solid proxy the spread result. The rule
 models the compatibility policy of eslint-plugin-solid's `no-proxy-apis`; it is
 not a claim that these APIs are unsafe on modern engines.
+
+Direct Proxy calls use the compiler-selected standard-library declaration; a
+project class or function that shadows `Proxy` stays silent. For `mergeProps`,
+the audited 1.9 client runtime enters its Proxy path when a source is callable
+or carries Solid's private `$PROXY` marker. Inline or locally resolved functions
+therefore produce violations, while an exact plain object literal is certified
+safe. A closed literal with accessors is safe as well when every key is
+statically known: accessors do not make the object callable or introduce a
+hidden `$PROXY` marker. Imports, parameters, spreads, call results, member reads, and other
+unresolved values may be plain objects or Proxy-triggering values and produce
+an **uncertifiable** obligation. Identifier names such as `props` are never
+used as evidence.
+
+An explicit `import type` declaration is proven erased and stays silent.
+Side-effect imports and bindings referenced by runtime expressions are proven
+to execute and report violations. An ordinary import with no runtime binding
+reference is **uncertifiable**: default TypeScript emit erases it, while
+`verbatimModuleSyntax` preserves it, and the current fact domains do not carry
+that effective emit option.
 
 ## Why is this bad?
 

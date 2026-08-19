@@ -10,8 +10,9 @@ use std::collections::HashSet;
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, ExportKind, FunctionKind};
+use solid_facts::ast::{ArgumentValueKind, ExportKind, FunctionKind, RuntimeValueKind};
 use solid_facts::core::Span;
+use typefacts::{ConstantValueKind, EntityFact, ResolvedCallValidity};
 
 use crate::execution_role::semantic_execution_role;
 use crate::owners::{containing_ast_function, jsx_element_is_loading};
@@ -39,9 +40,10 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
 /// queue"). The finding is conditional — a boundary that settles *before*
 /// the flush still applies its writes — hence warning severity.
 ///
-/// Fires only in projects that provably server-render: on the client both
-/// exports are unconditional no-ops wherever they are called, so a CSR-only
-/// project has no post-flush drop to report.
+/// A proven server-rendering entry yields a violation. When no such entry is
+/// visible, the rendering mode remains unresolved (the entry may live in a
+/// separate tsconfig/package), so the same shape is uncertifiable rather than
+/// silently treated as CSR-only.
 fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     let mut server_renders = None;
     let mut loading_hosts: Option<HashSet<(&str, Span)>> = None;
@@ -60,11 +62,8 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             .and_then(crate::PrimitiveName::primitive) else {
                 continue;
             };
-            if !*server_renders
-                .get_or_insert_with(|| crate::source_discovery::project_server_renders(ctx.facts))
-            {
-                return;
-            }
+            let server_renders = *server_renders
+                .get_or_insert_with(|| crate::source_discovery::project_server_renders(ctx.facts));
             // Render-time scopes only. An event handler or deferred callback
             // is a client-time (or post-render) call and is a no-op for a
             // different reason than the post-flush drop; unknown scopes stay
@@ -105,16 +104,24 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             draft.static_violations.push(StaticViolation {
                 id: "SC7005".into(),
                 rule: "http-response-after-flush".into(),
-                message: format!(
-                    "{name}() is called by content below a <Loading> boundary; under streaming SSR the response head commits at the shell flush, and when this boundary settles after the shell has flushed the call is a committed no-op — the {} is silently dropped, with no queue holding it for later",
-                    if kind == Primitive::HttpStatus { "status" } else { "header" }
-                ),
+                message: if server_renders {
+                    format!(
+                        "{name}() is called by content below a <Loading> boundary; under streaming SSR the response head commits at the shell flush, and when this boundary settles after the shell has flushed the call is a committed no-op — the {} is silently dropped, with no queue holding it for later",
+                        if kind == Primitive::HttpStatus { "status" } else { "header" }
+                    )
+                } else {
+                    format!(
+                        "{name}() is called by content below a <Loading> boundary, but the analyzed project cannot prove whether a server-rendering entry exists; if this application streams SSR and the boundary settles after the shell flush, the {} is silently dropped",
+                        if kind == Primitive::HttpStatus { "status" } else { "header" }
+                    )
+                },
                 hint: format!(
                     "Decide the response head in shell content — above every <Loading> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. If the boundary settles before the flush (fast data, renderToString) the write still applies, which is why this is a warning."
                 ),
                 location: location(file.path.shared(), call.callee),
                 analysis_context: String::new(),
                 fixes: vec![],
+                uncertain: !server_renders,
             });
         }
     }
@@ -176,8 +183,9 @@ fn loading_wrapped_components<'a>(ctx: &AnalysisContext<'a>) -> HashSet<(&'a str
 ///
 /// Positive forms: a wrapped export (call-expression initializer), a
 /// non-function `export default` expression, and re-exports (`export { x }
-/// from`, `export * from`). Everything else — identifier aliases, plain
-/// value exports, unresolvable shapes — routes to silence.
+/// from`, `export * from`). Identifier aliases, plain values, and other shapes
+/// that are neither proven direct functions nor proven wrapped exports are
+/// explicit uncertifiable results.
 fn server_function_module_directive(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         if !file
@@ -194,12 +202,13 @@ fn server_function_module_directive(ctx: &AnalysisContext<'_>, draft: &mut Progr
             }
             match export.kind {
                 ExportKind::All => {
-                    push_module_directive_violation(
+                    push_module_directive_finding(
                         draft,
                         file,
                         export.span,
                         "every re-exported binding",
                         "a re-export",
+                        false,
                     );
                 }
                 ExportKind::Named if export.module.is_some() => {
@@ -208,12 +217,13 @@ fn server_function_module_directive(ctx: &AnalysisContext<'_>, draft: &mut Progr
                         .iter()
                         .filter(|specifier| !specifier.type_only)
                     {
-                        push_module_directive_violation(
+                        push_module_directive_finding(
                             draft,
                             file,
                             specifier.local.span,
                             specifier.exported.as_str(),
                             "a re-export",
+                            false,
                         );
                     }
                 }
@@ -223,17 +233,29 @@ fn server_function_module_directive(ctx: &AnalysisContext<'_>, draft: &mut Progr
                         .iter()
                         .filter(|specifier| !specifier.type_only)
                     {
-                        let Some(shape) = non_function_export_shape(file, specifier.local.span)
-                        else {
-                            continue;
-                        };
-                        push_module_directive_violation(
-                            draft,
-                            file,
-                            specifier.local.span,
-                            specifier.exported.as_str(),
-                            shape,
-                        );
+                        match module_export_shape(file, specifier.local.span) {
+                            ModuleExportShape::DirectFunction => {}
+                            ModuleExportShape::NotDirect(shape) => {
+                                push_module_directive_finding(
+                                    draft,
+                                    file,
+                                    specifier.local.span,
+                                    specifier.exported.as_str(),
+                                    shape,
+                                    false,
+                                );
+                            }
+                            ModuleExportShape::Unresolved => {
+                                push_module_directive_finding(
+                                    draft,
+                                    file,
+                                    specifier.local.span,
+                                    specifier.exported.as_str(),
+                                    "an export whose runtime shape cannot be proven",
+                                    true,
+                                );
+                            }
+                        }
                     }
                 }
             }
@@ -241,10 +263,15 @@ fn server_function_module_directive(ctx: &AnalysisContext<'_>, draft: &mut Progr
     }
 }
 
-/// Proves an exported declaration is *not* a direct function export, naming
-/// the shape for the message; `None` keeps it silent (a direct function, or
-/// a shape the analysis cannot prove either way).
-fn non_function_export_shape(file: &FileFacts, local: Span) -> Option<&'static str> {
+enum ModuleExportShape {
+    DirectFunction,
+    NotDirect(&'static str),
+    Unresolved,
+}
+
+/// Classifies an exported declaration without treating an unrecognized shape
+/// as a direct-function proof.
+fn module_export_shape(file: &FileFacts, local: Span) -> ModuleExportShape {
     // A function declaration exported by name, or a default-exported
     // function/class expression whose recorded span is the function itself.
     if file.ast.functions.iter().any(|function| {
@@ -255,7 +282,7 @@ fn non_function_export_shape(file: &FileFacts, local: Span) -> Option<&'static s
                     .as_ref()
                     .is_some_and(|name| name.span == local))
     }) {
-        return None;
+        return ModuleExportShape::DirectFunction;
     }
     if let Some(binding) = file
         .ast
@@ -267,40 +294,49 @@ fn non_function_export_shape(file: &FileFacts, local: Span) -> Option<&'static s
         // function expression is a reference; anything else stays silent
         // rather than guessed.
         if binding.initializer_function {
-            return None;
+            return ModuleExportShape::DirectFunction;
         }
-        return binding
-            .call_initializer
-            .is_some()
-            .then_some("a wrapped function");
+        return if binding.call_initializer.is_some() {
+            ModuleExportShape::NotDirect("a wrapped function")
+        } else {
+            ModuleExportShape::Unresolved
+        };
     }
     // `export default <expression>`: the recorded local span is the
     // expression. A call is the proven wrapped form.
     let value = file.ast.peel_ts_sugar_span(local);
-    file.ast
-        .calls
-        .iter()
-        .any(|call| call.span == value)
-        .then_some("a wrapped function")
+    if file.ast.calls.iter().any(|call| call.span == value) {
+        ModuleExportShape::NotDirect("a wrapped function")
+    } else {
+        ModuleExportShape::Unresolved
+    }
 }
 
-fn push_module_directive_violation(
+fn push_module_directive_finding(
     draft: &mut ProgramDraft,
     file: &FileFacts,
     span: Span,
     exported: &str,
     shape: &str,
+    uncertain: bool,
 ) {
     draft.static_violations.push(StaticViolation {
         id: "SC7006".into(),
         rule: "server-function-module-directive".into(),
-        message: format!(
-            "this module's top-level \"use server\" directive extracts every export to the server build, but export {exported} is {shape}, not a direct function declaration; the compiler turns only direct function exports into client references, so this export is silently dropped from the client build"
-        ),
+        message: if uncertain {
+            format!(
+                "this module's top-level \"use server\" directive requires direct function exports, but export {exported} is {shape}; available syntax facts cannot prove that the compiler will turn it into a client reference"
+            )
+        } else {
+            format!(
+                "this module's top-level \"use server\" directive extracts every export to the server build, but export {exported} is {shape}, not a direct function declaration; the compiler turns only direct function exports into client references, so this export is silently dropped from the client build"
+            )
+        },
         hint: "Move the \"use server\" directive into each function body and keep the wrapper at the export site — export const getData = GET(async (id) => { \"use server\"; ... }) round-trips the wrapper call — or export plain functions from this module and wrap them where they are imported.".into(),
         location: location(file.path.shared(), span),
         analysis_context: String::new(),
         fixes: vec![],
+        uncertain,
     });
 }
 
@@ -316,7 +352,10 @@ fn push_module_directive_violation(
 /// throw (probed); `enableRichArguments()` or a configured `serializeArgs`
 /// removes the throw entirely (probed).
 fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    let mut rich_arguments_enabled = None;
+    // The serializer proof is a project-wide scan of every call. Only a client
+    // call to a server function can consume it, and most projects have none,
+    // so resolve it on first use rather than on entry.
+    let mut serializer_proof = None;
     for file in &ctx.facts.files {
         // A call site inside server-side code never crosses the client
         // transport: in-process SSR and server-to-server calls run the
@@ -349,6 +388,22 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
             if !server_function {
                 continue;
             }
+            match ctx.semantic_lookup.resolved_callee_call(file, call.callee) {
+                Some(resolved) if resolved.validity == ResolvedCallValidity::Valid => {}
+                // Recovery and unresolved calls are TypeScript-owned. Emitting
+                // a transport finding on the same invalid call would violate
+                // the project's no-duplicate boundary.
+                Some(_) => continue,
+                None => {
+                    push_rich_argument_uncertainty(
+                        draft,
+                        file,
+                        call.callee,
+                        "the compiler did not return the demanded call-validity fact",
+                    );
+                    continue;
+                }
+            }
             // A call whose own lexical scope is extracted to the server (an
             // enclosing "use server" function) is a direct server-side call.
             if file
@@ -360,29 +415,68 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                 continue;
             }
             for (index, argument) in call.arguments.iter().enumerate() {
-                // Only identifier arguments carry demanded type facts; an
-                // inline expression is unresolvable here and an unproven rich
-                // type is not a proven throw — silence, not uncertifiable.
-                if argument.spread || argument.value != ArgumentValueKind::Identifier {
+                if argument.spread {
+                    if *serializer_proof
+                        .get_or_insert_with(|| project_rich_argument_serializer(ctx))
+                        != SerializerProof::Enabled
+                    {
+                        push_rich_argument_uncertainty(
+                            draft,
+                            file,
+                            argument.span,
+                            "a spread hides the runtime argument values",
+                        );
+                    }
                     continue;
                 }
                 let Some(entity) = ctx
                     .semantic_lookup
                     .entity_at(file.path.as_str(), argument.span)
                 else {
+                    push_rich_argument_uncertainty(
+                        draft,
+                        file,
+                        argument.span,
+                        "the compiler did not return the demanded argument facts",
+                    );
                     continue;
                 };
-                let Some(library_types) = entity.library_types.as_deref() else {
-                    continue;
-                };
-                let Some(matched) = rich_transport_member(library_types) else {
+                let matched = entity
+                    .library_types
+                    .as_deref()
+                    .and_then(|types| rich_transport_member(types));
+                let Some(matched) = matched else {
+                    if argument_is_proven_json_safe(argument, entity) {
+                        continue;
+                    }
+                    if *serializer_proof
+                        .get_or_insert_with(|| project_rich_argument_serializer(ctx))
+                        != SerializerProof::Enabled
+                    {
+                        push_rich_argument_uncertainty(
+                            draft,
+                            file,
+                            argument.span,
+                            if *serializer_proof
+                                .get_or_insert_with(|| project_rich_argument_serializer(ctx))
+                                == SerializerProof::Unresolved
+                            {
+                                "neither the argument's JSON safety nor the project's serializer configuration can be resolved exactly"
+                            } else {
+                                "the argument's complete JSON safety cannot be proven from the available type and literal facts"
+                            },
+                        );
+                    }
                     continue;
                 };
                 // The descriptor is quoted in the message so the report names the
-                // type the author wrote; the decision above never reads it.
-                let Some(descriptor) = entity.type_descriptor.as_ref() else {
-                    continue;
-                };
+                // type the author wrote; the decision above never reads it. A
+                // literal argument carries no descriptor demand, so the value
+                // the author wrote stands in for it.
+                let descriptor = entity.type_descriptor.as_ref().map_or_else(
+                    || file.source_text(argument.span).unwrap_or("this argument"),
+                    |descriptor| descriptor.text.as_ref(),
+                );
                 // Natural HTTP encodings: a lone Uint8Array/ArrayBuffer
                 // argument — or one in trailing position after JSON-safe
                 // leading arguments — is sent as a body, not as JSON
@@ -392,10 +486,19 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                 {
                     continue;
                 }
-                if *rich_arguments_enabled
-                    .get_or_insert_with(|| project_enables_rich_arguments(ctx))
+                match *serializer_proof.get_or_insert_with(|| project_rich_argument_serializer(ctx))
                 {
-                    return;
+                    SerializerProof::Enabled => return,
+                    SerializerProof::Unresolved => {
+                        push_rich_argument_uncertainty(
+                            draft,
+                            file,
+                            argument.span,
+                            "the project's server-function serializer configuration cannot be resolved exactly",
+                        );
+                        continue;
+                    }
+                    SerializerProof::Disabled => {}
                 }
                 let name = function
                     .name
@@ -407,16 +510,81 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     rule: "server-function-rich-argument".into(),
                     message: format!(
                         "server function {name} receives an argument typed {} ({}); server-function arguments travel as plain JSON by default, and a value JSON cannot carry faithfully throws at the transport: \"Server function arguments are sent as JSON by default and these arguments are not JSON-serializable\"",
-                        descriptor.text, matched.member
+                        descriptor, matched.member
                     ),
                     hint: "Call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup to send Dates, Maps, Sets, and typed arrays through the codec (~5 KB gz), or convert the argument to a JSON-safe shape at the call site (date.toISOString(), Array.from(set)).".into(),
                     location: location(file.path.shared(), argument.span),
                     analysis_context: String::new(),
                     fixes: vec![],
+                    uncertain: false,
                 });
             }
         }
     }
+}
+
+/// A deliberately small safe set, proved from the value the call actually
+/// passes: `null`, a constant string, a finite constant number, and a written
+/// primitive or nullish literal. Objects, arrays, aliases, unions, `any`, and
+/// `unknown` are not guessed -- nested rich values, cycles, non-finite
+/// numbers, and runtime type escapes remain possible, so their branch is
+/// explicit `uncertifiable` unless a serializer is proven.
+///
+/// This deliberately does *not* consult `TypeDescriptor.text`. A rendered name
+/// is not a fact about the value: `type Name = string` renders as `Name`, so a
+/// text test certified `save(plain)` and raised an obligation on the identical
+/// `save(aliased)`. Type Facts exposes no structural primitive-kind fact to
+/// replace it with, so an unresolved declared type is now uniformly an
+/// obligation rather than a spelling-dependent one. See
+/// docs/precision-backlog.md for the ledger entry.
+fn argument_is_proven_json_safe(
+    argument: &solid_facts::ast::ArgumentFact,
+    entity: &EntityFact,
+) -> bool {
+    if argument.value == ArgumentValueKind::Null {
+        return true;
+    }
+    if let Some(value) = entity.constant_value.as_ref() {
+        return match value.kind {
+            ConstantValueKind::String => true,
+            ConstantValueKind::Number => value.number.is_finite(),
+        };
+    }
+    // A written primitive or nullish literal is JSON-safe, and the AST proves
+    // the shape without any compiler fact. This is only reached once the
+    // library identities have already ruled the value out of the rich
+    // transport set, so a regexp literal never lands here.
+    matches!(
+        argument.runtime_value_kind,
+        RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
+    )
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum SerializerProof {
+    Enabled,
+    Disabled,
+    Unresolved,
+}
+
+fn push_rich_argument_uncertainty(
+    draft: &mut ProgramDraft,
+    file: &solid_facts::FileFacts,
+    span: Span,
+    reason: &str,
+) {
+    draft.static_violations.push(StaticViolation {
+        id: "SC7007".into(),
+        rule: "server-function-rich-argument".into(),
+        message: format!(
+            "a client call to a server function has an unresolved rich-argument transport proof: {reason}"
+        ),
+        hint: "Resolve the argument type and configure the serializer through the exact @solidjs/web server-functions API, or pass a JSON-safe value explicitly.".into(),
+        location: location(file.path.shared(), span),
+        analysis_context: "server-function-rich-argument-unresolved".into(),
+        fixes: vec![],
+        uncertain: true,
+    });
 }
 
 /// A matched rich-transport type member.
@@ -436,8 +604,8 @@ struct RichMember {
 /// The names come from `libraryTypes`, the compiler's own identities for the
 /// standard-library types the argument's type is built from at its top level:
 /// itself, its union and intersection members, and one array-element unwrap.
-/// Nested object properties are not included, which keeps the rule's existing
-/// boundary — an unproven rich member is not a proven throw.
+/// Nested object properties are not included. Their absence cannot certify the
+/// object graph, so the caller retains an explicit uncertifiable obligation.
 ///
 /// This replaced a walk over `TypeDescriptor.text` that split on top-level
 /// `|`/`&` and matched the head of each member. Text could not answer it: an
@@ -475,40 +643,57 @@ fn rich_transport_member(library_types: &[std::sync::Arc<str>]) -> Option<RichMe
 /// Whether anything in the project installs an argument serializer: a value
 /// import of the `rich-args` entry (whose one export is
 /// `enableRichArguments`), or `configureServerFunctionsClient({ …,
-/// serializeArgs })`. Either removes the transport throw everywhere
-/// (probed), so the whole rule goes silent — over-approximation here only
-/// ever silences.
-fn project_enables_rich_arguments(ctx: &AnalysisContext<'_>) -> bool {
-    ctx.facts.files.iter().any(|file| {
+/// serializeArgs })`. Either removes the transport throw everywhere (probed),
+/// so the whole rule goes silent. Because that is a project-wide safety proof,
+/// ambiguous configuration is kept separate from both enabled and disabled.
+fn project_rich_argument_serializer(ctx: &AnalysisContext<'_>) -> SerializerProof {
+    let mut unresolved = false;
+    for file in &ctx.facts.files {
         let rich_args_import = file.ast.imports.iter().any(|import| {
             !import.type_only
                 && import.module.as_str() == "@solidjs/web/server-functions/rich-args"
                 && import.bindings.iter().any(|binding| !binding.type_only)
         });
         if rich_args_import {
-            return true;
+            return SerializerProof::Enabled;
         }
-        let imports_configure = file.ast.imports.iter().any(|import| {
-            import.module.as_str().starts_with("@solidjs/web")
-                && import.bindings.iter().any(|binding| {
-                    !binding.type_only
-                        && binding
-                            .imported
-                            .as_deref()
-                            .or_else(|| file.source_text(binding.local.span))
-                            == Some("configureServerFunctionsClient")
-                })
-        });
-        imports_configure
-            && file.ast.calls.iter().any(|call| {
-                call.arguments.iter().any(|argument| {
-                    argument
-                        .property_names
-                        .iter()
-                        .any(|name| file.source_text(*name) == Some("serializeArgs"))
-                })
-            })
-    })
+        for call in &file.ast.calls {
+            let exact_configure = ctx
+                .semantic_lookup
+                .resolved_callee_call(file, call.callee)
+                .filter(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
+                .and_then(|resolved| resolved.declaration.as_ref())
+                .is_some_and(|declaration| {
+                    declaration.name.as_ref() == "configureServerFunctionsClient"
+                        && matches!(
+                            declaration.origin_module.as_ref(),
+                            "@solidjs/web/server-functions"
+                                | "@solidjs/web/server-functions/client"
+                        )
+                });
+            if !exact_configure {
+                continue;
+            }
+            let Some(options) = call.arguments.first() else {
+                continue;
+            };
+            if options
+                .property_names
+                .iter()
+                .any(|name| file.source_text(*name) == Some("serializeArgs"))
+            {
+                return SerializerProof::Enabled;
+            }
+            if !options.closed_object_literal {
+                unresolved = true;
+            }
+        }
+    }
+    if unresolved {
+        SerializerProof::Unresolved
+    } else {
+        SerializerProof::Disabled
+    }
 }
 
 #[cfg(test)]

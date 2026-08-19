@@ -272,9 +272,12 @@ by the binder's resolution of that exact reference, carried on the object
 property fact as `shorthandBinding`. That is scope-exact: a same-spelled
 binding in a sibling block declares a different symbol at a different span, so
 it can neither be chosen nor make the visible declaration ambiguous. A
-shorthand the binder resolves to no declaration in this file -- a global, or an
-import specifier, including one for an accessor declared in another file --
-carries no fact and yields no structured property.
+shorthand the binder resolves to a relative named/default import is followed
+through exact project-local ESM exports (including re-export chains) before a
+reactive leaf is claimed. Ambiguous relative targets, bare/path-mapped imports,
+namespace imports, globals, and unresolved cycles yield no structured property;
+the generator never chooses a same-spelled declaration or filesystem candidate
+as a substitute for exact resolution.
 
 Generation fails closed when an exported parameter escapes through an
 uncontracted external call whose execution semantics are unknown. This includes
@@ -283,6 +286,14 @@ scheduler: emission stops instead of producing an empty, falsely inert summary.
 Local calls are summarized transitively, and forwarding into known Solid
 callback slots records the corresponding tracked, deferred, or inline
 execution.
+
+Schema-v1 callback entries describe execution timing, not the callback's owner
+capability. When an exported function invokes a caller-supplied callback from a
+Solid leaf owner such as `onSettled`, recording only `"execution": "deferred"`
+would lose the fact that cleanup, flush, and nested primitive creation are
+forbidden there. Generation therefore emits SC9012 and refuses to certify that
+surface until an exact in-project callback discharges it or a future
+backward-compatible contract field can represent the leaf-owner constraint.
 
 Local deferred-flow proofs are structural rather than name-based. A function
 installed on an object is considered deferred only when that object is

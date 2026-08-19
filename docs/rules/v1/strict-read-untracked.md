@@ -13,6 +13,11 @@ position, or through a chain of calls that ends in one of those places. The
 finding's evidence trail shows where the value was declared and how the read
 reached the untracked scope.
 
+For an uppercase function with neither a JSX call site nor an exact
+`Component` type, the execution model is unresolved. Reads that would be
+untracked in component setup are reported as **uncertifiable**, because the
+same function may instead be an ordinary helper invoked under tracking.
+
 Solid 1.x context providers are an important runtime-defined case:
 `createContext(...).Provider` reads its `value` getter inside `untrack`, so a
 reactive read in that prop is untracked even though ordinary component props

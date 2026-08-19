@@ -23,13 +23,11 @@
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind};
+use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind, RuntimeValueKind};
 use solid_facts::core::Span;
+use typefacts::{CallKind, ResolvedCall, ResolvedCallValidity};
 
-use super::{
-    UpstreamCompatContext, binding_initializer, deletion_with_leading_comma, is_import_reference,
-    text,
-};
+use super::{UpstreamCompatContext, binding_initializer, deletion_with_leading_comma, text};
 use crate::{Fix, StaticViolation, TextEdit, known_primitive, location};
 
 pub(super) fn check_file(
@@ -101,6 +99,7 @@ fn no_react_deps(
                     new_text: String::new(),
                 }],
             }],
+            uncertain: false,
         });
     }
 }
@@ -118,22 +117,64 @@ fn no_proxy_apis(
     no_proxy_calls(file, context, violations);
 }
 
-fn proxy_violation(file: &FileFacts, message: &str, hint: &str, span: Span) -> StaticViolation {
-    super::violation(file, "SC8009", "no-proxy-apis", message, hint, span, vec![])
+fn proxy_violation(
+    file: &FileFacts,
+    message: &str,
+    hint: &str,
+    span: Span,
+    uncertain: bool,
+) -> StaticViolation {
+    StaticViolation {
+        uncertain,
+        ..super::violation(file, "SC8009", "no-proxy-apis", message, hint, span, vec![])
+    }
 }
 
 /// `solid-js/store` builds its stores on ES2015 `Proxy`, unavailable on the
 /// resource-constrained or legacy engines this rule exists for.
 fn no_proxy_imports(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
     for import in &file.ast.imports {
-        if import.module.as_str() == "solid-js/store" {
+        if import.module.as_str() != "solid-js/store" {
+            continue;
+        }
+        let execution = import_execution(import);
+        if execution != ImportExecution::Erased {
             violations.push(proxy_violation(
                 file,
                 "The store package relies on JavaScript Proxies.",
-                "Proxies are unavailable on engines without ES2015 Proxy support.",
+                if execution == ImportExecution::Unknown {
+                    "The binding is not used at runtime, but whether TypeScript preserves this import depends on effective compiler emit options that are unavailable to this analysis."
+                } else {
+                    "Proxies are unavailable on engines without ES2015 Proxy support."
+                },
                 import.span,
+                execution == ImportExecution::Unknown,
             ));
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ImportExecution {
+    Erased,
+    Executes,
+    Unknown,
+}
+
+fn import_execution(import: &solid_facts::ast::ImportFact) -> ImportExecution {
+    if import.type_only {
+        ImportExecution::Erased
+    } else if import
+        .bindings
+        .iter()
+        .any(|binding| binding.runtime_referenced)
+    {
+        ImportExecution::Executes
+    } else {
+        // Default TypeScript emit erases this declaration; verbatim module
+        // syntax preserves it. No current fact domain carries that effective
+        // project option, so neither runtime execution nor erasure is proven.
+        ImportExecution::Unknown
     }
 }
 
@@ -149,38 +190,53 @@ fn no_proxy_calls(
 ) {
     let primitives = context.lookup.primitives(file);
     for (index, call) in file.ast.calls.iter().enumerate() {
-        // `Proxy` is a JS builtin, not a dialect primitive, so there is no
-        // resolution table to ask; the source spelling is all there is.
         let callee = call.static_callee(&file.source).unwrap_or_default();
         let call_source = text(file, call.span).trim_start();
-        if callee == "Proxy.revocable" || (callee == "Proxy" && call_source.starts_with("new ")) {
-            violations.push(proxy_violation(
-                file,
-                "The Proxy API is unavailable in resource-constrained environments.",
-                "Proxies are unavailable on engines without ES2015 Proxy support.",
-                call.span,
-            ));
+        let proxy_spelling =
+            callee == "Proxy.revocable" || (callee == "Proxy" && call_source.starts_with("new "));
+        if proxy_spelling {
+            match context.lookup.resolved_callee_call(file, call.callee) {
+                Some(resolved) if is_standard_proxy_call(resolved) => {
+                    violations.push(proxy_violation(
+                        file,
+                        "The Proxy API is unavailable in resource-constrained environments.",
+                        "Proxies are unavailable on engines without ES2015 Proxy support.",
+                        call.span,
+                        false,
+                    ));
+                }
+                None => violations.push(proxy_violation(
+                    file,
+                    "The call is spelled like the Proxy API, but its exact declaration could not be resolved.",
+                    "Resolve the call target before certifying whether this code requires ES2015 Proxy support.",
+                    call.span,
+                    true,
+                )),
+                Some(_) => {
+                    // An exact project declaration shadows the standard
+                    // builtin. Its spelling cannot transfer Proxy semantics.
+                }
+            }
         }
         if known_primitive(&primitives.calls[index]) == Some(Primitive::MergeProps) {
-            // Upstream judges every argument, not just the first: a spread,
-            // a function (written inline or resolved through a binding), or
-            // an identifier that neither resolves to an object literal nor
-            // names props (`/[pP]rops/`) each makes `mergeProps` fall back
-            // to a Proxy. Object literals, calls, and member reads pass.
+            // The 1.9 runtime enables its Proxy path only when a source is a
+            // function or carries Solid's private `$PROXY` marker. Source
+            // spelling and names such as `props` prove neither condition.
             for argument in &call.arguments {
                 let spread = file
                     .ast
                     .spreads
                     .iter()
                     .any(|spread| spread.span == argument.span);
-                let reported = spread
-                    || match argument.value {
-                        ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction => true,
+                let (reported, uncertain) = if spread {
+                    (true, true)
+                } else {
+                    match argument.value {
+                        ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction => {
+                            (true, false)
+                        }
                         ArgumentValueKind::Identifier => {
-                            let name = text(file, argument.span).trim();
                             match binding_initializer(context, file, argument.span) {
-                                // Resolved to a function: a Proxy source no
-                                // matter what the binding is called.
                                 Some((binding_file, initializer_span, _, _))
                                     if binding_file
                                         .ast
@@ -188,30 +244,47 @@ fn no_proxy_calls(
                                         .iter()
                                         .any(|function| function.span == initializer_span) =>
                                 {
-                                    true
+                                    (true, false)
                                 }
-                                // Resolved to anything else written in this
-                                // file — an object literal, a call, a member
-                                // read — passes, as upstream's trace does.
-                                Some(_) => false,
-                                // An imported binding passes: upstream's
-                                // trace lands on the import specifier, which
-                                // is not an identifier, so it never reaches
-                                // the props-name test.
-                                None if is_import_reference(context, file, argument.span) => false,
-                                // Unresolvable: upstream reports unless the
-                                // name reads as props.
-                                None => !name.contains("props") && !name.contains("Props"),
+                                // A local non-function initializer, an
+                                // import, and an unresolvable parameter may
+                                // each be a plain object or a marked proxy.
+                                // No identifier name certifies which one.
+                                Some(_) | None => (true, true),
                             }
                         }
-                        _ => false,
-                    };
+                        _ => match argument.runtime_value_kind {
+                            RuntimeValueKind::Function => (true, false),
+                            RuntimeValueKind::Object if argument.closed_object_literal => {
+                                // Accessors do not make an object callable and
+                                // cannot introduce hidden spread/computed keys.
+                                // The closed key set is enough for this
+                                // eager-merge decision even though it does not
+                                // prove accessor values.
+                                (false, false)
+                            }
+                            RuntimeValueKind::Nullish
+                            | RuntimeValueKind::Primitive
+                            | RuntimeValueKind::Array => (false, false),
+                            RuntimeValueKind::Object | RuntimeValueKind::Unknown => (true, true),
+                        },
+                    }
+                };
                 if reported {
                     violations.push(proxy_violation(
                         file,
-                        "Passing anything but an object literal or a props object to mergeProps may require a Proxy.",
-                        "If you pass a function to `mergeProps`, it will create a Proxy, which are incompatible with your target environment.",
+                        if uncertain {
+                            "This mergeProps source may be a function or a Solid proxy, but its runtime shape is unresolved."
+                        } else {
+                            "Passing a function to mergeProps makes Solid use a Proxy."
+                        },
+                        if uncertain {
+                            "Pass an exact plain object, or resolve the source to prove whether it is callable or carries Solid's proxy marker."
+                        } else {
+                            "Pass a plain object instead of a function when targeting an environment without ES2015 Proxy support."
+                        },
                         argument.span,
+                        uncertain,
                     ));
                 }
             }
@@ -236,6 +309,7 @@ fn no_proxy_calls(
                     "Spreading a member expression may require a Proxy.",
                     "Using a property access in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
                     member.span,
+                    false,
                 ));
             }
             for call in file
@@ -249,10 +323,26 @@ fn no_proxy_calls(
                     "Spreading a call expression may require a Proxy.",
                     "Using a function call in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
                     call.span,
+                    false,
                 ));
             }
         }
     }
+}
+
+fn is_standard_proxy_call(call: &ResolvedCall) -> bool {
+    if call.validity != ResolvedCallValidity::Valid {
+        return false;
+    }
+    call.declaration.as_ref().is_some_and(|declaration| {
+        declaration.standard_library
+            && declaration
+                .owners
+                .iter()
+                .any(|owner| owner.name.as_ref() == "ProxyConstructor")
+            && ((call.kind == CallKind::Construct && declaration.name.as_ref() == "construct")
+                || (call.kind == CallKind::Call && declaration.name.as_ref() == "revocable"))
+    })
 }
 
 // ---------------------------------------------------------------------
@@ -354,6 +444,7 @@ fn prefer_for(
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes,
+            uncertain: false,
         });
     }
 }
@@ -603,6 +694,7 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
             location: location(file.path.shared(), logical.span),
             analysis_context: String::new(),
             fixes,
+            uncertain: false,
         });
     }
     for conditional in &file.ast.conditional_expressions {
@@ -637,6 +729,7 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
             location: location(file.path.shared(), conditional.span),
             analysis_context: String::new(),
             fixes,
+            uncertain: false,
         });
     }
 }
@@ -644,9 +737,10 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        as_jsx_attribute_expression, as_jsx_child, braces_wrap, show_conditional_replacement,
-        show_replacement_span,
+        ImportExecution, as_jsx_attribute_expression, as_jsx_child, braces_wrap, import_execution,
+        show_conditional_replacement, show_replacement_span,
     };
+    use solid_facts::ast::extract;
     use solid_facts::core::Span;
 
     /// The substring [`show_replacement_span`] chose, given the span of the
@@ -742,5 +836,28 @@ mod tests {
             show_conditional_replacement("ready", "content", "<Fallback />"),
             "<Show when={ready} fallback={<Fallback />}>{content}</Show>"
         );
+    }
+
+    #[test]
+    fn store_imports_distinguish_erased_executing_and_config_dependent() {
+        let facts = extract(
+            "imports.ts",
+            r#"import { Store } from "solid-js/store";
+import { createStore } from "solid-js/store";
+import type { SetStoreFunction } from "solid-js/store";
+type State = Store<{ count: number }>;
+type Setter = SetStoreFunction<{ count: number }>;
+createStore({ count: 0 });"#,
+        )
+        .unwrap();
+        assert_eq!(
+            import_execution(&facts.imports[0]),
+            ImportExecution::Unknown
+        );
+        assert_eq!(
+            import_execution(&facts.imports[1]),
+            ImportExecution::Executes
+        );
+        assert_eq!(import_execution(&facts.imports[2]), ImportExecution::Erased);
     }
 }

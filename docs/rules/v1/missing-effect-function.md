@@ -6,9 +6,17 @@
 
 ## What it does
 
-Flags `createEffect` calls whose first argument is not a function — either
-missing entirely, or a value that only type-checks because a cast defeated
-TypeScript.
+Flags `createEffect` calls whose first argument is provably not a function but
+only type-checks because a TypeScript assertion defeated the published
+signature. Missing and raw invalid arguments are TypeScript's diagnostics.
+An `any`, unresolved value, or type-correct spread is **uncertifiable**: its
+runtime callback may be callable or non-callable, so neither a violation nor
+safety is proven. A compiler-proven callable identifier stays silent.
+When such a call is covered by a `"use server"` directive, the finding is
+**uncertifiable**. The directive is a framework and bundler convention that no
+core Solid package reads, so it proves neither client nor server execution.
+The call fails on the client, while 1.x's server entry compiles `createEffect`
+to a bare no-op. The 2.0 rule preserves the same uncertainty.
 
 ## Why is this bad?
 
@@ -26,11 +34,18 @@ value laundered through a cast, which is where this rule earns its place.
 Examples of **incorrect** code for this rule:
 
 ```tsx
-// No callback at all.
-createEffect();
-
 // First argument is not a function — the cast hides it from TypeScript.
 createEffect(123 as unknown as () => void);
+```
+
+Examples whose outcome is **uncertifiable**:
+
+```tsx
+declare const callback: any;
+createEffect(callback);
+
+declare const args: Parameters<typeof createEffect>;
+createEffect(...args);
 ```
 
 Examples of **correct** code for this rule:

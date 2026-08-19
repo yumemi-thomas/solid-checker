@@ -85,15 +85,15 @@ const KEEPS_WORDING = new Set([
 /**
  * Fixture projects that must stay byte-identical to each other.
  *
- * The dialect pair is duplicated source on purpose -- the two projects differ
- * only in the solid-js version they resolve -- and duplicated source drifts.
+ * The dialect pair duplicates application source on purpose. Its declarations
+ * differ because each must preserve its published dialect's overloads.
  * If these stop matching, the snapshot diff between them stops meaning "the
  * dialect changed the answer" and starts meaning nothing at all.
  */
 const IDENTICAL_SOURCES = [
   {
     projects: ["reactive-ir/dialect-solid-1x", "reactive-ir/dialect-solid-2"],
-    files: ["App.tsx", "solid-js.d.ts", "tsconfig.json"]
+    files: ["App.tsx", "tsconfig.json"]
   }
 ];
 

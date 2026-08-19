@@ -82,6 +82,26 @@
       "fixes": 0
     },
     {
+      "rule": "v1/event-handlers",
+      "code": "SC8001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 4176,
+      "end": 4189,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/event-handlers",
+      "code": "SC8001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 4190,
+      "end": 4203,
+      "fixes": 0
+    },
+    {
       "rule": "v1/no-unknown-namespaces",
       "code": "SC8012",
       "kind": "violation",
@@ -220,6 +240,26 @@
       "start": 7617,
       "end": 7623,
       "fixes": 1
+    },
+    {
+      "rule": "v1/expected-function-got-expression",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 8936,
+      "end": 8938,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/expected-function-got-expression",
+      "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
+      "start": 8948,
+      "end": 8950,
+      "fixes": 0
     }
   ]
 }

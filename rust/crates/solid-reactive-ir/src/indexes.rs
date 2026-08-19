@@ -18,6 +18,13 @@ use typefacts::{
 use super::{SymbolId, SymbolName};
 use crate::owners::{function_binding_name, jsx_element_is_loading};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ComponentStatus {
+    No,
+    Uncertain,
+    Proven,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
     pub(super) by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
@@ -718,44 +725,6 @@ impl<'a> SemanticLookup<'a> {
             .unwrap_or_default()
     }
 
-    /// Whether `symbol` — following alias links, as an import binding is an
-    /// alias of the export it names — is declared in one of the analyzed
-    /// source files. A tsconfig path alias (`@/utils/x`) is a bare specifier
-    /// at the syntax level, but TypeScript resolved it into the project, so
-    /// its declarations land in analyzed sources; a real package's live in
-    /// its own `.d.ts`, which is not an analyzed source.
-    pub(super) fn symbol_is_project_code(&self, symbol: &str) -> bool {
-        let symbols = self.symbols_by_id.get_or_init(|| {
-            self.facts
-                .typescript
-                .symbols()
-                .map(|candidate| (candidate.id(), candidate))
-                .collect()
-        });
-        let mut current = symbol;
-        // Alias chains are short (import of a re-export of an export); the
-        // bound only guards against a malformed cyclic fact set.
-        for _ in 0..8 {
-            let Some(entry) = symbols.get(current) else {
-                return false;
-            };
-            if entry.declarations().iter().any(|declaration| {
-                self.facts
-                    .files
-                    .iter()
-                    .any(|file| *file.path.as_str() == *declaration.location.path)
-            }) {
-                return true;
-            }
-            let target = entry.alias_target();
-            if target.is_empty() || target == current {
-                return false;
-            }
-            current = target;
-        }
-        false
-    }
-
     /// The binding declaration named by an exact canonical symbol reference.
     ///
     /// Returned functions can cross files and destructuring patterns before
@@ -1127,28 +1096,24 @@ impl<'a> SemanticLookup<'a> {
         Some((receiver.clone(), property_name))
     }
 
-    /// The single implementation `value.property` resolves to, or `None`.
+    /// Every exact implementation `value.property` may resolve to.
     ///
-    /// Used per call site, so an argument that is exactly one object proves
-    /// what runs there. Anything else -- an unresolved value, or a
-    /// conditional that could be either of two objects -- is not a proof and
-    /// answers `None`.
-    pub(super) fn member_value_symbol_at(
+    /// This retains a finite runtime union rather than silently selecting one
+    /// candidate. Consumers may certify it only after proving every candidate
+    /// has equivalent behavior; an empty result is missing evidence, not
+    /// safety.
+    pub(super) fn member_value_symbols_at(
         &self,
         file: &FileFacts,
         value: Span,
         property_name: &str,
-    ) -> Option<SymbolId> {
+    ) -> Vec<SymbolId> {
         let mut symbols = Vec::new();
         let mut visited = HashSet::new();
         self.member_value_symbols(file, value, property_name, &mut visited, &mut symbols);
         symbols.sort_unstable();
         symbols.dedup();
-        if symbols.len() == 1 {
-            symbols.pop()
-        } else {
-            None
-        }
+        symbols
     }
 
     /// Resolve `parameter.member()` through the exact project call sites of
@@ -1567,6 +1532,36 @@ impl<'a> SemanticLookup<'a> {
             .contains(&(file.path.as_str(), function.span))
     }
 
+    /// Three-outcome component identity. Exact JSX uses and Solid component
+    /// types are proven; a dialect naming convention only preserves the
+    /// ambiguity and must never become proof by itself.
+    pub(super) fn function_component_status(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> ComponentStatus {
+        if self.function_is_component(file, function) {
+            return ComponentStatus::Proven;
+        }
+        let possible = crate::owners::component_binding_name(file, function).is_some_and(|name| {
+            self.dialect
+                .component_name_may_be_component(file.source_text(name.span).unwrap_or_default())
+        });
+        if possible {
+            ComponentStatus::Uncertain
+        } else {
+            ComponentStatus::No
+        }
+    }
+
+    pub(super) fn function_may_be_component(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        self.function_component_status(file, function) != ComponentStatus::No
+    }
+
     fn component_functions(&self) -> &HashSet<(&'a str, Span)> {
         self.component_functions.get_or_init(|| {
             self.facts
@@ -1594,12 +1589,6 @@ impl<'a> SemanticLookup<'a> {
             return true;
         }
         let binding_name = crate::owners::component_binding_name(file, function);
-        if binding_name.is_some_and(|name| {
-            self.dialect
-                .component_name_is_compat_component(file.source_text(name.span).unwrap_or_default())
-        }) {
-            return true;
-        }
         let directly_contains_jsx = |span: Span| {
             file.ast.jsx_within(span).any(|element| {
                 crate::owners::containing_ast_function(&file.ast, element.span)
@@ -1818,6 +1807,15 @@ impl<'a> SemanticLookup<'a> {
         file.ast
             .functions_body_containing(span)
             .any(|function| self.function_is_component(file, function))
+    }
+
+    /// Whether `span` is inside a function whose component identity is
+    /// possible but not proven. Consumers use this to preserve an
+    /// uncertifiable outcome instead of selecting either execution model.
+    pub(super) fn inside_possible_component(&self, file: &FileFacts, span: Span) -> bool {
+        file.ast.functions_body_containing(span).any(|function| {
+            self.function_component_status(file, function) == ComponentStatus::Uncertain
+        })
     }
 
     /// Compiler-derived callability at `span`, falling back to the smallest

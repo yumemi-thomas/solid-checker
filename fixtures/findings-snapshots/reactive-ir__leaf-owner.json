@@ -177,8 +177,48 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 3600,
-      "end": 3608,
+      "start": 3531,
+      "end": 3539,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 4590,
+      "end": 4612,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 4935,
+      "end": 4988,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-cleanup",
+      "code": "SC4002",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 5051,
+      "end": 5060,
+      "fixes": 0
+    },
+    {
+      "rule": "cleanup-in-forbidden-scope",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 5420,
+      "end": 5436,
       "fixes": 0
     }
   ]

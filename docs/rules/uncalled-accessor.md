@@ -21,11 +21,17 @@ spellings of the bug, so the rule keeps them:
 
 - **A string-concatenation binary operand.** `"hello " + label` type-checks,
   because `+` with a string operand accepts anything — and renders the
-  accessor's own source text. (Arithmetic on a numeric accessor, `count + 1`, is
-  TS2365 and therefore a residual duplicate; separating the two needs a fact
-  that distinguishes concatenation from arithmetic, which is recorded as open in
-  `docs/precision-backlog.md`.)
-- **A unary operand.** `!count` is legal on any value and always truthy.
+  accessor's own source text. The *arithmetic and bitwise* binary positions are
+  separated out and stay silent: `count + 1` is TS2365, and `count - 1`,
+  `count * 2`, and `count | 0` are TS2362, so they are TypeScript's. The fact
+  that distinguishes them is the operand kind recorded on
+  `AstFacts::coercive_operands`, which now carries only the coercions the type
+  system accepts.
+- **A unary operand.** `!count` is legal on any value and always truthy, and so
+  are the unary numeric coercions `-count`, `+count`, and `~count` — probed
+  against the published typings, TypeScript reports nothing for a function
+  operand in any of the four, so an accessor coerced there (silently `NaN`) is
+  this checker's to report.
 - **A template-literal interpolation.** Stringifies whatever it is given.
 
 Both directions are pinned by `fixtures/tsc-oracle/rule-cases.json` and

@@ -31,8 +31,8 @@ export function GoodSeededPanel() {
   return <div>{seededPanel.width}</div>;
 }
 
-// The server entry point is what makes the project server-render; without it
-// (see the ssr-client-boundary-csr fixture) SC5005 must stay silent.
+// This visible server entry proves the violation. Without it (see the
+// ssr-client-boundary-csr fixture), SC5005 is uncertifiable rather than safe.
 export const server = { render: renderToStream };
 
 declare function computeWidth(): number;

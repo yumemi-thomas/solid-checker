@@ -12,6 +12,11 @@ Flags object destructuring of a component's props — both in the parameter list
 and of objects proven reactive by native APIs or reviewed package contracts.
 It does not guess from hook names such as `useParams`.
 
+An uppercase function name is only a Solid 1 convention, not proof that the
+function is invoked as a component. When no JSX call site or exact `Component`
+type resolves that identity, a props destructure is reported as
+**uncertifiable** rather than assumed defective or silently accepted.
+
 When every destructured property is only read (never reassigned), solid-checker
 offers a safe fix that restores the `props` parameter and rewrites the body to
 `props.<name>` accesses.

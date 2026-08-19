@@ -9,8 +9,10 @@ it, in a project that server-renders.
 ## What it does
 
 Flags tracked JSX reads of sources created with `ssrSource: "client"` and no
-declared first paint, when no `<Loading>` boundary dominates the read and the
-project imports a server rendering entry point.
+declared first paint when no `<Loading>` boundary dominates the read. A visible
+server-rendering entry proves a violation; without one, the same shape is
+reported as **uncertifiable**, because the entry may live outside the analyzed
+tsconfig or package.
 
 This is the static counterpart of the unconditional server-runtime error
 `ssrSource: "client" read during SSR outside a <Loading> boundary` in
@@ -93,18 +95,13 @@ server has something to render.
 
 ## When it does not fire
 
-- **CSR-only projects.** The throw lives in the server runtime, so a project
-  that never server-renders can never hit it — firing there would itself be a
-  false positive. The rule therefore requires evidence that the project
-  server-renders: a named import of one of `@solidjs/web`'s server rendering
-  entry points (`renderToStream`, `renderToString`, `renderToFrameStream`,
-  `renderServerComponent`, `handleServerFunctionRequest`) or of `hydrate`
-  (hydration is the client half of a server-rendered app), from
-  `@solidjs/web` or one of its subpaths, anywhere in the analyzed project.
-  If your server entry lives in a separate project (a different tsconfig the
-  analyzer never sees), the rule stays silent there — analyze the project that
-  contains the server entry, or keep client-hole sources under boundaries by
-  convention.
+- **Rendering mode.** A named import of a `@solidjs/web` server-rendering
+  entry point (`renderToStream`, `renderToString`, `renderToFrameStream`,
+  `renderServerComponent`, `handleServerFunctionRequest`) or `hydrate`
+  proves the server path and yields a violation. Without that evidence the
+  rule emits an uncertifiable result, not silence: the server entry may live
+  in a separate tsconfig/package. A genuinely CSR-only application is runtime
+  safe, but the current fact surface has no project-level CSR certificate.
 - **Unprovable options.** The `ssrSource: "client"` + no-declaration
   combination must be proven from an exact object-literal options argument
   (static keys, no spreads). A spread or a computed options object could

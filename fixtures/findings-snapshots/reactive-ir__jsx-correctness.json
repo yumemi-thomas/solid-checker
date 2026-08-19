@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
-      "start": 882,
-      "end": 891,
+      "start": 1145,
+      "end": 1162,
       "fixes": 0
     },
     {
@@ -17,8 +17,38 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
-      "start": 975,
-      "end": 991,
+      "start": 1257,
+      "end": 1274,
+      "fixes": 0
+    },
+    {
+      "rule": "no-implicit-draggable",
+      "code": "SC8019",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 1351,
+      "end": 1368,
+      "fixes": 0
+    },
+    {
+      "rule": "no-implicit-draggable",
+      "code": "SC8019",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 1470,
+      "end": 1487,
+      "fixes": 0
+    },
+    {
+      "rule": "no-implicit-draggable",
+      "code": "SC8019",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
+      "start": 1592,
+      "end": 1609,
       "fixes": 0
     },
     {
@@ -27,8 +57,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
-      "start": 2220,
-      "end": 2222,
+      "start": 2922,
+      "end": 2924,
       "fixes": 0
     },
     {
@@ -37,8 +67,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
-      "start": 2343,
-      "end": 2349,
+      "start": 3045,
+      "end": 3051,
       "fixes": 0
     },
     {
@@ -47,8 +77,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
-      "start": 2429,
-      "end": 2430,
+      "start": 3131,
+      "end": 3132,
       "fixes": 0
     },
     {
@@ -57,8 +87,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
-      "start": 2541,
-      "end": 2544,
+      "start": 3243,
+      "end": 3246,
       "fixes": 0
     },
     {
@@ -67,8 +97,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/jsx-correctness/App.tsx",
-      "start": 2636,
-      "end": 2638,
+      "start": 3338,
+      "end": 3340,
       "fixes": 0
     }
   ]

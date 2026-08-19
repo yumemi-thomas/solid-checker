@@ -6,13 +6,14 @@ use std::env;
 use std::path::PathBuf;
 use std::process::Command;
 
-fn dialect_pair_findings(fixture: &str) -> Vec<(String, String, u64)> {
+fn dialect_pair_findings(fixture: &str) -> Vec<(String, String, String, u64)> {
     dialect_snapshot_findings(fixture)
         .iter()
         .map(|finding| {
             (
                 finding["id"].as_str().unwrap().to_owned(),
                 finding["rule"].as_str().unwrap().to_owned(),
+                finding["kind"].as_str().unwrap().to_owned(),
                 finding["primaryLocation"]["startByte"].as_u64().unwrap(),
             )
         })
@@ -136,16 +137,17 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
     // draggable="true", `draggable={false}` renders draggable="false", and
     // both behave), so only the shorthand is a defect there. The 2.0 runtime
     // treats boolean literals as attribute presence (probed on
-    // @solidjs/web@2.0.0-rc.0): a literal `true` renders presence-only — the
-    // same empty-attribute defect — and a literal `false` removes the
+    // @solidjs/web@2.0.0-rc.0), but its published JSX types reject the
+    // shorthand and literal `true`, so the checker leaves those to TypeScript.
+    // A literal `false` is well typed and removes the
     // attribute, which on the draggable-by-default elements (`img`,
     // `a[href]`) selects the auto state and silently re-enables dragging.
     // The href-less `a` and the `div` are not draggable by default, so their
     // `draggable={false}` removal matches intent and stays clean, as does
     // the enumerated string spelling `draggable="false"`. The `a` whose
-    // `href` is a dynamic expression stays clean too: a nullish value removes
-    // that attribute, and then the anchor is not draggable by default — the
-    // default is unproven, so the rule does not report it.
+    // `href` is a dynamic expression is explicitly uncertifiable in v2: a
+    // nullish value removes the href and makes the anchor non-draggable, while
+    // a string keeps it draggable. Neither outcome may be guessed.
     for (dialect, expected) in [
         (
             "solid-v1",
@@ -156,7 +158,7 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
         ),
         (
             "solid-v2",
-            &[("prefer-component-syntax", 1), ("no-implicit-draggable", 4)][..],
+            &[("prefer-component-syntax", 1), ("no-implicit-draggable", 3)][..],
         ),
     ] {
         let findings = project_snapshot_findings(project.clone(), Some(dialect));
@@ -179,6 +181,11 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
             expected.iter().map(|(_, count)| count).sum::<usize>(),
             "unexpected {dialect} findings: {findings:#?}"
         );
+        if dialect == "solid-v2" {
+            assert!(findings.iter().any(|finding| {
+                finding["rule"] == "no-implicit-draggable" && finding["kind"] == "uncertifiable"
+            }));
+        }
     }
 }
 
@@ -840,21 +847,26 @@ fn solid_one_from_producer_inherits_its_callers_owner() {
         })
         .expect("component from cleanup") as u64;
     let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some("solid-v1"));
-    let owner_findings = findings
+    let top_level_findings = findings
         .iter()
         .filter(|finding| finding["id"] == "SC4002")
         .filter(|finding| finding["primaryLocation"]["startByte"] == invalid_cleanup)
         .collect::<Vec<_>>();
     assert_eq!(
-        owner_findings.len(),
+        top_level_findings.len(),
         1,
-        "the top-level producer is certainly unowned, while the component producer inherits its owner: {findings:#?}"
+        "the top-level producer is certainly unowned: {findings:#?}"
     );
     assert!(
-        findings.iter().all(|finding| {
-            finding["id"] != "SC4002" || finding["primaryLocation"]["startByte"] != valid_cleanup
+        findings.iter().any(|finding| {
+            finding["id"] == "SC4002"
+                && finding["primaryLocation"]["startByte"] == valid_cleanup
+                && finding["kind"] == "uncertifiable"
+                && finding["message"]
+                    .as_str()
+                    .is_some_and(|message| message.contains("component or an ordinary helper"))
         }),
-        "the component producer must retain its caller's owner: {findings:#?}"
+        "an uppercase-only function may be a component or an ordinary helper, so the producer's inherited owner must remain uncertifiable: {findings:#?}"
     );
 }
 
@@ -1174,37 +1186,50 @@ fn solid_one_lazy_loader_requires_a_proven_component_or_preload_invocation() {
     let cleanup_findings = findings
         .iter()
         .filter(|finding| finding["id"] == "SC4002")
-        .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
         .collect::<Vec<_>>();
+    let cleanup_finding_at = |start: u64| {
+        cleanup_findings
+            .iter()
+            .copied()
+            .find(|finding| finding["primaryLocation"]["startByte"] == start)
+    };
     assert!(
-        !cleanup_findings.contains(&cleanup_at("discardedLazySource")),
+        cleanup_finding_at(cleanup_at("discardedLazySource")).is_none(),
         "a dormant loader cannot register cleanup: {findings:#?}"
     );
     assert!(
-        cleanup_findings.contains(&cleanup_at("immediateLazySource")),
+        cleanup_finding_at(cleanup_at("immediateLazySource"))
+            .is_some_and(|finding| finding["kind"] == "violation"),
         "an immediately invoked top-level lazy component inherits no owner: {findings:#?}"
     );
     assert!(
-        !cleanup_findings.contains(&cleanup_at("jsxLazySource")),
-        "a JSX component invocation supplies the owner inherited by its lazy loader: {findings:#?}"
+        cleanup_finding_at(cleanup_at("jsxLazySource"))
+            .is_some_and(|finding| finding["kind"] == "uncertifiable"),
+        "a JSX invocation inside an uppercase-only function inherits an owner only if that function is actually used as a component: {findings:#?}"
     );
     let cross_file_source = std::fs::read_to_string(fixture.join("lazy-component.tsx"))
         .expect("read cross-file lazy fixture");
-    let cross_file_cleanup = cross_file_source
+    let cross_file_loader = cross_file_source
+        .find("export const CrossFileLazy")
+        .expect("cross-file lazy loader");
+    let cross_file_cleanup = cross_file_source[cross_file_loader..]
         .find("onCleanup")
+        .map(|offset| cross_file_loader + offset)
         .expect("cross-file cleanup") as u64;
     assert!(
-        findings.iter().all(|finding| {
-            finding["id"] != "SC4002"
-                || finding["primaryLocation"]["path"]
+        findings.iter().any(|finding| {
+            finding["id"] == "SC4002"
+                && finding["primaryLocation"]["path"]
                     .as_str()
-                    .is_none_or(|path| !path.ends_with("lazy-component.tsx"))
-                || finding["primaryLocation"]["startByte"] != cross_file_cleanup
+                    .is_some_and(|path| path.ends_with("lazy-component.tsx"))
+                && finding["primaryLocation"]["startByte"] == cross_file_cleanup
+                && finding["kind"] == "uncertifiable"
         }),
-        "a cross-file JSX invocation must preserve its component owner: {findings:#?}"
+        "a cross-file JSX invocation inside an uppercase-only function has the same unresolved inherited owner: {findings:#?}"
     );
     assert!(
-        cleanup_findings.contains(&cleanup_at("preloadedLazySource")),
+        cleanup_finding_at(cleanup_at("preloadedLazySource"))
+            .is_some_and(|finding| finding["kind"] == "violation"),
         "top-level preload invokes the loader without an owner: {findings:#?}"
     );
 }
@@ -1416,7 +1441,7 @@ fn the_dialect_pair_reports_different_findings_from_identical_sources() {
     // (`scripts/coverage.mjs` enforces the same identity; this assert keeps
     // the test self-contained when run without the snapshot gate.)
     let fixtures = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../fixtures/reactive-ir");
-    for file in ["App.tsx", "solid-js.d.ts", "tsconfig.json"] {
+    for file in ["App.tsx", "tsconfig.json"] {
         assert_eq!(
             std::fs::read_to_string(fixtures.join("dialect-solid-1x").join(file)).unwrap(),
             std::fs::read_to_string(fixtures.join("dialect-solid-2").join(file)).unwrap(),
@@ -1429,13 +1454,13 @@ fn the_dialect_pair_reports_different_findings_from_identical_sources() {
     assert_ne!(one, two, "the dialects agreed on everything");
 
     // Every 1.x finding names the dialect that produced it.
-    for (_, rule, _) in &one {
+    for (_, rule, _, _) in &one {
         assert!(
             rule.starts_with("v1/"),
             "1.x finding {rule} must carry the v1/ namespace"
         );
     }
-    for (_, rule, _) in &two {
+    for (_, rule, _, _) in &two {
         assert!(
             !rule.starts_with("v1/"),
             "2.0 finding {rule} must stay unprefixed"
@@ -1443,33 +1468,62 @@ fn the_dialect_pair_reports_different_findings_from_identical_sources() {
     }
 
     // The headline arity difference: `createEffect(() => ...)` is the 1.x
-    // signature, so only 2.0 reports the one-argument call; both report
-    // `createEffect(undefined)`.
+    // signature, so only 2.0 reports the one-argument call. Calls rejected by
+    // the published typings stay silent; cast-hidden runtime defects survive.
     let source =
         std::fs::read_to_string(fixtures.join("dialect-solid-1x").join("App.tsx")).unwrap();
     let one_argument_call = source
         .find("createEffect(() => {\n    reader()")
         .expect("one-argument createEffect marker") as u64;
-    let undefined_argument_call = source
-        .find("createEffect(undefined)")
-        .expect("createEffect(undefined) marker") as u64;
-    let sc7001 = |findings: &[(String, String, u64)]| {
+    let escaped_compute_call = source
+        .find("createEffect(123 as unknown as () => number)")
+        .expect("cast-hidden createEffect compute marker") as u64;
+    let server_directive_call = source
+        .find("createEffect(456 as unknown as () => number)")
+        .expect("server directive spelling marker") as u64;
+    let escaped_apply_calls = [
+        "createEffect(() => 1, 123 as unknown as (value: number) => void)",
+        "createEffect(() => 1, null as unknown as (value: number) => void)",
+        "createEffect(() => 1, {} as unknown as (value: number) => void)",
+    ]
+    .map(|marker| source.find(marker).expect("cast-hidden apply marker") as u64);
+    let sc7001 = |findings: &[(String, String, String, u64)]| {
         findings
             .iter()
-            .filter(|(code, _, _)| code == "SC7001")
-            .map(|(_, _, byte)| *byte)
+            .filter(|(code, _, _, _)| code == "SC7001")
+            .map(|(_, _, kind, byte)| (*byte, kind.clone()))
             .collect::<Vec<_>>()
     };
-    assert_eq!(sc7001(&one), vec![undefined_argument_call]);
+    assert_eq!(
+        sc7001(&one),
+        vec![
+            (escaped_compute_call, "violation".to_owned()),
+            (server_directive_call, "uncertifiable".to_owned()),
+        ]
+    );
+    // No core package reads `"use server"`, so the spelling proves neither
+    // client nor server execution. Both dialects preserve that missing fact as
+    // an uncertifiable SC7001 obligation: their client entries fail, while
+    // their server entries neutralise the call.
     assert_eq!(
         sc7001(&two),
-        vec![one_argument_call, undefined_argument_call]
+        [
+            vec![
+                (one_argument_call, "violation".to_owned()),
+                (escaped_compute_call, "violation".to_owned()),
+            ],
+            escaped_apply_calls
+                .map(|byte| (byte, "violation".to_owned()))
+                .to_vec(),
+            vec![(server_directive_call, "uncertifiable".to_owned())],
+        ]
+        .concat()
     );
 
     // createReaction is a leaf owner only in 1.x: onCleanup inside its
     // callback is a 1.x finding and 2.0 silence.
-    assert!(one.iter().any(|(code, _, _)| code == "SC3001"));
-    assert!(!two.iter().any(|(code, _, _)| code == "SC3001"));
+    assert!(one.iter().any(|(code, _, _, _)| code == "SC3001"));
+    assert!(!two.iter().any(|(code, _, _, _)| code == "SC3001"));
 }
 
 /// An explicit `--dialect` beats detection: the 1.x fixture analyzed as 2.0

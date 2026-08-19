@@ -299,11 +299,11 @@ entry naming its own diagnostic.
 | --- | --- | --- | --- |
 | SC8011 | `v1/no-react-specific-props` | `className`/`htmlFor`/`key` on an **intrinsic** element — TS2322 each. The `key` arm was intrinsic-only and went entirely. | The same spellings on a **component**, upstream's own cases 04 and 08. A component's props are whatever it declares, so the key is permitted on a permissive one and a type error on `{ class?: string }` — the answer genuinely depends on the component. |
 | SC8017 | `v1/style-prop` | The object-key arms on an intrinsic element: camelCase (TS2561 with the kebab suggestion), an unknown key (TS2353), a unitless number for a length (TS2322 against `MarginTop<…>`), and a configured extra style prop (TS2322 on the attribute). | Every **string-valued** `style`, legal in 1.x, including the two claims no type can make — a declaration with a missing value, and a value that is not CSS. Plus any `-`-prefixed key on any element: `` [key: `-${string}`] `` absorbs it, so `-webkitAlignContent` is silent (upstream's case 02). Plus any key on a component. |
-| SC8001 | `v1/event-handlers` | Every **unknown** `on*` name in every value form including the boolean shorthand (TS2322), and every mis-cased or non-standard spelling — `onClIcK`, `oncLICK`, `onDoubleClick`, `ondoubleclick` are not declared under any casing. Also the whole static-value arm on a standard element: no static value is ever assignable to `EventHandlerUnion`. | The readability rename for a **declared** spelling: 1.x declares each handler as both `onClick` and `onclick`, so `onclick` and `ondblclick` type-check (upstream's cases 02 and 12). Every arm on a **hyphenated tag**: `<my-widget />` is TS2339 against stock typings, so a project using one declared it itself, commonly permissively. And `warnOnSpread`, which type-checks while Solid does not attach the handler. |
+| SC8001 | `v1/event-handlers` | Every **type-checked unknown** `on*` name in every value form including the boolean shorthand (TS2322), and every mis-cased or non-standard spelling — `onClIcK`, `oncLICK`, `onDoubleClick`, `ondoubleclick` are not declared under any casing. Also the static-value arm on a standard declared handler: no static value is assignable to `EventHandlerUnion`. | The readability rename for a **declared** spelling: 1.x declares each handler as both `onClick` and `onclick`, so `onclick` and `ondblclick` type-check (upstream's cases 02 and 12). Every arm on a **hyphenated tag**: `<my-widget />` is TS2339 against stock typings, so a project using one declared it itself, commonly permissively. Hyphenated attribute names such as `on-foo`, which TypeScript deliberately skips but the compiler still lowers. And `warnOnSpread`, which type-checks while Solid does not attach the handler. |
 | SC8003 | `v1/jsx-no-duplicate-props` | **Identically spelled** duplicates, by origin pair: two attributes are TS17001, an attribute then a spread is TS2783 (`strict` pass only, which the rule does not accept as an exception), two keys in one spread object are TS1117. | Two **differently spelled** props the compiler folds into one slot — `onClick`/`onclick` both become the delegated `el.$$click` write, `attr:title`/`title` share the template attribute slot. Plus the two identical-name orders TypeScript leaves alone: a spread then an attribute (upstream's case 02) and two different spread objects. Plus every child-content conflict — no type relates `children`, JSX children, `innerHTML`, and `textContent`. |
 | SC8012 | `v1/no-unknown-namespaces` | Every namespaced prop on an **intrinsic** element — TS2322. Solid resolves namespaces through mapped types over user-augmentable interfaces plus individually declared `on:*` events, so an unrecognised prefix has nothing to land on. This covered the `style:`/`class:` steer too: **neither prefix is declared at all**, a real gap in Solid's published typings given the 1.x compiler supports both. | The same on a **component**, upstream's cases 06 and 07. Props are a plain object, TypeScript is silent, and the claim — the compiler special-cases namespaces only on DOM elements it lowers directly, so the prop arrives inert — is one no type makes. |
-| SC1007 | `expected-function-got-expression` | The whole **call-result** arm. Both its triggers land on TS2322 at the same attribute: an expression *proven non-callable* is exactly what TypeScript rejects, and a *proven-accessor call* is rejected whenever the accessor's value is not callable (`onClick={count()}` with `count: Accessor<number>`). Deliberately **not** kept for the one spelling TypeScript permits — an accessor holding a function, `onClick={handler()}` — because there the finding would be wrong: a JSX attribute expression is a tracked read, so that handler does update. The dead `HandlerCallResult` defect kind and the `proven_not_callable` helper went with it. | The **reactive-handler-read** arm: a callable handler read out of reactive props or store state. TypeScript is silent, and the claim is a timing one — a native listener receives its function value once during DOM setup, so reading it through reactive props freezes the initial handler. A prop every call site passes statically stays silent. |
-| SC1005 | `uncalled-accessor` (both catalogs) | Three of its six value positions, in both dialects: a native JSX attribute (TS2322 — an accessor is never assignable to a DOM attribute type), a class object value (TS2322 against 2.0's `Record<string, boolean>`), a computed property access (TS2538). This removed the last consumers of the dialect's `class_object_values_are_truthiness_coerced` and `native_children_attribute_invokes_functions` predicates, which went with them. | The three positions TypeScript **permits**, and the most common real spellings of the bug: a string-concatenation binary operand (`"hello " + label` renders the accessor's source text), a unary operand, and a template-literal interpolation. |
+| SC1007 | `expected-function-got-expression` | The **call-result** arm on a normal declared handler. Both its triggers land on TS2322 at the same attribute: an expression *proven non-callable* is exactly what TypeScript rejects, and a *proven-accessor call* is rejected whenever the accessor's value is not callable (`onClick={count()}` with `count: Accessor<number>`). Deliberately **not** kept for the one spelling TypeScript permits — an accessor holding a function, `onClick={handler()}` — because there the finding would be wrong: a JSX attribute expression is a tracked read, so that handler does update. | The **reactive-handler-read** arm: a callable handler read out of reactive props or store state. TypeScript is silent, and the claim is a timing one — a native listener receives its function value once during DOM setup, so reading it through reactive props freezes the initial handler. Also the hyphenated native `on*` arm TypeScript deliberately declines to check: proven non-callable/non-array values are violations and mixed runtime shapes are uncertifiable. |
+| SC1005 | `uncalled-accessor` (both catalogs) | Three of its six value positions, in both dialects: a native JSX attribute (TS2322 — an accessor is never assignable to a DOM attribute type), a class object value (TS2322 against 2.0's `Record<string, boolean>`), a computed property access (TS2538). This removed the last consumers of the dialect's `class_object_values_are_truthiness_coerced` and `native_children_attribute_invokes_functions` predicates, which went with them. | The positions TypeScript **permits**, and the most common real spellings of the bug: a string-concatenation binary operand (`"hello " + label` renders the accessor's source text), a unary operand (logical-not and the numeric coercions `-`/`+`/`~`, all clean against the published typings), and a template-literal interpolation. |
 
 ### Narrowed 2026-08-17: `no-direct-mutation`, in the 2.0 catalog only
 
@@ -341,11 +341,30 @@ happens to land on four either way, so `diagnostics_process.rs` asserts each
 surviving spelling and each dropped one **by span** — a count alone cannot tell
 this narrowing from a regression that dropped the wrong three.
 
-### Known residual duplicate, inside a surviving position
+### Closed 2026-08-18: SC1005 no longer overlaps arithmetic diagnostics
 
-| Code | Rule | The residue | Why it stays |
-| --- | --- | --- | --- |
-| SC1005 | `uncalled-accessor` | **Residual, inside a surviving position.** An *arithmetic* binary operand (`count + 1`) is TS2365, while a string-concatenation operand in the same position is silent. Separating them needs a fact distinguishing concatenation from arithmetic — the operand's static type, or the operator's resolved signature — which the checker does not have. Reported today; recorded as a known duplicate rather than dropping the whole binary position and losing the concatenation case with it. | Everything else the row above keeps. |
+The structural fact now retains binary `+` expressions with a string literal on
+one side, unary logical-not, and the unary numeric coercions. Numeric and
+bitwise **binary** operators reject a function operand in TypeScript — `count +
+1` is TS2365, `count - 1`, `count * 2`, and `count | 0` are TS2362 — and are no
+longer SC1005 positions, which removes the former `count + 1` duplicate.
+Concatenations whose string behavior would require a resolved operator
+signature remain outside the violation claim rather than being guessed from
+source text.
+
+The **unary** operators were dropped in the same pass on the assumption that
+they behave like their binary counterparts. They do not: probed against
+solid-js@1.9.14 through `scripts/tsc-oracle.mjs`, `-f`, `+f`, and `~f` on a
+function value are clean in *both* the strict and loose passes, exactly like
+`!f`. Dropping them removed a real, TypeScript-silent defect class (a coerced
+accessor is silently `NaN`) and lost upstream parity case
+`reactivity__invalid__21`, whose deviation could not be declared
+`typescript-owned` because `scripts/parity-tsc-ownership.mjs` proved TypeScript
+reports nothing there. They are restored under
+`CoerciveOperandKind::NumericCoercion`, pinned by a `expect: "silent"` /
+`checker: "reports"` oracle case and by
+`fixtures/reactive-ir/uncalled-accessor-v2`, whose `TypeScriptOwnedOperators`
+case now holds only the binary spellings.
 
 ### Independent — keep
 
@@ -381,13 +400,42 @@ provenance fact with no type surface at all.
   `missing-effect-function` ✓: the single-argument `createEffect(compute)`
   overload still exists in rc.0, deprecated and typed `never`, so the call
   type-checks and the claim "this effect never runs" is the checker's alone.
+  Cast-hidden non-callable values survive in both dialects as well, including
+  `.ts` angle-bracket assertions and a cast-hidden non-callable `effect` field
+  in the required `{ effect, error }` bundle. Raw invalid arguments, including
+  nullish values accepted only with `strictNullChecks` disabled, are excluded
+  because the strict published-type pass reports them.
+  Missing facts now remain explicit rather than becoming silent gaps. A
+  spread argument hides the call's arity, so `missing-effect-function` reports
+  an uncertifiable obligation; in 2.0 `no-owner-effect` does the same when
+  allocation depends on the hidden tuple length. Recovering a proof needs
+  tuple-arity facts the fact layer does not carry. Unknown or `any` callback
+  values are also uncertifiable, as is a nullable callback hidden by the
+  runtime-transparent `!` wrapper, while compiler-proven callable identifiers retain a proven
+  violation path. A `"use server"`
+  directive is a framework and bundler convention that no core package reads;
+  both published server entries neutralise client-runtime claims (1.9.14 uses a
+  no-op; 2.0.0-rc.0 routes through `serverEffect`). Otherwise-reporting effect
+  and ownership cases under the directive are therefore uncertifiable until a
+  project/compiler fact proves which entry executes. Oracle cases pin both the
+  uncertain directive path and undirected controls.
   SC7002 `sync-node-received-async`, SC7005 `http-response-after-flush`,
-  SC7006/SC7007 (the server surface) likewise assert runtime behavior.
+  SC7006/SC7007 (the server surface) likewise assert runtime behavior. SC5005
+  and SC7005 now distinguish a visible server-render entry (violation) from
+  an absent entry (uncertifiable); absence is not treated as proof of CSR
+  because the entry may live in a different tsconfig or package.
 - **Syntax and style, no type surface** — SC1003 `v1/no-destructure` ✓ /
   `component-props-destructure`, SC1004 `v1/components-return-once` /
   `component-returns-conditionally`, SC8002 `v1/imports`, SC8006
   `v1/jsx-uses-vars`, SC8009 `v1/no-proxy-apis` ✓ (a legal import; the claim is
-  target-runtime Proxy support), SC8010 `v1/no-react-deps` ✓
+  target-runtime Proxy support; explicit type imports are proven erased and
+  runtime-referenced imports are proven executing, while unused value imports
+  are uncertifiable because `verbatimModuleSyntax` changes their emit; direct
+  Proxy calls require the exact standard-library declaration; and `mergeProps`
+  reports a violation only for a proven function source, certifies only exact
+  plain literals, and keeps every possible callable/`$PROXY` source
+  uncertifiable without identifier-name heuristics), SC8010
+  `v1/no-react-deps` ✓
   (`createEffect(fn, [dep])` type-checks — the array is 1.x's `Init` value),
   SC8013 `v1/prefer-classlist`, SC8014 `v1/prefer-for`, SC8015
   `v1/prefer-show`, SC8016 `v1/self-closing-comp` ✓, SC8018
@@ -396,8 +444,8 @@ provenance fact with no type surface at all.
   family). A missing contract is a statement about analyzability, not about a
   type.
 - **SC8005 `v1/jsx-no-undef`** — kept, with a caveat worth recording. Its
-  surviving domain is an unknown `use:` name (unresolved JSX tags were already
-  made uncertifiable and silent). Against the published typings *alone*,
+  surviving domain is an unknown `use:` name (unresolved JSX tags are
+  TypeScript-owned and remain checker-silent). Against the published typings *alone*,
   `use:autofocus` is TS2322, because `JSX.Directives` ships empty and is meant
   to be augmented. In a project that has augmented it — the documented, intended
   usage — `tsc` is silent, and the checker's claim (no lexical *value* binding
@@ -472,8 +520,11 @@ is why it stays.
   listeners for events `ce`/`ly` when function-valued, and statically-valued
   ones are frozen into the template as plain attributes — exactly what
   `v1/event-handlers` reports. Upstream's `/^on[a-zA-Z]/` is *narrower* than
-  the compiler (`on-foo` is an event to the compiler but invisible to the
-  rule) — a documented FN of a stylistic rule, not an FP.
+  the compiler; the checker deliberately uses the compiler's `startsWith`
+  boundary instead, so a statically frozen `on-foo` receives SC8001 while a
+  dynamic non-callable value is handled by SC1007's TypeScript-unchecked
+  handler branch. A callable `on-foo` remains clean because it is a real
+  listener for the distinct `-foo` event.
 - **ASCII-only element-name case classification**
   (`upstream_compat/mod.rs::is_lowercase_led`): Babel's `isCompatTag` is
   `/^[a-z]/`, so a non-ASCII-led tag compiles as a component reference. The
@@ -493,14 +544,31 @@ written rather than rewritten, because they record how the runtime value domain
 came to be trusted — which is still true — and rewriting them would erase the
 reason the removal was safe.
 
+- **SC7007 inline arguments and serializer identity** (`server_rules.rs`,
+  `demand_plan.rs`): compiler library-type facts are now demanded for every
+  non-spread server-function argument, so `save(new Date())` no longer falls
+  through a variable-only gap. `configureServerFunctionsClient` must resolve
+  to the exact `@solidjs/web/server-functions` declaration; a local same-named
+  function with a `serializeArgs` property cannot silence the project. A valid
+  exact configuration call with a dynamic options object produces an
+  uncertifiable SC7007 until `serializeArgs` presence is closed. The remaining
+  top-level fact boundary no longer creates silent nested false negatives:
+  arguments outside the deliberately proven JSON-safe primitive set now carry
+  an uncertifiable transport obligation, including object graphs, arrays,
+  aliases, unions, arbitrary numbers, spreads, and missing facts. Invalid calls
+  remain TypeScript-owned through an exact call-validity gate.
+
 - **Synchronous standard callbacks after `await`** (`static_rules.rs` and
   `runtime_semantics.rs`): SC1002's accessor-call *and* member-read proofs now
   continue into a function written directly in an exact built-in
   `Array`/`ReadonlyArray.prototype.filter` call after a dominating await.
   Callability is sampled at the argument, not the callee, and the callback must
-  be the literal argument — `filter(makePredicate(fn))` stays silent. Promise
-  callbacks, project-defined or shadowed methods, `async` callbacks, and
-  unresolved package callbacks remain fail-closed.
+  be the literal argument for a proven SC1002 —
+  `filter(makePredicate(fn))` and an `async` callback instead produce SC9012,
+  preserving the unknown synchronous callback extent as an explicit proof
+  obligation. Promise callbacks and project-defined or shadowed methods are
+  outside this exact built-in behavior; unresolved package callbacks remain
+  package-contract obligations.
 - **Cleanup returns classified from the runtime value domain** (`cleanup.rs` and
   `demand_plan.rs`): identifier returns are demanded with TypeFacts'
   `runtimeValueDomain` and classified from it rather than from rendered type
@@ -508,9 +576,11 @@ reason the removal was safe.
   `return (value)` and `return value as Cleanup` work like the bare form).
   `CleanupReturnStatus` now separates "proven a function" from "proven legal but
   not a function", so a proven-`undefined` return can no longer make a callback
-  look like one that returns a cleanup. Mixed domains, `unknown`, `any`, and
-  generics were SC9002 obligations (the rule is removed; they are now just
-  absent cleanup proofs).
+  look like one that returns a cleanup. Mixed legal domains, `unknown`, `any`,
+  and generics are not legality findings (the removed SC9002 was TypeScript's
+  job), but an unowned `onSettled` callback that may return a cleanup now keeps
+  an uncertifiable SC4004 owner obligation instead of treating that cleanup as
+  absent.
 - **Static member cleanup returns** (`cleanup.rs` and `demand_plan.rs`): member
   return spans now receive the same exact `runtimeValueDomain` demand as
   identifier returns. A proven static function member is accepted as a
@@ -518,10 +588,10 @@ reason the removal was safe.
   cleanup"). A *mixed* union
   (`(() => void) | number`), `any`, and a computed member were SC9002 (removed),
   because their runtime property value is not closed by an exact dispatch
-  proof. An **optional** member (`maybe?: () => void`) is not an obligation: it
-  classifies as legal-but-not-a-cleanup and is silent, exactly as the
-  identifier path treats `(() => void) | undefined`. Verified against the
-  pinned producer for all four spellings.
+  proof. An **optional** member (`maybe?: () => void`) is legal but does not
+  prove a cleanup on every execution; when owner safety depends on it, SC4004
+  is uncertifiable. Verified against the pinned producer for all four
+  spellings.
 - **`runWithOwner` Owner identity** (`owners.rs` and `solid-dialect`): the
   supplied-owner proof now accepts only a compiler-resolved `Owner` type whose
   declaration and origin match the active dialect export table. Re-exported
@@ -538,24 +608,25 @@ reason the removal was safe.
   and only when the callback is the literal argument; SC3001, genuinely unowned
   SC4002, and unowned returned-cleanup SC4004 remain distinct. Indirect,
   exported, and unresolved cases stay conservative.
-- **The lexical leaf pass requires the literal callback and its synchronous
+- **The lexical leaf pass requires an exact callback and its synchronous
   extent** (`cleanup.rs`). The leaf-scope rules (SC3001/SC3002/SC3003) used to
   fire for a primitive written lexically *anywhere* inside the leaf-owner
   argument, so `onSettled(wrap(() => { onCleanup(fn) }))` reported SC3001 even
   though `wrap` may stash the callback and run it out-of-band, where no leaf
   scope exists and the call does not throw. The pass now demands the same two
-  containment facts the dynamic-extent path already did: the argument is a
-  function literal (`callback_argument_literal`) and the call sits in that
-  callback's own synchronous extent (`direct_callback_contains`). A non-literal
-  leaf argument — a wrapper call, a callback-returning call, or an identifier
-  reference — is now uniformly silent for the leaf rules, the same fail-closed
-  answer `owners.rs::apply_settled_requirement_gates` already gave it (**FN**,
-  deliberate: the callback the owner receives is opaque). The genuinely unowned
-  SC4002 and the unowned returned-cleanup SC4004 are unaffected, as are the
-  settled call-site gates. Pinned by `fixtures/reactive-ir/solid2-precision`'s
-  `OwnedSettledCleanup` (literal, still fully reported),
-  `WrappedSettledCleanup`, `settledCleanup` (identifier reference), and
-  `NestedSettledCleanup`.
+  containment facts the dynamic-extent path already did: a literal or exact
+  in-project callback exposes its body, and the call must sit in that
+  callback's own synchronous extent (`direct_callback_contains`). An exact
+  identifier callback is followed transitively, so forbidden operations keep
+  their SC3xxx identity and an exact safe body is certified. A wrapper call,
+  callback-returning call, or unresolved helper cannot support a specific
+  violation claim and now produces SC9012 `uncertifiable` instead of silent
+  failure. Known accessors, setters, actions, primitives, and exact
+  standard-library calls discharge that walk, preventing false uncertainty on
+  ordinary signal operations. The genuinely unowned SC4002 and the unowned
+  returned-cleanup SC4004 are unaffected, as are the settled call-site gates.
+  Pinned by `fixtures/reactive-ir/solid2-precision` and the opaque/exact pairs
+  in `fixtures/reactive-ir/leaf-owner/`.
 
 ### Remaining approximations from this slice
 
@@ -621,14 +692,16 @@ reason the removal was safe.
   (silent), and helper calls written inside nested functions within the leaf
   callback are not the leaf's synchronous extent (silent, correct).
   The leaf callback must also be a **function literal written directly in the
-  owner's callback argument**: `createTrackedEffect(makeCallback())` evaluates
-  its argument under the enclosing owner *before* any leaf scope exists, and
+  owner's callback argument**, or an exact in-project function reference:
+  `createTrackedEffect(makeCallback())` evaluates its factory under the
+  enclosing owner *before* any leaf scope exists, and
   `createTrackedEffect(wrap(() => …))` hands the arrow to an opaque wrapper
-  that decides whether and where it runs — neither is proof, so both are
-  silent (**FN**, deliberate). `fixtures/reactive-ir/leaf-owner/` pins the
-  `onCleanup`, `flush`, and primitive positives, the transitive hop, both
-  the block-bodied and the expression-bodied leaf callback, the nested-body
-  and event-handler negatives, and both argument-position negatives.
+  that decides what the owner receives. Neither is a violation proof, so both
+  are SC9012 obligations rather than silent false negatives.
+  `fixtures/reactive-ir/leaf-owner/` pins the `onCleanup`, `flush`, and
+  primitive positives, the transitive hop, exact safe and defective
+  references, both literal spellings, the nested-body and event-handler
+  negatives, and both opaque argument forms.
   Cost, accepted: the helper traversal is redone per call site rather than
   memoized by callee symbol. Depth is capped at 8 with a cycle guard and the
   walk only starts for a non-primitive call inside a leaf callback, so the
@@ -638,11 +711,14 @@ reason the removal was safe.
   and removal selects `auto`, which is draggable on `img` and `a[href]` —
   flagged with the `draggable="false"` fix hint; 1.x stringifies
   (`draggable="false"` works) and is deliberately unaffected. The `a` default
-  needs a **proven-present** `href` — a JSX string or the bare spelling. A
-  spread-carried one may not be there, and a dynamic `href={expr}` is removed
-  by the runtime when `expr` is nullish, after which the anchor is *not*
-  draggable by default; both stay clean rather than guessed (**FN**,
-  deliberate). Every other element and the string spelling stay clean too.
+  needs a **proven-present** final `href` write — a JSX string or the bare
+  spelling. A spread-carried/final spread value may not be there, and a dynamic
+  `href={expr}` is removed by the runtime when `expr` is nullish, after which
+  the anchor is *not* draggable by default; both are now explicit
+  **uncertifiable** obligations rather than silent false negatives. A later
+  static href remains proven, while an anchor with no href and no spread is
+  proven non-draggable in auto state and stays clean. Every other element and
+  the string draggable spelling stay clean too.
   Pinned in the backend `jsx-correctness` fixture for both dialects,
   including the dynamic-`href` anchor.
 
@@ -688,14 +764,17 @@ reason the removal was safe.
   (now clean) alongside the `onFoo="a"`/`onFoo="b"` static duplicates (still
   reported).
 
-  **FN, deliberate for now**: a non-frozen, non-callable handler value is
-  unreported by the 1.x catalog. `onClick={-1}`, `onClick={NaN}`, and a plain
-  `onClick={someNumber}` binding are all silent — the last one already was, so
-  this is a pre-existing gap the alignment made uniform rather than a new one.
-  SC8001 is the wrong owner for it (its claim is about template freezing);
-  `expected-function-got-expression` is, and it currently fires only for
-  `HandlerCallResult`, not for a non-callable handler binding whose
-  `callability` is already demanded at that span.
+  **Closed 2026-08-18: non-frozen, non-callable handler values.** On a normal
+  declared handler such as `onClick`, `onClick={-1}`, `onClick={NaN}`, and
+  `onClick={someNumber}` are TS2322 and remain checker-silent. The uncovered
+  case is a hyphenated attribute such as `on-event`, which TypeScript
+  deliberately declines to check even though the compiler lowers every native
+  `on` prefix as a listener. SC1007 now reads the exact runtime value domain and
+  array shape there: a proven non-callable, non-array value is a violation; a
+  callable/non-callable union, `any`, or an unresolved array/bound-pair shape is
+  uncertifiable; a callable or absent handler is certified. Type assertions are
+  peeled before classification. Real-typings oracle cases pin violation,
+  uncertainty, and safe controls in both dialects.
 
 ## Audited remaining `TypeDescriptor.text` consumers 2026-08-17
 
@@ -716,6 +795,27 @@ because it is what made the replacements findable:
   member (`Date`, `Map`, `Set`, typed arrays, and so on). **Resolved
   2026-08-18** — see the `libraryTypes` entry below. Its one remaining use of
   `text` quotes the author's type in the message; the decision never reads it.
+
+Two consumers reintroduced a text decision while the SC1007 handler domain and
+the SC7007 transport domain were being widened, and both are closed again:
+
+- `shared_reactivity.rs::unchecked_handler_value_proof` certified an absent
+  handler by matching `"null" | "false"`. `type Falsy = false` renders as
+  `Falsy`, so the identical runtime value was a *proven violation* through an
+  alias and silent as a literal. The runtime value domain cannot separate them
+  — `null` and `false` both arrive as `may_be_other` — so the proof now comes
+  from the AST: the literal written at the attribute, or the initializer of an
+  immutable binding the reference resolves to.
+- `server_rules.rs::argument_is_proven_json_safe` matched `"string" |
+  "boolean" | "true" | "false" | "null"` for JSON safety, with the same alias
+  asymmetry in the other direction — a spurious obligation on `type Name =
+  string`. Type Facts exposes no structural primitive-kind fact, so the
+  certification is now `null`, a constant string, a finite constant number, and
+  an AST-proven primitive/nullish literal. **Remaining approximation:** a
+  declared `string`/`boolean` *identifier* is no longer certified and produces
+  an explicit SC7007 obligation. That is the fail-closed direction, and it is
+  uniform across spellings, but it is a real precision loss until a structural
+  primitive fact exists.
 
 ## Resolved: static attribute values are a fact, not a rendered type 2026-08-17
 
@@ -896,14 +996,32 @@ table schema are unchanged; this widened when the fact is emitted, not its shape
 `H1 | [number, number]`, and `H1 | [(a,b,c) => void, number]` are each TS2322
 (the type checker's, still silent here).
 
-### Remaining approximation
+### Closed 2026-08-18: mixed handler shapes and runtime presence
 
 A union that mixes a bound pair with a **plain function** (`Handlers |
 ((e: MouseEvent) => void)`) has no `tupleShape`: one constituent is not a tuple,
-so no shape is common to every value. `tsc` accepts it, so this is the rule's to
-speak about in principle — but the value may genuinely be a function, and nothing
-proves it is a pair. It stays silent as a deliberate false negative rather than a
-guess. Pinned by `clean-cases.tsx`'s `pairOrFunction`.
+so no violation holds for every runtime value. It no longer disappears. The
+handler expression now also demands `runtimeValueDomain`; callable/non-callable
+unions, `any`, and generic shapes produce an explicit **uncertifiable** SC8007.
+An unresolved import remains silent because TS2307 owns that source.
+
+The same audit found two adjacent proof errors:
+
+- `Handlers | undefined` has a common tuple shape, but a tuple is not present on
+  every execution. With `strictNullChecks` disabled TypeScript erases the
+  undefined constituent before the runtime-domain fact is computed, and the IR
+  does not receive that compiler option. A violation is therefore reserved for
+  a structurally proven runtime array (an inline literal or immutable local
+  array initializer); type-only pair evidence remains uncertifiable.
+- A TypeScript assertion was treated as a safety voucher. JSX facts now record
+  whether a wrapper is a runtime type escape, and the rule demands/classifies
+  the peeled runtime expression. An asserted array is a violation, an asserted
+  function is safe, and an unresolved runtime shape is uncertifiable.
+
+The focused fixture now pins proven violations, proven-safe controls,
+TypeScript-owned invalid tuples/arrays, and every uncertifiable branch. The
+real-typings oracle carries strict and non-strict cases for a pair/function
+union, an optional pair, an asserted array, and an asserted-function control.
 
 ### Closed 2026-08-18: `rich_transport_member`, via `libraryTypes`
 
@@ -940,11 +1058,41 @@ Three defects text could not avoid, all closed:
 - **A user-declared type could match a global's name.** `Map` from the project's
   own code is now excluded by its declaration file, not hoped away by spelling.
 
-The nesting boundary is unchanged and still pinned: `Boxed = { title: string;
-when: Date }` reports nothing, because an object's properties are not top level.
+The fact's nesting boundary remains unchanged, but it no longer becomes a
+checker blind spot: `Boxed = { title: string; when: Date }` produces an explicit
+uncertifiable SC7007 because the complete object graph is not proven JSON-safe.
 `tsc` cannot duplicate any of this — the argument's type matches its parameter's
 type by construction, so no diagnostic is possible; the claim is entirely about
 runtime transport.
+
+## Closed 2026-08-18: unresolved generic member dispatch is explicit
+
+Generic member calls now have three outcomes instead of a silent fail-closed
+branch. One exact implementation contributes its summary; a finite set of
+implementations contributes a summary only when every candidate has the same
+reactive-read behavior; missing or divergent behavior produces SC9012
+`reactive-dispatch-unresolved` as an `uncertifiable` finding.
+
+The explicit obligation covers parameter-member substitution at each call
+site, computed calls whose TypeScript call is valid, and direct member dispatch
+on parameters of exported helpers with unseen callers. A compiler-proven
+tracked JSX call is safe regardless of which implementation reads, and an
+exact standard-library method is not open dispatch, so neither produces an
+export obligation. Member calls nested in returned, assigned, or scheduler
+callbacks are not mistaken for direct export behavior: the existing callback
+execution contract owns those paths. These distinctions keep JSX collection
+helpers and higher-order adapters certifiable while refusing a falsely empty
+summary for a helper whose own execution directly depends on an unseen
+implementation.
+
+`fixtures/reactive-ir/interprocedural-methods-v2/` pins all three finite-set
+outcomes: an exact reactive object is a proven SC1001 read, reactive candidates
+with equivalent summaries remain a proven read, and reactive/inert candidates
+produce SC9012. It also pins valid computed dispatch as SC9012 and a direct
+export boundary. `fixtures/reactive-ir/v1-reactivity/` pins the same shared
+obligation under the v1 identity. The real-typings oracle carries keystones for
+both dialects and TS2349 negative controls; invalid calls remain TypeScript's
+job and never receive SC9012.
 
 ## Design-change candidates (open)
 
@@ -957,18 +1105,6 @@ same-span region or callback role in every decision arm, and
 against externally produced or partial compiler facts only, which is why no
 fixture can pin it; if a third compiler adapter ever lands, that adapter's
 tests are where this rule gets its coverage.
-
-### Generic member dispatch is partially resolved
-
-Direct generic calls, class methods, object-literal methods, exact resolved
-member declarations, and structural calls whose formal receiver can be mapped
-to every exact in-project call-site argument now participate in summaries. A
-member call with multiple exact candidates is certified only when their
-semantic read/callback/async summaries are equivalent and none has an
-unresolved callback-contract obligation; missing, unresolved, or different
-candidates remain fail closed. Remaining **FN** cases are exported structural
-helpers with unseen external callers, computed members, and receiver
-expressions whose TypeScript facts do not expose an exact value.
 
 ### Shorthand property values follow exact project-local exports
 
@@ -988,7 +1124,9 @@ file set, never the filesystem — and matches that file's exported declaration
 in the accessor map exactly as the same-file arm does
 (`interproc.rs::imported_accessor`). Named re-exports, default re-exports,
 export-all chains, and cycles are followed with a cycle guard. What remains
-fail-closed, by design and in each case yielding no structured property:
+unavailable for an exact structured-property claim is listed below. Each
+exported shorthand now produces SC9012 instead of disappearing; the generated
+summary still omits the unproven property rather than inventing a reactive leaf:
 
 - **an ambiguous relative specifier.** `./values` can name `values.ts`,
   `values.tsx`, or `values/index.ts`, and which one a bundler picks depends on
@@ -1001,9 +1139,9 @@ fail-closed, by design and in each case yielding no structured property:
 - **bare and path-mapped specifiers**, which the resolver rejects outright
   (it only walks `./` and `../` against the analyzed file set, never the
   filesystem or `tsconfig` `paths`).
-- **namespace imports**, which do not identify one accessor value.
-- **unresolved export cycles**, ambiguous re-exports, or unresolved local
-  bindings.
+- **globals/unresolved bindings.** A namespace import is an exact non-reactive
+  namespace object and remains certified without SC9012. An unresolved export
+  cycle is TypeScript-owned (TS2303), so it receives no checker finding.
 
 What the fixture pins today is the same-file resolution set
 (`scopedShorthand`, `unprovenShorthand`, `shadowedShorthand`,
@@ -1014,6 +1152,11 @@ nondeterministic import set (`importedShorthand`, `namespaceShorthand`,
 the default/named/export-all joins (`defaultReexportShorthand`,
 `namedReexportShorthand`, `exportAllShorthand`), and a global
 (`globalShorthand`).
+
+The same fixture asserts the five unresolved exported shorthands explicitly:
+ambiguous relative resolution, bare import, path mapping, and global binding.
+Exact local non-reactive values and namespace objects remain certified without
+SC9012.
 
 The shared `solid_facts::resolve_relative_module_path` helper now answers
 "which file does this relative specifier name" for both
@@ -1026,8 +1169,9 @@ answer when extension/index candidates are ambiguous.
 - **`v1/jsx-no-undef` now fails closed on missing semantic facts.** It reports
   unresolved `use:` names only when the structural binder proves that no
   lexical binding exists. Unresolved JSX tags, including dotted roots, are
-  uncertifiable and silent. The old auto-import helpers remain test coverage
-  for the upstream formatting logic, not a blanket semantic allowlist.
+  TypeScript-owned (TS2304) and checker-silent rather than a second diagnostic.
+  The old auto-import helpers remain test coverage for the upstream formatting
+  logic, not a blanket semantic allowlist.
 - **Unknown callback helpers remain contract obligations.** Exact TypeScript
   call facts now enrich the obligation and diagnostic with package,
   entrypoint, export/function, callback parameter index/type, required
@@ -1054,28 +1198,26 @@ answer when extension/index candidates are ambiguous.
   obligation (`invoked_parameter_members`: parameter index and property), and
   `interprocedural_reads` resolves it against the argument actually passed at
   each site, the way `invoked_parameters` already substitutes a directly
-  invoked parameter. A site whose argument is exactly one object contributes
-  that object's reads; an unresolved argument, or a conditional over two
-  objects, contributes nothing. This replaces pooling every call site into one
-  summary, which made an unambiguous site uncertifiable whenever a sibling site
-  was ambiguous. `fixtures/reactive-ir/interprocedural-methods-v2/` pins both
-  halves: `invoke(objectReader, …)` reports at its own call span, while
-  `invoke(cond ? objectReader : quietReader, …)` stays silent. The pooled
-  `structural_parameter_member_symbols` path still supplies the function's own
-  exported summary, where one answer must cover every call.
+  invoked parameter. One exact object contributes its reads; several exact
+  objects contribute their common summary only when those summaries are
+  equivalent. A missing or divergent implementation produces SC9012 rather
+  than contributing no read. This replaces both the old pooled answer (which
+  contaminated an exact site with an ambiguous sibling) and the later silent
+  omission at the ambiguous site.
 
 - **Callee resolution is exact and conservative.** Parenthesized, `as`,
   `satisfies`, and non-null wrappers are peeled through a shared AST fact
   helper. Resolved call declarations identify member callees when TypeScript
-  provides them; static members can use their exact property entity, while
-  computed members such as `handlers[i]()` fail closed instead of inheriting
-  `i` or `handlers`.
+  provides them; static members can use their exact property entity, while a
+  TypeScript-valid computed member such as `handlers[i]()` produces SC9012
+  instead of inheriting `i`, inheriting `handlers`, or disappearing. An invalid
+  computed call remains silent because TypeScript owns it.
 - **Summary discovery covers method, alias, and returned-value branches.**
   Class/object methods, returned closures, conditional aliases, destructured
   function properties, and exact object spreads retain their canonical
   symbols. Direct generic calls and resolved structural member calls propagate
-  summaries only through the dispatch proof described above; unresolved
-  aliases and computed properties remain uncertifiable.
+  summaries only through the dispatch proof described above; a finite
+  unresolved dispatch remains explicitly uncertifiable through SC9012.
 - **Transparent TypeScript wrappers are peeled at equality gates.** The
   shared helper is used by map/callback discovery, Solid 1.x structure gates,
   and shared reactivity function matching, with AST and fixture coverage for
@@ -1091,10 +1233,15 @@ answer when extension/index candidates are ambiguous.
   `prefer-component-syntax-v2` fixture pins this branch for issue #210.
 
 - **Component identity conventions are dialect-owned.** JSX call sites,
-  direct JSX returns (Solid 2), and exact compiler-resolved Solid component
-  aliases prove component identity. Solid 1 explicitly retains its upstream
-  uppercase-binding convention for parity; the shared reactive core contains
-  no hard-coded casing rule. Intrinsic-tag case checks remain syntax-only.
+  direct JSX returns, and exact compiler-resolved Solid component aliases prove
+  component identity. Solid 1 does not promote upstream's uppercase-name
+  shortcut to proof: capitalization makes component identity **uncertifiable**
+  until a JSX call site or exact component type selects the execution model.
+  This uncertainty propagates through ownership, props, reads, destructuring,
+  conditional returns, handler reads, and mutations. Solid 2's
+  direct-JSX-return convention remains dialect-owned. The shared reactive core
+  contains no hard-coded proven-component casing rule. Intrinsic-tag case
+  checks remain syntax-only.
 - **Dialect-owned type origin is no longer enough to register a source.** The
   dialect classifies exact exported aliases as component, accessor/resource,
   signal, store, setter, or store setter; user-local lookalike aliases and

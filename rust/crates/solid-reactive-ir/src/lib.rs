@@ -2,6 +2,7 @@ mod cache;
 mod cleanup;
 mod contracts;
 mod directives;
+mod effect_api;
 mod execution_role;
 mod findings;
 mod identity;
@@ -123,7 +124,7 @@ pub struct ReactiveRead {
     /// (exported component, unresolvable references, call-site spreads).
     /// Projection reports it as an uncertifiable proof obligation rather
     /// than a proven violation.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub uncertain: bool,
 }
 
@@ -208,6 +209,10 @@ pub enum LeafOwnerOperationKind {
     Cleanup,
     Flush,
     Primitive(String),
+    /// The leaf owner receives a callback whose exact synchronous body is not
+    /// available. It may contain any of the forbidden operations above, so
+    /// the leaf scope is a proof obligation rather than a clean result.
+    UnresolvedCallback,
 }
 
 impl LeafOwnerOperationKind {
@@ -217,6 +222,7 @@ impl LeafOwnerOperationKind {
             Self::Cleanup => "onCleanup",
             Self::Flush => "flush",
             Self::Primitive(primitive) => primitive,
+            Self::UnresolvedCallback => "unresolved leaf callback",
         }
     }
 }
@@ -232,6 +238,11 @@ pub struct StaticViolation {
     pub location: Location,
     pub analysis_context: String,
     pub fixes: Vec<Fix>,
+    /// A required runtime/configuration fact is unavailable. Projection keeps
+    /// the rule identity and wording but emits an uncertifiable proof
+    /// obligation rather than claiming a proven violation.
+    #[serde(default)]
+    pub uncertain: bool,
 }
 
 /// A version-independent defect proven by shared analysis.
@@ -267,9 +278,6 @@ pub enum DraggableSpelling {
     /// enumerated state is the invalid-value default `auto`.
     #[default]
     Shorthand,
-    /// `draggable={true}` under a runtime that renders boolean literals
-    /// presence-only — the same empty-attribute defect as the shorthand.
-    LiteralTrue,
     /// `draggable={false}` on a draggable-by-default element (`img`,
     /// `a[href]`) under a runtime that removes the attribute on `false` —
     /// removal selects `auto`, which re-enables dragging there.
@@ -338,7 +346,37 @@ pub enum StaticDefectKind {
         source: String,
         callee: String,
     },
+    /// A type-correct call can reach more than one runtime implementation,
+    /// and those implementations do not have one equivalent reactive-read
+    /// summary. Silence would certify whichever implementation happened not
+    /// to be selected by the analyzer.
+    ReactiveDispatchUnresolved {
+        callee: String,
+        member: Option<String>,
+    },
+    /// An exact synchronous callback position is known, but the callback
+    /// value's body is not an inspectable synchronous function literal. The
+    /// enclosing operation is type-correct, so silence would certify behavior
+    /// that neither the AST nor a contract proves.
+    ReactiveCallbackUnresolved {
+        callee: String,
+    },
+    /// An exported structured return contains a shorthand value whose exact
+    /// binding cannot be joined to the analyzed project. Omitting the property
+    /// would make a possibly-reactive return look inert.
+    StructuredReturnUnresolved {
+        function: String,
+        property: String,
+        reason: String,
+    },
     ReactiveHandlerRead {
+        attribute: String,
+        expression: String,
+    },
+    /// A JSX attribute name TypeScript deliberately does not check is lowered
+    /// as a native event listener, but the runtime value is either proven not
+    /// callable or cannot be distinguished from a valid bound-handler pair.
+    HandlerValueUnresolved {
         attribute: String,
         expression: String,
     },
@@ -367,6 +405,9 @@ impl StaticDefectKind {
                 | Self::PackageContractEnvironmentDependent { .. }
                 | Self::UnknownCallbackExecution { .. }
                 | Self::ReactiveSourceUncaptured { .. }
+                | Self::ReactiveDispatchUnresolved { .. }
+                | Self::ReactiveCallbackUnresolved { .. }
+                | Self::StructuredReturnUnresolved { .. }
         )
     }
 
@@ -409,10 +450,23 @@ pub struct OwnerRequirement {
     pub operation: OwnerRequirementOperation,
     pub location: Location,
     pub uncertain: bool,
+    /// Allocation itself depends on a runtime fact not available to the
+    /// analyzer (for example server-entry selection or spread arity).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub runtime_uncertain: bool,
+    /// The containing exported function may be called with or without an
+    /// owner, and its callers cannot be enumerated.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub caller_uncertain: bool,
     /// The uncertainty specifically comes from a nullable owner supplied to
     /// `runWithOwner`, rather than an exported function's unknown callers.
     #[serde(default, skip_serializing_if = "is_false")]
     pub conditional_owner: bool,
+    /// The containing Solid 1 function is component-shaped only by a naming
+    /// convention; JSX invocation and ordinary invocation imply different
+    /// owner contexts.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub component_uncertain: bool,
     pub report: bool,
 }
 
@@ -571,6 +625,12 @@ pub struct AsyncRead {
     /// unconditionally (SC5005).
     #[serde(default)]
     pub ssr_client_hole: bool,
+    /// The source is a proven bare `ssrSource: "client"` source, but whether
+    /// the application server-renders cannot be decided from the analyzed
+    /// project. SC5005 reports this as uncertifiable instead of treating a
+    /// missing server-entry import as proof of CSR.
+    #[serde(default)]
+    pub server_rendering_unresolved: bool,
 }
 
 fn default_async_provenance() -> bool {

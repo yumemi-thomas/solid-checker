@@ -16,6 +16,7 @@ use crate::{
     DraggableSpelling, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive,
     location, primitive_name,
 };
+use solid_dialect::Version;
 use solid_facts::core::Span;
 use std::collections::HashSet;
 use typefacts::Location;
@@ -107,19 +108,12 @@ fn function_directly_returns_jsx(
 /// SC8019: `draggable` is enumerated, not boolean. JSX shorthand serializes
 /// an empty value, whose HTML state is `auto`, not `true`.
 ///
-/// Where the dialect's runtime also treats boolean literals as attribute
-/// presence (Solid 2.0 — see
-/// [`solid_dialect::Dialect::literal_true_attribute_is_presence_only`] and
-/// [`solid_dialect::Dialect::false_attribute_value_removes_attribute`] for
-/// the `@solidjs/web@2.0.0-rc.0` probes), two literal spellings join the
-/// shorthand: `draggable={true}` renders presence-only (the same
-/// empty-attribute defect), and `draggable={false}` removes the attribute —
-/// which selects `auto` and therefore silently *re-enables* dragging on the
-/// draggable-by-default elements (`img`, and `a` with an `href`). On every
-/// other element removal matches the author's intent and stays clean, and a
-/// proven-`href`-less `a` is not draggable by default, so only the proven
-/// cases report. 1.x stringifies both literals (`draggable="true"` /
-/// `draggable="false"`) and behaves, so neither literal reports there.
+/// Solid 2.0 removes `draggable={false}`, which selects `auto` and silently
+/// re-enables dragging on draggable-by-default elements (`img`, and `a` with
+/// an `href`). Its published JSX types already reject the shorthand and
+/// literal `true`, so those spellings belong to TypeScript and are excluded.
+/// Solid 1.x stringifies boolean literals and only its type-correct shorthand
+/// remains this rule's concern.
 fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     for file in &ctx.facts.files {
         for element in &file.ast.jsx_elements {
@@ -135,7 +129,11 @@ fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
                 }
                 let spelling = match attribute.value_kind {
                     solid_facts::ast::JsxAttributeValueKind::Boolean => {
-                        DraggableSpelling::Shorthand
+                        if ctx.dialect.version() == Version::V1 {
+                            DraggableSpelling::Shorthand
+                        } else {
+                            continue;
+                        }
                     }
                     solid_facts::ast::JsxAttributeValueKind::Expression => {
                         // The boolean-literal fact mirrors the attribute name
@@ -147,19 +145,8 @@ fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
                             .find(|property| property.name == attribute.local_name);
                         match literal {
                             Some(property)
-                                if property.value
-                                    && ctx.dialect.literal_true_attribute_is_presence_only() =>
-                            {
-                                DraggableSpelling::LiteralTrue
-                            }
-                            Some(property)
                                 if !property.value
-                                    && ctx.dialect.false_attribute_value_removes_attribute()
-                                    && element_defaults_to_draggable(
-                                        file,
-                                        element,
-                                        element_name,
-                                    ) =>
+                                    && ctx.dialect.false_attribute_value_removes_attribute() =>
                             {
                                 DraggableSpelling::LiteralFalseOnDraggableDefault
                             }
@@ -168,14 +155,27 @@ fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
                     }
                     _ => continue,
                 };
+                let draggable_default = match spelling {
+                    DraggableSpelling::Shorthand => DraggableDefault::Yes,
+                    DraggableSpelling::LiteralFalseOnDraggableDefault => {
+                        element_defaults_to_draggable(file, element, element_name)
+                    }
+                };
+                if draggable_default == DraggableDefault::No {
+                    continue;
+                }
                 draft.push_defect(
                     "no-implicit-draggable",
                     StaticDefect {
                         kind: StaticDefectKind::ImplicitDraggableBoolean { spelling },
                         location: location(file.path.shared(), attribute.span),
-                        analysis_context: element_name.to_owned(),
+                        analysis_context: if draggable_default == DraggableDefault::Uncertain {
+                            "draggable-default-uncertain".into()
+                        } else {
+                            element_name.to_owned()
+                        },
                         fixes: vec![],
-                        uncertain: false,
+                        uncertain: draggable_default == DraggableDefault::Uncertain,
                     },
                 );
             }
@@ -187,30 +187,53 @@ fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
 /// "the draggable attribute": `img` elements, and `a` elements with an
 /// `href` attribute.
 ///
-/// The `href` must be *proven present* for the default to be proven. A
-/// spread may or may not carry one, and a dynamic value (`href={props.link}`)
-/// is worse than unknown: Solid removes the attribute when the expression is
-/// nullish, and an `a` with no `href` attribute is not draggable by default,
-/// so `draggable={false}` on it is correct code. Only the value forms that
-/// always emit the attribute — a JSX string and the bare (boolean) spelling —
-/// prove the default; everything else leaves the element unflagged rather
-/// than guessed.
+/// The last source-order write owns `href`. A static string/bare attribute
+/// proves presence; a dynamic expression or later spread can either preserve
+/// or remove it and therefore leaves an explicit proof obligation. Absence of
+/// every direct attribute and spread proves that the anchor is not draggable
+/// by default.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum DraggableDefault {
+    No,
+    Yes,
+    Uncertain,
+}
+
 fn element_defaults_to_draggable(
     file: &solid_facts::FileFacts,
     element: &solid_facts::ast::JsxElementFact,
     element_name: &str,
-) -> bool {
-    element_name == "img"
-        || (element_name == "a"
-            && element.attributes.iter().any(|attribute| {
-                attribute.namespace.is_none()
-                    && file.source_text(attribute.local_name) == Some("href")
-                    && matches!(
-                        attribute.value_kind,
-                        solid_facts::ast::JsxAttributeValueKind::String
-                            | solid_facts::ast::JsxAttributeValueKind::Boolean
-                    )
-            }))
+) -> DraggableDefault {
+    if element_name == "img" {
+        return DraggableDefault::Yes;
+    }
+    if element_name != "a" {
+        return DraggableDefault::No;
+    }
+    let direct = element
+        .attributes
+        .iter()
+        .filter(|attribute| {
+            attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("href")
+        })
+        .max_by_key(|attribute| attribute.span.start);
+    let spread = element
+        .spreads
+        .iter()
+        .max_by_key(|spread| spread.span.start);
+    if spread.is_some_and(|spread| {
+        direct.is_none_or(|attribute| spread.span.start > attribute.span.start)
+    }) {
+        return DraggableDefault::Uncertain;
+    }
+    match direct.map(|attribute| attribute.value_kind) {
+        Some(
+            solid_facts::ast::JsxAttributeValueKind::String
+            | solid_facts::ast::JsxAttributeValueKind::Boolean,
+        ) => DraggableDefault::Yes,
+        Some(_) => DraggableDefault::Uncertain,
+        None => DraggableDefault::No,
+    }
 }
 
 /// SC8020: nesting for which the HTML parser changes the authored tree by
@@ -604,10 +627,16 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                     .parameters
                     .first()
                     .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Object)
-                && ctx.semantic_lookup.function_is_component(file, function)
+                && ctx
+                    .semantic_lookup
+                    .function_may_be_component(file, function)
             {
                 let location = location(file.path.shared(), parameter.pattern);
-                let uncertain = match destructured_props_use(ctx, parameter, &location) {
+                let mut uncertain = ctx
+                    .semantic_lookup
+                    .function_component_status(file, function)
+                    == crate::indexes::ComponentStatus::Uncertain;
+                uncertain |= match destructured_props_use(ctx, parameter, &location) {
                     crate::source_discovery::PropUse::Static => continue,
                     crate::source_discovery::PropUse::Reactive => false,
                     crate::source_discovery::PropUse::Unknown => true,
@@ -651,13 +680,14 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
             if binding.shape != solid_facts::ast::BindingShape::Object {
                 continue;
             }
-            let prop_declaration = binding
+            let prop_symbol = binding
                 .initializer_identifier
                 .as_ref()
                 .and_then(|identifier| {
                     ctx.entities
                         .get(&location(file.path.shared(), identifier.span))
-                })
+                });
+            let prop_declaration = prop_symbol
                 .and_then(|symbol| ctx.prop_sources.get(symbol))
                 .map(|(_, declaration)| declaration.clone());
             let props = prop_declaration.is_some();
@@ -706,7 +736,8 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
             {
                 continue;
             }
-            let mut uncertain = false;
+            let mut uncertain =
+                prop_symbol.is_some_and(|symbol| ctx.uncertain_prop_sources.contains(symbol));
             if let Some(declaration) = &prop_declaration {
                 match destructured_props_use(ctx, binding, declaration) {
                     crate::source_discovery::PropUse::Static => continue,
@@ -887,6 +918,13 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                         continue;
                     }
                     let Some(callback) = inline_standard_callback(ctx, file, filter) else {
+                        report_opaque_standard_callback(
+                            ctx,
+                            draft,
+                            file,
+                            filter,
+                            &analysis_context,
+                        );
                         continue;
                     };
                     // The callback body runs before the awaiting computation
@@ -978,6 +1016,45 @@ fn inline_standard_callback<'f>(
     }
     let callback = callback_argument_literal(file, argument.span)?;
     (!callback.r#async).then_some(callback)
+}
+
+/// Preserve the proof obligation for an exact built-in synchronous callback
+/// position whose body cannot be inspected. Invalid argument shapes do not
+/// reach `is_proven_array_filter` and remain TypeScript-owned.
+fn report_opaque_standard_callback(
+    ctx: &AnalysisContext<'_>,
+    draft: &mut ProgramDraft,
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    analysis_context: &str,
+) {
+    let Some(argument) = call.arguments.first() else {
+        return;
+    };
+    let Some(resolved) = ctx.semantic_lookup.resolved_callee_call(file, call.callee) else {
+        return;
+    };
+    let callability = ctx
+        .semantic_lookup
+        .smallest_contained_callability(file.path.as_str(), argument.span);
+    if !is_proven_array_filter(resolved, callability) {
+        return;
+    }
+    draft.push_defect(
+        "reactive-dispatch-unresolved",
+        StaticDefect {
+            kind: StaticDefectKind::ReactiveCallbackUnresolved {
+                callee: call
+                    .static_callee(&file.source)
+                    .unwrap_or("Array.prototype.filter")
+                    .to_owned(),
+            },
+            location: location(file.path.shared(), argument.span),
+            analysis_context: analysis_context.to_owned(),
+            fixes: vec![],
+            uncertain: false,
+        },
+    );
 }
 
 /// The resolved location of an async function's member-read analysis: its
@@ -1126,7 +1203,9 @@ fn member_reads_after_await(
             let property = file.source_text(member.property).unwrap_or_default();
             match ctx.props_reactivity.prop_use(declaration, property) {
                 crate::source_discovery::PropUse::Static => continue,
-                crate::source_discovery::PropUse::Reactive => (name, false),
+                crate::source_discovery::PropUse::Reactive => {
+                    (name, ctx.uncertain_prop_sources.contains(symbol))
+                }
                 crate::source_discovery::PropUse::Unknown => (name, true),
             }
         } else {
@@ -1173,7 +1252,10 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
             else {
                 continue;
             };
-            if !ctx.semantic_lookup.function_is_component(file, function) {
+            let component_status = ctx
+                .semantic_lookup
+                .function_component_status(file, function);
+            if component_status == crate::indexes::ComponentStatus::No {
                 continue;
             }
             let mut direct_returns = file
@@ -1220,7 +1302,8 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                                 .unwrap_or_default()
                                 .to_owned(),
                             fixes: vec![],
-                            uncertain: false,
+                            uncertain: component_status
+                                == crate::indexes::ComponentStatus::Uncertain,
                         },
                     );
                 }

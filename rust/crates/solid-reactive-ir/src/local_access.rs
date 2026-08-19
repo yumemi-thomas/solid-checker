@@ -48,9 +48,9 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) async_sources: &'a HashSet<SymbolId>,
     pub(crate) source_async_options: &'a HashMap<SymbolId, AsyncSourceOptions>,
-    /// Whether any file in the project imports a server rendering entry
-    /// point; folded into every source's effective `ssr_client_bare` so a
-    /// bare client source never fires SC5005 in a CSR-only project.
+    /// Whether any file in the analyzed project imports a server rendering
+    /// entry point. False means unresolved, not proven CSR: the server entry
+    /// may live in another tsconfig or package.
     pub(crate) server_renders: bool,
     pub(crate) source_declarations: &'a HashMap<SymbolId, Declaration>,
     pub(crate) contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
@@ -58,6 +58,7 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) uncertain_prop_sources: &'a HashSet<SymbolId>,
     pub(crate) props_reactivity: &'a PropsReactivityIndex,
 }
 
@@ -238,14 +239,14 @@ impl LocalAccessContext<'_, '_> {
     }
 
     /// The source's declared async/hydration options with the project-level
-    /// server-render fact already folded in: a bare `ssrSource: "client"`
-    /// only becomes a hole when a server path exists to hit it.
+    /// server-render fact folded into a violation/uncertifiable distinction.
     fn effective_async_options(&self, symbol: &str) -> AsyncSourceOptions {
         let mut options = self
             .source_async_options
             .get(symbol)
             .copied()
             .unwrap_or_default();
+        options.server_rendering_unresolved = options.ssr_client_bare && !self.server_renders;
         options.ssr_client_bare &= self.server_renders;
         options
     }
@@ -260,12 +261,14 @@ impl LocalAccessContext<'_, '_> {
         SymbolId,
         Location,
         Option<crate::source_discovery::PropsReactivity>,
+        bool,
     )> {
         self.prop_sources.get(symbol).map(|(name, declaration)| {
             (
                 name.clone(),
                 declaration.clone(),
                 self.props_reactivity.for_declaration(declaration).cloned(),
+                self.uncertain_prop_sources.contains(symbol),
             )
         })
     }
@@ -395,7 +398,7 @@ impl LocalAccessContext<'_, '_> {
                             .into(),
                         origin: Some(declaration.clone()),
                         origin_context: Arc::from("package return contract"),
-                        uncertain: false,
+                        uncertain: self.lookup.inside_possible_component(file, call.span),
                     }));
                     if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                         result.strict_read_obligations += 1;
@@ -479,7 +482,7 @@ impl LocalAccessContext<'_, '_> {
                     origin_context: origin
                         .map_or_else(String::new, |origin| origin.1.to_string())
                         .into(),
-                    uncertain: false,
+                    uncertain: self.lookup.inside_possible_component(file, call.span),
                 }));
                 if !matches!(
                     self.source_primitives.get(symbol).map(SymbolId::as_str),
@@ -490,7 +493,10 @@ impl LocalAccessContext<'_, '_> {
                 }
                 let async_provenance = self.async_sources.contains(symbol);
                 let async_options = self.effective_async_options(symbol);
-                if async_provenance || async_options.ssr_client_bare {
+                if async_provenance
+                    || async_options.ssr_client_bare
+                    || async_options.server_rendering_unresolved
+                {
                     let async_execution = async_execution_role(file, call.callee, execution);
                     result.async_reads.push(Arc::new(AsyncRead {
                         accessor: format!("{name}()").into(),
@@ -515,6 +521,7 @@ impl LocalAccessContext<'_, '_> {
                         declared_loading: async_options.declared_loading,
                         options_opaque: async_options.opaque,
                         ssr_client_hole: async_options.ssr_client_bare,
+                        server_rendering_unresolved: async_options.server_rendering_unresolved,
                     }));
                 }
             }
@@ -546,7 +553,7 @@ impl LocalAccessContext<'_, '_> {
                     via: Arc::from(""),
                     origin: None,
                     origin_context: Arc::from(""),
-                    uncertain: false,
+                    uncertain: self.lookup.inside_possible_component(file, call.span),
                 }));
                 result.strict_read_obligations += 1;
             }
@@ -572,7 +579,7 @@ impl LocalAccessContext<'_, '_> {
                             via: via.clone().into(),
                             origin: Some(declaration.clone()),
                             origin_context: via.clone().into(),
-                            uncertain: false,
+                            uncertain: self.lookup.inside_possible_component(file, call.span),
                         }));
                         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                             result.strict_read_obligations += 1;
@@ -700,7 +707,8 @@ impl LocalAccessContext<'_, '_> {
             // Caller-proven props: a prop every call site passes statically
             // compiles to a plain property — reading it is not a reactive
             // read at all. Unprovable backing stays a proof obligation.
-            let mut uncertain = false;
+            let mut uncertain = self.uncertain_prop_sources.contains(symbol)
+                || self.lookup.inside_possible_component(file, member.span);
             if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                 && let Some((_, prop_declaration)) = self.prop_sources.get(symbol)
             {
@@ -755,7 +763,9 @@ impl LocalAccessContext<'_, '_> {
             let member_async = self.async_sources.contains(symbol);
             let member_options = self.effective_async_options(symbol);
             if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
-                && (member_async || member_options.ssr_client_bare)
+                && (member_async
+                    || member_options.ssr_client_bare
+                    || member_options.server_rendering_unresolved)
             {
                 let async_execution = async_execution_role(file, member.span, execution);
                 result.async_reads.push(Arc::new(AsyncRead {
@@ -785,6 +795,7 @@ impl LocalAccessContext<'_, '_> {
                     declared_loading: member_options.declared_loading,
                     options_opaque: member_options.opaque,
                     ssr_client_hole: member_options.ssr_client_bare,
+                    server_rendering_unresolved: member_options.server_rendering_unresolved,
                 }));
             }
         }
@@ -821,7 +832,8 @@ impl LocalAccessContext<'_, '_> {
             };
             // A spread unwraps every prop, so it follows the whole-object
             // caller classification.
-            let mut uncertain = false;
+            let mut uncertain = self.uncertain_prop_sources.contains(symbol)
+                || self.lookup.inside_possible_component(file, spread.span);
             if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                 && self.prop_sources.contains_key(symbol)
             {
@@ -896,6 +908,7 @@ impl LocalAccessContext<'_, '_> {
                 declared_loading: false,
                 options_opaque: false,
                 ssr_client_hole: false,
+                server_rendering_unresolved: false,
             }));
         }
         result

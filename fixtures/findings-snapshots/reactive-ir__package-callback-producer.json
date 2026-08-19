@@ -1,4 +1,15 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-callback-producer/App.tsx",
+      "start": 550,
+      "end": 558,
+      "fixes": 0
+    }
+  ]
 }

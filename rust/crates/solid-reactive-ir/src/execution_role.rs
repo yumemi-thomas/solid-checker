@@ -440,6 +440,12 @@ fn semantic_execution_role_within(
     if lookup.inside_component(file, span) {
         return ExecutionRole::UntrackedRendering;
     }
+    if lookup.inside_possible_component(file, span) {
+        // Select the component execution branch so the relevant rule is
+        // projected, while LocalAccess marks the read uncertifiable. Leaving
+        // this Unknown would silently certify the ordinary-helper branch.
+        return ExecutionRole::UntrackedRendering;
+    }
     // Module initialization is an AST-proven one-shot execution context. It
     // is not a compiler-fact gap: no reactive owner or subscriber can be
     // active before a containing function is invoked.

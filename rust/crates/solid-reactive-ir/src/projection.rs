@@ -85,13 +85,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         ),
         StaticDefectKind::ImplicitDraggableBoolean { spelling } => (
             match spelling {
-                // Probed on @solidjs/web@2.0.0-rc.0: a literal `true` renders
-                // the bare attribute on the client (setAttribute("draggable",
-                // "")) and on the server (`<div draggable>`); both select the
-                // enumerated attribute's invalid-value default, `auto`.
-                DraggableSpelling::LiteralTrue => {
-                    "the draggable attribute is given the boolean true, which the runtime renders as a bare presence-only attribute; draggable is an enumerated attribute, so that selects the invalid/default auto state rather than draggable=\"true\"".into()
-                }
                 DraggableSpelling::Shorthand => {
                     "the draggable attribute uses JSX boolean shorthand, which emits an empty attribute value; HTML treats that as the invalid/default state rather than draggable=\"true\"".into()
                 }
@@ -99,14 +92,18 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 // attribute, and removal selects `auto` — which is draggable
                 // on this element.
                 DraggableSpelling::LiteralFalseOnDraggableDefault => {
-                    "the draggable attribute is given the boolean false, which the runtime serializes by removing the attribute; this element is draggable by default, so the removed attribute's auto state silently re-enables dragging rather than selecting draggable=\"false\"".into()
+                    if defect.uncertain {
+                        "the draggable attribute is given boolean false, which the runtime removes; a dynamic or spread-carried href may leave this anchor either draggable or non-draggable in the resulting auto state, so neither the defect nor safety is proven".into()
+                    } else {
+                        "the draggable attribute is given the boolean false, which the runtime serializes by removing the attribute; this element is draggable by default, so the removed attribute's auto state silently re-enables dragging rather than selecting draggable=\"false\"".into()
+                    }
                 }
             },
             match spelling {
                 DraggableSpelling::LiteralFalseOnDraggableDefault => {
                     "Write draggable=\"false\"; draggable is enumerated, so only the string \"false\" disables dragging on images and links, whose auto state is draggable.".into()
                 }
-                DraggableSpelling::Shorthand | DraggableSpelling::LiteralTrue => {
+                DraggableSpelling::Shorthand => {
                     "Write draggable=\"true\" for a static attribute, or draggable={condition ? \"true\" : \"false\"} for a dynamic one; draggable is enumerated, so only the strings \"true\" and \"false\" select a state.".into()
                 }
             },
@@ -168,10 +165,39 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Audit the implementation and add an explicit contract for {package}{entrypoint} export {function} with callback parameter {parameter}. Required behavior: {required_execution}. Generate from package source with `solid-checker contract generate --package-root <package-root> --entrypoint {entrypoint}`, or edit this JSON stub (then replace its placeholders and review the evidence): {contract_stub}"
             ),
         ),
-        StaticDefectKind::MissingEffectFunction => (
-            terms.missing_effect_message.into(),
-            terms.missing_effect_hint.into(),
-        ),
+        StaticDefectKind::MissingEffectFunction => {
+            let mut message = terms.missing_effect_message.to_string();
+            let mut hint = terms.missing_effect_hint.to_string();
+            if defect.uncertain {
+                match defect.analysis_context.as_str() {
+                    "effect-runtime-entry-uncertain" => {
+                        message.push_str(
+                            "; a use-server directive makes the selected Solid runtime entry unknown, so this is a client-runtime proof obligation rather than a proven defect",
+                        );
+                        hint.push_str(
+                            " Prove the effective client/server entry through project compiler facts before treating this as a violation.",
+                        );
+                    }
+                    "effect-runtime-entry-and-argument-shape-uncertain" => {
+                        message.push_str(
+                            "; both the selected Solid runtime entry and the runtime effect argument shape remain unresolved, so neither failure nor safety is proven",
+                        );
+                        hint.push_str(
+                            " Prove the effective client/server entry and the callable runtime argument before treating this as a violation or as safe.",
+                        );
+                    }
+                    _ => {
+                        message.push_str(
+                            "; the runtime effect argument may be callable or non-callable, so neither failure nor safety is proven",
+                        );
+                        hint.push_str(
+                            " Pass a statically resolved callable function or an exact effect bundle to certify safety.",
+                        );
+                    }
+                }
+            }
+            (message, hint)
+        }
         StaticDefectKind::UntrackedDerivedFunction { name } => (
             format!(
                 "{name} derives from reactive state but every call to it is untracked, so its reads subscribe to nothing and the derivation never updates"
@@ -186,8 +212,36 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
             ),
             format!(
-                "Describe {callee} in its package's solid-reactivity.json — which arguments it tracks and what it returns — or keep the function in the project so its body is analysed. See docs/package-contracts.md."
+                "If {callee} comes from a package, describe its callback behavior in solid-reactivity.json. Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit. See docs/package-contracts.md."
             ),
+        ),
+        StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (
+            if let Some(member) = member {
+                format!(
+                    "{callee} invokes .{member} on a caller-supplied value, but the exact runtime implementation cannot be selected and the possible implementations do not have one proven reactive-read behavior"
+                )
+            } else {
+                format!(
+                    "the runtime target of {callee} cannot be selected exactly, and its possible implementations do not have one proven reactive-read behavior"
+                )
+            },
+            "Narrow the value to one exact implementation, or wrap the alternatives in an adapter whose body is available to solid-checker and has one explicit reactive behavior.".into(),
+        ),
+        StaticDefectKind::ReactiveCallbackUnresolved { callee } => (
+            format!(
+                "{callee} invokes its callback synchronously after tracking has ended, but the exact callback body cannot be resolved; whether it reads reactive state in that untracked extent cannot be certified"
+            ),
+            "Pass an exact synchronous function literal directly, or keep the callback body in the project in a form solid-checker can inspect.".into(),
+        ),
+        StaticDefectKind::StructuredReturnUnresolved {
+            function,
+            property,
+            reason,
+        } => (
+            format!(
+                "exported function {function} returns shorthand property {property:?}, but its runtime value cannot be resolved exactly ({reason}); whether that property is a reactive accessor or store path cannot be certified"
+            ),
+            "Use an exact project-relative named/default import, return an explicitly resolved local binding, or provide an audited package contract for the external value.".into(),
         ),
         StaticDefectKind::ReactiveHandlerRead {
             attribute,
@@ -200,6 +254,28 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Wrap the read so it happens when the event fires: {attribute}={{event => {expression}(event)}}."
             ),
         ),
+        StaticDefectKind::HandlerValueUnresolved {
+            attribute,
+            expression,
+        } => {
+            if defect.uncertain {
+                (
+                    format!(
+                        "{attribute} is lowered as a native listener, but the runtime shape of {expression} cannot be certified as a callable handler or a valid bound-handler pair"
+                    ),
+                    format!(
+                        "Pass a function directly to {attribute}, or use an explicit two-slot bound-handler tuple whose first slot is callable."
+                    ),
+                )
+            } else {
+                (
+                    format!(
+                        "{attribute} is lowered as a native listener, but {expression} is proven non-callable and not an array-backed bound-handler pair"
+                    ),
+                    format!("Pass a function to {attribute} instead."),
+                )
+            }
+        }
         StaticDefectKind::UncalledAccessor { name, position } => (
             format!(
                 "accessor {name:?} is used as a value in {position}; the expression receives the accessor function itself, not the value it holds, and never updates"
@@ -235,9 +311,9 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             spelling: DraggableSpelling::Shorthand,
         } => "the intrinsic draggable attribute has no explicit value",
         StaticDefectKind::ImplicitDraggableBoolean {
-            spelling: DraggableSpelling::LiteralTrue,
-        } => {
-            "the intrinsic draggable attribute is a literal boolean true, which the runtime serializes presence-only"
+            spelling: DraggableSpelling::LiteralFalseOnDraggableDefault,
+        } if defect.uncertain => {
+            "the runtime removes draggable={false}, while the final presence of this anchor's href depends on a dynamic value or spread"
         }
         StaticDefectKind::ImplicitDraggableBoolean {
             spelling: DraggableSpelling::LiteralFalseOnDraggableDefault,
@@ -256,12 +332,38 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::UnknownCallbackExecution { .. } => {
             "TypeScript resolved the callable parameter, but no exact runtime contract proves when the external helper invokes it"
         }
+        StaticDefectKind::ReactiveDispatchUnresolved { .. } => {
+            "the call is type-correct, but exact runtime dispatch or equivalent reactive summaries are not proven"
+        }
+        StaticDefectKind::ReactiveCallbackUnresolved { .. } => {
+            "the built-in callback position is type-correct and synchronous, but the callback body's reactive reads are not available for proof"
+        }
+        StaticDefectKind::StructuredReturnUnresolved { .. } => {
+            "the exported shorthand value is type-correct, but its exact runtime binding and reactive return behavior are not proven"
+        }
+        StaticDefectKind::HandlerValueUnresolved { .. } if defect.uncertain => {
+            "TypeScript deliberately skips this hyphenated JSX attribute name, and the runtime handler shape is not closed by the available compiler facts"
+        }
+        StaticDefectKind::MissingEffectFunction if defect.uncertain => {
+            match defect.analysis_context.as_str() {
+                "effect-runtime-entry-uncertain" => {
+                    "the client entry rejects this effect shape, but the source directive alone does not prove whether the client or server entry executes"
+                }
+                "effect-runtime-entry-and-argument-shape-uncertain" => {
+                    "neither the selected runtime entry nor the callable shape of the runtime effect argument is proven"
+                }
+                _ => {
+                    "the published call is valid, but the runtime effect argument is not proven callable or non-callable"
+                }
+            }
+        }
         StaticDefectKind::ExecutionMapIncomplete
         | StaticDefectKind::ReactiveReadAfterAwait { .. }
         | StaticDefectKind::MissingEffectFunction
         | StaticDefectKind::UntrackedDerivedFunction { .. }
         | StaticDefectKind::ReactiveSourceUncaptured { .. }
         | StaticDefectKind::ReactiveHandlerRead { .. }
+        | StaticDefectKind::HandlerValueUnresolved { .. }
         | StaticDefectKind::UncalledAccessor { .. }
         | StaticDefectKind::DirectMutation { .. } => {
             "the invalid API shape is statically present at this call"
@@ -474,6 +576,7 @@ pub fn project_findings(
                         && read.execution == crate::ExecutionRole::TrackedJsx
                         && !read.under_loading
                         && (read.ssr_client_hole
+                            || read.server_rendering_unresolved
                             || (read.async_provenance && !read.declared_loading))
                 })
                 .map(|read| project_finding(FindingSeed::AsyncRead(read), catalog)),
@@ -576,6 +679,9 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
         FindingSeed::StaticViolation(violation) => {
             finding.analysis_context = violation.analysis_context.clone();
             finding.fixes = violation.fixes.clone();
+            if violation.uncertain {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::StaticDefect(defect) => {
             finding.analysis_context = defect.analysis_context.clone();
@@ -596,6 +702,9 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // boundary rules keep their reporting: SC5003 is informational
             // either way, and SC5002's throw is timing-dependent by nature.
             if read.options_opaque && finding.id == "SC5001" {
+                finding.kind = "uncertifiable".into();
+            }
+            if read.server_rendering_unresolved && finding.id == "SC5005" {
                 finding.kind = "uncertifiable".into();
             }
         }
@@ -694,6 +803,7 @@ mod tests {
                 declared_loading: false,
                 options_opaque: false,
                 ssr_client_hole: false,
+                server_rendering_unresolved: false,
             }],
             ..Program::default()
         };
@@ -734,6 +844,7 @@ mod tests {
                 declared_loading: false,
                 options_opaque: false,
                 ssr_client_hole: false,
+                server_rendering_unresolved: false,
             }],
             ..Program::default()
         };

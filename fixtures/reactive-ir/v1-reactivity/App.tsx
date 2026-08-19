@@ -79,6 +79,22 @@ export function FactoryHandler() {
   return <button onClick={makeHandler()}>ok</button>;
 }
 
+declare const maybeUncheckedHandler: (() => void) | number;
+
+// TypeScript deliberately skips hyphenated JSX attribute names, but the 1.x
+// compiler still lowers every native `on` prefix as an event. The number is a
+// proven SC1007 violation; the union remains an explicit uncertifiable shape.
+export function UncheckedHandlers() {
+  const numberHandler = 1;
+  return (
+    <div>
+      <button on-event={numberHandler}>invalid</button>
+      <button on-maybe={maybeUncheckedHandler}>uncertain</button>
+      <button on-safe={() => {}}>safe</button>
+    </div>
+  );
+}
+
 // v1/reactive-source-uncaptured: the contract describes `described` and says
 // its first argument is tracked, so that call is certified. It says nothing
 // about `observe`, which has no body here either — so whether the accessor
@@ -150,6 +166,18 @@ export function AmbientCallees() {
   setTimeout(count, 100);
   console.log(count);
   return <div>{count()}</div>;
+}
+
+// v1/reactive-dispatch-unresolved: the interface is type-correct for both
+// values, but only one method reads a signal. Neither candidate may be chosen
+// as the truth, so the call remains an explicit proof obligation.
+export function ConditionalMethodDispatch() {
+  const [count] = createSignal(0);
+  const reactive = { read: () => count() };
+  const quiet = { read: () => 0 };
+  const invoke = (reader: { read(): number }) => reader.read();
+  const value = invoke(Math.random() > 0.5 ? reactive : quiet);
+  return <div>{value}</div>;
 }
 
 declare function load(): Promise<void>;

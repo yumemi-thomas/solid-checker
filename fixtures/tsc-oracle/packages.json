@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
-  "note": "Exact published package versions the tsc oracle compiles against. These are the versions the repository audits: `v1` matches pkg/contracts/bundled/solid-v1/solid-js.json's `package.version`, `v2` matches pkg/contracts/bundled/runtime-lock.json. A newer release must be reviewed, never silently substituted -- the oracle verifies the installed version against `expect` and refuses to run on a mismatch.",
+  "note": "Exact published package versions the tsc oracle compiles against. The Solid runtime pins match the repository audits: `v1` matches pkg/contracts/bundled/solid-v1/solid-js.json's `package.version`, `v2` matches pkg/contracts/bundled/runtime-lock.json. The v1 project also installs the exact @solidjs/signals helper used to exercise an unknown external-package contract while Solid 1.9.14 still selects the dialect. A newer release must be reviewed, never silently substituted -- the oracle verifies every installed version against `expect` and refuses to run on a mismatch.",
   "dialects": {
     "v1": {
-      "install": ["solid-js@1.9.14"],
+      "install": ["solid-js@1.9.14", "@solidjs/signals@2.0.0-rc.0"],
       "expect": {
-        "solid-js": "1.9.14"
+        "solid-js": "1.9.14",
+        "@solidjs/signals": "2.0.0-rc.0"
       },
       "jsxImportSource": "solid-js",
       "audit": "pkg/contracts/bundled/solid-v1/solid-js.json"

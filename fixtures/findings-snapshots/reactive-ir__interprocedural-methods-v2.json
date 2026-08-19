@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
-      "start": 130,
-      "end": 156,
+      "start": 177,
+      "end": 203,
       "fixes": 0
     },
     {
@@ -17,8 +17,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
-      "start": 238,
-      "end": 269,
+      "start": 285,
+      "end": 316,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 412,
+      "end": 460,
       "fixes": 0
     },
     {
@@ -27,8 +37,18 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
-      "start": 525,
-      "end": 555,
+      "start": 578,
+      "end": 666,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 749,
+      "end": 790,
       "fixes": 0
     },
     {
@@ -37,8 +57,28 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
-      "start": 636,
-      "end": 663,
+      "start": 882,
+      "end": 912,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/App.tsx",
+      "start": 993,
+      "end": 1020,
+      "fixes": 0
+    },
+    {
+      "rule": "reactive-dispatch-unresolved",
+      "code": "SC9012",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/interprocedural-methods-v2/source.ts",
+      "start": 462,
+      "end": 559,
       "fixes": 0
     }
   ]

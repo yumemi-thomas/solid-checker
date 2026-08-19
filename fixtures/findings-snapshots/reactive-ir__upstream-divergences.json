@@ -127,8 +127,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/upstream-divergences/proxy-cases.tsx",
-      "start": 429,
-      "end": 445,
+      "start": 521,
+      "end": 537,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/no-proxy-apis",
+      "code": "SC8009",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/upstream-divergences/proxy-cases.tsx",
+      "start": 581,
+      "end": 586,
       "fixes": 0
     },
     {
@@ -137,8 +147,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/upstream-divergences/proxy-cases.tsx",
-      "start": 558,
-      "end": 566,
+      "start": 660,
+      "end": 668,
       "fixes": 0
     },
     {
@@ -194,7 +204,7 @@
     {
       "rule": "v1/strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/upstream-divergences/tag-cases.tsx",
       "start": 582,
@@ -204,7 +214,7 @@
     {
       "rule": "v1/strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/upstream-divergences/tag-cases.tsx",
       "start": 595,

@@ -54,8 +54,10 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // that only builds a nested function, and — because the
                 // argument is not a function literal the owner receives —
                 // both `createTrackedEffect(makeTeardownCallback())` and
-                // `createTrackedEffect(wrapCallback(() => …))`.
-                ("cleanup-in-forbidden-scope", 6),
+                // `createTrackedEffect(wrapCallback(() => …))`. Those two are
+                // not silent overall: SC9012 preserves their opaque callback
+                // behavior as explicit proof obligations.
+                ("cleanup-in-forbidden-scope", 7),
                 // Three inline (the function-seeded createSignal, createMemo,
                 // createRoot) plus the dynamic-extent trackDouble() reached
                 // through its helper.
@@ -70,16 +72,20 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // classify them.
                 ("invalid-cleanup-return", 0),
                 ("cleanup-return-unresolved", 0),
+                // Both call-expression callback arguments are type-correct but
+                // return opaque runtime functions. They must remain explicit
+                // rather than being mistaken for their wrapper declarations.
+                ("reactive-dispatch-unresolved", 2),
             ][..],
         ),
         (
             "static-api",
             &[
-                // Absent, `undefined`, `null`, `5`, and `"apply"` second
-                // arguments: the last three are proven non-functions that
-                // crash the effect queue. The `{ effect, error }` object and
-                // the plain apply function stay silent.
-                ("missing-effect-function", 5),
+                // The valid deprecated one-argument overload plus five
+                // cast-hidden non-callable runtime values, including a bad
+                // EffectBundle.effect field. Raw invalid apply arguments are
+                // TypeScript's diagnostics and stay silent.
+                ("missing-effect-function", 6),
                 // Signal-family only: the store constructors never route
                 // options.sync into their node, so their three sync: true
                 // async derives are negative cases now.
@@ -185,15 +191,15 @@ fn settled_leaf_rules_follow_call_site_ownership() {
     );
     // The exported helper's call sites are unknowable, so its onSettled leaf
     // finding is a proof obligation, not a proven violation; the owner-backed
-    // component-body ones stay violations — three inline, two reached through
-    // the exactly-resolved dynamic-extent helpers.
+    // component-body ones stay violations — three inline, three reached
+    // through exactly-resolved dynamic-extent helpers.
     let kinds = cleanup
         .iter()
         .map(|finding| finding["kind"].as_str().unwrap_or_default())
         .collect::<Vec<_>>();
     assert_eq!(
         kinds.iter().filter(|kind| **kind == "violation").count(),
-        5,
+        6,
         "{cleanup:#?}"
     );
     assert_eq!(
@@ -253,7 +259,9 @@ fn solid2_precision_corrections_are_end_to_end() {
         ("no-direct-mutation", 4),
         ("cleanup-in-forbidden-scope", 1),
         ("no-owner-cleanup", 3),
-        ("no-owner-settled-cleanup", 2),
+        // One proven returned cleanup plus four callbacks whose runtime
+        // return may be a cleanup and therefore cannot be certified safe.
+        ("no-owner-settled-cleanup", 5),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
@@ -349,14 +357,16 @@ fn solid2_precision_corrections_are_end_to_end() {
     // `return nothing` where `nothing: undefined` is a legal cleanup return
     // that hands the owner nothing, so it is not a returned cleanup that would
     // make these unowned callbacks SC4004.
-    let typed_undefined = start_of("// `nothing` is provably");
-    assert!(
-        findings
-            .iter()
-            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
-            .all(|start| start < typed_undefined),
-        "a proven-`undefined` cleanup return is silent in every cleanup rule"
-    );
+    let cleanup_starts = starts("no-owner-settled-cleanup");
+    for typed_undefined in [
+        start_of("return nothing;") + u64::try_from("return ".len()).unwrap(),
+        start_of("=> nothing);") + u64::try_from("=> ".len()).unwrap(),
+    ] {
+        assert!(
+            !cleanup_starts.contains(&typed_undefined),
+            "a proven-`undefined` return is not an unowned cleanup"
+        );
+    }
 }
 
 #[test]
@@ -366,12 +376,25 @@ fn solid_one_missing_wording_paths_are_end_to_end() {
     };
 
     for (rule, expected) in [
-        ("v1/no-owner-effect", 1),
+        ("v1/no-owner-effect", 2),
         ("v1/no-owner-boundary", 1),
         ("v1/primitive-in-directive-application", 1),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
+    let owner_effects = findings_for_rule(&findings, "v1/no-owner-effect");
+    assert!(owner_effects.iter().any(|finding| {
+        finding["kind"] == "violation"
+            && finding["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("without a reactive owner"))
+    }));
+    assert!(owner_effects.iter().any(|finding| {
+        finding["kind"] == "uncertifiable"
+            && finding["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("component or an ordinary helper"))
+    }));
     assert_eq!(
         findings_for_rule(&findings, "v1/package-contract-missing").len(),
         1,
@@ -433,7 +456,7 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
 }
 
 #[test]
-fn ssr_client_hole_requires_a_server_rendering_project() {
+fn ssr_client_hole_distinguishes_proven_and_unresolved_server_rendering() {
     let Some(findings) = diagnostic_fixture("ssr-client-boundary") else {
         return;
     };
@@ -448,12 +471,14 @@ fn ssr_client_hole_requires_a_server_rendering_project() {
             .is_some_and(|message| message.contains("ssrSource: \"client\"")),
         "{holes:#?}"
     );
-    // The same bare client source read in a CSR-only project must stay
-    // silent: the throwing code path lives in the server runtime.
+    // With no visible server entry, the same source is not certified safe:
+    // the entry may live in another tsconfig/package.
     let Some(csr_findings) = diagnostic_fixture("ssr-client-boundary-csr") else {
         return;
     };
-    assert!(csr_findings.is_empty(), "{csr_findings:#?}");
+    let unresolved = findings_for_rule(&csr_findings, "ssr-client-source-outside-loading-boundary");
+    assert_eq!(unresolved.len(), 1, "{csr_findings:#?}");
+    assert_eq!(unresolved[0]["kind"], "uncertifiable", "{unresolved:#?}");
 }
 
 /// The wave-6 server-surface and resolve rules, pinned at their probed
@@ -474,10 +499,17 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                 .all(|finding| finding["severity"] == "warning" && finding["kind"] == "violation"),
             "the post-flush drop is conditional and must stay a warning: {drops:#?}"
         );
-        // CSR twin: both exports are client no-ops everywhere, no drop to
-        // report.
+        // With no visible server entry, the rendering mode is unresolved;
+        // absence of the import is not proof that the app is CSR-only.
         if let Some(csr) = diagnostic_fixture("http-response-flush-csr") {
-            assert!(csr.is_empty(), "{csr:#?}");
+            let unresolved = findings_for_rule(&csr, "http-response-after-flush");
+            assert_eq!(unresolved.len(), 2, "{csr:#?}");
+            assert!(
+                unresolved
+                    .iter()
+                    .all(|finding| finding["kind"] == "uncertifiable"),
+                "{unresolved:#?}"
+            );
         }
     }
     if let Some(findings) = diagnostic_fixture("server-function-directive") {
@@ -494,16 +526,10 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
     }
     if let Some(findings) = diagnostic_fixture("server-function-rich-args") {
-        // Date, Set, Map, RegExp (module-level directive), Float64Array, and
-        // the Set of the mixed call; lone/trailing Uint8Array, plain JSON
-        // shapes, and the unresolvable inline `new Date()` stay silent.
-        //
-        // Plus the two imported aliases, `Stamps = Date[]` and `Ids =
-        // Set<string>`, added when the rule started reading `libraryTypes`
-        // instead of the rendered type text — both render as their own name and
-        // matched nothing before. `Boxed`, whose Date is a nested property,
-        // stays silent: that boundary is unchanged.
-        assert_rule_findings(&findings, "server-function-rich-argument", 8);
+        // Nine proven rich values plus three explicit obligations where the
+        // available facts cannot close the full JSON graph. Lone/trailing
+        // Uint8Array and compiler-known JSON-safe values remain certified.
+        assert_rule_findings(&findings, "server-function-rich-argument", 12);
         if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
             assert!(
                 enabled.is_empty(),
@@ -524,14 +550,22 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
     }
     if let Some(findings) = diagnostic_fixture("uncalled-accessor-v2") {
-        // The three positions TypeScript permits: a string-concatenation
-        // operand, a unary operand, and a template interpolation. The typed
-        // positions the 2026-08-17 narrowing dropped -- a class object value, a
-        // native attribute, and a computed key -- are each a diagnostic of
-        // TypeScript's own, and the children attribute and the called and
-        // passed-on accessors were already silent.
-        assert_rule_findings(&findings, "uncalled-accessor", 3);
-        for position in ["binary operator", "unary operator", "template literal"] {
+        // The positions TypeScript permits: a string-concatenation operand, a
+        // logical-not operand, the two unary numeric coercions (`-count` and
+        // `~count`, both clean against the published typings), and a template
+        // interpolation. The typed positions the 2026-08-17 narrowing dropped
+        // -- a class object value, a native attribute, and a computed key --
+        // are each a diagnostic of TypeScript's own, and the children
+        // attribute and the called and passed-on accessors were already
+        // silent. Binary arithmetic and bitwise operands stay silent because
+        // TypeScript rejects a function there (TS2365/TS2362).
+        assert_rule_findings(&findings, "uncalled-accessor", 5);
+        for position in [
+            "string concatenation",
+            "logical-not operator",
+            "numeric coercion",
+            "template literal",
+        ] {
             assert!(
                 findings.iter().any(|finding| {
                     finding["message"]
@@ -580,10 +614,11 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
         // which TypeScript rejects on its own (TS2322) and the 2026-08-17
         // narrowing dropped.
         ("uncalled-accessor", 2),
-        // One: the reactive `props.onSave` read. The call-result arm went on
-        // 2026-08-17 -- a handler expression proven non-callable, or a
-        // non-callable accessor call, is TS2322 at that same attribute.
-        ("expected-function-got-expression", 1),
+        // The reactive `props.onSave` read, plus the two hyphenated attributes
+        // TypeScript deliberately declines to check: one proven invalid and
+        // one callable/non-callable proof obligation. Ordinary `onClick`
+        // non-callable values remain TS2322-owned.
+        ("expected-function-got-expression", 3),
         ("untracked-derived-function", 2),
     ] {
         assert_rule_findings(&reactivity_findings, rule, expected);
@@ -632,6 +667,21 @@ fn static_violation_evidence_describes_the_actual_proof() {
 }
 
 #[test]
+fn create_effect_owner_findings_require_runtime_allocation() {
+    let Some(static_api) = diagnostic_fixture("static-api") else {
+        return;
+    };
+    let lines = findings_for_rule(&static_api, "no-owner-effect")
+        .into_iter()
+        .map(|finding| finding["primaryLocation"]["line"].as_u64().unwrap())
+        .collect::<Vec<_>>();
+    // Solid 2 throws before allocating an effect node for an absent,
+    // undefined, or null apply argument (including cast-hidden null). Other
+    // non-callable values allocate first and still create an owner leak.
+    assert_eq!(lines, [8, 9, 13, 15, 16, 17, 23, 36]);
+}
+
+#[test]
 fn interprocedural_diagnostics_point_to_the_calling_component() {
     for (fixture, expected_count, message) in [
         ("interprocedural", 1, "readCount"),
@@ -640,10 +690,10 @@ fn interprocedural_diagnostics_point_to_the_calling_component() {
         ("recursive", 1, "readA"),
         ("returned-closure", 1, "readCount"),
         ("store-flow", 1, "\"state.count\""),
-        // Four: the class, object, and generic-function calls, plus
-        // `invoke(objectReader, …)` whose receiver is exactly one object at
-        // that site. The sibling `invoke(cond ? a : b, …)` stays silent.
-        ("interprocedural-methods-v2", 4, "count"),
+        // Five: class, object, generic-function, the exact object passed to
+        // `invoke`, and the conditional whose candidates have equivalent
+        // reactive summaries. Divergent and computed dispatch are SC9012.
+        ("interprocedural-methods-v2", 5, "count"),
     ] {
         let Some(findings) = diagnostic_fixture(fixture) else {
             return;

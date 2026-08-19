@@ -40,9 +40,13 @@ npm test --prefix packages/cli
 # AGENTS.md's absolute rule, as a gate: no rule's positive case may also be a
 # `tsc` error against the real published Solid typings. Provisioning installs
 # the audited package versions and verifies them, so a drifted install fails
-# here rather than changing the answer silently.
+# here rather than changing the answer silently. The gate runs the checker over
+# every case as well, so it takes the same fresh debug build as coverage and
+# parity -- the packaged binary may lag rust/ source.
 node scripts/tsc-oracle.mjs provision --dialect all
-node scripts/tsc-oracle-gate.mjs
+node --test scripts/tsc-oracle.test.mjs
+SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
 
 sh -n scripts/*.sh
 jq empty schema/*.json

@@ -2,16 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "no-owner-effect",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 158,
-      "end": 170,
-      "fixes": 0
-    },
-    {
       "rule": "missing-effect-function",
       "code": "SC7001",
       "kind": "violation",
@@ -27,18 +17,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 181,
-      "end": 193,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-effect-function",
-      "code": "SC7001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 181,
-      "end": 193,
+      "start": 376,
+      "end": 388,
       "fixes": 0
     },
     {
@@ -47,18 +27,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 435,
-      "end": 447,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-effect-function",
-      "code": "SC7001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 435,
-      "end": 447,
+      "start": 402,
+      "end": 414,
       "fixes": 0
     },
     {
@@ -67,8 +37,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 464,
-      "end": 476,
+      "start": 661,
+      "end": 673,
       "fixes": 0
     },
     {
@@ -77,18 +47,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 464,
-      "end": 476,
-      "fixes": 0
-    },
-    {
-      "rule": "no-owner-effect",
-      "code": "SC4001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 490,
-      "end": 502,
+      "start": 661,
+      "end": 673,
       "fixes": 0
     },
     {
@@ -97,8 +57,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 490,
-      "end": 502,
+      "start": 725,
+      "end": 737,
       "fixes": 0
     },
     {
@@ -107,8 +67,68 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 603,
-      "end": 615,
+      "start": 792,
+      "end": 804,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 792,
+      "end": 804,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 857,
+      "end": 869,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 857,
+      "end": 869,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 922,
+      "end": 934,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-effect-function",
+      "code": "SC7001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 922,
+      "end": 934,
+      "fixes": 0
+    },
+    {
+      "rule": "no-owner-effect",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/static-api/App.tsx",
+      "start": 1115,
+      "end": 1127,
       "fixes": 0
     },
     {
@@ -117,8 +137,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 666,
-      "end": 676,
+      "start": 1178,
+      "end": 1188,
       "fixes": 0
     },
     {
@@ -127,8 +147,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 709,
-      "end": 721,
+      "start": 1221,
+      "end": 1233,
       "fixes": 0
     },
     {
@@ -137,8 +157,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 754,
-      "end": 770,
+      "start": 1266,
+      "end": 1282,
       "fixes": 0
     },
     {
@@ -147,8 +167,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 1257,
-      "end": 1269,
+      "start": 1769,
+      "end": 1781,
       "fixes": 0
     },
     {
@@ -157,8 +177,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api/App.tsx",
-      "start": 2758,
-      "end": 2772,
+      "start": 3270,
+      "end": 3284,
       "fixes": 0
     }
   ]

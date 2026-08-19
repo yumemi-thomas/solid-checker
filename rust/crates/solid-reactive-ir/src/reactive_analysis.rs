@@ -83,6 +83,7 @@ pub(crate) fn collect_project<'facts>(
         bundled_returns: &source.bundled_returns,
         source_kinds: ctx.source_kinds,
         prop_sources: ctx.prop_sources,
+        uncertain_prop_sources: ctx.uncertain_prop_sources,
         props_reactivity: ctx.props_reactivity,
     };
     let cached_interprocedural = reuse
@@ -255,6 +256,9 @@ pub(crate) fn collect_project<'facts>(
     timings.absorb_interprocedural(&interprocedural.timings);
     draft.strict_read_obligations += interprocedural.reads.len();
     draft.reads.extend(interprocedural.reads.iter().cloned());
+    for obligation in interprocedural.dispatch_obligations.iter() {
+        draft.push_defect("reactive-dispatch-unresolved", obligation.clone());
+    }
     static_rules::component_returns_conditionally(ctx, draft);
     draft.contract_exports = interprocedural.exports.clone();
     draft.contract_generation_obligations =

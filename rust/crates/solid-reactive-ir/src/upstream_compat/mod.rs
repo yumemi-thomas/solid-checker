@@ -37,7 +37,7 @@ use crate::{
 };
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
-use typefacts::{ArrayShape, Location, TupleShape};
+use typefacts::{ArrayShape, Location, RuntimeValueDomain, TupleShape};
 
 /// The source text a span covers, or `""` when the span is not readable.
 ///
@@ -128,6 +128,62 @@ pub(super) fn expression_tuple_shape(
         .lookup
         .entity_at(file.path.as_str(), span)
         .and_then(|entity| entity.tuple_shape)
+}
+
+/// The complete runtime value domain for exactly this expression span.
+///
+/// Unlike a binary callability fact, this preserves a union whose
+/// constituents include both functions and non-functions. That distinction is
+/// what lets a rule retain an explicit obligation for `Handler | BoundPair`
+/// without guessing either outcome.
+pub(super) fn expression_runtime_value_domain(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<RuntimeValueDomain> {
+    context
+        .lookup
+        .entity_at(file.path.as_str(), span)
+        .and_then(|entity| entity.runtime_value_domain)
+}
+
+pub(super) fn expression_symbol_is_unresolved(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> bool {
+    context
+        .lookup
+        .entity_at(file.path.as_str(), span)
+        .is_some_and(|entity| entity.symbol_unresolved)
+}
+
+/// Whether this exact reference names an import whose relative module is not
+/// part of the analyzed project. The import binding itself still has a local
+/// symbol, so `symbol_unresolved` alone cannot detect TS2307 at the declaration.
+pub(super) fn expression_import_is_unresolved(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> bool {
+    let Some(symbol) = context.lookup.entities().at(file.path.as_str(), span) else {
+        return false;
+    };
+    file.ast.imports.iter().any(|import| {
+        import.bindings.iter().any(|binding| {
+            context
+                .lookup
+                .entities()
+                .at(file.path.as_str(), binding.local.span)
+                == Some(symbol)
+        }) && import.module.starts_with('.')
+            && solid_facts::resolve_relative_module_path(
+                file.path.as_str(),
+                import.module.as_str(),
+                context.lookup.files().iter().map(|file| file.path.as_str()),
+            )
+            .is_none()
+    })
 }
 
 // --- helpers shared by the rule modules ------------------------------------
@@ -243,24 +299,6 @@ pub(super) fn binding_initializer<'a>(
         text(binding_file, initializer),
         symbol,
     ))
-}
-
-/// Whether an exact identifier reference resolves to one of this file's
-/// imports. Comparing canonical symbols keeps a parameter that shadows an
-/// import from inheriting the import's treatment merely by sharing its name.
-pub(super) fn is_import_reference(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    reference: Span,
-) -> bool {
-    let Some(symbol) = context.entities.at(file.path.as_str(), reference) else {
-        return false;
-    };
-    file.ast.imports.iter().any(|import| {
-        import.bindings.iter().any(|binding| {
-            context.entities.at(file.path.as_str(), binding.local.span) == Some(symbol)
-        })
-    })
 }
 
 /// The static string an attribute value or expression resolves to, following
@@ -551,6 +589,7 @@ pub(super) fn violation(
         location: location(file.path.shared(), span),
         analysis_context: String::new(),
         fixes,
+        uncertain: false,
     }
 }
 
@@ -606,6 +645,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// facts. Member names may be unresolved (for example an inferred `any`),
     /// but the props object itself remains a reactive proxy.
     pub(super) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(super) uncertain_prop_sources: &'a HashSet<SymbolId>,
     /// Caller-proven props reactivity per props declaration; answers
     /// `Reactive` everywhere for dialects that keep the upstream
     /// over-approximation.
@@ -688,6 +728,7 @@ pub(crate) fn check_project(
         source_kinds: ctx.source_kinds,
         source_primitives: ctx.source_primitives,
         prop_sources: ctx.prop_sources,
+        uncertain_prop_sources: ctx.uncertain_prop_sources,
         props_reactivity: ctx.props_reactivity,
         source_reference_index: retained.unwrap_or_else(|| {
             crate::symbols::source_reference_locations(

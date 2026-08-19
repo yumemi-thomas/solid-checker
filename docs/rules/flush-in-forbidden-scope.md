@@ -16,7 +16,9 @@ directly in the owner's argument**, and the `flush()` sits in that literal's own
 synchronous extent. `createTrackedEffect(wrap(() => flush()))` and
 `createTrackedEffect(makeCallback())` hand the owner a callback this analysis
 cannot see, and a call inside a nested function the callback merely builds runs
-later, in that function's scope; both stay silent.
+later, in that function's scope. The nested function is proven outside the leaf
+extent and stays clean. Opaque wrapper/factory callbacks instead produce SC9012
+`reactive-dispatch-unresolved`; they are not silently certified.
 
 `onSettled` called out-of-band (from an event handler, with no owner, or inside
 another leaf scope) runs its callback as a plain queued function where `flush()`

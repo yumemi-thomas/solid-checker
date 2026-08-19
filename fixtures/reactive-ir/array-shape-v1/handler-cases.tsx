@@ -34,7 +34,8 @@ declare function makeHandlers(): Handlers;
 // Unions whose every value-carrying constituent is a bound pair. `tsc` accepts
 // both, and whichever constituent the value turns out to be it is still a pair,
 // so the claim holds for the whole type. `optional` is the common shape of an
-// optional prop; the `undefined` constituent carries no structure and is skipped.
+// optional prop. The optional case has a shared tuple shape, but presence is
+// not proven, so its finding is `uncertifiable` rather than a violation.
 type OtherHandlers = [(data: string, event: MouseEvent) => void, string];
 declare const eitherPair: Handlers | OtherHandlers;
 declare const optional: Handlers | undefined;

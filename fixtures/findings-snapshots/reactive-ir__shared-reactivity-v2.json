@@ -34,11 +34,31 @@
     {
       "rule": "expected-function-got-expression",
       "code": "SC1007",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 3934,
+      "end": 3947,
+      "fixes": 0
+    },
+    {
+      "rule": "expected-function-got-expression",
+      "code": "SC1007",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 3848,
-      "end": 3860,
+      "start": 3990,
+      "end": 4011,
+      "fixes": 0
+    },
+    {
+      "rule": "expected-function-got-expression",
+      "code": "SC1007",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
+      "start": 4413,
+      "end": 4425,
       "fixes": 0
     },
     {
@@ -47,8 +67,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 4161,
-      "end": 4168,
+      "start": 4726,
+      "end": 4733,
       "fixes": 0
     },
     {
@@ -57,8 +77,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/shared-reactivity-v2/App.tsx",
-      "start": 4603,
-      "end": 4611,
+      "start": 5168,
+      "end": 5176,
       "fixes": 0
     }
   ]

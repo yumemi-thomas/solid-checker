@@ -276,6 +276,12 @@ pub(crate) struct AsyncSourceOptions {
     /// `loadingValue`/`seedLoadingValue` declaration, on a function-form
     /// call: the server installs a client hole for it.
     pub(crate) ssr_client_bare: bool,
+    /// The source is a proven bare `ssrSource: "client"` source, but the
+    /// analyzed project does not contain enough evidence to decide whether a
+    /// server-rendering entry exists. Absence of an import is not proof that
+    /// the application is CSR-only: the server entry may live in another
+    /// tsconfig or package.
+    pub(crate) server_rendering_unresolved: bool,
     /// An options argument exists that the analyzer cannot read as an exact
     /// object literal, so option-dependent claims cannot be proven either
     /// way.
@@ -344,15 +350,17 @@ pub(crate) fn async_source_options(
     AsyncSourceOptions {
         declared_loading,
         ssr_client_bare,
+        server_rendering_unresolved: false,
         opaque: !argument.exact_object_literal && !declared_loading,
     }
 }
 
 /// The `@solidjs/web` exports whose import proves the project server-renders
 /// (or hydrates server-rendered HTML). A bare `ssrSource: "client"` source is
-/// only a runtime error on the server path, so SC5005 stays silent for
-/// CSR-only projects. Named imports only; the export names come from the
-/// bundled `@solidjs/web` contract.
+/// only a runtime error on the server path. Named imports prove that path;
+/// their absence leaves the rendering mode unresolved because the server
+/// entry may live outside the analyzed project. The export names come from
+/// the bundled `@solidjs/web` contract.
 const SERVER_RENDER_IMPORTS: [&str; 6] = [
     "renderToStream",
     "renderToString",
@@ -402,8 +410,7 @@ fn store_is_value_form(call: &solid_facts::ast::CallFact, primitive: Option<Prim
         matches!(
             argument.value,
             ArgumentValueKind::Null | ArgumentValueKind::Undefined
-        ) || argument.primitive_literal
-            || argument.container_literal
+        ) || argument.runtime_value_kind.is_data_literal()
     })
 }
 
@@ -1060,6 +1067,11 @@ pub(crate) struct SourceDiscovery {
     pub(crate) contract_returns: HashMap<SymbolId, (ContractReturn, Location)>,
     pub(crate) contracted_accessor_symbols: HashSet<SymbolId>,
     pub(crate) prop_sources: HashMap<SymbolId, (SymbolId, Location)>,
+    /// Prop roots whose enclosing function may be a component only by a
+    /// dialect convention. Reads through them remain explicit proof
+    /// obligations until a JSX call site or exact component type resolves the
+    /// identity.
+    pub(crate) uncertain_prop_sources: HashSet<SymbolId>,
     /// Caller-proven props reactivity per props declaration; empty (answering
     /// `Reactive` everywhere) for dialects that keep the upstream
     /// over-approximation.
@@ -1725,9 +1737,11 @@ pub(crate) fn discover_sources(
         actions.extend(action_aliases);
     }
     let mut prop_sources = HashMap::<SymbolId, (SymbolId, Location)>::new();
+    let mut uncertain_prop_sources = HashSet::<SymbolId>::new();
     for file in &facts.files {
         for function in &file.ast.functions {
-            if !semantic_lookup.function_is_component(file, function) {
+            let component_status = semantic_lookup.function_component_status(file, function);
+            if component_status == crate::indexes::ComponentStatus::No {
                 continue;
             }
             let Some(parameter) = function
@@ -1740,6 +1754,9 @@ pub(crate) fn discover_sources(
             };
             let declaration = location(file.path.shared(), parameter.span);
             if let Some(symbol) = entities.get(&declaration) {
+                if component_status == crate::indexes::ComponentStatus::Uncertain {
+                    uncertain_prop_sources.insert(symbol.clone());
+                }
                 prop_sources.insert(
                     symbol.clone(),
                     (
@@ -1761,8 +1778,12 @@ pub(crate) fn discover_sources(
                     .and_then(|identifier| {
                         entities.get(&location(file.path.shared(), identifier.span))
                     })
-                    .and_then(|symbol| prop_sources.get(symbol))
-                    .cloned()
+                    .and_then(|symbol| {
+                        prop_sources
+                            .get(symbol)
+                            .cloned()
+                            .map(|source| (source, uncertain_prop_sources.contains(symbol)))
+                    })
                     .or_else(|| {
                         let initializer = binding.call_initializer?;
                         let call = file.ast.call_at(initializer)?;
@@ -1778,13 +1799,15 @@ pub(crate) fn discover_sources(
                             return None;
                         }
                         call.arguments.iter().find_map(|argument| {
-                            entities
-                                .get(&location(file.path.shared(), argument.span))
-                                .and_then(|symbol| prop_sources.get(symbol))
+                            let symbol =
+                                entities.get(&location(file.path.shared(), argument.span))?;
+                            prop_sources
+                                .get(symbol)
                                 .cloned()
+                                .map(|source| (source, uncertain_prop_sources.contains(symbol)))
                         })
                     });
-                let Some((_, declaration)) = source else {
+                let Some(((_, declaration), source_uncertain)) = source else {
                     continue;
                 };
                 for name in &binding.names {
@@ -1792,6 +1815,9 @@ pub(crate) fn discover_sources(
                     if let Some(symbol) = entities.get(&binding_location)
                         && !prop_sources.contains_key(symbol)
                     {
+                        if source_uncertain {
+                            uncertain_prop_sources.insert(symbol.clone());
+                        }
                         prop_sources.insert(
                             symbol.clone(),
                             (
@@ -1839,6 +1865,7 @@ pub(crate) fn discover_sources(
         contract_returns,
         contracted_accessor_symbols,
         prop_sources,
+        uncertain_prop_sources,
         props_reactivity,
         bundled_returns,
         retained_source_paths,
@@ -2013,7 +2040,7 @@ fn classify_component_props(
             let Some(parameter) = function.parameters.first() else {
                 continue;
             };
-            if function.parameters.len() > 1 || !lookup.function_is_component(file, function) {
+            if function.parameters.len() > 1 || !lookup.function_may_be_component(file, function) {
                 continue;
             }
             let classification = classify_one_component(

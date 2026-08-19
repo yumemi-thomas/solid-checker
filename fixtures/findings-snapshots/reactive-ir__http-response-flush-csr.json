@@ -1,4 +1,25 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-csr/App.tsx",
+      "start": 422,
+      "end": 432,
+      "fixes": 0
+    },
+    {
+      "rule": "http-response-after-flush",
+      "code": "SC7005",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/http-response-flush-csr/App.tsx",
+      "start": 441,
+      "end": 451,
+      "fixes": 0
+    }
+  ]
 }

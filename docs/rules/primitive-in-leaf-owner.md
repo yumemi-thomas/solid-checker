@@ -17,7 +17,10 @@ directly in the owner's argument**, and the call sits in that literal's own
 synchronous extent. `createTrackedEffect(wrap(() => createMemo(fn)))` and
 `createTrackedEffect(makeCallback())` hand the owner a callback this analysis
 cannot see, and a call inside a nested function the callback merely builds runs
-later, in that function's scope; both stay silent.
+later, in that function's scope. The nested function is proven outside the leaf
+extent and stays clean. The opaque wrapper/factory is not silently certified:
+[reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) reports SC9012
+until the exact callback body is available.
 
 Value-form `createSignal(0)` / `createStore(obj)` are **not** flagged and do not
 throw at runtime — they register no work on the owner. Only the derived forms

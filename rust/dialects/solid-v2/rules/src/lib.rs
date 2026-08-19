@@ -240,26 +240,43 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
                 operation.owner
             ),
         ),
+        LeafOwnerOperationKind::UnresolvedCallback => (
+            Rule::ReactiveDispatchUnresolved,
+            format!(
+                "{} receives a type-correct callback whose exact synchronous body cannot be resolved; whether it performs cleanup, flush, or creates a nested primitive in this leaf scope cannot be certified",
+                operation.owner
+            ),
+            "Pass an exact in-project function or a function literal directly, so solid-checker can inspect the callback body and certify or report its leaf-scope operations.".into(),
+        ),
     };
-    if let Some(via) = &operation.via {
+    if let Some(via) = &operation.via
+        && !matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
+    {
         message.push_str(&format!(
             " — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
         ));
     }
     let mut evidence = vec![EvidenceStep {
-        message: match &operation.via {
-            Some(via) => format!(
-                "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
-                operation.owner
-            ),
-            None => format!(
-                "the call is lexically contained by the {} callback",
-                operation.owner
-            ),
+        message: if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) {
+            "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
+        } else {
+            match &operation.via {
+                Some(via) => format!(
+                    "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
+                    operation.owner
+                ),
+                None => format!(
+                    "the call is lexically contained by the {} callback",
+                    operation.owner
+                ),
+            }
         },
         location: Some(operation.location.clone()),
     }];
-    if operation.uncertain {
+    if operation.uncertain
+        && (!matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
+            || operation.call_site_gate.is_some())
+    {
         message.push_str(
             "; solid-checker cannot prove this call runs under a live children-capable owner (out-of-band the callback is a plain queued function and this does not throw), so the finding is a proof obligation",
         );
@@ -323,14 +340,26 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
                 },
                 "Read async values where the graph can wait for them: JSX, a createMemo, or an effect's compute function. The read then suspends to the nearest <Loading> boundary and re-runs when the value settles.".to_owned(),
             ),
-            ExecutionRole::TrackedJsx if read.ssr_client_hole && !read.under_loading => (
-                Rule::SsrClientSourceOutsideLoadingBoundary,
-                format!(
-                    "source {:?} declares ssrSource: \"client\" with no loadingValue/seedLoadingValue, and this project server-renders; the server never runs the compute, so rendering this read outside a Loading boundary throws `ssrSource: \"client\" read during SSR outside a <Loading> boundary` during SSR — even when the compute is fully synchronous",
-                    read.accessor
-                ),
-                "Wrap the reading subtree in <Loading fallback={...}> so the server can flush the fallback and hand the position to the client, or declare a loadingValue (loadingValue: undefined is valid; store-family sources use seedLoadingValue: true) so the server renders a provisional value instead.".to_owned(),
-            ),
+            ExecutionRole::TrackedJsx
+                if (read.ssr_client_hole || read.server_rendering_unresolved)
+                    && !read.under_loading => {
+                let unresolved = read.server_rendering_unresolved;
+                (
+                    Rule::SsrClientSourceOutsideLoadingBoundary,
+                    if unresolved {
+                        format!(
+                            "source {:?} declares ssrSource: \"client\" with no loadingValue/seedLoadingValue and is read outside a Loading boundary, but the analyzed project cannot prove whether a server-rendering entry exists; if this application server-renders, the read throws during SSR even when the compute is fully synchronous",
+                            read.accessor
+                        )
+                    } else {
+                        format!(
+                            "source {:?} declares ssrSource: \"client\" with no loadingValue/seedLoadingValue, and this project server-renders; the server never runs the compute, so rendering this read outside a Loading boundary throws `ssrSource: \"client\" read during SSR outside a <Loading> boundary` during SSR — even when the compute is fully synchronous",
+                            read.accessor
+                        )
+                    },
+                    "Wrap the reading subtree in <Loading fallback={...}> so the server can flush the fallback and hand the position to the client, or declare a loadingValue (loadingValue: undefined is valid; store-family sources use seedLoadingValue: true) so the server renders a provisional value instead.".to_owned(),
+                )
+            },
             ExecutionRole::TrackedJsx if !read.under_loading => (
                 Rule::AsyncOutsideLoadingBoundary,
                 format!(
@@ -351,7 +380,11 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
         }
     };
     let mut provenance = if rule == Rule::SsrClientSourceOutsideLoadingBoundary {
-        "the source declares ssrSource: \"client\" and no loadingValue/seedLoadingValue, and a server rendering entry point is imported in this project".to_owned()
+        if read.server_rendering_unresolved {
+            "the source declares ssrSource: \"client\" and no loadingValue/seedLoadingValue; no server rendering entry point is visible in the analyzed project, which does not prove the application is CSR-only".to_owned()
+        } else {
+            "the source declares ssrSource: \"client\" and no loadingValue/seedLoadingValue, and a server rendering entry point is imported in this project".to_owned()
+        }
     } else {
         "the accessor is returned by an async computation".to_owned()
     };
@@ -402,6 +435,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ExpectedFunctionGotExpression
         | Rule::NoDirectMutation
         | Rule::ReactiveSourceUncaptured
+        | Rule::ReactiveDispatchUnresolved
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
         | Rule::PreferComponentSyntax
@@ -458,16 +492,41 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
-        StaticDefectKind::ReactiveHandlerRead { .. } => Rule::ExpectedFunctionGotExpression,
+        StaticDefectKind::ReactiveDispatchUnresolved { .. }
+        | StaticDefectKind::ReactiveCallbackUnresolved { .. }
+        | StaticDefectKind::StructuredReturnUnresolved { .. } => Rule::ReactiveDispatchUnresolved,
+        StaticDefectKind::ReactiveHandlerRead { .. }
+        | StaticDefectKind::HandlerValueUnresolved { .. } => Rule::ExpectedFunctionGotExpression,
         StaticDefectKind::UncalledAccessor { .. } => Rule::UncalledAccessor,
         StaticDefectKind::DirectMutation { .. } => Rule::NoDirectMutation,
     };
     let text = solid_reactive_ir::static_defect_text(defect, &V2_STATIC_TERMS);
     let mut message = text.message;
-    if defect.uncertain {
-        message.push_str(
-            "; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the props are signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime defect",
-        );
+    // This suffix names *one* source of uncertainty: a component whose call
+    // sites cannot be enumerated, so its props' signal backing is unprovable.
+    // Kinds whose uncertainty is something else already say so in
+    // `static_defect_text`, and appending this to them describes the wrong
+    // proof obligation -- an unchecked handler value has no component and no
+    // props to enumerate.
+    if defect.uncertain
+        && !matches!(
+            &defect.kind,
+            StaticDefectKind::MissingEffectFunction
+                | StaticDefectKind::ReactiveDispatchUnresolved { .. }
+                | StaticDefectKind::ReactiveCallbackUnresolved { .. }
+                | StaticDefectKind::StructuredReturnUnresolved { .. }
+                | StaticDefectKind::HandlerValueUnresolved { .. }
+        )
+    {
+        if defect.analysis_context == "draggable-default-uncertain" {
+            message.push_str(
+                "; resolve the final href value before treating this as a violation or certifying it as safe",
+            );
+        } else {
+            message.push_str(
+                "; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the props are signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime defect",
+            );
+        }
     }
     FindingWording::new(rule.metadata(), message, text.hint).with_evidence(vec![EvidenceStep {
         message: text.evidence.into(),

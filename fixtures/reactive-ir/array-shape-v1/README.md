@@ -9,15 +9,17 @@ array.
 Both questions were once answered by matching `TypeDescriptor.text` against `[`,
 `readonly `, `Array<`, `ReadonlyArray<`, and a trailing `[]`. This fixture pins
 what text could not reach — and, for SC8007, the boundary with the type checker,
-which is what makes it two files that must each stay exactly as they are:
+which is why the fixture separates violations, uncertainties, and
+TypeScript-owned controls:
 
-- **`handler-cases.tsx`** — the positives, all of them bound-handler tuples,
-  including two unions whose every value-carrying constituent is one (a pair of
-  pair types, and the optional `Handlers | undefined`). An
+- **`handler-cases.tsx`** — bound-handler tuples. Inline and immutable local
+  arrays are violations; a call-returned tuple, a declared union of pairs, and
+  an optional tuple are uncertifiable because runtime presence is not
+  structurally proven. An
   **aliased tuple renders as its alias**, so `type Handlers = [...]` matched no
   prefix and the rule went silent on a real defect. Also here: a doubly-aliased
   tuple, a tuple returned from a call, a readonly tuple, and an inline literal.
-- **`clean-cases.tsx`** — the negatives, and the fixture's other half. Four are
+- **`clean-cases.tsx`** — the proven-safe or TypeScript-owned negatives. Seven are
   the shapes the `tupleShape` narrowing removed (a plain array, a tuple with a
   non-callable first slot, a one-slot tuple, `[1, 2, 3]`, and a first slot
   requiring three arguments where Solid passes two, and two unions with a bad
@@ -27,9 +29,10 @@ which is what makes it two files that must each stay exactly as they are:
   an array of functions, and `SafeArray<T> extends Array<T>`, which is
   array-*like* and deliberately `notArray`.
 - **`fail-closed-cases.tsx`** — absence, `mixed`, and `unknown` are "not proven",
-  never "not an array". Type parameters (constrained or not), a union mixing both
-  shapes, `any`, and an unresolved import all report nothing. These are
-  deliberate false negatives; see `docs/precision-backlog.md`.
+  never "not an array". Type parameters and `any` are explicit uncertifiable
+  results; an unresolved import alone stays silent because TS2307 owns it.
+- **`uncertain-cases.tsx`** — a pair/function union is uncertifiable, a directly
+  asserted array is a violation, and an asserted-function control is silent.
 - **`map-receiver-cases.tsx`** — `prefer-for`. Every case reports; only the
   proven-array receivers carry the autofix.
 
@@ -55,11 +58,10 @@ An alias renders as its own name, so every prefix test missed it. The two
 never *proven* an array, so the `<For each>` rewrite was withheld from code it
 was correct for.
 
-**`tupleShape` (ADR 0016) closed the duplicates `arrayShape` could not.**
+**`tupleShape` (ADR 0016) closes the duplicates `arrayShape` cannot.**
 `arrayShape` calls every row below `array`, so it could not exclude any of them.
-`tupleShape` narrows SC8007 here to 5, removing exactly the five `tsc` already
-rejects — the last row needing the minimum-arity field, which alone took the
-count from 6 to 5:
+`tupleShape` removes exactly the five shapes `tsc` already rejects — the last
+row needing the minimum-arity field:
 
 | Case | `arrayShape` only | `tupleShape` | `tsc` says |
 | --- | --- | --- | --- |
@@ -69,7 +71,8 @@ count from 6 to 5:
 | `onClick={[1, 2, 3]}` | SC8007 | silent | element 0 not a handler |
 | `onClick={overArity}` | SC8007 | silent | signature provides too few arguments |
 
-No legitimate finding was lost in either step.
+No TypeScript-owned case becomes a checker violation. Values whose safety and
+defect are both possible remain visible as uncertifiable findings.
 
 ## Why these findings are the checker's own
 
@@ -82,14 +85,15 @@ node scripts/tsc-oracle.mjs check --dialect v1 --file <case>
 against the **real** solid-js@1.9.14 typings, in both the strict and non-strict
 passes.
 
-`handler-cases.tsx` — which holds every SC8007 in this fixture — produces
-**zero** `tsc` diagnostics. `onXxx` is typed `EventHandlerUnion = EHandler |
+`handler-cases.tsx` and `uncertain-cases.tsx` produce **zero** `tsc`
+diagnostics. `onXxx` is typed `EventHandlerUnion = EHandler |
 BoundEventHandler`, and `BoundEventHandler` is an *interface* with members `0`
 and `1`, so a `[handler, data]` tuple satisfies it however it is spelled: bare,
 aliased, aliased twice, readonly, inline, or returned from a call. Its first
 member is typed `(data: any, ...e) => void` — `any`, so the data the handler
 receives is never checked against the data the tuple carries. That unchecked
-seam is the finding, and only this rule can report it.
+seam is the rule's own claim: it is a violation when the runtime array is
+proven and an uncertifiable obligation when presence or shape remains open.
 
 `clean-cases.tsx` is the mirror image: **ten** `tsc` diagnostics and **zero**
 findings. The rule and the type checker partition the space exactly, and `tsc`

@@ -1,7 +1,7 @@
 // SC7007 server-function-rich-argument, probed on the rc.0 server-functions
 // client: Date/Map/Set/RegExp/typed-array arguments throw the directed
 // rich-args error at the default transport; a lone or trailing Uint8Array is
-// a natural HTTP body and does not; unresolvable types stay silent.
+// a natural HTTP body and does not; unresolved JSON safety stays explicit.
 import {
   analyze,
   appendChunk,
@@ -15,6 +15,13 @@ import {
 } from "./api";
 import type { Boxed, Ids, Stamps } from "./api";
 import { recordPattern } from "./server-module";
+
+// Same spelling and same property shape as the real configuration API, but a
+// local function. It must not suppress any SC7007 finding.
+function configureServerFunctionsClient(_options: {
+  serializeArgs: (args: unknown[]) => string;
+}) {}
+configureServerFunctionsClient({ serializeArgs: JSON.stringify });
 
 export function Toolbar() {
   const when = new Date();
@@ -36,14 +43,14 @@ export function Toolbar() {
         await saveEvent(when, tags); // two findings: Date, Set
         await saveCounts(counts); // finding: Map
         await recordPattern(pattern); // finding: RegExp (module-level directive)
-        await analyze(samples, label()); // finding: Float64Array has no natural encoding
+        await analyze(samples, label()); // violation for Float64Array; label result uncertifiable
         await uploadChunk(bytes); // silent: lone Uint8Array is a request body
         await appendChunk("chunk", bytes); // silent: trailing Uint8Array after JSON-safe leading
-        await savePlain(payload); // silent: plain JSON-safe object
+        await savePlain(payload); // uncertifiable: the available fact cannot close the object graph
         await saveStamps(stamps); // finding: Date behind an imported alias
         await saveIds(ids); // finding: Set behind an imported alias
-        await saveBoxed(boxed); // silent: the Date is a nested property, not top level
-        await saveEvent(new Date(), tags); // first argument inline: unresolvable, silent; tags still reported
+        await saveBoxed(boxed); // uncertifiable: nested Date is outside the top-level fact
+        await saveEvent(new Date(), tags); // two findings: inline Date, Set
       }}
     >
       save

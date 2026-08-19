@@ -2,12 +2,22 @@ import { affects, createEffect, createMemo, createOptimistic, createOptimisticSt
 
 createEffect(() => 1);
 createEffect(() => 1, undefined);
-// Proven non-function apply arguments crash the effect queue at runtime
-// (`null.effect` / `5.effect is not a function`): flagged like the absent
-// form. The `{ effect, error }` object form is legal and stays silent.
+// These raw values are rejected by the published overload, so the checker
+// stays silent even though they would crash if emitted.
 createEffect(() => 1, null);
 createEffect(() => 1, 5);
 createEffect(() => 1, "apply");
+// Casts can hide the type error. Runtime literals remain enough proof for the
+// checker, including exact objects without `effect`, array literals, and a
+// bundle whose `effect` property is itself a cast-hidden non-function.
+createEffect(() => 1, 5 as unknown as (value: number) => void);
+createEffect(() => 1, null as unknown as (value: number) => void);
+createEffect(() => 1, {} as unknown as (value: number) => void);
+createEffect(() => 1, [] as unknown as (value: number) => void);
+createEffect(() => 1, {
+  effect: 5 as unknown as (value: number) => void,
+  error: (error: unknown) => {},
+});
 const applyFn = (value: number) => {};
 const recoverFn = (error: unknown) => {};
 createEffect(() => 1, { effect: applyFn, error: recoverFn });

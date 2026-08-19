@@ -20,6 +20,7 @@ pub enum Rule {
     ExpectedFunctionGotExpression,
     NoDirectMutation,
     ReactiveSourceUncaptured,
+    ReactiveDispatchUnresolved,
     ComponentPropsDestructure,
     ComponentReturnsConditionally,
     PreferComponentSyntax,
@@ -63,7 +64,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 37] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -71,6 +72,7 @@ impl Rule {
         Self::ExpectedFunctionGotExpression,
         Self::NoDirectMutation,
         Self::ReactiveSourceUncaptured,
+        Self::ReactiveDispatchUnresolved,
         Self::ComponentPropsDestructure,
         Self::ComponentReturnsConditionally,
         Self::PreferComponentSyntax,
@@ -120,6 +122,9 @@ impl Rule {
             Self::NoDirectMutation => ("SC2003", "no-direct-mutation", "warning", false),
             Self::ReactiveSourceUncaptured => {
                 ("SC9011", "reactive-source-uncaptured", "warning", true)
+            }
+            Self::ReactiveDispatchUnresolved => {
+                ("SC9012", "reactive-dispatch-unresolved", "warning", true)
             }
             Self::ComponentPropsDestructure => {
                 ("SC1003", "component-props-destructure", "error", false)

@@ -194,7 +194,7 @@
     {
       "rule": "v1/strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v1/component-props-alias.tsx",
       "start": 81,
@@ -204,7 +204,7 @@
     {
       "rule": "v1/no-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v1/component-props-body-destructure.tsx",
       "start": 50,
@@ -212,9 +212,19 @@
       "fixes": 0
     },
     {
+      "rule": "v1/no-proxy-apis",
+      "code": "SC8009",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v1/component-props-merge-alias.tsx",
+      "start": 134,
+      "end": 139,
+      "fixes": 0
+    },
+    {
       "rule": "v1/no-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v1/component-props-parameter-complex-destructure.tsx",
       "start": 17,
@@ -224,7 +234,7 @@
     {
       "rule": "v1/no-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v1/component-props-parameter-complex-destructure.tsx",
       "start": 109,
@@ -234,7 +244,7 @@
     {
       "rule": "v1/no-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v1/component-props-parameter-complex-destructure.tsx",
       "start": 203,
@@ -244,7 +254,7 @@
     {
       "rule": "v1/no-destructure",
       "code": "SC1003",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v1/component-props-parameter-destructure.tsx",
       "start": 14,
@@ -254,7 +264,7 @@
     {
       "rule": "v1/strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v1/component-props-read.tsx",
       "start": 58,
@@ -264,7 +274,7 @@
     {
       "rule": "v1/strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-conditional-return.tsx",
       "start": 53,
@@ -274,7 +284,7 @@
     {
       "rule": "v1/components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-conditional-return.tsx",
       "start": 53,
@@ -284,7 +294,7 @@
     {
       "rule": "v1/strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-early-return.tsx",
       "start": 50,
@@ -294,7 +304,7 @@
     {
       "rule": "v1/components-return-once",
       "code": "SC1004",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-early-return.tsx",
       "start": 50,

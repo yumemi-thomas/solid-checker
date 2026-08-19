@@ -20,8 +20,10 @@ own synchronous extent. `onSettled(wrap(() => onCleanup(dispose)))` and
 `onSettled(makeCallback())` hand the owner a callback this analysis cannot
 see — a wrapper may stash it and run it out-of-band, where there is no leaf
 scope and no throw — and a call inside a nested function the callback merely
-builds runs later, in that function's scope. All of those stay silent here;
-a genuinely unowned cleanup is still reported by
+builds runs later, in that function's scope. The nested function is proven clean
+for this leaf extent. Opaque wrapper/factory callbacks stay silent for this
+specific SC3001 claim but produce SC9012 `reactive-dispatch-unresolved`; a
+genuinely unowned cleanup is still reported by
 [no-owner-cleanup](no-owner-cleanup.md).
 
 `onSettled` is only a leaf owner when it is called *owner-backed*. Called

@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 1217,
-      "end": 1221,
+      "start": 1534,
+      "end": 1538,
       "fixes": 0
     },
     {
@@ -17,8 +17,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 1223,
-      "end": 1227,
+      "start": 1540,
+      "end": 1544,
       "fixes": 0
     },
     {
@@ -27,8 +27,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 1282,
-      "end": 1288,
+      "start": 1599,
+      "end": 1605,
       "fixes": 0
     },
     {
@@ -37,8 +37,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 1335,
-      "end": 1342,
+      "start": 1652,
+      "end": 1659,
       "fixes": 0
     },
     {
@@ -47,8 +47,28 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 1411,
-      "end": 1418,
+      "start": 1728,
+      "end": 1735,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
+      "start": 1737,
+      "end": 1744,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
+      "start": 2006,
+      "end": 2013,
       "fixes": 0
     },
     {
@@ -57,8 +77,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 1749,
-      "end": 1755,
+      "start": 2108,
+      "end": 2114,
       "fixes": 0
     },
     {
@@ -67,8 +87,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 1822,
-      "end": 1825,
+      "start": 2181,
+      "end": 2184,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
+      "start": 2252,
+      "end": 2257,
       "fixes": 0
     },
     {
@@ -77,8 +107,18 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
-      "start": 1993,
-      "end": 1997,
+      "start": 2344,
+      "end": 2354,
+      "fixes": 0
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-rich-args/App.tsx",
+      "start": 2356,
+      "end": 2360,
       "fixes": 0
     }
   ]
