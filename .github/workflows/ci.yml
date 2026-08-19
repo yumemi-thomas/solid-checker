@@ -37,6 +37,15 @@ jobs:
       # deviation declared. Both are meaningless unless something runs them.
       - run: make coverage
       - run: make parity
+      # AGENTS.md's absolute rule, as a gate: no rule's positive case may also
+      # be a `tsc` error against the real published Solid typings, and — the
+      # half the checker-side declarations added — no rule may be narrowed into
+      # silence. Provisioning installs the audited Solid versions and refuses
+      # to run on a version mismatch. The harness resolves `typescript` through
+      # packages/cli, and the workspace and both binaries are already built by
+      # the steps above, so this is one npm install plus the audited installs.
+      - run: npm ci --ignore-scripts --prefix packages/cli
+      - run: make tsc-oracle
       # The contract drift gate against real installed packages: install the
       # exact pins the checked-in artifacts were generated from, regenerate,
       # and diff. The workspace is already built, so this is one npm install
