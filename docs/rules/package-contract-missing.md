@@ -42,7 +42,7 @@ one, or provide a reviewed local contract override. The Solid
 2 runtime closure is pinned too: `@solidjs/signals` is resolved and integrity-pinned
 alongside `solid-js`, so package-manager drift beneath the same top-level RC also
 fails contract conformance rather than being certified. See
-[package-contracts.md](../package-contracts.md#bundled-contracts) for details.
+[package-contracts.md](../package-contracts.md#bundled-and-ecosystem-contracts) for details.
 
 
 ### Stale contracts
