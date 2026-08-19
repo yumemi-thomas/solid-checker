@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "server-function-rich-argument",
+      "code": "SC7007",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/server-function-rich-args-config-unknown/App.ts",
+      "start": 398,
+      "end": 408,
+      "fixes": 0
+    }
+  ]
+}

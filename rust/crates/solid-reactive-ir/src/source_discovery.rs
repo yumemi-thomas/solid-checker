@@ -276,6 +276,12 @@ pub(crate) struct AsyncSourceOptions {
     /// `loadingValue`/`seedLoadingValue` declaration, on a function-form
     /// call: the server installs a client hole for it.
     pub(crate) ssr_client_bare: bool,
+    /// The source is a proven bare `ssrSource: "client"` source, but the
+    /// analyzed project does not contain enough evidence to decide whether a
+    /// server-rendering entry exists. Absence of an import is not proof that
+    /// the application is CSR-only: the server entry may live in another
+    /// tsconfig or package.
+    pub(crate) server_rendering_unresolved: bool,
     /// An options argument exists that the analyzer cannot read as an exact
     /// object literal, so option-dependent claims cannot be proven either
     /// way.
@@ -344,15 +350,17 @@ pub(crate) fn async_source_options(
     AsyncSourceOptions {
         declared_loading,
         ssr_client_bare,
+        server_rendering_unresolved: false,
         opaque: !argument.exact_object_literal && !declared_loading,
     }
 }
 
 /// The `@solidjs/web` exports whose import proves the project server-renders
 /// (or hydrates server-rendered HTML). A bare `ssrSource: "client"` source is
-/// only a runtime error on the server path, so SC5005 stays silent for
-/// CSR-only projects. Named imports only; the export names come from the
-/// bundled `@solidjs/web` contract.
+/// only a runtime error on the server path. Named imports prove that path;
+/// their absence leaves the rendering mode unresolved because the server
+/// entry may live outside the analyzed project. The export names come from
+/// the bundled `@solidjs/web` contract.
 const SERVER_RENDER_IMPORTS: [&str; 6] = [
     "renderToStream",
     "renderToString",

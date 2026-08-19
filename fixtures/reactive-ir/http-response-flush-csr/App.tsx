@@ -1,6 +1,6 @@
-// The CSR twin of http-response-flush: no server rendering entry point is
-// imported, so httpStatus/httpHeader are unconditional client no-ops and
-// SC7005 must stay silent everywhere — including below the boundary.
+// No server rendering entry point is visible in this analyzed project. That
+// is not proof of CSR because the server entry may live in another tsconfig
+// or package, so the two dominated calls are SC7005 uncertifiable results.
 import { Loading, createMemo } from "solid-js";
 import { httpHeader, httpStatus } from "@solidjs/web";
 

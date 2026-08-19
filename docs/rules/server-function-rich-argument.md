@@ -1,6 +1,6 @@
 # server-function-rich-argument
 
-`SC7007` · **error** · violation
+`SC7007` · **error** · violation or uncertifiable transport obligation
 
 A `Date` / `Map` / `Set` / `RegExp` / typed-array argument handed to a server
 function while nothing in the project installs an argument serializer.
@@ -12,10 +12,16 @@ At call sites of proven server functions — functions whose body carries a
 module-level `"use server"` directive — flags arguments whose resolved
 TypeScript type is (or contains at top level) one of the types the default
 transport cannot carry: `Date`, `Map`/`ReadonlyMap`, `Set`/`ReadonlySet`,
-`RegExp`, or a typed array. The rule goes silent project-wide once
+`RegExp`, or a typed array. Identifier and inline-expression arguments receive
+the same compiler library-identity facts. The rule goes silent project-wide once
 `enableRichArguments` is imported (from
 `@solidjs/web/server-functions/rich-args`) or a `serializeArgs` is configured
-through `configureServerFunctionsClient`.
+through the exact resolved `configureServerFunctionsClient` API. A dynamic
+options value that may or may not contain `serializeArgs` makes SC7007
+uncertifiable instead of silently suppressing the transport check. Arguments
+whose complete JSON safety is not proven are likewise explicit uncertifiable
+results; this includes spreads, structurally typed objects, arrays, aliases,
+unions, arbitrary numbers, and missing compiler facts.
 
 **Premise: probe-confirmed** on the pinned
 `@solidjs/web@2.0.0-rc.0` server-functions client
@@ -96,15 +102,17 @@ to a JSON-safe shape at the call site (`date.toISOString()`,
   **`configureServerFunctionsClient({ serializeArgs })`** configured: both
   install a serializer and remove the throw project-wide (probed), so the
   rule is silent for the whole project.
-- **Unresolvable argument types route to silence, not uncertifiable.** Only
-  identifier arguments carry demanded type facts; an inline `new Date()`, a
-  spread, or an argument whose type cannot be resolved is not reported — an
-  unproven rich type is not a proven throw, and this rule only claims proven
-  ones.
-- **Nested rich types stay silent** for the same reason the rule is precise:
-  matching is top-level only (union/intersection members and `[]` array
-  element types). `{ when: Date }` throws at runtime (probed) but is not
-  claimed statically; the top-level set is what the docs constrain.
+- **Missing or incomplete facts are explicit.** Inline expressions such as
+  `new Date()` are demanded and reported exactly like identifiers. A spread,
+  structurally typed object, array, alias, union, arbitrary number, or missing
+  fact cannot prove the complete object graph JSON-safe, so SC7007 is
+  `uncertifiable` rather than silent. This closes the former nested-value hole:
+  `{ when: Date }` is no longer silently missed even though the available
+  library identity is top-level only.
+- **Only a deliberately small safe set is certified:** `null`, compiler-known
+  strings, booleans, finite numeric constants, and the natural binary body
+  positions below. Broader values need a recursive compiler JSON-safety fact
+  before the checker can certify them without guessing.
 - **Natural HTTP encodings.** A `Uint8Array` as the only argument — or in
   trailing position after JSON-safe leading arguments — is sent as a request
   body, not as JSON (probed: it reaches `fetch`), so those positions are

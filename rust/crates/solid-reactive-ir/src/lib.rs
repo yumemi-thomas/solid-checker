@@ -576,6 +576,12 @@ pub struct AsyncRead {
     /// unconditionally (SC5005).
     #[serde(default)]
     pub ssr_client_hole: bool,
+    /// The source is a proven bare `ssrSource: "client"` source, but whether
+    /// the application server-renders cannot be decided from the analyzed
+    /// project. SC5005 reports this as uncertifiable instead of treating a
+    /// missing server-entry import as proof of CSR.
+    #[serde(default)]
+    pub server_rendering_unresolved: bool,
 }
 
 fn default_async_provenance() -> bool {

@@ -48,9 +48,9 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) source_primitives: &'a HashMap<SymbolId, SymbolId>,
     pub(crate) async_sources: &'a HashSet<SymbolId>,
     pub(crate) source_async_options: &'a HashMap<SymbolId, AsyncSourceOptions>,
-    /// Whether any file in the project imports a server rendering entry
-    /// point; folded into every source's effective `ssr_client_bare` so a
-    /// bare client source never fires SC5005 in a CSR-only project.
+    /// Whether any file in the analyzed project imports a server rendering
+    /// entry point. False means unresolved, not proven CSR: the server entry
+    /// may live in another tsconfig or package.
     pub(crate) server_renders: bool,
     pub(crate) source_declarations: &'a HashMap<SymbolId, Declaration>,
     pub(crate) contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
@@ -238,14 +238,14 @@ impl LocalAccessContext<'_, '_> {
     }
 
     /// The source's declared async/hydration options with the project-level
-    /// server-render fact already folded in: a bare `ssrSource: "client"`
-    /// only becomes a hole when a server path exists to hit it.
+    /// server-render fact folded into a violation/uncertifiable distinction.
     fn effective_async_options(&self, symbol: &str) -> AsyncSourceOptions {
         let mut options = self
             .source_async_options
             .get(symbol)
             .copied()
             .unwrap_or_default();
+        options.server_rendering_unresolved = options.ssr_client_bare && !self.server_renders;
         options.ssr_client_bare &= self.server_renders;
         options
     }
@@ -490,7 +490,10 @@ impl LocalAccessContext<'_, '_> {
                 }
                 let async_provenance = self.async_sources.contains(symbol);
                 let async_options = self.effective_async_options(symbol);
-                if async_provenance || async_options.ssr_client_bare {
+                if async_provenance
+                    || async_options.ssr_client_bare
+                    || async_options.server_rendering_unresolved
+                {
                     let async_execution = async_execution_role(file, call.callee, execution);
                     result.async_reads.push(Arc::new(AsyncRead {
                         accessor: format!("{name}()").into(),
@@ -515,6 +518,7 @@ impl LocalAccessContext<'_, '_> {
                         declared_loading: async_options.declared_loading,
                         options_opaque: async_options.opaque,
                         ssr_client_hole: async_options.ssr_client_bare,
+                        server_rendering_unresolved: async_options.server_rendering_unresolved,
                     }));
                 }
             }
@@ -755,7 +759,9 @@ impl LocalAccessContext<'_, '_> {
             let member_async = self.async_sources.contains(symbol);
             let member_options = self.effective_async_options(symbol);
             if self.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store)
-                && (member_async || member_options.ssr_client_bare)
+                && (member_async
+                    || member_options.ssr_client_bare
+                    || member_options.server_rendering_unresolved)
             {
                 let async_execution = async_execution_role(file, member.span, execution);
                 result.async_reads.push(Arc::new(AsyncRead {
@@ -785,6 +791,7 @@ impl LocalAccessContext<'_, '_> {
                     declared_loading: member_options.declared_loading,
                     options_opaque: member_options.opaque,
                     ssr_client_hole: member_options.ssr_client_bare,
+                    server_rendering_unresolved: member_options.server_rendering_unresolved,
                 }));
             }
         }
@@ -896,6 +903,7 @@ impl LocalAccessContext<'_, '_> {
                 declared_loading: false,
                 options_opaque: false,
                 ssr_client_hole: false,
+                server_rendering_unresolved: false,
             }));
         }
         result

@@ -323,14 +323,27 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
                 },
                 "Read async values where the graph can wait for them: JSX, a createMemo, or an effect's compute function. The read then suspends to the nearest <Loading> boundary and re-runs when the value settles.".to_owned(),
             ),
-            ExecutionRole::TrackedJsx if read.ssr_client_hole && !read.under_loading => (
-                Rule::SsrClientSourceOutsideLoadingBoundary,
-                format!(
-                    "source {:?} declares ssrSource: \"client\" with no loadingValue/seedLoadingValue, and this project server-renders; the server never runs the compute, so rendering this read outside a Loading boundary throws `ssrSource: \"client\" read during SSR outside a <Loading> boundary` during SSR — even when the compute is fully synchronous",
-                    read.accessor
-                ),
-                "Wrap the reading subtree in <Loading fallback={...}> so the server can flush the fallback and hand the position to the client, or declare a loadingValue (loadingValue: undefined is valid; store-family sources use seedLoadingValue: true) so the server renders a provisional value instead.".to_owned(),
-            ),
+            ExecutionRole::TrackedJsx
+                if (read.ssr_client_hole || read.server_rendering_unresolved)
+                    && !read.under_loading =>
+            {
+                let unresolved = read.server_rendering_unresolved;
+                (
+                    Rule::SsrClientSourceOutsideLoadingBoundary,
+                    if unresolved {
+                        format!(
+                            "source {:?} declares ssrSource: \"client\" with no loadingValue/seedLoadingValue and is read outside a Loading boundary, but the analyzed project cannot prove whether a server-rendering entry exists; if this application server-renders, the read throws during SSR even when the compute is fully synchronous",
+                            read.accessor
+                        )
+                    } else {
+                        format!(
+                            "source {:?} declares ssrSource: \"client\" with no loadingValue/seedLoadingValue, and this project server-renders; the server never runs the compute, so rendering this read outside a Loading boundary throws `ssrSource: \"client\" read during SSR outside a <Loading> boundary` during SSR — even when the compute is fully synchronous",
+                            read.accessor
+                        )
+                    },
+                    "Wrap the reading subtree in <Loading fallback={...}> so the server can flush the fallback and hand the position to the client, or declare a loadingValue (loadingValue: undefined is valid; store-family sources use seedLoadingValue: true) so the server renders a provisional value instead.".to_owned(),
+                )
+            }
             ExecutionRole::TrackedJsx if !read.under_loading => (
                 Rule::AsyncOutsideLoadingBoundary,
                 format!(
@@ -351,7 +364,11 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
         }
     };
     let mut provenance = if rule == Rule::SsrClientSourceOutsideLoadingBoundary {
-        "the source declares ssrSource: \"client\" and no loadingValue/seedLoadingValue, and a server rendering entry point is imported in this project".to_owned()
+        if read.server_rendering_unresolved {
+            "the source declares ssrSource: \"client\" and no loadingValue/seedLoadingValue; no server rendering entry point is visible in the analyzed project, which does not prove the application is CSR-only".to_owned()
+        } else {
+            "the source declares ssrSource: \"client\" and no loadingValue/seedLoadingValue, and a server rendering entry point is imported in this project".to_owned()
+        }
     } else {
         "the accessor is returned by an async computation".to_owned()
     };

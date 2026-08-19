@@ -398,7 +398,10 @@ provenance fact with no type surface at all.
   overload still exists in rc.0, deprecated and typed `never`, so the call
   type-checks and the claim "this effect never runs" is the checker's alone.
   SC7002 `sync-node-received-async`, SC7005 `http-response-after-flush`,
-  SC7006/SC7007 (the server surface) likewise assert runtime behavior.
+  SC7006/SC7007 (the server surface) likewise assert runtime behavior. SC5005
+  and SC7005 now distinguish a visible server-render entry (violation) from
+  an absent entry (uncertifiable); absence is not treated as proof of CSR
+  because the entry may live in a different tsconfig or package.
 - **Syntax and style, no type surface** — SC1003 `v1/no-destructure` ✓ /
   `component-props-destructure`, SC1004 `v1/components-return-once` /
   `component-returns-conditionally`, SC8002 `v1/imports`, SC8006
@@ -508,6 +511,27 @@ describes survives because SC4002/SC4004 need it. The entries are kept as
 written rather than rewritten, because they record how the runtime value domain
 came to be trusted — which is still true — and rewriting them would erase the
 reason the removal was safe.
+
+- **SC7007 inline arguments and serializer identity** (`server_rules.rs`,
+  `demand_plan.rs`): compiler library-type facts are now demanded for every
+  non-spread server-function argument, so `save(new Date())` no longer falls
+  through a variable-only gap. `configureServerFunctionsClient` must resolve
+  to the exact `@solidjs/web/server-functions` declaration; a local same-named
+  function with a `serializeArgs` property cannot silence the project. A valid
+  exact configuration call with a dynamic options object produces an
+  uncertifiable SC7007 until `serializeArgs` presence is closed. The remaining
+  top-level fact boundary no longer creates silent nested false negatives:
+  arguments outside the deliberately proven JSON-safe primitive set now carry
+  an uncertifiable transport obligation, including object graphs, arrays,
+  aliases, unions, arbitrary numbers, spreads, and missing facts. Invalid calls
+  remain TypeScript-owned through an exact call-validity gate.
+
+  The proven JSON-safe set is deliberately small and is read from the value,
+  never from a rendered type name: `null`, a constant string, a finite constant
+  number, and an AST-proven primitive/nullish literal. A declared `string` or
+  `boolean` *identifier* is therefore an explicit obligation rather than a
+  certification — the fail-closed direction, and uniform across spellings,
+  until Type Facts exposes a structural primitive-kind fact.
 
 - **Synchronous standard callbacks after `await`** (`static_rules.rs` and
   `runtime_semantics.rs`): SC1002's accessor-call *and* member-read proofs now

@@ -1,4 +1,15 @@
 {
-  "status": "certified",
-  "findings": []
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "ssr-client-source-outside-loading-boundary",
+      "code": "SC5005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ssr-client-boundary-csr/App.tsx",
+      "start": 458,
+      "end": 466,
+      "fixes": 0
+    }
+  ]
 }

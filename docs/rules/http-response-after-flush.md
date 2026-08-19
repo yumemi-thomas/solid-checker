@@ -10,7 +10,9 @@
 Flags calls to `httpStatus` and `httpHeader` (imported from `@solidjs/web`)
 made in a render-time scope that sits below a `<Loading>` boundary — either
 lexically inside a `Loading` element's children, or in the body of a
-component that is rendered as a `Loading` element's child.
+component that is rendered as a `Loading` element's child. A visible server
+entry makes this a violation; when rendering mode is not visible in the
+analyzed project, it is an **uncertifiable** result.
 
 **Premise: code-read on the pinned runtime, with the RFC as co-author.**
 `@solidjs/web@2.0.0-rc.0`'s `dist/server.js` gates both primitives — the
@@ -97,13 +99,11 @@ settled data.
 
 ## When it does not fire
 
-- **CSR-only projects.** On the client both exports are unconditional no-ops
-  (`dist/web.js` / `dist/dev.js` export empty functions) wherever they are
-  called — there is no post-flush drop to distinguish. The rule requires the
-  same server-render evidence as
-  [ssr-client-source-outside-loading-boundary](ssr-client-source-outside-loading-boundary.md):
-  a named import of a `@solidjs/web` server rendering entry point (or
-  `hydrate`) somewhere in the analyzed project.
+- **Rendering mode.** On the client both exports are unconditional no-ops
+  (`dist/web.js` / `dist/dev.js` export empty functions), but absence of a
+  server entry from one analyzed project does not prove the application is
+  CSR-only. A visible server-rendering import yields the violation; otherwise
+  the dominated render-time call is uncertifiable.
 - **Fallback position.** A call inside a `Loading` element's `fallback` —
   or in a component rendered in fallback position — is shell-time and
   applies; only the boundary's children are post-flush material.

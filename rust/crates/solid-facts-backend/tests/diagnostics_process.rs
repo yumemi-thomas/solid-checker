@@ -433,7 +433,7 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
 }
 
 #[test]
-fn ssr_client_hole_requires_a_server_rendering_project() {
+fn ssr_client_hole_distinguishes_proven_and_unresolved_server_rendering() {
     let Some(findings) = diagnostic_fixture("ssr-client-boundary") else {
         return;
     };
@@ -448,12 +448,14 @@ fn ssr_client_hole_requires_a_server_rendering_project() {
             .is_some_and(|message| message.contains("ssrSource: \"client\"")),
         "{holes:#?}"
     );
-    // The same bare client source read in a CSR-only project must stay
-    // silent: the throwing code path lives in the server runtime.
+    // With no visible server entry, the same source is not certified safe:
+    // the entry may live in another tsconfig/package.
     let Some(csr_findings) = diagnostic_fixture("ssr-client-boundary-csr") else {
         return;
     };
-    assert!(csr_findings.is_empty(), "{csr_findings:#?}");
+    let unresolved = findings_for_rule(&csr_findings, "ssr-client-source-outside-loading-boundary");
+    assert_eq!(unresolved.len(), 1, "{csr_findings:#?}");
+    assert_eq!(unresolved[0]["kind"], "uncertifiable", "{unresolved:#?}");
 }
 
 /// The wave-6 server-surface and resolve rules, pinned at their probed
@@ -474,10 +476,17 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
                 .all(|finding| finding["severity"] == "warning" && finding["kind"] == "violation"),
             "the post-flush drop is conditional and must stay a warning: {drops:#?}"
         );
-        // CSR twin: both exports are client no-ops everywhere, no drop to
-        // report.
+        // With no visible server entry, the rendering mode is unresolved;
+        // absence of the import is not proof that the app is CSR-only.
         if let Some(csr) = diagnostic_fixture("http-response-flush-csr") {
-            assert!(csr.is_empty(), "{csr:#?}");
+            let unresolved = findings_for_rule(&csr, "http-response-after-flush");
+            assert_eq!(unresolved.len(), 2, "{csr:#?}");
+            assert!(
+                unresolved
+                    .iter()
+                    .all(|finding| finding["kind"] == "uncertifiable"),
+                "{unresolved:#?}"
+            );
         }
     }
     if let Some(findings) = diagnostic_fixture("server-function-directive") {
@@ -494,16 +503,10 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
     }
     if let Some(findings) = diagnostic_fixture("server-function-rich-args") {
-        // Date, Set, Map, RegExp (module-level directive), Float64Array, and
-        // the Set of the mixed call; lone/trailing Uint8Array, plain JSON
-        // shapes, and the unresolvable inline `new Date()` stay silent.
-        //
-        // Plus the two imported aliases, `Stamps = Date[]` and `Ids =
-        // Set<string>`, added when the rule started reading `libraryTypes`
-        // instead of the rendered type text — both render as their own name and
-        // matched nothing before. `Boxed`, whose Date is a nested property,
-        // stays silent: that boundary is unchanged.
-        assert_rule_findings(&findings, "server-function-rich-argument", 8);
+        // Nine proven rich values plus three explicit obligations where the
+        // available facts cannot close the full JSON graph. Lone/trailing
+        // Uint8Array and compiler-known JSON-safe values remain certified.
+        assert_rule_findings(&findings, "server-function-rich-argument", 12);
         if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
             assert!(
                 enabled.is_empty(),

@@ -474,6 +474,7 @@ pub fn project_findings(
                         && read.execution == crate::ExecutionRole::TrackedJsx
                         && !read.under_loading
                         && (read.ssr_client_hole
+                            || read.server_rendering_unresolved
                             || (read.async_provenance && !read.declared_loading))
                 })
                 .map(|read| project_finding(FindingSeed::AsyncRead(read), catalog)),
@@ -601,6 +602,9 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             if read.options_opaque && finding.id == "SC5001" {
                 finding.kind = "uncertifiable".into();
             }
+            if read.server_rendering_unresolved && finding.id == "SC5005" {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::PackageContractIssue(_) => {
             finding.analysis_context = "package contract completeness".into();
@@ -697,6 +701,7 @@ mod tests {
                 declared_loading: false,
                 options_opaque: false,
                 ssr_client_hole: false,
+                server_rendering_unresolved: false,
             }],
             ..Program::default()
         };
@@ -737,6 +742,7 @@ mod tests {
                 declared_loading: false,
                 options_opaque: false,
                 ssr_client_hole: false,
+                server_rendering_unresolved: false,
             }],
             ..Program::default()
         };

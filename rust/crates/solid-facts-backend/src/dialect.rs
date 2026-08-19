@@ -398,6 +398,7 @@ mod tests {
                 declared_loading: false,
                 options_opaque: false,
                 ssr_client_hole: false,
+                server_rendering_unresolved: false,
             }],
             static_defects: defect_kinds
                 .into_iter()
