@@ -415,7 +415,26 @@ Add one entry to the `contracts` array of `rust/dialects/<id>/dialect.json`:
 
 Every field except `probeRuntime`, `composeScript`, and `composeInputs` is
 required, `generatorTarget` must start with `<id>/`, and no two entries may
-share a `generatorTarget`. `node scripts/dialect-manifests.mjs validate` — part
+share a `generatorTarget` or declare the same package twice.
+
+A contract that is **reviewed against a package rather than derived from it**
+declares `"generated": false` and carries only `package` and `bundledContract`:
+
+```json
+{
+  "package": "@solid-primitives/scheduled",
+  "bundledContract": "pkg/contracts/bundled/solid-v1/solid-primitives-scheduled.json",
+  "generated": false
+}
+```
+
+There is nothing for `make contracts` to regenerate from, so it skips these
+entries. Supplying any generator field alongside `"generated": false` is an
+error rather than being ignored: a half-filled entry is someone leaving fields
+out of a generated contract, and that must not pass as a deliberate
+hand-authored one. Such an entry is still declared, because the manifest is the
+inventory of every package a dialect models — see [The manifest is the complete
+inventory](#the-manifest-is-the-complete-inventory). `node scripts/dialect-manifests.mjs validate` — part
 of the universal check set — enforces all of that and fails on any declared
 artifact that does not exist, so a half-added package cannot ship as a dialect
 that silently models nothing.
@@ -494,13 +513,29 @@ reviewed, never silently substituted. Consumers see the same boundary from the
 other side: an installed version other than the audited one is refused and
 reported as a stale contract.
 
-### Known gap
+### The manifest is the complete inventory
 
-The drift gate enumerates the contracts a manifest **declares**. A package that
-a dialect's vocabulary knows about but that no manifest entry names is not
-caught by any check — it simply has no contract, and every project importing it
-reports `SC9005` forever. Nothing derives the expected contract set from the
-vocabulary and fails on the difference.
+Every gate above enumerates the contracts a manifest **declares**, which leaves
+one hole they cannot see: a package a dialect models but no entry names is
+covered by nothing at all. It silently has no contract, and every project
+importing it reports `SC9005` forever.
+
+`every_modeled_package_is_declared_in_the_assembly_manifest`, in
+`rust/crates/solid-facts-backend/src/dialect.rs`, closes it by deriving the
+expected set from the dialect instead of the manifest. A package is modeled when
+the vocabulary owns one of its modules (`Dialect::modules`) or the backend
+compiles a contract in for it (`Dialect::bundled_packages`); the two sets must
+match the declared packages exactly. An undeclared modeled package fails, and so
+does a declaration for a package the dialect neither owns nor bundles, which is
+dead weight.
+
+Module specifiers collapse to package roots first, the same way contract
+discovery resolves them: `solid-js/store` and `@solidjs/web/frames` are subpaths
+of one installed package, not packages of their own.
+
+The check runs with `cargo test -p solid-facts-backend --lib`, and therefore in
+`make verify`. It reads the checked-in `dialect.json` files directly, so it
+fails on the manifest as committed rather than on a regenerated copy.
 
 ## Bundled and ecosystem contracts
 

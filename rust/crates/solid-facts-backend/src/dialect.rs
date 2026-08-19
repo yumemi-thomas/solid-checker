@@ -281,7 +281,6 @@ static SOLID_V1: Dialect = Dialect {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
     use std::collections::HashSet;
 
     use solid_reactive_ir::{
@@ -292,6 +291,87 @@ mod tests {
     use typefacts::Location;
 
     use super::*;
+
+    /// The package root of a module specifier, matching contract discovery:
+    /// `solid-js/store` and `@solidjs/web/frames` are subpaths of one installed
+    /// package, not packages of their own.
+    fn package_root(module: &str) -> &str {
+        if module.starts_with('@') {
+            module
+                .match_indices('/')
+                .nth(1)
+                .map_or(module, |(index, _)| &module[..index])
+        } else {
+            module.split('/').next().unwrap_or(module)
+        }
+    }
+
+    /// Every package a dialect models is declared in its assembly manifest, and
+    /// every declaration models something.
+    ///
+    /// The manifest drives contract generation, the drift check, runtime
+    /// conformance, and the composed-artifact check -- all of which enumerate
+    /// what it *declares*. A package the vocabulary owns or the backend bundles
+    /// but no entry names is therefore covered by no gate at all: it silently
+    /// has no contract, and every project importing it reports SC9005 forever.
+    /// This check closes that hole, so it derives the expected set from the
+    /// dialect itself rather than from the manifest it is checking.
+    #[test]
+    fn every_modeled_package_is_declared_in_the_assembly_manifest() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        for dialect in ALL {
+            let source = root
+                .join("rust/dialects")
+                .join(dialect.id)
+                .join("dialect.json");
+            let read = std::fs::read(&source)
+                .unwrap_or_else(|error| panic!("{}: {error}", source.display()));
+            let manifest: serde_json::Value = serde_json::from_slice(&read)
+                .unwrap_or_else(|error| panic!("{}: {error}", source.display()));
+            let declared = manifest["contracts"]
+                .as_array()
+                .unwrap_or_else(|| panic!("{} has no contracts array", source.display()))
+                .iter()
+                .map(|contract| {
+                    contract["package"]
+                        .as_str()
+                        .unwrap_or_else(|| {
+                            panic!("{} has a contract without a package", source.display())
+                        })
+                        .to_owned()
+                })
+                .collect::<HashSet<_>>();
+            // Both halves of "models": the vocabulary owns the module's
+            // exports, or the backend compiles a contract in for it. Either is
+            // a claim about the package that the manifest has to carry.
+            let modeled = dialect
+                .vocabulary
+                .modules()
+                .iter()
+                .copied()
+                .chain(dialect.bundled_packages.iter().copied())
+                .map(|module| package_root(module).to_owned())
+                .collect::<HashSet<_>>();
+            let mut undeclared = modeled.difference(&declared).collect::<Vec<_>>();
+            undeclared.sort();
+            assert!(
+                undeclared.is_empty(),
+                "{} models {undeclared:?} but declares no contract for them; add an entry to {} \
+                 (a hand-authored bundled overlay sets \"generated\": false)",
+                dialect.id,
+                source.display()
+            );
+            let mut unmodeled = declared.difference(&modeled).collect::<Vec<_>>();
+            unmodeled.sort();
+            assert!(
+                unmodeled.is_empty(),
+                "{} declares a contract for {unmodeled:?}, which its vocabulary does not own and \
+                 the backend does not bundle; the entry in {} is dead weight",
+                dialect.id,
+                source.display()
+            );
+        }
+    }
 
     fn location(index: u64) -> Location {
         Location {
