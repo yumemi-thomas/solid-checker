@@ -37,8 +37,17 @@ The Solid 1.x artifact is composed by
 
 The scheduled-primitives overlay is intentionally Solid 1.x-only because that
 release's peer range is `solid-js@^1.6.12`. Its exact npm version and integrity
-are pinned; its deferred/inline claims were reviewed against the published
-implementation and the contract generator's returned-wrapper regression suite.
+are pinned, and its claims are runtime-probed in all four condition modes
+against `solid-js@1.9.14` in a Solid 1.x install root of their own.
+
+Probing found that `leading` and `leadingAndTrailing` do not behave the same way
+everywhere: their server branch returns early and never invokes the scheduler
+factory, so the `inline` claim on parameter 0 is true off the server only. Those
+two exports therefore carry per-condition `variants` — the browser variant keeps
+both claims, the node variant states only the deferred one. The debounce,
+throttle, and scheduleIdle claims need no variants: their server branch returns
+a no-op, so the callback is not invoked during the call in any condition, which
+is exactly what `deferred` asserts.
 
 The similarly named files below `rust/crates/solid-dialect/contracts/` are a
 different artifact set: flat review inputs used to test the hand-written

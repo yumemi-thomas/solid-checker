@@ -16,10 +16,35 @@ import {
 } from "../packages/cli/scripts/contract-document.mjs";
 import { loadDialectManifests, root } from "./dialect-manifests.mjs";
 
-const definitions = loadDialectManifests({ requireArtifacts: true })
-  .flatMap(manifest => manifest.contracts)
-  .filter(contract => contract.probeRuntime)
-  .map(contract => ({ file: contract.bundledContract, name: contract.package }));
+// Probing is grouped by dialect, and each group installs into its own root.
+// One shared install cannot host them: @solid-primitives/scheduled peers on
+// solid-js@^1.6.12 while the 2.0 contracts pin 2.0.0-rc.0, and npm refuses the
+// combination outright. A dialect's non-probed packages are installed
+// alongside its probed ones so those peers resolve to the audited release
+// rather than whatever npm would pick.
+const manifests = loadDialectManifests({ requireArtifacts: true });
+const probeWorkers = {
+  "solid-v1": "scripts/contract-probes-solid-v1.mjs",
+  "solid-v2": "scripts/contract-probes.mjs",
+};
+const definitions = manifests.flatMap(manifest =>
+  manifest.contracts
+    .filter(contract => contract.probeRuntime)
+    .map(contract => ({
+      file: contract.bundledContract,
+      name: contract.package,
+      dialect: manifest.id,
+    })),
+);
+const peerDefinitions = manifests.flatMap(manifest =>
+  manifest.contracts
+    .filter(contract => !contract.probeRuntime)
+    .map(contract => ({
+      file: contract.bundledContract,
+      name: contract.package,
+      dialect: manifest.id,
+    })),
+);
 const write = process.argv.includes("--write");
 const probeModes = [
   { name: "client", conditions: ["browser"] },
@@ -110,10 +135,11 @@ function summaryForMode(summary, mode) {
   return mostSpecific[0].summary;
 }
 
-function writeProbeEvidence(summary, packageName, entrypoint, name, allowedModes = probeModes) {
+function writeProbeEvidence(summary, dialect, packageName, entrypoint, name, allowedModes = probeModes) {
   const claimResults = claim =>
     observed.probes.filter(
       result =>
+        result.dialect === dialect &&
         result.pkg === packageName &&
         result.entrypoint === entrypoint &&
         result.name === name &&
@@ -152,6 +178,7 @@ function writeProbeEvidence(summary, packageName, entrypoint, name, allowedModes
       ...variant,
       summary: writeProbeEvidence(
         variant.summary,
+        dialect,
         packageName,
         entrypoint,
         name,
@@ -171,62 +198,121 @@ const contracts = definitions.map(definition => {
   return { ...definition, path, contract };
 });
 
-const cacheKey = contracts
-  .map(({ name, contract }) => `${name}@${contract.package.version}`)
-  .join("_")
-  .replace(/[^\w.@-]+/g, "-");
-const install = join(tmpdir(), `solid-checker-contract-conformance-${cacheKey}`);
-mkdirSync(install, { recursive: true });
+/** The exact release a declared contract pins, for install specifiers. */
+const pinnedVersion = definition =>
+  JSON.parse(readFileSync(join(root, definition.file), "utf8")).package?.version;
 
-const installedVersion = name => {
-  const path = join(install, "node_modules", name, "package.json");
-  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")).version : null;
+/** One install root per dialect, with the probe worker that can drive it. */
+const installations = manifests
+  .filter(manifest => contracts.some(contract => contract.dialect === manifest.id))
+  .map(manifest => {
+    const probed = contracts.filter(contract => contract.dialect === manifest.id);
+    const peers = peerDefinitions
+      .filter(definition => definition.dialect === manifest.id)
+      .map(definition => ({ name: definition.name, version: pinnedVersion(definition) }))
+      .filter(peer => peer.version);
+    const specifiers = [
+      ...probed.map(({ name, contract }) => `${name}@${contract.package.version}`),
+      ...peers.map(peer => `${peer.name}@${peer.version}`),
+    ].sort();
+    const worker = probeWorkers[manifest.id];
+    if (!worker) {
+      throw new Error(
+        `${manifest.id} declares probeRuntime contracts but has no probe worker; add one to probeWorkers`,
+      );
+    }
+    const cacheKey = specifiers.join("_").replace(/[^\w.@-]+/g, "-");
+    const directory = join(tmpdir(), `solid-checker-contract-conformance-${cacheKey}`);
+    mkdirSync(directory, { recursive: true });
+    return { dialect: manifest.id, probed, specifiers, worker, directory };
+  });
+
+const readInstalledManifest = (directory, name) => {
+  const path = join(directory, "node_modules", ...name.split("/"), "package.json");
+  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
 };
-if (contracts.some(({ name, contract }) => installedVersion(name) !== contract.package.version)) {
-  const result = spawnSync(
-    "npm",
-    [
-      "install",
-      "--prefix",
-      install,
-      "--no-audit",
-      "--no-fund",
-      "--no-save",
-      ...contracts.map(({ name, contract }) => `${name}@${contract.package.version}`),
-    ],
-    { stdio: "inherit" },
+
+const observations = [];
+for (const installation of installations) {
+  const satisfied = installation.probed.every(
+    ({ name, contract }) =>
+      readInstalledManifest(installation.directory, name)?.version === contract.package.version,
   );
-  if (result.status !== 0) process.exit(result.status ?? 1);
+  if (!satisfied) {
+    const result = spawnSync(
+      "npm",
+      [
+        "install",
+        "--prefix",
+        installation.directory,
+        "--no-audit",
+        "--no-fund",
+        "--no-save",
+        ...installation.specifiers,
+      ],
+      { stdio: "inherit" },
+    );
+    if (result.status !== 0) process.exit(result.status ?? 1);
+  }
+
+  // The worker runs from inside the install so its bare imports resolve to that
+  // dialect's releases; its shared harness has to travel with it.
+  const worker = join(installation.directory, "contract-probes.mjs");
+  copyFileSync(join(root, installation.worker), worker);
+  mkdirSync(join(installation.directory, "lib"), { recursive: true });
+  copyFileSync(
+    join(root, "scripts/lib/contract-probe-harness.mjs"),
+    join(installation.directory, "lib", "contract-probe-harness.mjs"),
+  );
+
+  const packages = installation.probed.map(({ name }) => ({
+    name,
+    directory: join(installation.directory, "node_modules", ...name.split("/")),
+  }));
+  for (const mode of probeModes) {
+    const execution = spawnSync(
+      "node",
+      [
+        ...mode.conditions.flatMap(condition => ["--conditions", condition]),
+        worker,
+        JSON.stringify({ mode: mode.name, packages }),
+      ],
+      { encoding: "utf8" },
+    );
+    if (execution.status !== 0) {
+      process.stderr.write(execution.stderr);
+      process.exit(execution.status ?? 1);
+    }
+    observations.push({ dialect: installation.dialect, ...JSON.parse(execution.stdout) });
+  }
 }
 
-const worker = join(install, "contract-probes.mjs");
-copyFileSync(join(root, "scripts/contract-probes.mjs"), worker);
-const packages = contracts.map(({ name }) => ({
-  name,
-  directory: join(install, "node_modules", name),
-}));
-const observations = [];
-for (const mode of probeModes) {
-  const request = { mode: mode.name, packages };
-  const execution = spawnSync(
-    "node",
-    [
-      ...mode.conditions.flatMap(condition => ["--conditions", condition]),
-      worker,
-      JSON.stringify(request),
-    ],
-    { encoding: "utf8" },
+/** The install root for one dialect's probed contracts. */
+const installationOfDialect = dialect =>
+  installations.find(installation => installation.dialect === dialect);
+
+/**
+ * The install that holds a package at an exact version.
+ *
+ * solid-js is installed in both roots at different versions, so a name-only
+ * lookup would answer with whichever dialect sorted first and compare the 2.0
+ * lock entry against the 1.x tree.
+ */
+const installationWithVersion = (name, version) =>
+  installations.find(
+    installation => readInstalledManifest(installation.directory, name)?.version === version,
   );
-  if (execution.status !== 0) {
-    process.stderr.write(execution.stderr);
-    process.exit(execution.status ?? 1);
-  }
-  observations.push(JSON.parse(execution.stdout));
-}
+
+const installedVersionIn = (installation, name) =>
+  readInstalledManifest(installation?.directory ?? "", name)?.version ?? null;
+/** Probed packages are identified by dialect and name: solid-js is declared by
+ * both dialects, at different versions, so a name-only key would merge them. */
+const probeKey = (dialect, name) => `${dialect}/${name}`;
 const observed = {
   packages: Object.fromEntries(
-    contracts.map(({ name }) => {
+    contracts.map(({ dialect, name }) => {
       const surfaces = observations
+        .filter(observation => observation.dialect === dialect)
         .map(observation => observation.packages[name])
         .filter(Boolean);
       const entrypoints = {};
@@ -248,30 +334,35 @@ const observed = {
           entrypoints[entrypoint] = current;
         }
       }
-      return [name, { version: surfaces[0]?.version, entrypoints }];
+      return [probeKey(dialect, name), { version: surfaces[0]?.version, entrypoints }];
     }),
   ),
-  probes: observations.flatMap(observation => observation.probes),
-  discoveredClaims: observations.flatMap(observation => observation.discoveredClaims ?? []),
+  probes: observations.flatMap(observation =>
+    observation.probes.map(probe => ({ ...probe, dialect: observation.dialect })),
+  ),
+  discoveredClaims: observations.flatMap(observation =>
+    (observation.discoveredClaims ?? []).map(claim => ({
+      ...claim,
+      dialect: observation.dialect,
+    })),
+  ),
 };
-const hiddenLockPath = join(install, "node_modules", ".package-lock.json");
-const hiddenLock = existsSync(hiddenLockPath)
-  ? JSON.parse(readFileSync(hiddenLockPath, "utf8"))
-  : null;
+const hiddenLockOf = directory => {
+  const path = join(directory, "node_modules", ".package-lock.json");
+  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : null;
+};
+const hiddenLocks = new Map(
+  installations.map(installation => [installation.directory, hiddenLockOf(installation.directory)]),
+);
 // npm's hidden lockfile keys packages by path, but the path's shape varies:
 // a plain `node_modules/<name>` on Linux, and a relative traversal that ends
 // with `/node_modules/<name>` where the temp directory resolves through a
 // symlink (macOS's /var -> /private/var).
-const installedIntegrity = name =>
-  Object.entries(hiddenLock?.packages ?? {}).find(
+const installedIntegrityIn = (installation, name) =>
+  Object.entries(hiddenLocks.get(installation?.directory)?.packages ?? {}).find(
     ([path]) =>
       path === `node_modules/${name}` || path.endsWith(`/node_modules/${name}`),
   )?.[1]?.integrity;
-
-const installedManifest = name => {
-  const path = join(install, "node_modules", ...name.split("/"), "package.json");
-  return existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) : undefined;
-};
 
 function splitPackageVersion(identifier) {
   const separator = identifier.lastIndexOf("@");
@@ -286,13 +377,19 @@ function checkRuntimeLock() {
       fail(`${runtimeLockPath} has malformed package entry ${identifier}`);
       continue;
     }
-    const actualVersion = installedVersion(expected.name);
-    if (actualVersion !== expected.version) {
+    // Resolve the entry in the install that actually holds that exact release,
+    // so a lock entry is checked against the tree it describes.
+    const installation = installationWithVersion(expected.name, expected.version);
+    if (!installation) {
+      const seen = installations
+        .map(candidate => installedVersionIn(candidate, expected.name))
+        .filter(Boolean);
       fail(
-        `${runtimeLockPath} pins ${identifier}, installed ${expected.name}@${actualVersion ?? "missing"}`,
+        `${runtimeLockPath} pins ${identifier}, installed ${seen.length ? seen.join(", ") : "nowhere"}`,
       );
+      continue;
     }
-    const manifest = installedManifest(expected.name);
+    const manifest = readInstalledManifest(installation.directory, expected.name);
     if (!manifest) {
       fail(`${runtimeLockPath} package ${identifier} is not installed`);
       continue;
@@ -317,8 +414,8 @@ function checkRuntimeLock() {
             `${runtimeLockPath} expects ${identifier} ${dependencyKind} ${name}@${edge.range}, installed manifest declares ${declared ?? "missing"}`,
           );
         }
-        const resolvedVersion = installedVersion(name);
-        const resolvedIntegrity = installedIntegrity(name);
+        const resolvedVersion = installedVersionIn(installation, name);
+        const resolvedIntegrity = installedIntegrityIn(installation, name);
         if (resolvedVersion !== edge.version || resolvedIntegrity !== edge.integrity) {
           fail(
             `${runtimeLockPath} expects ${name}@${edge.version} (${edge.integrity}), installed ${name}@${resolvedVersion ?? "missing"} (${resolvedIntegrity ?? "no integrity"})`,
@@ -333,9 +430,9 @@ checkRuntimeLock();
 
 if (write) {
   for (const item of contracts) {
-    const runtime = observed.packages[item.name];
+    const runtime = observed.packages[probeKey(item.dialect, item.name)];
     item.contract.package.version = runtime.version;
-    const integrity = installedIntegrity(item.name);
+    const integrity = installedIntegrityIn(installationOfDialect(item.dialect), item.name);
     if (integrity) item.contract.package.integrity = integrity;
     item.contract.entrypoints = Object.fromEntries(
       Object.entries(item.contract.entrypoints)
@@ -346,7 +443,7 @@ if (write) {
             Object.entries(surface.exports).map(([name, summary]) => [
               name,
               runtimeSurface?.exports[name]
-                ? writeProbeEvidence(summary, item.name, entrypoint, name)
+                ? writeProbeEvidence(summary, item.dialect, item.name, entrypoint, name)
                 : summary,
             ]),
           );
@@ -361,7 +458,7 @@ if (write) {
 }
 
 for (const item of contracts) {
-  const runtime = observed.packages[item.name];
+  const runtime = observed.packages[probeKey(item.dialect, item.name)];
   if (runtime.version !== item.contract.package.version) {
     fail(
       `${item.file} pins ${item.contract.package.version}, installed ${runtime.version}`,
@@ -369,7 +466,10 @@ for (const item of contracts) {
   }
   if (!item.contract.package.integrity) {
     fail(`${item.file} does not pin npm integrity`);
-  } else if (item.contract.package.integrity !== installedIntegrity(item.name)) {
+  } else if (
+    item.contract.package.integrity !==
+    installedIntegrityIn(installationOfDialect(item.dialect), item.name)
+  ) {
     fail(`${item.file} npm integrity does not match the installed release`);
   }
   const contractEntrypoints = item.contract.entrypoints ?? {};
@@ -405,20 +505,20 @@ for (const item of contracts) {
 
 const results = new Map();
 for (const result of observed.probes) {
-  const key = `${result.pkg}:${result.entrypoint}:${result.name}:${result.claim}`;
+  const key = `${result.dialect}:${result.pkg}:${result.entrypoint}:${result.name}:${result.claim}`;
   const modeResults = results.get(key) ?? [];
   modeResults.push(result);
   results.set(key, modeResults);
 }
 const declaredByTarget = new Map();
 const incompleteness = [];
-const targetKey = (packageName, entrypoint, name) =>
-  `${packageName}:${entrypoint}:${name}`;
+const targetKey = (dialect, packageName, entrypoint, name) =>
+  `${dialect}:${packageName}:${entrypoint}:${name}`;
 const claimFamily = claim => claim.replace(/=.*/, "");
 for (const item of contracts) {
   for (const [entrypoint, entry] of Object.entries(item.contract.entrypoints)) {
     for (const [name, summary] of Object.entries(entry.exports)) {
-      declaredByTarget.set(targetKey(item.name, entrypoint, name), summary);
+      declaredByTarget.set(targetKey(item.dialect, item.name, entrypoint, name), summary);
       for (const mode of probeModes.filter(candidate => modeApplies(entry, candidate))) {
         const selected = summaryForMode(summary, mode);
         if (!selected) {
@@ -432,7 +532,7 @@ for (const item of contracts) {
           ...(selected.returns ? [`returns=${selected.returns.kind}`] : []),
         ];
         for (const claim of claims) {
-          const key = `${item.name}:${entrypoint}:${name}:${claim}`;
+          const key = `${item.dialect}:${item.name}:${entrypoint}:${name}:${claim}`;
           const modeResults = results.get(key) ?? [];
           const result = modeResults.find(candidate => candidate.mode === mode.name);
           if (!result) {
@@ -450,7 +550,12 @@ for (const item of contracts) {
   }
 }
 for (const observation of observed.discoveredClaims) {
-  const target = targetKey(observation.pkg, observation.entrypoint, observation.name);
+  const target = targetKey(
+    observation.dialect,
+    observation.pkg,
+    observation.entrypoint,
+    observation.name,
+  );
   const summary = declaredByTarget.get(target);
   const mode = probeModes.find(candidate => candidate.name === observation.mode);
   const selected = summary && mode ? summaryForMode(summary, mode) : undefined;
