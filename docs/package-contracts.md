@@ -516,15 +516,17 @@ claim about the server build, which needs its own contract and does not yet have
 one. Restricting the modes records that boundary; it does not weaken the ones
 that remain, and any claim inside a stated mode is still probed.
 
-**A claim a probe cannot adjudicate is declared**, in
-`pkg/contracts/bundled/unprobed-claims.json`, with the reason. Two 1.x claims
-are there today because the vocabulary's own definitions disagree about what
-they assert: `Execution::Inline` is documented as running immediately, while
-`startTransition` is deliberately classified inline despite running its callback
-in a microtask, on the ground that the runtime restores the captured listener so
-reads inside it still subscribe. Timing and tracking cannot both be the test. An
-entry that stops matching a real claim fails the suite, so the list cannot
-outlive its reason.
+**`inline`, `deferred` and `tracked` classify attribution, not timing**, so a
+probe asks who owns the reads rather than when the callback ran. An `inline`
+probe puts the export call inside a memo and checks that the memo re-runs when a
+signal the callback read changes; a `deferred` probe checks that it does not.
+`startTransition` is the case that fixes the definition: its callback runs in a
+microtask, and it is inline because the runtime restores the captured listener,
+so a read inside subscribes exactly as at the call site. `untrack`, `createRoot`
+and `runWithOwner` stay inline while clearing the listener, which the dialect
+states separately through `runs_callback_deferred`, and their probes assert the
+opposite attribution. Every claim of a probed contract is probed; there are no
+exemptions.
 
 `node scripts/check-contract-pins.mjs`, in the same target, covers what probing
 cannot reach. The probe suite proves a package's identity by installing it and
