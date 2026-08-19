@@ -13,12 +13,20 @@
 // button/a use the default scope list.
 
 const canDrag = () => true;
+declare const maybeHref: string | undefined;
+declare const laterHref: { href?: string };
 
 export function Draggable() {
   return (
     <section>
-      <img draggable />                                {/* SC8019: presence-only -> auto */}
-      <img draggable={true} />                         {/* SC8019: also presence-only -> auto */}
+      <img draggable />                                {/* TypeScript-owned in 2.0 */}
+      <img draggable={true} />                         {/* TypeScript-owned in 2.0 */}
+      <img draggable={false} />                        {/* SC8019: removal -> draggable auto */}
+      <a href="/download" draggable={false}>save</a>  {/* SC8019: same for linked anchors */}
+      <a href={maybeHref} draggable={false}>maybe</a> {/* SC8019 uncertifiable: href may be removed */}
+      <a href="/download" {...laterHref} draggable={false}>maybe</a> {/* SC8019 uncertifiable: later spread owns href */}
+      <a {...laterHref} href="/download" draggable={false}>save</a> {/* SC8019: later static href proves default */}
+      <a draggable={false}>label</a>                  {/* negative: proven href-free anchor */}
       <img draggable="true" />                         {/* negative: real "true" state */}
       <img draggable="false" />                        {/* negative: real "false" state */}
       <img draggable={canDrag() ? "true" : "false"} /> {/* negative: dynamic string */}

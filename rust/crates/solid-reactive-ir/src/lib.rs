@@ -272,9 +272,6 @@ pub enum DraggableSpelling {
     /// enumerated state is the invalid-value default `auto`.
     #[default]
     Shorthand,
-    /// `draggable={true}` under a runtime that renders boolean literals
-    /// presence-only — the same empty-attribute defect as the shorthand.
-    LiteralTrue,
     /// `draggable={false}` on a draggable-by-default element (`img`,
     /// `a[href]`) under a runtime that removes the attribute on `false` —
     /// removal selects `auto`, which re-enables dragging there.
@@ -344,6 +341,13 @@ pub enum StaticDefectKind {
         callee: String,
     },
     ReactiveHandlerRead {
+        attribute: String,
+        expression: String,
+    },
+    /// A JSX attribute name TypeScript deliberately does not check is lowered
+    /// as a native event listener, but the runtime value is either proven not
+    /// callable or cannot be distinguished from a valid bound-handler pair.
+    HandlerValueUnresolved {
         attribute: String,
         expression: String,
     },

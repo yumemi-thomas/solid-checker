@@ -235,7 +235,7 @@
     },
     "style-prop__invalid__13": {
       "status": "typescript-owned",
-      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 -- `'margin-top': -10` against `MarginTop<…>`, same shape as case 12. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
+      "reason": "Narrowed under AGENTS.md's absolute rule: on an intrinsic element TypeScript already answers for every style-object key its `CSSProperties` describes, and its excess-property check has the same subject this rule inspects -- a fresh object literal written in place. Against the real solid-js@1.9.14 typings: TS2322 -- `'margin-top': -10` against `MarginTop<\u2026>`, same shape as case 12. The rule still speaks where no type answers: a `-`-prefixed key, which the `[key: `-${string}`]` index signature absorbs whatever it is spelled (upstream's own case 02, which still fires), and any key on a component, whose props are whatever it declares. The string-value arms are untouched on every element. Pinned in both directions by fixtures/tsc-oracle/rule-cases.json."
     },
     "event-handlers__invalid__00": {
       "status": "typescript-owned",
@@ -380,6 +380,30 @@
     "jsx-no-duplicate-props__invalid__06": {
       "status": "typescript-owned",
       "reason": "Narrowed under AGENTS.md's absolute rule. The `children`-prop-plus-JSX-children pair is TS2710 -- \"'children' are specified twice. The attribute named 'children' will be overwritten.\" -- which is word for word this arm's claim, in both the strict and non-strict passes and on components as well as intrinsic elements. Confirmed by scripts/parity-tsc-ownership.mjs, which matched the two spans. Only that exact pair is covered: `innerHTML` with `textContent`, and `innerHTML` with JSX children, draw no diagnostic at all, so any set including them still reports -- the finding then asserts more than TS2710 does even where TS2710 also fires. Upstream's case 07 (`innerHTML` with `textContent`) still fires, which is the other half."
+    },
+    "no-array-handlers__valid__07": {
+      "status": "fact-unavailable",
+      "reason": "`props` is untyped in this isolated case, so neither a tuple shape, an array shape, nor a runtime value domain resolves for `props.onClick`. Upstream reads the syntax and sees no array literal; the checker cannot prove the value is a plain function rather than a `[handler, data]` pair, so it keeps one uncertifiable obligation instead of certifying an unresolved shape."
+    },
+    "no-array-handlers__valid__10": {
+      "status": "policy",
+      "reason": "Upstream silences the rule for any handler expression whose source contains ` as `. The checker declines that allowlist: an assertion changes the static type without changing the value Solid installs, and it is also what removes TypeScript's own diagnostic from the expression, so the checker judges the asserted-away runtime value and reports the array that actually reaches the listener."
+    },
+    "no-proxy-apis__valid__00": {
+      "status": "evidence-backed",
+      "reason": "Upstream exempts an identifier named `props`. Solid 1.9's mergeProps runtime does not inspect names: a parameter may be a plain object, callable, or `$PROXY`-marked source. The checker therefore emits an uncertifiable obligation for the unresolved parameter instead of silently certifying it or claiming a violation."
+    },
+    "no-proxy-apis__valid__01": {
+      "status": "fact-unavailable",
+      "reason": "The direct `{}` argument is proven safe, but the current normalized facts do not retain that the separate const initializer of `obj` is an exact plain object. The checker preserves the unresolved mergeProps source as uncertifiable instead of using source text or treating a non-function initializer as proof of safety."
+    },
+    "no-proxy-apis__valid__02": {
+      "status": "evidence-backed",
+      "reason": "The mutable `let obj` binding can be reassigned before mergeProps runs, and `props` is likewise unresolved. Upstream silently accepts both based on initializer/name heuristics; the checker emits uncertifiable obligations because either runtime value may be callable or `$PROXY`-marked."
+    },
+    "no-proxy-apis__valid__03": {
+      "status": "fact-unavailable",
+      "reason": "The closed accessor object is now certified safe: its statically complete key set proves it cannot hide callable or `$PROXY`-marked behavior. The remaining `props` argument is unresolved and may still be a plain object or a Proxy-triggering value, so the checker retains one uncertifiable obligation without overlapping the accessor's TypeScript diagnostic."
     }
   },
   "counts": {
@@ -406,6 +430,12 @@
       "theirs": 1,
       "status": "rule-split",
       "reason": "Upstream's single `noAsyncTrackedScope` covers both halves of an async effect; the checker splits them. SC5004 (v1/no-async-tracked-scope) reports the scope -- this createEffect callback is async, so tracking stops at the first await -- and SC1002 (v1/reactive-read-after-await) reports the specific read of `count` that lands after it. Both rules are in the set upstream's one `reactivity` rule maps onto, so both count against its expected 1."
+    },
+    "no-proxy-apis__invalid__08": {
+      "ours": 2,
+      "theirs": 1,
+      "status": "per-site",
+      "reason": "The locally resolved `func` source is a proven function and receives the violation upstream also reports. The separate `props` source is not proven plain: it may be callable or `$PROXY`-marked, so the checker retains a second uncertifiable obligation rather than exempting the identifier by name."
     }
   },
   "outputs": {

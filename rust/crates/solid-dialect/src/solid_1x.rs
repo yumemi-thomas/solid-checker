@@ -634,6 +634,10 @@ impl Dialect for Solid1x {
         true
     }
 
+    fn static_event_values_are_attributes(&self) -> bool {
+        true
+    }
+
     /// `Suspense`, not `Loading`; `ErrorBoundary`, not `Errored`. Source:
     /// `docs/solid-1x-api-surface.md`, the control-flow components.
     ///

@@ -475,13 +475,24 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
-        StaticDefectKind::ReactiveHandlerRead { .. } => Rule::ExpectedFunctionGotExpression,
+        StaticDefectKind::ReactiveHandlerRead { .. }
+        | StaticDefectKind::HandlerValueUnresolved { .. } => Rule::ExpectedFunctionGotExpression,
         StaticDefectKind::UncalledAccessor { .. } => Rule::UncalledAccessor,
         StaticDefectKind::DirectMutation { .. } => Rule::NoDirectMutation,
     };
     let text = solid_reactive_ir::static_defect_text(defect, &V2_STATIC_TERMS);
     let mut message = text.message;
-    if defect.uncertain {
+    // This suffix names *one* source of uncertainty: a component whose call
+    // sites cannot be enumerated, so its props' signal backing is unprovable.
+    // Kinds whose uncertainty is something else already say so in
+    // `static_defect_text`, and appending this to them describes the wrong
+    // proof obligation.
+    if defect.uncertain
+        && !matches!(
+            &defect.kind,
+            StaticDefectKind::HandlerValueUnresolved { .. }
+        )
+    {
         message.push_str(
             "; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the props are signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime defect",
         );

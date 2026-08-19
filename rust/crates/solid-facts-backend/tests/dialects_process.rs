@@ -136,16 +136,17 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
     // draggable="true", `draggable={false}` renders draggable="false", and
     // both behave), so only the shorthand is a defect there. The 2.0 runtime
     // treats boolean literals as attribute presence (probed on
-    // @solidjs/web@2.0.0-rc.0): a literal `true` renders presence-only — the
-    // same empty-attribute defect — and a literal `false` removes the
+    // @solidjs/web@2.0.0-rc.0), but its published JSX types reject the
+    // shorthand and literal `true`, so the checker leaves those to TypeScript.
+    // A literal `false` is well typed and removes the
     // attribute, which on the draggable-by-default elements (`img`,
     // `a[href]`) selects the auto state and silently re-enables dragging.
     // The href-less `a` and the `div` are not draggable by default, so their
     // `draggable={false}` removal matches intent and stays clean, as does
     // the enumerated string spelling `draggable="false"`. The `a` whose
-    // `href` is a dynamic expression stays clean too: a nullish value removes
-    // that attribute, and then the anchor is not draggable by default — the
-    // default is unproven, so the rule does not report it.
+    // `href` is a dynamic expression is explicitly uncertifiable in v2: a
+    // nullish value removes the href and makes the anchor non-draggable, while
+    // a string keeps it draggable. Neither outcome may be guessed.
     for (dialect, expected) in [
         (
             "solid-v1",
@@ -156,7 +157,7 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
         ),
         (
             "solid-v2",
-            &[("prefer-component-syntax", 1), ("no-implicit-draggable", 4)][..],
+            &[("prefer-component-syntax", 1), ("no-implicit-draggable", 3)][..],
         ),
     ] {
         let findings = project_snapshot_findings(project.clone(), Some(dialect));
@@ -179,6 +180,11 @@ fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
             expected.iter().map(|(_, count)| count).sum::<usize>(),
             "unexpected {dialect} findings: {findings:#?}"
         );
+        if dialect == "solid-v2" {
+            assert!(findings.iter().any(|finding| {
+                finding["rule"] == "no-implicit-draggable" && finding["kind"] == "uncertifiable"
+            }));
+        }
     }
 }
 

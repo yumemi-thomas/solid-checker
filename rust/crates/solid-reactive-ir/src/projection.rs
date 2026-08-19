@@ -85,13 +85,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         ),
         StaticDefectKind::ImplicitDraggableBoolean { spelling } => (
             match spelling {
-                // Probed on @solidjs/web@2.0.0-rc.0: a literal `true` renders
-                // the bare attribute on the client (setAttribute("draggable",
-                // "")) and on the server (`<div draggable>`); both select the
-                // enumerated attribute's invalid-value default, `auto`.
-                DraggableSpelling::LiteralTrue => {
-                    "the draggable attribute is given the boolean true, which the runtime renders as a bare presence-only attribute; draggable is an enumerated attribute, so that selects the invalid/default auto state rather than draggable=\"true\"".into()
-                }
                 DraggableSpelling::Shorthand => {
                     "the draggable attribute uses JSX boolean shorthand, which emits an empty attribute value; HTML treats that as the invalid/default state rather than draggable=\"true\"".into()
                 }
@@ -99,14 +92,18 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 // attribute, and removal selects `auto` — which is draggable
                 // on this element.
                 DraggableSpelling::LiteralFalseOnDraggableDefault => {
-                    "the draggable attribute is given the boolean false, which the runtime serializes by removing the attribute; this element is draggable by default, so the removed attribute's auto state silently re-enables dragging rather than selecting draggable=\"false\"".into()
+                    if defect.uncertain {
+                        "the draggable attribute is given boolean false, which the runtime removes; a dynamic or spread-carried href may leave this anchor either draggable or non-draggable in the resulting auto state, so neither the defect nor safety is proven".into()
+                    } else {
+                        "the draggable attribute is given the boolean false, which the runtime serializes by removing the attribute; this element is draggable by default, so the removed attribute's auto state silently re-enables dragging rather than selecting draggable=\"false\"".into()
+                    }
                 }
             },
             match spelling {
                 DraggableSpelling::LiteralFalseOnDraggableDefault => {
                     "Write draggable=\"false\"; draggable is enumerated, so only the string \"false\" disables dragging on images and links, whose auto state is draggable.".into()
                 }
-                DraggableSpelling::Shorthand | DraggableSpelling::LiteralTrue => {
+                DraggableSpelling::Shorthand => {
                     "Write draggable=\"true\" for a static attribute, or draggable={condition ? \"true\" : \"false\"} for a dynamic one; draggable is enumerated, so only the strings \"true\" and \"false\" select a state.".into()
                 }
             },
@@ -200,6 +197,28 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Wrap the read so it happens when the event fires: {attribute}={{event => {expression}(event)}}."
             ),
         ),
+        StaticDefectKind::HandlerValueUnresolved {
+            attribute,
+            expression,
+        } => {
+            if defect.uncertain {
+                (
+                    format!(
+                        "{attribute} is lowered as a native listener, but the runtime shape of {expression} cannot be certified as a callable handler or a valid bound-handler pair"
+                    ),
+                    format!(
+                        "Pass a function directly to {attribute}, or use an explicit two-slot bound-handler tuple whose first slot is callable."
+                    ),
+                )
+            } else {
+                (
+                    format!(
+                        "{attribute} is lowered as a native listener, but {expression} is proven non-callable and not an array-backed bound-handler pair"
+                    ),
+                    format!("Pass a function to {attribute} instead."),
+                )
+            }
+        }
         StaticDefectKind::UncalledAccessor { name, position } => (
             format!(
                 "accessor {name:?} is used as a value in {position}; the expression receives the accessor function itself, not the value it holds, and never updates"
@@ -235,9 +254,9 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             spelling: DraggableSpelling::Shorthand,
         } => "the intrinsic draggable attribute has no explicit value",
         StaticDefectKind::ImplicitDraggableBoolean {
-            spelling: DraggableSpelling::LiteralTrue,
-        } => {
-            "the intrinsic draggable attribute is a literal boolean true, which the runtime serializes presence-only"
+            spelling: DraggableSpelling::LiteralFalseOnDraggableDefault,
+        } if defect.uncertain => {
+            "the runtime removes draggable={false}, while the final presence of this anchor's href depends on a dynamic value or spread"
         }
         StaticDefectKind::ImplicitDraggableBoolean {
             spelling: DraggableSpelling::LiteralFalseOnDraggableDefault,
@@ -256,12 +275,16 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::UnknownCallbackExecution { .. } => {
             "TypeScript resolved the callable parameter, but no exact runtime contract proves when the external helper invokes it"
         }
+        StaticDefectKind::HandlerValueUnresolved { .. } if defect.uncertain => {
+            "TypeScript deliberately skips this hyphenated JSX attribute name, and the runtime handler shape is not closed by the available compiler facts"
+        }
         StaticDefectKind::ExecutionMapIncomplete
         | StaticDefectKind::ReactiveReadAfterAwait { .. }
         | StaticDefectKind::MissingEffectFunction
         | StaticDefectKind::UntrackedDerivedFunction { .. }
         | StaticDefectKind::ReactiveSourceUncaptured { .. }
         | StaticDefectKind::ReactiveHandlerRead { .. }
+        | StaticDefectKind::HandlerValueUnresolved { .. }
         | StaticDefectKind::UncalledAccessor { .. }
         | StaticDefectKind::DirectMutation { .. } => {
             "the invalid API shape is statically present at this call"

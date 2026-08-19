@@ -1,15 +1,16 @@
 # v1/no-array-handlers
 
-`SC8007` · **error** · violation
+`SC8007` · **error** · violation or uncertifiable
 
 A conventional `onEvent` prop on a DOM element receives a `[handler, data]`
 bound-handler pair.
 
 ## What it does
 
-Checks conventional `onEvent` props on lowercase JSX elements, and reports
-exactly the values Solid's own types accept there: a tuple with both numbered
-slots whose first slot can be called with `(data, event)`.
+Checks conventional `onEvent` props on lowercase JSX elements. It reports a
+violation only when the runtime value is structurally proven to be an array,
+and reports `uncertifiable` when a type-correct value may be either a plain
+function, a bound pair, or absent.
 
 That set is the rule's because it is the set `tsc` permits. `onEvent` is typed
 `EventHandlerUnion = EHandler | BoundEventHandler`, and `BoundEventHandler` is
@@ -20,12 +21,16 @@ first slot requiring three arguments is not assignable to a two-argument
 signature — every one of those is already `TS2322`, so the rule stays out of
 them.
 
-The compiler decides tupleness (`tupleShape`), so an imported or aliased tuple is
-recognized however it is spelled. When no type constrains the attribute at all —
-a project whose JSX typings are permissive, where `tsc` says nothing — the rule
-falls back to recognizing local array literals and their bindings, because there
-it is the only thing that can speak. A cast vouches for the value, as upstream
-also honours.
+The compiler decides tupleness (`tupleShape`) and the complete runtime domain,
+so aliases and unions are recognized however they are spelled. Type-only tuple
+evidence without a runtime-presence proof is retained as an uncertifiable
+obligation; inline arrays and immutable local array initializers prove the
+violation. When no type constrains the attribute at all, the same structural
+fallback applies.
+
+Assertions do not vouch for runtime safety. The checker peels `as` and non-null
+wrappers: an asserted array still reports, an asserted function stays clean,
+and a hidden value whose arrayness cannot be established is uncertifiable.
 
 The `on:*` namespaced form is **not** checked. Solid types `onEvent` as
 `EventHandlerUnion = EHandler | BoundEventHandler`, where `BoundEventHandler` is
@@ -69,6 +74,9 @@ Pass a plain function whose parameters and captured data TypeScript can check.
 If a tuple abstraction is essential, wrap it behind a function at the JSX
 boundary. The rule does not rewrite handlers automatically because it cannot
 infer the intended handler signature.
+
+For an uncertifiable value, narrow it to a plain function before the JSX
+boundary or make the bound pair's runtime construction explicit.
 
 ## Configuration
 

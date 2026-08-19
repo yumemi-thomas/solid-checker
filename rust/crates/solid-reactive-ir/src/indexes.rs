@@ -718,44 +718,6 @@ impl<'a> SemanticLookup<'a> {
             .unwrap_or_default()
     }
 
-    /// Whether `symbol` — following alias links, as an import binding is an
-    /// alias of the export it names — is declared in one of the analyzed
-    /// source files. A tsconfig path alias (`@/utils/x`) is a bare specifier
-    /// at the syntax level, but TypeScript resolved it into the project, so
-    /// its declarations land in analyzed sources; a real package's live in
-    /// its own `.d.ts`, which is not an analyzed source.
-    pub(super) fn symbol_is_project_code(&self, symbol: &str) -> bool {
-        let symbols = self.symbols_by_id.get_or_init(|| {
-            self.facts
-                .typescript
-                .symbols()
-                .map(|candidate| (candidate.id(), candidate))
-                .collect()
-        });
-        let mut current = symbol;
-        // Alias chains are short (import of a re-export of an export); the
-        // bound only guards against a malformed cyclic fact set.
-        for _ in 0..8 {
-            let Some(entry) = symbols.get(current) else {
-                return false;
-            };
-            if entry.declarations().iter().any(|declaration| {
-                self.facts
-                    .files
-                    .iter()
-                    .any(|file| *file.path.as_str() == *declaration.location.path)
-            }) {
-                return true;
-            }
-            let target = entry.alias_target();
-            if target.is_empty() || target == current {
-                return false;
-            }
-            current = target;
-        }
-        false
-    }
-
     /// The binding declaration named by an exact canonical symbol reference.
     ///
     /// Returned functions can cross files and destructuring patterns before

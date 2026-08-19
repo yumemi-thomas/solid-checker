@@ -114,6 +114,8 @@ const ARRAY_HANDLER =
 // held to the same standard as the oracle gate's `distinct-claim`: name what the
 // finding asserts that the type error does not.
 const ACKNOWLEDGED = {
+  "event-handlers__valid__03:v1/no-array-handlers":
+    "TS2322 says `onFoo` is not an attribute of `<div>`; the finding says the untyped `props.onFoo` value cannot be proven to be a plain function rather than a `[handler, data]` pair. Upstream invents the attribute name, so the type error is a corpus artefact -- with a real handler attribute (`onClick`, `no-array-handlers__valid__07`) TypeScript is silent on the same untyped value and the shape obligation is all that remains.",
   "imports__invalid__02:v1/no-proxy-apis":
     "TS2305 says `solid-js` does not export `createMutable`; the finding says the Proxy-based store API is unavailable on the configured target runtime. The finding's span is the whole import statement, which is why it overlaps. Written as the correct `solid-js/store` import the type error disappears and the runtime-support claim remains.",
   "jsx-no-duplicate-props__invalid__02:v1/jsx-no-duplicate-props":

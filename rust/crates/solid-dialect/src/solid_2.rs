@@ -721,15 +721,6 @@ impl Dialect for Solid2 {
         )
     }
 
-    /// Probed on `@solidjs/web@2.0.0-rc.0` (client `setAttribute`/`assign`
-    /// and SSR `ssrAttribute`/`ssrElement`/`renderToString`): a literal
-    /// `true` renders the bare attribute on both paths — `<div draggable>`,
-    /// `setAttribute("draggable", "")` — never `draggable="true"`. See the
-    /// trait doc for the full matrix.
-    fn literal_true_attribute_is_presence_only(&self) -> bool {
-        true
-    }
-
     /// The removal half of the same probe: a literal `false` removes the
     /// attribute on the client and omits it in SSR (RFC 07 — "Boolean
     /// literals add/remove the attribute"). 1.x stringifies instead, so

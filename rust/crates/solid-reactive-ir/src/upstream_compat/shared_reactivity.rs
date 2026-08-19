@@ -32,11 +32,16 @@
 //! arrives through three wrappers still is.
 
 use solid_facts::FileFacts;
-use solid_facts::ast::{FunctionFact, IdentifierRole};
+use solid_facts::ast::{ArgumentValueKind, FunctionFact, IdentifierRole};
 use solid_facts::core::Span;
+use typefacts::{ArrayShape, Callability, ResolvedCallValidity};
 
-use super::{UpstreamCompatContext, is_lowercase_led, text};
+use super::{
+    UpstreamCompatContext, expression_array_shape, expression_runtime_value_domain,
+    is_lowercase_led, jsx_name_is_type_checked, static_string_expression, text,
+};
 use crate::owners::containing_ast_function;
+use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
 use crate::{
     DirectMutationTarget, ReactiveSourceKind, StaticDefect, StaticDefectKind, StaticViolation,
     known_primitive, location,
@@ -296,37 +301,23 @@ fn within_jsx(file: &FileFacts, span: Span) -> bool {
 /// unknown callee is the entire premise. A helper defined in the project is
 /// read directly and never reported here.
 ///
-/// Scoped to callees imported from a package, because those are the callees
-/// the fix applies to: the hint says "describe this export in the package's
-/// contract", which is only actionable for a package export. An ambient
-/// global (`setTimeout`, `console.log`, an array method) comes from no
-/// package, so reporting it demanded a contract nobody can write — the rule
-/// stays silent there and the reads flowing through remain uncertified
-/// rather than reported.
+/// The premise is a callee whose behavior *could* be described: a package
+/// export, or project code with no body here. A standard-library declaration
+/// is neither -- no `solid-reactivity.json` entry can describe `setTimeout` --
+/// so it is excluded by that compiler fact rather than by the bare-specifier
+/// import test it replaces. Among the callees that remain, an exact
+/// compiler-selected `ValueOnly` parameter certifies that the source is not
+/// invoked; every other valid unresolved boundary remains an explicit
+/// obligation, and invalid/recovery calls stay TypeScript-owned.
+///
+/// The argument must be a bare identifier. `entities.at` answers a call span
+/// with the *callee's* symbol, so without that gate `console.log(count())`
+/// reads as handing `count` itself to the callee.
 fn reactive_source_uncaptured(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     defects: &mut Vec<StaticDefect>,
 ) {
-    // Symbols bound by value imports from bare specifiers — the only callees
-    // whose reactive behaviour a package contract could ever describe. A
-    // bare specifier is necessary but not sufficient: a tsconfig path alias
-    // (`@/utils/x`) is spelled bare too, so anything TypeScript resolved
-    // into the project's own sources is excluded — no contract can describe
-    // project code, and the engine walks it directly.
-    let package_imported: std::collections::HashSet<&crate::SymbolId> = file
-        .ast
-        .imports
-        .iter()
-        .filter(|import| !import.module.starts_with('.') && !import.module.starts_with('/'))
-        .flat_map(|import| &import.bindings)
-        .filter(|binding| !binding.type_only)
-        .filter_map(|binding| context.entities.at(file.path.as_str(), binding.local.span))
-        .filter(|symbol| !context.lookup.symbol_is_project_code(symbol.as_str()))
-        .collect();
-    if package_imported.is_empty() {
-        return;
-    }
     let primitives = context.lookup.primitives(file);
     for (index, call) in file.ast.calls.iter().enumerate() {
         // A dialect primitive is described by definition, and a call the
@@ -343,16 +334,38 @@ fn reactive_source_uncaptured(
         let Some(callee_symbol) = callee_symbol else {
             continue;
         };
-        if !package_imported.contains(callee_symbol)
-            || context.contracted.contains_key(callee_symbol)
+        if context.contracted.contains_key(callee_symbol) {
+            continue;
+        }
+        let Some(resolved_call) = context.lookup.resolved_callee_call(file, call.callee) else {
+            continue;
+        };
+        if resolved_call.validity != ResolvedCallValidity::Valid {
+            continue;
+        }
+        // A standard-library callee is ambient: it belongs to no package, so
+        // no `solid-reactivity.json` entry could ever describe it and the
+        // finding would demand a fix nobody can apply. This is the exact
+        // compiler fact that replaces the old bare-specifier import test --
+        // which also excluded them, by accident of never reaching them.
+        if resolved_call
+            .declaration
+            .as_ref()
+            .is_some_and(|declaration| declaration.standard_library)
         {
             continue;
         }
         let callee_text = text(file, call.callee);
-        for argument in &call.arguments {
+        for (argument_index, argument) in call.arguments.iter().enumerate() {
             // Only a bare reference to the source itself. A call, a member
             // read, or an expression built from one passes a *value*, whose
             // reactivity was already resolved before the callee saw it.
+            // `entities.at` answers the callee's symbol for a call span, so
+            // the argument's own kind is what enforces this -- without it
+            // `console.log(count())` reads as handing `count` over.
+            if argument.value != ArgumentValueKind::Identifier {
+                continue;
+            }
             let Some(symbol) = context.entities.at(file.path.as_str(), argument.span) else {
                 continue;
             };
@@ -360,6 +373,11 @@ fn reactive_source_uncaptured(
                 continue;
             };
             if context.source_kinds.get(symbol) == Some(&ReactiveSourceKind::Store) {
+                continue;
+            }
+            if argument_behavior(resolved_call, Some(Callability::Callable), argument_index)
+                == Some(RuntimeArgumentBehavior::ValueOnly)
+            {
                 continue;
             }
             let name = name.as_str();
@@ -473,11 +491,11 @@ fn no_async_tracked_scope(
 ///
 /// Narrower than upstream, deliberately. `onClick={makeHandler()}` is a
 /// factory call and correct, and upstream cannot tell the two apart because it
-/// works from syntax. Two things are proof here, and nothing else is reported:
-/// the callee is a *proven* reactive accessor, so the call yields that
-/// accessor's value; or TypeScript resolved the whole expression to a type
-/// that is not callable. A factory whose return type is a function satisfies
-/// neither and stays silent.
+/// works from syntax. The normal, declared attribute path reports only a
+/// reactive source member whose callable value is frozen during setup.
+/// Hyphenated attribute names form a separate boundary TypeScript does not
+/// check: there the runtime value is classified as safe, invalid, or
+/// unresolved against Solid's function-or-bound-pair representations.
 fn expected_function_got_expression(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
@@ -496,14 +514,46 @@ fn expected_function_got_expression(
             .filter(|attribute| attribute.namespace.is_none())
         {
             let name = text(file, attribute.name);
-            if !name.starts_with("on")
-                || !name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic)
-            {
+            if !name.starts_with("on") {
                 continue;
             }
             let Some(expression) = attribute.expression else {
                 continue;
             };
+            if context.dialect.static_event_values_are_attributes()
+                && (static_string_expression(context, file, expression).is_some()
+                    || super::solid1x_syntax::expression_is_static_literal(file, expression))
+            {
+                // Solid 1.x freezes this value into a plain attribute instead
+                // of installing it as a listener. SC8001 owns that exact
+                // compiler consequence; describing it here as a non-callable
+                // runtime listener would be both duplicate and false.
+                continue;
+            }
+            // TypeScript deliberately skips every JSX attribute whose name
+            // contains a hyphen. Solid's compiler does not: any `on` prefix
+            // on a native element is lowered as an event listener. Keep the
+            // uncovered runtime value in this rule's tri-state domain instead
+            // of leaving `on-foo={someNumber}` to fail only when dispatched.
+            if !jsx_name_is_type_checked(name) {
+                let proof = unchecked_handler_value_proof(file, context, attribute, expression);
+                match proof {
+                    HandlerValueProof::Safe => {}
+                    HandlerValueProof::Invalid | HandlerValueProof::Unresolved => {
+                        defects.push(StaticDefect {
+                            kind: StaticDefectKind::HandlerValueUnresolved {
+                                attribute: name.to_owned(),
+                                expression: text(file, expression).to_owned(),
+                            },
+                            location: location(file.path.shared(), expression),
+                            analysis_context: "unchecked-native-handler-value".into(),
+                            fixes: vec![],
+                            uncertain: proof == HandlerValueProof::Unresolved,
+                        });
+                        continue;
+                    }
+                }
+            }
             // A native listener receives its function value once during DOM
             // setup. Reading that function through reactive props/store state
             // here freezes the initial handler. The member root is a proven
@@ -579,6 +629,100 @@ fn expected_function_got_expression(
             // native listener is installed once from a value that changes.
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HandlerValueProof {
+    Safe,
+    Invalid,
+    Unresolved,
+}
+
+fn unchecked_handler_value_proof(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    attribute: &solid_facts::ast::JsxAttributeFact,
+    expression: Span,
+) -> HandlerValueProof {
+    let runtime = if attribute.runtime_type_escape {
+        file.ast.peel_ts_sugar_span(expression)
+    } else {
+        expression
+    };
+    if context
+        .lookup
+        .entity_at(file.path.as_str(), runtime)
+        .is_none()
+    {
+        return HandlerValueProof::Unresolved;
+    }
+    let Some(domain) = expression_runtime_value_domain(context, file, runtime) else {
+        return HandlerValueProof::Unresolved;
+    };
+    if domain.unknown {
+        return HandlerValueProof::Unresolved;
+    }
+    // `never` cannot reach the listener. A callable (optionally absent) is a
+    // valid handler, while absence sentinels disable the handler harmlessly.
+    if (!domain.may_be_callable && !domain.may_be_undefined && !domain.may_be_other)
+        || (domain.may_be_callable && !domain.may_be_other)
+        || (!domain.may_be_callable && domain.may_be_undefined && !domain.may_be_other)
+    {
+        return HandlerValueProof::Safe;
+    }
+    if !domain.may_be_callable
+        && !domain.may_be_undefined
+        && handler_value_is_absent_sentinel(context, file, runtime)
+    {
+        return HandlerValueProof::Safe;
+    }
+    if domain.may_be_callable || domain.may_be_undefined {
+        return HandlerValueProof::Unresolved;
+    }
+    match expression_array_shape(context, file, runtime) {
+        // A non-callable, non-array runtime value cannot be either accepted
+        // handler representation: a function or `[handler, data]`.
+        Some(ArrayShape::NotArray) => HandlerValueProof::Invalid,
+        // An array may or may not be a valid two-slot bound-handler pair.
+        Some(ArrayShape::Array | ArrayShape::Mixed | ArrayShape::Unknown) | None => {
+            HandlerValueProof::Unresolved
+        }
+    }
+}
+
+/// Whether the value handed to the listener is one of the absent-handler
+/// sentinels this rule certifies: `null` or `false`.
+///
+/// Proved from the literal the program actually passes -- written at the
+/// attribute, or as the initializer of an immutable binding this reference
+/// resolves to -- and never from a rendered type name. `type Falsy = false`
+/// renders as `Falsy`, so a `TypeDescriptor.text` test reported the alias and
+/// certified the literal for one runtime value. The runtime value domain
+/// cannot answer this: `null` and `false` both arrive as `may_be_other`,
+/// indistinguishable from a number.
+fn handler_value_is_absent_sentinel(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> bool {
+    fn is_sentinel_literal(file: &FileFacts, span: Span) -> bool {
+        matches!(
+            text(file, file.ast.peel_ts_sugar_span(span)).trim(),
+            "null" | "false"
+        )
+    }
+    if is_sentinel_literal(file, span) {
+        return true;
+    }
+    context
+        .lookup
+        .binding_at_reference(file.path.as_str(), span)
+        .is_some_and(|(binding_file, binding, _)| {
+            binding.immutable
+                && binding
+                    .initializer
+                    .is_some_and(|initializer| is_sentinel_literal(binding_file, initializer))
+        })
 }
 
 /// The function written at exactly this span, if the argument is a literal

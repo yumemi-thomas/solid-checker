@@ -627,36 +627,18 @@ pub trait Dialect: Sync {
     /// Whether creating this primitive registers a directive-applied owner.
     fn creates_directive_owner(&self, primitive: Primitive) -> bool;
 
-    /// Whether the runtime renders a literal `true` JSX attribute value as a
-    /// presence-only attribute (no `="true"` text) on intrinsic elements.
-    ///
-    /// Solid 2.0 unified boolean handling — "Boolean literals add/remove the
-    /// attribute (no `="true"` string)" (RFC 07) — and the pinned
-    /// `@solidjs/web@2.0.0-rc.0` confirms it on both paths with no
-    /// per-attribute special case (probed 2026-08-15):
-    ///
-    /// - SSR: `ssrAttribute("draggable", true)` → ` draggable`;
-    ///   `renderToString` of `{draggable: true}` → `<div draggable>`.
-    /// - Client: `setAttribute(el, "draggable", true)` →
-    ///   `el.setAttribute("draggable", "")`; same through `assign`/spread.
-    ///
-    /// Both therefore select the enumerated attribute's *invalid value
-    /// default* (`auto` for `draggable`), not `true` — the paths agree, so
-    /// there is no hydration mismatch, just the wrong state on both.
-    /// 1.x's dom-expressions stringifies attribute values instead
-    /// (`draggable={true}` renders `draggable="true"` and behaves), so the
-    /// default answer is `false` and only the 2.0 dialect opts in.
-    fn literal_true_attribute_is_presence_only(&self) -> bool {
-        false
-    }
-
     /// Whether the runtime serializes a literal `false` JSX attribute value
     /// by *removing* the attribute on intrinsic elements.
     ///
-    /// The complement of
-    /// [`Dialect::literal_true_attribute_is_presence_only`], from the same
-    /// RFC 07 sentence — "Boolean literals add/remove the attribute" — and
-    /// the same `@solidjs/web@2.0.0-rc.0` probe (2026-08-15): the client
+    /// RFC 07 unified boolean handling — "Boolean literals add/remove the
+    /// attribute (no `="true"` string)" — and this is the half of that
+    /// sentence the checker still owns. The `true` half is real too (probed
+    /// on `@solidjs/web@2.0.0-rc.0`, 2026-08-15: `ssrAttribute("draggable",
+    /// true)` → ` draggable`, `setAttribute(el, "draggable", true)` →
+    /// `el.setAttribute("draggable", "")`, both selecting `auto`), but 2.0's
+    /// published `EnumeratedPseudoBoolean` type rejects `draggable={true}`
+    /// and the shorthand outright, so that spelling is TypeScript's to
+    /// report and needs no dialect question. From the same probe: the client
     /// `setAttribute`/`assign` paths remove the attribute for `false` and
     /// SSR omits it. For an *enumerated* attribute such as `draggable`,
     /// removal selects the `auto` default rather than the `"false"` state —
@@ -925,6 +907,15 @@ pub trait Dialect: Sync {
     /// scope (`no-async-tracked-scope`). 1.x does; Solid 2.0 models async
     /// computations as a feature, so its catalog omits the rule.
     fn reports_async_tracked_scope(&self) -> bool {
+        false
+    }
+
+    /// Whether a statically known string/number in a native `on*` JSX
+    /// position is emitted as an attribute instead of installed as a listener.
+    /// Solid 1.x's compiler makes that node/value distinction; the shared
+    /// handler-value rule must therefore leave those expressions to the v1
+    /// `event-handlers` rule rather than describe them as runtime listeners.
+    fn static_event_values_are_attributes(&self) -> bool {
         false
     }
 

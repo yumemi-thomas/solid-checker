@@ -212,6 +212,16 @@
       "fixes": 0
     },
     {
+      "rule": "v1/no-proxy-apis",
+      "code": "SC8009",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/engine/eslint-reactivity-v1/component-props-merge-alias.tsx",
+      "start": 134,
+      "end": 139,
+      "fixes": 0
+    },
+    {
       "rule": "v1/no-destructure",
       "code": "SC1003",
       "kind": "violation",

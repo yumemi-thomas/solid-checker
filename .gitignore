@@ -25,6 +25,11 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/external-reexport/node_modules/**
 !fixtures/package-contracts/dialect-detection/node_modules/
 !fixtures/package-contracts/dialect-detection/node_modules/**
+# The bundled-contract consumer resolves a real package name; its stub is the
+# only thing that makes the installed-version and callback-timing proofs
+# reproducible from a clean checkout.
+!fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/
+!fixtures/reactive-ir/bundled-scheduled-consumer/node_modules/**
 # Dialect detection reads the installed solid-js version from these stubs.
 !fixtures/reactive-ir/dialect-solid-*/node_modules/
 !fixtures/reactive-ir/dialect-solid-*/node_modules/**
