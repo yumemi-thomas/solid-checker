@@ -23,9 +23,12 @@ import { loadDialectManifests, root } from "./dialect-manifests.mjs";
 // alongside its probed ones so those peers resolve to the audited release
 // rather than whatever npm would pick.
 const manifests = loadDialectManifests({ requireArtifacts: true });
+// A dialect may need several workers: the 1.x core and the scheduled overlay
+// import different packages, and a worker's bare imports are what tie it to the
+// install it runs in. Every worker of a dialect runs in every condition mode.
 const probeWorkers = {
-  "solid-v1": "scripts/contract-probes-solid-v1.mjs",
-  "solid-v2": "scripts/contract-probes.mjs",
+  "solid-v1": ["scripts/contract-probes-solid-v1.mjs"],
+  "solid-v2": ["scripts/contract-probes.mjs"],
 };
 const definitions = manifests.flatMap(manifest =>
   manifest.contracts
@@ -215,8 +218,8 @@ const installations = manifests
       ...probed.map(({ name, contract }) => `${name}@${contract.package.version}`),
       ...peers.map(peer => `${peer.name}@${peer.version}`),
     ].sort();
-    const worker = probeWorkers[manifest.id];
-    if (!worker) {
+    const workers = probeWorkers[manifest.id];
+    if (!workers?.length) {
       throw new Error(
         `${manifest.id} declares probeRuntime contracts but has no probe worker; add one to probeWorkers`,
       );
@@ -224,7 +227,7 @@ const installations = manifests
     const cacheKey = specifiers.join("_").replace(/[^\w.@-]+/g, "-");
     const directory = join(tmpdir(), `solid-checker-contract-conformance-${cacheKey}`);
     mkdirSync(directory, { recursive: true });
-    return { dialect: manifest.id, probed, specifiers, worker, directory };
+    return { dialect: manifest.id, probed, specifiers, workers, directory };
   });
 
 const readInstalledManifest = (directory, name) => {
@@ -255,35 +258,36 @@ for (const installation of installations) {
     if (result.status !== 0) process.exit(result.status ?? 1);
   }
 
-  // The worker runs from inside the install so its bare imports resolve to that
-  // dialect's releases; its shared harness has to travel with it.
-  const worker = join(installation.directory, "contract-probes.mjs");
-  copyFileSync(join(root, installation.worker), worker);
+  // Workers run from inside the install so their bare imports resolve to that
+  // dialect's releases; the shared harness has to travel with them.
   mkdirSync(join(installation.directory, "lib"), { recursive: true });
   copyFileSync(
     join(root, "scripts/lib/contract-probe-harness.mjs"),
     join(installation.directory, "lib", "contract-probe-harness.mjs"),
   );
-
   const packages = installation.probed.map(({ name }) => ({
     name,
     directory: join(installation.directory, "node_modules", ...name.split("/")),
   }));
-  for (const mode of probeModes) {
-    const execution = spawnSync(
-      "node",
-      [
-        ...mode.conditions.flatMap(condition => ["--conditions", condition]),
-        worker,
-        JSON.stringify({ mode: mode.name, packages }),
-      ],
-      { encoding: "utf8" },
-    );
-    if (execution.status !== 0) {
-      process.stderr.write(execution.stderr);
-      process.exit(execution.status ?? 1);
+  for (const source of installation.workers) {
+    const worker = join(installation.directory, source.split("/").at(-1));
+    copyFileSync(join(root, source), worker);
+    for (const mode of probeModes) {
+      const execution = spawnSync(
+        "node",
+        [
+          ...mode.conditions.flatMap(condition => ["--conditions", condition]),
+          worker,
+          JSON.stringify({ mode: mode.name, packages }),
+        ],
+        { encoding: "utf8" },
+      );
+      if (execution.status !== 0) {
+        process.stderr.write(execution.stderr);
+        process.exit(execution.status ?? 1);
+      }
+      observations.push({ dialect: installation.dialect, ...JSON.parse(execution.stdout) });
     }
-    observations.push({ dialect: installation.dialect, ...JSON.parse(execution.stdout) });
   }
 }
 

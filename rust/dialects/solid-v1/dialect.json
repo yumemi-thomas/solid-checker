@@ -13,7 +13,7 @@
       "bundledContract": "pkg/contracts/bundled/solid-v1/solid-js.json",
       "composeScript": "scripts/generate-bundled-solid1-contract.mjs",
       "composeInputs": [
-        "pkg/contracts/bundled/solid-v1/solid-js-census.json"
+        "pkg/contracts/bundled/solid-v1/solid-js-runtime-surface.json"
       ]
     },
     {

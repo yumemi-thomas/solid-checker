@@ -31,9 +31,16 @@ by `--write`.
 
 The Solid 1.x artifact is composed by
 `scripts/generate-bundled-solid1-contract.mjs` from the adjacent
-`solid-v1/solid-js-census.json` and the reviewed vocabulary contract. Run
-`node scripts/dialect-manifests.mjs check-composed-contracts` to detect drift.
-`make contract-conformance` runs both forms of verification.
+`solid-v1/solid-js-runtime-surface.json` and the reviewed vocabulary contract.
+The surface says which exports the package actually has, under which
+entrypoints; it is generated from the installed release by
+`scripts/generate-solid1-runtime-surface.mjs`, which `--check` holds to that
+release. It replaced a census copied from the 1.x branch that answered the same
+question from declarations and was wrong in both directions: 20 names no build
+exports, and two — `innerHTML` and `ssrStyleProperty` on `./web` — that every
+build does. Run `node scripts/dialect-manifests.mjs check-composed-contracts` to
+detect drift between the artifact and its inputs. `make contract-conformance`
+runs all of these.
 
 The scheduled-primitives overlay is intentionally Solid 1.x-only because that
 release's peer range is `solid-js@^1.6.12`. Its exact npm version and integrity
