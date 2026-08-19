@@ -258,6 +258,10 @@ static SOLID_1X: ContractTarget = ContractTarget {
         entry("solid-js/universal", "universal/types/index.d.ts"),
     ],
     type_only: &[],
+    // Anything absent here is emitted as a function. The eight web constant
+    // tables below are `const` declarations whose runtime values are objects,
+    // Sets and Symbols; calling them a function is a claim about the package
+    // that its own builds refute, which the runtime surface now cross-checks.
     values: &[
         "$PROXY",
         "$TRACK",
@@ -267,6 +271,14 @@ static SOLID_1X: ContractTarget = ContractTarget {
         "sharedConfig",
         "isServer",
         "isDev",
+        "Aliases",
+        "ChildProperties",
+        "DelegatedEvents",
+        "DOMElements",
+        "Properties",
+        "RequestContext",
+        "SVGElements",
+        "SVGNamespace",
     ],
     semantics: &[
         (

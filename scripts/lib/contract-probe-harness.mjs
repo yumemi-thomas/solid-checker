@@ -8,7 +8,7 @@
 //
 // What stays in each worker is the part that cannot be shared: the Solid API
 // used to drive a probe (1.x has no `flush`) and the probe bodies themselves.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -96,7 +96,16 @@ export function createRecorder({ mode, runInRoot }) {
   return { probes, probe };
 }
 
-/** Emits the report `check-bundled-contracts.mjs` parses from stdout. */
+/**
+ * Emits the report `check-bundled-contracts.mjs` parses from stdout, then ends
+ * the process.
+ *
+ * Probing leaves handles behind — a deferred scheduler's timeout, a resource's
+ * pending fetch, an idle callback — and Node will not exit while they are
+ * pending. The parent runs workers with spawnSync, so one lingering timer hangs
+ * the whole suite rather than failing it. The report is complete once it is
+ * written, so the write is synchronous and the exit immediate.
+ */
 export function emit(packages, probes) {
   const discoveredClaims = probes
     .filter(probe => probe.ok)
@@ -108,5 +117,6 @@ export function emit(packages, probes) {
       mode,
       calls,
     }));
-  process.stdout.write(JSON.stringify({ packages, probes, discoveredClaims }));
+  writeSync(1, JSON.stringify({ packages, probes, discoveredClaims }));
+  process.exit(0);
 }

@@ -56,4 +56,5 @@ find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
 node scripts/dialect-manifests.mjs validate
 node scripts/check-bundled-contracts.mjs
 node scripts/check-contract-pins.mjs
+node scripts/generate-solid1-runtime-surface.mjs --check
 node scripts/dialect-manifests.mjs check-composed-contracts

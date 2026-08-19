@@ -10,7 +10,7 @@
       "kind": "function"
     },
     "Aliases": {
-      "kind": "function"
+      "kind": "value"
     },
     "Assets": {
       "kind": "function"
@@ -44,7 +44,7 @@
       ]
     },
     "ChildProperties": {
-      "kind": "function"
+      "kind": "value"
     },
     "children": {
       "kind": "function",
@@ -200,7 +200,7 @@
       "kind": "function"
     },
     "DelegatedEvents": {
-      "kind": "function"
+      "kind": "value"
     },
     "delegateEvents": {
       "kind": "function"
@@ -212,7 +212,7 @@
       "kind": "value"
     },
     "DOMElements": {
-      "kind": "function"
+      "kind": "value"
     },
     "Dynamic": {
       "kind": "function"
@@ -446,7 +446,7 @@
       ]
     },
     "Properties": {
-      "kind": "function"
+      "kind": "value"
     },
     "$PROXY": {
       "kind": "value"
@@ -479,7 +479,7 @@
       "kind": "function"
     },
     "RequestContext": {
-      "kind": "function"
+      "kind": "value"
     },
     "resetErrorBoundaries": {
       "kind": "function"
@@ -566,10 +566,10 @@
       "kind": "function"
     },
     "SVGElements": {
-      "kind": "function"
+      "kind": "value"
     },
     "SVGNamespace": {
-      "kind": "function"
+      "kind": "value"
     },
     "Switch": {
       "kind": "function"

@@ -169,46 +169,241 @@
     ".": {
       "exports": {
         "function": [
-          "DevHooks",
           "ErrorBoundary",
           "For",
-          "IS_DEV",
           "Index",
           "Match",
-          "Owner",
-          "SUPPORTS_PROXY",
           "Show",
           "Suspense",
           "SuspenseList",
           "Switch",
-          "Transition",
           "cancelCallback",
           "createComponent",
           "createContext",
           "createSignal",
           "createUniqueId",
-          "devComponent",
           "enableExternalSource",
           "enableHydration",
           "enableScheduling",
           "equalFn",
           "getListener",
           "getOwner",
-          "getSuspenseContext",
           "mergeProps",
-          "nextHydrateContext",
           "observable",
           "on",
-          "readSignal",
-          "registerGraph",
           "requestCallback",
           "resetErrorBoundaries",
-          "resumeEffects",
-          "setHydrateContext",
           "splitProps",
           "useContext",
-          "useTransition",
-          "writeSignal"
+          "useTransition"
+        ],
+        "function-1": [
+          "createReaction",
+          "lazy",
+          "onCleanup",
+          "onError",
+          "onMount"
+        ],
+        "function-10": [
+          "createMemo"
+        ],
+        "function-11": [
+          "children"
+        ],
+        "function-12": [
+          "createSelector"
+        ],
+        "function-2": [
+          "catchError"
+        ],
+        "function-3": [
+          "batch",
+          "createRoot",
+          "startTransition",
+          "untrack"
+        ],
+        "function-4": [
+          "createComputed",
+          "createEffect",
+          "createRenderEffect"
+        ],
+        "function-5": [
+          "createResource"
+        ],
+        "function-6": [
+          "runWithOwner"
+        ],
+        "function-7": [
+          "createDeferred"
+        ],
+        "function-8": [
+          "from"
+        ],
+        "function-9": [
+          "indexArray",
+          "mapArray"
+        ],
+        "value": [
+          "$DEVCOMP",
+          "$PROXY",
+          "$TRACK",
+          "DEV",
+          "sharedConfig"
+        ]
+      },
+      "conditions": [
+        "default",
+        "import"
+      ]
+    },
+    "./h/jsx-dev-runtime": {
+      "exports": {
+        "function": [
+          "Fragment",
+          "jsx",
+          "jsxDEV",
+          "jsxs"
+        ]
+      },
+      "conditions": [
+        "default",
+        "import"
+      ]
+    },
+    "./h/jsx-runtime": {
+      "exports": {
+        "function": [
+          "Fragment",
+          "jsx",
+          "jsxDEV",
+          "jsxs"
+        ]
+      },
+      "conditions": [
+        "default",
+        "import"
+      ]
+    },
+    "./jsx-dev-runtime": {
+      "exports": {
+        "function": [
+          "ErrorBoundary",
+          "For",
+          "Index",
+          "Match",
+          "Show",
+          "Suspense",
+          "SuspenseList",
+          "Switch",
+          "cancelCallback",
+          "createComponent",
+          "createContext",
+          "createSignal",
+          "createUniqueId",
+          "enableExternalSource",
+          "enableHydration",
+          "enableScheduling",
+          "equalFn",
+          "getListener",
+          "getOwner",
+          "mergeProps",
+          "observable",
+          "on",
+          "requestCallback",
+          "resetErrorBoundaries",
+          "splitProps",
+          "useContext",
+          "useTransition"
+        ],
+        "function-1": [
+          "createReaction",
+          "lazy",
+          "onCleanup",
+          "onError",
+          "onMount"
+        ],
+        "function-10": [
+          "createMemo"
+        ],
+        "function-11": [
+          "children"
+        ],
+        "function-12": [
+          "createSelector"
+        ],
+        "function-2": [
+          "catchError"
+        ],
+        "function-3": [
+          "batch",
+          "createRoot",
+          "startTransition",
+          "untrack"
+        ],
+        "function-4": [
+          "createComputed",
+          "createEffect",
+          "createRenderEffect"
+        ],
+        "function-5": [
+          "createResource"
+        ],
+        "function-6": [
+          "runWithOwner"
+        ],
+        "function-7": [
+          "createDeferred"
+        ],
+        "function-8": [
+          "from"
+        ],
+        "function-9": [
+          "indexArray",
+          "mapArray"
+        ],
+        "value": [
+          "$DEVCOMP",
+          "$PROXY",
+          "$TRACK",
+          "DEV",
+          "sharedConfig"
+        ]
+      },
+      "conditions": [
+        "default",
+        "import"
+      ]
+    },
+    "./jsx-runtime": {
+      "exports": {
+        "function": [
+          "ErrorBoundary",
+          "For",
+          "Index",
+          "Match",
+          "Show",
+          "Suspense",
+          "SuspenseList",
+          "Switch",
+          "cancelCallback",
+          "createComponent",
+          "createContext",
+          "createSignal",
+          "createUniqueId",
+          "enableExternalSource",
+          "enableHydration",
+          "enableScheduling",
+          "equalFn",
+          "getListener",
+          "getOwner",
+          "mergeProps",
+          "observable",
+          "on",
+          "requestCallback",
+          "resetErrorBoundaries",
+          "splitProps",
+          "useContext",
+          "useTransition"
         ],
         "function-1": [
           "createReaction",
@@ -272,17 +467,10 @@
     "./store": {
       "exports": {
         "function": [
-          "DevHooks",
-          "IS_DEV",
           "createStore",
-          "getNode",
-          "getNodes",
           "isWrappable",
-          "ownKeys",
-          "proxyDescriptor",
           "reconcile",
           "setProperty",
-          "trackSelf",
           "unwrap",
           "updatePath"
         ],
@@ -305,14 +493,21 @@
         "import"
       ]
     },
+    "./universal": {
+      "exports": {
+        "function": [
+          "createRenderer"
+        ]
+      },
+      "conditions": [
+        "default",
+        "import"
+      ]
+    },
     "./web": {
       "exports": {
         "function": [
-          "Aliases",
           "Assets",
-          "ChildProperties",
-          "DOMElements",
-          "DelegatedEvents",
           "Dynamic",
           "ErrorBoundary",
           "For",
@@ -322,10 +517,6 @@
           "Match",
           "NoHydration",
           "Portal",
-          "Properties",
-          "RequestContext",
-          "SVGElements",
-          "SVGNamespace",
           "Show",
           "Suspense",
           "SuspenseList",
@@ -348,6 +539,7 @@
           "getOwner",
           "getPropAlias",
           "getRequestEvent",
+          "innerHTML",
           "insert",
           "mergeProps",
           "pipeToNodeWritable",
@@ -370,6 +562,7 @@
           "ssrHydrationKey",
           "ssrSpread",
           "ssrStyle",
+          "ssrStyleProperty",
           "style",
           "template",
           "use",
@@ -388,8 +581,27 @@
           "effect"
         ],
         "value": [
+          "Aliases",
+          "ChildProperties",
+          "DOMElements",
+          "DelegatedEvents",
+          "Properties",
+          "RequestContext",
+          "SVGElements",
+          "SVGNamespace",
           "isDev",
           "isServer"
+        ]
+      },
+      "conditions": [
+        "default",
+        "import"
+      ]
+    },
+    "./web/storage": {
+      "exports": {
+        "function": [
+          "provideRequestEvent"
         ]
       },
       "conditions": [

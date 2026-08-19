@@ -50,6 +50,19 @@ export function loadDialectManifests({ requireArtifacts = false, projectRoot = r
         if (typeof contract.generated !== "undefined" && typeof contract.generated !== "boolean") {
           fail(`${source} contracts[].generated must be a boolean`);
         }
+        // A contract may state its claims for fewer than all four condition
+        // modes when a build under some condition is a different artifact.
+        if (typeof contract.probeModes !== "undefined") {
+          const modes = contract.probeModes;
+          const known = ["client", "server", "development", "production"];
+          if (!Array.isArray(modes) || modes.length === 0) {
+            fail(`${source} contracts[].probeModes must be a non-empty array`);
+          } else if (modes.some(mode => !known.includes(mode))) {
+            fail(`${source} contracts[].probeModes must be drawn from ${known.join(", ")}`);
+          } else if (!contract.probeRuntime) {
+            fail(`${source} contracts[].probeModes has no meaning without probeRuntime`);
+          }
+        }
         const generatorFields = [
           "packagePathEnv",
           "defaultPackagePath",

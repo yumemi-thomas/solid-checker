@@ -6,20 +6,15 @@
 //
 // Inputs (both checked in, read-only):
 //
-// 1. pkg/contracts/bundled/solid-v1/solid-js-census.json — the per-subpath export
-//    census: a JSON array of wire-v2 contract units, one per
-//    (moduleSubpath, exportName) of solid-js@1.9.14, materialized from the
-//    1.x branch with:
-//        git show 1.x:fixtures/bundled-contracts/bundled/solid-js.json \
-//          > pkg/contracts/bundled/solid-v1/solid-js-census.json
-//    It decides WHICH exports exist under WHICH entrypoint (".", "./store",
-//    "./web"), plus whether a name is a value (reactive-value-flow role
-//    "ordinary") or a function (role "callable"). Its other facets use a
-//    different vocabulary and are intentionally ignored here.
+// 1. pkg/contracts/bundled/solid-v1/solid-js-runtime-surface.json — which
+//    exports solid-js@1.9.14 actually has, under which entrypoints, and
+//    whether each is a function or a value. Generated from the installed
+//    package by scripts/generate-solid1-runtime-surface.mjs, which is where
+//    the note on why a declaration census could not answer this lives.
 //
 // 2. rust/crates/solid-dialect/contracts/solid-v1/solid-js.json — the reviewed flat
 //    semantics map (export name -> {kind, callbacks, returns}). It supplies
-//    the callback/return summaries. Exports present in the census but absent
+//    the callback/return summaries. Exports present in the surface but absent
 //    from this map fall back to the plain "function" / "value" summary.
 //
 // Run from anywhere: node scripts/generate-bundled-solid1-contract.mjs
@@ -35,13 +30,13 @@ const contract = dialect?.contracts.find(
   item => item.composeScript === "scripts/generate-bundled-solid1-contract.mjs",
 );
 if (!contract || contract.composeInputs?.length !== 1) {
-  throw new Error("solid-v1 manifest must declare this composer and one census input");
+  throw new Error("solid-v1 manifest must declare this composer and one surface input");
 }
-const censusPath = join(root, contract.composeInputs[0]);
+const surfacePath = join(root, contract.composeInputs[0]);
 const semanticsPath = join(root, contract.reviewContract);
 const outputPath = join(root, contract.bundledContract);
 
-const census = JSON.parse(readFileSync(censusPath, "utf8"));
+const surface = JSON.parse(readFileSync(surfacePath, "utf8"));
 const semantics = JSON.parse(readFileSync(semanticsPath, "utf8")).exports;
 
 function fail(message) {
@@ -66,48 +61,34 @@ function canonicalSummary(entry) {
   return summary;
 }
 
-function censusKind(unit) {
-  const roles = unit.facets?.reactiveValueFlow?.values?.[0]?.roles ?? [];
-  if (roles.includes("ordinary")) return "value";
-  if (roles.includes("callable")) return "function";
-  fail(
-    `census unit ${unit.scope.moduleSubpath}:${unit.scope.exportName} has no recognizable role`,
-  );
+if (surface.package?.name !== "solid-js") {
+  fail(`${contract.composeInputs[0]} describes ${surface.package?.name}`);
 }
 
 // entrypoint subpath -> export name -> canonical summary object
 const entrypointExports = new Map();
-const conditionSets = new Set();
-for (const unit of census) {
-  const { moduleSubpath, exportName, exportConditions } = unit.scope;
-  conditionSets.add(JSON.stringify(exportConditions));
-  const kind = censusKind(unit);
-  const reviewed = semantics[exportName];
-  let summary;
-  if (reviewed !== undefined) {
-    if (reviewed.kind !== kind) {
+for (const [moduleSubpath, entry] of Object.entries(surface.entrypoints)) {
+  const exports = new Map();
+  for (const [exportName, kind] of Object.entries(entry.exports)) {
+    const reviewed = semantics[exportName];
+    if (reviewed !== undefined && reviewed.kind !== kind) {
       fail(
-        `kind conflict for ${moduleSubpath}:${exportName}: census says ${kind}, semantics say ${reviewed.kind}`,
+        `kind conflict for ${moduleSubpath}:${exportName}: the runtime says ${kind}, semantics say ${reviewed.kind}`,
       );
     }
-    summary = canonicalSummary(reviewed);
-  } else {
-    summary = { kind };
+    exports.set(exportName, reviewed === undefined ? { kind } : canonicalSummary(reviewed));
   }
-  if (!entrypointExports.has(moduleSubpath)) {
-    entrypointExports.set(moduleSubpath, new Map());
-  }
-  const exports = entrypointExports.get(moduleSubpath);
-  if (exports.has(exportName)) {
-    fail(`duplicate census unit ${moduleSubpath}:${exportName}`);
-  }
-  exports.set(exportName, summary);
+  entrypointExports.set(moduleSubpath, exports);
 }
 
-if (conditionSets.size !== 1) {
-  fail(`census units disagree on export conditions: ${[...conditionSets]}`);
-}
-const conditions = JSON.parse([...conditionSets][0]);
+// The contract covers the union of every build 1.x resolves, so its entrypoints
+// are environment-agnostic: no environment condition selects a different
+// contracted surface. The per-entrypoint `conditions` in the surface document
+// are the resolution keys walked to reach each build, which is a different
+// question and deliberately not what is recorded here. An export that a build
+// omits would need per-condition variants instead; every export carrying a
+// claim exists in all three builds, which the probe suite re-checks.
+const conditions = ["default", "import"];
 
 // Deduplicate summaries into shared identifiers, following the naming scheme
 // of contract_document.rs normalize(): summaries with no effects keep their
