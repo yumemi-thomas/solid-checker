@@ -65,18 +65,20 @@ the artifact worth reading.
 
 ## The dialect pair
 
-`dialect-solid-1x` and `dialect-solid-2` hold byte-identical sources and differ
-in one file: `node_modules/solid-js/package.json`, which says `1.9.14` in one
-and `2.0.0-rc.0` in the other. That is the whole mechanism — the checker
-reads the version the project would actually import and picks its dialect, so
-the fixtures exercise the real detection path rather than a test-only override.
+`dialect-solid-1x` and `dialect-solid-2` hold byte-identical application source
+and tsconfig files. Their `solid-js.d.ts` files preserve the published overloads
+for their respective APIs, while `node_modules/solid-js/package.json` says
+`1.9.14` in one and `2.0.0-rc.0` in the other. The checker reads the version the
+project would actually import and picks its dialect, so the fixtures exercise
+the real detection path rather than a test-only override.
 
 The diff between their two snapshots is the only automated evidence that the
 1.x adapter does anything:
 
 - `createEffect(fn)` is a complete effect in 1.x and a missing-apply violation
   in 2.0 (SC7001), because the callback moves from argument 0 to argument 1.
-- `createEffect(undefined)` is SC7001 in both, quoting a different signature.
+- Calls rejected by either published declaration stay silent; cast-hidden
+  non-callable runtime values remain SC7001.
 - The async `createMemo` is a different defect per dialect: SC5004 in 1.x
   (async tracked scope, no sync option exists), SC7002 in 2.0, whose hint
   names `<Loading>`.
@@ -92,9 +94,9 @@ Two rules the runner enforces for this pair, both of which fail loudly:
 - Their snapshots keep `message` and `hint`, because for these the wording *is*
   what is under test. A dialect diagnostic that quotes the other dialect's
   signature is the failure they exist to catch.
-- Their shared sources must stay byte-identical. Duplicated source drifts, and
-  a drifted pair makes the snapshot diff meaningless rather than wrong — the
-  worse of the two failures, so the runner checks it directly.
+- Their `App.tsx` and tsconfig files must stay byte-identical. Duplicated source
+  drifts, and a drifted pair makes the snapshot diff meaningless rather than
+  wrong — the worse of the two failures, so the runner checks it directly.
 
 Adding a dialect-gated rule means adding its case to both halves.
 

@@ -142,6 +142,71 @@ impl Finding {
     ) -> Self {
         let uncertain = requirement.uncertain;
         let conditional_owner = requirement.conditional_owner;
+        let runtime_uncertain = requirement.runtime_uncertain;
+        let component_uncertain = requirement.component_uncertain;
+        // `uncertain` predates the reason fields. Treat a deserialized legacy
+        // row with no explicit reason as caller uncertainty.
+        let caller_uncertain = requirement.caller_uncertain
+            || (uncertain && !runtime_uncertain && !conditional_owner && !component_uncertain);
+        let mut message = message.to_string();
+        let mut hint = hint.to_string();
+        let mut evidence = vec![EvidenceStep {
+            message: if component_uncertain {
+                "component identity is unresolved, so this operation may execute with or without a reactive owner"
+                    .into()
+            } else if conditional_owner {
+                "runWithOwner receives a nullable owner, so this operation may execute detached"
+                    .into()
+            } else {
+                "no containing component, computation, or root owner dominates this operation"
+                    .into()
+            },
+            location: Some(requirement.location.clone()),
+        }];
+        if runtime_uncertain {
+            let (clause, guidance, evidence_message) = match requirement.operation {
+                crate::OwnerRequirementOperation::SettledCleanup => (
+                    "; available runtime facts do not prove whether this callback returns a cleanup that requires owner registration",
+                    " Resolve the callback's runtime return value to a definite cleanup or definite void before treating this as a violation.",
+                    "cleanup registration depends on an unresolved callback return value",
+                ),
+                _ => (
+                    "; available runtime facts do not prove whether this effect reaches owner registration",
+                    " Resolve the effective runtime entry and argument shape before treating this as a violation.",
+                    "effect allocation depends on an unavailable runtime-entry or argument-shape fact",
+                ),
+            };
+            message.push_str(clause);
+            hint.push_str(guidance);
+            evidence.push(EvidenceStep {
+                message: evidence_message.into(),
+                location: Some(requirement.location.clone()),
+            });
+        }
+        if conditional_owner {
+            message.push_str(
+                "; runWithOwner may receive null, so solid-checker cannot prove this execution has an owner",
+            );
+            hint.push_str(
+                " Narrow the owner to a non-null value before runWithOwner, or handle the detached lifetime explicitly.",
+            );
+        }
+        if component_uncertain {
+            message.push_str(
+                "; the containing function may be a Solid component or an ordinary helper, so its owner context cannot be certified",
+            );
+            hint.push_str(
+                " Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly.",
+            );
+        }
+        if caller_uncertain {
+            message.push_str(
+                "; this function is exported, so solid-checker cannot prove its callers provide an owner",
+            );
+            hint.push_str(
+                " If every caller runs this exported function under an owner, document that in the package's reactivity contract.",
+            );
+        }
         Self {
             kind: if uncertain {
                 "uncertifiable".into()
@@ -153,42 +218,9 @@ impl Finding {
             } else {
                 metadata.severity.into()
             },
-            evidence: vec![EvidenceStep {
-                message: if conditional_owner {
-                    "runWithOwner receives a nullable owner, so this operation may execute detached"
-                        .into()
-                } else {
-                    "no containing component, computation, or root owner dominates this operation"
-                        .into()
-                },
-                location: Some(requirement.location.clone()),
-            }],
-            hint: if conditional_owner {
-                format!(
-                    "{hint} Narrow the owner to a non-null value before runWithOwner, or handle the detached lifetime explicitly."
-                )
-            } else if uncertain {
-                format!(
-                    "{hint} If every caller runs this exported function under an owner, document that in the package's reactivity contract."
-                )
-            } else {
-                hint.into()
-            },
-            ..Self::new(
-                metadata,
-                if conditional_owner {
-                    format!(
-                        "{message}; runWithOwner may receive null, so solid-checker cannot prove this execution has an owner"
-                    )
-                } else if uncertain {
-                    format!(
-                        "{message}; this function is exported, so solid-checker cannot prove its callers provide an owner"
-                    )
-                } else {
-                    message.into()
-                },
-                requirement.location.clone(),
-            )
+            evidence,
+            hint,
+            ..Self::new(metadata, message, requirement.location.clone())
         }
     }
 }

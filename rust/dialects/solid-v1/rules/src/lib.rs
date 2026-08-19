@@ -82,8 +82,19 @@ impl CatalogWording for Catalog {
                     LeafOwnerOperationKind::Flush => {
                         panic!("Solid 1.x analysis emitted a 2.0-only flush leaf operation")
                     }
+                    LeafOwnerOperationKind::UnresolvedCallback => (
+                        Rule::ReactiveDispatchUnresolved,
+                        format!(
+                            "{} receives a type-correct callback whose exact synchronous body cannot be resolved; whether it performs cleanup or creates a nested primitive in this leaf scope cannot be certified",
+                            operation.owner
+                        ),
+                        "Pass an exact in-project function or a function literal directly, so solid-checker can inspect the callback body and certify or report its leaf-scope operations.".into(),
+                    ),
                 };
                 let message = match &operation.via {
+                    _ if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) => {
+                        message
+                    }
                     Some(via) => format!(
                         "{message} — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
                     ),
@@ -91,7 +102,10 @@ impl CatalogWording for Catalog {
                 };
                 FindingWording::new(rule.metadata(), message, hint).with_evidence(vec![
                     EvidenceStep {
-                        message: match &operation.via {
+                        message: if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) {
+                            "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
+                        } else {
+                            match &operation.via {
                             Some(via) => format!(
                                 "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
                                 operation.owner
@@ -100,6 +114,7 @@ impl CatalogWording for Catalog {
                                 "the call is lexically contained by the {} callback",
                                 operation.owner
                             ),
+                            }
                         },
                         location: Some(operation.location.clone()),
                     },

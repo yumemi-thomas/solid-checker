@@ -1138,16 +1138,7 @@ fn shorthand_property_values_resolve_through_block_scope() {
         "unprovenShorthand",
         "shadowedShorthand",
         "importedShorthand",
-        // `./ambiguous` names two project files that both export the
-        // accessor. File-enumeration order is not evidence, so the relative
-        // resolver fails closed rather than proving a claim from whichever
-        // module it happened to see first.
-        "ambiguousShorthand",
-        "globalShorthand",
         "namespaceShorthand",
-        "bareImportShorthand",
-        "pathMappedShorthand",
-        "cyclicReexportShorthand",
     ] {
         assert_eq!(
             exports[export]["returns"],

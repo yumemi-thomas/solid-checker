@@ -240,26 +240,43 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
                 operation.owner
             ),
         ),
+        LeafOwnerOperationKind::UnresolvedCallback => (
+            Rule::ReactiveDispatchUnresolved,
+            format!(
+                "{} receives a type-correct callback whose exact synchronous body cannot be resolved; whether it performs cleanup, flush, or creates a nested primitive in this leaf scope cannot be certified",
+                operation.owner
+            ),
+            "Pass an exact in-project function or a function literal directly, so solid-checker can inspect the callback body and certify or report its leaf-scope operations.".into(),
+        ),
     };
-    if let Some(via) = &operation.via {
+    if let Some(via) = &operation.via
+        && !matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
+    {
         message.push_str(&format!(
             " — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
         ));
     }
     let mut evidence = vec![EvidenceStep {
-        message: match &operation.via {
-            Some(via) => format!(
-                "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
-                operation.owner
-            ),
-            None => format!(
-                "the call is lexically contained by the {} callback",
-                operation.owner
-            ),
+        message: if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) {
+            "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
+        } else {
+            match &operation.via {
+                Some(via) => format!(
+                    "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
+                    operation.owner
+                ),
+                None => format!(
+                    "the call is lexically contained by the {} callback",
+                    operation.owner
+                ),
+            }
         },
         location: Some(operation.location.clone()),
     }];
-    if operation.uncertain {
+    if operation.uncertain
+        && (!matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback)
+            || operation.call_site_gate.is_some())
+    {
         message.push_str(
             "; solid-checker cannot prove this call runs under a live children-capable owner (out-of-band the callback is a plain queued function and this does not throw), so the finding is a proof obligation",
         );
@@ -325,8 +342,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             ),
             ExecutionRole::TrackedJsx
                 if (read.ssr_client_hole || read.server_rendering_unresolved)
-                    && !read.under_loading =>
-            {
+                    && !read.under_loading => {
                 let unresolved = read.server_rendering_unresolved;
                 (
                     Rule::SsrClientSourceOutsideLoadingBoundary,
@@ -343,7 +359,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
                     },
                     "Wrap the reading subtree in <Loading fallback={...}> so the server can flush the fallback and hand the position to the client, or declare a loadingValue (loadingValue: undefined is valid; store-family sources use seedLoadingValue: true) so the server renders a provisional value instead.".to_owned(),
                 )
-            }
+            },
             ExecutionRole::TrackedJsx if !read.under_loading => (
                 Rule::AsyncOutsideLoadingBoundary,
                 format!(
@@ -490,19 +506,27 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
     // sites cannot be enumerated, so its props' signal backing is unprovable.
     // Kinds whose uncertainty is something else already say so in
     // `static_defect_text`, and appending this to them describes the wrong
-    // proof obligation.
+    // proof obligation -- an unchecked handler value has no component and no
+    // props to enumerate.
     if defect.uncertain
         && !matches!(
             &defect.kind,
-            StaticDefectKind::HandlerValueUnresolved { .. }
+            StaticDefectKind::MissingEffectFunction
                 | StaticDefectKind::ReactiveDispatchUnresolved { .. }
                 | StaticDefectKind::ReactiveCallbackUnresolved { .. }
                 | StaticDefectKind::StructuredReturnUnresolved { .. }
+                | StaticDefectKind::HandlerValueUnresolved { .. }
         )
     {
-        message.push_str(
-            "; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the props are signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime defect",
-        );
+        if defect.analysis_context == "draggable-default-uncertain" {
+            message.push_str(
+                "; resolve the final href value before treating this as a violation or certifying it as safe",
+            );
+        } else {
+            message.push_str(
+                "; this component's call sites cannot be enumerated (it is exported, spread into, or referenced outside JSX), so whether the props are signal-backed can be neither proven nor ruled out — this finding is a proof obligation, not a proven runtime defect",
+            );
+        }
     }
     FindingWording::new(rule.metadata(), message, text.hint).with_evidence(vec![EvidenceStep {
         message: text.evidence.into(),

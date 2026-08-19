@@ -21,6 +21,11 @@ select the returned JSX structure. Only the returned expression's own
 conditional/logical spine counts; a ternary nested inside a JSX attribute of a
 returned branch is a tracked binding, not a structural branch.
 
+An uppercase name alone does not prove component execution. If no JSX call
+site or exact `Component` type resolves an otherwise component-shaped
+function, the conditional-return result is **uncertifiable**: it is defective
+as a component and may be correct as an ordinary helper.
+
 ## Why is this bad?
 
 Solid components are setup functions: the body executes once, and only the JSX

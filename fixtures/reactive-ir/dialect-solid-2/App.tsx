@@ -27,12 +27,41 @@ export function OneArgument() {
   return null;
 }
 
-// Missing its effect function in both dialects, so both report SC7001 -- but
-// they have to quote different signatures back at the reader. This is the
-// case the wording matters for, which is why this project's snapshot keeps
-// messages and hints.
-export function NoArgument() {
+// The published typings reject both calls, so the checker must stay silent.
+// A deliberately loose fixture declaration used to manufacture SC7001 here.
+export function TypeScriptOwnedInvalidCalls() {
   createEffect(undefined);
+  createEffect();
+  return null;
+}
+
+// These casts escape the type system while leaving a runtime value that is
+// provably non-callable. Both dialects report the bad first argument; only
+// 2.0 reports the missing/bad apply arguments because 1.x treats argument 1
+// as an ordinary seed value.
+export function TypeEscapesThatRemainRuntimeDefects() {
+  createEffect(123 as unknown as () => number);
+  createEffect(() => 1, 123 as unknown as (value: number) => void);
+  createEffect(() => 1, null as unknown as (value: number) => void);
+  createEffect(() => 1, {} as unknown as (value: number) => void);
+  return null;
+}
+
+// Neither core package reads this directive -- it is a framework/bundler
+// convention -- so it proves server mode in neither dialect. Both published
+// server entries neutralise the client claim, while both client entries fail.
+// The unresolved execution mode therefore produces an uncertifiable SC7001
+// obligation in both dialects rather than silence or a proven violation.
+export function directiveLeavesTheClaimUncertifiableInBothDialects() {
+  "use server";
+  createEffect(456 as unknown as () => number);
+  return null;
+}
+
+// This is a valid function-valued seed in 1.x and an ordinary TypeScript
+// error against 2.0's apply signature. Neither dialect may report SC7001.
+export function RawInvalidApplyBelongsToTypeScript() {
+  createEffect(() => 1, 5);
   return null;
 }
 
@@ -59,6 +88,17 @@ const trackReaction = createReaction(() => {
 });
 trackReaction(() => reactionDependency());
 setReactionDependency(1);
+
+// The returned tracker makes the invalidation callback reachable. A wrapper
+// hides the exact callback body: 1.x keeps an SC9012 leaf obligation, while
+// 2.0 does not classify createReaction as the same leaf API.
+function wrapReaction(callback: () => void): () => void {
+  return callback;
+}
+const trackOpaqueReaction = createReaction(
+  wrapReaction(() => onCleanup(() => {})),
+);
+trackOpaqueReaction(() => reactionDependency());
 
 // Names Solid 1.x exports and 2.0 removed. Each dialect gets its own bundled
 // model of what solid-js exports, so these are ordinary imports under 1.x and

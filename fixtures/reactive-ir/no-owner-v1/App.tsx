@@ -33,7 +33,9 @@ export const OrphanBoundary = (
   </Suspense>
 );
 
-// Inside a component the render root owns the effect: also silent.
+// A capitalized exported function is only conventionally a component. Without
+// a JSX callsite or Component annotation it could instead be called as an
+// ordinary helper, so its owner status is explicitly uncertifiable.
 export function App() {
   createEffect(() => {
     console.log(ticks());

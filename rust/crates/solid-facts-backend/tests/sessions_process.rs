@@ -605,6 +605,101 @@ fn incremental_reactive_ir_matches_fresh_after_an_edit() {
 }
 
 #[test]
+fn incremental_result_cache_preserves_dispatch_obligations() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let directory = temporary_directory("dispatch-obligation-cache");
+    let project = directory.join("tsconfig.json");
+    let app = directory.join("App.tsx");
+    let source = directory.join("source.ts");
+    let other = directory.join("other.ts");
+    let declarations = directory.join("solid-js.d.ts");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"jsx":"preserve","module":"ESNext","moduleResolution":"Bundler","strict":true,"target":"ES2022"},"files":["App.tsx","source.ts","other.ts","solid-js.d.ts"]}"#,
+    )
+    .unwrap();
+    fs::write(
+        &app,
+        r#"import { invoke, reactive, quiet } from "./source";
+export function App() {
+  const value = invoke(Math.random() > 0.5 ? reactive : quiet);
+  return <div>{value}</div>;
+}
+"#,
+    )
+    .unwrap();
+    fs::write(
+        &source,
+        r#"import { createSignal } from "solid-js";
+const [count] = createSignal(0);
+export const reactive = { read: () => count() };
+export const quiet = { read: () => 0 };
+export function invoke(reader: { read(): number }) { return reader.read(); }
+"#,
+    )
+    .unwrap();
+    fs::write(&other, "export const unrelated = 1;\n").unwrap();
+    fs::write(
+        &declarations,
+        r#"declare module "solid-js" {
+  export function createSignal<T>(value: T): [() => T, (value: T) => void];
+}
+declare namespace JSX {
+  interface IntrinsicElements { div: Record<string, unknown>; }
+  interface Element {}
+}
+"#,
+    )
+    .unwrap();
+
+    let project_id = project.to_string_lossy().into_owned();
+    let paths = [&app, &source, &other];
+    let sources = paths
+        .iter()
+        .map(|path| SourceFile {
+            path: path.to_string_lossy().into_owned(),
+            source: fs::read_to_string(path).unwrap().into(),
+            compiler_options: CompilerOptions::default(),
+        })
+        .collect();
+    let selected = dialect::by_id("solid-v2").unwrap();
+    let typescript = open_type_facts_session(&typefacts, &project_id);
+    let mut session =
+        NativeIncrementalSession::open(selected, project_id, sources, typescript).unwrap();
+    let first = session.analyze().unwrap();
+    let mut incremental = solid_reactive_ir::IncrementalBuilder::default();
+    let (initial, _) = incremental.build(&first, selected.vocabulary).unwrap();
+    assert!(selected.solve(&initial).iter().any(|finding| {
+        finding.rule == "reactive-dispatch-unresolved" && finding.kind == "uncertifiable"
+    }));
+
+    let edited = session
+        .edit(
+            vec![SourceChange {
+                path: other.to_string_lossy().into_owned(),
+                version: 1,
+                source: Some("export const unrelated = 2;\n".into()),
+                compiler_options: CompilerOptions::default(),
+            }],
+            None,
+        )
+        .unwrap();
+    let fresh = solid_reactive_ir::build(&edited, selected.vocabulary).unwrap();
+    let (retained, timings) = incremental.build(&edited, selected.vocabulary).unwrap();
+    assert!(
+        timings.interprocedural_result_reused_files > 0,
+        "the unchanged files should exercise the per-file result cache"
+    );
+    assert_eq!(retained, fresh);
+    assert!(selected.solve(&retained).iter().any(|finding| {
+        finding.rule == "reactive-dispatch-unresolved" && finding.kind == "uncertifiable"
+    }));
+}
+
+#[test]
 fn compiler_option_only_edit_invalidates_cached_ownership() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
@@ -673,7 +768,7 @@ fn cross_file_jsx_use_invalidates_cached_component_identity() {
         r#"import { createEffect } from "solid-js";
 export const Card = () => {
   const view = <div />;
-  createEffect(() => {});
+  createEffect(() => 1, () => {});
   return view;
 };
 "#,
@@ -686,7 +781,7 @@ void <Card />;
     fs::write(
         &declarations,
         r#"declare module "solid-js" {
-  export function createEffect(callback: () => void): void;
+  export function createEffect<T>(compute: () => T, apply: (value: T) => void): void;
 }
 declare namespace JSX {
   interface IntrinsicElements { div: Record<string, never>; }

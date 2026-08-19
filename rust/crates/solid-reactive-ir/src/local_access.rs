@@ -58,6 +58,7 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     pub(crate) bundled_returns: &'a HashMap<SymbolId, ContractReturn>,
     pub(crate) source_kinds: &'a HashMap<SymbolId, ReactiveSourceKind>,
     pub(crate) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(crate) uncertain_prop_sources: &'a HashSet<SymbolId>,
     pub(crate) props_reactivity: &'a PropsReactivityIndex,
 }
 
@@ -260,12 +261,14 @@ impl LocalAccessContext<'_, '_> {
         SymbolId,
         Location,
         Option<crate::source_discovery::PropsReactivity>,
+        bool,
     )> {
         self.prop_sources.get(symbol).map(|(name, declaration)| {
             (
                 name.clone(),
                 declaration.clone(),
                 self.props_reactivity.for_declaration(declaration).cloned(),
+                self.uncertain_prop_sources.contains(symbol),
             )
         })
     }
@@ -395,7 +398,7 @@ impl LocalAccessContext<'_, '_> {
                             .into(),
                         origin: Some(declaration.clone()),
                         origin_context: Arc::from("package return contract"),
-                        uncertain: false,
+                        uncertain: self.lookup.inside_possible_component(file, call.span),
                     }));
                     if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                         result.strict_read_obligations += 1;
@@ -479,7 +482,7 @@ impl LocalAccessContext<'_, '_> {
                     origin_context: origin
                         .map_or_else(String::new, |origin| origin.1.to_string())
                         .into(),
-                    uncertain: false,
+                    uncertain: self.lookup.inside_possible_component(file, call.span),
                 }));
                 if !matches!(
                     self.source_primitives.get(symbol).map(SymbolId::as_str),
@@ -550,7 +553,7 @@ impl LocalAccessContext<'_, '_> {
                     via: Arc::from(""),
                     origin: None,
                     origin_context: Arc::from(""),
-                    uncertain: false,
+                    uncertain: self.lookup.inside_possible_component(file, call.span),
                 }));
                 result.strict_read_obligations += 1;
             }
@@ -576,7 +579,7 @@ impl LocalAccessContext<'_, '_> {
                             via: via.clone().into(),
                             origin: Some(declaration.clone()),
                             origin_context: via.clone().into(),
-                            uncertain: false,
+                            uncertain: self.lookup.inside_possible_component(file, call.span),
                         }));
                         if counts_as_strict_read_root(file, call.span, execution, self.lookup) {
                             result.strict_read_obligations += 1;
@@ -704,7 +707,8 @@ impl LocalAccessContext<'_, '_> {
             // Caller-proven props: a prop every call site passes statically
             // compiles to a plain property — reading it is not a reactive
             // read at all. Unprovable backing stays a proof obligation.
-            let mut uncertain = false;
+            let mut uncertain = self.uncertain_prop_sources.contains(symbol)
+                || self.lookup.inside_possible_component(file, member.span);
             if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                 && let Some((_, prop_declaration)) = self.prop_sources.get(symbol)
             {
@@ -828,7 +832,8 @@ impl LocalAccessContext<'_, '_> {
             };
             // A spread unwraps every prop, so it follows the whole-object
             // caller classification.
-            let mut uncertain = false;
+            let mut uncertain = self.uncertain_prop_sources.contains(symbol)
+                || self.lookup.inside_possible_component(file, spread.span);
             if self.source_kinds.get(symbol) != Some(&ReactiveSourceKind::Store)
                 && self.prop_sources.contains_key(symbol)
             {

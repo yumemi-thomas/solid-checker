@@ -645,6 +645,7 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// facts. Member names may be unresolved (for example an inferred `any`),
     /// but the props object itself remains a reactive proxy.
     pub(super) prop_sources: &'a HashMap<SymbolId, (SymbolId, Location)>,
+    pub(super) uncertain_prop_sources: &'a HashSet<SymbolId>,
     /// Caller-proven props reactivity per props declaration; answers
     /// `Reactive` everywhere for dialects that keep the upstream
     /// over-approximation.
@@ -727,6 +728,7 @@ pub(crate) fn check_project(
         source_kinds: ctx.source_kinds,
         source_primitives: ctx.source_primitives,
         prop_sources: ctx.prop_sources,
+        uncertain_prop_sources: ctx.uncertain_prop_sources,
         props_reactivity: ctx.props_reactivity,
         source_reference_index: retained.unwrap_or_else(|| {
             crate::symbols::source_reference_locations(

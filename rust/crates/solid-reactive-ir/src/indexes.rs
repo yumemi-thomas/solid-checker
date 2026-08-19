@@ -18,6 +18,13 @@ use typefacts::{
 use super::{SymbolId, SymbolName};
 use crate::owners::{function_binding_name, jsx_element_is_loading};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ComponentStatus {
+    No,
+    Uncertain,
+    Proven,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct EntitySymbols {
     pub(super) by_path: HashMap<String, HashMap<(u64, u64), SymbolId>>,
@@ -1525,6 +1532,36 @@ impl<'a> SemanticLookup<'a> {
             .contains(&(file.path.as_str(), function.span))
     }
 
+    /// Three-outcome component identity. Exact JSX uses and Solid component
+    /// types are proven; a dialect naming convention only preserves the
+    /// ambiguity and must never become proof by itself.
+    pub(super) fn function_component_status(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> ComponentStatus {
+        if self.function_is_component(file, function) {
+            return ComponentStatus::Proven;
+        }
+        let possible = crate::owners::component_binding_name(file, function).is_some_and(|name| {
+            self.dialect
+                .component_name_may_be_component(file.source_text(name.span).unwrap_or_default())
+        });
+        if possible {
+            ComponentStatus::Uncertain
+        } else {
+            ComponentStatus::No
+        }
+    }
+
+    pub(super) fn function_may_be_component(
+        &self,
+        file: &FileFacts,
+        function: &solid_facts::ast::FunctionFact,
+    ) -> bool {
+        self.function_component_status(file, function) != ComponentStatus::No
+    }
+
     fn component_functions(&self) -> &HashSet<(&'a str, Span)> {
         self.component_functions.get_or_init(|| {
             self.facts
@@ -1552,12 +1589,6 @@ impl<'a> SemanticLookup<'a> {
             return true;
         }
         let binding_name = crate::owners::component_binding_name(file, function);
-        if binding_name.is_some_and(|name| {
-            self.dialect
-                .component_name_is_compat_component(file.source_text(name.span).unwrap_or_default())
-        }) {
-            return true;
-        }
         let directly_contains_jsx = |span: Span| {
             file.ast.jsx_within(span).any(|element| {
                 crate::owners::containing_ast_function(&file.ast, element.span)
@@ -1776,6 +1807,15 @@ impl<'a> SemanticLookup<'a> {
         file.ast
             .functions_body_containing(span)
             .any(|function| self.function_is_component(file, function))
+    }
+
+    /// Whether `span` is inside a function whose component identity is
+    /// possible but not proven. Consumers use this to preserve an
+    /// uncertifiable outcome instead of selecting either execution model.
+    pub(super) fn inside_possible_component(&self, file: &FileFacts, span: Span) -> bool {
+        file.ast.functions_body_containing(span).any(|function| {
+            self.function_component_status(file, function) == ComponentStatus::Uncertain
+        })
     }
 
     /// Compiler-derived callability at `span`, falling back to the smallest

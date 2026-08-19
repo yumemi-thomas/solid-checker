@@ -1,6 +1,6 @@
 # v1/no-owner-effect
 
-`SC4001` · **warning** · violation (uncertifiable, reported as an error, for exported functions)
+`SC4001` · **warning** · violation (uncertifiable, reported as an error, when ownership or runtime entry is unproven)
 
 An effect is created without a reactive owner, so nothing will ever dispose it.
 
@@ -15,6 +15,16 @@ the project, the finding is reported as **uncertifiable** instead: solid-checker
 cannot prove callers provide an owner. Like the SC9xxx rules, the uncertifiable form
 carries **error** severity; the catalog's **warning** applies to the proven
 violation form.
+
+Calls covered by `"use server"` are also uncertifiable when they would allocate
+on the client. The directive is a framework convention, not proof of a server
+transform: Solid 1.x's client entry allocates the computation, while its server
+entry is a no-op.
+
+An uppercase function name is likewise not owner proof. Without a JSX call
+site or an exact `Component` type, the function may execute as a component
+under an owner or as an ordinary helper without one; an effect inside it is
+therefore **uncertifiable**, with component identity named as the missing fact.
 
 ## Why is this bad?
 

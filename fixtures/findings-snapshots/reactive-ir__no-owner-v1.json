@@ -38,13 +38,25 @@
       "hint": "Render boundaries inside a component tree rooted by render() or hydrate(), or under an explicit createRoot; a boundary created in a bare helper function has no owner to attach to."
     },
     {
+      "rule": "v1/no-owner-effect",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
+      "start": 1625,
+      "end": 1637,
+      "fixes": 0,
+      "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the containing function may be a Solid component or an ordinary helper, so its owner context cannot be certified",
+      "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
+    },
+    {
       "rule": "v1/primitive-in-directive-application",
       "code": "SC6001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
-      "start": 1931,
-      "end": 1943,
+      "start": 2086,
+      "end": 2098,
       "fixes": 0,
       "message": "reactive primitive createSignal is created in a directive application callback; the apply phase runs per element as an unowned leaf, so primitives created here are never tracked or disposed",
       "hint": "Use the two-phase directive factory: create primitives and subscriptions in the setup phase (the factory body, which runs in an owned scope) and keep the returned ref callback to DOM work only."

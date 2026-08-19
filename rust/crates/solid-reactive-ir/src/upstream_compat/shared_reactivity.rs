@@ -572,17 +572,23 @@ fn expected_function_got_expression(
                 let uncertain = if context.accessors.contains_key(symbol) {
                     Some(false)
                 } else if let Some((_, declaration)) = context.prop_sources.get(symbol) {
-                    let property = file
-                        .ast
-                        .members
-                        .iter()
-                        .find(|member| member.object == root && expression.contains(member.span))
-                        .map(|member| text(file, member.property))
-                        .unwrap_or_default();
-                    match context.props_reactivity.prop_use(declaration, property) {
-                        crate::source_discovery::PropUse::Static => None,
-                        crate::source_discovery::PropUse::Reactive => Some(false),
-                        crate::source_discovery::PropUse::Unknown => Some(true),
+                    if context.uncertain_prop_sources.contains(symbol) {
+                        Some(true)
+                    } else {
+                        let property = file
+                            .ast
+                            .members
+                            .iter()
+                            .find(|member| {
+                                member.object == root && expression.contains(member.span)
+                            })
+                            .map(|member| text(file, member.property))
+                            .unwrap_or_default();
+                        match context.props_reactivity.prop_use(declaration, property) {
+                            crate::source_discovery::PropUse::Static => None,
+                            crate::source_discovery::PropUse::Reactive => Some(false),
+                            crate::source_discovery::PropUse::Unknown => Some(true),
+                        }
                     }
                 } else {
                     None
@@ -919,7 +925,7 @@ fn no_direct_mutation(
             location: location(file.path.shared(), assignment.target),
             analysis_context: String::new(),
             fixes: vec![],
-            uncertain: false,
+            uncertain: props && context.uncertain_prop_sources.contains(symbol),
         });
     }
 }

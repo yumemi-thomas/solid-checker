@@ -165,10 +165,39 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Audit the implementation and add an explicit contract for {package}{entrypoint} export {function} with callback parameter {parameter}. Required behavior: {required_execution}. Generate from package source with `solid-checker contract generate --package-root <package-root> --entrypoint {entrypoint}`, or edit this JSON stub (then replace its placeholders and review the evidence): {contract_stub}"
             ),
         ),
-        StaticDefectKind::MissingEffectFunction => (
-            terms.missing_effect_message.into(),
-            terms.missing_effect_hint.into(),
-        ),
+        StaticDefectKind::MissingEffectFunction => {
+            let mut message = terms.missing_effect_message.to_string();
+            let mut hint = terms.missing_effect_hint.to_string();
+            if defect.uncertain {
+                match defect.analysis_context.as_str() {
+                    "effect-runtime-entry-uncertain" => {
+                        message.push_str(
+                            "; a use-server directive makes the selected Solid runtime entry unknown, so this is a client-runtime proof obligation rather than a proven defect",
+                        );
+                        hint.push_str(
+                            " Prove the effective client/server entry through project compiler facts before treating this as a violation.",
+                        );
+                    }
+                    "effect-runtime-entry-and-argument-shape-uncertain" => {
+                        message.push_str(
+                            "; both the selected Solid runtime entry and the runtime effect argument shape remain unresolved, so neither failure nor safety is proven",
+                        );
+                        hint.push_str(
+                            " Prove the effective client/server entry and the callable runtime argument before treating this as a violation or as safe.",
+                        );
+                    }
+                    _ => {
+                        message.push_str(
+                            "; the runtime effect argument may be callable or non-callable, so neither failure nor safety is proven",
+                        );
+                        hint.push_str(
+                            " Pass a statically resolved callable function or an exact effect bundle to certify safety.",
+                        );
+                    }
+                }
+            }
+            (message, hint)
+        }
         StaticDefectKind::UntrackedDerivedFunction { name } => (
             format!(
                 "{name} derives from reactive state but every call to it is untracked, so its reads subscribe to nothing and the derivation never updates"
@@ -183,7 +212,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
             ),
             format!(
-                "Describe {callee} in its package's solid-reactivity.json — which arguments it tracks and what it returns — or keep the function in the project so its body is analysed. See docs/package-contracts.md."
+                "If {callee} comes from a package, describe its callback behavior in solid-reactivity.json. Otherwise, route the call through a project-local adapter whose body makes invocation or retention explicit. See docs/package-contracts.md."
             ),
         ),
         StaticDefectKind::ReactiveDispatchUnresolved { callee, member } => (
@@ -314,6 +343,19 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::HandlerValueUnresolved { .. } if defect.uncertain => {
             "TypeScript deliberately skips this hyphenated JSX attribute name, and the runtime handler shape is not closed by the available compiler facts"
+        }
+        StaticDefectKind::MissingEffectFunction if defect.uncertain => {
+            match defect.analysis_context.as_str() {
+                "effect-runtime-entry-uncertain" => {
+                    "the client entry rejects this effect shape, but the source directive alone does not prove whether the client or server entry executes"
+                }
+                "effect-runtime-entry-and-argument-shape-uncertain" => {
+                    "neither the selected runtime entry nor the callable shape of the runtime effect argument is proven"
+                }
+                _ => {
+                    "the published call is valid, but the runtime effect argument is not proven callable or non-callable"
+                }
+            }
         }
         StaticDefectKind::ExecutionMapIncomplete
         | StaticDefectKind::ReactiveReadAfterAwait { .. }

@@ -1,6 +1,6 @@
 # no-owner-settled-cleanup
 
-`SC4004` · **error** · violation (uncertifiable for exported functions)
+`SC4004` · **error** · violation (uncertifiable when owner or cleanup return is unresolved)
 
 An `onSettled` callback returns a cleanup function, but no owner can register
 the cleanup.
@@ -11,7 +11,10 @@ Flags `onSettled` calls whose callback returns a cleanup function while the
 call executes without a component, computation, or root owner. When the call
 sits in an exported function whose call sites are outside the project, the
 finding is reported as **uncertifiable** instead: solid-checker cannot prove
-callers provide an owner. Both forms carry **error** severity — unlike the
+callers provide an owner. A callback whose type-correct runtime return may be
+either a cleanup or `undefined` is also uncertifiable: the checker preserves
+the owner-registration obligation without claiming the throwing branch always
+runs. Both forms carry **error** severity — unlike the
 other owner rules, whose proven form is a warning, this one mirrors a runtime
 throw.
 

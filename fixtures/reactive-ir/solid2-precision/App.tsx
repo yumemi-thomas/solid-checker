@@ -85,8 +85,9 @@ export function FilterStoreReadAfterAwait() {
 
 // `filter` receives whatever `makePredicate` returns, not the arrow written
 // here: the wrapper may stash it and run it under a later tracking scope. The
-// callback must be the literal argument, not merely the largest function
-// somewhere inside the argument text.
+// callback must be the literal argument for SC1002, not merely the largest
+// function somewhere inside the argument text; SC9012 keeps that unresolved
+// behavior explicit.
 export function WrappedFilterCallbackAfterAwait() {
   const [id] = createSignal("42");
   const posts = createMemo(async () => {
@@ -243,9 +244,9 @@ export function WrappedSettledCleanup() {
   return <div />;
 }
 
-// The callback reaches the owner as an identifier reference, so the leaf pass
-// has no literal argument to scan and stays silent — `settledCleanup` has
-// other, unowned callers this pass cannot see. The onCleanup keeps SC4002.
+// The callback reaches the owner as an exact identifier reference, so the leaf
+// pass can inspect its body. This particular call is out-of-band at module
+// scope, so no leaf exists here and the onCleanup keeps SC4002.
 const settledCleanup = () => {
   onCleanup(dispose);
 };
@@ -287,8 +288,15 @@ onSettled(() => makeThunk());
 
 // `nothing` is provably `undefined`: a legal cleanup return that hands the
 // owner no cleanup at all. Reading "valid" as "returned a cleanup function"
-// would make both of these a false SC4004, and neither is SC3004 or SC9002.
+// would make both of these a false SC4004; neither is a cleanup finding.
 onSettled(() => {
   return nothing;
 });
 onSettled(() => nothing);
+
+// These callbacks may return a cleanup, but the runtime value is not closed
+// to one outcome. They are uncertifiable SC4004 rather than silently treated
+// as callbacks that never return cleanup.
+onSettled(() => makeMaybeThunk());
+onSettled(() => makeAny());
+onSettled(() => (Math.random() > 0.5 ? () => {} : undefined));

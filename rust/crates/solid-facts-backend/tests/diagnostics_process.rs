@@ -54,8 +54,10 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // that only builds a nested function, and — because the
                 // argument is not a function literal the owner receives —
                 // both `createTrackedEffect(makeTeardownCallback())` and
-                // `createTrackedEffect(wrapCallback(() => …))`.
-                ("cleanup-in-forbidden-scope", 6),
+                // `createTrackedEffect(wrapCallback(() => …))`. Those two are
+                // not silent overall: SC9012 preserves their opaque callback
+                // behavior as explicit proof obligations.
+                ("cleanup-in-forbidden-scope", 7),
                 // Three inline (the function-seeded createSignal, createMemo,
                 // createRoot) plus the dynamic-extent trackDouble() reached
                 // through its helper.
@@ -70,16 +72,20 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // classify them.
                 ("invalid-cleanup-return", 0),
                 ("cleanup-return-unresolved", 0),
+                // Both call-expression callback arguments are type-correct but
+                // return opaque runtime functions. They must remain explicit
+                // rather than being mistaken for their wrapper declarations.
+                ("reactive-dispatch-unresolved", 2),
             ][..],
         ),
         (
             "static-api",
             &[
-                // Absent, `undefined`, `null`, `5`, and `"apply"` second
-                // arguments: the last three are proven non-functions that
-                // crash the effect queue. The `{ effect, error }` object and
-                // the plain apply function stay silent.
-                ("missing-effect-function", 5),
+                // The valid deprecated one-argument overload plus five
+                // cast-hidden non-callable runtime values, including a bad
+                // EffectBundle.effect field. Raw invalid apply arguments are
+                // TypeScript's diagnostics and stay silent.
+                ("missing-effect-function", 6),
                 // Signal-family only: the store constructors never route
                 // options.sync into their node, so their three sync: true
                 // async derives are negative cases now.
@@ -185,15 +191,15 @@ fn settled_leaf_rules_follow_call_site_ownership() {
     );
     // The exported helper's call sites are unknowable, so its onSettled leaf
     // finding is a proof obligation, not a proven violation; the owner-backed
-    // component-body ones stay violations — three inline, two reached through
-    // the exactly-resolved dynamic-extent helpers.
+    // component-body ones stay violations — three inline, three reached
+    // through exactly-resolved dynamic-extent helpers.
     let kinds = cleanup
         .iter()
         .map(|finding| finding["kind"].as_str().unwrap_or_default())
         .collect::<Vec<_>>();
     assert_eq!(
         kinds.iter().filter(|kind| **kind == "violation").count(),
-        5,
+        6,
         "{cleanup:#?}"
     );
     assert_eq!(
@@ -253,7 +259,9 @@ fn solid2_precision_corrections_are_end_to_end() {
         ("no-direct-mutation", 4),
         ("cleanup-in-forbidden-scope", 1),
         ("no-owner-cleanup", 3),
-        ("no-owner-settled-cleanup", 2),
+        // One proven returned cleanup plus four callbacks whose runtime
+        // return may be a cleanup and therefore cannot be certified safe.
+        ("no-owner-settled-cleanup", 5),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
@@ -349,14 +357,16 @@ fn solid2_precision_corrections_are_end_to_end() {
     // `return nothing` where `nothing: undefined` is a legal cleanup return
     // that hands the owner nothing, so it is not a returned cleanup that would
     // make these unowned callbacks SC4004.
-    let typed_undefined = start_of("// `nothing` is provably");
-    assert!(
-        findings
-            .iter()
-            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
-            .all(|start| start < typed_undefined),
-        "a proven-`undefined` cleanup return is silent in every cleanup rule"
-    );
+    let cleanup_starts = starts("no-owner-settled-cleanup");
+    for typed_undefined in [
+        start_of("return nothing;") + u64::try_from("return ".len()).unwrap(),
+        start_of("=> nothing);") + u64::try_from("=> ".len()).unwrap(),
+    ] {
+        assert!(
+            !cleanup_starts.contains(&typed_undefined),
+            "a proven-`undefined` return is not an unowned cleanup"
+        );
+    }
 }
 
 #[test]
@@ -366,12 +376,25 @@ fn solid_one_missing_wording_paths_are_end_to_end() {
     };
 
     for (rule, expected) in [
-        ("v1/no-owner-effect", 1),
+        ("v1/no-owner-effect", 2),
         ("v1/no-owner-boundary", 1),
         ("v1/primitive-in-directive-application", 1),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
+    let owner_effects = findings_for_rule(&findings, "v1/no-owner-effect");
+    assert!(owner_effects.iter().any(|finding| {
+        finding["kind"] == "violation"
+            && finding["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("without a reactive owner"))
+    }));
+    assert!(owner_effects.iter().any(|finding| {
+        finding["kind"] == "uncertifiable"
+            && finding["message"]
+                .as_str()
+                .is_some_and(|message| message.contains("component or an ordinary helper"))
+    }));
     assert_eq!(
         findings_for_rule(&findings, "v1/package-contract-missing").len(),
         1,
@@ -591,10 +614,11 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
         // which TypeScript rejects on its own (TS2322) and the 2026-08-17
         // narrowing dropped.
         ("uncalled-accessor", 2),
-        // One: the reactive `props.onSave` read. The call-result arm went on
-        // 2026-08-17 -- a handler expression proven non-callable, or a
-        // non-callable accessor call, is TS2322 at that same attribute.
-        ("expected-function-got-expression", 1),
+        // The reactive `props.onSave` read, plus the two hyphenated attributes
+        // TypeScript deliberately declines to check: one proven invalid and
+        // one callable/non-callable proof obligation. Ordinary `onClick`
+        // non-callable values remain TS2322-owned.
+        ("expected-function-got-expression", 3),
         ("untracked-derived-function", 2),
     ] {
         assert_rule_findings(&reactivity_findings, rule, expected);
@@ -640,6 +664,21 @@ fn static_violation_evidence_describes_the_actual_proof() {
                     .is_some_and(|message| message.contains("conditional JSX expression"))
             })
     );
+}
+
+#[test]
+fn create_effect_owner_findings_require_runtime_allocation() {
+    let Some(static_api) = diagnostic_fixture("static-api") else {
+        return;
+    };
+    let lines = findings_for_rule(&static_api, "no-owner-effect")
+        .into_iter()
+        .map(|finding| finding["primaryLocation"]["line"].as_u64().unwrap())
+        .collect::<Vec<_>>();
+    // Solid 2 throws before allocating an effect node for an absent,
+    // undefined, or null apply argument (including cast-hidden null). Other
+    // non-callable values allocate first and still create an owner leak.
+    assert_eq!(lines, [8, 9, 13, 15, 16, 17, 23, 36]);
 }
 
 #[test]

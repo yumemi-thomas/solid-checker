@@ -4,10 +4,11 @@ use std::collections::{HashMap, HashSet};
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, RuntimeValueKind};
+use solid_facts::ast::ArgumentValueKind;
 use solid_facts::core::Span;
 use typefacts::Location;
 
+use crate::effect_api::{ProofStatus, classify_effect_call};
 use crate::execution_role::{allowed_callback_spans, semantic_write_execution_role};
 use crate::identity::SymbolId;
 use crate::indexes::{EntitySymbols, SemanticLookup};
@@ -86,35 +87,21 @@ impl StaticApiContext<'_> {
             // rules below branch on. A name this dialect does not export
             // resolves to `None` and matches nothing.
             let kind = primitive.primitive();
-            // Where the effect function has to be is a dialect question, and
-            // the same one `callback_positions` already answers: 2.0 puts it
-            // at index 1 of `createEffect(compute, apply)`, 1.x at index 0 of
-            // `createEffect(fn, value?)`. Hardcoding index 1 would fire this
-            // rule on every correct 1.x effect.
-            // An absent/`undefined` effect slot is the removed 1.x
-            // single-callback form (dev throws MISSING_EFFECT_FN). A proven
-            // non-function value in the slot — `null`, a string/number/
-            // boolean literal — is the same defect with a worse failure
-            // mode: the runtime reads `.effect` off it or calls it, crashing
-            // the effect queue (`null.effect` / `5.effect is not a
-            // function`; probed, rc.0). An `{ effect, error }` object is the
-            // documented error-handling form and stays legal; identifiers
-            // and unresolved expressions stay silent.
-            if kind == Some(Primitive::CreateEffect)
-                && let Some(&index) = dialect.callback_positions(Primitive::CreateEffect).last()
-                && call.arguments.get(index).is_none_or(|argument| {
-                    matches!(
-                        argument.value,
-                        ArgumentValueKind::Undefined | ArgumentValueKind::Null
-                    ) || argument.runtime_value_kind == RuntimeValueKind::Primitive
-                })
+            let effect_semantics = (kind == Some(Primitive::CreateEffect))
+                .then(|| classify_effect_call(file, call, Primitive::CreateEffect, self.lookup));
+            if effect_semantics
+                .is_some_and(|semantics| semantics.missing_effect_function != ProofStatus::No)
             {
+                let semantics = effect_semantics.expect("checked as some above");
                 result.defects.push(StaticDefect {
                     kind: StaticDefectKind::MissingEffectFunction,
                     location: location(file.path.shared(), call.callee),
-                    analysis_context: String::new(),
+                    analysis_context: semantics
+                        .missing_effect_uncertainty
+                        .analysis_context()
+                        .into(),
                     fixes: vec![],
-                    uncertain: false,
+                    uncertain: semantics.missing_effect_function == ProofStatus::Uncertain,
                 });
             }
             // Where each primitive takes its options object -- a second index

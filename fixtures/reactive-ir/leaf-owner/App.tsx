@@ -115,8 +115,7 @@ export function DynamicExtent() {
   });
   // The same synchronous extent written without braces: an expression-bodied
   // leaf callback is still the callback the owner receives. (What it returns
-  // is `flushNow()`'s void, which is not provably not a cleanup function, so
-  // the cleanup-return obligation is uncertifiable — SC9002.)
+  // is `flushNow()`'s proven void, so it registers no returned cleanup.)
   createTrackedEffect(() => flushNow()); // SC3003, via flushNow()
   return (
     <button
@@ -148,17 +147,33 @@ function wrapCallback(callback: () => void) {
 export function ArgumentPosition() {
   // `makeTeardownCallback()` is evaluated here, at argument-evaluation time,
   // under the enclosing owner — before any leaf scope exists. The callback
-  // the owner ends up with is opaque to this pass, so no SC3xxx is proven;
-  // what the callback *returns* is unprovable too, so the cleanup-return
-  // obligation is reported as uncertifiable (SC9002).
+  // the owner ends up with is opaque. No SC3xxx is proven, but SC9012 keeps
+  // the unresolved leaf behavior explicit.
   createTrackedEffect(makeTeardownCallback());
   // The arrow is `wrapCallback`'s argument, not the owner's callback:
   // `wrapCallback` decides whether and where it runs. Calls written inside
-  // it are not proven to execute in the leaf scope.
+  // it are not proven to execute in the leaf scope, so SC9012 is emitted
+  // instead of guessing at SC3001 or silently certifying the callback.
   createTrackedEffect(
     wrapCallback(() => {
       registerTeardown();
     }),
   );
+  return <div />;
+}
+
+const exactLeafCleanup = () => {
+  onCleanup(() => {});
+};
+const exactLeafSafe = () => {
+  console.log("safe callback");
+};
+
+export function ExactCallbackReference() {
+  // Exact in-project callback references are inspectable: the first is a
+  // proven SC3001 violation, while the second is certified and must not be
+  // widened to SC9012 merely because it is not written inline.
+  createTrackedEffect(exactLeafCleanup);
+  createTrackedEffect(exactLeafSafe);
   return <div />;
 }

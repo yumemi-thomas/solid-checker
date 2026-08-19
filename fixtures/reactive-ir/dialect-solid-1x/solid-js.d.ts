@@ -4,7 +4,9 @@ declare namespace JSX {
 }
 
 declare module "solid-js" {
-  export function createEffect<T>(compute: ((prev?: T) => T) | undefined, apply?: T | ((value: T) => void)): void;
+  type EffectFunction<Prev, Next extends Prev = Prev> = (value: Prev) => Next;
+  export function createEffect<Next>(fn: EffectFunction<undefined | Next, Next>): void;
+  export function createEffect<Next, Init = Next>(fn: EffectFunction<Init | Next, Next>, value: Init, options?: { name?: string; render?: boolean }): void;
   export function createSignal<T>(v: T): [() => T, (n: T) => void];
   export function batch<T>(fn: () => T): T;
   export function onMount(fn: () => void): void;

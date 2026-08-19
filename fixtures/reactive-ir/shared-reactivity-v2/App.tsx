@@ -85,6 +85,22 @@ export function FactoryHandler() {
   return <button onClick={makeHandler()}>ok</button>;
 }
 
+declare const maybeUncheckedHandler: (() => void) | number;
+
+// TypeScript does not check hyphenated JSX attribute names. Native `on*`
+// lowering still treats these as handlers, so the number is a violation and
+// the callable/non-callable union is uncertifiable rather than silently safe.
+export function UncheckedHandlers() {
+  const numberHandler = 1;
+  return (
+    <div>
+      <button on-event={numberHandler}>invalid</button>
+      <button on-maybe={maybeUncheckedHandler}>uncertain</button>
+      <button on-safe={() => {}}>safe</button>
+    </div>
+  );
+}
+
 // Reading a handler through reactive props during native element setup
 // freezes the initial function. This exercises SC1007's member-read branch,
 // distinct from calling an accessor and binding its returned value.

@@ -93,7 +93,7 @@ impl Dialect for Solid1x {
         Version::V1
     }
 
-    fn component_name_is_compat_component(&self, name: &str) -> bool {
+    fn component_name_may_be_component(&self, name: &str) -> bool {
         name.as_bytes()
             .first()
             .is_some_and(|byte| !byte.is_ascii_lowercase())
@@ -870,12 +870,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn compatibility_component_names_match_upstreams_ascii_lowercase_test() {
+    fn compatibility_names_signal_possible_components_without_proving_them() {
         for component in ["App", "_App", "$App", "画面"] {
-            assert!(Solid1x.component_name_is_compat_component(component));
+            assert!(Solid1x.component_name_may_be_component(component));
         }
         for helper in ["app", "zView"] {
-            assert!(!Solid1x.component_name_is_compat_component(helper));
+            assert!(!Solid1x.component_name_may_be_component(helper));
         }
     }
 

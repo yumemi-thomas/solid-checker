@@ -627,10 +627,16 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                     .parameters
                     .first()
                     .filter(|parameter| parameter.shape == solid_facts::ast::BindingShape::Object)
-                && ctx.semantic_lookup.function_is_component(file, function)
+                && ctx
+                    .semantic_lookup
+                    .function_may_be_component(file, function)
             {
                 let location = location(file.path.shared(), parameter.pattern);
-                let uncertain = match destructured_props_use(ctx, parameter, &location) {
+                let mut uncertain = ctx
+                    .semantic_lookup
+                    .function_component_status(file, function)
+                    == crate::indexes::ComponentStatus::Uncertain;
+                uncertain |= match destructured_props_use(ctx, parameter, &location) {
                     crate::source_discovery::PropUse::Static => continue,
                     crate::source_discovery::PropUse::Reactive => false,
                     crate::source_discovery::PropUse::Unknown => true,
@@ -674,13 +680,14 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
             if binding.shape != solid_facts::ast::BindingShape::Object {
                 continue;
             }
-            let prop_declaration = binding
+            let prop_symbol = binding
                 .initializer_identifier
                 .as_ref()
                 .and_then(|identifier| {
                     ctx.entities
                         .get(&location(file.path.shared(), identifier.span))
-                })
+                });
+            let prop_declaration = prop_symbol
                 .and_then(|symbol| ctx.prop_sources.get(symbol))
                 .map(|(_, declaration)| declaration.clone());
             let props = prop_declaration.is_some();
@@ -729,7 +736,8 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
             {
                 continue;
             }
-            let mut uncertain = false;
+            let mut uncertain =
+                prop_symbol.is_some_and(|symbol| ctx.uncertain_prop_sources.contains(symbol));
             if let Some(declaration) = &prop_declaration {
                 match destructured_props_use(ctx, binding, declaration) {
                     crate::source_discovery::PropUse::Static => continue,
@@ -1195,7 +1203,9 @@ fn member_reads_after_await(
             let property = file.source_text(member.property).unwrap_or_default();
             match ctx.props_reactivity.prop_use(declaration, property) {
                 crate::source_discovery::PropUse::Static => continue,
-                crate::source_discovery::PropUse::Reactive => (name, false),
+                crate::source_discovery::PropUse::Reactive => {
+                    (name, ctx.uncertain_prop_sources.contains(symbol))
+                }
                 crate::source_discovery::PropUse::Unknown => (name, true),
             }
         } else {
@@ -1242,7 +1252,10 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
             else {
                 continue;
             };
-            if !ctx.semantic_lookup.function_is_component(file, function) {
+            let component_status = ctx
+                .semantic_lookup
+                .function_component_status(file, function);
+            if component_status == crate::indexes::ComponentStatus::No {
                 continue;
             }
             let mut direct_returns = file
@@ -1289,7 +1302,8 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                                 .unwrap_or_default()
                                 .to_owned(),
                             fixes: vec![],
-                            uncertain: false,
+                            uncertain: component_status
+                                == crate::indexes::ComponentStatus::Uncertain,
                         },
                     );
                 }

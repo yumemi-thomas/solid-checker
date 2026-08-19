@@ -62,6 +62,16 @@
       "fixes": 0
     },
     {
+      "rule": "v1/no-owner-effect",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 1922,
+      "end": 1934,
+      "fixes": 0
+    },
+    {
       "rule": "v1/no-async-tracked-scope",
       "code": "SC5004",
       "kind": "violation",
@@ -82,9 +92,19 @@
       "fixes": 0
     },
     {
+      "rule": "v1/no-owner-effect",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 2299,
+      "end": 2311,
+      "fixes": 0
+    },
+    {
       "rule": "v1/strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
       "start": 2601,
@@ -132,9 +152,19 @@
       "fixes": 0
     },
     {
+      "rule": "v1/no-owner-effect",
+      "code": "SC4001",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
+      "start": 5029,
+      "end": 5041,
+      "fixes": 0
+    },
+    {
       "rule": "v1/strict-read-untracked",
       "code": "SC1001",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
       "start": 6367,

@@ -1,6 +1,6 @@
 # no-owner-effect
 
-`SC4001` · **warning** · violation (uncertifiable, reported as an error, for exported functions)
+`SC4001` · **warning** · violation (uncertifiable, reported as an error, when ownership or allocation is unproven)
 
 An effect is created without a reactive owner, so nothing will ever dispose it.
 
@@ -15,6 +15,24 @@ the project, the finding is reported as **uncertifiable** instead: solid-checker
 cannot prove callers provide an owner. Like the SC9xxx rules, the uncertifiable form
 carries **error** severity; the catalog's **warning** applies to the proven
 violation form.
+
+Under a `"use server"` directive, a constructor that would allocate on the
+client is reported as **uncertifiable**. No core Solid package reads that
+directive — it is a framework and bundler convention — so source text cannot
+prove whether the client or server entry executes. Solid's server entry emits
+no lifecycle diagnostic and allocates no corresponding client computation;
+the client entry does. Calls that allocate on neither possible path stay
+silent.
+
+A spread whose runtime tuple arity decides whether `createEffect` allocates is
+also uncertifiable. A visible absent or nullish apply argument remains proven
+to throw before allocation and stays silent for this ownership rule.
+
+The same rule applies to a non-literal apply value. A compiler-proven callable
+identifier reaches allocation and can produce a violation. `any`, a nullable
+value hidden by `!`, or another value whose callability is unavailable produces
+an uncertifiable obligation because it may hit the runtime's pre-allocation
+nullish guard. This does not weaken ordinary typed callbacks.
 
 For `runWithOwner`, a supplied owner is treated as definite only when TypeScript's
 resolved type declaration is the active Solid dialect's exported `Owner` type.

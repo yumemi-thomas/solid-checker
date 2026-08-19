@@ -512,9 +512,9 @@ pub(crate) struct LocalAccessSymbolState {
     pub(crate) action: Option<(SymbolId, Location)>,
     pub(crate) source_primitive: Option<SymbolId>,
     pub(crate) async_source: bool,
-    /// The declared async/hydration options with the project-level
-    /// server-render fact already folded into `ssr_client_bare`, so a fixed
-    /// import elsewhere invalidates every file reading this source.
+    /// The declared async/hydration options with the project-level rendering
+    /// proof folded into `ssr_client_bare` / `server_rendering_unresolved`, so
+    /// a fixed import elsewhere invalidates every file reading this source.
     pub(crate) async_options: crate::source_discovery::AsyncSourceOptions,
     pub(crate) contract_reads: Option<Vec<(String, String, Location, String)>>,
     pub(crate) source_kind: Option<ReactiveSourceKind>,
@@ -522,6 +522,7 @@ pub(crate) struct LocalAccessSymbolState {
         SymbolId,
         Location,
         Option<crate::source_discovery::PropsReactivity>,
+        bool,
     )>,
     pub(crate) source_declaration: Option<Declaration>,
     pub(crate) symbol_name: Option<SymbolId>,
@@ -553,6 +554,7 @@ pub(crate) struct CachedLocalAccesses {
             SymbolId,
             Location,
             Option<crate::source_discovery::PropsReactivity>,
+            bool,
         ),
     >,
 }

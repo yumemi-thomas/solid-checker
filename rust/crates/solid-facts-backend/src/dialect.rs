@@ -384,7 +384,10 @@ mod tests {
                 operation: OwnerRequirementOperation::Cleanup,
                 location: location(5),
                 uncertain: false,
+                runtime_uncertain: false,
+                caller_uncertain: false,
                 conditional_owner: false,
+                component_uncertain: false,
                 report: true,
             }],
             async_reads: vec![AsyncRead {

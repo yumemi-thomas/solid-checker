@@ -2,6 +2,7 @@ mod cache;
 mod cleanup;
 mod contracts;
 mod directives;
+mod effect_api;
 mod execution_role;
 mod findings;
 mod identity;
@@ -123,7 +124,7 @@ pub struct ReactiveRead {
     /// (exported component, unresolvable references, call-site spreads).
     /// Projection reports it as an uncertifiable proof obligation rather
     /// than a proven violation.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "is_false")]
     pub uncertain: bool,
 }
 
@@ -208,6 +209,10 @@ pub enum LeafOwnerOperationKind {
     Cleanup,
     Flush,
     Primitive(String),
+    /// The leaf owner receives a callback whose exact synchronous body is not
+    /// available. It may contain any of the forbidden operations above, so
+    /// the leaf scope is a proof obligation rather than a clean result.
+    UnresolvedCallback,
 }
 
 impl LeafOwnerOperationKind {
@@ -217,6 +222,7 @@ impl LeafOwnerOperationKind {
             Self::Cleanup => "onCleanup",
             Self::Flush => "flush",
             Self::Primitive(primitive) => primitive,
+            Self::UnresolvedCallback => "unresolved leaf callback",
         }
     }
 }
@@ -444,10 +450,23 @@ pub struct OwnerRequirement {
     pub operation: OwnerRequirementOperation,
     pub location: Location,
     pub uncertain: bool,
+    /// Allocation itself depends on a runtime fact not available to the
+    /// analyzer (for example server-entry selection or spread arity).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub runtime_uncertain: bool,
+    /// The containing exported function may be called with or without an
+    /// owner, and its callers cannot be enumerated.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub caller_uncertain: bool,
     /// The uncertainty specifically comes from a nullable owner supplied to
     /// `runWithOwner`, rather than an exported function's unknown callers.
     #[serde(default, skip_serializing_if = "is_false")]
     pub conditional_owner: bool,
+    /// The containing Solid 1 function is component-shaped only by a naming
+    /// convention; JSX invocation and ordinary invocation imply different
+    /// owner contexts.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub component_uncertain: bool,
     pub report: bool,
 }
 

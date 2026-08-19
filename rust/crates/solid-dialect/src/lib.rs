@@ -369,23 +369,23 @@ pub trait Dialect: Sync {
     /// Which version this adapter speaks.
     fn version(&self) -> Version;
 
-    /// Whether this dialect's compatibility surface treats a binding name as
-    /// a component without a semantic JSX call-site or type proof.
+    /// Whether a binding spelling is a dialect convention that makes
+    /// component identity possible but does not prove it.
     ///
-    /// Solid 1.x retains the ESLint-era uppercase convention for parity with
-    /// the upstream rules. The reactive core asks the dialect instead of
-    /// embedding that source convention in its component model; Solid 2 has
-    /// no such fallback.
-    fn component_name_is_compat_component(&self, name: &str) -> bool {
+    /// This is intentionally an uncertainty signal. A name cannot establish
+    /// runtime invocation through JSX, but Solid 1's uppercase convention is
+    /// enough to prevent the analyzer from certifying an ambiguous function
+    /// as an ordinary helper.
+    fn component_name_may_be_component(&self, name: &str) -> bool {
         let _ = name;
         false
     }
 
     /// Whether a direct JSX return is sufficient component evidence.
     ///
-    /// Solid 2 treats JSX-producing functions as components. Solid 1's
-    /// upstream-compatible rules instead use their historical binding-name
-    /// convention, so a lowercase JSX helper remains a non-component there.
+    /// Solid 2 treats JSX-producing functions as components. Solid 1 requires
+    /// a JSX call site or an exact component type instead; upstream's
+    /// binding-name shortcut is not semantic proof.
     fn direct_jsx_return_is_component(&self) -> bool {
         false
     }

@@ -3,7 +3,7 @@
 //!
 //! Detects `onCleanup`/leaf-owner misuse, and answers the owner-analysis
 //! subsystem's question "does this callback hand the owner a cleanup"
-//! (`function_returns_cleanup`), which SC4002 and SC4004 depend on.
+//! (`function_cleanup_return_proof`), which SC4002 and SC4004 depend on.
 //!
 //! It deliberately reports nothing about a returned value's *legality*. Solid
 //! 2.0 types the effect callback's return as `(() => void) | void`
@@ -13,10 +13,11 @@
 //! not expressible as a type. See `docs/precision-backlog.md` for the ledger
 //! entry and the `tsc` evidence.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use solid_dialect::{CleanupRule, Primitive};
 use solid_facts::FileFacts;
+use solid_facts::ast::ArgumentValueKind;
 use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
@@ -30,9 +31,21 @@ use crate::pipeline::{AnalysisContext, ProgramDraft, parallel_file_results};
 
 /// Runs the project-level leaf-owner stage.
 pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
+    let safe_call_symbols = ctx
+        .accessors
+        .keys()
+        .chain(ctx.setters.keys())
+        .chain(ctx.actions.keys())
+        .cloned()
+        .collect::<HashSet<_>>();
     draft.leaf_operations.extend(
         parallel_file_results(&ctx.facts.files, |file| {
-            leaf_owner_operations_for_file(file, ctx.symbol_names, ctx.semantic_lookup)
+            leaf_owner_operations_for_file(
+                file,
+                ctx.symbol_names,
+                &safe_call_symbols,
+                ctx.semantic_lookup,
+            )
         })
         .into_iter()
         .flatten(),
@@ -42,10 +55,16 @@ pub(crate) fn collect_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraf
 pub(super) fn leaf_owner_operations_for_file(
     file: &FileFacts,
     symbol_names: &HashMap<SymbolId, SymbolId>,
+    safe_call_symbols: &HashSet<SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<LeafOwnerOperation> {
     let entities = lookup.entities();
     let dialect = lookup.dialect;
+    let resolution = LeafScopeResolution {
+        lookup,
+        symbol_names,
+        safe_call_symbols,
+    };
     let mut operations = Vec::new();
     for owner_call in &file.ast.calls {
         let owner = primitive_name(
@@ -67,7 +86,7 @@ pub(super) fn leaf_owner_operations_for_file(
         // under 1.x these rules could not fire at all. Taking the argument
         // index from the same answer also drops the assumption that the
         // callback is always first.
-        let Some(region) = owner
+        let Some(callback_argument) = owner
             .primitive()
             .into_iter()
             .flat_map(|primitive| {
@@ -78,10 +97,10 @@ pub(super) fn leaf_owner_operations_for_file(
             })
             .next()
             .and_then(|index| owner_call.arguments.get(index))
-            .map(|argument| argument.span)
         else {
             continue;
         };
+        let region = callback_argument.span;
         // 2.0's `onSettled` is a leaf owner only when the call runs under a
         // live children-capable owner; out-of-band it enqueues a plain
         // callback where none of these operations throw. This pass is
@@ -101,12 +120,69 @@ pub(super) fn leaf_owner_operations_for_file(
         // and `onSettled(wrap(cb))` hands `cb` to `wrap`, which decides
         // whether and where it runs. In neither case is a leaf scope proven
         // to exist where the call is written, so nothing in the argument
-        // region is proven to throw and this pass stays silent. That is the
-        // same fail-closed answer the owner pipeline gives a non-literal leaf
-        // argument (`apply_settled_requirement_gates`, which keeps the
-        // ordinary unowned-cleanup requirement rather than deduplicating it
-        // against a leaf finding it cannot prove).
+        // region is proven to throw. An exact identifier callback is inspected
+        // below; every other valid opaque shape becomes SC9012 rather than a
+        // violation claim or silent certification.
         let Some(leaf_callback) = callback_argument_literal(file, region) else {
+            let valid_call = lookup
+                .resolved_callee_call(file, owner_call.callee)
+                .is_some_and(|call| call.validity == ResolvedCallValidity::Valid);
+            if !valid_call {
+                // Invalid callback shapes belong to TypeScript. A missing
+                // validity fact cannot safely distinguish those from a valid
+                // opaque callback, so it cannot produce this obligation.
+                continue;
+            }
+            let callback_span = file.ast.peel_ts_sugar_span(region);
+            // Only a value reference denotes the function that is actually
+            // handed to the owner. A call expression's entity may resolve to
+            // its *callee* (`makeCallback` or `wrap`) even though the runtime
+            // callback is the callee's opaque return value. Following that
+            // declaration falsely certifies the wrapper body and drops the
+            // very obligation this branch exists to preserve.
+            let exact_callback = (callback_argument.value == ArgumentValueKind::Identifier)
+                .then(|| entities.at(file.path.as_str(), callback_span))
+                .flatten()
+                .and_then(|symbol| lookup.function_for_symbol(symbol));
+            if let Some((callback_file, callback)) = exact_callback {
+                let mut kinds = Vec::new();
+                let mut visited = Vec::new();
+                let complete = function_forbidden_operations(
+                    resolution,
+                    callback_file,
+                    callback,
+                    &mut kinds,
+                    &mut visited,
+                    8,
+                );
+                let via = file
+                    .source_text(callback_span)
+                    .unwrap_or_default()
+                    .to_owned();
+                for kind in kinds {
+                    operations.push(LeafOwnerOperation {
+                        kind,
+                        owner: owner.to_string(),
+                        location: location(file.path.shared(), callback_span),
+                        fix: None,
+                        call_site_gate: call_site_gate.clone(),
+                        uncertain: false,
+                        via: Some(via.clone()),
+                    });
+                }
+                if complete {
+                    continue;
+                }
+            }
+            operations.push(LeafOwnerOperation {
+                kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
+                owner: owner.to_string(),
+                location: location(file.path.shared(), callback_span),
+                fix: None,
+                call_site_gate,
+                uncertain: true,
+                via: None,
+            });
             continue;
         };
         for call in &file.ast.calls {
@@ -134,16 +210,15 @@ pub(super) fn leaf_owner_operations_for_file(
                 // scope, so a forbidden operation inside it executes here.
                 let mut kinds = Vec::new();
                 let mut visited = Vec::new();
-                helper_forbidden_operations(
-                    lookup,
-                    symbol_names,
+                let complete = helper_forbidden_operations(
+                    resolution,
                     file,
                     call,
                     &mut kinds,
                     &mut visited,
                     8,
                 );
-                if kinds.is_empty() {
+                if kinds.is_empty() && complete {
                     continue;
                 }
                 let via = file.source_text(call.callee).unwrap_or_default().to_owned();
@@ -156,6 +231,17 @@ pub(super) fn leaf_owner_operations_for_file(
                         call_site_gate: call_site_gate.clone(),
                         uncertain: false,
                         via: Some(via.clone()),
+                    });
+                }
+                if !complete {
+                    operations.push(LeafOwnerOperation {
+                        kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
+                        owner: owner.to_string(),
+                        location: location(file.path.shared(), call.callee),
+                        fix: None,
+                        call_site_gate: call_site_gate.clone(),
+                        uncertain: true,
+                        via: Some(via),
                     });
                 }
                 continue;
@@ -264,31 +350,71 @@ fn forbidden_operation_kind(
 /// entity join resolves a callee (see `SemanticLookup::function_for_symbol`);
 /// an unresolved, ambiguous, or package callee contributes nothing here and
 /// stays owned by the package-contract obligation surface.
+/// The project-wide lookups both leaf-scope walkers thread through every hop.
+#[derive(Clone, Copy)]
+struct LeafScopeResolution<'a, 'lookup> {
+    lookup: &'a SemanticLookup<'lookup>,
+    symbol_names: &'a HashMap<SymbolId, SymbolId>,
+    /// Calls that cannot open a leaf scope of their own: accessors, setters,
+    /// and actions.
+    safe_call_symbols: &'a HashSet<SymbolId>,
+}
+
 fn helper_forbidden_operations(
-    lookup: &SemanticLookup<'_>,
-    symbol_names: &HashMap<SymbolId, SymbolId>,
+    resolution: LeafScopeResolution<'_, '_>,
     call_file: &FileFacts,
     call: &solid_facts::ast::CallFact,
     kinds: &mut Vec<crate::LeafOwnerOperationKind>,
     visited: &mut Vec<(String, Span)>,
     depth: usize,
-) {
+) -> bool {
+    let LeafScopeResolution {
+        lookup,
+        safe_call_symbols,
+        ..
+    } = resolution;
     if depth == 0 {
-        return;
+        return false;
     }
     let Some(symbol) = lookup.entities().at(call_file.path.as_str(), call.callee) else {
-        return;
+        return false;
     };
+    if safe_call_symbols.contains(symbol) {
+        return true;
+    }
     let Some((helper_file, helper)) = lookup.function_for_symbol(symbol) else {
-        return;
+        return lookup
+            .resolved_callee_call(call_file, call.callee)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .is_some_and(|declaration| declaration.standard_library);
     };
+    function_forbidden_operations(resolution, helper_file, helper, kinds, visited, depth)
+}
+
+fn function_forbidden_operations(
+    resolution: LeafScopeResolution<'_, '_>,
+    helper_file: &FileFacts,
+    helper: &solid_facts::ast::FunctionFact,
+    kinds: &mut Vec<crate::LeafOwnerOperationKind>,
+    visited: &mut Vec<(String, Span)>,
+    depth: usize,
+) -> bool {
+    let LeafScopeResolution {
+        lookup,
+        symbol_names,
+        ..
+    } = resolution;
+    if depth == 0 {
+        return false;
+    }
     let key = (helper_file.path.as_str().to_owned(), helper.span);
     if visited.contains(&key) {
-        return;
+        return true;
     }
     visited.push(key);
     let dialect = lookup.dialect;
     let entities = lookup.entities();
+    let mut complete = true;
     for inner in helper_file.ast.calls_within(helper.body) {
         // A call inside a nested function is not executed by calling the
         // helper; it belongs to whatever later invokes that function.
@@ -306,9 +432,8 @@ fn helper_forbidden_operations(
             dialect,
         );
         let Some(primitive) = primitive else {
-            helper_forbidden_operations(
-                lookup,
-                symbol_names,
+            complete &= helper_forbidden_operations(
+                resolution,
                 helper_file,
                 inner,
                 kinds,
@@ -328,6 +453,7 @@ fn helper_forbidden_operations(
             kinds.push(kind);
         }
     }
+    complete
 }
 
 /// What one `return` in a cleanup-accepting callback proves about the value
@@ -341,21 +467,32 @@ fn helper_forbidden_operations(
 /// `return nothing` where `nothing: undefined` is *legal* and merely hands the
 /// owner nothing, which is not the same as a value the owner cannot use.
 ///
-/// None of them is a finding. Legality is TypeScript's: `EffectFunction`
-/// returns `(() => void) | void`, so an unusable value is a type error and
-/// reporting it again would duplicate `tsc`.
+/// None is a cleanup-legality finding. Legality is TypeScript's:
+/// `EffectFunction` returns `(() => void) | void`, so an unusable value is a
+/// type error and reporting it again would duplicate `tsc`. The owner pass may
+/// still turn `Unresolved` into an uncertifiable SC4004 when a possibly
+/// returned cleanup would need an owner.
 enum CleanupReturnStatus {
     /// Proven to be a function: an owner that reads returned cleanups
     /// registers it.
     ValidFunction,
-    /// Proven legal but not proven to be a function — `undefined`, `void`, or
-    /// a domain admitting only a function or `undefined`. No claim that a
-    /// cleanup was returned.
+    /// Proven legal and unable to contain a function — `undefined` or `void`.
     ValidNonFunction,
+    /// Proven legal and may be either a cleanup function or `undefined`.
+    /// Legality is settled, but owner registration is conditional.
+    OptionalFunction,
     /// Proven to be a value an owner cannot use as cleanup — which is exactly
     /// the domain `tsc` rejects, so it only means "no cleanup here".
     Invalid,
     /// Neither proven; no cleanup may be assumed.
+    Unresolved,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum CleanupReturnProof {
+    Function,
+    OptionalFunction,
+    NoFunction,
     Unresolved,
 }
 
@@ -429,7 +566,11 @@ fn cleanup_return_status(
                 )
             }
         }
-        solid_facts::ast::ReturnValueKind::Other => CleanupReturnStatus::Invalid,
+        solid_facts::ast::ReturnValueKind::Other => domain_cleanup_return_status(
+            lookup
+                .entity_at(file.path.as_str(), returned.span)
+                .and_then(|entity| entity.runtime_value_domain.as_ref()),
+        ),
         solid_facts::ast::ReturnValueKind::Call => {
             let Some(callee) = returned.callee else {
                 return CleanupReturnStatus::Unresolved;
@@ -454,17 +595,7 @@ fn cleanup_return_status(
             let Some(symbol) = entities.get(&location(file.path.shared(), returned.span)) else {
                 return CleanupReturnStatus::Unresolved;
             };
-            let function = file.ast.functions.iter().any(|function| {
-                function.name.as_ref().is_some_and(|name| {
-                    entities.get(&location(file.path.shared(), name.span)) == Some(symbol)
-                })
-            }) || file.ast.bindings.iter().any(|binding| {
-                binding.initializer_function
-                    && binding.names.iter().any(|name| {
-                        entities.get(&location(file.path.shared(), name.span)) == Some(symbol)
-                    })
-            });
-            if function {
+            if identifier_return_is_exact_function(lookup, file, symbol) {
                 CleanupReturnStatus::ValidFunction
             } else {
                 domain_cleanup_return_status(
@@ -475,6 +606,25 @@ fn cleanup_return_status(
             }
         }
     }
+}
+
+fn identifier_return_is_exact_function(
+    lookup: &SemanticLookup<'_>,
+    file: &solid_facts::FileFacts,
+    symbol: &SymbolId,
+) -> bool {
+    let entities = lookup.entities();
+    file.ast.functions.iter().any(|function| {
+        function.name.as_ref().is_some_and(|name| {
+            entities.get(&location(file.path.shared(), name.span)) == Some(symbol)
+        })
+    }) || file.ast.bindings.iter().any(|binding| {
+        binding.initializer_function
+            && binding
+                .names
+                .iter()
+                .any(|name| entities.get(&location(file.path.shared(), name.span)) == Some(symbol))
+    })
 }
 
 /// Classifies a cleanup return from the compiler's runtime value domain.
@@ -495,9 +645,9 @@ fn domain_cleanup_return_status(domain: Option<&RuntimeValueDomain>) -> CleanupR
         domain.may_be_undefined,
     ) {
         // Only ever a function, or only ever a function or `undefined`: legal
-        // either way, but only the first proves a cleanup was handed over.
+        // either way, but the optional form keeps owner registration open.
         (true, false, false) => CleanupReturnStatus::ValidFunction,
-        (true, false, true) => CleanupReturnStatus::ValidNonFunction,
+        (true, false, true) => CleanupReturnStatus::OptionalFunction,
         // Never a function and never voidish: the owner is handed a value it
         // cannot use, on every execution that reaches this return.
         (false, true, false) => CleanupReturnStatus::Invalid,
@@ -506,61 +656,76 @@ fn domain_cleanup_return_status(domain: Option<&RuntimeValueDomain>) -> CleanupR
         // A domain that admits both a legal and an illegal value proves
         // neither, and `never` (a known empty domain) describes a value this
         // return never produces.
-        (true, true, _) | (false, true, true) | (false, false, false) => {
-            CleanupReturnStatus::Unresolved
-        }
+        (true, true, _) | (false, true, true) => CleanupReturnStatus::Invalid,
+        (false, false, false) => CleanupReturnStatus::ValidNonFunction,
     }
 }
 
-pub(super) fn function_returns_cleanup(
+pub(super) fn function_cleanup_return_proof(
     lookup: &SemanticLookup<'_>,
     file: &solid_facts::FileFacts,
     function: &solid_facts::ast::FunctionFact,
-) -> bool {
-    function
-        .expression_return
+) -> CleanupReturnProof {
+    let status = |returned: &solid_facts::ast::ReturnFact| {
+        match cleanup_return_status(lookup, file, returned) {
+            CleanupReturnStatus::ValidFunction => match returned.value {
+                solid_facts::ast::ReturnValueKind::Function => CleanupReturnProof::Function,
+                solid_facts::ast::ReturnValueKind::Identifier => lookup
+                    .entities()
+                    .get(&location(file.path.shared(), returned.span))
+                    .filter(|symbol| identifier_return_is_exact_function(lookup, file, symbol))
+                    .map_or(CleanupReturnProof::OptionalFunction, |_| {
+                        CleanupReturnProof::Function
+                    }),
+                // A callable checker type alone does not prove the runtime
+                // value is non-nullish when strictNullChecks is disabled.
+                solid_facts::ast::ReturnValueKind::Call
+                | solid_facts::ast::ReturnValueKind::Member
+                | solid_facts::ast::ReturnValueKind::Other
+                | solid_facts::ast::ReturnValueKind::Undefined => {
+                    CleanupReturnProof::OptionalFunction
+                }
+            },
+            CleanupReturnStatus::ValidNonFunction | CleanupReturnStatus::Invalid => {
+                CleanupReturnProof::NoFunction
+            }
+            CleanupReturnStatus::OptionalFunction => CleanupReturnProof::OptionalFunction,
+            CleanupReturnStatus::Unresolved => CleanupReturnProof::Unresolved,
+        }
+    };
+    if let Some(returned) = function.expression_return.as_ref() {
+        return status(returned);
+    }
+    let returned = file
+        .ast
+        .returns
         .iter()
-        .chain(file.ast.returns.iter().filter(|returned| {
+        .filter(|returned| {
             containing_ast_function(&file.ast, returned.span)
                 .is_some_and(|owner| owner.span == function.span)
-        }))
-        .any(|returned| cleanup_return_is_function(lookup, file, returned))
-}
-
-fn cleanup_return_is_function(
-    lookup: &SemanticLookup<'_>,
-    file: &solid_facts::FileFacts,
-    returned: &solid_facts::ast::ReturnFact,
-) -> bool {
-    match returned.value {
-        solid_facts::ast::ReturnValueKind::Function => true,
-        // Only a *proven function* registers a cleanup. `return nothing` where
-        // `nothing: undefined` is a legal return that hands the owner nothing,
-        // so it must not make the enclosing callback look like one that
-        // returns a cleanup.
-        solid_facts::ast::ReturnValueKind::Identifier => {
-            matches!(
-                cleanup_return_status(lookup, file, returned),
-                CleanupReturnStatus::ValidFunction
-            )
-        }
-        solid_facts::ast::ReturnValueKind::Call => {
-            let Some(callee) = returned.callee else {
-                return false;
-            };
-            let valid_call = lookup
-                .entity_at(file.path.as_str(), callee)
-                .and_then(|entity| entity.resolved_call.as_ref())
-                .is_some_and(|call| call.validity == ResolvedCallValidity::Valid);
-            valid_call
-                && matches!(
-                    domain_cleanup_return_status(returned_call_domain(lookup, file, callee)),
-                    CleanupReturnStatus::ValidFunction
-                )
-        }
-        solid_facts::ast::ReturnValueKind::Undefined
-        | solid_facts::ast::ReturnValueKind::Member
-        | solid_facts::ast::ReturnValueKind::Other => false,
+        })
+        .collect::<Vec<_>>();
+    if returned.is_empty() {
+        return CleanupReturnProof::NoFunction;
+    }
+    if let [only] = returned.as_slice()
+        && !only.conditional
+    {
+        return status(only);
+    }
+    let statuses = returned.into_iter().map(status).collect::<Vec<_>>();
+    if statuses.contains(&CleanupReturnProof::Unresolved) {
+        return CleanupReturnProof::Unresolved;
+    }
+    if statuses
+        .iter()
+        .all(|status| *status == CleanupReturnProof::NoFunction)
+    {
+        CleanupReturnProof::NoFunction
+    } else {
+        // Multiple/conditional exits do not prove that a cleanup is returned
+        // on every execution, even when one arm visibly returns a function.
+        CleanupReturnProof::OptionalFunction
     }
 }
 
