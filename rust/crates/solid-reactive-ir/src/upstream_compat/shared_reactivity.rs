@@ -458,6 +458,7 @@ fn no_async_tracked_scope(
                 location: location(file.path.shared(), argument.span),
                 analysis_context: String::new(),
                 fixes: vec![],
+                uncertain: false,
             });
         }
     }

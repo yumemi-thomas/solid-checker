@@ -232,6 +232,11 @@ pub struct StaticViolation {
     pub location: Location,
     pub analysis_context: String,
     pub fixes: Vec<Fix>,
+    /// A required runtime/configuration fact is unavailable. Projection keeps
+    /// the rule identity and wording but emits an uncertifiable proof
+    /// obligation rather than claiming a proven violation.
+    #[serde(default)]
+    pub uncertain: bool,
 }
 
 /// A version-independent defect proven by shared analysis.

@@ -576,6 +576,9 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
         FindingSeed::StaticViolation(violation) => {
             finding.analysis_context = violation.analysis_context.clone();
             finding.fixes = violation.fixes.clone();
+            if violation.uncertain {
+                finding.kind = "uncertifiable".into();
+            }
         }
         FindingSeed::StaticDefect(defect) => {
             finding.analysis_context = defect.analysis_context.clone();

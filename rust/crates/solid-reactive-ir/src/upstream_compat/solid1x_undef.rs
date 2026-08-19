@@ -62,6 +62,7 @@ pub(super) fn check_file(
                 location: location(file.path.shared(), attribute.local_name),
                 analysis_context: String::new(),
                 fixes: vec![],
+                uncertain: false,
             });
         }
     }

@@ -115,6 +115,7 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                 location: location(file.path.shared(), call.callee),
                 analysis_context: String::new(),
                 fixes: vec![],
+                uncertain: false,
             });
         }
     }
@@ -301,6 +302,7 @@ fn push_module_directive_violation(
         location: location(file.path.shared(), span),
         analysis_context: String::new(),
         fixes: vec![],
+        uncertain: false,
     });
 }
 
@@ -413,6 +415,7 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     location: location(file.path.shared(), argument.span),
                     analysis_context: String::new(),
                     fixes: vec![],
+                    uncertain: false,
                 });
             }
         }

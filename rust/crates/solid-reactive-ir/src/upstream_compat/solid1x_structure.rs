@@ -101,6 +101,7 @@ fn no_react_deps(
                     new_text: String::new(),
                 }],
             }],
+            uncertain: false,
         });
     }
 }
@@ -354,6 +355,7 @@ fn prefer_for(
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes,
+            uncertain: false,
         });
     }
 }
@@ -603,6 +605,7 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
             location: location(file.path.shared(), logical.span),
             analysis_context: String::new(),
             fixes,
+            uncertain: false,
         });
     }
     for conditional in &file.ast.conditional_expressions {
@@ -637,6 +640,7 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
             location: location(file.path.shared(), conditional.span),
             analysis_context: String::new(),
             fixes,
+            uncertain: false,
         });
     }
 }

@@ -151,6 +151,7 @@ impl StaticApiContext<'_> {
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
+                    uncertain: false,
                 });
             }
             // SC2004: resolve() in a tracked scope. Probed on
@@ -176,6 +177,7 @@ impl StaticApiContext<'_> {
                     location: location(file.path.shared(), call.callee),
                     analysis_context: String::new(),
                     fixes: vec![],
+                    uncertain: false,
                 });
             }
             let Some(kind @ (Primitive::Refresh | Primitive::Affects)) = kind else {

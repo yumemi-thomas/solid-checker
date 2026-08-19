@@ -551,6 +551,7 @@ pub(super) fn violation(
         location: location(file.path.shared(), span),
         analysis_context: String::new(),
         fixes,
+        uncertain: false,
     }
 }
 
