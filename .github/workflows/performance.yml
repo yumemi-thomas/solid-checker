@@ -21,10 +21,6 @@ jobs:
         with:
           # The relative gate builds the merge base in a worktree.
           fetch-depth: 0
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache: false
       - uses: actions/setup-node@v4
         with:
           node-version: 24
@@ -33,10 +29,43 @@ jobs:
         with:
           workspaces: rust
           shared-key: performance
+          # A pull request's cache scope is unreadable from main, and writing it
+          # evicts the entries on main that every run restores from.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+      - uses: ./.github/actions/typefacts
+
+      # Which commit this job races against, resolved before anything is built
+      # so that commit's benchmark runtime can be looked up in the cache.
+      - id: base
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
+          else
+            base=$(git rev-parse HEAD^)
+          fi
+          echo "sha=$base" >> "$GITHUB_OUTPUT"
+
+      # A benchmark runtime is a bench binary paired with the producer the same
+      # commit pinned, and this workflow used to build each one twice: once as
+      # the head of that commit's own run, once as the base of the next. Caching
+      # it under the commit sha collapses that to one build -- a linear series
+      # on main, and every re-push to a branch whose merge base has not moved,
+      # stop rebuilding a pair this workflow has already produced.
+      #
+      # The directory carries the sha because a cache entry restores to the path
+      # it was archived from: keying and locating on the same sha is what keeps
+      # the base's restore path identical to the path some earlier run's head
+      # was saved from.
+      - id: base-runtime
+        uses: actions/cache@v4
+        with:
+          path: |
+            /tmp/perf-runtime/${{ steps.base.outputs.sha }}/bench
+            /tmp/perf-runtime/${{ steps.base.outputs.sha }}/solid-typefacts
+          key: perf-runtime-${{ runner.os }}-${{ runner.arch }}-${{ steps.base.outputs.sha }}
 
       - name: Build the benchmark runtime
         run: |
-          scripts/build-typefacts.sh
           cargo build --release --manifest-path rust/Cargo.toml \
             -p solid-facts-backend --bin solid-checker-session-bench
 
@@ -49,31 +78,64 @@ jobs:
           SOLID_CHECKER_MAX_FIRST_IR_NS_PER_SOURCE: 225000
         run: node benchmarks/verify-performance.mjs
 
-      # The relative gate: build the merge base in a worktree and race it
-      # against the head on this same runner, interleaved so scheduler drift
-      # cancels. Pull requests compare their merge base; pushes and manual runs
-      # compare the preceding main commit. This is what catches a 26ms -> 60ms
-      # regression that still clears the shared-runner absolute ceiling above.
+      # The relative gate: race the merge base against the head on this same
+      # runner, interleaved so scheduler drift cancels. Pull requests compare
+      # their merge base; pushes and manual runs compare the preceding main
+      # commit. This is what catches a 26ms -> 60ms regression that still clears
+      # the shared-runner absolute ceiling above. Only the two binaries are
+      # cached, never a measurement: both sides are still timed here, on one
+      # machine, in this run.
+      - name: Check out the merge base
+        if: steps.base-runtime.outputs.cache-hit != 'true'
+        run: git worktree add /tmp/perf-base "${{ steps.base.outputs.sha }}"
+
+      # At whatever producer revision that commit pinned, which is the point: a
+      # comparison must not pair one commit's engine with another's producer.
+      - uses: ./.github/actions/typefacts
+        if: steps.base-runtime.outputs.cache-hit != 'true'
+        with:
+          working-directory: /tmp/perf-base
+
       - name: Build the merge-base benchmark runtime
+        if: steps.base-runtime.outputs.cache-hit != 'true'
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            base=$(git merge-base HEAD "origin/${{ github.base_ref }}")
-          else
-            base=$(git rev-parse HEAD^)
-          fi
-          git worktree add /tmp/perf-base "$base"
           cd /tmp/perf-base
-          scripts/build-typefacts.sh
           cargo build --release --manifest-path rust/Cargo.toml \
             -p solid-facts-backend --bin solid-checker-session-bench
+          runtime=/tmp/perf-runtime/${{ steps.base.outputs.sha }}
+          mkdir -p "$runtime"
+          cp rust/target/release/solid-checker-session-bench "$runtime/bench"
+          cp bin/solid-typefacts "$runtime/solid-typefacts"
 
       - name: Compare performance with the merge base
         run: |
+          runtime=/tmp/perf-runtime/${{ steps.base.outputs.sha }}
           node benchmarks/compare-performance.mjs \
-            --base-bench /tmp/perf-base/rust/target/release/solid-checker-session-bench \
-            --base-typefacts /tmp/perf-base/bin/solid-typefacts \
+            --base-bench "$runtime/bench" \
+            --base-typefacts "$runtime/solid-typefacts" \
             --head-bench rust/target/release/solid-checker-session-bench \
             --head-typefacts bin/solid-typefacts
+
+      # This commit's own pair, saved under its sha, is what the next commit on
+      # main resolves as its base. Main only: a pull request's next push
+      # resolves a new head sha, so the entry would never be read.
+      - name: Stage this commit's runtime as a future base
+        if: github.ref == 'refs/heads/main'
+        run: |
+          runtime=/tmp/perf-runtime/${{ github.sha }}
+          mkdir -p "$runtime"
+          cp rust/target/release/solid-checker-session-bench "$runtime/bench"
+          cp bin/solid-typefacts "$runtime/solid-typefacts"
+      - name: Publish this commit's runtime as a future base
+        if: github.ref == 'refs/heads/main'
+        # A re-run of an already-published commit finds its own entry present.
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            /tmp/perf-runtime/${{ github.sha }}/bench
+            /tmp/perf-runtime/${{ github.sha }}/solid-typefacts
+          key: perf-runtime-${{ runner.os }}-${{ runner.arch }}-${{ github.sha }}
 
       - name: Prepare the deterministic corpus
         run: |

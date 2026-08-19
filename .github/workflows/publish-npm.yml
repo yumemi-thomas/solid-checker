@@ -38,10 +38,6 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache: false
       - uses: dtolnay/rust-toolchain@1.97
       - uses: actions/setup-node@v4
         with:
@@ -49,15 +45,29 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          # Restores the release dependency build CI already warmed on main
+          # under this key. A tag gets its own cache scope that no later run can
+          # read, so saving here would only evict entries that have readers.
+          # Keyed on the runner image, not just the platform: the release builds
+          # linux-x64 on 22.04 on purpose, and a dependency's C objects compiled
+          # against a newer image's headers have no business being linked into
+          # that artifact. Identical images share; 22.04 builds its own.
+          shared-key: release-${{ matrix.runner }}-${{ matrix.arch }}
+          save-if: false
+      # A release's build id is its tag, so this producer is a genuinely new
+      # binary every time and nothing is cached: what ships is always compiled
+      # from the pinned revision in this run.
+      - uses: ./.github/actions/typefacts
+        with:
+          build-id: ${{ github.ref_name }}
+          output: bin/solid-typefacts${{ matrix.platform == 'win32' && '.exe' || '' }}
+          cache: "false"
       - name: Build native package
         env:
           SOLID_CHECKER_BUILD_ID: ${{ github.ref_name }}
         run: |
           extension=""
           if [[ "${{ matrix.platform }}" == "win32" ]]; then extension=".exe"; fi
-          mkdir -p bin
-          TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID" \
-            scripts/build-typefacts.sh "bin/solid-typefacts${extension}"
           TYPEFACTS_BUILD_ID="$SOLID_CHECKER_BUILD_ID" \
             cargo build --release --manifest-path rust/Cargo.toml --workspace
           node scripts/package-rust.mjs \
@@ -94,6 +104,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          # Same reasoning as the native build: a tag's cache scope has no
+          # readers, so restore from main's and do not write.
+          save-if: false
       - run: npm ci
         working-directory: packages/wasm
       - name: Build WASI package

@@ -14,10 +14,6 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with:
-          go-version: stable
-          cache: false
       - uses: dtolnay/rust-toolchain@1.97
       - uses: pnpm/action-setup@v4
         with:
@@ -25,4 +21,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+      # Same debug workspace as CI's engine job; read that job's dependency
+      # cache rather than rebuild the graph on a weekly schedule.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: engine-debug
+          save-if: false
+      - uses: ./.github/actions/typefacts
       - run: make corpus

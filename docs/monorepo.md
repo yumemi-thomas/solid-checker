@@ -51,6 +51,19 @@ move together: the startup handshake compares protocol version, schema digest,
 and build id, so `scripts/build-typefacts.sh` reads the revision straight out
 of `rust/Cargo.toml` rather than keeping a second copy of it.
 
+That pin is also what makes the producer cacheable. The binary is a function of
+the pinned revision and the build id and nothing else, so the script records
+that pair in `<output>.buildinfo` and returns immediately when it already
+matches — which is why several `make` targets can each depend on
+`build-typefacts` without paying for it more than once. CI keys a cache entry on
+the same pair (`.github/actions/typefacts`), so a job restores the producer
+instead of cloning the repository and running a cold Go build. Set
+`TYPEFACTS_REBUILD=1` to force the rebuild anyway.
+
+A release deliberately gets none of that: its build id is the tag, so every
+published producer is compiled from the pinned revision during that run. The
+same applies when the pin moves — a new revision is a new cache key.
+
 Oxc, tsgolint, and TypeScript-Go stay pinned dependencies too. Prefer a pinned
 dependency on a fork's own repository over vendoring sources into this tree.
 
