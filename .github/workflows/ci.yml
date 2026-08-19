@@ -158,6 +158,10 @@ jobs:
         with:
           node-version: 24
       - run: sh -n scripts/*.sh
+      # The script tests import the oracle harness, which resolves `typescript`
+      # through packages/cli. `make test-cli` installs it too, but that runs
+      # after this step.
+      - run: npm ci --ignore-scripts --prefix packages/cli
       - run: node --test scripts/*.test.mjs
       - run: jq empty schema/*.json
       - run: find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
