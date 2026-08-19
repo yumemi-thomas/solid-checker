@@ -71,7 +71,7 @@ project is fully certified:
 npx solid-checker --project tsconfig.json --certify
 ```
 
-Linux (x64, arm64), macOS (x64, arm64), and Windows (x64) are supported; npm
+Linux (x64, arm64), macOS (arm64), and Windows (x64) are supported; npm
 downloads only the binary matching your platform.
 
 ## Solid compatibility
