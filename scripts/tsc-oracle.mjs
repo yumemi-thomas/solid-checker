@@ -26,12 +26,12 @@
 // expression" when one column counts UTF-16 units.
 import { execFileSync } from "node:child_process";
 import {
-  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
@@ -107,21 +107,96 @@ const provision = (dialect) => {
   return versions;
 };
 
-const compilerOptions = (spec, root, strict) => ({
-  strict,
-  noEmit: true,
-  target: ts.ScriptTarget.ES2022,
-  module: ts.ModuleKind.ESNext,
-  moduleResolution: ts.ModuleResolutionKind.Bundler,
-  jsx: ts.JsxEmit.Preserve,
-  jsxImportSource: spec.jsxImportSource,
-  lib: ["lib.es2022.d.ts", "lib.dom.d.ts"],
+/**
+ * The one serializable compiler configuration used by both `tsc` and the
+ * checker side of the gate. Keeping this JSON-shaped prevents two handwritten
+ * option lists from drifting (notably `lib`, `baseUrl`, and strictness).
+ */
+export const oracleCompilerOptions = (dialect, strict, overrides = {}) => ({
+  target: "ES2022",
+  module: "ESNext",
+  moduleResolution: "Bundler",
+  jsx: "preserve",
+  jsxImportSource: dialectSpec(dialect).jsxImportSource,
+  lib: ["ES2022", "DOM"],
   // A stray `@types/*` in the install tree must not change the answer.
   types: [],
   skipLibCheck: true,
   allowJs: false,
-  baseUrl: root,
+  baseUrl: ".",
+  ...overrides,
+  // A case may vary emit semantics, but never the two invariants the oracle
+  // compares independently.
+  strict,
+  noEmit: true,
 });
+
+const compilerOptions = (dialect, root, strict, overrides) => {
+  const converted = ts.convertCompilerOptionsFromJson(
+    oracleCompilerOptions(dialect, strict, overrides),
+    root,
+  );
+  if (converted.errors.length) {
+    throw new Error(
+      converted.errors.map((error) => ts.flattenDiagnosticMessageText(error.messageText, " ")).join("; "),
+    );
+  }
+  return converted.options;
+};
+
+const byteSpan = (text, start, end) => ({
+  startByte: Buffer.byteLength(text.slice(0, start), "utf8"),
+  endByte: Buffer.byteLength(text.slice(0, end), "utf8"),
+});
+
+const isSubject = (node) =>
+  ts.isCallExpression(node) ||
+  ts.isNewExpression(node) ||
+  ts.isJsxAttribute(node) ||
+  ts.isJsxElement(node) ||
+  ts.isJsxSelfClosingElement(node) ||
+  ts.isReturnStatement(node) ||
+  ts.isVariableDeclaration(node);
+
+const enclosingSubject = (source, start, end) => {
+  let best = source;
+  const visit = (node) => {
+    const nodeStart = node.getStart(source, false);
+    if (nodeStart > start || node.end < end) return;
+    if (isSubject(node) && node.end - nodeStart < best.end - best.getStart(source, false)) best = node;
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  const text = source.getFullText();
+  return byteSpan(text, best.getStart(source, false), best.end);
+};
+
+const characterOffsetAtByte = (text, byte) => {
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (Buffer.byteLength(text.slice(0, middle), "utf8") <= byte) low = middle;
+    else high = middle - 1;
+  }
+  return low;
+};
+
+/** Return the smallest semantic source subject containing a byte range. */
+export const oracleSubjectSpan = (code, startByte, endByte, name = "case.tsx") => {
+  const source = ts.createSourceFile(
+    name,
+    code,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.getScriptKindFromFileName(name),
+  );
+  return enclosingSubject(
+    source,
+    characterOffsetAtByte(code, startByte),
+    characterOffsetAtByte(code, endByte),
+  );
+};
 
 // The mapping a ledger entry needs: what the checker claims about a span
 // versus what `tsc` claims about it. A diagnostic is recorded with its exact
@@ -140,6 +215,7 @@ const collect = (program, sources) => {
       const start = diagnostic.start ?? 0;
       const { line, character } = source.getLineAndCharacterOfPosition(start);
       const text = source.getFullText();
+      const subject = enclosingSubject(source, start, start + (diagnostic.length ?? 0));
       out.push({
         code: diagnostic.code,
         category: ts.DiagnosticCategory[diagnostic.category].toLowerCase(),
@@ -151,12 +227,30 @@ const collect = (program, sources) => {
         // scripts/parity.mjs applies fixes on a Buffer.
         startByte: Buffer.byteLength(text.slice(0, start), "utf8"),
         endByte: Buffer.byteLength(text.slice(0, start + (diagnostic.length ?? 0)), "utf8"),
+        subjectStartByte: subject.startByte,
+        subjectEndByte: subject.endByte,
         text: text.slice(start, start + (diagnostic.length ?? 0)),
       });
     }
   }
   return out.sort((a, b) => a.startByte - b.startByte || a.code - b.code);
 };
+
+/**
+ * The audited install for `dialect`, verified to be at the expected versions.
+ *
+ * Exported so a consumer that needs a *project* rather than a compilation --
+ * the oracle gate runs the checker over the same snippets -- resolves against
+ * the same tree, behind the same version check, instead of reimplementing it
+ * and drifting.
+ *
+ * @param {"v1"|"v2"} dialect
+ * @returns {{root: string, jsxImportSource: string}}
+ */
+export const oracleProject = (dialect) => ({
+  root: assertProvisioned(dialect),
+  jsxImportSource: dialectSpec(dialect).jsxImportSource,
+});
 
 /**
  * Compile `inputs` against the real typings for `dialect`.
@@ -166,7 +260,7 @@ const collect = (program, sources) => {
  * @returns diagnostics from a `strict` and a `loose` pass, plus the versions
  *          they were produced against.
  */
-export const runOracle = (dialect, inputs) => {
+export const runOracle = (dialect, inputs, compilerOptionOverrides = {}) => {
   const spec = dialectSpec(dialect);
   const root = assertProvisioned(dialect);
   // An isolated temp directory: the audited install is never mutated, and the
@@ -175,11 +269,7 @@ export const runOracle = (dialect, inputs) => {
   try {
     // Node's resolver walks up for node_modules, so linking the audited tree
     // next to the sources is enough -- and keeps the install read-only.
-    cpSync(join(root, "node_modules"), join(work, "node_modules"), {
-      recursive: true,
-      dereference: false,
-      verbatimSymlinks: true,
-    });
+    symlinkSync(join(root, "node_modules"), join(work, "node_modules"), "dir");
     const files = inputs.map(({ name, code }) => {
       const target = join(work, name);
       mkdirSync(dirname(target), { recursive: true });
@@ -191,7 +281,10 @@ export const runOracle = (dialect, inputs) => {
       ["strict", true],
       ["loose", false],
     ]) {
-      const program = ts.createProgram(files, compilerOptions(spec, work, strict));
+      const program = ts.createProgram(
+        files,
+        compilerOptions(dialect, work, strict, compilerOptionOverrides),
+      );
       passes[pass] = collect(program, files);
     }
     return {
