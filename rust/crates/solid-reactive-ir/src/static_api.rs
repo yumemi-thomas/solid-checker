@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::ArgumentValueKind;
+use solid_facts::ast::{ArgumentValueKind, RuntimeValueKind};
 use solid_facts::core::Span;
 use typefacts::Location;
 
@@ -106,7 +106,7 @@ impl StaticApiContext<'_> {
                     matches!(
                         argument.value,
                         ArgumentValueKind::Undefined | ArgumentValueKind::Null
-                    ) || argument.primitive_literal
+                    ) || argument.runtime_value_kind == RuntimeValueKind::Primitive
                 })
             {
                 result.defects.push(StaticDefect {
@@ -213,8 +213,7 @@ impl StaticApiContext<'_> {
                     | ArgumentValueKind::AsyncFunction
                     | ArgumentValueKind::Null
                     | ArgumentValueKind::Undefined
-            ) || target.primitive_literal
-                || target.container_literal;
+            ) || target.runtime_value_kind.is_data_literal();
             // Also `tsc`'s. `Refreshable<T> = T & { readonly [$REFRESH]: any }`
             // is the brand *as a type*, so a thunk, a read value, a literal,
             // `null`, and `undefined` are all TS2345 against it; `affects`

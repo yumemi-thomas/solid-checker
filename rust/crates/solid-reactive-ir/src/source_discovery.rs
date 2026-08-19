@@ -402,8 +402,7 @@ fn store_is_value_form(call: &solid_facts::ast::CallFact, primitive: Option<Prim
         matches!(
             argument.value,
             ArgumentValueKind::Null | ArgumentValueKind::Undefined
-        ) || argument.primitive_literal
-            || argument.container_literal
+        ) || argument.runtime_value_kind.is_data_literal()
     })
 }
 

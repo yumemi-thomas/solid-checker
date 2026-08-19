@@ -524,14 +524,22 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
     }
     if let Some(findings) = diagnostic_fixture("uncalled-accessor-v2") {
-        // The three positions TypeScript permits: a string-concatenation
-        // operand, a unary operand, and a template interpolation. The typed
-        // positions the 2026-08-17 narrowing dropped -- a class object value, a
-        // native attribute, and a computed key -- are each a diagnostic of
-        // TypeScript's own, and the children attribute and the called and
-        // passed-on accessors were already silent.
-        assert_rule_findings(&findings, "uncalled-accessor", 3);
-        for position in ["binary operator", "unary operator", "template literal"] {
+        // The positions TypeScript permits: a string-concatenation operand, a
+        // logical-not operand, the two unary numeric coercions (`-count` and
+        // `~count`, both clean against the published typings), and a template
+        // interpolation. The typed positions the 2026-08-17 narrowing dropped
+        // -- a class object value, a native attribute, and a computed key --
+        // are each a diagnostic of TypeScript's own, and the children
+        // attribute and the called and passed-on accessors were already
+        // silent. Binary arithmetic and bitwise operands stay silent because
+        // TypeScript rejects a function there (TS2365/TS2362).
+        assert_rule_findings(&findings, "uncalled-accessor", 5);
+        for position in [
+            "string concatenation",
+            "logical-not operator",
+            "numeric coercion",
+            "template literal",
+        ] {
             assert!(
                 findings.iter().any(|finding| {
                     finding["message"]

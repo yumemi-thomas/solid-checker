@@ -30,6 +30,22 @@ export function UnaryOperand() {
   return <div>{!count ? "empty" : "full"}</div>;
 }
 
+// Binary arithmetic and bitwise coercions are TypeScript-owned and must stay
+// silent: against solid-js@1.9.14, `count + 1` is TS2365 and `count - 1`,
+// `count * 2`, `count | 0` are TS2362, in both the strict and loose passes.
+export function TypeScriptOwnedOperators() {
+  const [count] = createSignal(0);
+  return <div>{count + 1}</div>;
+}
+
+// The *unary* numeric coercions are not TypeScript-owned: `-f`, `+f`, and `~f`
+// on a function are all clean against the published typings in both passes, so
+// a coerced accessor there is this checker's to report — two findings.
+export function UnaryNumericCoercions() {
+  const [count] = createSignal(0);
+  return <div>{-count}{~count}</div>;
+}
+
 // A template literal stringifies each interpolation whatever its type — finding.
 export function TemplateInterpolation() {
   const [count] = createSignal(0);

@@ -180,9 +180,7 @@ fn plan_file(
             // (1.x) prove it statically string/number or array-shaped. The
             // `on:` namespace form is a handler too.
             let handler = native
-                && ((attribute.namespace.is_none()
-                    && name.starts_with("on")
-                    && name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic))
+                && ((attribute.namespace.is_none() && name.starts_with("on"))
                     || attribute
                         .namespace
                         .is_some_and(|namespace| file.source_text(namespace) == Some("on")));
@@ -210,6 +208,19 @@ fn plan_file(
                 add_symbol(expression, false);
                 type_descriptor_spans.insert(expression);
             }
+            if handler {
+                runtime_value_domain_spans.insert(expression);
+                array_shape_spans.insert(expression);
+                if attribute.runtime_type_escape {
+                    let runtime_expression = file.ast.peel_ts_sugar_span(expression);
+                    if runtime_expression != expression {
+                        add_symbol(runtime_expression, false);
+                        type_descriptor_spans.insert(runtime_expression);
+                        runtime_value_domain_spans.insert(runtime_expression);
+                        array_shape_spans.insert(runtime_expression);
+                    }
+                }
+            }
             if static_value_type_required {
                 constant_value_spans.insert(expression);
             }
@@ -222,6 +233,7 @@ fn plan_file(
             // another rule's `smallest_contained_*` lookup.
             if handler && dialect.semantic_demands.jsx_handler_array_shapes {
                 array_shape_spans.insert(expression);
+                runtime_value_domain_spans.insert(expression);
                 // Solid's handler prop accepts a `[handler, data]` pair through
                 // an interface with members `0` and `1`. Deciding whether a
                 // value satisfies *that* needs the slot count and the first
@@ -229,6 +241,18 @@ fn plan_file(
                 // `array` for a plain array too, and a plain array has no
                 // numbered members, so TypeScript already rejects it.
                 tuple_shape_spans.insert(expression);
+                // Assertions and `satisfies` change the apparent type without
+                // changing the runtime value. Demand the peeled expression as
+                // a separate subject so the rule can distinguish an asserted
+                // array from an asserted function instead of treating the
+                // wrapper as a safety proof.
+                let runtime_expression = file.ast.peel_ts_sugar_span(expression);
+                if runtime_expression != expression {
+                    add_symbol(runtime_expression, false);
+                    array_shape_spans.insert(runtime_expression);
+                    tuple_shape_spans.insert(runtime_expression);
+                    runtime_value_domain_spans.insert(runtime_expression);
+                }
             }
             // A non-literal `keyed` value on a control-flow component picks
             // the children-callback overload at runtime; source discovery
@@ -345,6 +369,7 @@ fn plan_file(
             returned.value,
             solid_facts::ast::ReturnValueKind::Identifier
                 | solid_facts::ast::ReturnValueKind::Member
+                | solid_facts::ast::ReturnValueKind::Other
         ) {
             // Cleanup-return classification resolves the returned entity at
             // `returned.span` — the peeled expression, so `return (value)` and
@@ -378,7 +403,9 @@ fn plan_file(
     }
     // An expression-bodied arrow's return is recorded on its function fact,
     // not in `ast.returns`, so `() => value` needs the same pair of demands
-    // at the same span the block-bodied form uses.
+    // at the same span the block-bodied form uses -- including `Other`, whose
+    // cleanup classification reads the same value domain. Without it the two
+    // spellings of one return answer differently.
     for returned in file
         .ast
         .functions
@@ -389,6 +416,7 @@ fn plan_file(
             returned.value,
             solid_facts::ast::ReturnValueKind::Identifier
                 | solid_facts::ast::ReturnValueKind::Member
+                | solid_facts::ast::ReturnValueKind::Other
         ) {
             add_symbol(returned.span, false);
             runtime_value_domain_spans.insert(returned.span);
@@ -406,6 +434,7 @@ fn plan_file(
                     // escape obligations; callability alone is not enough for
                     // structurally typed object and primitive arguments.
                     type_descriptor_spans.insert(argument.span);
+                    runtime_value_domain_spans.insert(argument.span);
                     async_symbol_spans.insert(argument.span);
                     // `server-function-rich-argument` asks whether the value is
                     // one of a few standard-library runtime types. That is a
@@ -422,6 +451,60 @@ fn plan_file(
                     async_value_spans.push(argument.span);
                 }
                 _ => {}
+            }
+            // A transparent assertion makes the outer ArgumentValueKind
+            // `Other`, so this must sit outside the identifier match arm. The
+            // wrapper can change the apparent type at the full argument span
+            // without changing the runtime value; retain the peeled value's
+            // callability as separate evidence for every escaped argument.
+            if argument.runtime_type_escape
+                && let Some(value_span) = argument.value_span
+            {
+                add_symbol(value_span, true);
+                type_descriptor_spans.insert(value_span);
+                runtime_value_domain_spans.insert(value_span);
+            }
+            // SC7007 must classify inline values such as `new Date()` as
+            // well as identifiers. Demand the compiler's library identities
+            // at every non-spread argument in the 2.0 server-function
+            // dialect; an empty identity set proves the value is outside the
+            // rich transport set, while an absent fact remains explicit.
+            //
+            // Library identities are the same for every inhabitant of a type,
+            // so this demand is insensitive to the *value* written. The
+            // remaining three are not: a type descriptor and a constant value
+            // both spell the literal out, so demanding them at every argument
+            // made `createSignal(0)` -> `createSignal(1)` a project-wide
+            // TypeScript-table change that invalidated every late-stage cache.
+            // A primitive or nullish literal is already classified by the AST
+            // and cannot be a rich transport value except as a regexp, which
+            // its library identity still reports -- so those shapes are left
+            // out of the value-carrying demands.
+            if dialect.semantic_demands.server_argument_library_types && !argument.spread {
+                add_symbol(argument.span, false);
+                library_type_spans.insert(argument.span);
+                if !matches!(
+                    argument.runtime_value_kind,
+                    solid_facts::ast::RuntimeValueKind::Primitive
+                        | solid_facts::ast::RuntimeValueKind::Nullish
+                ) {
+                    type_descriptor_spans.insert(argument.span);
+                    constant_value_spans.insert(argument.span);
+                }
+            }
+            // Solid 2 effect bundles accept a callable `effect` property. An
+            // asserted or nullable identifier in that slot cannot be judged
+            // from callability alone because callability deliberately skips a
+            // nullish union constituent. Demand the complete runtime domain
+            // at the exact value occurrence when this argument contains such
+            // a statically named property.
+            let argument_value = argument.value_span.unwrap_or(argument.span);
+            for property in file.ast.object_properties.iter().filter(|property| {
+                argument_value.contains(property.span)
+                    && file.source_text(property.key) == Some("effect")
+            }) {
+                add_symbol(property.value, true);
+                runtime_value_domain_spans.insert(property.value);
             }
         }
     }
@@ -490,11 +573,17 @@ fn plan_file(
         let property = callee_property_location(&file.source, &callee);
         let mut planned = demand(callee.clone()).symbol(false);
         // Signature-to-argument mapping is consumed only when a call has an
-        // argument to classify, or when cleanup analysis must prove the
-        // callability of a returned call. Accessor reads and other ordinary
-        // zero-argument calls need only their type descriptor.
-        planned.resolved_call =
-            !call.arguments.is_empty() || returned_callees.contains(&call.callee);
+        // argument to classify, when cleanup analysis must prove the
+        // callability of a returned call, or when a computed call needs a
+        // validity gate before unresolved runtime dispatch is exposed.
+        let computed_dispatch = file
+            .ast
+            .computed_members
+            .binary_search(&file.ast.peel_ts_sugar_span(call.callee))
+            .is_ok();
+        planned.resolved_call = !call.arguments.is_empty()
+            || returned_callees.contains(&call.callee)
+            || computed_dispatch;
         planned.query_location = Some(property.clone());
         planned.type_descriptor = call.arguments.is_empty();
         demands.push(planned);

@@ -856,8 +856,9 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
         .find(|operand| operand.span == span)
     {
         return Some(match operand.kind {
-            solid_facts::ast::CoerciveOperandKind::Binary => "a binary operator",
-            solid_facts::ast::CoerciveOperandKind::Unary => "a unary operator",
+            solid_facts::ast::CoerciveOperandKind::StringConcatenation => "a string concatenation",
+            solid_facts::ast::CoerciveOperandKind::LogicalNot => "a logical-not operator",
+            solid_facts::ast::CoerciveOperandKind::NumericCoercion => "a numeric coercion",
         });
     }
 

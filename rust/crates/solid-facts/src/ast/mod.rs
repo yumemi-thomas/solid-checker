@@ -27,7 +27,7 @@ use oxc_syntax::{operator::AssignmentOperator, scope::ScopeFlags};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-pub const AST_FACTS_SCHEMA: u32 = 31;
+pub const AST_FACTS_SCHEMA: u32 = 34;
 
 mod span_index;
 
@@ -81,10 +81,14 @@ pub struct AstFacts {
     pub object_properties: Vec<ObjectPropertyFact>,
     #[serde(default)]
     pub template_literals: Vec<TemplateLiteralFact>,
-    /// Operands whose operator coerces a value. A function object is never a
-    /// useful substitute for calling a reactive accessor in one of these
-    /// slots. Equality, `in`, `instanceof`, `typeof`, `void`, and `delete`
-    /// are deliberately absent because they can inspect a function itself.
+    /// Operands in TypeScript-valid coercions where a function object is
+    /// provably observed as a value: string-literal concatenation, logical
+    /// not, and the unary numeric coercions. *Binary* arithmetic and bitwise
+    /// positions are deliberately absent because TypeScript rejects a function
+    /// operand there (`f + 1` is TS2365, `f - 1`/`f * 2`/`f | 0` are TS2362,
+    /// probed against solid-js@1.9.14 in both passes). The unary forms are
+    /// not: `-f`, `+f`, and `~f` are all accepted, so a coerced accessor there
+    /// is this checker's to report.
     #[serde(default)]
     pub coercive_operands: Vec<CoerciveOperandFact>,
     #[serde(default)]
@@ -150,20 +154,28 @@ pub struct ArgumentFact {
     /// option.
     #[serde(default)]
     pub exact_object_literal: bool,
-    /// True when the runtime value (behind TS sugar) is a primitive literal:
-    /// string, number, boolean, bigint, template, or regexp. Such a value is
-    /// proven to be neither a function nor an object.
+    /// True when the argument is an object literal with a closed, statically
+    /// named property set. Unlike `exact_object_literal`, accessors are
+    /// allowed because they still cannot add a hidden spread/computed key;
+    /// consumers may prove key absence but must not infer final property
+    /// values from this flag.
     #[serde(default)]
-    pub primitive_literal: bool,
-    /// True when the runtime value (behind TS sugar) is an object or array
-    /// literal — proven not callable, but possibly a store seed/value.
+    pub closed_object_literal: bool,
+    /// Normalized runtime shape underneath transparent TypeScript wrappers.
+    /// This is shared by arguments and object-property values so consumers do
+    /// not rebuild a partial literal taxonomy from source text.
     #[serde(default)]
-    pub container_literal: bool,
+    pub runtime_value_kind: RuntimeValueKind,
     /// The span of the runtime value expression when TypeScript sugar
     /// (parentheses, `as`, `satisfies`, `!`) wraps it; `None` when the
     /// argument span already is the runtime value.
     #[serde(default)]
     pub value_span: Option<Span>,
+    /// True when a TypeScript assertion or non-null assertion can make the
+    /// static call valid without changing the runtime value. Parentheses and
+    /// `satisfies` are transparent too, but cannot launder an invalid value.
+    #[serde(default)]
+    pub runtime_type_escape: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -175,6 +187,37 @@ pub enum ArgumentValueKind {
     Function,
     AsyncFunction,
     Other,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeValueKind {
+    #[default]
+    Unknown,
+    Nullish,
+    Primitive,
+    Function,
+    Object,
+    Array,
+}
+
+impl RuntimeValueKind {
+    #[must_use]
+    pub const fn is_proven_noncallable(self) -> bool {
+        matches!(
+            self,
+            Self::Nullish | Self::Primitive | Self::Object | Self::Array
+        )
+    }
+
+    /// A literal carrying data rather than behavior: a primitive, object, or
+    /// array literal. This is [`Self::is_proven_noncallable`] without the
+    /// nullish arm, which callers keep separate because `null`/`undefined`
+    /// answer a different question — absence, rather than a wrong value.
+    #[must_use]
+    pub const fn is_data_literal(self) -> bool {
+        matches!(self, Self::Primitive | Self::Object | Self::Array)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -311,6 +354,11 @@ pub struct ImportBindingFact {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub imported: Option<CompactString>,
     pub type_only: bool,
+    /// Whether Oxc resolved at least one runtime-value reference to this
+    /// binding. A syntactic value import used only in type positions is
+    /// normally erased by TypeScript and therefore does not load its module.
+    #[serde(default)]
+    pub runtime_referenced: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -466,6 +514,11 @@ pub struct JsxAttributeFact {
     pub value: Option<Span>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub expression: Option<Span>,
+    /// True when an assertion or non-null assertion can make the attribute
+    /// type-check without changing its runtime value. `satisfies` and
+    /// parentheses are transparent but do not launder an invalid value.
+    #[serde(default)]
+    pub runtime_type_escape: bool,
     pub value_kind: JsxAttributeValueKind,
 }
 
@@ -509,6 +562,14 @@ pub struct ObjectPropertyFact {
     pub key: Span,
     pub value: Span,
     pub computed: bool,
+    /// Runtime shape of the property value after transparent TypeScript
+    /// wrappers are removed.
+    #[serde(default)]
+    pub value_kind: RuntimeValueKind,
+    /// Whether a type or non-null assertion can make this property value
+    /// statically acceptable without changing what reaches the runtime.
+    #[serde(default)]
+    pub runtime_type_escape: bool,
     /// Declaration this shorthand property's value binding refers to, as
     /// resolved by the binder for that exact reference.
     ///
@@ -558,8 +619,11 @@ pub struct SpreadFact {
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum CoerciveOperandKind {
-    Binary,
-    Unary,
+    StringConcatenation,
+    LogicalNot,
+    /// Unary `+`, `-`, or `~`: the operand is read through `ToNumber`, and
+    /// TypeScript accepts a function there.
+    NumericCoercion,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1014,7 +1078,7 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
                 (ReturnValueKind::Function, None)
             }
-            Expression::Identifier(identifier) if identifier.name == "undefined" => {
+            Expression::Identifier(identifier) if self.is_global_undefined(identifier) => {
                 (ReturnValueKind::Undefined, None)
             }
             Expression::Identifier(_) => (ReturnValueKind::Identifier, None),
@@ -1079,9 +1143,9 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         Some(span(self.scoping.symbol_span(symbol)))
     }
 
-    fn argument_fact(argument: &Argument<'_>) -> ArgumentFact {
+    fn argument_fact(&self, argument: &Argument<'_>) -> ArgumentFact {
         let value = match argument {
-            Argument::Identifier(identifier) if identifier.name == "undefined" => {
+            Argument::Identifier(identifier) if self.is_global_undefined(identifier) => {
                 ArgumentValueKind::Undefined
             }
             Argument::Identifier(_) => ArgumentValueKind::Identifier,
@@ -1165,8 +1229,14 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
                 .collect(),
             _ => vec![],
         };
-        let property_names = match argument {
-            Argument::ObjectExpression(object) => object
+        // Property completeness belongs to the runtime object, not to the
+        // transparent TypeScript wrapper around it. This keeps
+        // `({ effect }) as EffectBundle` equivalent to `{ effect }` and lets
+        // consumers prove absence on `{} as SomeObject` without parsing
+        // source text.
+        let expression = argument.as_expression().map(peel_ts_sugar);
+        let property_names = match expression {
+            Some(Expression::ObjectExpression(object)) => object
                 .properties
                 .iter()
                 .filter_map(|property| {
@@ -1186,39 +1256,42 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         // `property_names` above (an `in` check sees it), but a literal that
         // contains one no longer proves final option *values*, so it is not
         // exact.
-        let exact_object_literal = match argument {
-            Argument::ObjectExpression(object) => object.properties.iter().all(|property| {
-                let ObjectPropertyKind::ObjectProperty(property) = property else {
-                    return false;
-                };
-                property.kind == PropertyKind::Init
-                    && matches!(&property.key, PropertyKey::StaticIdentifier(_))
-            }),
+        let exact_object_literal = match expression {
+            Some(Expression::ObjectExpression(object)) => {
+                object.properties.iter().all(|property| {
+                    let ObjectPropertyKind::ObjectProperty(property) = property else {
+                        return false;
+                    };
+                    property.kind == PropertyKind::Init
+                        && matches!(&property.key, PropertyKey::StaticIdentifier(_))
+                })
+            }
+            _ => false,
+        };
+        let closed_object_literal = match expression {
+            Some(Expression::ObjectExpression(object)) => {
+                object.properties.iter().all(|property| {
+                    let ObjectPropertyKind::ObjectProperty(property) = property else {
+                        return false;
+                    };
+                    matches!(&property.key, PropertyKey::StaticIdentifier(_))
+                })
+            }
             _ => false,
         };
         // Classify the runtime value behind TypeScript sugar so downstream
         // rules can reason about what actually reaches the call: a
         // `value as const` still passes the literal, and `target!` still
         // passes the member chain.
-        let expression = argument.as_expression().map(peel_ts_sugar);
-        let primitive_literal = matches!(
-            expression,
-            Some(
-                Expression::StringLiteral(_)
-                    | Expression::NumericLiteral(_)
-                    | Expression::BooleanLiteral(_)
-                    | Expression::BigIntLiteral(_)
-                    | Expression::RegExpLiteral(_)
-                    | Expression::TemplateLiteral(_)
-            )
-        );
-        let container_literal = matches!(
-            expression,
-            Some(Expression::ObjectExpression(_) | Expression::ArrayExpression(_))
-        );
+        let runtime_value_kind = expression.map_or(RuntimeValueKind::Unknown, |expression| {
+            self.runtime_value_kind(expression)
+        });
         let value_span = expression
             .map(|expression| span(expression.span()))
             .filter(|inner| *inner != span(argument.span()));
+        let runtime_type_escape = argument
+            .as_expression()
+            .is_some_and(contains_runtime_type_escape);
         ArgumentFact {
             span: span(argument.span()),
             spread: argument.is_spread(),
@@ -1228,10 +1301,54 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
             string_properties,
             property_names,
             exact_object_literal,
-            primitive_literal,
-            container_literal,
+            closed_object_literal,
+            runtime_value_kind,
             value_span,
+            runtime_type_escape,
         }
+    }
+
+    fn is_global_undefined(&self, identifier: &IdentifierReference<'_>) -> bool {
+        identifier.name == "undefined"
+            && identifier.reference_id.get().is_some_and(|reference| {
+                self.scoping.get_reference(reference).symbol_id().is_none()
+            })
+    }
+
+    fn runtime_value_kind(&self, expression: &Expression<'_>) -> RuntimeValueKind {
+        match peel_ts_sugar(expression) {
+            Expression::NullLiteral(_) => RuntimeValueKind::Nullish,
+            Expression::Identifier(identifier) if self.is_global_undefined(identifier) => {
+                RuntimeValueKind::Nullish
+            }
+            Expression::StringLiteral(_)
+            | Expression::NumericLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::BigIntLiteral(_)
+            | Expression::TemplateLiteral(_)
+            | Expression::RegExpLiteral(_) => RuntimeValueKind::Primitive,
+            Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_) => {
+                RuntimeValueKind::Function
+            }
+            Expression::ObjectExpression(_) => RuntimeValueKind::Object,
+            Expression::ArrayExpression(_) => RuntimeValueKind::Array,
+            _ => RuntimeValueKind::Unknown,
+        }
+    }
+}
+
+fn contains_runtime_type_escape(expression: &Expression<'_>) -> bool {
+    match expression {
+        Expression::TSAsExpression(_)
+        | Expression::TSTypeAssertion(_)
+        | Expression::TSNonNullExpression(_) => true,
+        Expression::ParenthesizedExpression(expression) => {
+            contains_runtime_type_escape(&expression.expression)
+        }
+        Expression::TSSatisfiesExpression(expression) => {
+            contains_runtime_type_escape(&expression.expression)
+        }
+        _ => false,
     }
 }
 
@@ -1253,6 +1370,7 @@ fn transparent_inner_expression<'a>(expression: &'a Expression<'a>) -> Option<&'
     match expression {
         Expression::ParenthesizedExpression(expression) => Some(&expression.expression),
         Expression::TSAsExpression(expression) => Some(&expression.expression),
+        Expression::TSTypeAssertion(expression) => Some(&expression.expression),
         Expression::TSSatisfiesExpression(expression) => Some(&expression.expression),
         Expression::TSNonNullExpression(expression) => Some(&expression.expression),
         _ => None,
@@ -1313,7 +1431,11 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             callee: span(callee_span),
             direct_callee: matches!(call.callee, Expression::Identifier(_)),
             type_arguments: call.type_arguments.is_some(),
-            arguments: call.arguments.iter().map(Self::argument_fact).collect(),
+            arguments: call
+                .arguments
+                .iter()
+                .map(|argument| self.argument_fact(argument))
+                .collect(),
             static_callee: self.is_static_callee(callee_span),
             owned_write_option: call.arguments.get(1).is_some_and(|argument| {
                 let Argument::ObjectExpression(options) = argument else {
@@ -1347,7 +1469,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             arguments: expression
                 .arguments
                 .iter()
-                .map(Self::argument_fact)
+                .map(|argument| self.argument_fact(argument))
                 .collect(),
             static_callee: self.is_static_callee(callee_span),
             owned_write_option: false,
@@ -1523,6 +1645,13 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         ImportDeclarationSpecifier::ImportSpecifier(specifier)
                             if specifier.import_kind.is_type()
                     ),
+                runtime_referenced: local.symbol_id.get().is_some_and(|symbol| {
+                    self.scoping
+                        .get_resolved_references(symbol)
+                        .any(|reference| {
+                            reference.is_value() && !reference.flags().is_value_as_type()
+                        })
+                }),
             });
         }
         if bindings.is_empty() {
@@ -1533,6 +1662,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                 },
                 imported: None,
                 type_only: false,
+                runtime_referenced: true,
             });
         }
         self.imports.push(ImportFact {
@@ -1823,6 +1953,8 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             key: span(property.key.span()),
             value: span(property.value.span()),
             computed: property.computed,
+            value_kind: self.runtime_value_kind(&property.value),
+            runtime_type_escape: contains_runtime_type_escape(&property.value),
             shorthand_binding: self.shorthand_binding(property),
         });
         walk::walk_object_property(self, property);
@@ -1958,25 +2090,37 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                             )
                         }
                     };
-                    let (value, expression, value_kind) = match attribute.value.as_ref() {
-                        None => (None, None, JsxAttributeValueKind::Boolean),
-                        Some(JSXAttributeValue::StringLiteral(value)) => {
-                            (Some(span(value.span)), None, JsxAttributeValueKind::String)
-                        }
-                        Some(JSXAttributeValue::ExpressionContainer(container)) => (
-                            Some(span(container.span)),
-                            Some(span(container.expression.span())),
-                            JsxAttributeValueKind::Expression,
-                        ),
-                        Some(JSXAttributeValue::Element(value)) => {
-                            (Some(span(value.span)), None, JsxAttributeValueKind::Element)
-                        }
-                        Some(JSXAttributeValue::Fragment(value)) => (
-                            Some(span(value.span)),
-                            None,
-                            JsxAttributeValueKind::Fragment,
-                        ),
-                    };
+                    let (value, expression, runtime_type_escape, value_kind) =
+                        match attribute.value.as_ref() {
+                            None => (None, None, false, JsxAttributeValueKind::Boolean),
+                            Some(JSXAttributeValue::StringLiteral(value)) => (
+                                Some(span(value.span)),
+                                None,
+                                false,
+                                JsxAttributeValueKind::String,
+                            ),
+                            Some(JSXAttributeValue::ExpressionContainer(container)) => (
+                                Some(span(container.span)),
+                                Some(span(container.expression.span())),
+                                container
+                                    .expression
+                                    .as_expression()
+                                    .is_some_and(contains_runtime_type_escape),
+                                JsxAttributeValueKind::Expression,
+                            ),
+                            Some(JSXAttributeValue::Element(value)) => (
+                                Some(span(value.span)),
+                                None,
+                                false,
+                                JsxAttributeValueKind::Element,
+                            ),
+                            Some(JSXAttributeValue::Fragment(value)) => (
+                                Some(span(value.span)),
+                                None,
+                                false,
+                                JsxAttributeValueKind::Fragment,
+                            ),
+                        };
                     Some(JsxAttributeFact {
                         span: span(attribute.span),
                         name: span(name),
@@ -1985,6 +2129,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         directive_binding,
                         value,
                         expression,
+                        runtime_type_escape,
                         value_kind,
                     })
                 })
@@ -2045,23 +2190,24 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     fn visit_binary_expression(&mut self, expression: &BinaryExpression<'a>) {
         use oxc_syntax::operator::BinaryOperator;
 
-        if !matches!(
-            expression.operator,
-            BinaryOperator::Equality
-                | BinaryOperator::Inequality
-                | BinaryOperator::StrictEquality
-                | BinaryOperator::StrictInequality
-                | BinaryOperator::In
-                | BinaryOperator::Instanceof
-        ) {
+        // Most binary operators reject function operands themselves, so a
+        // checker finding there would duplicate TypeScript. Keep only the
+        // syntactically proven string-concatenation subset: `+` with a string
+        // literal on one side. Broader concatenation requires the operator's
+        // resolved signature, which this structural fact deliberately does
+        // not guess.
+        if expression.operator == BinaryOperator::Addition
+            && (matches!(&expression.left, Expression::StringLiteral(_))
+                || matches!(&expression.right, Expression::StringLiteral(_)))
+        {
             self.coercive_operands.extend([
                 CoerciveOperandFact {
                     span: span(expression.left.span()),
-                    kind: CoerciveOperandKind::Binary,
+                    kind: CoerciveOperandKind::StringConcatenation,
                 },
                 CoerciveOperandFact {
                     span: span(expression.right.span()),
-                    kind: CoerciveOperandKind::Binary,
+                    kind: CoerciveOperandKind::StringConcatenation,
                 },
             ]);
         }
@@ -2071,16 +2217,23 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
     fn visit_unary_expression(&mut self, expression: &UnaryExpression<'a>) {
         use oxc_syntax::operator::UnaryOperator;
 
-        if matches!(
-            expression.operator,
-            UnaryOperator::UnaryPlus
-                | UnaryOperator::UnaryNegation
-                | UnaryOperator::LogicalNot
-                | UnaryOperator::BitwiseNot
-        ) {
+        // Every unary operator here accepts a function operand in TypeScript
+        // (probed against the published typings: `-f`, `+f`, `~f`, and `!f`
+        // are all clean in the strict and loose passes), so a coerced accessor
+        // in one of these slots is this checker's to report rather than a
+        // duplicate of a type error. `typeof`, `void`, and `delete` stay out:
+        // they inspect the function itself.
+        let kind = match expression.operator {
+            UnaryOperator::LogicalNot => Some(CoerciveOperandKind::LogicalNot),
+            UnaryOperator::UnaryPlus | UnaryOperator::UnaryNegation | UnaryOperator::BitwiseNot => {
+                Some(CoerciveOperandKind::NumericCoercion)
+            }
+            _ => None,
+        };
+        if let Some(kind) = kind {
             self.coercive_operands.push(CoerciveOperandFact {
                 span: span(expression.argument.span()),
-                kind: CoerciveOperandKind::Unary,
+                kind,
             });
         }
         walk::walk_unary_expression(self, expression);
@@ -2385,6 +2538,86 @@ const mixed = () => {
     }
 
     #[test]
+    fn object_completeness_survives_transparent_typescript_wrappers() {
+        let source = "effect(compute, {} as unknown as Apply); effect(compute, ({ effect: apply }) satisfies Bundle); effect(compute, [] as unknown as Apply); effect(compute, null!); effect(compute, <Apply><unknown>5);";
+        let facts = extract("effect.ts", source).unwrap();
+        let empty = &facts.calls[0].arguments[1];
+        assert_eq!(empty.runtime_value_kind, RuntimeValueKind::Object);
+        assert!(empty.runtime_value_kind.is_data_literal());
+        assert!(empty.exact_object_literal);
+        assert!(empty.closed_object_literal);
+        assert!(empty.property_names.is_empty());
+        assert!(empty.runtime_type_escape);
+
+        let bundle = &facts.calls[1].arguments[1];
+        assert_eq!(bundle.runtime_value_kind, RuntimeValueKind::Object);
+        assert!(bundle.exact_object_literal);
+        assert!(bundle.closed_object_literal);
+        assert!(!bundle.runtime_type_escape);
+        assert_eq!(
+            bundle
+                .property_names
+                .iter()
+                .filter_map(|span| source.get(span.start as usize..span.end as usize))
+                .collect::<Vec<_>>(),
+            ["effect"]
+        );
+
+        let array = &facts.calls[2].arguments[1];
+        assert_eq!(array.runtime_value_kind, RuntimeValueKind::Array);
+        assert!(array.runtime_value_kind.is_data_literal());
+        assert!(array.runtime_type_escape);
+
+        let nullish = &facts.calls[3].arguments[1];
+        assert_eq!(nullish.runtime_value_kind, RuntimeValueKind::Nullish);
+        assert!(nullish.runtime_type_escape);
+
+        let angle_asserted = &facts.calls[4].arguments[1];
+        assert_eq!(
+            angle_asserted.runtime_value_kind,
+            RuntimeValueKind::Primitive
+        );
+        assert!(angle_asserted.runtime_type_escape);
+    }
+
+    #[test]
+    fn closed_object_literals_allow_accessors_but_reject_hidden_keys() {
+        let facts = extract(
+            "objects.ts",
+            "merge({ get value() { return 1; } }); merge({ ...other }); merge({ [key]: 1 });",
+        )
+        .unwrap();
+        let getter = &facts.calls[0].arguments[0];
+        assert!(getter.closed_object_literal);
+        assert!(!getter.exact_object_literal);
+        assert!(!facts.calls[1].arguments[0].closed_object_literal);
+        assert!(!facts.calls[2].arguments[0].closed_object_literal);
+    }
+
+    #[test]
+    fn global_undefined_is_distinct_from_a_shadowed_binding() {
+        let facts = extract(
+            "effect.ts",
+            r#"effect(undefined!);
+function run(undefined: () => void) {
+    effect(undefined!);
+    return undefined;
+}"#,
+        )
+        .unwrap();
+
+        assert_eq!(
+            facts.calls[0].arguments[0].runtime_value_kind,
+            RuntimeValueKind::Nullish
+        );
+        assert_eq!(
+            facts.calls[1].arguments[0].runtime_value_kind,
+            RuntimeValueKind::Unknown
+        );
+        assert_eq!(facts.returns[0].value, ReturnValueKind::Identifier);
+    }
+
+    #[test]
     fn retains_named_callbacks_in_object_arguments() {
         let facts = extract(
             "effect.ts",
@@ -2474,7 +2707,10 @@ const mixed = () => {
     fn retains_type_only_import_specifiers() {
         let facts = extract(
             "types.ts",
-            r#"import value, { type Shape, runtime as renamed } from "./dependency";"#,
+            r#"import value, { type Shape, runtime as renamed, OnlyType } from "./dependency";
+type Alias = OnlyType;
+void value;
+renamed();"#,
         )
         .unwrap();
 
@@ -2490,6 +2726,27 @@ const mixed = () => {
                 .iter()
                 .filter(|binding| binding.imported.as_deref() != Some("Shape"))
                 .all(|binding| !binding.type_only)
+        );
+        assert!(
+            !bindings
+                .iter()
+                .find(|binding| binding.imported.as_deref() == Some("Shape"))
+                .unwrap()
+                .runtime_referenced
+        );
+        assert!(
+            !bindings
+                .iter()
+                .find(|binding| binding.imported.as_deref() == Some("OnlyType"))
+                .unwrap()
+                .runtime_referenced
+        );
+        assert!(
+            bindings
+                .iter()
+                .find(|binding| binding.imported.as_deref() == Some("runtime"))
+                .unwrap()
+                .runtime_referenced
         );
     }
 
@@ -2566,8 +2823,8 @@ const mixed = () => {
     }
 
     #[test]
-    fn retains_only_operators_that_coerce_accessor_values() {
-        let source = "const a = signal + 1; const b = -signal; const c = !signal; const d = signal === other; const e = typeof signal;";
+    fn retains_only_typescript_valid_operators_that_coerce_accessor_values() {
+        let source = "const a = signal + 1; const b = -signal; const c = !signal; const d = signal === other; const e = typeof signal; const f = \"value: \" + signal;";
         let facts = extract("operators.ts", source).unwrap();
         let operands = facts
             .coercive_operands
@@ -2577,7 +2834,9 @@ const mixed = () => {
             })
             .collect::<Vec<_>>();
 
-        assert_eq!(operands, ["signal", "1", "signal", "signal"]);
+        // `signal + 1` is TS2365 and stays out; `-signal`, `!signal`, and the
+        // string-literal concatenation are all TypeScript-clean and stay in.
+        assert_eq!(operands, ["signal", "signal", "\"value: \"", "signal"]);
     }
 
     #[test]
@@ -2692,6 +2951,35 @@ if (Array.isArray(callbacks)) callbacks.push(fn);
         assert_eq!(facts.object_properties.len(), 1);
         assert_eq!(facts.logical_expressions.len(), 1);
         assert_eq!(facts.conditional_expressions.len(), 1);
+    }
+
+    #[test]
+    fn jsx_attributes_distinguish_runtime_type_escapes_from_checked_wrappers() {
+        let source = r#"<div
+  onClick={handler as unknown as () => void}
+  onInput={handler satisfies () => void}
+  onFocus={(handler)}
+  onBlur={handler!}
+/>"#;
+        let facts = extract("attributes.tsx", source).unwrap();
+        let element = &facts.jsx_elements[0];
+        let escaped = element
+            .attributes
+            .iter()
+            .filter(|attribute| attribute.runtime_type_escape)
+            .filter_map(|attribute| {
+                source.get(attribute.name.start as usize..attribute.name.end as usize)
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(escaped, ["onClick", "onBlur"]);
+        for attribute in &element.attributes {
+            let expression = attribute.expression.expect("expression attribute");
+            let runtime = facts.peel_ts_sugar_span(expression);
+            assert_eq!(
+                source.get(runtime.start as usize..runtime.end as usize),
+                Some("handler")
+            );
+        }
     }
 
     #[test]

@@ -341,11 +341,27 @@ happens to land on four either way, so `diagnostics_process.rs` asserts each
 surviving spelling and each dropped one **by span** — a count alone cannot tell
 this narrowing from a regression that dropped the wrong three.
 
-### Known residual duplicate, inside a surviving position
+### Closed 2026-08-18: SC1005 no longer overlaps arithmetic diagnostics
 
-| Code | Rule | The residue | Why it stays |
-| --- | --- | --- | --- |
-| SC1005 | `uncalled-accessor` | **Residual, inside a surviving position.** An *arithmetic* binary operand (`count + 1`) is TS2365, while a string-concatenation operand in the same position is silent. Separating them needs a fact distinguishing concatenation from arithmetic — the operand's static type, or the operator's resolved signature — which the checker does not have. Reported today; recorded as a known duplicate rather than dropping the whole binary position and losing the concatenation case with it. | Everything else the row above keeps. |
+The residue was an *arithmetic* binary operand (`count + 1`, TS2365) sharing a
+position with a string-concatenation operand that is silent. The fact that
+separates them is structural, not typed: `AstFacts::coercive_operands` now
+records binary `+` only when a string literal sits on one side, so the
+arithmetic and bitwise binary positions stop being SC1005 positions at all.
+Probed against solid-js@1.9.14 through `scripts/tsc-oracle.mjs`: `count + 1` is
+TS2365, and `count - 1`, `count * 2`, and `count | 0` are TS2362, in both the
+strict and loose passes. Concatenations whose string behavior would need a
+resolved operator signature stay outside the violation claim rather than being
+guessed from source text.
+
+The **unary** operators look like they should follow, and do not. Probed the
+same way, `-f`, `+f`, and `~f` on a function value are clean in both passes,
+exactly like `!f` — TypeScript reports nothing for any of the four. So they
+remain SC1005 positions, recorded as `CoerciveOperandKind::NumericCoercion`: an
+accessor coerced there is silently `NaN`, which no type error covers. Pinned by
+an `expect: "silent"` / `checker: "reports"` oracle case and by
+`fixtures/reactive-ir/uncalled-accessor-v2`, whose `TypeScriptOwnedOperators`
+case holds only the binary spellings.
 
 ### Independent — keep
 
