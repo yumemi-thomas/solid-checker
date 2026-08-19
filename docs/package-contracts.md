@@ -213,18 +213,28 @@ says so: the consumer does not own that artifact, so the options are to install
 the version this checker audited or to upgrade `solid-checker` to a release
 that audits the installed one.
 
-Analysis fails closed on a stale contract rather than continuing without it: a
-contract for another version is not weaker evidence, it is evidence about a
-different artifact. The error names both versions and the same regeneration
-command the report prints, so a stale contract surfaces the same way whether it
-is found by `contract check` or by an ordinary run.
+Analysis fails closed on the contract without failing the run. The stale
+contract is refused — a contract for another version is not weaker evidence, it
+is evidence about a different artifact — and the package is reported exactly as
+an uncontracted one: an uncertifiable `SC9005 package-contract-missing` finding
+at the package import, snapshot status `uncertifiable`, and `--certify` exiting
+1. The message states which case applies, naming both versions rather than
+claiming no contract exists, and the hint carries the same remedy the report
+prints.
 
-Normal analysis performs the same completeness check for *missing* contracts. A
-missing contract emits the uncertifiable `SC9005 package-contract-missing`
-finding at the package import, changes the snapshot status to `uncertifiable`,
-and causes `--certify` to exit with status 1. This behavior is shared by
-one-shot and retained-daemon checks. Use `contract check` when only the focused
-coverage report is needed.
+Refusing the contract without stopping the run is what keeps one upgraded
+dependency from blanking out every other finding in the project, which matters
+most in an editor. It does not weaken enforcement: the project cannot certify
+until the contract is regenerated and reviewed.
+
+A *malformed* contract — unparseable, wrong schema version, wrong package name,
+mismatched artifact hashes — still fails the analysis outright. That is a broken
+file rather than drift, and no finding can describe a document the loader could
+not read.
+
+Missing and unverified contracts take the same path and have always done so.
+This behavior is shared by one-shot and retained-daemon checks. Use
+`contract check` when only the focused coverage report is needed.
 
 Validate contracts and their artifacts without opening a TypeScript project:
 

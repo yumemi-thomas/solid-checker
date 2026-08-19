@@ -255,6 +255,28 @@ fn bundled_contract_refuses_a_different_installed_version() {
     let remedy = report["packages"][0]["remedy"].as_str().unwrap();
     assert!(remedy.contains("upgrade solid-checker"), "{remedy}");
     assert!(!remedy.contains("contract generate"), "{remedy}");
+
+    // Analysis reports the same fact. Before, an unaudited solid-js version
+    // reported as "has no reactivity contract", which sent users looking for a
+    // contract to write for solid-js itself.
+    let analysis = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--format", "json", "--certify", "--project"])
+        .arg(directory.join("tsconfig.json"))
+        .output()
+        .unwrap();
+    assert_eq!(analysis.status.code(), Some(1));
+    let snapshot: serde_json::Value = serde_json::from_slice(&analysis.stdout).unwrap();
+    assert_eq!(snapshot["status"], "uncertifiable");
+    let message = snapshot["findings"][0]["message"].as_str().unwrap();
+    assert!(
+        message.contains("is audited by this checker at version"),
+        "{message}"
+    );
+    assert!(message.contains("2.0.0-beta.25 is installed"), "{message}");
+    let hint = snapshot["findings"][0]["hint"].as_str().unwrap();
+    assert!(hint.contains("upgrade solid-checker"), "{hint}");
+    assert!(!hint.contains("contract generate"), "{hint}");
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -1598,16 +1620,31 @@ fn cli_reports_a_project_owned_contract_that_the_installed_version_outran() {
         "{rendered}"
     );
 
-    // Analysis still fails closed: a contract for another version is not
-    // evidence for the installed one. The error names the same remedy.
-    let analysis = check(&["--format", "json", "--project"]);
-    assert_ne!(analysis.status.code(), Some(0));
-    let stderr = String::from_utf8_lossy(&analysis.stderr);
-    assert!(stderr.contains("stale"), "{stderr}");
+    // Analysis fails closed on the contract without failing the run: the stale
+    // contract is refused, and the package reports as uncertifiable at the
+    // import instead of taking every other finding in the project down with it.
+    let analysis = check(&["--format", "json", "--certify", "--project"]);
+    assert_eq!(analysis.status.code(), Some(1));
+    let snapshot: serde_json::Value = serde_json::from_slice(&analysis.stdout).unwrap();
+    assert_eq!(snapshot["status"], "uncertifiable");
+    let finding = &snapshot["findings"][0];
+    assert_eq!(finding["id"], "SC9005");
+    assert_eq!(finding["rule"], "package-contract-missing");
+    // The message states what is true — a contract exists, for another
+    // version — rather than claiming there is none.
+    let message = finding["message"].as_str().unwrap();
     assert!(
-        stderr.contains("solid-checker contract generate"),
-        "{stderr}"
+        message.contains("has a reactivity contract for version 1.0.0"),
+        "{message}"
     );
-    assert!(stderr.contains("solid-checker contract check"), "{stderr}");
+    assert!(message.contains("version 1.1.0 is installed"), "{message}");
+    let hint = finding["hint"].as_str().unwrap();
+    assert!(hint.contains("solid-checker contract generate"), "{hint}");
+    assert!(
+        finding["primaryLocation"]["path"]
+            .as_str()
+            .is_some_and(|path| path.ends_with("App.tsx")),
+        "the finding anchors at the import, not at the project root"
+    );
     fs::remove_dir_all(directory).unwrap();
 }

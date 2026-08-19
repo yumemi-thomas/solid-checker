@@ -2,13 +2,22 @@
 
 `SC9005` · **error** · uncertifiable
 
-An imported package integrates with Solid but has no reactivity contract.
+An imported package integrates with Solid but has no reactivity contract this
+checker can rely on.
 
 ## What it does
 
 Flags imported packages whose own manifest declares a dependency on `solid-js` or
-`@solidjs/*` but for which no contract could be found. Contracts are discovered in
-this order:
+`@solidjs/*` and for which no usable contract could be found. The rule fires in
+three cases, and the message says which one applies:
+
+- **missing** — no contract was found at any tier;
+- **stale** — a contract was found, but it describes a different version of the
+  package than the one installed;
+- **unverified** — a contract was found, but its evidence is `inferred`: its
+  claims were generated and never reviewed.
+
+Contracts are discovered in this order:
 
 1. explicit `--contract <PATH>` arguments,
 2. a local override at `.solid-checker/contracts/<package>/solid-reactivity.json`,
@@ -21,6 +30,27 @@ every subpath to its package root.
 
 General-purpose packages that do not depend on Solid are deliberately exempt — they
 cannot participate in reactivity, so they need no contract.
+
+
+### Stale contracts
+
+A contract records the exact package version it was generated and reviewed
+against, and is matched by exact version equality against the installed
+package's manifest. When the two disagree, the contract is refused: it is
+evidence about an artifact the project no longer has, not weaker evidence about
+the one it does. The refusal is reported here rather than raised as an error, so
+one upgraded dependency does not blank out every other finding in the project.
+
+The message names both versions. For a project-owned or package-published
+contract, regenerate it and review the checklist written beside it:
+
+```sh
+solid-checker contract generate --package-root node_modules/<package> \
+  --output .solid-checker/contracts/<package>/solid-reactivity.json
+```
+
+`solid-checker contract check` lists every package in this state at once, with
+the command for each.
 
 ## Why is this analysis-limiting?
 

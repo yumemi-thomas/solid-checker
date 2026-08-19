@@ -420,10 +420,25 @@ impl CatalogCapabilities {
 }
 
 /// Why an imported Solid-aware package cannot provide usable summaries.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum PackageContractIssueKind {
     Missing,
     Unverified,
+    /// A contract exists and is well-formed, but describes a different release
+    /// of the package than the one installed. It is evidence about an artifact
+    /// this project no longer has, so it is dropped rather than applied.
+    ///
+    /// `Bundled` is the same fact about this checker's own audited contract,
+    /// which the consumer cannot regenerate; the two carry different remedies
+    /// and so cannot share one kind.
+    Stale {
+        contract_version: String,
+        installed_version: String,
+    },
+    StaleBundled {
+        audited_version: String,
+        installed_version: String,
+    },
 }
 
 /// The backend-owned package discovery facts a catalog words as SC9005.
