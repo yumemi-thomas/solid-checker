@@ -18,7 +18,21 @@ import { runNative } from "../bin/launcher.mjs";
 import { expandContract, normalizeContract } from "./contract-document.mjs";
 
 export const packageContractHelp = `Usage:
+  solid-checker contract check [OPTIONS]
   solid-checker contract generate [OPTIONS]
+
+contract check reports every imported Solid package whose contract is missing,
+unverified, or stale, and prints the command that resolves each one. It exits 1
+when any package needs action.
+
+Options:
+  --project <PATH>       TypeScript project (default: tsconfig.json)
+  --format <text|json>   Output format (default: text)
+  --contract <FILE>      Contract override to classify (repeatable)
+
+contract generate writes a package's solid-reactivity.json and a review
+checklist beside it. Generation never promotes inferred claims: the checklist
+still has to be reviewed.
 
 Options:
   --package-root <DIR>   Package root (default: current directory)

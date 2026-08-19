@@ -243,7 +243,18 @@ fn bundled_contract_refuses_a_different_installed_version() {
     assert_eq!(output.status.code(), Some(1));
     let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
     assert_eq!(report["missing"], 1);
-    assert_eq!(report["packages"][0]["status"], "missing");
+    assert_eq!(report["stale"], 1);
+    // The dialect audited another solid-js release, so the installed one is
+    // unaudited rather than uncontracted. The remedy names the audited version
+    // instead of a generation command the consumer must not run for a bundled
+    // package.
+    assert_eq!(report["packages"][0]["status"], "stale");
+    let detail = report["packages"][0]["detail"].as_str().unwrap();
+    assert!(detail.contains("audited solid-js"), "{detail}");
+    assert!(detail.contains("2.0.0-beta.25 is installed"), "{detail}");
+    let remedy = report["packages"][0]["remedy"].as_str().unwrap();
+    assert!(remedy.contains("upgrade solid-checker"), "{remedy}");
+    assert!(!remedy.contains("contract generate"), "{remedy}");
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -1448,5 +1459,155 @@ fn package_generator_uses_bundled_solid_contract_for_renderer_reexports() {
             "function"
         );
     }
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// A project-owned contract that was reviewed against an earlier release of the
+/// package is stale after an upgrade: it is evidence about an artifact this
+/// project no longer installs.
+///
+/// The report must classify it rather than fail, and the analysis must fail
+/// closed with a message that names the command that fixes it. Between them
+/// these are how a user notices drift at all.
+#[test]
+fn cli_reports_a_project_owned_contract_that_the_installed_version_outran() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let fixture = root.join("fixtures/reactive-ir/package-consumer");
+    let directory = temporary_directory("stale-contract");
+    for file in ["App.tsx", "jsx.d.ts", "tsconfig.json"] {
+        fs::copy(fixture.join(file), directory.join(file)).unwrap();
+    }
+    let package = directory.join("node_modules/reactive-package");
+    fs::create_dir_all(&package).unwrap();
+    fs::copy(
+        fixture.join("node_modules/reactive-package/index.d.ts"),
+        package.join("index.d.ts"),
+    )
+    .unwrap();
+    let manifest = |version: &str| {
+        format!(
+            r#"{{
+  "name": "reactive-package",
+  "version": "{version}",
+  "types": "index.d.ts",
+  "peerDependencies": {{ "solid-js": "^2.0.0" }}
+}}
+"#
+        )
+    };
+    fs::write(package.join("package.json"), manifest("1.0.0")).unwrap();
+    let local = directory.join(".solid-checker/contracts/reactive-package");
+    fs::create_dir_all(&local).unwrap();
+    fs::write(
+        local.join("solid-reactivity.json"),
+        r#"{
+  "schemaVersion": 1,
+  "package": {
+    "name": "reactive-package",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "artifacts": {},
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "reactiveReads": [
+        { "kind": "accessor", "label": "project-owned reactive value" }
+      ]
+    }
+  },
+  "entrypoints": {
+    ".": { "exports": { "function-1": ["readCount"] } }
+  },
+  "evidence": {
+    "kind": "reviewed",
+    "generator": "application developer"
+  }
+}
+"#,
+    )
+    .unwrap();
+
+    let check = |arguments: &[&str]| {
+        Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+            .env("SOLID_TYPEFACTS_BIN", &typefacts)
+            .args(arguments)
+            .arg(directory.join("tsconfig.json"))
+            .output()
+            .unwrap()
+    };
+
+    let fresh = check(&["--format", "json", "--check-contracts", "--project"]);
+    assert!(
+        fresh.status.success(),
+        "{}",
+        String::from_utf8_lossy(&fresh.stderr)
+    );
+    let report: serde_json::Value = serde_json::from_slice(&fresh.stdout).unwrap();
+    assert_eq!(report["packages"][0]["status"], "local");
+    assert_eq!(report["stale"], 0);
+    // A certifying status carries neither a complaint nor an action.
+    assert!(report["packages"][0]["remedy"].is_null());
+    assert!(report["packages"][0]["detail"].is_null());
+
+    // The dependency is upgraded; the reviewed contract still describes 1.0.0.
+    fs::write(package.join("package.json"), manifest("1.1.0")).unwrap();
+
+    let stale = check(&["--format", "json", "--check-contracts", "--project"]);
+    assert_eq!(stale.status.code(), Some(1));
+    let report: serde_json::Value = serde_json::from_slice(&stale.stdout).unwrap();
+    assert_eq!(report["packages"][0]["status"], "stale");
+    assert_eq!(report["stale"], 1);
+    assert_eq!(report["missing"], 1);
+    // The drift itself is reported, not just the label: both versions are
+    // named, so the user does not have to open two files to see what moved.
+    assert_eq!(
+        report["packages"][0]["detail"],
+        "the contract describes reactive-package 1.0.0, but 1.1.0 is installed"
+    );
+    let remedy = report["packages"][0]["remedy"].as_str().unwrap();
+    assert!(
+        remedy.contains("solid-checker contract generate"),
+        "{remedy}"
+    );
+    assert!(
+        remedy.contains(".solid-checker/contracts/reactive-package/solid-reactivity.json"),
+        "{remedy}"
+    );
+
+    // Text output is the default one a user gets from `contract check`, with no
+    // --format at all, and it carries the same remedy.
+    let text = check(&["--check-contracts", "--project"]);
+    assert_eq!(text.status.code(), Some(1));
+    let rendered = String::from_utf8_lossy(&text.stdout);
+    assert!(rendered.contains("reactive-package: stale"), "{rendered}");
+    assert!(
+        rendered.contains("the contract describes reactive-package 1.0.0, but 1.1.0 is installed"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("solid-checker contract generate"),
+        "{rendered}"
+    );
+    assert!(
+        rendered.contains("1 of 1 package contracts need action (1 stale)"),
+        "{rendered}"
+    );
+
+    // Analysis still fails closed: a contract for another version is not
+    // evidence for the installed one. The error names the same remedy.
+    let analysis = check(&["--format", "json", "--project"]);
+    assert_ne!(analysis.status.code(), Some(0));
+    let stderr = String::from_utf8_lossy(&analysis.stderr);
+    assert!(stderr.contains("stale"), "{stderr}");
+    assert!(
+        stderr.contains("solid-checker contract generate"),
+        "{stderr}"
+    );
+    assert!(stderr.contains("solid-checker contract check"), "{stderr}");
     fs::remove_dir_all(directory).unwrap();
 }

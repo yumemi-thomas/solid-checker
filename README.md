@@ -164,7 +164,7 @@ Run `solid-checker --help` for the full list. The options you'll reach for most:
 | `--dialect <solid-v1\|solid-v2>` | Override automatic Solid major-version detection. |
 | `--format <default\|text\|json>` | Output format. `default` prints framed source excerpts, `text` is compact, `json` is machine-readable. |
 | `--certify` | Exit non-zero unless the project is fully certified. Use this in CI. |
-| `--check-contracts` | Report imported Solid packages that ship no reactivity contract. |
+| `--check-contracts` | Report imported Solid packages whose reactivity contract is missing, unverified, or stale, with the command that fixes each. Also spelled `solid-checker contract check`. |
 | `-h`, `--help` | Print help. |
 
 Authoring a package contract (see [Publishing a Solid library?](#publishing-a-solid-library)):
@@ -187,11 +187,20 @@ When that dependency's source isn't part of your project, it relies on a
 ships none, the check reports the uncertifiable `SC9005 package-contract-missing`
 finding and `--certify` fails.
 
-List which of your dependencies are missing a contract:
+List which of your dependencies are missing a contract, and which have one
+that no longer matches the installed version:
 
 ```sh
-solid-checker --project tsconfig.json --check-contracts
+solid-checker contract check
 ```
+
+Each package is reported as `bundled`, `published`, `local`, `explicit`,
+`unverified`, `stale`, or `missing`, and every status that cannot certify
+prints the command that resolves it. The command exits non-zero when any
+package needs action, so it also works as a CI gate. A `stale` contract is one
+generated against a different version of the package than the one installed —
+after an upgrade, regenerate and re-review it. See
+[docs/package-contracts.md](docs/package-contracts.md#checking-contract-coverage-and-freshness).
 
 You don't have to wait for the maintainer. You can supply the contract yourself
 and `solid-checker` will pick it up automatically from
