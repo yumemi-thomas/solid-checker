@@ -132,8 +132,9 @@ WASM API from the same package:
 import { checkSync } from "solid-checker";
 ```
 
-Supported targets are Linux (x64 and arm64), macOS (x64 and arm64), and
-Windows (x64). npm installs only the matching
+Supported targets are Linux (x64 and arm64), macOS (arm64), and
+Windows (x64). macOS on Intel is not published; build from a checkout with
+`make build-rust` to run there. npm installs only the matching
 `@solid-checker/binding-<target>` optional dependency; the portable package
 contains the launchers. The launcher forwards arguments, stdio, signals, and
 exit status. While running from this monorepo, it builds missing development

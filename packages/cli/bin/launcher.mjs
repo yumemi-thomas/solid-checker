@@ -12,7 +12,6 @@ const nativeInvocations = new Map();
 function nativePackageRoot() {
   const target = {
     "darwin-arm64": "darwin-arm64",
-    "darwin-x64": "darwin-x64",
     "linux-arm64": "linux-arm64-gnu",
     "linux-x64": "linux-x64-gnu",
     "win32-x64": "win32-x64-msvc"
@@ -76,9 +75,16 @@ function nativeInvocation(command) {
   }
 
   if (!existsSync(executable)) {
+    // darwin-x64 had a published binding and no longer does, so "install a
+    // supported package" would send those users looking for something that is
+    // not coming back. Building from a checkout still works there.
+    const retired =
+      process.platform === "darwin" && process.arch === "x64"
+        ? "; macOS on Intel is no longer published — build from a checkout with `make build-rust`, " +
+          "or stay on a release that still shipped a darwin-x64 binding"
+        : "; set SOLID_CHECKER_NATIVE_BIN or install a supported package";
     console.error(
-      `solid-checker: no ${command} binary for ${process.platform}-${process.arch}; ` +
-      "set SOLID_CHECKER_NATIVE_BIN or install a supported package"
+      `solid-checker: no ${command} binary for ${process.platform}-${process.arch}${retired}`
     );
     process.exit(2);
   }
