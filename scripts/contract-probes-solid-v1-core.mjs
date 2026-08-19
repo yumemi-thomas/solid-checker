@@ -70,64 +70,73 @@ async function core(name, claim, body, calls = 1) {
 }
 
 // ---------------------------------------------------------------- inline
-// `inline` means the callback runs while the export call runs, so a reactive
-// read inside it belongs to the caller's scope.
+// Execution classifies attribution, not timing (see the Execution enum in
+// solid-dialect): `inline` means reads inside the callback subscribe whatever
+// was tracking at the call site. So an inline probe puts the export call
+// inside a memo and asks whether that memo re-runs when a signal the callback
+// read changes -- not whether the callback ran before the call returned.
+//
+// The exception set is the primitives that stay inline while clearing the
+// listener, which the dialect states through runs_callback_deferred:
+// untrack, createRoot and runWithOwner. For those the observable claim is the
+// opposite -- the caller must NOT subscribe -- and they are probed that way.
 
-await core("batch", "callbacks[0]=inline", S => {
-  let called = false;
-  S.batch(() => {
-    called = true;
+/**
+ * Whether a read inside `call`'s callback subscribes the enclosing computation.
+ *
+ * The memo is the caller: if it re-runs when the signal changes, the read was
+ * attributed to the call site, which is what `inline` asserts.
+ */
+const attributesToCaller = call => async S => {
+  const [source, setSource] = S.createSignal(0);
+  let outer = 0;
+  const memo = S.createMemo(() => {
+    outer++;
+    call(S, () => source());
   });
-  return called;
-});
+  memo();
+  await settle();
+  const before = outer;
+  setSource(1);
+  await settle();
+  memo();
+  return outer > before;
+};
 
-await core("untrack", "callbacks[0]=inline", S => {
-  let called = false;
-  S.untrack(() => {
-    called = true;
-  });
-  return called;
-});
+/** An inline claim: reads inside the callback belong to the caller. */
+const inlineProbe = (name, call, calls = 2) =>
+  core(name, "callbacks[0]=inline", attributesToCaller(call), calls);
 
-await core("createRoot", "callbacks[0]=inline", S => {
-  let called = false;
+/** An inline claim on a listener-clearing primitive: reads do not escape to it. */
+const inlineClearingProbe = (name, claim, call, calls = 2) =>
+  core(name, claim, async S => !(await attributesToCaller(call)(S)), calls);
+
+await inlineProbe("batch", (S, read) => S.batch(read));
+
+await inlineClearingProbe("untrack", "callbacks[0]=inline", (S, read) => S.untrack(read));
+
+await inlineClearingProbe("createRoot", "callbacks[0]=inline", (S, read) =>
   S.createRoot(dispose => {
-    called = true;
+    read();
     dispose();
-  });
-  return called;
-});
+  }),
+);
 
-await core("catchError", "callbacks[0]=inline", S => {
-  let called = false;
-  S.catchError(
-    () => {
-      called = true;
-    },
-    () => {},
-  );
-  return called;
-});
+await inlineProbe("catchError", (S, read) => S.catchError(read, () => {}));
 
-await core("runWithOwner", "callbacks[1]=inline", S => {
-  let called = false;
-  S.runWithOwner(S.getOwner(), () => {
-    called = true;
-  });
-  return called;
-});
+await inlineClearingProbe("runWithOwner", "callbacks[1]=inline", (S, read) =>
+  S.runWithOwner(S.getOwner(), read),
+);
 
 
 
-await core("from", "callbacks[0]=inline", S => {
-  let called = false;
+await inlineProbe("from", (S, read) =>
   S.from(set => {
-    called = true;
+    read();
     set(1);
     return () => {};
-  });
-  return called;
-});
+  }),
+);
 
 await core("from", "returns=accessor", S => {
   const value = S.from(set => {
@@ -137,9 +146,9 @@ await core("from", "returns=accessor", S => {
   return typeof value === "function" && value() === 7;
 });
 
-// startTransition and createResource are absent on purpose: their claims are
-// declared unprobeable in pkg/contracts/bundled/unprobed-claims.json, because
-// timing and tracking disagree about what their labels assert.
+// startTransition runs its callback in a microtask and is still inline: the
+// runtime restores the captured listener, so the read is the caller's.
+await inlineProbe("startTransition", (S, read) => S.startTransition(read));
 
 // ---------------------------------------------------------------- deferred
 // `deferred` means the callback does not run while the export call runs.
@@ -178,6 +187,22 @@ await core("catchError", "callbacks[1]=deferred", S => {
   );
   return !handled;
 });
+
+// The sourced fetcher runs during the createResource call and still does not
+// subscribe the caller, which is what deferred asserts.
+await core(
+  "createResource",
+  "callbacks[1]=deferred",
+  async S =>
+    !(await attributesToCaller((S, read) => {
+      const [source] = S.createSignal(1);
+      S.createResource(source, () => {
+        read();
+        return 1;
+      });
+    })(S)),
+  2,
+);
 
 await core("createReaction", "callbacks[0]=deferred", S => {
   let called = false;

@@ -330,15 +330,48 @@ pub enum KeyForm {
 /// `solid-contract-gen` and a test holds them to it.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum Execution {
-    /// Runs at the call and re-runs when a dependency changes. The reads
-    /// inside it subscribe.
+    /// The callback creates its own observer: reads inside it subscribe *it*,
+    /// and it re-runs when one of them changes.
     Tracked,
-    /// Runs later than the call — on the next tick, on cleanup, when a
-    /// resource settles.
+    /// The callback runs outside the caller's tracking pass: reads inside it
+    /// subscribe nothing the caller owns. Usually it also runs later than the
+    /// call — on the next tick, on cleanup, when a resource settles — but the
+    /// attribution is the claim.
     Deferred,
-    /// Runs immediately, in the caller's scope, and does not re-run.
+    /// The callback runs inside the caller's tracking pass: reads inside it
+    /// subscribe whatever was tracking at the call site, and it does not
+    /// re-run on its own.
+    ///
+    /// A primitive that clears the listener while staying inline — `untrack`,
+    /// `createRoot`, `runWithOwner` — says so through
+    /// [`Dialect::runs_callback_deferred`] instead of through a different
+    /// execution, because the two facts are independent and consumers ask
+    /// about them separately.
     Inline,
 }
+
+// These three classify **attribution, not timing**, and the distinction is
+// load-bearing rather than pedantic.
+//
+// `callback_runs_outside_tracking` in solid-reactive-ir is the consumer that
+// settles it: Deferred is "outside the current tracking pass" unconditionally,
+// Inline "inherits the caller's Listener" unless the primitive is separately
+// marked as listener-clearing, and Tracked creates its own observer unless
+// `tracks_reads` overrides. Nothing downstream asks when the callback ran.
+//
+// 1.x `startTransition` is the case that proves it. Its callback runs in a
+// `Promise.resolve().then()` microtask, so by timing it is plainly not
+// immediate — and it is Inline, correctly, because the runtime restores the
+// captured Listener around it and a read inside subscribes exactly as at the
+// call site. Probed: `batch`, `catchError`'s first argument and
+// `startTransition` all subscribe an enclosing memo; `untrack` and
+// `createRoot`, both listener-clearing, do not; `createResource`'s fetcher
+// does not, which is why it is Deferred even though the sourced overload runs
+// it during the call.
+//
+// Classifying by timing instead would move `startTransition` to Deferred and
+// tell the engine that reads inside it escape the caller's scope, which the
+// runtime contradicts.
 
 /// The complete callback contract for one argument of one concrete primitive
 /// call. Consumers ask one question and receive the execution, ownership,

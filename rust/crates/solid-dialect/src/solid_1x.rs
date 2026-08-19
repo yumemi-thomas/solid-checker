@@ -483,13 +483,14 @@ impl Dialect for Solid1x {
             Primitive::CreateRoot
             | Primitive::Untrack
             | Primitive::Batch
-            // Timing caveat: with transitions enabled the 1.9 runtime invokes
+            // With transitions enabled the 1.9 runtime invokes
             // startTransition's callback in a Promise.resolve().then()
-            // microtask, not synchronously. `Inline` is still the right
-            // classification, because it describes tracking, and the runtime
-            // restores the captured Listener around the callback — reads
-            // inside it subscribe exactly as at the call site, and it never
-            // re-runs.
+            // microtask, not synchronously. `Inline` is the right
+            // classification anyway: [`Execution`] classifies attribution, and
+            // the runtime restores the captured Listener around the callback,
+            // so reads inside it subscribe exactly as at the call site and it
+            // never re-runs. Probed in
+            // scripts/contract-probes-solid-v1-core.mjs.
             | Primitive::StartTransition
             | Primitive::From
             | Primitive::Hydrate

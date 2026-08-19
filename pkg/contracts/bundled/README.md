@@ -51,8 +51,6 @@ The 1.x core contract is runtime-probed too, in the client, development and
 production modes it states. It does not state the server mode: under `node`,
 1.x resolves a build where `createEffect` never runs and memos never re-run, and
 that build needs its own contract rather than a footnote in this one.
-`unprobed-claims.json` records the two claims a probe cannot adjudicate, with
-the reason each.
 
 Probing found that `leading` and `leadingAndTrailing` do not behave the same way
 everywhere: their server branch returns early and never invokes the scheduler

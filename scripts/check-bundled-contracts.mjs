@@ -50,34 +50,6 @@ const fail = message => {
   console.error(`FAIL ${message}`);
 };
 const pass = message => console.log(`ok   ${message}`);
-const unprobedPath = join(root, "pkg/contracts/bundled/unprobed-claims.json");
-let unprobed = { schemaVersion: 1, claims: [] };
-try {
-  unprobed = JSON.parse(readFileSync(unprobedPath, "utf8"));
-} catch (error) {
-  fail(`cannot read ${unprobedPath}: ${error.message}`);
-}
-if (unprobed.schemaVersion !== 1 || !Array.isArray(unprobed.claims)) {
-  fail(`${unprobedPath} must use schemaVersion 1 with a claims array`);
-}
-const unprobedUsed = new Set();
-/** Whether a claim is declared unprobeable, marking the declaration as used. */
-const isUnprobed = (dialect, packageName, name, claim) => {
-  const index = unprobed.claims.findIndex(
-    entry =>
-      entry.dialect === dialect &&
-      entry.package === packageName &&
-      entry.export === name &&
-      entry.claim === claim,
-  );
-  if (index === -1) return false;
-  if (!unprobed.claims[index].reason) {
-    fail(`${unprobedPath} entry for ${packageName} ${name} ${claim} has no reason`);
-  }
-  unprobedUsed.add(index);
-  return true;
-};
-
 const runtimeLockPath = join(root, "pkg/contracts/bundled/runtime-lock.json");
 let runtimeLock = { schemaVersion: 1, packages: {} };
 try {
@@ -587,9 +559,7 @@ for (const item of contracts) {
           const key = `${item.dialect}:${item.name}:${entrypoint}:${name}:${claim}`;
           const modeResults = results.get(key) ?? [];
           const result = modeResults.find(candidate => candidate.mode === mode.name);
-          if (isUnprobed(item.dialect, item.name, name, claim)) {
-            pass(`${item.name} ${entrypoint}:${name} ${claim} (declared unprobeable)`);
-          } else if (!result) {
+          if (!result) {
             fail(`${item.file} ${entrypoint}:${name} ${claim} has no probe in ${mode.name}`);
           } else if (!result.ok) {
             fail(
@@ -638,15 +608,6 @@ for (const observation of observed.discoveredClaims) {
 }
 if (incompleteness.length > 0) {
   console.error(`incompleteness reports: ${incompleteness.length}`);
-}
-
-// An exemption that no longer matches a claim has outlived its reason.
-for (const [index, entry] of unprobed.claims.entries()) {
-  if (!unprobedUsed.has(index)) {
-    fail(
-      `${unprobedPath} exempts ${entry.package} ${entry.export} ${entry.claim}, which no contract claims`,
-    );
-  }
 }
 
 if (failures > 0) process.exit(1);
