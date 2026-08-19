@@ -175,10 +175,13 @@ jobs:
       - run: jq empty schema/*.json
       - run: find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
       # The bundled contracts ship semantics compiled into the backend, so a
-      # stale artifact ships wrong semantics. contract-conformance runs both
+      # stale artifact ships wrong semantics. contract-conformance runs three
       # gates: check-bundled-contracts.mjs probes the 2.0 contracts against
-      # the exact pinned packages, and generate-bundled-solid1-contract.mjs
-      # --check catches drift between the 1.x artifact and its inputs. The
+      # the exact pinned packages, check-contract-pins.mjs holds every bundled
+      # pin to the registry tarball it was audited against (which is what
+      # covers the contracts probing never installs), and
+      # generate-bundled-solid1-contract.mjs --check catches drift between the
+      # 1.x artifact and its inputs. The
       # separate drift gate against *real installed* packages
       # (`make contracts-check`) runs in the rust-engine job, which installs
       # the exact pins and regenerates all three artifacts.

@@ -167,7 +167,15 @@ for (const subpath of [...entrypointExports.keys()].sort()) {
 
 const document = {
   schemaVersion: 1,
-  package: { name: "solid-js", version: "1.9.14" },
+  // The exact tarball this model was read from. `scripts/check-contract-pins.mjs`
+  // holds it to the registry, so a republished 1.9.14 stops matching instead of
+  // silently becoming what this contract claims to describe.
+  package: {
+    name: "solid-js",
+    version: "1.9.14",
+    integrity:
+      "sha512-sAEXC0Kk0S1EDg+8ysEWJDbYhA3RRoEjwuySUGlKIemeo0I5YZfOyumNjNs9Sv3y2nmhD+0rW66ag2HsMuQiGQ==",
+  },
   compilerFactsProtocol: 1,
   summaries: orderedSummaries,
   entrypoints,

@@ -487,6 +487,16 @@ pinned release, checks its export surface and npm integrity, verifies every edge
 in `pkg/contracts/bundled/runtime-lock.json`, and executes every declared
 behavior probe in client, server, development, and production condition modes.
 
+`node scripts/check-contract-pins.mjs`, in the same target, covers what probing
+cannot reach. The probe suite proves a package's identity by installing it and
+reading npm's hidden lockfile, so a contract it does not install — a
+hand-authored overlay, or a dialect whose runtime is not probed — would be
+pinned by a version string alone. A version string is not a pin: republished or
+mutated contents keep the version, and the contract would still claim to
+describe them. So every bundled contract records the integrity of the exact
+tarball it was audited against, that integrity is checked against the registry,
+and a contract recording none fails.
+
 `--write` records passing modes as `probed` row evidence on claims that already
 exist. **It does not repair a lock or probe mismatch, and must not be taught
 to.** A probe failure means the package does not behave the way the contract

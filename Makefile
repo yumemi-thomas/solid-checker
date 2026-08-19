@@ -87,6 +87,7 @@ contract-corpus: build-rust
 
 contract-conformance:
 	node scripts/check-bundled-contracts.mjs
+	node scripts/check-contract-pins.mjs
 	node scripts/dialect-manifests.mjs check-composed-contracts
 
 # `contracts` and `contracts-check` read real installed packages: the exact
