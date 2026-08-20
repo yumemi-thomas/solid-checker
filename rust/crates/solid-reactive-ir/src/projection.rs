@@ -9,9 +9,9 @@ use std::time::Instant;
 use typefacts::Location;
 
 use crate::{
-    ActionInvocation, AsyncRead, DraggableSpelling, EvidenceStep, Finding, LeafOwnerOperation,
-    OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveWrite, RuleMetadata,
-    SolveTimings, StaticDefect, StaticDefectKind, StaticViolation, finish_findings,
+    ActionInvocation, AsyncRead, EvidenceStep, Finding, LeafOwnerOperation, OwnerRequirement,
+    PrimitiveCreation, Program, ReactiveRead, ReactiveWrite, RuleMetadata, SolveTimings,
+    StaticDefect, StaticDefectKind, StaticViolation, finish_findings,
 };
 
 /// The few phrases where shared static-defect concepts use dialect APIs.
@@ -81,31 +81,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 "Rename it with an uppercase component name and render it as <{} />. If this is intentionally a value helper, return data rather than JSX.",
                 uppercase_first(name)
             ),
-        ),
-        StaticDefectKind::ImplicitDraggableBoolean { spelling } => (
-            match spelling {
-                DraggableSpelling::Shorthand => {
-                    "the draggable attribute uses JSX boolean shorthand, which emits an empty attribute value; HTML treats that as the invalid/default state rather than draggable=\"true\"".into()
-                }
-                // The removal half of the same probe: `false` removes the
-                // attribute, and removal selects `auto` — which is draggable
-                // on this element.
-                DraggableSpelling::LiteralFalseOnDraggableDefault => {
-                    if defect.uncertain {
-                        "the draggable attribute is given boolean false, which the runtime removes; a dynamic or spread-carried href may leave this anchor either draggable or non-draggable in the resulting auto state, so neither the defect nor safety is proven".into()
-                    } else {
-                        "the draggable attribute is given the boolean false, which the runtime serializes by removing the attribute; this element is draggable by default, so the removed attribute's auto state silently re-enables dragging rather than selecting draggable=\"false\"".into()
-                    }
-                }
-            },
-            match spelling {
-                DraggableSpelling::LiteralFalseOnDraggableDefault => {
-                    "Write draggable=\"false\"; draggable is enumerated, so only the string \"false\" disables dragging on images and links, whose auto state is draggable.".into()
-                }
-                DraggableSpelling::Shorthand => {
-                    "Write draggable=\"true\" for a static attribute, or draggable={condition ? \"true\" : \"false\"} for a dynamic one; draggable is enumerated, so only the strings \"true\" and \"false\" select a state.".into()
-                }
-            },
         ),
         StaticDefectKind::InvalidJsxNesting {
             parent,
@@ -296,19 +271,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::PreferComponentSyntax { .. } => {
             "the resolved local function directly returns JSX and this call is inside JSX"
-        }
-        StaticDefectKind::ImplicitDraggableBoolean {
-            spelling: DraggableSpelling::Shorthand,
-        } => "the intrinsic draggable attribute has no explicit value",
-        StaticDefectKind::ImplicitDraggableBoolean {
-            spelling: DraggableSpelling::LiteralFalseOnDraggableDefault,
-        } if defect.uncertain => {
-            "the runtime removes draggable={false}, while the final presence of this anchor's href depends on a dynamic value or spread"
-        }
-        StaticDefectKind::ImplicitDraggableBoolean {
-            spelling: DraggableSpelling::LiteralFalseOnDraggableDefault,
-        } => {
-            "the intrinsic draggable attribute is a literal boolean false on a draggable-by-default element, and the runtime removes the attribute on false"
         }
         StaticDefectKind::InvalidJsxNesting { .. } => {
             "the intrinsic JSX ancestor chain is statically known and HTML parsing changes this nesting"

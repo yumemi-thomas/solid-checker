@@ -777,28 +777,12 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
-            "rule": "v1/no-implicit-draggable",
-            "code": "SC8019",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                31,
-                40
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
+            "rule": "v1/no-implicit-draggable"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {

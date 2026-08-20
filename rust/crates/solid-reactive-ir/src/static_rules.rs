@@ -13,10 +13,8 @@ use crate::pipeline::{AnalysisContext, ProgramDraft};
 use crate::runtime_semantics::is_proven_array_filter;
 use crate::symbols::async_symbol_root;
 use crate::{
-    DraggableSpelling, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive,
-    location, primitive_name,
+    ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive, location, primitive_name,
 };
-use solid_dialect::Version;
 use solid_facts::core::Span;
 use std::collections::HashSet;
 use typefacts::Location;
@@ -26,7 +24,6 @@ pub(crate) fn static_prepass(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
     execution_map_incomplete(ctx, draft);
     component_props_destructure(ctx, draft);
     prefer_component_syntax(ctx, draft);
-    implicit_draggable_boolean(ctx, draft);
     valid_jsx_nesting(ctx, draft);
     reactive_read_after_await(ctx, draft);
 }
@@ -103,137 +100,6 @@ fn function_directly_returns_jsx(
                         .is_some_and(|owner| owner.span == function.span)
             })
         })
-}
-
-/// SC8019: `draggable` is enumerated, not boolean. JSX shorthand serializes
-/// an empty value, whose HTML state is `auto`, not `true`.
-///
-/// Solid 2.0 removes `draggable={false}`, which selects `auto` and silently
-/// re-enables dragging on draggable-by-default elements (`img`, and `a` with
-/// an `href`). Its published JSX types already reject the shorthand and
-/// literal `true`, so those spellings belong to TypeScript and are excluded.
-/// Solid 1.x stringifies boolean literals and only its type-correct shorthand
-/// remains this rule's concern.
-fn implicit_draggable_boolean(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    for file in &ctx.facts.files {
-        for element in &file.ast.jsx_elements {
-            let element_name = file.source_text(element.name.span).unwrap_or_default();
-            if !element_name.starts_with(|character: char| character.is_ascii_lowercase()) {
-                continue;
-            }
-            for attribute in &element.attributes {
-                if attribute.namespace.is_some()
-                    || file.source_text(attribute.local_name) != Some("draggable")
-                {
-                    continue;
-                }
-                let spelling = match attribute.value_kind {
-                    solid_facts::ast::JsxAttributeValueKind::Boolean => {
-                        if ctx.dialect.version() == Version::V1 {
-                            DraggableSpelling::Shorthand
-                        } else {
-                            continue;
-                        }
-                    }
-                    solid_facts::ast::JsxAttributeValueKind::Expression => {
-                        // The boolean-literal fact mirrors the attribute name
-                        // span, carrying the literal value; a non-literal
-                        // expression has no entry and proves nothing.
-                        let literal = element
-                            .boolean_properties
-                            .iter()
-                            .find(|property| property.name == attribute.local_name);
-                        match literal {
-                            Some(property)
-                                if !property.value
-                                    && ctx.dialect.false_attribute_value_removes_attribute() =>
-                            {
-                                DraggableSpelling::LiteralFalseOnDraggableDefault
-                            }
-                            _ => continue,
-                        }
-                    }
-                    _ => continue,
-                };
-                let draggable_default = match spelling {
-                    DraggableSpelling::Shorthand => DraggableDefault::Yes,
-                    DraggableSpelling::LiteralFalseOnDraggableDefault => {
-                        element_defaults_to_draggable(file, element, element_name)
-                    }
-                };
-                if draggable_default == DraggableDefault::No {
-                    continue;
-                }
-                draft.push_defect(
-                    "no-implicit-draggable",
-                    StaticDefect {
-                        kind: StaticDefectKind::ImplicitDraggableBoolean { spelling },
-                        location: location(file.path.shared(), attribute.span),
-                        analysis_context: if draggable_default == DraggableDefault::Uncertain {
-                            "draggable-default-uncertain".into()
-                        } else {
-                            element_name.to_owned()
-                        },
-                        fixes: vec![],
-                        uncertain: draggable_default == DraggableDefault::Uncertain,
-                    },
-                );
-            }
-        }
-    }
-}
-
-/// The elements whose `draggable` *auto* state is draggable — WHATWG HTML
-/// "the draggable attribute": `img` elements, and `a` elements with an
-/// `href` attribute.
-///
-/// The last source-order write owns `href`. A static string/bare attribute
-/// proves presence; a dynamic expression or later spread can either preserve
-/// or remove it and therefore leaves an explicit proof obligation. Absence of
-/// every direct attribute and spread proves that the anchor is not draggable
-/// by default.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum DraggableDefault {
-    No,
-    Yes,
-    Uncertain,
-}
-
-fn element_defaults_to_draggable(
-    file: &solid_facts::FileFacts,
-    element: &solid_facts::ast::JsxElementFact,
-    element_name: &str,
-) -> DraggableDefault {
-    if element_name == "img" {
-        return DraggableDefault::Yes;
-    }
-    if element_name != "a" {
-        return DraggableDefault::No;
-    }
-    let direct = element
-        .attributes
-        .iter()
-        .filter(|attribute| {
-            attribute.namespace.is_none() && file.source_text(attribute.local_name) == Some("href")
-        })
-        .max_by_key(|attribute| attribute.span.start);
-    let spread = element
-        .spreads
-        .iter()
-        .max_by_key(|spread| spread.span.start);
-    if spread.is_some_and(|spread| {
-        direct.is_none_or(|attribute| spread.span.start > attribute.span.start)
-    }) {
-        return DraggableDefault::Uncertain;
-    }
-    match direct.map(|attribute| attribute.value_kind) {
-        Some(
-            solid_facts::ast::JsxAttributeValueKind::String
-            | solid_facts::ast::JsxAttributeValueKind::Boolean,
-        ) => DraggableDefault::Yes,
-        Some(_) => DraggableDefault::Uncertain,
-        None => DraggableDefault::No,
-    }
 }
 
 /// SC8020: nesting for which the HTML parser changes the authored tree by

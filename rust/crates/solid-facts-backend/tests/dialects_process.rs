@@ -124,65 +124,30 @@ fn component_ref_callbacks_are_setup_time_outputs_in_both_dialects() {
 }
 
 #[test]
-fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
+fn jsx_correctness_fixture_excludes_retired_draggable_policy_in_both_dialects() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/jsx-correctness/tsconfig.json");
-    // The 1.x runtime stringifies attribute values (`draggable={true}` renders
-    // draggable="true", `draggable={false}` renders draggable="false", and
-    // both behave), so only the shorthand is a defect there. The 2.0 runtime
-    // treats boolean literals as attribute presence (probed on
-    // @solidjs/web@2.0.0-rc.0), but its published JSX types reject the
-    // shorthand and literal `true`, so the checker leaves those to TypeScript.
-    // A literal `false` is well typed and removes the
-    // attribute, which on the draggable-by-default elements (`img`,
-    // `a[href]`) selects the auto state and silently re-enables dragging.
-    // The href-less `a` and the `div` are not draggable by default, so their
-    // `draggable={false}` removal matches intent and stays clean, as does
-    // the enumerated string spelling `draggable="false"`. The `a` whose
-    // `href` is a dynamic expression is explicitly uncertifiable in v2: a
-    // nullish value removes the href and makes the anchor non-draggable, while
-    // a string keeps it draggable. Neither outcome may be guessed.
+    // Draggable serialization is generic HTML attribute-state policy, not a
+    // Solid semantic defect. Every spelling remains in this fixture as a
+    // negative regression; only the still-live JSX-returning helper rule may
+    // report.
     for (dialect, expected) in [
-        (
-            "solid-v1",
-            &[
-                ("v1/prefer-component-syntax", 1),
-                ("v1/no-implicit-draggable", 1),
-            ][..],
-        ),
-        (
-            "solid-v2",
-            &[("prefer-component-syntax", 1), ("no-implicit-draggable", 3)][..],
-        ),
+        ("solid-v1", "v1/prefer-component-syntax"),
+        ("solid-v2", "prefer-component-syntax"),
     ] {
         let findings = project_snapshot_findings(project.clone(), Some(dialect));
         let rules = findings
             .iter()
             .map(|finding| finding["rule"].as_str().unwrap())
             .collect::<Vec<_>>();
-        for (rule, count) in expected {
-            assert_eq!(
-                rules
-                    .iter()
-                    .filter(|candidate| **candidate == *rule)
-                    .count(),
-                *count,
-                "{dialect} should report exactly {count} {rule}: {findings:#?}"
-            );
-        }
         assert_eq!(
-            rules.len(),
-            expected.iter().map(|(_, count)| count).sum::<usize>(),
+            rules,
+            [expected],
             "unexpected {dialect} findings: {findings:#?}"
         );
-        if dialect == "solid-v2" {
-            assert!(findings.iter().any(|finding| {
-                finding["rule"] == "no-implicit-draggable" && finding["kind"] == "uncertifiable"
-            }));
-        }
     }
 }
 

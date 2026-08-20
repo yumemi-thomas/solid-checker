@@ -462,7 +462,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
         | Rule::PreferComponentSyntax
-        | Rule::NoImplicitDraggable
         | Rule::ValidJsxNesting
         | Rule::ReactiveWriteInOwnedScope
         | Rule::ActionCalledInOwnedScope
@@ -505,7 +504,6 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
         StaticDefectKind::PreferComponentSyntax { .. } => Rule::PreferComponentSyntax,
-        StaticDefectKind::ImplicitDraggableBoolean { .. } => Rule::NoImplicitDraggable,
         StaticDefectKind::InvalidJsxNesting { .. } => Rule::ValidJsxNesting,
         StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
         StaticDefectKind::PackageContractEnvironmentDependent { .. } => {

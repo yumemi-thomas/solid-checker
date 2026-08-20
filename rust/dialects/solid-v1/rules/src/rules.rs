@@ -62,7 +62,6 @@ pub enum Rule {
     SelfClosingComp,
     StyleProp,
     PreferComponentSyntax,
-    NoImplicitDraggable,
     ValidJsxNesting,
     PackageContractExportMissing,
     PackageContractCallbackMissing,
@@ -83,7 +82,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 38] = [
+    pub const ALL: [Self; 37] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -116,7 +115,6 @@ impl Rule {
         Self::SelfClosingComp,
         Self::StyleProp,
         Self::PreferComponentSyntax,
-        Self::NoImplicitDraggable,
         Self::ValidJsxNesting,
         Self::PackageContractExportMissing,
         Self::PackageContractCallbackMissing,
@@ -176,7 +174,6 @@ impl Rule {
             Self::PreferComponentSyntax => {
                 ("SC8018", "v1/prefer-component-syntax", "warning", false)
             }
-            Self::NoImplicitDraggable => ("SC8019", "v1/no-implicit-draggable", "error", false),
             Self::ValidJsxNesting => ("SC8020", "v1/valid-jsx-nesting", "error", false),
             Self::PackageContractExportMissing => (
                 "SC9001",

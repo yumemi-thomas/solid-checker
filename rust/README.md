@@ -23,7 +23,7 @@ Fact ownership is deliberately split:
 - `crates/solid-reactive-ir`: native analysis, producing the reactive program
   IR and the dialect-neutral `Finding` model;
 - `dialects/solid-v2/rules` and `dialects/solid-v1/rules`: each version's
-  rule catalog and finding construction (36 rules for 2.0, 38 for 1.x);
+  rule catalog and finding construction (35 rules for 2.0, 37 for 1.x);
 - `dialects/solid-v2/compiler` and `dialects/solid-v1/compiler`: the
   dom-expressions compiler and its Solid 1.x fork, each adapted to the
   `CompilerFactsProvider` seam.

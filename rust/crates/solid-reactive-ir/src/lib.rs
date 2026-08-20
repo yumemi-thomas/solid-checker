@@ -268,22 +268,6 @@ pub struct StaticDefect {
     pub uncertain: bool,
 }
 
-/// The boolean spelling written on a `draggable` attribute. Each selects a
-/// different wrong runtime state under the reporting dialect; the wording
-/// arms in `projection` name the exact spelling and consequence.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum DraggableSpelling {
-    /// The bare `draggable` shorthand — an empty attribute value, whose
-    /// enumerated state is the invalid-value default `auto`.
-    #[default]
-    Shorthand,
-    /// `draggable={false}` on a draggable-by-default element (`img`,
-    /// `a[href]`) under a runtime that removes the attribute on `false` —
-    /// removal selects `auto`, which re-enables dragging there.
-    LiteralFalseOnDraggableDefault,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
@@ -298,13 +282,6 @@ pub enum StaticDefectKind {
     ComponentReturnsConditionally,
     PreferComponentSyntax {
         name: String,
-    },
-    ImplicitDraggableBoolean {
-        /// Which boolean spelling was written; the wording names it. The
-        /// literal spellings are only emitted for dialects whose runtime
-        /// treats boolean literals as attribute presence (Solid 2.0).
-        #[serde(default)]
-        spelling: DraggableSpelling,
     },
     InvalidJsxNesting {
         parent: String,

@@ -23,7 +23,6 @@ pub enum Rule {
     ComponentPropsDestructure,
     ComponentReturnsConditionally,
     PreferComponentSyntax,
-    NoImplicitDraggable,
     ValidJsxNesting,
     ReactiveWriteInOwnedScope,
     ActionCalledInOwnedScope,
@@ -63,7 +62,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 35] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -74,7 +73,6 @@ impl Rule {
         Self::ComponentPropsDestructure,
         Self::ComponentReturnsConditionally,
         Self::PreferComponentSyntax,
-        Self::NoImplicitDraggable,
         Self::ValidJsxNesting,
         Self::ReactiveWriteInOwnedScope,
         Self::ActionCalledInOwnedScope,
@@ -128,7 +126,6 @@ impl Rule {
                 ("SC1004", "component-returns-conditionally", "error", false)
             }
             Self::PreferComponentSyntax => ("SC8018", "prefer-component-syntax", "warning", false),
-            Self::NoImplicitDraggable => ("SC8019", "no-implicit-draggable", "error", false),
             Self::ValidJsxNesting => ("SC8020", "valid-jsx-nesting", "error", false),
             Self::ReactiveWriteInOwnedScope => {
                 ("SC2001", "reactive-write-in-owned-scope", "error", false)

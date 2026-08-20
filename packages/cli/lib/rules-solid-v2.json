@@ -15,7 +15,6 @@
     { "code": "SC1003", "name": "component-props-destructure", "severity": "error", "uncertifiable": false },
     { "code": "SC1004", "name": "component-returns-conditionally", "severity": "error", "uncertifiable": false },
     { "code": "SC8018", "name": "prefer-component-syntax", "severity": "warning", "uncertifiable": false },
-    { "code": "SC8019", "name": "no-implicit-draggable", "severity": "error", "uncertifiable": false },
     { "code": "SC8020", "name": "valid-jsx-nesting", "severity": "error", "uncertifiable": false },
     { "code": "SC2001", "name": "reactive-write-in-owned-scope", "severity": "error", "uncertifiable": false },
     { "code": "SC2002", "name": "action-called-in-owned-scope", "severity": "error", "uncertifiable": false },
