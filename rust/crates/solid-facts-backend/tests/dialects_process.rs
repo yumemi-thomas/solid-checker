@@ -390,8 +390,7 @@ fn solid_one_reaction_callback_uses_its_disposing_computation_owner() {
         Some("solid-v1"),
     );
     assert!(
-        one.iter()
-            .all(|finding| !matches!(finding["id"].as_str(), Some("SC3001" | "SC3002"))),
+        one.iter().all(|finding| finding["id"] != "SC3001"),
         "createReaction installs its own owner and disposes callback cleanups and children: {one:#?}"
     );
     assert!(

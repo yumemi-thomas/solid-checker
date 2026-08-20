@@ -25,9 +25,7 @@ pub enum Rule {
     ReactiveWriteInOwnedScope,
     ActionCalledInOwnedScope,
     ResolveInReactiveScope,
-    CleanupInForbiddenScope,
-    PrimitiveInLeafOwner,
-    FlushInForbiddenScope,
+    LeafOwnerForbiddenCall,
     MissingOwner,
     PendingAsyncUntrackedRead,
     PendingAsyncForbiddenScope,
@@ -56,7 +54,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 29] = [
+    pub const ALL: [Self; 27] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -69,9 +67,7 @@ impl Rule {
         Self::ReactiveWriteInOwnedScope,
         Self::ActionCalledInOwnedScope,
         Self::ResolveInReactiveScope,
-        Self::CleanupInForbiddenScope,
-        Self::PrimitiveInLeafOwner,
-        Self::FlushInForbiddenScope,
+        Self::LeafOwnerForbiddenCall,
         Self::MissingOwner,
         Self::PendingAsyncUntrackedRead,
         Self::PendingAsyncForbiddenScope,
@@ -126,11 +122,7 @@ impl Rule {
             // error; production has no guard and silently takes a one-shot
             // snapshot.
             Self::ResolveInReactiveScope => ("SC2004", "resolve-in-reactive-scope", "error", false),
-            Self::CleanupInForbiddenScope => {
-                ("SC3001", "cleanup-in-forbidden-scope", "error", false)
-            }
-            Self::PrimitiveInLeafOwner => ("SC3002", "primitive-in-leaf-owner", "error", false),
-            Self::FlushInForbiddenScope => ("SC3003", "flush-in-forbidden-scope", "error", false),
+            Self::LeafOwnerForbiddenCall => ("SC3001", "leaf-owner-forbidden-call", "error", false),
             // Settled-cleanup findings override this family default to error:
             // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
             // other missing-owner operations leak silently.

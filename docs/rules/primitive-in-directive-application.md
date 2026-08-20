@@ -81,5 +81,5 @@ listener wiring only.
 
 ## Related
 
-- [primitive-in-leaf-owner](primitive-in-leaf-owner.md) — the leaf-owner analogue
+- [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) — the leaf-owner analogue
 - [missing-owner](missing-owner.md) — the same unowned-leak class outside directives

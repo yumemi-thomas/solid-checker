@@ -18,6 +18,12 @@ code; **Both** — either, depending on the code.
   missing-owner variants. Explicit ESLint keys for the former members are a
   breaking removal. The `onSettled` cleanup message retains error severity;
   other proven variants retain warning severity.
+- **2026-08-20 — leaf-owner diagnostics merged.**
+  `cleanup-in-forbidden-scope`, `primitive-in-leaf-owner`, and
+  `flush-in-forbidden-scope` now report as `leaf-owner-forbidden-call` /
+  `SC3001`. This is a declared configuration break: old rule-options keys are
+  accepted as retired no-ops, their disables do not transfer to the merged
+  family, and the former explicit ESLint keys are removed.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 

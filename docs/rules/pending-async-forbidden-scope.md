@@ -59,4 +59,4 @@ guard the scope so it only runs once the data is ready.
 ## Related
 
 - [pending-async-untracked-read](pending-async-untracked-read.md) — untracked pending reads
-- [primitive-in-leaf-owner](primitive-in-leaf-owner.md) — other leaf-owner restrictions
+- [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) — other leaf-owner restrictions

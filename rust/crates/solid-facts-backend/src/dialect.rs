@@ -159,6 +159,18 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "valid-jsx-nesting",
         "removed 2026-08-20: generic HTML parser conformance is outside the Solid semantic checker domain",
     ),
+    (
+        "cleanup-in-forbidden-scope",
+        "merged 2026-08-20 into leaf-owner-forbidden-call; existing disables intentionally do not transfer to the wider family",
+    ),
+    (
+        "primitive-in-leaf-owner",
+        "merged 2026-08-20 into leaf-owner-forbidden-call; existing disables intentionally do not transfer to the wider family",
+    ),
+    (
+        "flush-in-forbidden-scope",
+        "merged 2026-08-20 into leaf-owner-forbidden-call; existing disables intentionally do not transfer to the wider family",
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.
@@ -680,7 +692,7 @@ mod tests {
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL.len() - 15,
-            14,
+            12,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
     }

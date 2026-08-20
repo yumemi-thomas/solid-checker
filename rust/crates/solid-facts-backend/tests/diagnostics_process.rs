@@ -85,14 +85,12 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // `createTrackedEffect(wrapCallback(() => …))`. Those two are
                 // not silent overall: SC9012 preserves their opaque callback
                 // behavior as explicit proof obligations.
-                ("cleanup-in-forbidden-scope", 7),
+                ("leaf-owner-forbidden-call", 15),
                 // Three inline (the function-seeded createSignal, createMemo,
                 // createRoot) plus the dynamic-extent trackDouble() reached
                 // through its helper.
-                ("primitive-in-leaf-owner", 4),
                 // Two inline plus flushNow() reached through its helper from
                 // a block-bodied and an expression-bodied leaf callback.
-                ("flush-in-forbidden-scope", 4),
                 // The six returns that used to be reported here are the
                 // domain `EffectFunction`'s `(() => void) | void` return type
                 // rejects, so the value-legality rules are gone; the fixture
@@ -186,22 +184,20 @@ fn settled_leaf_rules_follow_call_site_ownership() {
     let Some(findings) = diagnostic_fixture("leaf-owner") else {
         return;
     };
-    let cleanup = findings_for_rule(&findings, "cleanup-in-forbidden-scope");
+    let cleanup = findings_for_rule(&findings, "leaf-owner-forbidden-call")
+        .into_iter()
+        .filter(|finding| {
+            finding["message"]
+                .as_str()
+                .is_some_and(|message| message.starts_with("onCleanup"))
+        })
+        .collect::<Vec<_>>();
     // The out-of-band onSettled (event handler) must not carry any leaf-scope
     // finding: the runtime enqueues a plain callback there.
     assert!(
         findings
             .iter()
-            .filter(|finding| {
-                matches!(
-                    finding["rule"].as_str(),
-                    Some(
-                        "cleanup-in-forbidden-scope"
-                            | "primitive-in-leaf-owner"
-                            | "flush-in-forbidden-scope"
-                    )
-                )
-            })
+            .filter(|finding| finding["rule"] == "leaf-owner-forbidden-call")
             .all(|finding| {
                 finding["message"]
                     .as_str()
@@ -288,7 +284,7 @@ fn solid2_precision_corrections_are_end_to_end() {
         // three root-record writes for the nested, cast, and props writes
         // asserted by span below. A count alone cannot tell those apart.
         ("no-direct-mutation", 4),
-        ("cleanup-in-forbidden-scope", 1),
+        ("leaf-owner-forbidden-call", 1),
         // One proven returned cleanup plus four callbacks whose runtime
         // return may be a cleanup and therefore cannot be certified safe.
         ("missing-owner", 8),
@@ -304,7 +300,7 @@ fn solid2_precision_corrections_are_end_to_end() {
     // genuinely unowned SC4001 continues.
     let non_literal_leaf = start_of("// `wrap` may stash");
     assert!(
-        starts("cleanup-in-forbidden-scope")
+        starts("leaf-owner-forbidden-call")
             .iter()
             .all(|start| *start < non_literal_leaf),
         "a leaf callback that is not the literal argument proves no leaf scope"

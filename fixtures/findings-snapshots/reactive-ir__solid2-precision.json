@@ -192,7 +192,7 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",

@@ -47,8 +47,8 @@ that exact rule in the shared project configuration described below.
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
 | Shared concepts (15 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
-| Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 14 rules: actions, `flush`, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 20 rules | 29 rules |
+| Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 12 rules: actions, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
+| Catalog size | 20 rules | 27 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -152,9 +152,7 @@ rule's page documents its additional options and defaults.
 
 | Code | Rule | Severity |
 | --- | --- | --- |
-| SC3001 | [cleanup-in-forbidden-scope](cleanup-in-forbidden-scope.md) | error |
-| SC3002 | [primitive-in-leaf-owner](primitive-in-leaf-owner.md) | error |
-| SC3003 | [flush-in-forbidden-scope](flush-in-forbidden-scope.md) | error |
+| SC3001 | [leaf-owner-forbidden-call](leaf-owner-forbidden-call.md) | error |
 
 ## Ownership
 

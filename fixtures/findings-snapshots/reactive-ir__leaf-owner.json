@@ -2,7 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",
@@ -12,8 +12,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -22,8 +22,8 @@
       "fixes": 0
     },
     {
-      "rule": "flush-in-forbidden-scope",
-      "code": "SC3003",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -32,7 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",
@@ -52,8 +52,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -62,8 +62,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -72,8 +72,8 @@
       "fixes": 0
     },
     {
-      "rule": "flush-in-forbidden-scope",
-      "code": "SC3003",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -82,7 +82,7 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",
@@ -102,7 +102,7 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -132,7 +132,7 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",
@@ -142,8 +142,8 @@
       "fixes": 0
     },
     {
-      "rule": "flush-in-forbidden-scope",
-      "code": "SC3003",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -152,7 +152,7 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",
@@ -162,8 +162,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -172,8 +172,8 @@
       "fixes": 0
     },
     {
-      "rule": "flush-in-forbidden-scope",
-      "code": "SC3003",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -212,7 +212,7 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",

@@ -232,7 +232,7 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
 fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> FindingWording {
     let (rule, mut message, hint) = match &operation.kind {
         LeafOwnerOperationKind::Cleanup => (
-            Rule::CleanupInForbiddenScope,
+            Rule::LeafOwnerForbiddenCall,
             format!(
                 "onCleanup is called inside {}, a leaf owner that manages cleanup through its return value; Solid throws CLEANUP_IN_FORBIDDEN_SCOPE here in dev",
                 operation.owner
@@ -243,7 +243,7 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
         ),
         LeafOwnerOperationKind::Flush => (
-            Rule::FlushInForbiddenScope,
+            Rule::LeafOwnerForbiddenCall,
             format!(
                 "flush() is called inside {}, which runs as part of the flush cycle itself; the call would re-enter the scheduler, and Solid throws here in dev",
                 operation.owner
@@ -254,7 +254,7 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
         ),
         LeafOwnerOperationKind::Primitive(primitive) => (
-            Rule::PrimitiveInLeafOwner,
+            Rule::LeafOwnerForbiddenCall,
             format!(
                 "reactive primitive {primitive} is created inside {}; {} is a leaf owner with no children, so nested primitives are never tracked or disposed, and Solid throws in dev",
                 operation.owner, operation.owner
@@ -463,9 +463,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ComponentReturnsConditionally
         | Rule::ReactiveWriteInOwnedScope
         | Rule::ActionCalledInOwnedScope
-        | Rule::CleanupInForbiddenScope
-        | Rule::PrimitiveInLeafOwner
-        | Rule::FlushInForbiddenScope
+        | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
         | Rule::PendingAsyncUntrackedRead
         | Rule::PendingAsyncForbiddenScope

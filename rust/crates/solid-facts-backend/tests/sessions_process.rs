@@ -158,8 +158,8 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
     );
     let findings = decode_findings(&output.stdout);
     let expected = [
-        ("leaf-reexport-flush.tsx", "flush-in-forbidden-scope"),
-        ("leaf-reexport-cleanup.tsx", "cleanup-in-forbidden-scope"),
+        ("leaf-reexport-flush.tsx", "leaf-owner-forbidden-call"),
+        ("leaf-reexport-cleanup.tsx", "leaf-owner-forbidden-call"),
         ("owned-reexport-memo.tsx", "reactive-write-in-owned-scope"),
         (
             "owned-reexport-refresh.tsx",

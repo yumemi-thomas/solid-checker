@@ -105,7 +105,7 @@ runtime guards on (runtime-legal; the value still will not update).
   promise still rejects in dev with `PRIMITIVE_IN_FORBIDDEN_SCOPE` (probed):
   `resolve` creates a `createRoot` internally, and leaf owners forbid
   primitive creation. That failure belongs to the leaf-owner defect class
-  ([primitive-in-leaf-owner](primitive-in-leaf-owner.md)), which does not
+  ([leaf-owner-forbidden-call](leaf-owner-forbidden-call.md)), which does not
   currently model `resolve`'s internal root; the rejection is asynchronous
   (inside the returned promise), unlike the synchronous throws that rule
   describes.

@@ -12,8 +12,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
@@ -42,8 +42,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",

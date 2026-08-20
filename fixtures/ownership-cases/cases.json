@@ -549,7 +549,7 @@
       }
     },
     {
-      "id": "cleanup-in-forbidden-scope/positive/001",
+      "id": "leaf-owner-forbidden-call/positive/001",
       "dialect": "solid-v2",
       "source": {
         "extension": ".tsx",
@@ -581,7 +581,7 @@
             }
           },
           {
-            "rule": "cleanup-in-forbidden-scope",
+            "rule": "leaf-owner-forbidden-call",
             "code": "SC3001",
             "kind": "violation",
             "severity": "error",

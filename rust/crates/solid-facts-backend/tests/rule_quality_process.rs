@@ -18,9 +18,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ("reactive-read-after-await", 20),
         ("component-props-destructure", 1),
         ("component-returns-conditionally", 3),
-        ("cleanup-in-forbidden-scope", 2),
-        ("flush-in-forbidden-scope", 2),
-        ("primitive-in-leaf-owner", 3),
+        ("leaf-owner-forbidden-call", 7),
     ] {
         assert_rule_findings(&findings, rule, count);
     }
@@ -80,20 +78,14 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "leaf-invalid.tsx",
-            [
-                ("cleanup-in-forbidden-scope", 1),
-                ("flush-in-forbidden-scope", 1),
-                ("primitive-in-leaf-owner", 3),
-            ]
-            .as_slice(),
+            [("leaf-owner-forbidden-call", 5)].as_slice(),
         ),
         (
             "owned-leaf-extended-invalid.tsx",
             [
                 ("reactive-write-in-owned-scope", 4),
                 ("action-called-in-owned-scope", 1),
-                ("cleanup-in-forbidden-scope", 1),
-                ("flush-in-forbidden-scope", 1),
+                ("leaf-owner-forbidden-call", 2),
             ]
             .as_slice(),
         ),
@@ -218,9 +210,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         (
             "leaf-valid.tsx",
             &[
-                "cleanup-in-forbidden-scope",
-                "flush-in-forbidden-scope",
-                "primitive-in-leaf-owner",
+                "leaf-owner-forbidden-call",
+                "leaf-owner-forbidden-call",
+                "leaf-owner-forbidden-call",
             ][..],
         ),
         (
@@ -228,9 +220,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             &[
                 "reactive-write-in-owned-scope",
                 "action-called-in-owned-scope",
-                "cleanup-in-forbidden-scope",
-                "flush-in-forbidden-scope",
-                "primitive-in-leaf-owner",
+                "leaf-owner-forbidden-call",
+                "leaf-owner-forbidden-call",
+                "leaf-owner-forbidden-call",
             ][..],
         ),
         (
