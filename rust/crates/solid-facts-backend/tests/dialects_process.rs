@@ -235,15 +235,11 @@ fn component_identity_combines_type_facts_with_dialect_compatibility() {
         .join("tests/fixtures/semantic-component-identity");
     let source = std::fs::read_to_string(fixture.join("App.tsx")).unwrap();
     let typed_offset = u64::try_from(source.find("setCount(1)").unwrap()).unwrap();
-    let compat_offset = u64::try_from(source.find("setCount(2)").unwrap()).unwrap();
     let mut component_prop_patterns = ["{ homeName }", "{ nestedName }", "{ spreadName }"]
         .map(|pattern| u64::try_from(source.find(pattern).unwrap()).unwrap())
         .to_vec();
     component_prop_patterns.sort_unstable();
-    for (dialect, expected) in [
-        ("solid-v2", vec![typed_offset]),
-        ("solid-v1", vec![typed_offset, compat_offset]),
-    ] {
+    for (dialect, expected) in [("solid-v2", vec![typed_offset]), ("solid-v1", vec![])] {
         let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some(dialect));
         let mut writes = findings
             .iter()
@@ -452,10 +448,9 @@ fn solid_one_reaction_callback_uses_its_disposing_computation_owner() {
     );
     assert!(
         one.iter().any(|finding| {
-            finding["id"] == "SC2001"
-                && finding["analysisContext"] == "ReactionInvalidationReachability"
+            finding["id"] == "SC2001" && finding["analysisContext"] == "namedTrackingCallback"
         }),
-        "the invoked reaction callback must still be analyzed under its tracked computation owner: {one:#?}"
+        "the callback passed through the returned reaction tracker must still be analyzed as a tracked computation: {one:#?}"
     );
 }
 

@@ -2,23 +2,22 @@
 
 `SC2001` · **error** · violation
 
-A signal or store setter is called inside an owned scope — a component body or a
-computation's tracking phase.
+A signal or store setter is called during a computation's tracking phase.
 
 ## What it does
 
 Flags calls to setters returned by `createSignal`/`createStore` when they execute
-inside a component body, a memo, or another tracked scope. Writes are allowed in
-event handlers, `onMount`, and other callbacks that run outside the current
-computation.
+inside a memo, effect computation, render effect, or tracked JSX expression.
+One-shot component bodies, ordinary helpers, event handlers, and `onMount`
+callbacks are outside this rule.
 
 ## Why is this bad?
 
 Writing during the tracking phase creates feedback loops: the write invalidates
 state the surrounding graph may depend on, which re-triggers the computation that
-made the write and can loop the reactive graph. Solid 1.x tolerates these writes
-at runtime, so the loop hides real bugs — and such a write is almost always a
-derivation expressed imperatively.
+made the write and can loop the reactive graph. Solid 1.x has no component-body
+write guard; SC2001 therefore reports only genuinely tracked execution, where a
+write is usually a derivation expressed imperatively.
 
 ## Examples
 
@@ -31,8 +30,7 @@ const [doubled, setDoubled] = createSignal(0);
 createMemo(() => setDoubled(count() * 2));
 
 function Counter() {
-  setCount(0); // Write in a component body.
-  return <span>{count()}</span>;
+  return <span>{setCount(0), count()}</span>; // Tracked JSX expression.
 }
 ```
 
@@ -47,6 +45,12 @@ const doubled = createMemo(() => count() * 2);
 
 // One-time setup writes run after render, outside the tracking phase:
 onMount(() => setReady(true));
+
+// Component setup and ordinary helpers also run once rather than tracking:
+function Counter() {
+  setCount(0);
+  return <span>{count()}</span>;
+}
 ```
 
 ## How to fix

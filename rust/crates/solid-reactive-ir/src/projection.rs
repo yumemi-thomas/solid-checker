@@ -379,6 +379,10 @@ pub struct CatalogCapabilities {
     pub async_reads: bool,
     pub leaf_operations: bool,
     pub directive_creations: bool,
+    /// Whether one-shot rendering/component bodies are included in the
+    /// owned-write rule. Solid 2.0's runtime guard rejects them; Solid 1.x
+    /// only has the feedback-loop hazard inside genuinely tracked scopes.
+    pub untracked_rendering_writes: bool,
     /// Whether module-scope reads are reported by the strict-read rule.
     /// The rc.0 runtime installs strict-read contexts only inside component
     /// and effect bodies (probed: a module-scope signal or memo read emits no
@@ -400,6 +404,7 @@ impl CatalogCapabilities {
         async_reads: false,
         leaf_operations: false,
         directive_creations: false,
+        untracked_rendering_writes: false,
         module_scope_strict_reads: true,
         handler_expression_owns_strict_read: false,
     };
@@ -409,6 +414,7 @@ impl CatalogCapabilities {
         async_reads: true,
         leaf_operations: true,
         directive_creations: true,
+        untracked_rendering_writes: true,
         module_scope_strict_reads: false,
         handler_expression_owns_strict_read: true,
     };
@@ -523,7 +529,12 @@ pub fn project_findings(
         program
             .writes
             .iter()
-            .filter(|write| !write.allowed_by_option && write.execution.reports_disallowed_write())
+            .filter(|write| {
+                !write.allowed_by_option
+                    && write.execution.reports_disallowed_write()
+                    && (capabilities.untracked_rendering_writes
+                        || write.execution != crate::ExecutionRole::UntrackedRendering)
+            })
             .map(|write| project_finding(FindingSeed::OwnedWrite(write), catalog)),
     );
     if capabilities.leaf_operations {

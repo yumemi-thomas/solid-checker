@@ -2,6 +2,107 @@
   "schemaVersion": 1,
   "cases": [
     {
+      "id": "v1/reactive-write-in-owned-scope/positive/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createEffect, createMemo, createRenderEffect, createSignal, type Component } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\nconst App: Component = () => {\n  createMemo(() => { setCount(2); return count(); });\n  createEffect(() => { setCount(3); count(); });\n  createRenderEffect(() => { setCount(4); count(); });\n  return <div>{setCount(8) && count()}</div>;\n};\nvoid <App />;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/reactive-write-in-owned-scope",
+            "code": "SC2001",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "setCount(2)"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/reactive-write-in-owned-scope",
+            "code": "SC2001",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "setCount(3)"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/reactive-write-in-owned-scope",
+            "code": "SC2001",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "setCount(4)"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/reactive-write-in-owned-scope",
+            "code": "SC2001",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "setCount(8)"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "v1/reactive-write-in-owned-scope/negative/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createSignal, onMount, type Component } from \"solid-js\";\nconst [, setCount] = createSignal(0);\nfunction helper() { setCount(6); }\nexport const App: Component = () => {\n  setCount(1);\n  helper();\n  onMount(() => setCount(5));\n  return <button onClick={() => setCount(7)}>safe</button>;\n};\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/reactive-write-in-owned-scope"
+          }
+        ]
+      }
+    },
+    {
       "id": "missing-effect-function/positive/001",
       "dialect": "solid-v2",
       "source": {
@@ -745,28 +846,11 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/reactive-write-in-owned-scope",
-            "code": "SC2001",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                121,
-                132
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
-          }
-        ],
+        "findings": [],
         "absent": [
+          {
+            "rule": "v1/reactive-write-in-owned-scope"
+          },
           {
             "rule": "v1/primitive-in-directive-application"
           }
