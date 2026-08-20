@@ -2083,7 +2083,7 @@
     {
       "upstreamCase": "reactivity__invalid__06",
       "disposition": "migrated",
-      "movedIn": "step-2",
+      "movedIn": "step-5",
       "ownershipCaseId": "upstream/reactivity__invalid__06",
       "reason": null
     },
@@ -2097,7 +2097,7 @@
     {
       "upstreamCase": "reactivity__invalid__08",
       "disposition": "migrated",
-      "movedIn": "step-2",
+      "movedIn": "step-5",
       "ownershipCaseId": "upstream/reactivity__invalid__08",
       "reason": null
     },
@@ -2111,21 +2111,21 @@
     {
       "upstreamCase": "reactivity__invalid__10",
       "disposition": "migrated",
-      "movedIn": "step-2",
+      "movedIn": "step-5",
       "ownershipCaseId": "upstream/reactivity__invalid__10",
       "reason": null
     },
     {
       "upstreamCase": "reactivity__invalid__11",
       "disposition": "migrated",
-      "movedIn": "step-2",
+      "movedIn": "step-5",
       "ownershipCaseId": "upstream/reactivity__invalid__11",
       "reason": null
     },
     {
       "upstreamCase": "reactivity__invalid__12",
       "disposition": "migrated",
-      "movedIn": "step-2",
+      "movedIn": "step-5",
       "ownershipCaseId": "upstream/reactivity__invalid__12",
       "reason": null
     },

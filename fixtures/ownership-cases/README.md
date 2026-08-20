@@ -21,9 +21,11 @@ Expected findings have one of three TypeScript ownership classes:
 - `distinct-claim`: both diagnostics overlap, and the entry must explain what
   the checker proves that TypeScript does not.
 
-Unlisted findings inside a case's own bytes fail. Negative cases name the rule
-or family that must remain absent. Cases can also pin exact counts, per-case rule
-options, fix applicability/output, presets, and directly enabled rules.
+Unlisted findings inside a case's own bytes fail. A live expectation may set a
+positive integer `count` when multiple findings share one exact identity and
+span. Negative cases name the rule or family that must remain absent. Cases
+can also pin per-case rule options, fix applicability/output, presets, and
+directly enabled rules.
 
 `migration-ledger.json` reconciles all 465 former upstream cases. It begins with
 every row `pending`; migrations and deletions update the row atomically with the

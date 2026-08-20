@@ -298,15 +298,6 @@ impl Dialect for Solid2 {
         true
     }
 
-    /// A derived helper bound and called entirely inside a tracked compute
-    /// tracks its reads there; one called from an event handler, `onSettled`,
-    /// `untrack`, or an effect's apply callback reads legitimately fresh
-    /// values at call time. Neither misbehaves at runtime, so the 2.0 catalog
-    /// exempts those call roles.
-    fn derived_function_role_exemptions(&self) -> bool {
-        true
-    }
-
     /// Source: RFC 10 — Solid 2.0 moves the `"use server"` directive and the
     /// `@solidjs/web/server-functions` runtime into core, and the pinned
     /// `@solidjs/web@2.0.0-rc.0` ships that runtime (`server-functions/dist`,

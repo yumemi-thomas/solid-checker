@@ -300,7 +300,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
         | Rule::UncalledAccessor
-        | Rule::UntrackedDerivedFunction
         | Rule::ExpectedFunctionGotExpression
         | Rule::NoDirectMutation
         | Rule::ReactiveSourceUncaptured
@@ -343,7 +342,6 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         }
         StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
-        StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
         StaticDefectKind::ReactiveDispatchUnresolved { .. }
         | StaticDefectKind::ReactiveCallbackUnresolved { .. }
@@ -368,7 +366,6 @@ const V1_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
         reactive_object_destructure_hint: "Keep the reactive object intact and read object.<name> inside JSX or a tracked computation. A property access made there remains subscribed; a setup-time destructuring binding does not.",
         missing_effect_message: "createEffect is called without an effect function; the signature is createEffect(fn, value?), where fn tracks dependencies and runs the side effect, and the optional value seeds the previous value passed to fn on its first run",
         missing_effect_hint: "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned.",
-        tracked_derived_scope: "JSX, a createMemo, or a createEffect callback",
         store_mutation_hint: v1_store_mutation_hint,
         // The removed-API migration map is a 2.0 concept: nothing has been
         // removed *from* the 1.x surface this catalog describes.

@@ -98,10 +98,7 @@ fn solid_one_merge_props_function_sources_are_tracked() {
     );
     assert!(
         findings.iter().all(|finding| {
-            !matches!(
-                finding["rule"].as_str(),
-                Some("v1/strict-read-untracked" | "v1/untracked-derived-function")
-            )
+            !matches!(finding["rule"].as_str(), Some("v1/strict-read-untracked"))
         }),
         "mergeProps wraps every function source in a tracked createMemo: {findings:#?}"
     );

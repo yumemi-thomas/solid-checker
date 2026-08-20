@@ -39,7 +39,6 @@ pub enum Rule {
     // engine's own SC1001/SC1002 above; these are the remaining distinct
     // defects that rule bundled. See docs/rules/README.md for the mapping.
     UncalledAccessor,
-    UntrackedDerivedFunction,
     ExpectedFunctionGotExpression,
     NoDirectMutation,
     NoAsyncTrackedScope,
@@ -87,7 +86,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 42] = [
+    pub const ALL: [Self; 41] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -101,7 +100,6 @@ impl Rule {
         Self::PrimitiveInDirectiveApplication,
         Self::MissingEffectFunction,
         Self::UncalledAccessor,
-        Self::UntrackedDerivedFunction,
         Self::ExpectedFunctionGotExpression,
         Self::NoDirectMutation,
         Self::NoAsyncTrackedScope,
@@ -159,9 +157,6 @@ impl Rule {
             ),
             Self::MissingEffectFunction => ("SC7001", "v1/missing-effect-function", "error", false),
             Self::UncalledAccessor => ("SC1005", "v1/uncalled-accessor", "warning", false),
-            Self::UntrackedDerivedFunction => {
-                ("SC1006", "v1/untracked-derived-function", "warning", false)
-            }
             Self::ExpectedFunctionGotExpression => (
                 "SC1007",
                 "v1/expected-function-got-expression",

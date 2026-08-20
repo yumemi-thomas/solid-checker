@@ -16,7 +16,6 @@ pub enum Rule {
     // stays 1.x-only: 2.0 models async computations as a feature
     // (SC5001–SC5003 and SC5005 own that surface).
     UncalledAccessor,
-    UntrackedDerivedFunction,
     ExpectedFunctionGotExpression,
     NoDirectMutation,
     ReactiveSourceUncaptured,
@@ -64,11 +63,10 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 36] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
-        Self::UntrackedDerivedFunction,
         Self::ExpectedFunctionGotExpression,
         Self::NoDirectMutation,
         Self::ReactiveSourceUncaptured,
@@ -110,9 +108,6 @@ impl Rule {
             Self::StrictReadUntracked => ("SC1001", "strict-read-untracked", "warning", false),
             Self::ReactiveReadAfterAwait => ("SC1002", "reactive-read-after-await", "error", false),
             Self::UncalledAccessor => ("SC1005", "uncalled-accessor", "warning", false),
-            Self::UntrackedDerivedFunction => {
-                ("SC1006", "untracked-derived-function", "warning", false)
-            }
             Self::ExpectedFunctionGotExpression => (
                 "SC1007",
                 "expected-function-got-expression",

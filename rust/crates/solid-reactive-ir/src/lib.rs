@@ -339,9 +339,6 @@ pub enum StaticDefectKind {
         contract_stub: String,
     },
     MissingEffectFunction,
-    UntrackedDerivedFunction {
-        name: String,
-    },
     ReactiveSourceUncaptured {
         source: String,
         callee: String,
@@ -1503,9 +1500,7 @@ fn containing_summary_function_indexed(
     path: &str,
     span: Span,
 ) -> Option<usize> {
-    functions_for_path(functions, by_path, path)
-        .find(|(_, function)| function.body.contains(span))
-        .map(|(index, _)| index)
+    containing_function_indexed(functions, by_path, path, span)
 }
 
 trait FunctionBoundary {
@@ -2685,7 +2680,7 @@ mod tests {
     }
 
     #[test]
-    fn summary_containment_preserves_first_node_order() {
+    fn summary_containment_selects_innermost_function() {
         let nodes = vec![
             summary_node(
                 "fixture.tsx",
@@ -2707,7 +2702,7 @@ mod tests {
                 "fixture.tsx",
                 Span { start: 35, end: 40 },
             ),
-            Some(0)
+            Some(1)
         );
     }
 

@@ -8,7 +8,6 @@
     { "code": "SC1001", "name": "strict-read-untracked", "severity": "warning", "uncertifiable": false },
     { "code": "SC1002", "name": "reactive-read-after-await", "severity": "error", "uncertifiable": false },
     { "code": "SC1005", "name": "uncalled-accessor", "severity": "warning", "uncertifiable": false },
-    { "code": "SC1006", "name": "untracked-derived-function", "severity": "warning", "uncertifiable": false },
     { "code": "SC1007", "name": "expected-function-got-expression", "severity": "warning", "uncertifiable": false },
     { "code": "SC2003", "name": "no-direct-mutation", "severity": "warning", "uncertifiable": false },
     { "code": "SC9011", "name": "reactive-source-uncaptured", "severity": "warning", "uncertifiable": true },

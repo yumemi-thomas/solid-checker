@@ -455,7 +455,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::StrictReadUntracked
         | Rule::ReactiveReadAfterAwait
         | Rule::UncalledAccessor
-        | Rule::UntrackedDerivedFunction
         | Rule::ExpectedFunctionGotExpression
         | Rule::NoDirectMutation
         | Rule::ReactiveSourceUncaptured
@@ -514,7 +513,6 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         }
         StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
-        StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
         StaticDefectKind::ReactiveDispatchUnresolved { .. }
         | StaticDefectKind::ReactiveCallbackUnresolved { .. }
@@ -564,7 +562,6 @@ const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
         reactive_object_destructure_hint: "Keep the reactive object intact and read object.<name> inside JSX or a tracked computation. A property access made there remains subscribed; a setup-time destructuring binding does not.",
         missing_effect_message: "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
         missing_effect_hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
-        tracked_derived_scope: "JSX, a createMemo, or the compute function of createEffect(compute, apply)",
         store_mutation_hint: v2_store_mutation_hint,
         removed_export_hint: v2_removed_export_hint,
     };

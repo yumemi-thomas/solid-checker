@@ -142,13 +142,13 @@
       "fixes": 0
     },
     {
-      "rule": "v1/untracked-derived-function",
-      "code": "SC1006",
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 4094,
-      "end": 4101,
+      "start": 4137,
+      "end": 4146,
       "fixes": 0
     },
     {
@@ -177,8 +177,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 6462,
-      "end": 6473,
+      "start": 6500,
+      "end": 6538,
       "fixes": 0
     }
   ]

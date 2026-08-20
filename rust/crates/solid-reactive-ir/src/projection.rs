@@ -20,7 +20,6 @@ pub struct StaticDefectTerms {
     pub reactive_object_destructure_hint: &'static str,
     pub missing_effect_message: &'static str,
     pub missing_effect_hint: &'static str,
-    pub tracked_derived_scope: &'static str,
     pub store_mutation_hint: fn(&str) -> String,
     /// A dialect-owned override for the missing-contract-export hint: when
     /// the dialect knows the export was removed or renamed upstream (the
@@ -198,15 +197,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             }
             (message, hint)
         }
-        StaticDefectKind::UntrackedDerivedFunction { name } => (
-            format!(
-                "{name} derives from reactive state but every call to it is untracked, so its reads subscribe to nothing and the derivation never updates"
-            ),
-            format!(
-                "Call {name} from a tracking scope — {} — or inline the value if a one-off read at setup is what was meant.",
-                terms.tracked_derived_scope
-            ),
-        ),
         StaticDefectKind::ReactiveSourceUncaptured { source, callee } => (
             format!(
                 "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
@@ -360,7 +350,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ExecutionMapIncomplete
         | StaticDefectKind::ReactiveReadAfterAwait { .. }
         | StaticDefectKind::MissingEffectFunction
-        | StaticDefectKind::UntrackedDerivedFunction { .. }
         | StaticDefectKind::ReactiveSourceUncaptured { .. }
         | StaticDefectKind::ReactiveHandlerRead { .. }
         | StaticDefectKind::HandlerValueUnresolved { .. }

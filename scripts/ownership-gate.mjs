@@ -167,6 +167,9 @@ for (const [index, testCase] of (manifest.cases ?? []).entries()) {
     const span = spanOf(testCase, expectation.span, findingLabel);
     findingSpans.push(span);
     const ownership = expectation.typescript?.ownership;
+    const count = expectation.count ?? 1;
+    if (!Number.isInteger(count) || count < 1) fail(failures, `${findingLabel}: count must be a positive integer`);
+    if (ownership === "typescript-owned" && expectation.count !== undefined) fail(failures, `${findingLabel}: TypeScript-owned expectations cannot declare a checker finding count`);
     if (!["checker-only", "typescript-owned", "distinct-claim"].includes(ownership)) fail(failures, `${findingLabel}: invalid TypeScript ownership`);
     if (ownership === "distinct-claim" && !expectation.typescript?.justification?.trim()) fail(failures, `${findingLabel}: distinct-claim requires a non-empty justification`);
     for (const [diagnosticIndex, diagnostic] of (expectation.typescript?.diagnostics ?? []).entries()) {
@@ -285,14 +288,16 @@ for (const value of resolved.values()) {
   for (const [index, expectation] of testCase.expect.findings.entries()) {
     const span = findingSpans[index];
     const candidates = actual.map((finding, actualIndex) => ({ finding, actualIndex })).filter(({ finding }) => finding.rule === expectation.rule && finding.id === expectation.code && finding.primaryLocation.startByte === span.start && finding.primaryLocation.endByte === span.end);
+    const expectedCount = expectation.count ?? 1;
     if (expectation.typescript.ownership === "typescript-owned") {
       if (candidates.length) fail(failures, `${label} finding[${index}]: TypeScript-owned finding was emitted`);
-    } else if (candidates.length !== 1) {
-      fail(failures, `${label} finding[${index}]: expected exactly one ${expectation.rule}/${expectation.code} at ${span.start}..${span.end}, got ${candidates.length}`);
+    } else if (candidates.length !== expectedCount) {
+      fail(failures, `${label} finding[${index}]: expected exactly ${expectedCount} ${expectation.rule}/${expectation.code} finding(s) at ${span.start}..${span.end}, got ${candidates.length}`);
     } else {
-      const { finding, actualIndex } = candidates[0];
-      claimed.add(actualIndex);
-      if (finding.kind !== expectation.kind || finding.severity !== expectation.severity) fail(failures, `${label} finding[${index}]: expected ${expectation.kind}/${expectation.severity}, got ${finding.kind}/${finding.severity}`);
+      candidates.forEach(({ actualIndex }) => claimed.add(actualIndex));
+      const mismatched = candidates.find(({ finding }) => finding.kind !== expectation.kind || finding.severity !== expectation.severity);
+      if (mismatched) fail(failures, `${label} finding[${index}]: expected every finding to be ${expectation.kind}/${expectation.severity}, got ${mismatched.finding.kind}/${mismatched.finding.severity}`);
+      const finding = candidates[0].finding;
       const behavior = expectation.fix?.behavior ?? "none";
       const fixes = finding.fixes ?? [];
       if (behavior === "none" && fixes.length) fail(failures, `${label} finding[${index}]: expected no fix, got ${fixes.length}`);

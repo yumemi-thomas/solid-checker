@@ -18,7 +18,6 @@
     { "code": "SC6001", "name": "v1/primitive-in-directive-application", "severity": "error", "uncertifiable": false },
     { "code": "SC7001", "name": "v1/missing-effect-function", "severity": "error", "uncertifiable": false },
     { "code": "SC1005", "name": "v1/uncalled-accessor", "severity": "warning", "uncertifiable": false },
-    { "code": "SC1006", "name": "v1/untracked-derived-function", "severity": "warning", "uncertifiable": false },
     { "code": "SC1007", "name": "v1/expected-function-got-expression", "severity": "warning", "uncertifiable": false },
     { "code": "SC2003", "name": "v1/no-direct-mutation", "severity": "warning", "uncertifiable": false },
     { "code": "SC5004", "name": "v1/no-async-tracked-scope", "severity": "warning", "uncertifiable": false },

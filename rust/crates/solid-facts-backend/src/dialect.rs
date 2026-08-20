@@ -59,6 +59,14 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "v1/imports",
         "removed 2026-08-17: its one condition — the named module does not export the name — is exactly TS2305's",
     ),
+    (
+        "v1/untracked-derived-function",
+        "removed 2026-08-20: SC1001 follows helper-call chains and owns the same untracked reactive-read failure",
+    ),
+    (
+        "untracked-derived-function",
+        "removed 2026-08-20: SC1001 follows helper-call chains and owns the same runtime STRICT_READ_UNTRACKED failure",
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.
@@ -421,9 +429,6 @@ mod tests {
                 reexported: false,
             },
             StaticDefectKind::MissingEffectFunction,
-            StaticDefectKind::UntrackedDerivedFunction {
-                name: "sampleFunction".into(),
-            },
             StaticDefectKind::ReactiveSourceUncaptured {
                 source: "sampleAccessor".into(),
                 callee: "sampleCallee".into(),
@@ -563,10 +568,9 @@ mod tests {
             .collect::<HashSet<_>>();
         let shared = v1.intersection(&v2).copied().collect::<HashSet<_>>();
         let expected = HashSet::from([
-            "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1006", "SC1007", "SC2001",
-            "SC2003", "SC3001", "SC3002", "SC4001", "SC4002", "SC4003", "SC6001", "SC7001",
-            "SC8018", "SC8019", "SC8020", "SC9001", "SC9004", "SC9005", "SC9006", "SC9011",
-            "SC9012",
+            "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1007", "SC2001", "SC2003",
+            "SC3001", "SC3002", "SC4001", "SC4002", "SC4003", "SC6001", "SC7001", "SC8018",
+            "SC8019", "SC8020", "SC9001", "SC9004", "SC9005", "SC9006", "SC9011", "SC9012",
         ]);
         assert_eq!(shared, expected);
         assert_eq!(
@@ -574,22 +578,22 @@ mod tests {
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            25
+            24
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            25
+            24
         );
         assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 25,
+            solid_v1_rules::Rule::ALL.len() - 24,
             17,
             "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
         assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 25,
+            solid_v2_rules::Rule::ALL.len() - 24,
             12,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );

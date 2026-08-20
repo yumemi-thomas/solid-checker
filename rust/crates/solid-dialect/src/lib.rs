@@ -988,16 +988,6 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// Whether `untracked-derived-function` exempts a derived helper whose
-    /// every call runs in a tracked compute or a fresh-at-call-time imperative
-    /// scope (event handler, deferred/leaf callback, effect apply, untrack).
-    /// Reads there either track or are legitimately fresh, so nothing
-    /// misbehaves. The 1.x catalog keeps upstream's expectations for parity,
-    /// so the default is `false`.
-    fn derived_function_role_exemptions(&self) -> bool {
-        false
-    }
-
     /// The modules this dialect exports `name` from, in `position`.
     ///
     /// The other half of [`Dialect::modules`], and the reason that list is

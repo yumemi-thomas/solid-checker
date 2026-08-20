@@ -7873,39 +7873,15 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
-            "rule": "v1/untracked-derived-function",
-            "code": "SC1006",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "textRange": [
-                50,
-                57
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      25,
-                      30
-                    ]
-                  }
-                }
-              ],
-              "justification": "The checker rule v1/untracked-derived-function asserts a Solid runtime semantic outcome; the overlapping TS7006 diagnostic concerns the source's type-level shape rather than that runtime outcome."
-            }
+            "rule": "v1/untracked-derived-function"
+          },
+          {
+            "rule": "v1/strict-read-untracked"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {
@@ -7969,14 +7945,14 @@
       "expect": {
         "findings": [
           {
-            "rule": "v1/untracked-derived-function",
-            "code": "SC1006",
+            "rule": "v1/strict-read-untracked",
+            "code": "SC1001",
             "kind": "violation",
             "severity": "warning",
             "span": {
               "textRange": [
-                88,
-                89
+                172,
+                175
               ]
             },
             "fix": {
@@ -7988,7 +7964,11 @@
             }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/untracked-derived-function"
+          }
+        ]
       }
     },
     {
@@ -8041,14 +8021,14 @@
       "expect": {
         "findings": [
           {
-            "rule": "v1/untracked-derived-function",
-            "code": "SC1006",
+            "rule": "v1/strict-read-untracked",
+            "code": "SC1001",
             "kind": "violation",
             "severity": "warning",
             "span": {
               "textRange": [
-                88,
-                89
+                240,
+                243
               ]
             },
             "fix": {
@@ -8060,14 +8040,14 @@
             }
           },
           {
-            "rule": "v1/untracked-derived-function",
-            "code": "SC1006",
+            "rule": "v1/strict-read-untracked",
+            "code": "SC1001",
             "kind": "violation",
             "severity": "warning",
             "span": {
               "textRange": [
-                150,
-                151
+                263,
+                266
               ]
             },
             "fix": {
@@ -8079,7 +8059,11 @@
             }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/untracked-derived-function"
+          }
+        ]
       }
     },
     {
@@ -8096,14 +8080,15 @@
       "expect": {
         "findings": [
           {
-            "rule": "v1/untracked-derived-function",
-            "code": "SC1006",
+            "rule": "v1/strict-read-untracked",
+            "code": "SC1001",
             "kind": "violation",
             "severity": "warning",
+            "count": 2,
             "span": {
               "textRange": [
-                195,
-                196
+                309,
+                312
               ]
             },
             "fix": {
@@ -8115,7 +8100,11 @@
             }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/untracked-derived-function"
+          }
+        ]
       }
     },
     {
@@ -8132,14 +8121,33 @@
       "expect": {
         "findings": [
           {
-            "rule": "v1/untracked-derived-function",
-            "code": "SC1006",
+            "rule": "v1/strict-read-untracked",
+            "code": "SC1001",
             "kind": "violation",
             "severity": "warning",
             "span": {
               "textRange": [
-                178,
-                181
+                234,
+                239
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/strict-read-untracked",
+            "code": "SC1001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                259,
+                264
               ]
             },
             "fix": {
@@ -8151,7 +8159,11 @@
             }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/untracked-derived-function"
+          }
+        ]
       }
     },
     {

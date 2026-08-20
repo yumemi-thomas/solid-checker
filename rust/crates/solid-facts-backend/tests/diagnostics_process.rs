@@ -619,7 +619,6 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
         // one callable/non-callable proof obligation. Ordinary `onClick`
         // non-callable values remain TS2322-owned.
         ("expected-function-got-expression", 3),
-        ("untracked-derived-function", 2),
     ] {
         assert_rule_findings(&reactivity_findings, rule, expected);
     }

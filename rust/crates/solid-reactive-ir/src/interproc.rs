@@ -2973,6 +2973,24 @@ fn interprocedural_result_reads_for_file(
         let valid_call = lookup
             .resolved_callee_call(file, call.callee)
             .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
+        // A member invoked on the innermost function's parameter is not a
+        // local runtime-dispatch choice. The graph records it in
+        // `invoked_parameter_members`, and each caller either selects an
+        // exact implementation or receives one call-site obligation. Also
+        // reporting the unresolved member here duplicates that same proof
+        // obligation at the helper definition.
+        let parameter_member_call = lookup
+            .member_callee_receiver(file, call.callee)
+            .is_some_and(|(receiver, _)| {
+                nodes
+                    .iter()
+                    .filter(|node| node.path == file.path.as_str() && node.body.contains(call.span))
+                    .min_by_key(|node| node.body.end - node.body.start)
+                    .is_some_and(|owner| owner.parameters.contains(&receiver))
+            });
+        if parameter_member_call {
+            continue;
+        }
         let candidate_symbols = lookup.callee_symbols(file, call.callee);
         if candidate_symbols.is_empty()
             && file
