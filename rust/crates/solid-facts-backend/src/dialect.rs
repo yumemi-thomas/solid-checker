@@ -91,6 +91,14 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "v1/no-array-handlers",
         "removed 2026-08-20: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove that a matched pair is defective",
     ),
+    (
+        "v1/no-react-deps",
+        "removed 2026-08-20: Solid 1.x intentionally accepts an array seed and passes it to the reactive callback",
+    ),
+    (
+        "v1/event-handlers",
+        "removed 2026-08-20: its surviving arms enforced spelling and intent conventions rather than proven runtime defects",
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.

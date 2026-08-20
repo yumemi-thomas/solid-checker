@@ -946,8 +946,8 @@ pub trait Dialect: Sync {
     /// Whether a statically known string/number in a native `on*` JSX
     /// position is emitted as an attribute instead of installed as a listener.
     /// Solid 1.x's compiler makes that node/value distinction; the shared
-    /// handler-value rule must therefore leave those expressions to the v1
-    /// `event-handlers` rule rather than describe them as runtime listeners.
+    /// handler-value rule must therefore leave those expressions alone rather
+    /// than describe them as runtime listeners.
     fn static_event_values_are_attributes(&self) -> bool {
         false
     }

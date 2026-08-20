@@ -726,23 +726,6 @@
       "expect": {
         "findings": [
           {
-            "rule": "v1/event-handlers",
-            "code": "SC8001",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "marker": "onclick"
-            },
-            "fix": {
-              "behavior": "safe",
-              "text": "const handler = () => {};\nexport const Case = () => <div onClick={handler} onClick={handler} />;\n"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
-          },
-          {
             "rule": "v1/jsx-no-duplicate-props",
             "code": "SC8003",
             "kind": "violation",
@@ -762,7 +745,11 @@
             }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/event-handlers"
+          }
+        ]
       }
     },
     {
@@ -1095,33 +1082,16 @@
         "prelude": "",
         "text": "declare const foo: unknown;\nconst handleClick = () => 42;\nexport const Case = () => <div {...{ onClick: handleClick, foo }} />;\n"
       },
-      "ruleOptions": {
-        "v1/event-handlers": {
-          "warnOnSpread": true
-        }
-      },
+      "ruleOptions": {},
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
-            "rule": "v1/event-handlers",
-            "code": "SC8001",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "marker": "onClick: handleClick"
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
+            "rule": "v1/event-handlers"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {
@@ -1155,26 +1125,13 @@
               "ownership": "checker-only",
               "diagnostics": []
             }
-          },
-          {
-            "rule": "v1/no-react-deps",
-            "code": "SC8010",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "marker": "[signal()]"
-            },
-            "fix": {
-              "behavior": "safe",
-              "text": "// café keeps byte offsets honest before the finding.\nconst [signal] = createSignal(0);\ncreateEffect(() => signal());\n"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/no-react-deps"
+          }
+        ]
       }
     },
     {

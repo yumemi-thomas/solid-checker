@@ -29,19 +29,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 
-/// Options for `v1/event-handlers` (SC8001).
-#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
-pub struct EventHandlersOptions {
-    /// Upstream's `ignoreCase`: treat handler names case-insensitively and
-    /// stop suggesting canonical spellings, so `onclick` and `only` are
-    /// accepted as written.
-    pub ignore_case: bool,
-    /// Upstream's `warnOnSpread`: report handler-named properties carried
-    /// into a DOM element through a JSX spread, which Solid does not attach.
-    pub warn_on_spread: bool,
-}
-
 /// Options for `v1/no-innerhtml` (SC8008).
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields, default)]
@@ -136,7 +123,6 @@ pub struct NoUnknownNamespacesOptions {
 /// Options owned specifically by the Solid 1.x compatibility implementation.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Solid1xRuleOptions {
-    pub event_handlers: EventHandlersOptions,
     pub no_innerhtml: NoInnerhtmlOptions,
     pub self_closing_comp: SelfClosingCompOptions,
     pub prefer_classlist: PreferClasslistOptions,
@@ -145,8 +131,7 @@ pub struct Solid1xRuleOptions {
 }
 
 impl Solid1xRuleOptions {
-    const CONFIGURABLE_RULES: [&'static str; 6] = [
-        "event-handlers",
+    const CONFIGURABLE_RULES: [&'static str; 5] = [
         "no-innerhtml",
         "self-closing-comp",
         "prefer-classlist",
@@ -161,9 +146,6 @@ impl Solid1xRuleOptions {
     fn parse_rule(&mut self, rule: &str, value: &serde_json::Value) -> Option<Result<(), String>> {
         let parsed =
             match rule {
-                "event-handlers" => {
-                    serde_json::from_value(value.clone()).map(|parsed| self.event_handlers = parsed)
-                }
                 "no-innerhtml" => {
                     serde_json::from_value(value.clone()).map(|parsed| self.no_innerhtml = parsed)
                 }
@@ -292,8 +274,7 @@ mod tests {
     fn known_rule(rule: &str) -> bool {
         matches!(
             rule,
-            "v1/event-handlers"
-                | "v1/no-innerhtml"
+            "v1/no-innerhtml"
                 | "v1/self-closing-comp"
                 | "v1/prefer-classlist"
                 | "v1/style-prop"
@@ -317,8 +298,6 @@ mod tests {
         assert_eq!(options, RuleOptions::default());
         let options = options.solid1x;
         assert!(options.no_innerhtml.allow_static);
-        assert!(!options.event_handlers.ignore_case);
-        assert!(!options.event_handlers.warn_on_spread);
         assert_eq!(options.self_closing_comp.html, SelfClosePolicy::All);
         assert_eq!(
             options.prefer_classlist.classnames,
@@ -335,7 +314,6 @@ mod tests {
             r#"{
               "schemaVersion": 1,
               "rules": {
-                "v1/event-handlers": { "ignoreCase": true, "warnOnSpread": true },
                 "v1/no-innerhtml": { "allowStatic": false },
                 "v1/self-closing-comp": { "component": "none", "html": "void" },
                 "v1/prefer-classlist": { "classnames": ["cx"] },
@@ -348,8 +326,6 @@ mod tests {
         )
         .unwrap();
         let options = options.solid1x;
-        assert!(options.event_handlers.ignore_case);
-        assert!(options.event_handlers.warn_on_spread);
         assert!(!options.no_innerhtml.allow_static);
         assert_eq!(options.self_closing_comp.component, SelfClosePolicy::None);
         assert_eq!(options.self_closing_comp.html, SelfClosePolicy::Void);

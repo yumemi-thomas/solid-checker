@@ -1,38 +1,23 @@
-//! `v1/no-innerhtml`, `v1/no-react-specific-props`, `v1/style-prop`,
-//! `v1/event-handlers`, `v1/prefer-classlist` —
+//! `v1/no-innerhtml`, `v1/no-react-specific-props`, `v1/style-prop`, and
+//! `v1/prefer-classlist` —
 //! eslint-plugin-solid's attribute-value rules, ported from the 1.x reactive
 //! solver's `solid_1_rules.rs` onto this checker's fact tables.
-//!
-//! Five of these six are purely structural, like every rule in the sibling
-//! `solid1x_syntax` module. `event-handlers` is the exception: telling an
-//! attribute value that Solid will treat as an inlined attribute
-//! (`onClick="doThing"`)
-//! apart from one Solid will treat as a listener needs the value's *type*,
-//! not just its syntax, when the value is neither a literal nor an
-//! obviously-static local (`const x = "..."; onClick={x}`). For that one
-//! case this reads the resolved TypeScript type through
-//! [`UpstreamCompatContext::lookup`] instead of guessing from source text —
-//! the same "ask what was proven, not what the syntax suggests" preference
-//! [`super::shared_reactivity`] documents for its own rules. The compiler's
-//! template/static branch is the exception: it is a syntax-node-kind rule, so
-//! this module delegates that exact predicate to `solid1x_syntax`.
 //!
 //! # Options
 //!
 //! `no-innerhtml { allowStatic }`, `style-prop { styleProps, allowString }`,
-//! `event-handlers { ignoreCase, warnOnSpread }`, and `prefer-classlist
-//! { classnames }` are read from the project's
+//! and `prefer-classlist { classnames }` are read from the project's
 //! `.solid-checker/rule-options.json` (see [`super::solid1x_options`]),
 //! defaulting to upstream's defaults.
 
 use std::collections::HashSet;
 
 use solid_facts::FileFacts;
-use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
+use solid_facts::ast::JsxElementFact;
 
 use super::{
-    UpstreamCompatContext, fix_replace, is_lowercase_led, jsx_name_is_type_checked,
-    literal_string_type, static_string, static_string_expression, text, violation,
+    UpstreamCompatContext, fix_replace, is_lowercase_led, literal_string_type, static_string, text,
+    violation,
 };
 use crate::StaticViolation;
 
@@ -45,7 +30,6 @@ pub(super) fn check_file(
         no_innerhtml(file, context, element, violations);
         no_react_specific_props(file, element, violations);
         style_prop(file, context, element, violations);
-        event_handlers(file, context, element, violations);
         prefer_classlist(file, context, element, violations);
     }
 }
@@ -540,285 +524,6 @@ fn to_kebab_case(name: &str) -> String {
     kebab
 }
 
-const COMMON_EVENTS: &[&str] = &[
-    "onAnimationEnd",
-    "onAnimationIteration",
-    "onAnimationStart",
-    "onBeforeInput",
-    "onBlur",
-    "onChange",
-    "onClick",
-    "onContextMenu",
-    "onCopy",
-    "onCut",
-    "onDblClick",
-    "onDrag",
-    "onDragEnd",
-    "onDragEnter",
-    "onDragExit",
-    "onDragLeave",
-    "onDragOver",
-    "onDragStart",
-    "onDrop",
-    "onError",
-    "onFocus",
-    "onFocusIn",
-    "onFocusOut",
-    "onGotPointerCapture",
-    "onInput",
-    "onInvalid",
-    "onKeyDown",
-    "onKeyPress",
-    "onKeyUp",
-    "onLoad",
-    "onLostPointerCapture",
-    "onMouseDown",
-    "onMouseEnter",
-    "onMouseLeave",
-    "onMouseMove",
-    "onMouseOut",
-    "onMouseOver",
-    "onMouseUp",
-    "onPaste",
-    "onPointerCancel",
-    "onPointerDown",
-    "onPointerEnter",
-    "onPointerLeave",
-    "onPointerMove",
-    "onPointerOut",
-    "onPointerOver",
-    "onPointerUp",
-    "onReset",
-    "onScroll",
-    "onSelect",
-    "onSubmit",
-    "onToggle",
-    "onTouchCancel",
-    "onTouchEnd",
-    "onTouchMove",
-    "onTouchStart",
-    "onTransitionEnd",
-    "onWheel",
-];
-
-/// The canonically-cased spelling of a common DOM event handler name, chosen
-/// case-insensitively, or `None` if `name` is not one of them.
-fn event_name(name: &str) -> Option<&'static str> {
-    COMMON_EVENTS
-        .iter()
-        .copied()
-        .find(|event| event.eq_ignore_ascii_case(name))
-}
-
-/// `v1/event-handlers` (SC8001) — an `on...`-named DOM attribute whose value
-/// Solid's compiler will inline as a plain attribute rather than attach as a
-/// listener (because the value is statically a string or number), a
-/// nonstandard or miscapitalized spelling of a real event
-/// (`ondoubleclick`/`onclick`), and a name that is ambiguous between "event
-/// handler with an unusual capitalization" and "attribute that happens to
-/// start with `on`" (`onload-status`-style names the third letter of which is
-/// lowercase).
-fn event_handlers(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    element: &JsxElementFact,
-    violations: &mut Vec<StaticViolation>,
-) {
-    let element_name = text(file, element.name.span);
-    if element_name.contains('.') || !is_lowercase_led(element_name) {
-        return; // bail if this is not a DOM/SVG element or web component
-    }
-    // Narrowed 2026-08-17 under AGENTS.md's absolute rule. Solid 1.x's JSX
-    // types declare every standard handler under both its camelCase and its
-    // all-lowercase spelling, and `HTMLAttributes` has no `on*` index
-    // signature, so on a standard element TypeScript answers two of this
-    // rule's three attribute arms outright:
-    //
-    //   * an unknown `on*` name is TS2322 "Property 'onFoo' does not exist on
-    //     type 'HTMLAttributes<HTMLDivElement>'" -- in every value form,
-    //     including the boolean shorthand;
-    //   * a statically valued *known* handler is TS2322 "Type 'string' is not
-    //     assignable to type 'EventHandlerUnion<…>'", and no static value is
-    //     ever assignable, so that arm has no residue either.
-    //
-    // A **hyphenated** tag is different: `<my-element />` is TS2339 against
-    // stock typings, so any project that actually uses one has augmented
-    // `JSX.IntrinsicElements` with its own declaration -- commonly a permissive
-    // one. There TypeScript is silent and this rule's claim (Solid freezes a
-    // statically valued `on*` prop into the template as a plain attribute
-    // rather than attaching a listener) is the only one available.
-    // A hyphenated tag is one case TypeScript declines; a hyphenated *attribute
-    // name* is the other, and it is checked per attribute below. Both reopen the
-    // arms the narrowing otherwise hands to TypeScript.
-    let custom_element = element_name.contains('-');
-    for attribute in element
-        .attributes
-        .iter()
-        .filter(|attribute| attribute.namespace.is_none())
-    {
-        let name = text(file, attribute.name);
-        if !name.starts_with("on") {
-            continue;
-        }
-        let type_is_static = attribute.expression.is_some_and(|span| {
-            if static_string_expression(context, file, span).is_some() {
-                return true;
-            }
-            // The pinned compiler freezes only a StringLiteral or
-            // NumericLiteral expression. In particular, `-1` is a unary
-            // expression and `NaN` is an identifier, even though TypeScript
-            // renders both as a primitive number. Keep this syntactic test in
-            // lockstep with jsx-no-duplicate-props rather than parsing a
-            // rendered type descriptor.
-            super::solid1x_syntax::expression_is_static_literal(file, span)
-        });
-        // No source-text fallback here. Parsing the written text with
-        // `str::parse::<f64>` accepted exactly the spellings the compiler does
-        // *not* freeze — `-1` (unary), `NaN` and `Infinity` (identifiers) —
-        // and it sat in this disjunction, so it decided the answer before the
-        // syntactic test above could. The diagnostic claims Solid "will treat
-        // the value as an attribute", which is only true for the frozen forms.
-        if type_is_static
-            || matches!(
-                attribute.value_kind,
-                JsxAttributeValueKind::Boolean | JsxAttributeValueKind::String
-            )
-        {
-            // TypeScript's on a standard element, whatever the name: a known
-            // handler rejects the value, an unknown name does not exist. Unless
-            // the name carries a hyphen, which TypeScript never checks --
-            // `onFoo-bar` is accepted on a `<div>` however it is valued.
-            if !custom_element && jsx_name_is_type_checked(name) {
-                continue;
-            }
-            violations.push(violation(
-                file,
-                "SC8001",
-                "event-handlers",
-                format!(
-                    "The {name} prop is named as an event handler (starts with \"on\"), but Solid knows its value is a string or number, so it will be treated as an attribute. If this is intentional, name this prop attr:{name}."
-                ),
-                format!(
-                    "Rename to attr:{name} to make the attribute reading explicit, or change the value to a function if a listener was intended."
-                ),
-                attribute.span,
-                vec![],
-            ));
-            continue;
-        }
-        // Upstream's `ignoreCase`: handler names are accepted as written, so
-        // the canonical-spelling and ambiguous-name advice below is off.
-        if context.solid1x_options.event_handlers.ignore_case {
-            continue;
-        }
-        let fixed = if name.eq_ignore_ascii_case("ondoubleclick") {
-            Some("onDblClick")
-        } else {
-            event_name(name)
-        };
-        if let Some(fixed) = fixed {
-            // The rename advice survives only where the name as written is a
-            // *declared* spelling, so TypeScript accepts it and the remaining
-            // objection is readability. Solid 1.x declares each handler as
-            // both `onClick` and `onclick`, so that is the all-lowercase form:
-            // `onclick` is silent to `tsc` and keeps its advice, while
-            // `onClIcK`, `oncLICK`, and `ondoubleclick` are TS2322 and are now
-            // TypeScript's. On a hyphenated tag nothing is declared by Solid,
-            // so the advice stands there too.
-            let declared_spelling = custom_element
-                || !jsx_name_is_type_checked(name)
-                || name == fixed.to_ascii_lowercase();
-            if fixed != name && declared_spelling {
-                let message = if name.eq_ignore_ascii_case("ondoubleclick") {
-                    format!(
-                        "The {name} prop should be renamed to {fixed}, because it's not a standard event handler."
-                    )
-                } else {
-                    format!("The {name} prop should be renamed to {fixed} for readability.")
-                };
-                let mut result = violation(
-                    file,
-                    "SC8001",
-                    "event-handlers",
-                    message,
-                    format!(
-                        "{fixed} is the standard spelling; renaming keeps the handler recognizable and consistent with the rest of the codebase."
-                    ),
-                    attribute.name,
-                    vec![],
-                );
-                result.fixes.push(fix_replace(
-                    file,
-                    attribute.name,
-                    format!("rename to {fixed}"),
-                    fixed,
-                ));
-                violations.push(result);
-            }
-        } else if (custom_element || !jsx_name_is_type_checked(name))
-            && name.as_bytes().get(2).is_some_and(u8::is_ascii_lowercase)
-        {
-            // Ambiguous between "ongoing"-style words and an unrecognized
-            // handler; two equally valid readings, so this is a suggestion
-            // rather than a fix (see attributes rule of the road: only an
-            // unambiguous fix is emitted).
-            //
-            // Reached only on a hyphenated tag: an unrecognised `on*` name on a
-            // standard element does not exist on its attribute type, which is
-            // TS2322's sentence, not this rule's.
-            let handler_name = format!("on{}{}", name[2..3].to_ascii_uppercase(), &name[3..]);
-            let attr_name = format!("attr:{name}");
-            violations.push(violation(
-                file,
-                "SC8001",
-                "event-handlers",
-                format!(
-                    "The {name} prop is ambiguous. If it is an event handler, change it to {handler_name}. If it is an attribute, change it to {attr_name}."
-                ),
-                format!(
-                    "Rename explicitly: {handler_name} if Solid should attach a listener, or {attr_name} to force it to be a plain DOM attribute."
-                ),
-                attribute.name,
-                vec![],
-            ));
-        }
-    }
-    // Upstream's `warnOnSpread`: a handler-named property carried into a DOM
-    // element through a JSX spread. Solid attaches listeners from attributes
-    // the compiler can see; a spread delivers the value as a plain property
-    // at runtime instead. Off by default, matching upstream — which looks
-    // only at a spread that is itself an object literal, reads that object's
-    // own entries, and takes any plain `on*`-named identifier key (no
-    // third-letter requirement: this judges the object's shape, not whether
-    // the name could be a real event).
-    if context.solid1x_options.event_handlers.warn_on_spread {
-        for spread in &element.spreads {
-            for property in
-                super::direct_object_literal_properties(file, spread.argument).unwrap_or_default()
-            {
-                if property.computed {
-                    continue;
-                }
-                let key = text(file, property.key);
-                if key.starts_with(['\'', '"']) || !key.starts_with("on") {
-                    continue;
-                }
-                violations.push(violation(
-                    file,
-                    "SC8001",
-                    "event-handlers",
-                    format!(
-                        "The {key} prop should be written as a JSX attribute, not spread in; Solid attaches listeners from attributes its compiler can see."
-                    ),
-                    format!("Move {key} out of the spread and write it directly on the element."),
-                    property.span,
-                    vec![],
-                ));
-            }
-        }
-    }
-}
-
 /// `v1/prefer-classlist` (SC8013) — a `class`/`className` prop set from a
 /// `classnames`-shaped helper call (`cn`, `clsx`, `classnames`) applied to an
 /// object literal. Solid's `classlist` prop accepts that exact `{ [name]:
@@ -911,9 +616,7 @@ fn prefer_classlist(
 #[cfg(test)]
 mod tests {
     use super::super::strip_string_literal;
-    use super::{
-        event_name, is_lowercase_led, missing_unit, style_string_object_fix, to_kebab_case,
-    };
+    use super::{is_lowercase_led, missing_unit, style_string_object_fix, to_kebab_case};
 
     #[test]
     fn converts_camel_case_css_properties_to_kebab_case() {
@@ -926,19 +629,6 @@ mod tests {
     fn leaves_already_kebab_or_lowercase_names_unchanged() {
         assert_eq!(to_kebab_case("font-size"), "font-size");
         assert_eq!(to_kebab_case("color"), "color");
-    }
-
-    #[test]
-    fn resolves_common_event_names_case_insensitively() {
-        assert_eq!(event_name("onclick"), Some("onClick"));
-        assert_eq!(event_name("ONCLICK"), Some("onClick"));
-        assert_eq!(event_name("onDblClick"), Some("onDblClick"));
-    }
-
-    #[test]
-    fn does_not_resolve_unknown_event_names() {
-        assert_eq!(event_name("onfoobar"), None);
-        assert_eq!(event_name("ondoubleclick"), None);
     }
 
     #[test]

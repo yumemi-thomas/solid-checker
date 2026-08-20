@@ -185,15 +185,11 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         )
     });
     let evidence = match rule {
-        Rule::EventHandlers => {
-            "the native JSX attribute spelling does not match Solid's event-handler contract"
-        }
         Rule::JsxNoDuplicateProps => "the same JSX property is assigned more than once",
         Rule::JsxNoScriptUrl => "the statically resolved URL uses the javascript: scheme",
         Rule::JsxNoUndef => "the JSX name has no value-space binding in lexical scope",
         Rule::NoInnerhtml => "the JSX attribute writes markup through an HTML injection sink",
         Rule::NoProxyApis => "the import or call requires Proxy-backed Solid APIs",
-        Rule::NoReactDeps => "a Solid reactive primitive received a React-style dependency array",
         Rule::NoReactSpecificProps => "the JSX attribute uses a React-specific property spelling",
         Rule::NoUnknownNamespaces => "the JSX namespace is outside Solid's known vocabulary",
         Rule::PreferClasslist => "a class helper call matches the configured classList preference",

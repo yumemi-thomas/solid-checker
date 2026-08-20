@@ -470,31 +470,6 @@ pub(super) fn deletion_with_leading_whitespace(source: &str, span: Span) -> Span
     Span::new(u32::try_from(start).unwrap_or(span.start), span.end)
 }
 
-/// Widens a deletion span leftward over the `,` separator (and the
-/// whitespace on either side of it) that joined the deleted text to the
-/// previous list item, so removing a call's last argument leaves `f(a)`
-/// rather than `f(a, )`. When what precedes is not a comma — a comment, an
-/// opening parenthesis — the span is returned unchanged rather than guess at
-/// a byte that is not the separator.
-pub(super) fn deletion_with_leading_comma(source: &str, span: Span) -> Span {
-    let bytes = source.as_bytes();
-    let mut start = span.start as usize;
-    if start > bytes.len() {
-        return span;
-    }
-    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
-        start -= 1;
-    }
-    if start == 0 || bytes[start - 1] != b',' {
-        return span;
-    }
-    start -= 1;
-    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
-        start -= 1;
-    }
-    Span::new(u32::try_from(start).unwrap_or(span.start), span.end)
-}
-
 pub(super) fn fix_replace(
     file: &FileFacts,
     span: Span,
@@ -694,8 +669,8 @@ pub(crate) fn check_project(
 #[cfg(test)]
 mod tests {
     use super::{
-        concat_plus_joined_literal, decode_string_literal, deletion_with_leading_comma,
-        deletion_with_leading_whitespace, entire_delimited, strip_string_literal,
+        concat_plus_joined_literal, decode_string_literal, deletion_with_leading_whitespace,
+        entire_delimited, strip_string_literal,
     };
     use solid_facts::core::Span;
 
@@ -757,32 +732,6 @@ mod tests {
         assert_eq!(concat_plus_joined_literal("'a' 'b'"), None);
         assert_eq!(concat_plus_joined_literal("'a' + 'b' +"), None);
         assert_eq!(concat_plus_joined_literal("'a' === x ? f : 'b'"), None);
-    }
-
-    #[test]
-    fn argument_deletion_swallows_the_separating_comma() {
-        let source = "createEffect(fn, [a])";
-        let span = Span::new(17, 20); // `[a]`
-        assert_eq!(
-            delete(source, deletion_with_leading_comma(source, span)),
-            "createEffect(fn)"
-        );
-        let spaced = "createEffect(fn ,  [a])";
-        let span = Span::new(19, 22); // `[a]`
-        assert_eq!(
-            delete(spaced, deletion_with_leading_comma(spaced, span)),
-            "createEffect(fn)"
-        );
-    }
-
-    #[test]
-    fn comma_swallowing_declines_when_no_comma_precedes() {
-        // A comment (or anything else) between the comma and the deleted
-        // text: the span comes back unchanged rather than eat a byte that
-        // is not the separator.
-        let source = "createEffect(fn, /* deps */ [a])";
-        let span = Span::new(28, 31); // `[a]`
-        assert_eq!(deletion_with_leading_comma(source, span), span);
     }
 
     #[test]

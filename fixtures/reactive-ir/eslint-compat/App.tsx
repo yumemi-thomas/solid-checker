@@ -50,18 +50,14 @@ export function Wrong() {
           Kept as a negative case: it is the exact markup both narrowings were
           made for. */}
       <div onFoo="a" onFoo="b" />
-      {/* SC8001 twice, its surviving readability arm. Solid 1.x declares every
-          handler under both spellings, so `onclick` and `ondblclick` are
-          accepted by TypeScript and the canonical-casing advice
-          (`onClick`, `onDblClick`) is the checker's own. The mis-cased
-          `onClIcK` and the non-standard `ondoubleclick` are *not* declared, so
-          they are TS2322 and no longer reported here. */}
+      {/* Silent: Solid 1.x declares both lowercase spellings. The retired
+          event-handlers rule treated canonical casing as a policy. */}
       <div onclick={() => {}} />
       <div ondblclick={() => {}} />
       {/* A hyphenated tag is TS2339 against stock typings, so a project using
           one has declared it — commonly permissively. There TypeScript is
-          silent and the static-value and ambiguous-name arms are the only
-          claims available: SC8001 twice. */}
+          silent, but the retired event-handlers rule's remaining objections
+          were conventions rather than proven runtime defects. */}
       <my-widget onFoo="a" />
       <my-widget onlynow={() => {}} />
       {/* Silent: `0x10` and `0x20` are NumericLiteral nodes the compiler
@@ -117,9 +113,8 @@ export function Wrong() {
           cases 04 and 05 are this shape. */}
       <div class:mt-10={true} />
       <div class:mt-10 />
-      {/* SC8001, the same mechanism on an ordinary element: `onFoo-bar` carries
-          a hyphen, so its name is never checked and the static-value claim is
-          the checker's. */}
+      {/* Silent: `onFoo-bar` carries a hyphen, so TypeScript does not check its
+          name; the checker nevertheless has no proven defect to report. */}
       <div onFoo-bar="a" />
       {/* SC1005: a hyphenated attribute is the one native-attribute position
           that survived, for the same reason — the accessor is stringified in
@@ -161,8 +156,7 @@ export function Right() {
           compiler never freezes it into the template: each occurrence
           attaches its own listener and neither is dead. */}
       <div on-foo={-1} on-foo={-2} />
-      {/* The same compiler-faithful distinction applies to event-handlers:
-          `-1` and `NaN` are primitive numbers to TypeScript, but neither is a
+      {/* `-1` and `NaN` are primitive numbers to TypeScript, but neither is a
           StringLiteral/NumericLiteral node that the compiler freezes. */}
       <div onClick={-1} />
       <div onClick={NaN} />

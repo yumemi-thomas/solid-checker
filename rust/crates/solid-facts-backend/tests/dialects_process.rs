@@ -1248,13 +1248,6 @@ fn solid_one_upstream_helpers_respect_runtime_values_and_ast_structure() {
     };
 
     assert!(
-        findings
-            .iter()
-            .filter(|finding| in_function(finding, "ShadowedHandler"))
-            .all(|finding| finding["id"] != "SC8001"),
-        "a shadowed function parameter was resolved to the unrelated string binding: {findings:#?}"
-    );
-    assert!(
         findings.iter().any(|finding| {
             finding["id"] == "SC8004" && in_function(&finding, "EscapedScriptUrl")
         }),

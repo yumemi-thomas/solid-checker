@@ -175,8 +175,7 @@ fn plan_file(
             }
             // A native event-handler value is judged by its resolved type:
             // `expected-function-got-expression` (both catalogs) proves the
-            // value non-callable and `event-handlers` (1.x) proves it
-            // statically string/number. The
+            // value non-callable. The
             // `on:` namespace form is a handler too.
             let handler = native
                 && ((attribute.namespace.is_none() && name.starts_with("on"))

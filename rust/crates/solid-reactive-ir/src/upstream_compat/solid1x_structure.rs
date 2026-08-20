@@ -1,6 +1,5 @@
-//! Solid 1.x `v1/prefer-for`, `v1/prefer-show`, `v1/no-react-deps`, and
-//! `v1/no-proxy-apis` —
-//! four of eslint-plugin-solid's structural-preference rules, each judging a
+//! Solid 1.x `v1/prefer-for`, `v1/prefer-show`, and `v1/no-proxy-apis` —
+//! three of eslint-plugin-solid's structural-preference rules, each judging a
 //! JavaScript-legal but Solid-unidiomatic shape.
 //!
 //! `prefer-for` and `prefer-show` are intent judgements, not correctness
@@ -13,7 +12,7 @@
 //! children, and `prefer-show` additionally only for the "expensive" branch
 //! shapes upstream defines (a JSX element/fragment, or a bare identifier).
 //!
-//! `no-react-deps` and `no-proxy-apis` resolve their callees through the
+//! `no-proxy-apis` resolves its callees through the
 //! dialect's own primitive table (`context.lookup.primitives`) instead of
 //! matching the callee's source spelling. Upstream's ESLint rules track
 //! import aliases by hand (`trackImports`); asking the same resolution the
@@ -27,7 +26,7 @@ use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind, R
 use solid_facts::core::Span;
 use typefacts::{CallKind, ResolvedCall, ResolvedCallValidity};
 
-use super::{UpstreamCompatContext, binding_initializer, deletion_with_leading_comma, text};
+use super::{UpstreamCompatContext, binding_initializer, text};
 use crate::{Fix, StaticViolation, TextEdit, known_primitive, location};
 
 pub(super) fn check_file(
@@ -35,73 +34,9 @@ pub(super) fn check_file(
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
-    no_react_deps(file, context, violations);
     no_proxy_apis(file, context, violations);
     prefer_for(file, context, violations);
     prefer_show(file, violations);
-}
-
-// ---------------------------------------------------------------------
-// SC8010 v1/no-react-deps
-// ---------------------------------------------------------------------
-
-/// `createEffect`/`createMemo` do not take a dependency array; Solid finds
-/// their dependencies automatically by tracking what the tracked callback
-/// reads. A second argument shaped like one is a habit carried over from
-/// React and does nothing in Solid except get silently ignored — or, for
-/// `createMemo`, get mistaken for the equality comparator it actually is.
-///
-/// Requires exactly two arguments, matching upstream: a third argument is
-/// Solid's own options parameter (`{ equals, name }`), not a dependency
-/// array, so a deliberate three-argument call is left alone rather than
-/// flagged for looking React-shaped by coincidence.
-fn no_react_deps(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
-) {
-    let primitives = context.lookup.primitives(file);
-    for (index, call) in file.ast.calls.iter().enumerate() {
-        if call.arguments.len() != 2
-            || !matches!(
-                known_primitive(&primitives.calls[index]),
-                Some(Primitive::CreateEffect | Primitive::CreateMemo)
-            )
-        {
-            continue;
-        }
-        let argument = &call.arguments[1];
-        let source = text(file, argument.span).trim();
-        let looks_like_deps = source.starts_with('[')
-            || binding_initializer(context, file, argument.span)
-                .is_some_and(|(_, _, initializer, _)| initializer.trim_start().starts_with('['));
-        if !looks_like_deps {
-            continue;
-        }
-        violations.push(StaticViolation {
-            id: "SC8010".into(),
-            rule: "no-react-deps".into(),
-            message: "Solid's reactive primitives do not use a dependency array.".into(),
-            hint: "Solid tracks dependencies automatically by reading them; if you really need to override what is tracked, use `on`.".into(),
-            location: location(file.path.shared(), argument.span),
-            analysis_context: String::new(),
-            fixes: vec![Fix {
-                message: "Remove the dependency array.".into(),
-                applicability: "safe".into(),
-                edits: vec![TextEdit {
-                    // The deletion swallows the `,` separating the two
-                    // arguments too — removing only the argument's own span
-                    // would leave `createEffect(fn, )` behind.
-                    location: location(
-                        file.path.shared(),
-                        deletion_with_leading_comma(&file.source, argument.span),
-                    ),
-                    new_text: String::new(),
-                }],
-            }],
-            uncertain: false,
-        });
-    }
 }
 
 // ---------------------------------------------------------------------

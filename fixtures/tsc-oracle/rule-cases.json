@@ -268,17 +268,6 @@
       "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const Component = () => <Panel model:value={1} />;\n// A hyphenated local name escapes the excess-property check entirely, so\n// TypeScript declines to look even on an intrinsic element.\nexport const Hyphenated = () => <div class:mt-10={true} />;\nexport const Shorthand = () => <div class:mt-10 />;\n"
     },
     {
-      "rule": "v1/event-handlers",
-      "dialect": "v1",
-      "expect": "removed-because-redundant",
-      "checker": "silent",
-      "why": "SC8001's unknown-`on*`-name arm, audited 2026-08-17 and recorded redundant in docs/precision-backlog.md (narrowing not yet landed). An unknown name does not exist on the element's attribute type, and Solid 1.x's only JSX index signature is `[key: `-${string}`]`, so nothing absorbs it. The rule SURVIVES on its declared-spelling arms -- see the sibling `silent` case.",
-      "allow": [
-        2322
-      ],
-      "code": "export const Unknown = () => <div onFoo=\"a\" />;\n"
-    },
-    {
       "rule": "v1/no-react-specific-props",
       "dialect": "v1",
       "expect": "removed-because-redundant",
@@ -300,15 +289,6 @@
         2322
       ],
       "code": "export const Camel = () => <div style={{ maxWidth: 3 }} />;\n"
-    },
-    {
-      "rule": "v1/event-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "checkerCount": 5,
-      "why": "SC8001's surviving arms, and the reason the rule was not deleted. `onclick` and `ondblclick` are *declared* props in Solid 1.x, so TypeScript accepts them and the canonical-casing advice is the rule's own. A hyphenated tag is TS2339 against stock typings, so a project using one has declared it -- the augmentation here is the permissive shape such declarations commonly take -- after which TypeScript is silent about its attributes and the static-value and ambiguous-name arms are the only claims available. A hyphen anywhere in the attribute name has the same effect as a hyphenated tag. The ordinary object spread is an explicit negative control: Solid's runtime spread handles event keys, so it must not inherit a direct-attribute finding.",
-      "code": "import type {} from \"solid-js\";\nconst handleClick = () => 42;\n// Solid 1.x exports its JSX namespace from the module, so a custom element\n// is declared by augmenting that module -- not the global scope.\ndeclare module \"solid-js\" {\n  namespace JSX {\n    interface IntrinsicElements {\n      \"my-widget\": { [key: string]: unknown };\n    }\n  }\n}\nexport const Casing = () => <div onclick={handleClick} />;\nexport const Ambiguous = () => <div ondblclick={handleClick} />;\nexport const Spread = () => <div {...{ onClick: handleClick }} />;\nexport const Widget = () => <my-widget onFoo=\"a\" />;\nexport const WidgetAmbiguous = () => <my-widget onlynow={handleClick} />;\n// A hyphenated attribute name is exempt from the excess-property check on a\n// standard element too, so these are the rule's as well.\nexport const HyphenName = () => <div onFoo-bar=\"a\" />;\n"
     },
     {
       "rule": "v1/no-react-specific-props",
@@ -737,14 +717,6 @@
       "checker": "silent",
       "why": "A project declaration named Proxy shadows the standard builtin. Exact compiler declaration identity must keep this unrelated constructor out of the ES2015 Proxy compatibility rule.",
       "code": "class Proxy { constructor(_target: object, _handler: object) {} }\nexport const value = new Proxy({}, {});\n"
-    },
-    {
-      "rule": "no-react-deps",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "1.x's `createEffect(fn, value?)` takes a second *value* argument, so an array type-checks as that value; the claim is that it reads like a React dependency list and does nothing of the kind.",
-      "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateEffect(() => {\n  count();\n}, [count]);\n"
     },
     {
       "rule": "prefer-classlist",

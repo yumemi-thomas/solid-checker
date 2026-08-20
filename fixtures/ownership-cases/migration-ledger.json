@@ -143,199 +143,199 @@
     },
     {
       "upstreamCase": "event-handlers__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__10",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__11",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__12",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__13",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__14",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__invalid__15",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__10",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "event-handlers__valid__11",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/event-handlers rule was removed because its surviving arms enforced spelling and intent conventions rather than proven runtime defects."
     },
     {
       "upstreamCase": "imports__invalid__00",
@@ -1424,108 +1424,108 @@
     },
     {
       "upstreamCase": "no-react-deps__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__invalid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__valid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-deps__valid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-10",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-deps rule was removed because Solid 1.x intentionally accepts an array seed and passes it to the reactive callback."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__00",

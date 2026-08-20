@@ -45,14 +45,12 @@ pub enum Rule {
     // rule. `jsx-uses-vars` is catalog-only: upstream exists to mark JSX
     // identifiers used for no-unused-vars, and TypeScript reference facts
     // already model those uses, so nothing here ever emits it.
-    EventHandlers,
     JsxNoDuplicateProps,
     JsxNoScriptUrl,
     JsxNoUndef,
     JsxUsesVars,
     NoInnerhtml,
     NoProxyApis,
-    NoReactDeps,
     NoReactSpecificProps,
     NoUnknownNamespaces,
     PreferClasslist,
@@ -81,7 +79,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 36] = [
+    pub const ALL: [Self; 34] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -97,14 +95,12 @@ impl Rule {
         Self::NoAsyncTrackedScope,
         Self::ReactiveSourceUncaptured,
         Self::ReactiveDispatchUnresolved,
-        Self::EventHandlers,
         Self::JsxNoDuplicateProps,
         Self::JsxNoScriptUrl,
         Self::JsxNoUndef,
         Self::JsxUsesVars,
         Self::NoInnerhtml,
         Self::NoProxyApis,
-        Self::NoReactDeps,
         Self::NoReactSpecificProps,
         Self::NoUnknownNamespaces,
         Self::PreferClasslist,
@@ -151,14 +147,12 @@ impl Rule {
             Self::ReactiveDispatchUnresolved => {
                 ("SC9012", "v1/reactive-dispatch-unresolved", "warning", true)
             }
-            Self::EventHandlers => ("SC8001", "v1/event-handlers", "warning", false),
             Self::JsxNoDuplicateProps => ("SC8003", "v1/jsx-no-duplicate-props", "error", false),
             Self::JsxNoScriptUrl => ("SC8004", "v1/jsx-no-script-url", "error", false),
             Self::JsxNoUndef => ("SC8005", "v1/jsx-no-undef", "error", false),
             Self::JsxUsesVars => ("SC8006", "v1/jsx-uses-vars", "error", false),
             Self::NoInnerhtml => ("SC8008", "v1/no-innerhtml", "error", false),
             Self::NoProxyApis => ("SC8009", "v1/no-proxy-apis", "error", false),
-            Self::NoReactDeps => ("SC8010", "v1/no-react-deps", "warning", false),
             Self::NoReactSpecificProps => {
                 ("SC8011", "v1/no-react-specific-props", "warning", false)
             }
@@ -316,13 +310,11 @@ mod tests {
     fn every_v1_static_violation_identity_resolves() {
         for (code, name) in [
             ("SC5004", "no-async-tracked-scope"),
-            ("SC8001", "event-handlers"),
             ("SC8003", "jsx-no-duplicate-props"),
             ("SC8004", "jsx-no-script-url"),
             ("SC8005", "jsx-no-undef"),
             ("SC8008", "no-innerhtml"),
             ("SC8009", "no-proxy-apis"),
-            ("SC8010", "no-react-deps"),
             ("SC8011", "no-react-specific-props"),
             ("SC8012", "no-unknown-namespaces"),
             ("SC8013", "prefer-classlist"),

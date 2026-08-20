@@ -329,9 +329,8 @@ fn expected_function_got_expression(
                     || super::solid1x_syntax::expression_is_static_literal(file, expression))
             {
                 // Solid 1.x freezes this value into a plain attribute instead
-                // of installing it as a listener. SC8001 owns that exact
-                // compiler consequence; describing it here as a non-callable
-                // runtime listener would be both duplicate and false.
+                // of installing it as a listener. It is therefore not a
+                // non-callable runtime listener, so this rule stays silent.
                 continue;
             }
             // TypeScript deliberately skips every JSX attribute whose name
