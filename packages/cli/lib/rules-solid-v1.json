@@ -20,8 +20,8 @@
     { "code": "SC8003", "name": "v1/jsx-no-duplicate-props", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC8005", "name": "v1/jsx-no-undef", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC8013", "name": "v1/prefer-classlist", "severity": "warning", "uncertifiable": false, "defaultEnabled": false, "presets": ["preferences"] },
-    { "code": "SC8014", "name": "v1/prefer-for", "severity": "error", "uncertifiable": false, "defaultEnabled": false, "presets": ["preferences"] },
-    { "code": "SC8015", "name": "v1/prefer-show", "severity": "warning", "uncertifiable": false, "defaultEnabled": false, "presets": ["preferences"] },
+    { "code": "SC8014", "name": "v1/prefer-for", "severity": "error", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
+    { "code": "SC8015", "name": "v1/prefer-show", "severity": "warning", "uncertifiable": false, "defaultEnabled": true, "presets": [] },
     { "code": "SC9005", "name": "v1/package-contract-incomplete", "severity": "error", "uncertifiable": true, "defaultEnabled": true, "presets": [] }
   ]
 }

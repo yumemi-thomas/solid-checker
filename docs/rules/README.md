@@ -18,13 +18,14 @@ owners, directives, async computations, and the server surface.
 
 ## Configuration
 
-Proof-backed and uncertifiable rules are enabled by default. The stylistic
-`prefer-classlist`, `prefer-for`, and `prefer-show` rules are disabled by
-default and belong to the dialect-neutral `preferences` preset:
+Proof-backed and uncertifiable rules are enabled by default. The reactive-input
+`prefer-for` and `prefer-show` preferences are also enabled by default and can
+be opted out individually. Solid 1.x `prefer-classlist` remains opt-in through
+the dialect-neutral `preferences` preset:
 
 ```sh
 solid-checker --project tsconfig.json --preset preferences
-solid-checker --project tsconfig.json --enable-rule prefer-show
+solid-checker --project tsconfig.json --enable-rule v1/prefer-classlist
 ```
 
 Both flags are repeatable. Project configuration lives in
@@ -35,7 +36,7 @@ enablement, and `enabled: true` enables a preference without a preset:
 {
   "schemaVersion": 1,
   "rules": {
-    "v1/prefer-show": { "enabled": true },
+    "v1/prefer-show": { "enabled": false },
     "v1/prefer-classlist": {
       "enabled": true,
       "classnames": ["cn", "clsx"]
@@ -44,9 +45,10 @@ enablement, and `enabled: true` enables a preference without a preset:
 }
 ```
 
-ESLint exposes generated `v1` and `v2` default configs plus opt-in
-`preferences-v1` and `preferences-v2` configs. Explicitly configuring a
-default-disabled per-rule key also opts that rule into the shared native run.
+ESLint exposes generated `v1` and `v2` default configs, which include
+`prefer-for` and `prefer-show`, plus opt-in `preferences-v1` and
+`preferences-v2` configs. The latter is empty for Solid 2.0; in Solid 1.x it
+adds `prefer-classlist`. Setting either control-flow rule to `off` opts out.
 
 Renamed and merged configuration keys, retired identities, and the six merges
 whose disables deliberately do not transfer are listed in the
@@ -77,8 +79,8 @@ whose disables deliberately do not transfer are listed in the
 | SC7006 | [server-function-module-directive](server-function-module-directive.md) | error | on |
 | SC7007 | [server-function-rich-argument](server-function-rich-argument.md) | error | on |
 | SC8003 | [jsx-no-duplicate-props](jsx-no-duplicate-props.md) | error | on |
-| SC8014 | [prefer-for](prefer-for.md) | error | preferences |
-| SC8015 | [prefer-show](prefer-show.md) | warning | preferences |
+| SC8014 | [prefer-for](prefer-for.md) | error | on |
+| SC8015 | [prefer-show](prefer-show.md) | warning | on |
 | SC9005 | [package-contract-incomplete](package-contract-incomplete.md) | error | on |
 | SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning | on |
 | SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning | on |
@@ -104,8 +106,8 @@ uncertifiable results. Their pages name the missing evidence and remediation.
 | SC8003 | [v1/jsx-no-duplicate-props](v1/jsx-no-duplicate-props.md) | error | on |
 | SC8005 | [v1/jsx-no-undef](v1/jsx-no-undef.md) | error | on |
 | SC8013 | [v1/prefer-classlist](v1/prefer-classlist.md) | warning | preferences |
-| SC8014 | [v1/prefer-for](v1/prefer-for.md) | error | preferences |
-| SC8015 | [v1/prefer-show](v1/prefer-show.md) | warning | preferences |
+| SC8014 | [v1/prefer-for](v1/prefer-for.md) | error | on |
+| SC8015 | [v1/prefer-show](v1/prefer-show.md) | warning | on |
 | SC9005 | [v1/package-contract-incomplete](v1/package-contract-incomplete.md) | error | on |
 | SC9011 | [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) | warning | on |
 | SC9012 | [v1/reactive-dispatch-unresolved](v1/reactive-dispatch-unresolved.md) | warning | on |
@@ -114,7 +116,7 @@ uncertifiable results. Their pages name the missing evidence and remediation.
 
 The retained semantic surface maps to `v1/no-destructure`,
 `v1/components-return-once`, `v1/jsx-no-duplicate-props`, `v1/jsx-no-undef`,
-and the three opt-in preference rules. Upstream's broad `reactivity` rule is
+and the three retained preference rules. Upstream's broad `reactivity` rule is
 split among SC1001, SC1002, SC1003, SC1005, SC1007, SC2003, SC9011, and SC9012
 so one configuration key never suppresses unrelated defect classes.
 

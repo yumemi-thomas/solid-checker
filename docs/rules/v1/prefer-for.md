@@ -2,8 +2,8 @@
 
 `SC8014` · **error** · violation
 
-This preference is disabled by default. Enable the `preferences` preset or
-enable this rule explicitly.
+This preference is enabled by default. Disable it explicitly when raw mapping
+better communicates the intended rendering behavior.
 
 A reactively updating list is rendered with `Array#map` directly as JSX
 children instead of using Solid's list control flow.
@@ -52,9 +52,9 @@ offered only when TypeScript proves the receiver is array-like and the callback
 has exactly one non-rest parameter; index-aware or ambiguous callbacks require a
 human choice.
 
-Native checks accept `--preset preferences` or
-`--enable-rule v1/prefer-for`. ESLint users can compose
-`solidChecker.configs["preferences-v1"]`.
+Native projects opt out with `"v1/prefer-for": { "enabled": false }` in
+`.solid-checker/rule-options.json`. ESLint users set
+`"solid-checker/v1/prefer-for": "off"`.
 
 ## Related
 

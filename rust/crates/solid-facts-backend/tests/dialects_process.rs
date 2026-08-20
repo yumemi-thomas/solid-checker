@@ -72,7 +72,7 @@ fn project_snapshot_findings_with(
 }
 
 #[test]
-fn preference_rules_are_opt_in_with_explicit_overrides_winning() {
+fn control_flow_preferences_are_defaults_with_explicit_disables_winning() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -90,10 +90,7 @@ fn preference_rules_are_opt_in_with_explicit_overrides_winning() {
         Some("solid-v2"),
         &[],
     ));
-    assert!(
-        defaults.is_empty(),
-        "preferences must be disabled by default: {defaults:#?}"
-    );
+    assert_eq!(defaults.len(), 8, "control-flow preferences are defaults");
 
     let preset = preference_findings(project_snapshot_findings_with(
         v2.clone(),
@@ -120,6 +117,10 @@ fn preference_rules_are_opt_in_with_explicit_overrides_winning() {
             ("prefer-show", "SC8015", "violation"),
         ]
     );
+    assert_eq!(
+        preset, defaults,
+        "the legacy preset is redundant for defaults"
+    );
     let v2_for_fix_texts = preset
         .iter()
         .filter(|finding| finding["rule"] == "prefer-for")
@@ -134,16 +135,21 @@ fn preference_rules_are_opt_in_with_explicit_overrides_winning() {
             .all(|text| text.contains("<For keyed={false}"))
     );
 
-    let one_rule = preference_findings(project_snapshot_findings_with(
+    let explicit_enable = preference_findings(project_snapshot_findings_with(
         v2,
         Some("solid-v2"),
         &["--enable-rule", "prefer-show"],
     ));
-    assert_eq!(one_rule.len(), 4);
+    assert_eq!(explicit_enable, defaults, "enabling a default is a no-op");
+
+    let v2_disabled = preference_findings(project_snapshot_findings_with(
+        fixture_root.join("preferences-v2-disabled/tsconfig.json"),
+        Some("solid-v2"),
+        &["--preset", "preferences"],
+    ));
     assert!(
-        one_rule
-            .iter()
-            .all(|finding| finding["rule"] == "prefer-show")
+        v2_disabled.is_empty(),
+        "explicit v2 disables must win over defaults and presets: {v2_disabled:#?}"
     );
 
     let enabled = preference_findings(project_snapshot_findings_with(
@@ -183,14 +189,14 @@ fn preference_rules_are_opt_in_with_explicit_overrides_winning() {
             .all(|text| { text.contains("<For each={") && !text.contains("keyed={false}") })
     );
 
-    let disabled = preference_findings(project_snapshot_findings_with(
+    let v1_disabled = preference_findings(project_snapshot_findings_with(
         fixture_root.join("preferences-v1-disabled/tsconfig.json"),
         Some("solid-v1"),
         &["--preset", "preferences"],
     ));
     assert!(
-        disabled.is_empty(),
-        "an explicit false must override the preset: {disabled:#?}"
+        v1_disabled.is_empty(),
+        "explicit v1 disables must win over defaults and presets: {v1_disabled:#?}"
     );
 }
 

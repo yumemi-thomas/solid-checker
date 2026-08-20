@@ -170,14 +170,13 @@ impl Rule {
             Self::PreferFor => ("SC8014", "prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "prefer-show", "warning", false),
         };
-        let preference = matches!(self, Self::PreferFor | Self::PreferShow);
         RuleMetadata {
             code,
             name,
             severity,
             uncertifiable,
-            default_enabled: !preference,
-            presets: if preference { &["preferences"] } else { &[] },
+            default_enabled: true,
+            presets: &[],
         }
     }
 

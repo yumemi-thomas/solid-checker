@@ -102,8 +102,9 @@ This change itself adds 31 retired identities and 19 aliases.
 
 ## Preference default change
 
-`prefer-classlist`, `prefer-for`, and `prefer-show` remain available but are
-off by default. Native checks opt in with `--preset preferences` or repeatable
-`--enable-rule <name>`. ESLint uses `preferences-v1` or `preferences-v2`; an
-explicit per-rule ESLint configuration is itself an opt-in. An explicit
-`enabled: false` in `rule-options.json` still wins over a preset.
+`prefer-for` and `prefer-show` are enabled by default after being narrowed to
+proven reactive governing inputs. Native projects opt out with an explicit
+`enabled: false` in `rule-options.json`; ESLint projects set the corresponding
+rule to `off`. `v1/prefer-classlist` remains opt-in through `preferences-v1`,
+`--preset preferences`, or `--enable-rule`. `preferences-v2` remains as an
+empty compatibility config.

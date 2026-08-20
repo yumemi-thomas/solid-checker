@@ -12,11 +12,13 @@
 
 ## 2026-08 preference defaults
 
-`prefer-classlist`, `prefer-for`, and `prefer-show` are retained as explicit
-style choices but no longer run by default. Native callers opt in with
-`--preset preferences` or `--enable-rule`; ESLint callers use the generated
-`preferences-v1` or `preferences-v2` config. Explicit project-level disables
-continue to win over the preset.
+`prefer-for` and `prefer-show` now run by default because their governing input
+must be proven reactive; native and ESLint callers can opt out per rule.
+`v1/prefer-classlist` remains the sole default-disabled preference and is
+available through `--preset preferences`, `--enable-rule`, or the generated
+`preferences-v1` ESLint config. The Solid 2 preferences config is retained as
+an empty compatibility surface. WASM still lacks a rule-options transport, so
+its callers receive the defaults but cannot yet opt out.
 
 The analyzer's known approximations, recorded so each is a decision with an
 owner rather than a rediscovery. Items live here when a fix is a *design

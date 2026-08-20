@@ -2,8 +2,8 @@
 
 `SC8015` · **warning** · violation
 
-This preference is disabled by default. Enable the `preferences` preset or
-enable this rule explicitly.
+This preference is enabled by default. Disable it explicitly when compact
+JavaScript control flow is preferred.
 
 Expensive JSX content is controlled by a reactive `&&` or `?:` condition
 instead of Solid's `<Show>` component.
@@ -52,9 +52,9 @@ the original JavaScript conditional when its compact form communicates the
 intent better; this rule can be disabled project-wide without weakening the
 checker’s reactive correctness guarantees.
 
-Native checks accept `--preset preferences` or
-`--enable-rule v1/prefer-show`. ESLint users can compose
-`solidChecker.configs["preferences-v1"]`.
+Native projects opt out with `"v1/prefer-show": { "enabled": false }` in
+`.solid-checker/rule-options.json`. ESLint users set
+`"solid-checker/v1/prefer-show": "off"`.
 
 ## Related
 

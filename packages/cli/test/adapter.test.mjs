@@ -355,11 +355,11 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
     report() {}
   };
   plugin._testing.snapshotCache.clear();
-  const listeners = plugin.rules["prefer-show"].create(context);
+  const listeners = plugin.rules["v1/prefer-classlist"].create(context);
   listeners.Program({ type: "Program" });
   listeners["Program:exit"]();
   const args = JSON.parse(readFileSync(calls, "utf8"));
-  assert.deepEqual(args.slice(-2), ["--enable-rule", "prefer-show"]);
+  assert.deepEqual(args.slice(-2), ["--enable-rule", "v1/prefer-classlist"]);
   plugin._testing.snapshotCache.clear();
 });
 

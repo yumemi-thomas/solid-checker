@@ -753,14 +753,8 @@ mod tests {
 
     #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
     #[test]
-    fn only_preference_rules_are_default_disabled_and_preset_members() {
-        let expected = HashSet::from([
-            "v1/prefer-classlist",
-            "v1/prefer-for",
-            "v1/prefer-show",
-            "prefer-for",
-            "prefer-show",
-        ]);
+    fn only_prefer_classlist_is_default_disabled_and_a_preset_member() {
+        let expected = HashSet::from(["v1/prefer-classlist"]);
         let observed = solid_v1_rules::Rule::ALL
             .into_iter()
             .map(|rule| rule.metadata())
