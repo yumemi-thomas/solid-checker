@@ -51,10 +51,9 @@ tsc-oracle: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
 
-# Needs parity's run artifact (the spans the checker actually reported), so it
-# runs after parity rather than beside it.
-tsc-ownership: tsc-oracle-provision parity
-	node scripts/parity-tsc-ownership.mjs
+# Compatibility target. Product ownership moved to ownership-gate after every
+# retained upstream case was migrated into the product-owned manifest.
+tsc-ownership: ownership-gate
 
 # Which upstream cases are not valid TypeScript, and which findings look like
 # duplicates. A discovery report, not a gate.
@@ -65,7 +64,8 @@ tsc-ownership-report: tsc-oracle-provision parity
 # carries its TypeScript-ownership disposition and exact source-relative span.
 ownership-gate: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
-	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/ownership-gate.mjs
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/ownership-gate.mjs \
+	  --require-retained
 
 # Fixture-findings snapshots: "no finding moved" as a checkable claim.
 coverage: build-rust

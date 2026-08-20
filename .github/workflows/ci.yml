@@ -41,11 +41,12 @@ jobs:
           cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v1
           cargo +1.97 check --manifest-path rust/Cargo.toml -p solid-checker-wasm --all-targets --no-default-features --features dialect-v2
       - run: make test-rust
-      # The two fixture gates: "no finding moved" over every fixture
-      # project, and eslint-plugin-solid's own 465 cases with every
-      # deviation declared. Both are meaningless unless something runs them.
+      # The two fixture gates: "no finding moved" over every fixture project,
+      # and product-owned semantic/TypeScript ownership over every retained
+      # former parity case. Both are meaningless unless something runs them.
       - run: make coverage
-      - run: make parity
+      - run: npm ci --ignore-scripts --prefix packages/cli
+      - run: make ownership-gate
       # AGENTS.md's absolute rule, as a gate: no rule's positive case may also
       # be a `tsc` error against the real published Solid typings, and — the
       # half the checker-side declarations added — no rule may be narrowed into
@@ -53,7 +54,6 @@ jobs:
       # to run on a version mismatch. The harness resolves `typescript` through
       # packages/cli, and the workspace and both binaries are already built by
       # the steps above, so this is one npm install plus the audited installs.
-      - run: npm ci --ignore-scripts --prefix packages/cli
       - run: make tsc-oracle
       # The contract drift gate against real installed packages: install the
       # exact pins the checked-in artifacts were generated from, regenerate,
