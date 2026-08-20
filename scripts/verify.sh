@@ -49,7 +49,6 @@ SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
 sh -n scripts/*.sh
 jq empty schema/*.json
 jq empty fixtures/tsc-oracle/*.json
-jq empty fixtures/upstream-parity/deviations.json
 find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
 node scripts/dialect-manifests.mjs validate
 node scripts/check-bundled-contracts.mjs

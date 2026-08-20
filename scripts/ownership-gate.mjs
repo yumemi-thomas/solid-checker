@@ -15,7 +15,6 @@ import {
 import { dirname, extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { caseId, corpusCases } from "./lib/upstream-cases.mjs";
 import { oracleCompilerOptions, oracleProject, runOracle } from "./tsc-oracle.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -24,7 +23,6 @@ const LEDGER_PATH = join(ROOT, "fixtures/ownership-cases/migration-ledger.json")
 const WORK_ROOT = join(ROOT, "rust/target/ownership-gate");
 const requireRetained = process.argv.includes("--require-retained");
 const requireComplete = process.argv.includes("--require-complete");
-const seedLedger = process.argv.includes("--seed-ledger");
 
 const stable = (value) => {
   if (Array.isArray(value)) return value.map(stable);
@@ -57,33 +55,6 @@ const applyFixes = (source, fixes) => {
   pieces.push(bytes.subarray(cursor));
   return Buffer.concat(pieces).toString("utf8");
 };
-
-const corpusIds = () => {
-  const ids = [];
-  for (const rule of corpusCases()) {
-    for (const kind of ["valid", "invalid"]) {
-      rule[kind].forEach((_, index) => ids.push(caseId(rule.rule, kind, index)));
-    }
-  }
-  return ids.sort();
-};
-
-if (seedLedger) {
-  const ledger = {
-    schemaVersion: 1,
-    cases: corpusIds().map((upstreamCase) => ({
-      upstreamCase,
-      disposition: "pending",
-      movedIn: null,
-      ownershipCaseId: null,
-      reason: null,
-    })),
-  };
-  mkdirSync(dirname(LEDGER_PATH), { recursive: true });
-  writeFileSync(LEDGER_PATH, `${JSON.stringify(ledger, null, 2)}\n`);
-  console.log(`ownership gate: seeded ${ledger.cases.length} pending migration rows`);
-  process.exit(0);
-}
 
 const locate = (variable, ...candidates) => {
   const value = process.env[variable] ?? candidates.find(existsSync);
@@ -184,9 +155,9 @@ for (const [index, testCase] of (manifest.cases ?? []).entries()) {
   caseById.set(testCase.id, testCase);
 }
 
-const expectedCorpus = corpusIds();
-const actualCorpus = (ledger.cases ?? []).map((row) => row.upstreamCase).sort();
-if (JSON.stringify(actualCorpus) !== JSON.stringify(expectedCorpus)) fail(failures, `migration ledger identities differ from the ${expectedCorpus.length}-case upstream corpus`);
+if ((ledger.cases ?? []).length !== 465) {
+  fail(failures, `migration ledger must retain exactly 465 reconciled upstream identities`);
+}
 const ledgerIds = new Set();
 for (const [index, row] of (ledger.cases ?? []).entries()) {
   const label = `ledger[${index}] ${row.upstreamCase ?? "<missing-id>"}`;

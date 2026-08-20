@@ -65,7 +65,7 @@ tsc-ownership-report: tsc-oracle-provision parity
 ownership-gate: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/ownership-gate.mjs \
-	  --require-retained
+	  --require-retained --require-complete
 
 # Fixture-findings snapshots: "no finding moved" as a checkable claim.
 coverage: build-rust
