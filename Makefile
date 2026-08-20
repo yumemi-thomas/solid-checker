@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-conformance contracts contracts-check coverage coverage-update parity parity-update tsc-oracle tsc-oracle-provision tsc-ownership tsc-ownership-report clean
+.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-conformance contracts contracts-check coverage coverage-update parity parity-update tsc-oracle tsc-oracle-provision tsc-ownership tsc-ownership-report ownership-gate clean
 
 build: build-rust
 
@@ -60,6 +60,12 @@ tsc-ownership: tsc-oracle-provision parity
 # duplicates. A discovery report, not a gate.
 tsc-ownership-report: tsc-oracle-provision parity
 	node scripts/parity-tsc-ownership.mjs --report
+
+# Product-owned semantic cases. Unlike upstream parity, every expected finding
+# carries its TypeScript-ownership disposition and exact source-relative span.
+ownership-gate: tsc-oracle-provision build-checker-debug
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/ownership-gate.mjs
 
 # Fixture-findings snapshots: "no finding moved" as a checkable claim.
 coverage: build-rust

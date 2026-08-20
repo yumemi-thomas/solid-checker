@@ -1,0 +1,1141 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "missing-effect-function/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "// naïve marker offset\nimport { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateEffect(() => count());\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "missing-effect-function",
+            "code": "SC7001",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                112,
+                124
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+            "ownership": "checker-only",
+            "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "no-owner-settled-cleanup/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { onSettled } from \"solid-js\";\nonSettled(() => {\n  const timer = setInterval(() => {}, 1000);\n  return () => clearInterval(timer);\n});\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "no-owner-settled-cleanup",
+            "code": "SC4004",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                48,
+                139
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+            "ownership": "checker-only",
+            "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "no-owner-cleanup/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { onCleanup } from \"solid-js\";\nonCleanup(() => {});\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "no-owner-cleanup",
+            "code": "SC4002",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                38,
+                47
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "reactive-read-after-await/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createSignal, createEffect } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\ncreateEffect(\n  async () => {\n    await Promise.resolve();\n    return count();\n  },\n  () => {},\n);\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "no-owner-effect",
+            "code": "SC4001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                98,
+                110
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "reactive-read-after-await",
+            "code": "SC1002",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                168,
+                173
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "uncalled-accessor/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst [label] = createSignal(\"world\");\nexport const Concat = () => <div>{\"hello \" + label}</div>;\nexport const Unary = () => <div>{!count ? \"empty\" : \"full\"}</div>;\nexport const Template = () => <div>{`count is ${count}`}</div>;\nexport const Hyphenated = () => <div data-count={count} />;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "uncalled-accessor",
+            "code": "SC1005",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                158,
+                163
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "uncalled-accessor",
+            "code": "SC1005",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                206,
+                211
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "uncalled-accessor",
+            "code": "SC1005",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                287,
+                292
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "uncalled-accessor",
+            "code": "SC1005",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                352,
+                357
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "strict-read-untracked/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createSignal } from \"solid-js\";\nexport function Comp() {\n  const [count] = createSignal(0);\n  const value = count();\n  return <div>{value}</div>;\n}\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "strict-read-untracked",
+            "code": "SC1001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                117,
+                124
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "no-direct-mutation/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createStore } from \"solid-js\";\nconst [profile] = createStore({ count: 0, user: { name: \"Ada\" } });\n// The readonly-ness is shallow.\nexport function Nested() {\n  profile.user.name = \"Grace\";\n}\n// A cast erases it from a root property too.\nexport function Cast() {\n  (profile as { count: number }).count = 1;\n}\n// A props member is not readonly at all.\nexport function Props(props: { n: number }) {\n  props.n = 1;\n}\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "no-direct-mutation",
+            "code": "SC2003",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "marker": "profile.user.name"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "no-direct-mutation",
+            "code": "SC2003",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                274,
+                310
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "reactive-write-in-owned-scope/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createSignal, createMemo } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\nexport const doubled = createMemo(() => {\n  setCount(1);\n  return count();\n});\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "reactive-write-in-owned-scope",
+            "code": "SC2001",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                140,
+                151
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "component-props-destructure/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export function Row(props: { name: string }) {\n  const { name } = props;\n  return <div>{name}</div>;\n}\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "component-props-destructure",
+            "code": "SC1003",
+            "kind": "uncertifiable",
+            "severity": "error",
+            "span": {
+              "marker": "{ name }"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "component-returns-conditionally/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createSignal } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport function Gate() {\n  if (ready()) return <div>on</div>;\n  return <span>off</span>;\n}\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "strict-read-untracked",
+            "code": "SC1001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                109,
+                116
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "component-returns-conditionally",
+            "code": "SC1004",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "ready()"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "cleanup-in-forbidden-scope/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createTrackedEffect, onCleanup } from \"solid-js\";\ncreateTrackedEffect(() => onCleanup(() => {}));\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "no-owner-effect",
+            "code": "SC4001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                59,
+                78
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "cleanup-in-forbidden-scope",
+            "code": "SC3001",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                85,
+                94
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "no-owner-cleanup",
+            "code": "SC4002",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                85,
+                94
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "expected-function-got-expression/positive/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createSignal } from \"solid-js\";\nconst [handler] = createSignal(() => {});\nconst Comp = (props: { onSave: () => void }) => (\n  <div>\n    <button onClick={props.onSave} />\n    <button onClick={handler()} />\n  </div>\n);\nexport const Use = () => <Comp onSave={handler()} />;\nexport default Comp;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/strict-read-untracked",
+            "code": "SC1001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                162,
+                174
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/expected-function-got-expression",
+            "code": "SC1007",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "marker": "props.onSave"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/strict-read-untracked",
+            "code": "SC1001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                200,
+                209
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "v1/jsx-no-duplicate-props/positive/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "const handler = () => {};\nexport const Case = () => <div onClick={handler} onclick={handler} />;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/event-handlers",
+            "code": "SC8001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "marker": "onclick"
+            },
+            "fix": {
+              "behavior": "safe",
+              "text": "const handler = () => {};\nexport const Case = () => <div onClick={handler} onClick={handler} />;\n"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/jsx-no-duplicate-props",
+            "code": "SC8003",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                75,
+                82
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "no-implicit-draggable/positive/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export const Case = () => <img draggable src=\"/a.png\" />;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/no-implicit-draggable",
+            "code": "SC8019",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                31,
+                40
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "valid-jsx-nesting/positive/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export const Case = () => <p><div /></p>;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/valid-jsx-nesting",
+            "code": "SC8020",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "div"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "primitive-in-directive-application/positive/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createSignal, createMemo } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\nfunction directive() {\n  setCount(1);\n  return (element: HTMLElement) => {\n    createMemo(() => count() + 1);\n  };\n}\nexport function App() {\n  return <button ref={directive()}>{count()}</button>;\n}\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/reactive-write-in-owned-scope",
+            "code": "SC2001",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                121,
+                132
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/primitive-in-directive-application",
+            "code": "SC6001",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                175,
+                185
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "v1/no-array-handlers/positive/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "const handler = (data: number, event: MouseEvent) => {};\nexport const Case = () => <button onClick={[handler, 1]} />;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/no-array-handlers",
+            "code": "SC8007",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "onClick={[handler, 1]}"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "v1/no-innerhtml/positive/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export const Case = () => <div innerHTML={\"<b>x</b>\"}>overwritten</div>;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/jsx-no-duplicate-props",
+            "code": "SC8003",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "textRange": [
+                26,
+                54
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/no-innerhtml",
+            "code": "SC8008",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "<div innerHTML={\"<b>x</b>\"}>overwritten</div>"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "reactive-read/distinct-claim/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "import { createSignal } from \"solid-js\";\nconst [n] = createSignal(1);\nconst Comp = (props: { n: number }) => <button onClick={props.n} />;\nexport const Use = () => <Comp n={n()} />;\nexport default Comp;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/strict-read-untracked",
+            "code": "SC1001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "marker": "props.n"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "distinct-claim",
+              "diagnostics": [
+                {
+                  "code": "TS2322",
+                  "span": {
+                    "textRange": [
+                      117,
+                      124
+                    ]
+                  }
+                }
+              ],
+              "justification": "The reactive-read finding proves that the prop getter is consumed during DOM setup outside tracking; TS2322 says only that the resulting number is not an event handler."
+            }
+          },
+          {
+            "rule": "v1/expected-function-got-expression",
+            "code": "SC1007",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                126,
+                133
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "distinct-claim",
+              "diagnostics": [
+                {
+                  "code": "TS2322",
+                  "span": {
+                    "textRange": [
+                      117,
+                      124
+                    ]
+                  }
+                }
+              ],
+              "justification": "The frozen-handler finding proves that the reactive value is evaluated once while installing the handler; TS2322 says only that the resulting number is not callable."
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "react-prop/typescript-owned/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export const Case = () => <label className=\"field\">Email</label>;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/no-react-specific-props",
+            "code": "SC8011",
+            "span": {
+              "textRange": [
+                33,
+                42
+              ]
+            },
+            "typescript": {
+              "ownership": "typescript-owned",
+              "diagnostics": [
+                {
+                  "code": "TS2322",
+                  "span": {
+                    "textRange": [
+                      33,
+                      42
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "innerhtml/typescript-owned/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export const Case = () => <div dangerouslySetInnerHTML={{ __html: \"x\" }} />;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/no-innerhtml",
+            "code": "SC8008",
+            "span": {
+              "marker": "dangerouslySetInnerHTML"
+            },
+            "typescript": {
+              "ownership": "typescript-owned",
+              "diagnostics": [
+                {
+                  "code": "TS2322",
+                  "span": {
+                    "textRange": [
+                      31,
+                      54
+                    ]
+                  }
+                }
+              ]
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "no-destructure/negative/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export const Row = (props: { name: string }) => <div>{props.name}</div>;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/no-destructure",
+            "reason": "the negative spelling preserves the tracked/member-access behavior"
+          }
+        ]
+      }
+    },
+    {
+      "id": "event-handlers/options/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "declare const foo: unknown;\nconst handleClick = () => 42;\nexport const Case = () => <div {...{ onClick: handleClick, foo }} />;\n"
+      },
+      "ruleOptions": {
+        "v1/event-handlers": {
+          "warnOnSpread": true
+        }
+      },
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/event-handlers",
+            "code": "SC8001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "marker": "onClick: handleClick"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "no-react-deps/fix/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "import { createSignal, createEffect } from \"solid-js\";\n",
+        "text": "// café keeps byte offsets honest before the finding.\nconst [signal] = createSignal(0);\ncreateEffect(() => signal(), [signal()]);\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/no-owner-effect",
+            "code": "SC4001",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "textRange": [
+                89,
+                101
+              ]
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          },
+          {
+            "rule": "v1/no-react-deps",
+            "code": "SC8010",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "marker": "[signal()]"
+            },
+            "fix": {
+              "behavior": "safe",
+              "text": "// café keeps byte offsets honest before the finding.\nconst [signal] = createSignal(0);\ncreateEffect(() => signal());\n"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    }
+  ]
+}

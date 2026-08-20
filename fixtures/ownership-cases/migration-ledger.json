@@ -1,0 +1,3260 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "upstreamCase": "components-return-once__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__invalid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "components-return-once__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__12",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__13",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__14",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__invalid__15",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "event-handlers__valid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "imports__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-duplicate-props__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-script-url__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__12",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__13",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__14",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__invalid__15",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "jsx-no-undef__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-array-handlers__valid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__12",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__13",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__14",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__15",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__16",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__17",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__18",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__19",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__20",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__21",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__22",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__23",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__24",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__25",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__26",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__invalid__27",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-destructure__valid__12",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__invalid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-innerhtml__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-proxy-apis__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-deps__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__invalid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-react-specific-props__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "no-unknown-namespaces__valid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-classlist__valid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-for__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-show__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-show__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-show__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-show__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-show__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-show__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "prefer-show__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__12",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__13",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__14",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__15",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__16",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__17",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__18",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__19",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__20",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__21",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__22",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__23",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__24",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__25",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__26",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__27",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__28",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__29",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__30",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__31",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__32",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__33",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__34",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__35",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__36",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__37",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__38",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__39",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__40",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__invalid__41",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__12",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__13",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__14",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__15",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__16",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__17",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__18",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__19",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__20",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__21",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__22",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__23",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__24",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__25",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__26",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__27",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__28",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__29",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__30",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__31",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__32",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__33",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__34",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__35",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__36",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__37",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__38",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__39",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__40",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__41",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__42",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__43",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__44",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__45",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__46",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__47",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__48",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__49",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__50",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__51",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__52",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__53",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__54",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__55",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__56",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__57",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__58",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__59",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__60",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__61",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__62",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__63",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__64",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__65",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__66",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__67",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__68",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__69",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__70",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__71",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__72",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__73",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__74",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__75",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__76",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__77",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "reactivity__valid__78",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__12",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__13",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__14",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "self-closing-comp__valid__15",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__12",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__invalid__13",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__00",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__01",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__02",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__03",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__04",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__05",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__06",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__07",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__08",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__09",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__10",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__11",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__12",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    },
+    {
+      "upstreamCase": "style-prop__valid__13",
+      "disposition": "pending",
+      "movedIn": null,
+      "ownershipCaseId": null,
+      "reason": null
+    }
+  ]
+}
