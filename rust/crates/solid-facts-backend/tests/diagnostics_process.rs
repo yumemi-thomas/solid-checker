@@ -563,11 +563,11 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // Memo compute, effect compute, createTrackedEffect, tracked JSX;
         // untrack, component body, event handler, apply, and module scope
         // are observer-free and stay silent (probed, rc.0).
-        assert_rule_findings(&findings, "resolve-in-reactive-scope", 4);
+        assert_rule_findings(&findings, "resolve-in-tracked-scope", 4);
         assert!(
             findings
                 .iter()
-                .all(|finding| finding["rule"] == "resolve-in-reactive-scope"),
+                .all(|finding| finding["rule"] == "resolve-in-tracked-scope"),
             "{findings:#?}"
         );
     }

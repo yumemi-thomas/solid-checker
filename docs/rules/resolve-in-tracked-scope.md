@@ -1,4 +1,4 @@
-# resolve-in-reactive-scope
+# resolve-in-tracked-scope
 
 `SC2004` · **error** · violation
 

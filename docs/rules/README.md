@@ -146,7 +146,7 @@ rule's page documents its additional options and defaults.
 | SC2001 | [reactive-write-in-owned-scope](reactive-write-in-owned-scope.md) | error |
 | SC2002 | [action-called-in-owned-scope](action-called-in-owned-scope.md) | error |
 | SC2003 | [no-direct-mutation](no-direct-mutation.md) | warning |
-| SC2004 | [resolve-in-reactive-scope](resolve-in-reactive-scope.md) | error |
+| SC2004 | [resolve-in-tracked-scope](resolve-in-tracked-scope.md) | error |
 
 ## Leaf owners & cleanup
 

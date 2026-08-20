@@ -108,7 +108,7 @@ impl Rule {
             // (probed), so the proven tracked-scope form mirrors it as an
             // error; production has no guard and silently takes a one-shot
             // snapshot.
-            Self::ResolveInReactiveScope => ("SC2004", "resolve-in-reactive-scope", "error", false),
+            Self::ResolveInReactiveScope => ("SC2004", "resolve-in-tracked-scope", "error", false),
             Self::LeafOwnerForbiddenCall => ("SC3001", "leaf-owner-forbidden-call", "error", false),
             // Settled-cleanup findings override this family default to error:
             // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
@@ -247,7 +247,7 @@ mod tests {
     #[test]
     fn every_v2_static_violation_identity_resolves() {
         for (code, name) in [
-            ("SC2004", "resolve-in-reactive-scope"),
+            ("SC2004", "resolve-in-tracked-scope"),
             ("SC7002", "sync-node-received-async"),
             ("SC7005", "http-response-after-flush"),
             ("SC7006", "server-function-module-directive"),

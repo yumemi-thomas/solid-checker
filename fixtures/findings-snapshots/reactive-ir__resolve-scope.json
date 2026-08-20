@@ -2,7 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "resolve-in-reactive-scope",
+      "rule": "resolve-in-tracked-scope",
       "code": "SC2004",
       "kind": "violation",
       "severity": "error",
@@ -12,7 +12,7 @@
       "fixes": 0
     },
     {
-      "rule": "resolve-in-reactive-scope",
+      "rule": "resolve-in-tracked-scope",
       "code": "SC2004",
       "kind": "violation",
       "severity": "error",
@@ -22,7 +22,7 @@
       "fixes": 0
     },
     {
-      "rule": "resolve-in-reactive-scope",
+      "rule": "resolve-in-tracked-scope",
       "code": "SC2004",
       "kind": "violation",
       "severity": "error",
@@ -32,7 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "resolve-in-reactive-scope",
+      "rule": "resolve-in-tracked-scope",
       "code": "SC2004",
       "kind": "violation",
       "severity": "error",

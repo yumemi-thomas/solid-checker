@@ -810,7 +810,7 @@
       "code": "import { action, createMemo } from \"solid-js\";\nconst save = action(function* () {});\ncreateMemo(() => save());\n"
     },
     {
-      "rule": "resolve-in-reactive-scope",
+      "rule": "resolve-in-tracked-scope",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",

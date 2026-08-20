@@ -54,6 +54,10 @@ code; **Both** — either, depending on the code.
   `v1/expected-function-got-expression` are now `reactive-handler-frozen` and
   `v1/reactive-handler-frozen`. Both old rule-options keys alias their current
   identities; both explicit ESLint keys remain deprecated delegates.
+- **2026-08-20 — SC2004 renamed.** `resolve-in-reactive-scope` is now
+  `resolve-in-tracked-scope`, naming the precise execution fact the rule
+  proves. The old rule-options key aliases the new identity; the explicit
+  ESLint key remains temporarily as a deprecated delegate.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 

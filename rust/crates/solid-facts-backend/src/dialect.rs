@@ -229,6 +229,7 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
         "v1/expected-function-got-expression",
         "v1/reactive-handler-frozen",
     ),
+    ("resolve-in-reactive-scope", "resolve-in-tracked-scope"),
 ];
 
 /// The removal note for a retired rule identity, or `None` if the checker never

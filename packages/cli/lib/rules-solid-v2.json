@@ -16,7 +16,7 @@
     { "code": "SC1004", "name": "components-return-once", "severity": "error", "uncertifiable": false },
     { "code": "SC2001", "name": "reactive-write-in-owned-scope", "severity": "error", "uncertifiable": false },
     { "code": "SC2002", "name": "action-called-in-owned-scope", "severity": "error", "uncertifiable": false },
-    { "code": "SC2004", "name": "resolve-in-reactive-scope", "severity": "error", "uncertifiable": false },
+    { "code": "SC2004", "name": "resolve-in-tracked-scope", "severity": "error", "uncertifiable": false },
     { "code": "SC3001", "name": "leaf-owner-forbidden-call", "severity": "error", "uncertifiable": false },
     { "code": "SC4001", "name": "missing-owner", "severity": "warning", "uncertifiable": false },
     { "code": "SC5001", "name": "pending-async-unsuspendable-read", "severity": "error", "uncertifiable": false },

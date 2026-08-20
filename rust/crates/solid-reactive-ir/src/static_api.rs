@@ -156,7 +156,7 @@ impl StaticApiContext<'_> {
             {
                 result.violations.push(StaticViolation {
                     id: "SC2004".into(),
-                    rule: "resolve-in-reactive-scope".into(),
+                    rule: "resolve-in-tracked-scope".into(),
                     message: format!(
                         "resolve() is called inside {scope}; resolve() reads the expression once and never tracks updates, and an active observer makes Solid throw \"Cannot call resolve inside a reactive scope\" here in dev"
                     ),
