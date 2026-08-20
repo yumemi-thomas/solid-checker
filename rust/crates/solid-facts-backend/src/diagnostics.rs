@@ -1425,9 +1425,15 @@ fn discover_rule_options_with(
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse(&encoded, &has_rule, &owns_solid1x_options).map_err(
-                    |error| BackendError::RuleOptions(format!("{}: {error}", candidate.display())),
-                );
+                return RuleOptions::parse_with_aliases(
+                    &encoded,
+                    &has_rule,
+                    &owns_solid1x_options,
+                    dialect::rule_alias,
+                )
+                .map_err(|error| {
+                    BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
+                });
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
@@ -1580,7 +1586,7 @@ mod tests {
     /// on to delete; the second is what keeps a typo from silently changing
     /// policy, which is the reason the validation exists.
     #[test]
-    fn retired_rule_identities_are_tolerated_and_typos_are_not() {
+    fn compatibility_rule_identities_are_tolerated_and_typos_are_not() {
         let directory = std::env::temp_dir().join(format!(
             "solid-checker-retired-rules-{}",
             std::process::id()
@@ -1612,6 +1618,34 @@ mod tests {
                     .any(|dialect| (dialect.has_rule)(retired.0)),
                 "{:?} is retired but still declared by a catalog",
                 retired.0
+            );
+        }
+
+        for (old, current) in crate::dialect::RULE_ALIASES {
+            std::fs::write(
+                &document,
+                format!(
+                    r#"{{ "schemaVersion": 1, "rules": {{ {old:?}: {{ "enabled": false }} }} }}"#
+                ),
+            )
+            .unwrap();
+            let loaded = super::discover_rule_options(&directory)
+                .unwrap_or_else(|error| panic!("alias {old:?} must load: {error}"));
+            assert!(
+                !loaded.is_enabled(current),
+                "disabling alias {old:?} did not disable {current:?}"
+            );
+            assert!(
+                crate::dialect::ALL
+                    .iter()
+                    .any(|dialect| (dialect.has_rule)(current)),
+                "alias target {current:?} is absent from every catalog"
+            );
+            assert!(
+                !crate::dialect::ALL
+                    .iter()
+                    .any(|dialect| (dialect.has_rule)(old)),
+                "alias source {old:?} is still declared by a catalog"
             );
         }
 

@@ -61,6 +61,13 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
     ),
 ];
 
+/// Former external rule identities that canonicalize onto a current rule.
+///
+/// Unlike [`RETIRED_RULES`], an alias transfers configuration: disabling its
+/// old name disables the current target. Entries land atomically with the
+/// identity change that creates the target, so this table begins empty.
+pub const RULE_ALIASES: &[(&str, &str)] = &[];
+
 /// The removal note for a retired rule identity, or `None` if the checker never
 /// published that name.
 #[must_use]
@@ -69,6 +76,15 @@ pub fn retired_rule(name: &str) -> Option<&'static str> {
         .iter()
         .find(|(retired, _)| *retired == name)
         .map(|(_, reason)| *reason)
+}
+
+/// The current catalog identity for a former external name.
+#[must_use]
+pub fn rule_alias(name: &str) -> Option<&'static str> {
+    RULE_ALIASES
+        .iter()
+        .find(|(old, _)| *old == name)
+        .map(|(_, current)| *current)
 }
 
 /// Semantic evidence a dialect's catalog needs Type Facts to acquire.

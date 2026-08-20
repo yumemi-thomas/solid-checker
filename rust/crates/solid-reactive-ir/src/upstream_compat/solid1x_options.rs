@@ -212,6 +212,19 @@ impl RuleOptions {
         has_rule: impl Fn(&str) -> bool,
         owns_solid1x_options: impl Fn(&str) -> bool,
     ) -> Result<Self, String> {
+        Self::parse_with_aliases(encoded, has_rule, owns_solid1x_options, |_| None)
+    }
+
+    /// Parses a document while canonicalizing former external names onto
+    /// their current catalog identities. Alias lookup stays outside this
+    /// crate so the backend's permanent compatibility table remains the one
+    /// source of truth.
+    pub fn parse_with_aliases(
+        encoded: &str,
+        has_rule: impl Fn(&str) -> bool,
+        owns_solid1x_options: impl Fn(&str) -> bool,
+        alias: impl Fn(&str) -> Option<&'static str>,
+    ) -> Result<Self, String> {
         let document: Document = serde_json::from_str(encoded)
             .map_err(|error| format!("rule options are not a valid document: {error}"))?;
         if document.schema_version != 1 {
@@ -221,21 +234,23 @@ impl RuleOptions {
             ));
         }
         let mut options = Self::default();
-        for (rule, value) in document.rules {
+        for (configured_rule, value) in document.rules {
+            let rule = alias(&configured_rule).unwrap_or(&configured_rule);
             if !has_rule(&rule) {
-                return Err(format!("the rule catalog has no rule named {rule:?}"));
+                return Err(format!(
+                    "the rule catalog has no rule named {configured_rule:?}"
+                ));
             }
-            let mut fields = value
-                .as_object()
-                .cloned()
-                .ok_or_else(|| format!("rule options for {rule:?} must be a JSON object"))?;
+            let mut fields = value.as_object().cloned().ok_or_else(|| {
+                format!("rule options for {configured_rule:?} must be a JSON object")
+            })?;
             let enabled = fields.remove("enabled").map_or(Ok(true), |value| {
-                value
-                    .as_bool()
-                    .ok_or_else(|| format!("rule options for {rule:?}: enabled must be a boolean"))
+                value.as_bool().ok_or_else(|| {
+                    format!("rule options for {configured_rule:?}: enabled must be a boolean")
+                })
             })?;
             if !enabled {
-                options.disabled.insert(rule.clone());
+                options.disabled.insert(rule.to_owned());
             }
             let value = serde_json::Value::Object(fields);
             // This module owns 1.x option shapes, not the catalog's external
@@ -256,7 +271,7 @@ impl RuleOptions {
                         ))
                     }
                 });
-            result.map_err(|error| format!("rule options for {rule:?}: {error}"))?;
+            result.map_err(|error| format!("rule options for {configured_rule:?}: {error}"))?;
         }
         Ok(options)
     }
@@ -436,5 +451,22 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn aliases_transfer_disable_to_the_canonical_rule() {
+        let options = RuleOptions::parse_with_aliases(
+            r#"{
+              "schemaVersion": 1,
+              "rules": { "old-missing-owner": { "enabled": false } }
+            }"#,
+            |rule| rule == "missing-owner",
+            |_| false,
+            |rule| (rule == "old-missing-owner").then_some("missing-owner"),
+        )
+        .unwrap();
+
+        assert!(!options.is_enabled("missing-owner"));
+        assert!(options.is_enabled("old-missing-owner"));
     }
 }
