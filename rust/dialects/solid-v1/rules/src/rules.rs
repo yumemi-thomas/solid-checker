@@ -49,15 +49,11 @@ pub enum Rule {
     JsxNoScriptUrl,
     JsxNoUndef,
     JsxUsesVars,
-    NoInnerhtml,
     NoProxyApis,
-    NoReactSpecificProps,
-    NoUnknownNamespaces,
     PreferClasslist,
     PreferFor,
     PreferShow,
     SelfClosingComp,
-    StyleProp,
     PreferComponentSyntax,
     ValidJsxNesting,
     PackageContractExportMissing,
@@ -79,7 +75,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 34] = [
+    pub const ALL: [Self; 30] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -99,15 +95,11 @@ impl Rule {
         Self::JsxNoScriptUrl,
         Self::JsxNoUndef,
         Self::JsxUsesVars,
-        Self::NoInnerhtml,
         Self::NoProxyApis,
-        Self::NoReactSpecificProps,
-        Self::NoUnknownNamespaces,
         Self::PreferClasslist,
         Self::PreferFor,
         Self::PreferShow,
         Self::SelfClosingComp,
-        Self::StyleProp,
         Self::PreferComponentSyntax,
         Self::ValidJsxNesting,
         Self::PackageContractExportMissing,
@@ -151,17 +143,11 @@ impl Rule {
             Self::JsxNoScriptUrl => ("SC8004", "v1/jsx-no-script-url", "error", false),
             Self::JsxNoUndef => ("SC8005", "v1/jsx-no-undef", "error", false),
             Self::JsxUsesVars => ("SC8006", "v1/jsx-uses-vars", "error", false),
-            Self::NoInnerhtml => ("SC8008", "v1/no-innerhtml", "error", false),
             Self::NoProxyApis => ("SC8009", "v1/no-proxy-apis", "error", false),
-            Self::NoReactSpecificProps => {
-                ("SC8011", "v1/no-react-specific-props", "warning", false)
-            }
-            Self::NoUnknownNamespaces => ("SC8012", "v1/no-unknown-namespaces", "error", false),
             Self::PreferClasslist => ("SC8013", "v1/prefer-classlist", "warning", false),
             Self::PreferFor => ("SC8014", "v1/prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "v1/prefer-show", "warning", false),
             Self::SelfClosingComp => ("SC8016", "v1/self-closing-comp", "warning", false),
-            Self::StyleProp => ("SC8017", "v1/style-prop", "warning", false),
             Self::PreferComponentSyntax => {
                 ("SC8018", "v1/prefer-component-syntax", "warning", false)
             }
@@ -313,15 +299,11 @@ mod tests {
             ("SC8003", "jsx-no-duplicate-props"),
             ("SC8004", "jsx-no-script-url"),
             ("SC8005", "jsx-no-undef"),
-            ("SC8008", "no-innerhtml"),
             ("SC8009", "no-proxy-apis"),
-            ("SC8011", "no-react-specific-props"),
-            ("SC8012", "no-unknown-namespaces"),
             ("SC8013", "prefer-classlist"),
             ("SC8014", "prefer-for"),
             ("SC8015", "prefer-show"),
             ("SC8016", "self-closing-comp"),
-            ("SC8017", "style-prop"),
         ] {
             assert!(
                 Rule::from_identity(code, name).is_some(),

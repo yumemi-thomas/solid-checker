@@ -47,8 +47,8 @@ that exact rule in the shared project configuration described below.
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
 | Shared concepts (20 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
-| Version-only concepts | 14 rules: `v1/no-async-tracked-scope` plus the retained SC8003–SC8017 ESLint-era surface | 15 rules: actions, `flush`, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 34 rules | 35 rules |
+| Version-only concepts | 10 rules: `v1/no-async-tracked-scope` plus the retained ESLint-era surface | 15 rules: actions, `flush`, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
+| Catalog size | 30 rules | 35 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -83,21 +83,16 @@ document is discovered by the same ancestor walk as
 `.solid-checker/contracts/`, so the CLI, daemon, LSP, and ESLint snapshots all
 apply the same policy.
 
-Six of the 1.x ESLint-surface rules also carry the upstream options their
-behaviour depends on: [v1/event-handlers](v1/event-handlers.md),
-[v1/no-innerhtml](v1/no-innerhtml.md),
-[v1/self-closing-comp](v1/self-closing-comp.md),
-[v1/prefer-classlist](v1/prefer-classlist.md),
-[v1/style-prop](v1/style-prop.md), and
-[v1/no-unknown-namespaces](v1/no-unknown-namespaces.md):
+Two of the 1.x ESLint-surface rules also carry the upstream options their
+behaviour depends on: [v1/self-closing-comp](v1/self-closing-comp.md) and
+[v1/prefer-classlist](v1/prefer-classlist.md):
 
 ```json
 {
   "schemaVersion": 1,
   "rules": {
     "v1/no-proxy-apis": { "enabled": false },
-    "v1/no-innerhtml": { "enabled": true, "allowStatic": false },
-    "v1/style-prop": { "styleProps": ["style", "css"] }
+    "v1/prefer-classlist": { "classnames": ["cx", "clsx"] }
   }
 }
 ```

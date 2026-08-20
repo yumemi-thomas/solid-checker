@@ -436,16 +436,6 @@ pub trait Dialect: Sync {
     /// so a 1.x diagnostic must not cite the 2.0 file.
     fn bundled_contract_label(&self) -> &'static str;
 
-    /// The JSX attribute namespace prefixes this dialect's compiler gives
-    /// meaning to — the reserved compiler namespaces plus the XML namespaces
-    /// it maps. Anything else compiles to nothing, which is what
-    /// `no-unknown-namespaces` reports.
-    ///
-    /// The two versions differ sharply: dom-expressions 0.50 dropped the
-    /// `class:`/`style:`/`on:`/`oncapture:`/`use:`/`attr:`/`bool:` special
-    /// namespaces, leaving `prop:` as 2.0's only reserved prefix.
-    fn jsx_attribute_namespaces(&self) -> &'static [&'static str];
-
     /// Resolves an exported name to a primitive, or `None` when this dialect
     /// does not export it.
     fn primitive(&self, name: &str) -> Option<Primitive>;

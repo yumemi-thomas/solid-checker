@@ -29,21 +29,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 
-/// Options for `v1/no-innerhtml` (SC8008).
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
-pub struct NoInnerhtmlOptions {
-    /// Upstream's `allowStatic` (default `true`): accept a provably-static
-    /// HTML string. With `false`, every `innerHTML` value is reported.
-    pub allow_static: bool,
-}
-
-impl Default for NoInnerhtmlOptions {
-    fn default() -> Self {
-        Self { allow_static: true }
-    }
-}
-
 /// Which empty elements of one category `v1/self-closing-comp` (SC8016)
 /// wants self-closed.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize)]
@@ -91,53 +76,15 @@ impl Default for PreferClasslistOptions {
     }
 }
 
-/// Options for `v1/style-prop` (SC8017).
-#[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
-pub struct StylePropOptions {
-    /// Upstream's `styleProps`: the prop names the rule inspects.
-    pub style_props: Vec<String>,
-    /// Upstream's `allowString`: accept string-valued style props instead of
-    /// asking for an object.
-    pub allow_string: bool,
-}
-
-impl Default for StylePropOptions {
-    fn default() -> Self {
-        Self {
-            style_props: vec!["style".to_owned()],
-            allow_string: false,
-        }
-    }
-}
-
-/// Options for `v1/no-unknown-namespaces` (SC8012).
-#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
-pub struct NoUnknownNamespacesOptions {
-    /// Upstream's `allowedNamespaces`: extra namespace prefixes to accept on
-    /// top of the dialect's own vocabulary.
-    pub allowed_namespaces: Vec<String>,
-}
-
 /// Options owned specifically by the Solid 1.x compatibility implementation.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Solid1xRuleOptions {
-    pub no_innerhtml: NoInnerhtmlOptions,
     pub self_closing_comp: SelfClosingCompOptions,
     pub prefer_classlist: PreferClasslistOptions,
-    pub style_prop: StylePropOptions,
-    pub no_unknown_namespaces: NoUnknownNamespacesOptions,
 }
 
 impl Solid1xRuleOptions {
-    const CONFIGURABLE_RULES: [&'static str; 5] = [
-        "no-innerhtml",
-        "self-closing-comp",
-        "prefer-classlist",
-        "style-prop",
-        "no-unknown-namespaces",
-    ];
+    const CONFIGURABLE_RULES: [&'static str; 2] = ["self-closing-comp", "prefer-classlist"];
 
     /// Applies an option object owned by the Solid 1.x compatibility layer.
     ///
@@ -146,18 +93,10 @@ impl Solid1xRuleOptions {
     fn parse_rule(&mut self, rule: &str, value: &serde_json::Value) -> Option<Result<(), String>> {
         let parsed =
             match rule {
-                "no-innerhtml" => {
-                    serde_json::from_value(value.clone()).map(|parsed| self.no_innerhtml = parsed)
-                }
                 "self-closing-comp" => serde_json::from_value(value.clone())
                     .map(|parsed| self.self_closing_comp = parsed),
                 "prefer-classlist" => serde_json::from_value(value.clone())
                     .map(|parsed| self.prefer_classlist = parsed),
-                "style-prop" => {
-                    serde_json::from_value(value.clone()).map(|parsed| self.style_prop = parsed)
-                }
-                "no-unknown-namespaces" => serde_json::from_value(value.clone())
-                    .map(|parsed| self.no_unknown_namespaces = parsed),
                 _ => return None,
             };
         Some(parsed.map_err(|error| error.to_string()))
@@ -274,11 +213,8 @@ mod tests {
     fn known_rule(rule: &str) -> bool {
         matches!(
             rule,
-            "v1/no-innerhtml"
-                | "v1/self-closing-comp"
+            "v1/self-closing-comp"
                 | "v1/prefer-classlist"
-                | "v1/style-prop"
-                | "v1/no-unknown-namespaces"
                 | "v1/no-destructure"
                 | "v1/no-direct-mutation"
                 | "no-owner-cleanup"
@@ -297,15 +233,11 @@ mod tests {
             RuleOptions::parse(r#"{ "schemaVersion": 1 }"#, known_rule, solid1x_rule).unwrap();
         assert_eq!(options, RuleOptions::default());
         let options = options.solid1x;
-        assert!(options.no_innerhtml.allow_static);
         assert_eq!(options.self_closing_comp.html, SelfClosePolicy::All);
         assert_eq!(
             options.prefer_classlist.classnames,
             ["cn", "clsx", "classnames"]
         );
-        assert_eq!(options.style_prop.style_props, ["style"]);
-        assert!(!options.style_prop.allow_string);
-        assert!(options.no_unknown_namespaces.allowed_namespaces.is_empty());
     }
 
     #[test]
@@ -314,11 +246,8 @@ mod tests {
             r#"{
               "schemaVersion": 1,
               "rules": {
-                "v1/no-innerhtml": { "allowStatic": false },
                 "v1/self-closing-comp": { "component": "none", "html": "void" },
-                "v1/prefer-classlist": { "classnames": ["cx"] },
-                "v1/style-prop": { "styleProps": ["css"], "allowString": true },
-                "v1/no-unknown-namespaces": { "allowedNamespaces": ["foo"] }
+                "v1/prefer-classlist": { "classnames": ["cx"] }
               }
             }"#,
             known_rule,
@@ -326,45 +255,9 @@ mod tests {
         )
         .unwrap();
         let options = options.solid1x;
-        assert!(!options.no_innerhtml.allow_static);
         assert_eq!(options.self_closing_comp.component, SelfClosePolicy::None);
         assert_eq!(options.self_closing_comp.html, SelfClosePolicy::Void);
         assert_eq!(options.prefer_classlist.classnames, ["cx"]);
-        assert_eq!(options.style_prop.style_props, ["css"]);
-        assert!(options.style_prop.allow_string);
-        assert_eq!(options.no_unknown_namespaces.allowed_namespaces, ["foo"]);
-    }
-
-    #[test]
-    fn configurable_shapes_do_not_own_the_catalog_namespace() {
-        let options = RuleOptions::parse(
-            r#"{
-              "schemaVersion": 1,
-              "rules": {
-                "legacy/no-innerhtml": { "allowStatic": false }
-              }
-            }"#,
-            |rule| rule == "legacy/no-innerhtml",
-            solid1x_rule,
-        )
-        .unwrap();
-
-        assert!(!options.solid1x.no_innerhtml.allow_static);
-    }
-
-    #[test]
-    fn a_same_named_non_v1_rule_does_not_receive_v1_options() {
-        assert!(
-            RuleOptions::parse(
-                r#"{
-                  "schemaVersion": 1,
-                  "rules": { "v2/no-innerhtml": { "allowStatic": false } }
-                }"#,
-                |rule| rule == "v2/no-innerhtml",
-                |rule| rule == "v1/no-innerhtml",
-            )
-            .is_err()
-        );
     }
 
     #[test]
@@ -374,7 +267,6 @@ mod tests {
               "schemaVersion": 1,
               "rules": {
                 "v1/no-direct-mutation": { "enabled": false },
-                "v1/no-innerhtml": { "enabled": false, "allowStatic": false },
                 "no-owner-cleanup": { "enabled": false },
                 "strict-read-untracked": { "enabled": true }
               }
@@ -384,12 +276,10 @@ mod tests {
         )
         .unwrap();
         assert!(!options.is_enabled("v1/no-direct-mutation"));
-        assert!(!options.is_enabled("v1/no-innerhtml"));
         assert!(options.is_enabled("strict-read-untracked"));
         assert!(options.is_enabled("v1/no-destructure"));
         assert!(!options.is_enabled("no-owner-cleanup"));
         assert!(options.is_enabled("no-owner-settled-cleanup"));
-        assert!(!options.solid1x.no_innerhtml.allow_static);
     }
 
     #[test]
@@ -398,14 +288,6 @@ mod tests {
         assert!(
             RuleOptions::parse(
                 r#"{ "schemaVersion": 1, "rules": { "v1/not-a-rule": {} } }"#,
-                known_rule,
-                solid1x_rule,
-            )
-            .is_err()
-        );
-        assert!(
-            RuleOptions::parse(
-                r#"{ "schemaVersion": 1, "rules": { "v1/no-innerhtml": { "allowStatick": false } } }"#,
                 known_rule,
                 solid1x_rule,
             )

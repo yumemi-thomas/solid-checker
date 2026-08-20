@@ -99,6 +99,22 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "v1/event-handlers",
         "removed 2026-08-20: its surviving arms enforced spelling and intent conventions rather than proven runtime defects",
     ),
+    (
+        "v1/no-react-specific-props",
+        "removed 2026-08-20: intrinsic uses are TypeScript errors and component props are passed through without React-specific lowering",
+    ),
+    (
+        "v1/no-unknown-namespaces",
+        "removed 2026-08-20: namespaced component props are delivered verbatim and intrinsic invalid names are TypeScript-owned",
+    ),
+    (
+        "v1/no-innerhtml",
+        "removed 2026-08-20: its component and injection-policy arms were unproven; content competition remains SC8003",
+    ),
+    (
+        "v1/style-prop",
+        "removed 2026-08-20: its component arm was false and its intrinsic residue was CSS style policy or TypeScript-owned",
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.

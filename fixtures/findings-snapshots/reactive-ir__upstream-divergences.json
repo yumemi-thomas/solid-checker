@@ -32,16 +32,6 @@
       "fixes": 1
     },
     {
-      "rule": "v1/no-innerhtml",
-      "code": "SC8008",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 579,
-      "end": 602,
-      "fixes": 1
-    },
-    {
       "rule": "v1/jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "violation",
@@ -49,56 +39,6 @@
       "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
       "start": 612,
       "end": 641,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-innerhtml",
-      "code": "SC8008",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 612,
-      "end": 671,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-innerhtml",
-      "code": "SC8008",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 720,
-      "end": 742,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-innerhtml",
-      "code": "SC8008",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 1744,
-      "end": 1792,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/no-innerhtml",
-      "code": "SC8008",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 1925,
-      "end": 1983,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-innerhtml",
-      "code": "SC8008",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/upstream-divergences/markup-cases.tsx",
-      "start": 2590,
-      "end": 2625,
       "fixes": 0
     },
     {
@@ -150,46 +90,6 @@
       "start": 660,
       "end": 668,
       "fixes": 0
-    },
-    {
-      "rule": "v1/style-prop",
-      "code": "SC8017",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
-      "start": 1688,
-      "end": 1709,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/style-prop",
-      "code": "SC8017",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
-      "start": 1818,
-      "end": 1827,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/style-prop",
-      "code": "SC8017",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
-      "start": 1923,
-      "end": 1928,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/style-prop",
-      "code": "SC8017",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/upstream-divergences/style-cases.tsx",
-      "start": 1964,
-      "end": 1972,
-      "fixes": 1
     },
     {
       "rule": "v1/strict-read-untracked",

@@ -188,17 +188,13 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::JsxNoDuplicateProps => "the same JSX property is assigned more than once",
         Rule::JsxNoScriptUrl => "the statically resolved URL uses the javascript: scheme",
         Rule::JsxNoUndef => "the JSX name has no value-space binding in lexical scope",
-        Rule::NoInnerhtml => "the JSX attribute writes markup through an HTML injection sink",
         Rule::NoProxyApis => "the import or call requires Proxy-backed Solid APIs",
-        Rule::NoReactSpecificProps => "the JSX attribute uses a React-specific property spelling",
-        Rule::NoUnknownNamespaces => "the JSX namespace is outside Solid's known vocabulary",
         Rule::PreferClasslist => "a class helper call matches the configured classList preference",
         Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
         Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
         Rule::SelfClosingComp => {
             "the element's child and closing-tag shape conflicts with the configured policy"
         }
-        Rule::StyleProp => "the style attribute shape conflicts with Solid's style contract",
         Rule::NoAsyncTrackedScope => {
             "the tracked callback is syntactically async and can continue after an await"
         }

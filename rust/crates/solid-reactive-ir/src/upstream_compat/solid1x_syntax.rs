@@ -1,5 +1,5 @@
-//! `v1/jsx-no-duplicate-props`, `v1/jsx-no-script-url`,
-//! `v1/no-unknown-namespaces`, `v1/self-closing-comp` — eslint-plugin-solid's
+//! `v1/jsx-no-duplicate-props`, `v1/jsx-no-script-url`, and
+//! `v1/self-closing-comp` — eslint-plugin-solid's
 //! purely structural JSX rules, ported from the 1.x reactive solver's
 //! `solid_1_rules.rs` onto this checker's fact tables.
 //!
@@ -7,13 +7,11 @@
 //! spread / object-property tables. The context is consulted twice, both
 //! times for vocabulary rather than syntax: `jsx-no-script-url` recovers a
 //! URL from a literal string *type* when the value's text lives in another
-//! file, and `no-unknown-namespaces` asks the dialect which namespace
-//! prefixes its compiler recognizes.
+//! file.
 //!
 //! # Options
 //!
-//! `no-unknown-namespaces { allowedNamespaces }` and `self-closing-comp
-//! { component, html }` are read from the project's
+//! `self-closing-comp { component, html }` is read from the project's
 //! `.solid-checker/rule-options.json` (see [`super::solid1x_options`]),
 //! defaulting to upstream's defaults. `jsx-no-duplicate-props { ignoreCase }`
 //! is the one option upstream ships here that the checker does not carry: no
@@ -28,7 +26,7 @@ use solid_facts::core::Span;
 
 use super::{
     UpstreamCompatContext, deletion_with_leading_whitespace, fix_replace, is_lowercase_led,
-    jsx_name_is_type_checked, static_string_expression, text, violation,
+    static_string_expression, text, violation,
 };
 use crate::StaticViolation;
 
@@ -40,7 +38,6 @@ pub(super) fn check_file(
     for element in &file.ast.jsx_elements {
         jsx_no_duplicate_props(file, element, violations);
         jsx_no_script_url(file, context, element, violations);
-        no_unknown_namespaces(file, context, element, violations);
         self_closing_comp(file, context, element, violations);
     }
 }
@@ -504,120 +501,6 @@ fn decode_character_references(value: &str) -> std::borrow::Cow<'_, str> {
     }
     decoded.push_str(rest);
     std::borrow::Cow::Owned(decoded)
-}
-
-/// `v1/no-unknown-namespaces` (SC8012) — a JSX attribute using the
-/// `namespace:name` form with a namespace that is not one of Solid's
-/// compiler-recognized prefixes, is a namespace on a component (which the
-/// compiler never sees, since components receive props as a plain object),
-/// or is `style:`/`class:` (valid, but a prop already says the same thing
-/// more plainly).
-fn no_unknown_namespaces(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    element: &JsxElementFact,
-    violations: &mut Vec<StaticViolation>,
-) {
-    // Which prefixes the compiler recognizes is dialect vocabulary, asked of
-    // the dialect rather than baked into the rule: the 2.0 compiler dropped
-    // every 1.x namespace except `prop:`. Upstream's `allowedNamespaces`
-    // option accepts extra prefixes on top.
-    let known = context.dialect.jsx_attribute_namespaces();
-    let allowed = &context
-        .solid1x_options
-        .no_unknown_namespaces
-        .allowed_namespaces;
-    let component = !is_lowercase_led(text(file, element.name.span));
-    // Narrowed 2026-08-17 under AGENTS.md's absolute rule: on an intrinsic
-    // element every namespaced prop this rule objects to is already TS2322
-    // against the real solid-js@1.9.14 typings. Solid resolves its namespaces
-    // through mapped types over user-augmentable interfaces (`Directives`,
-    // `ExplicitProperties`, `ExplicitAttributes`, `ExplicitBoolAttributes`,
-    // `CustomEvents`) plus individually declared `on:*` events, so an
-    // unrecognised prefix has nothing to land on:
-    //
-    //   TS2322: Property 'model:value' does not exist on type
-    //           'HTMLAttributes<HTMLDivElement>'.
-    //
-    // That covers the `style:`/`class:` steer as well: neither prefix is
-    // declared at all, so `<div class:active={true} />` is a type error
-    // regardless of the style preference this rule was expressing. (A genuine
-    // gap in Solid's published typings, since the 1.x compiler does support
-    // both — but the type error is already speaking at that exact span, and
-    // compensating for the typings is not this checker's job.)
-    //
-    // A component keeps the rule: its props are a plain object, TypeScript is
-    // silent, and the claim — the compiler special-cases namespaces only on
-    // DOM elements it lowers directly, so the prop arrives inert — is one no
-    // type makes.
-    //
-    // And so does an intrinsic element whose attribute name TypeScript declines
-    // to check at all: a *hyphenated* local name such as `class:mt-10` escapes
-    // the excess-property check entirely (upstream's cases 04 and 05), so the
-    // narrowing must ask per attribute rather than bail on the element.
-    for attribute in element
-        .attributes
-        .iter()
-        .filter(|attribute| attribute.namespace.is_some())
-        .filter(|attribute| component || !jsx_name_is_type_checked(text(file, attribute.name)))
-    {
-        let namespace = text(file, attribute.namespace.expect("filtered to Some above"));
-        let local = text(file, attribute.local_name);
-        let mut result = if component {
-            let mut result = violation(
-                file,
-                "SC8012",
-                "no-unknown-namespaces",
-                "Namespaced props have no effect on components.",
-                format!(
-                    "Drop the `{namespace}:` prefix: components receive `{local}` as a plain prop, and Solid's compiler only special-cases namespaces on DOM elements it compiles directly."
-                ),
-                attribute.name,
-                vec![],
-            );
-            result.fixes.push(fix_replace(
-                file,
-                attribute.name,
-                format!("rename to `{local}`"),
-                local,
-            ));
-            result
-        } else if matches!(namespace, "style" | "class") && known.contains(&namespace) {
-            // Recognized by the 1.x compiler (the dialect's namespace table
-            // lists both), but upstream still steers authors to the plain
-            // prop with this exact message — the namespaced form exists for
-            // per-name toggling the plain prop usually expresses better.
-            violation(
-                file,
-                "SC8012",
-                "no-unknown-namespaces",
-                format!(
-                    "Using the '{namespace}:' special prefix is potentially confusing, prefer the '{namespace}' prop instead."
-                ),
-                format!(
-                    "Replace `{namespace}:{local}` with the plain `{namespace}` prop; the namespaced form exists for edge cases the plain prop cannot express, which this usage is not."
-                ),
-                attribute.name,
-                vec![],
-            )
-        } else if !known.contains(&namespace) && !allowed.iter().any(|extra| extra == namespace) {
-            violation(
-                file,
-                "SC8012",
-                "no-unknown-namespaces",
-                format!(
-                    "'{namespace}:' is not one of Solid's special prefixes for JSX attributes ('on:', 'oncapture:', 'use:', 'prop:', 'attr:', 'bool:')."
-                ),
-                "Use one of Solid's namespaces (on:, oncapture:, use:, prop:, attr:, bool:), or drop the prefix if a plain prop was intended; an unrecognized namespace compiles to nothing.",
-                attribute.name,
-                vec![],
-            )
-        } else {
-            continue;
-        };
-        result.analysis_context = format!("JSX namespace {namespace}");
-        violations.push(result);
-    }
 }
 
 /// The HTML elements with no closing tag; the only ones upstream's

@@ -1267,25 +1267,6 @@ fn solid_one_upstream_helpers_respect_runtime_values_and_ast_structure() {
             .all(|finding| finding["id"] != "SC8004"),
         "a cyclic initializer must terminate without manufacturing a URL value: {findings:#?}"
     );
-
-    let inner_html = findings
-        .iter()
-        .filter(|finding| finding["id"] == "SC8008" && in_function(finding, "InnerHtmlFixes"))
-        .collect::<Vec<_>>();
-    // Two of the three: the arm is narrowed to components, so the intrinsic
-    // spelling is TS2322's and stays silent. The two fix shapes are what this
-    // case exists for and both live on the component now.
-    assert_eq!(
-        inner_html.len(),
-        2,
-        "both component-borne unsupported props must report, and the intrinsic one must not"
-    );
-    assert_eq!(inner_html[0]["fixes"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        inner_html[1]["fixes"].as_array().map_or(0, Vec::len),
-        0,
-        "a binary expression must not receive the object-literal rewrite"
-    );
 }
 
 #[test]

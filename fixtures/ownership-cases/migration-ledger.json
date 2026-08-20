@@ -1193,122 +1193,122 @@
     },
     {
       "upstreamCase": "no-innerhtml__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__10",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__invalid__11",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-innerhtml__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-innerhtml rule was removed because its component and injection-policy arms were unproven; SC8003 retains proven content competition."
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__00",
@@ -1529,276 +1529,276 @@
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__invalid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-react-specific-props__valid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-react-specific-props rule was removed because intrinsic uses are TypeScript-owned and component props pass through unchanged."
     },
     {
       "upstreamCase": "no-unknown-namespaces__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__invalid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "no-unknown-namespaces__valid__10",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-unknown-namespaces rule was removed because component namespace keys pass through verbatim and invalid intrinsic names are TypeScript-owned."
     },
     {
       "upstreamCase": "prefer-classlist__invalid__00",
@@ -3062,199 +3062,199 @@
     },
     {
       "upstreamCase": "style-prop__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__10",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__11",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__12",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__invalid__13",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__10",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__11",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__12",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     },
     {
       "upstreamCase": "style-prop__valid__13",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-11",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/style-prop rule was removed because its component premise was false and its intrinsic residue was CSS policy or TypeScript-owned."
     }
   ]
 }

@@ -879,25 +879,9 @@
               "ownership": "checker-only",
               "diagnostics": []
             }
-          },
-          {
-            "rule": "v1/no-innerhtml",
-            "code": "SC8008",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "marker": "<div innerHTML={\"<b>x</b>\"}>overwritten</div>"
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
           }
         ],
-        "absent": []
+        "absent": [{ "rule": "v1/no-innerhtml" }]
       }
     },
     {
@@ -986,33 +970,8 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/no-react-specific-props",
-            "code": "SC8011",
-            "span": {
-              "textRange": [
-                33,
-                42
-              ]
-            },
-            "typescript": {
-              "ownership": "typescript-owned",
-              "diagnostics": [
-                {
-                  "code": "TS2322",
-                  "span": {
-                    "textRange": [
-                      33,
-                      42
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ],
-        "absent": []
+        "findings": [],
+        "absent": [{ "rule": "v1/no-react-specific-props" }]
       }
     },
     {
@@ -1027,30 +986,8 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/no-innerhtml",
-            "code": "SC8008",
-            "span": {
-              "marker": "dangerouslySetInnerHTML"
-            },
-            "typescript": {
-              "ownership": "typescript-owned",
-              "diagnostics": [
-                {
-                  "code": "TS2322",
-                  "span": {
-                    "textRange": [
-                      31,
-                      54
-                    ]
-                  }
-                }
-              ]
-            }
-          }
-        ],
-        "absent": []
+        "findings": [],
+        "absent": [{ "rule": "v1/no-innerhtml" }]
       }
     },
     {
@@ -2360,37 +2297,8 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/no-unknown-namespaces",
-            "code": "SC8012",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "marker": "use:X"
-            },
-            "fix": {
-              "behavior": "safe",
-              "text": "let Component, X = <Component X />\nexport {};\n"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS2604",
-                  "span": {
-                    "textRange": [
-                      20,
-                      29
-                    ]
-                  }
-                }
-              ],
-              "justification": "The checker rule v1/no-unknown-namespaces asserts a Solid runtime semantic outcome; the overlapping TS2604 diagnostic concerns the source's type-level shape rather than that runtime outcome."
-            }
-          }
-        ],
-        "absent": []
+        "findings": [],
+        "absent": [{ "rule": "v1/no-unknown-namespaces" }]
       }
     },
     {

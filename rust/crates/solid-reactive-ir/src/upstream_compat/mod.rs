@@ -25,7 +25,6 @@ pub mod solid1x_options;
 mod solid1x_structure;
 mod solid1x_syntax;
 mod solid1x_undef;
-mod solid1x_upstream_data;
 
 use std::collections::{HashMap, HashSet};
 

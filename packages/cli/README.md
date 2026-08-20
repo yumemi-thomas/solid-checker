@@ -118,7 +118,7 @@ id, compatibility `config` key, and optional rule `namespace`; adding a catalog
 does not require a JavaScript registry or version branch.
 
 Project-wide rule enablement and per-rule options (for example
-`v1/no-innerhtml`'s `allowStatic`) live in the project's
+`v1/prefer-classlist`'s `classnames`) live in the project's
 `.solid-checker/rule-options.json`, which the native analysis
 discovers itself — not in ESLint rule configuration. The adapter runs one
 analysis per project, so a single discovered file is what keeps ESLint, the

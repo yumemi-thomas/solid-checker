@@ -119,29 +119,6 @@ impl Dialect for Solid1x {
         "solid-v1/solid-js.json"
     }
 
-    /// The 1.x dom-expressions `reservedNameSpaces` (`class`, `on`,
-    /// `oncapture`, `style`, `use`, `prop`, `attr`, `bool`) plus the XML
-    /// prefixes the compiler maps (`xmlns`, `xlink`, `xml` — dom-expressions
-    /// 0.40's namespace table, so `xml:lang` and `xml:space` stay legal SVG).
-    /// `class:` and `style:` are recognized — the compiler binds them
-    /// per-name — even though `no-unknown-namespaces` still steers authors
-    /// toward the plain props, exactly as upstream's rule does.
-    fn jsx_attribute_namespaces(&self) -> &'static [&'static str] {
-        &[
-            "class",
-            "on",
-            "oncapture",
-            "style",
-            "use",
-            "prop",
-            "attr",
-            "bool",
-            "xmlns",
-            "xlink",
-            "xml",
-        ]
-    }
-
     fn primitive(&self, name: &str) -> Option<Primitive> {
         static INDEX: crate::NameIndex = crate::NameIndex::new();
         lookup(&INDEX, &[TABLE, ALIASES], name)
