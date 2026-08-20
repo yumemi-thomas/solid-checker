@@ -193,11 +193,10 @@ rule's page documents its additional options and defaults.
 
 SC7005–SC7007 describe the 2.0 server surface (`@solidjs/web`'s HTTP response
 head and core server functions) and exist only in the 2.0 catalog: Solid 1.x
-has neither. SC7005 is a **warning** by design — the post-flush drop only
-occurs when the boundary settles after the shell flush, so the static finding
-is conditional rather than a proven-unconditional failure. If the analyzed
-project cannot establish whether SSR exists, SC7005 is additionally marked
-uncertifiable rather than treating a missing server import as proof of CSR.
+has neither. SC7005 is **uncertifiable** at warning severity: the post-flush
+drop occurs only when the boundary settles after the shell flush, and static
+analysis cannot prove which side of that request-time race wins. It therefore
+fails `--certify` until the response-head decision moves above the boundary.
 
 ## Uncertifiable (analysis limits)
 

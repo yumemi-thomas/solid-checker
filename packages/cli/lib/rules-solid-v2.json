@@ -31,7 +31,7 @@
     { "code": "SC6001", "name": "primitive-in-directive-application", "severity": "warning", "uncertifiable": false },
     { "code": "SC7001", "name": "missing-effect-function", "severity": "error", "uncertifiable": false },
     { "code": "SC7002", "name": "sync-node-received-async", "severity": "error", "uncertifiable": false },
-    { "code": "SC7005", "name": "http-response-after-flush", "severity": "warning", "uncertifiable": false },
+    { "code": "SC7005", "name": "http-response-after-flush", "severity": "warning", "uncertifiable": true },
     { "code": "SC7006", "name": "server-function-module-directive", "severity": "error", "uncertifiable": false },
     { "code": "SC7007", "name": "server-function-rich-argument", "severity": "error", "uncertifiable": false },
     { "code": "SC9001", "name": "package-contract-export-missing", "severity": "error", "uncertifiable": true },

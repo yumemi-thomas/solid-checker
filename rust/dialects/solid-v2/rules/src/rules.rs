@@ -182,12 +182,10 @@ impl Rule {
             // code identifies the defect (an invalid or unresolved target),
             // while the name identifies the surface it was found on
             // (`refresh` versus `affects`).
-            // The post-flush drop is real but conditional: a Loading
-            // boundary that settles *before* the shell flush (fast data,
-            // renderToString, deferStream) still applies its writes, so the
-            // static form is a warning, not a proven-unconditional error.
+            // The post-flush drop is real but request-time ordering decides
+            // whether it occurs, so this is an uncertifiable hazard.
             Self::HttpResponseAfterFlush => {
-                ("SC7005", "http-response-after-flush", "warning", false)
+                ("SC7005", "http-response-after-flush", "warning", true)
             }
             // The client build silently loses the export (RFC 10 §Compiler
             // implications — "Minimum: a diagnostic"), so this is an error.
@@ -363,5 +361,6 @@ mod tests {
             "error"
         );
         assert_eq!(Rule::HttpResponseAfterFlush.metadata().severity, "warning");
+        assert!(Rule::HttpResponseAfterFlush.metadata().uncertifiable);
     }
 }

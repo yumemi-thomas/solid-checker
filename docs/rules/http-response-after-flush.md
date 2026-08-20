@@ -1,6 +1,6 @@
 # http-response-after-flush
 
-`SC7005` · **warning** · violation
+`SC7005` · **warning** · uncertifiable
 
 `httpStatus()` / `httpHeader()` is called by content that renders below a
 `<Loading>` boundary, in a project that server-renders.
@@ -10,9 +10,10 @@
 Flags calls to `httpStatus` and `httpHeader` (imported from `@solidjs/web`)
 made in a render-time scope that sits below a `<Loading>` boundary — either
 lexically inside a `Loading` element's children, or in the body of a
-component that is rendered as a `Loading` element's child. A visible server
-entry makes this a violation; when rendering mode is not visible in the
-analyzed project, it is an **uncertifiable** result.
+component that is rendered as a `Loading` element's child. The result is
+always **uncertifiable**: source facts prove the hazardous placement, but
+request-time ordering decides whether the boundary settles before or after
+the shell commits.
 
 **Premise: code-read on the pinned runtime, with the RFC as co-author.**
 `@solidjs/web@2.0.0-rc.0`'s `dist/server.js` gates both primitives — the
@@ -36,7 +37,7 @@ settles after that flush executes too late to speak: its `httpStatus(404)` or
 fine, so the bug ships quietly — a not-found page that answers 200, a
 `no-store` header that never leaves.
 
-## Why a warning, not an error
+## Why it is uncertifiable
 
 The drop is **conditional**: the runtime still applies the write whenever the
 boundary settles *before* the head commits — fast data resolving before the
@@ -44,7 +45,9 @@ shell flush, a `deferStream: true` source holding the shell open, or
 `renderToString`-style rendering where the head is derived after the tree
 settles. A static rule cannot prove which side a given request lands on, so
 the finding reports the hazard rather than claiming an unconditional runtime
-failure.
+failure. Because the checker cannot certify the response head while this race
+remains, SC7005 fails `--certify` even though its advisory severity stays
+`warning`.
 
 ## Examples
 
@@ -102,8 +105,8 @@ settled data.
 - **Rendering mode.** On the client both exports are unconditional no-ops
   (`dist/web.js` / `dist/dev.js` export empty functions), but absence of a
   server entry from one analyzed project does not prove the application is
-  CSR-only. A visible server-rendering import yields the violation; otherwise
-  the dominated render-time call is uncertifiable.
+  CSR-only. A visible server-rendering import strengthens the runtime premise
+  but does not resolve the boundary-versus-flush race.
 - **Fallback position.** A call inside a `Loading` element's `fallback` —
   or in a component rendered in fallback position — is shell-time and
   applies; only the boundary's children are post-flush material.

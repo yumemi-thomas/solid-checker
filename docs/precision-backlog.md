@@ -421,9 +421,10 @@ provenance fact with no type surface at all.
   uncertain directive path and undirected controls.
   SC7002 `sync-node-received-async`, SC7005 `http-response-after-flush`,
   SC7006/SC7007 (the server surface) likewise assert runtime behavior. SC5005
-  and SC7005 now distinguish a visible server-render entry (violation) from
-  an absent entry (uncertifiable); absence is not treated as proof of CSR
-  because the entry may live in a different tsconfig or package.
+  distinguishes a visible server-render entry from an absent one. SC7005 is
+  now always uncertifiable: even with SSR proven, source facts cannot decide
+  whether a boundary settles before or after the shell flush. This
+  2026-08-20 kind change means SC7005 now fails `--certify`.
 - **Syntax and style, no type surface** — SC1003 `v1/no-destructure` ✓ /
   `component-props-destructure`, SC1004 `v1/components-return-once` /
   `component-returns-conditionally`, SC8002 `v1/imports`, SC8006

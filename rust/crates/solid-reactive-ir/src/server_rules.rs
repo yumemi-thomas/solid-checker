@@ -37,13 +37,9 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
 /// `dist/server.js:2901-2975`), and `createSSRResponse` commits the stub at
 /// the shell flush — so a call made by boundary content that settles after
 /// the shell went out is a silent no-op by contract (RFC 12: "there is no
-/// queue"). The finding is conditional — a boundary that settles *before*
-/// the flush still applies its writes — hence warning severity.
-///
-/// A proven server-rendering entry yields a violation. When no such entry is
-/// visible, the rendering mode remains unresolved (the entry may live in a
-/// separate tsconfig/package), so the same shape is uncertifiable rather than
-/// silently treated as CSR-only.
+/// queue"). The finding is uncertifiable because a boundary that settles
+/// *before* the flush still applies its writes; source analysis cannot prove
+/// which side of that request-time race any invocation reaches.
 fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
     let mut server_renders = None;
     let mut loading_hosts: Option<HashSet<(&str, Span)>> = None;
@@ -116,12 +112,12 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                     )
                 },
                 hint: format!(
-                    "Decide the response head in shell content — above every <Loading> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. If the boundary settles before the flush (fast data, renderToString) the write still applies, which is why this is a warning."
+                    "Decide the response head in shell content — above every <Loading> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. A boundary may settle before or after the flush, so move the decision to make the response certifiable."
                 ),
                 location: location(file.path.shared(), call.callee),
                 analysis_context: String::new(),
                 fixes: vec![],
-                uncertain: !server_renders,
+                uncertain: true,
             });
         }
     }

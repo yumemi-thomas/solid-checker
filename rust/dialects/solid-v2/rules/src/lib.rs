@@ -444,7 +444,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
             "the resolve() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
         }
         Rule::HttpResponseAfterFlush => {
-            "the call's scope renders below a Loading boundary in a project that server-renders, and the response head admits no writes after the shell flush"
+            "the call's scope renders below a Loading boundary, but request-time ordering does not prove whether the boundary settles before or after the response head commits"
         }
         Rule::ServerFunctionModuleDirective => {
             "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"

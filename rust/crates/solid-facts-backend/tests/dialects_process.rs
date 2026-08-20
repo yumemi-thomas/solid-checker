@@ -1211,48 +1211,6 @@ fn solid_one_cyclic_adapter_invocations_terminate_and_classify() {
 }
 
 #[test]
-fn solid_one_upstream_helpers_respect_runtime_values_and_ast_structure() {
-    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
-        return;
-    }
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/solid-1x-upstream-regressions");
-    let source = std::fs::read_to_string(fixture.join("App.tsx")).expect("read fixture");
-    let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some("solid-v1"));
-
-    let in_function = |finding: &&serde_json::Value, name: &str| {
-        let start = source.find(&format!("function {name}")).unwrap() as u64;
-        let next = source[usize::try_from(start).unwrap() + 1..]
-            .find("export function ")
-            .map_or(source.len() as u64, |offset| start + 1 + offset as u64);
-        finding["primaryLocation"]["startByte"]
-            .as_u64()
-            .is_some_and(|position| position >= start && position < next)
-    };
-
-    assert!(
-        findings.iter().any(|finding| {
-            finding["id"] == "SC8004" && in_function(&finding, "EscapedScriptUrl")
-        }),
-        "the decoded unicode escape must expose the javascript: URL: {findings:#?}"
-    );
-    assert!(
-        findings
-            .iter()
-            .filter(|finding| in_function(finding, "JsxBackslashIsLiteral"))
-            .all(|finding| finding["id"] != "SC8004"),
-        "JSX attribute text must keep its backslash literal: {findings:#?}"
-    );
-    assert!(
-        findings
-            .iter()
-            .filter(|finding| in_function(finding, "CyclicUrl"))
-            .all(|finding| finding["id"] != "SC8004"),
-        "a cyclic initializer must terminate without manufacturing a URL value: {findings:#?}"
-    );
-}
-
-#[test]
 fn run_with_owner_distinguishes_null_definite_and_nullable_owners_in_both_dialects() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;

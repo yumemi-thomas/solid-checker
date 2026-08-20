@@ -518,10 +518,10 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         // event-handler calls stay silent.
         assert_eq!(drops.len(), 3, "{findings:#?}");
         assert!(
-            drops
-                .iter()
-                .all(|finding| finding["severity"] == "warning" && finding["kind"] == "violation"),
-            "the post-flush drop is conditional and must stay a warning: {drops:#?}"
+            drops.iter().all(|finding| {
+                finding["severity"] == "warning" && finding["kind"] == "uncertifiable"
+            }),
+            "the post-flush race must remain explicitly uncertifiable: {drops:#?}"
         );
         // With no visible server entry, the rendering mode is unresolved;
         // absence of the import is not proof that the app is CSR-only.
