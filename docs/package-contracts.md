@@ -216,7 +216,7 @@ that audits the installed one.
 Analysis fails closed on the contract without failing the run. The stale
 contract is refused — a contract for another version is not weaker evidence, it
 is evidence about a different artifact — and the package is reported exactly as
-an uncontracted one: an uncertifiable `SC9005 package-contract-missing` finding
+an uncontracted one: an uncertifiable `SC9005 package-contract-incomplete` finding
 at the package import, snapshot status `uncertifiable`, and `--certify` exiting
 1. The message states which case applies, naming both versions rather than
 claiming no contract exists, and the hint carries the same remedy the report

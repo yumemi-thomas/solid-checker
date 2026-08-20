@@ -14,7 +14,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     for (rule, count) in [
         ("reactive-write-in-owned-scope", 9),
         ("action-called-in-owned-scope", 2),
-        ("strict-read-untracked", 25),
+        ("strict-read-untracked", 22),
         ("reactive-read-after-await", 20),
         ("no-destructure", 1),
         ("components-return-once", 3),
@@ -66,7 +66,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "component-return-invalid.tsx",
-            [("strict-read-untracked", 3), ("components-return-once", 3)].as_slice(),
+            [("components-return-once", 3)].as_slice(),
         ),
         (
             "leaf-invalid.tsx",

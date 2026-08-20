@@ -18,8 +18,8 @@ Upstream reports the compound form (its props branch tests for an ESTree
 `AssignmentExpression`, which covers every compound operator) and reports an
 accessor binding's `++` through the write reference ESLint's scope analysis
 records, but never sees a *member* `++`, which is an `UpdateExpression`. No
-upstream test case covers either spelling, so this is an evidence-backed
-divergence with no parity case attached rather than a declared deviation.
+upstream test case covered either spelling, so the product-owned fixture pins
+this additional evidence-backed behavior directly.
 
 The warning tier deliberately mirrors that upstream rule's advisory policy.
 It does not mean the write is speculative: every finding is a proven mutation

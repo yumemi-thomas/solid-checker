@@ -66,7 +66,7 @@ export function SyncEffect() {
   }, "light");
 }
 
-// v1/expected-function-got-expression: count() runs during setup and its
+// v1/reactive-handler-frozen:          count() runs during setup and its
 // result is bound as the listener.
 export function CalledHandler() {
   const [count] = createSignal(0);

@@ -66,7 +66,7 @@ export function MutatesInsideOtherSetter() {
   return <button onClick={() => setOther(() => { store.open = true; })}>{String(store.open)}{other.count}</button>;
 }
 
-// expected-function-got-expression (SC1007): count() runs during setup and
+// reactive-handler-frozen          (SC1007): count() runs during setup and
 // its result -- a number, not a function -- is bound as the listener.
 export function CalledHandler() {
   const [count] = createSignal(0);

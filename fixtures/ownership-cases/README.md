@@ -27,7 +27,6 @@ span. Negative cases name the rule or family that must remain absent. Cases
 can also pin per-case rule options, fix applicability/output, presets, and
 directly enabled rules.
 
-`migration-ledger.json` reconciles all 465 former upstream cases. It begins with
-every row `pending`; migrations and deletions update the row atomically with the
-semantic commit that owns the change. `--require-retained` gates parity
-retirement, and `--require-complete` gates deletion of the upstream corpus.
+`migration-ledger.json` permanently reconciles all 465 former upstream cases:
+254 migrated and 211 dropped with reasons. The gate requires zero pending rows
+and validates every migrated case id and every dropped-case completion record.

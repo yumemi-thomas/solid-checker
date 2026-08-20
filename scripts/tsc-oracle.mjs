@@ -224,7 +224,7 @@ const collect = (program, sources) => {
         line: line + 1,
         column: character + 1,
         // Byte offsets, so a non-ASCII case cannot slip -- the same reason
-        // scripts/parity.mjs applies fixes on a Buffer.
+        // Checker fixes use UTF-8 byte offsets and are applied to a Buffer.
         startByte: Buffer.byteLength(text.slice(0, start), "utf8"),
         endByte: Buffer.byteLength(text.slice(0, start + (diagnostic.length ?? 0)), "utf8"),
         subjectStartByte: subject.startByte,

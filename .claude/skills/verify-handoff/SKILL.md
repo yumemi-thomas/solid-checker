@@ -24,7 +24,7 @@ Rust **library** tests (`-p <crate> --lib`) need no binary and no env var.
 ## Fresh vs checked-in binary (trap)
 
 `bin/solid-checker-rust` is checked in and may lag source. After Rust source
-changes, run coverage/parity with
+changes, run coverage/ownership with
 `SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust"` (build the
 debug target once if missing). Never conclude "no finding moved" from a run
 that may have used a stale binary. Do not rebuild or overwrite
@@ -40,7 +40,7 @@ AGENTS.md). At handoff, add per change class:
 
 - **Analyzer or fixture changes**: relevant process tests (armed), coverage
   comparison, and CLI tests if adapter-visible.
-- **Fixture/finding changes**: coverage and parity comparisons; `--update`
+- **Fixture/finding changes**: coverage and ownership-gate comparisons; `--update`
   only after the non-updating diff showed the exact intentional change.
 - **Contract changes**: `node scripts/check-bundled-contracts.mjs` and
   `node scripts/dialect-manifests.mjs check-composed-contracts`, plus the
@@ -57,7 +57,8 @@ AGENTS.md). At handoff, add per change class:
 
 - **Release or broad architectural changes only**: `make verify` (full gate:
   fmt, clippy, per-dialect feature checks, armed workspace tests, coverage,
-  parity, performance certification, CLI tests, schema/manifest checks). Never
+  ownership and TypeScript-oracle gates, performance certification, CLI tests,
+  schema/manifest checks). Never
   run it as an iteration loop.
 
 Run only one Cargo process at a time; parallel Cargo commands contend for the

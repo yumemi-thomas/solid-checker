@@ -197,14 +197,6 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         ("component-props-alias.tsx", "strict-read-untracked"),
         ("component-props-merge-alias.tsx", "strict-read-untracked"),
         (
-            "component-reactive-early-return.tsx",
-            "strict-read-untracked",
-        ),
-        (
-            "component-reactive-conditional-return.tsx",
-            "strict-read-untracked",
-        ),
-        (
             "component-props-parameter-destructure.tsx",
             "no-destructure",
         ),

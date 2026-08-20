@@ -45,7 +45,7 @@ export function App() {
 
 // Out-of-band onSettled: called from an event handler, the callback is
 // enqueued as a plain function, not a leaf owner (rc.0 dev.js:4855-4893) —
-// onCleanup only warns no-owner-cleanup, primitives attach nowhere without
+// onCleanup only warns missing-owner,    primitives attach nowhere without
 // throwing, and flush() is a silent no-op, so no SC3xxx fires here.
 export function OutOfBand() {
   const [count] = createSignal(0);
@@ -121,7 +121,7 @@ export function DynamicExtent() {
     <button
       onClick={() => {
         // Not a leaf scope: an event handler runs out-of-band, where
-        // onCleanup at worst warns no-owner-cleanup — the leaf rules stay
+        // onCleanup at worst warns missing-owner    — the leaf rules stay
         // silent on this call.
         registerTeardown();
       }}

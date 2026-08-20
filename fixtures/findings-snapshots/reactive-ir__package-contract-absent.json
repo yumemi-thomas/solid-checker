@@ -7,8 +7,8 @@
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/package-contract-absent/App.tsx",
-      "start": 560,
-      "end": 609,
+      "start": 563,
+      "end": 612,
       "fixes": 0
     }
   ]

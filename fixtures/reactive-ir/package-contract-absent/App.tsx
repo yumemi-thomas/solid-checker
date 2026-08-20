@@ -1,4 +1,4 @@
-// package-contract-missing (SC9005): uncontracted-package resolves -- it has
+// package-contract-incomplete (SC9005): uncontracted-package resolves -- it has
 // a package.json and type declarations under node_modules -- and its manifest
 // declares a solid-js peer dependency, so it participates in Solid
 // reactivity. But it ships no solid-reactivity.json and the project declares

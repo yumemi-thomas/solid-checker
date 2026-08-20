@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-conformance contracts contracts-check coverage coverage-update parity parity-update tsc-oracle tsc-oracle-provision tsc-ownership tsc-ownership-report ownership-gate clean
+.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate clean
 
 build: build-rust
 
@@ -55,11 +55,6 @@ tsc-oracle: tsc-oracle-provision build-checker-debug
 # retained upstream case was migrated into the product-owned manifest.
 tsc-ownership: ownership-gate
 
-# Which upstream cases are not valid TypeScript, and which findings look like
-# duplicates. A discovery report, not a gate.
-tsc-ownership-report: tsc-oracle-provision parity
-	node scripts/parity-tsc-ownership.mjs --report
-
 # Product-owned semantic cases. Unlike upstream parity, every expected finding
 # carries its TypeScript-ownership disposition and exact source-relative span.
 ownership-gate: tsc-oracle-provision build-checker-debug
@@ -73,13 +68,6 @@ coverage: build-rust
 
 coverage-update: build-rust
 	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/coverage.mjs --update
-
-# eslint-plugin-solid's own 465 test cases, with every deviation declared.
-parity: build-rust
-	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/parity.mjs
-
-parity-update: build-rust
-	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/parity.mjs --update
 
 verify-performance: build-typefacts
 	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-checker-session-bench

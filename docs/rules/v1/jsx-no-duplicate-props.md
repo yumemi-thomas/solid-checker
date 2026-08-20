@@ -56,7 +56,7 @@ also fires, because the finding then asserts a conflict the type error does not.
 Both directions are pinned by `fixtures/tsc-oracle/rule-cases.json` and
 `fixtures/reactive-ir/eslint-compat`. The upstream cases this narrowing stops
 firing for are declared `status: "policy"` in
-`fixtures/upstream-parity/deviations.json`, each naming its diagnostic.
+`fixtures/ownership-cases/cases.json`, each naming its diagnostic.
 
 ### Intrinsic elements: the compiler's slot model
 
@@ -80,8 +80,8 @@ separate `addEventListener` calls; a non-delegated plain `on*` event attaches
 one listener per occurrence; a delegated `onClick` and an `on:click` on the
 same element both fire. eslint-plugin-solid folds all of these onto one
 lowercase name and reports them — runtime-legal code — so this is a
-deliberate, compiler-evidenced divergence from upstream (no upstream corpus
-case pins the folding; the parity ledger is unaffected).
+deliberate, compiler-evidenced divergence from upstream, pinned directly in the
+product-owned ownership cases.
 
 The static-value half of the model is a *node-kind* test, matching the
 compiler's inline branch: `Expression::StringLiteral` and

@@ -9,7 +9,7 @@ import * as Solid from "solid-js";
 const [items] = Solid.createSignal(["a"]);
 
 // Control: `createEffect` predates the census-derived namespace list. This
-// module-scope effect is unowned, so no-owner-effect firing here proves the
+// module-scope effect is unowned, so missing-owner   firing here proves the
 // namespace resolution path itself works.
 Solid.createEffect(
   () => items(),
@@ -18,7 +18,7 @@ Solid.createEffect(
 
 // `children` joined the namespace list with the census widening: it
 // registers cleanup, so creating it inside an owner-backed `onSettled` (the
-// component body proves the owner) is primitive-in-leaf-owner — through
+// component body proves the owner) is leaf-owner-forbidden-call — through
 // either import style. The JSX return is what proves `Leaf` a component.
 export function Leaf() {
   Solid.onSettled(() => {

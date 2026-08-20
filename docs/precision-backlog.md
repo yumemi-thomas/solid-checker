@@ -76,6 +76,44 @@ code; **Both** — either, depending on the code.
   2.0 catalog. The 1.x DOM-slot folding arm stays dialect-restricted, and the
   2.0 list fix uses `<For keyed={false}>` because `Index` was removed.
 
+### Reduction evidence retained with the release
+
+The deletions were driven by runtime/compiler probes and real published
+typings, not by catalog-size targets. Representative probe transcripts:
+
+```text
+createReaction callback: owner=PRESENT
+createReaction callback cleanup: RAN
+directive apply: owner=PRESENT
+directive effect sees tick=0
+directive effect sees tick=1
+directive onCleanup RAN
+1.9.14 spread onClick -> ATTACHED via delegated $$click
+```
+
+Those results removed the three false v1 ownership rules and the false
+`warnOnSpread` premise. Runtime source also confirms handler/data arrays are a
+supported dispatch form, array seeds are threaded into v1 effect callbacks,
+and component props preserve their exact keys. Generic HTML, CSS, injection,
+formatting, and naming policies were retired because they are outside the
+checker's certification domain.
+
+The real-typings probes also fixed the boundary with TypeScript. Representative
+compiler output, in both strict and non-strict passes where applicable:
+
+```text
+TS2305: Module '"solid-js/web"' has no exported member 'createEffect'.
+TS2540: Cannot assign to 'count' because it is a read-only property.
+TS2322: Property 'dangerouslySetInnerHTML' does not exist on the intrinsic props type.
+TS17001: JSX elements cannot have multiple attributes with the same name.
+```
+
+Accordingly `v1/imports` was removed entirely, readonly store-root writes stay
+TypeScript-owned, and SC8003 retains only content-slot or compiler-folding
+collisions that the type system does not already report. The executable
+`fixtures/tsc-oracle/rule-cases.json` ledger remains the source of exact snippets,
+diagnostic codes, and checker expectations.
+
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 
 AGENTS.md carries an absolute rule — never report what `tsc` reports, judged
@@ -92,33 +130,18 @@ fixture stub. Two passes run, `strict` and non-`strict`, because "the project
 may not be `strict`" is a distinction a ledger entry has to state even though
 the absolute rule refuses it as an exception. TypeScript 5.9.3.
 
-**The parity ledger is held to its own claims, by span.**
-`scripts/parity-tsc-ownership.mjs` compiles the *same bytes* `scripts/parity.mjs`
-lints — the materialization is shared through `scripts/lib/upstream-cases.mjs` so
-the two cannot describe different source — and reads the run artifact parity now
-writes (`rust/target/upstream-parity/findings.json`: every finding with the byte
-span the checker reported). Both of its directions gate, and both compare spans:
+**The product-owned ledger is held to its claims, by span.**
+`scripts/ownership-gate.mjs` runs every case in
+`fixtures/ownership-cases/cases.json` through the checker and through strict and
+non-strict TypeScript over identical bytes. Each expected finding declares one
+of `checker-only`, `typescript-owned`, or `distinct-claim`, with exact UTF-8
+byte spans and any expected TS codes. Unlisted findings, overlapping claims,
+missing fixes, and a TypeScript-owned finding emitted by the checker all fail.
 
-- A deviation declared **`status: "typescript-owned"`** must sit on a case
-  TypeScript reports **in the case's own code**, not in the imports the harness
-  prepends and not via an incidental untyped-corpus error. 45 verified.
-- No **finding may share a span** with a TypeScript diagnostic unless the
-  difference in claims is written down. 30 span matches are declared
-  `ACKNOWLEDGED` with the difference named, and `PENDING_NARROWING` is **empty** —
-  both duplicates it caught have been narrowed away (below).
-
-`typescript-owned` is a new status, and splitting it out of `policy` was the fix
-for a flaw in the first version of this check. Plain `policy` predates the whole
-audit and covers *any* deliberate difference from upstream — a name-only allowlist
-this checker does not carry, a stricter demand for an explicit `untrack`. Those
-make no claim about TypeScript, so demanding a diagnostic for them was asking for
-evidence of a claim they never made. Twelve entries stay `policy`; the 45 this
-audit wrote are `typescript-owned` and now verifiable. Verified failing by
-relabelling one entry.
-
-The "does not type-check" count printed under `--report` remains a lower bound on
-corpus cleanliness, not a statement about ownership — 73% is easy to misquote,
-and only the span-matched list below it is an ownership claim.
+The former 465-case upstream corpus is fully reconciled by
+`migration-ledger.json`: 254 cases migrated into the product-owned manifest,
+211 dropped with reasons, and zero pending. The old parity and deviation files
+were deleted only after `make ownership-gate` enforced that completion.
 
 ### Duplicates the span comparison caught, both now narrowed
 
@@ -187,8 +210,9 @@ and asserting that no surviving rule's proof depends on the looseness.
 
 ### The general mechanism: TypeScript does not check hyphenated JSX attribute names
 
-Found on 2026-08-17 by `scripts/parity-tsc-ownership.mjs`, and it is the boundary
-of every "this attribute is TypeScript's" argument above.
+Found on 2026-08-17 by the predecessor span audit and now pinned in the
+product-owned TypeScript cases; it is the boundary of every "this attribute is
+TypeScript's" argument above.
 
 TypeScript exempts a JSX attribute whose **name contains a hyphen** from the
 excess-property check entirely — a deliberate allowance for HTML's own hyphenated
@@ -218,9 +242,8 @@ oracle gate's `silent` cases.
 
 Every one is a **violation the type system already reports on the same code**,
 or an **obligation whose whole domain the type system closes**. The first seven
-are 2.0-catalog rules, so they left `scripts/parity.mjs` untouched; the eighth,
-`v1/imports`, is a 1.x rule and its seven upstream cases are declared
-`status: "policy"`.
+were 2.0-catalog rules; the eighth, `v1/imports`, was a 1.x rule. Their former
+upstream cases are permanently reconciled in `migration-ledger.json`.
 
 | Code | Rule | Findings | Why |
 | --- | --- | --- | --- |
@@ -328,7 +351,8 @@ and `v1/style-prop` as **proven redundant, removal specified**. That was wrong,
 and the mistake is worth recording because it is the mirror image of the
 fixture-stub trap: each was probed on *one* arm — an unknown attribute name on
 an intrinsic element — and the verdict was generalised to the whole rule. Read
-against each rule's actual upstream domain (`fixtures/upstream-parity/upstream-cases.json`),
+against each rule's complete former upstream domain (now reconciled in
+`fixtures/ownership-cases/migration-ledger.json`),
 all three have an arm TypeScript does not cover, so all three are **partially
 redundant** and belong in the table below. None was deleted.
 
@@ -359,9 +383,8 @@ Each keeps the arm no type answers and drops the arm TypeScript already
 reports. Every one is pinned in **both** directions by
 `fixtures/tsc-oracle/rule-cases.json` — a `removed-because-redundant` case for
 the dropped arm and a `silent` case for the surviving one — so neither half can
-move without failing CI. Each rule's upstream cases that stopped firing are
-declared `status: "policy"` in `fixtures/upstream-parity/deviations.json`, every
-entry naming its own diagnostic.
+move without failing CI. Each retained spelling is now a direct positive or
+negative case in `fixtures/ownership-cases/cases.json`.
 
 | Code | Rule | Dropped, and why | Kept, and why |
 | --- | --- | --- | --- |
@@ -427,8 +450,8 @@ function value are clean in *both* the strict and loose passes, exactly like
 `!f`. Dropping them removed a real, TypeScript-silent defect class (a coerced
 accessor is silently `NaN`) and lost upstream parity case
 `reactivity__invalid__21`, whose deviation could not be declared
-`typescript-owned` because `scripts/parity-tsc-ownership.mjs` proved TypeScript
-reports nothing there. They are restored under
+TypeScript-owned because the span audit proved TypeScript reports nothing
+there. They are restored under
 `CoerciveOperandKind::NumericCoercion`, pinned by a `expect: "silent"` /
 `checker: "reports"` oracle case and by
 `fixtures/reactive-ir/uncalled-accessor-v2`, whose `TypeScriptOwnedOperators`
@@ -743,8 +766,7 @@ reason the removal was safe.
   `AssignmentExpression`, and `++` is an `UpdateExpression`. The compound form
   and an accessor binding's `++` are both parity-correct (upstream reports them
   via `AssignmentExpression` and `reference.isWrite()` respectively). No upstream
-  case exercises any of these spellings, so parity stays green and there is no
-  `deviations.json` entry to attach; pinned by
+  case exercised any of these spellings; it is pinned by
   `fixtures/reactive-ir/v1-reactivity`'s `MutatesInPlace`.
 
 ## Resolved: false negatives closed 2026-08-16
@@ -803,7 +825,8 @@ reason the removal was safe.
   event-shaped names only for proven single-winner slots: the delegated
   `el.$$event = handler` property write (later-wins) and the statically
   valued template attribute (first-wins, shared with `attr:`). No upstream
-  parity case pins the folding, so the corpus is unaffected;
+  former upstream case pinned the folding; the product-owned cases now pin both
+  directions directly;
   `fixtures/reactive-ir/eslint-compat` pins both directions.
   The slot model is **DOM lowering, so it applies to intrinsic elements
   only**. A component's props are a plain object the compiler never lowers:
@@ -819,9 +842,8 @@ reason the removal was safe.
   compiler node-kind predicate, so `{-1}`, `{+1}`, `{NaN}`, and `{Infinity}`
   are dynamic while radix and separator numeric literals remain static. The
   shared static-string resolver still covers upstream's proven string locals
-  and literal concatenations. No upstream corpus case separates the two
-  spellings, so parity is unaffected and there is no deviations entry to
-  attach.
+  and literal concatenations. No former upstream case separated the two
+  spellings; the focused fixture carries the regression instead.
 
   Adding the node-kind predicate was not sufficient on its own: a source-text
   arm (`text(span).parse::<f64>().is_ok() || static_string(..)`) survived in
@@ -915,11 +937,9 @@ This is a precision *gain* in both directions, not only an FP fix:
 `v1/jsx-no-script-url` now proves the scheme in
 `href={"java" + "script:alert(1)"}`, which no literal type ever described, and
 a `const`-referenced value is static wherever it was declared. Pinned by
-`fixtures/reactive-ir/upstream-divergences`'s `FoldedMarkup` and `ScriptUrls`;
-parity returns to fully green at 421/465, and
-`no-array-handlers__valid__10`'s declared deviation was removed because the
-complete-expression selection types its unresolved `SafeArray` cast correctly
-and it no longer deviates.
+`fixtures/reactive-ir/upstream-divergences`'s `FoldedMarkup` and `ScriptUrls`.
+The later catalog reduction retired `jsx-no-script-url`; this paragraph records
+the producer fact that remains useful to other semantic consumers.
 
 Deliberately **not** folded into the producer: the *node-kind* tests. The 1.x
 compiler inlines an attribute into the template on a `StringLiteral`/
@@ -984,9 +1004,8 @@ type 'EventHandlerWithOptionsUnion<HTMLDivElement, MouseEvent, ...>'
 ~~~
 
 in both the strict and non-strict passes. The `on:` arm was removed under the
-absolute rule; upstream case `no-array-handlers__invalid__03` is now a declared
-`typescript-owned` deviation, verified by `scripts/parity-tsc-ownership.mjs`.
-Parity moved 373/465 → 372/465 with 102 deviations, all declared.
+absolute rule; former upstream case `no-array-handlers__invalid__03` is recorded
+as TypeScript-owned in the completed migration ledger.
 
 ### Closed 2026-08-18: the plain-array duplicate, via `tupleShape`
 
@@ -1038,11 +1057,10 @@ The consequence is that `fixtures/reactive-ir/array-shape-v1` had to stop using 
 permissive `IntrinsicElements` index signature: its stub now carries the real
 `EventHandlerUnion`/`BoundEventHandler` signatures, because a looser stub erases
 the contextual typing the rule depends on and the fixture would stop exercising
-its own path. The upstream parity corpus still uses a permissive harness, so
-three cases upstream reports are now declared `typescript-owned`
-(`no-array-handlers__invalid__03`, `__05`, `__07`), each verified against the
-real typings by `scripts/parity-tsc-ownership.mjs`. Parity 372/465 → 370/465,
-104 deviations, all declared.
+its own path. The retired upstream corpus used a permissive harness, so three
+former cases (`no-array-handlers__invalid__03`, `__05`, `__07`)
+are recorded as TypeScript-owned in the completed migration ledger, each
+verified against the real typings before the corpus was retired.
 
 ### Closed 2026-08-18: unions of tuples
 

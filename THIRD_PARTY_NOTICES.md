@@ -72,10 +72,9 @@ not redistributed as part of this repository.
 - Version: `0.14.5` (test corpus extracted from commit `6d3bc311`)
 - License: MIT
 
-The plugin's rule test suites are vendored as data in
-`fixtures/upstream-parity/upstream-cases.json`: every `valid` and `invalid`
-case, including its verbatim source snippet, extracted by
-`scripts/extract-upstream-cases.mjs`. The Rust rules in
+Retained source snippets from the plugin's rule test suites are preserved in
+the product-owned `fixtures/ownership-cases/cases.json`; the accompanying
+`migration-ledger.json` reconciles all 465 former cases. The Rust rules in
 `rust/crates/solid-reactive-ir/src/upstream_compat/` reproduce the plugin's
 rule surface over this checker's own fact tables; the plugin's implementation
 is not copied.

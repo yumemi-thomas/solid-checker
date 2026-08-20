@@ -26,7 +26,7 @@ SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
 node scripts/tsc-oracle.mjs provision --dialect all
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/ownership-gate.mjs \
-  --require-retained
+  --require-retained --require-complete
 
 cargo +1.97 build --release --manifest-path "$rust_manifest" \
   -p solid-facts-backend --bin solid-checker-session-bench

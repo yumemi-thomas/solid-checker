@@ -3,7 +3,7 @@
 //! eslint-plugin-solid ships user-configurable options on several of the
 //! rules this pass reproduces. The checker carries exactly the options whose
 //! behaviour upstream's own test corpus exercises — every field here is
-//! proven by a `fixtures/upstream-parity` case — and nothing speculative.
+//! proven by a product-owned case in `fixtures/ownership-cases` — and nothing speculative.
 //! Option fields use upstream's defaults. Rule enablement defaults to the
 //! checker's existing catalog policy (enabled), so an absent file reproduces
 //! the behaviour the pass has always had.

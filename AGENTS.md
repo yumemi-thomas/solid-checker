@@ -33,7 +33,7 @@ analysis pipeline deliberately separates these semantic owners:
   rules.
 - packages/cli owns the Node CLI, ESLint adapter, package metadata, and tests.
 - packages/wasm owns the WASM adapter.
-- scripts/ owns fixture coverage, upstream parity, contract generation, and
+- scripts/ owns fixture coverage, product-ownership gates, contract generation, and
   packaging workflows.
 - fixtures/ contains focused semantic fixtures and expected findings.
 - schema/ and pkg/contracts/bundled/ contain versioned public contract artifacts.
@@ -159,7 +159,7 @@ skip it.
   than guessing which phase is slow.
 
 The normal cadence is: focused test after a semantic slice, one coverage or
-parity comparison after fixture work, then one handoff verification pass. If a
+ownership-gate comparison after fixture work, then one handoff verification pass. If a
 check fails because a binary is stale, build the required target once and rerun
 that same check; do not fan out into unrelated full-suite commands.
 
@@ -171,7 +171,7 @@ that same check; do not fan out into unrelated full-suite commands.
 | solid-reactive-ir (IR, indexes, contracts, interprocedural, rules engine) | `ir-lib` | coverage compare, universal set |
 | solid-facts-backend process/diagnostics | `backend-process` | coverage compare, universal set |
 | dialects, contracts at the process boundary | `contract-process` | contract conformance, universal set |
-| fixtures or expected findings | coverage compare (fresh debug binary) | parity, universal set |
+| fixtures or expected findings | coverage compare (fresh debug binary) | ownership gate, universal set |
 | packages/cli or packages/wasm | `npm test --prefix packages/cli` (or `packages/wasm`) | universal set |
 | release or broad architectural work | — | `make verify` |
 
@@ -202,7 +202,7 @@ node scripts/dialect-manifests.mjs validate
 cargo +1.97 clippy --manifest-path rust/Cargo.toml --workspace --all-targets -- -D warnings
 ~~~
 
-Rust library tests need no native binary; process tests, coverage, parity, and
+Rust library tests need no native binary; process tests, coverage, ownership, and
 contract generation do. During iteration prefer targeted Clippy
 (`-p <crate> --lib`); run the workspace-wide universal set once at handoff, not
 after every patch. See `.claude/skills/verify-handoff/SKILL.md` for the full
@@ -216,7 +216,7 @@ proportionality rules and the report format.
   fail loudly. Always arm it:
   `SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts"`.
 - **Stale binaries hide source changes.** The checked-in bin/solid-checker-rust
-  may lag rust/ source. After Rust changes, run coverage/parity with
+  may lag rust/ source. After Rust changes, run coverage/ownership with
   `SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust"`; never
   conclude “no finding moved” from a run that may have used a stale binary.
   Do not rebuild or overwrite bin/solid-checker-rust merely to test a source
@@ -234,10 +234,10 @@ proportionality rules and the report format.
 - **Odd upstream heuristics may be deliberate.** Code under
   rust/crates/solid-reactive-ir/src/upstream_compat/ ports eslint-plugin-solid
   0.14.5 (commit 6d3bc311) byte-faithfully. Check the upstream source at that
-  revision before “fixing” one; intentional divergences must be declared in
-  fixtures/upstream-parity/deviations.json.
+  revision before “fixing” one; retained behavior and intentional divergences
+  must be pinned in fixtures/ownership-cases/cases.json.
 - **Snapshot updates travel with the code that moved the findings** — the same
-  commit, not the thematically nearest one. Never run coverage or parity with
+  commit, not the thematically nearest one. Never run coverage with
   `--update` until the non-updating run has shown the exact intentional
   change; snapshot updates record a deliberate semantic change, they do not
   discover what the implementation does.

@@ -1,71 +1,50 @@
 ---
 name: upstream-parity
-description: Investigate solid-checker divergences from eslint-plugin-solid — the parity corpus, deviations.json ledger, and the upstream-faithfulness rule for upstream_compat heuristics. Use when parity fails, when a heuristic in upstream_compat looks wrong, or when a rule's behavior differs from upstream.
+description: Investigate retained eslint-plugin-solid behavior after parity-corpus retirement. Use when an upstream_compat heuristic looks wrong or a product-owned case differs from upstream.
 ---
 
-# Upstream parity work
+# Upstream compatibility work
 
-The parity corpus is every valid/invalid case from eslint-plugin-solid
-**0.14.5** at upstream commit **`6d3bc311`** (2025-11-18): 465 cases across 19
-rules, extracted as data into `fixtures/upstream-parity/upstream-cases.json`
-by `scripts/extract-upstream-cases.mjs`. `jsx-uses-vars` is deliberately
-absent and its rule deliberately never fires (see
-`docs/rules/v1/jsx-uses-vars.md`).
+eslint-plugin-solid 0.14.5 at commit `6d3bc311` is the audited source for the
+retained Solid 1.x compatibility heuristics. The former 465-case parity corpus
+has been retired: `fixtures/ownership-cases/migration-ledger.json` reconciles
+all of it, and retained behavior now lives in product-owned cases with explicit
+TypeScript ownership.
 
-## Running
+## Running the replacement gate
 
 ~~~sh
-SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/parity.mjs
+make ownership-gate
 ~~~
 
-Use the fresh debug binary after Rust source changes; the checked-in `bin/`
-binary may be stale. `--update` rewrites
-`fixtures/upstream-parity/deviations.json` from the run — only after the
-non-updating run has shown that every changed case is an intentional,
-explainable divergence.
+The gate uses a fresh debug checker, real published typings, exact UTF-8 spans,
+and the cases in `fixtures/ownership-cases/cases.json`. A behavior change must
+update its focused case and, when relevant, `docs/precision-backlog.md` in the
+same semantic commit. There is no deviation allowlist to update.
 
-## The deviations ledger
+## The upstream-faithfulness rule
 
-Every divergence from upstream must be declared in
-`fixtures/upstream-parity/deviations.json` (schemaVersion 2): one entry per
-case with a `status` and a `reason` that names the semantic ground for the
-divergence (e.g. "the checker reports a conditional return only when the
-condition is proven reactive; upstream reports the shape regardless"). The
-status vocabulary and its tables are documented in
-`fixtures/upstream-parity/README.md`. An undeclared divergence is a parity
-failure, not an acceptable delta.
+Code under `rust/crates/solid-reactive-ir/src/upstream_compat/` began as a
+byte-faithful port. Some heuristics look odd but are intentional upstream
+behavior. Before changing one:
 
-## The upstream-faithfulness rule (trap)
-
-Code under `rust/crates/solid-reactive-ir/src/upstream_compat/` ports upstream
-heuristics **byte-faithfully**. Several look like bugs and are not — proven
-examples: the `on*` third-character-alphabetic event-handler test and the
-ASCII-only case tests. Before "fixing" anything there:
-
-1. Read the actual upstream source at the pinned revision:
+1. Read the upstream source at the pinned revision:
 
    ~~~sh
    gh api "repos/solidjs-community/eslint-plugin-solid/contents/<path>?ref=6d3bc311" --jq .content | base64 -d
    ~~~
 
-2. If upstream does the same thing, the heuristic is a faithful port — leave
-   it, and record the oddity in `docs/precision-backlog.md` if it is not
-   already there.
-3. If the checker deliberately does better (evidence-backed precision), keep
-   the divergence and declare it in `deviations.json` with the semantic
-   reason. `jsx-no-duplicate-props`' `on:` / `oncapture:` duplicate folding
-   is the worked example: upstream folds every `on*` spelling onto one name,
-   the *pinned 1.x compiler* lowers them to separate listeners that all fire,
-   and the checker follows the compiler
-   (`docs/rules/v1/jsx-no-duplicate-props.md`). Upstream faithfulness is the
-   fallback when nothing else settles the question — the compiler outranks it
-   when it does.
-4. Only if the port genuinely mismatches upstream is it a bug to fix — with a
-   focused fixture pinning the corrected behavior.
+2. Establish which semantic owner decides the product behavior. TypeScript
+   owns type errors, the pinned Solid compiler owns lowering, runtime probes
+   own execution behavior, and package contracts own external callbacks.
+3. If no stronger evidence distinguishes the behavior, retain the audited
+   upstream heuristic.
+4. If the checker deliberately differs for evidence-backed precision, encode
+   the positive and negative behavior directly in ownership cases and explain
+   the evidence in the nearest rule page or precision entry.
+5. If the port genuinely mismatches upstream, fix it with a focused fixture.
 
-Never resolve a parity failure by weakening a proof, adding blanket trust, or
-regex-matching what upstream resolves semantically. Moving the upstream pin
-itself is a reviewed dependency change (docs/monorepo.md), not a debugging
-step — re-extract with `scripts/extract-upstream-cases.mjs` and re-review, do
-not hand-edit `upstream-cases.json`.
+Never preserve upstream behavior by duplicating a TypeScript diagnostic,
+weakening semantic resolution, adding blanket trust, or guessing from names.
+Moving the upstream pin is a reviewed dependency change under
+`docs/monorepo.md`, not a debugging step.

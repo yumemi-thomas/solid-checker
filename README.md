@@ -84,6 +84,7 @@ analysis engine:
 | Audited runtime | `solid-js@1.9.14` | `solid-js@2.0.0-rc.0` and `@solidjs/web@2.0.0-rc.0` |
 | Dialect id | `solid-v1` | `solid-v2` |
 | Rule names | `v1/<rule>` | Unprefixed |
+| Catalog | 18 rules | 26 rules |
 | Effect model | `createEffect(fn, initialValue?, options?)` | `createEffect(compute, apply)` |
 | Async boundary | `Suspense` / `createResource` | `Loading` / async computations |
 | Lifecycle | `onMount`; cleanup via `onCleanup` | `onSettled`; leaf cleanup returned from callbacks |
@@ -190,7 +191,7 @@ Authoring a package contract (see [Publishing a Solid library?](#publishing-a-so
 `solid-checker` needs to know how a dependency's exports read reactive values.
 When that dependency's source isn't part of your project, it relies on a
 `solid-reactivity.json` **contract**. If an imported Solid-dependent package
-ships none, the check reports the uncertifiable `SC9005 package-contract-missing`
+ships none, the check reports the uncertifiable `SC9005 package-contract-incomplete`
 finding and `--certify` fails.
 
 List which of your dependencies are missing a contract, and which have one
@@ -281,6 +282,8 @@ import { checkSync } from "solid-checker";
 ## Documentation
 
 - [Rule index](docs/rules/README.md) — every diagnostic, with examples and fixes
+- [Rule catalog migration](docs/rule-catalog-migration.md) — renamed, merged,
+  retired, and opt-in rule keys
 - [Package contracts](docs/package-contracts.md) — the dependency trust model
 - [Documentation index](docs/README.md) — architecture, protocols, glossary
 - [Contributing](CONTRIBUTING.md) — building and developing solid-checker

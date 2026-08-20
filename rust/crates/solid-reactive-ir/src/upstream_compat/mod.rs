@@ -63,8 +63,8 @@ pub(super) fn text(file: &FileFacts, span: Span) -> &str {
 /// TypeScript rejects is TypeScript's to report. This is the boundary of that
 /// argument: where TypeScript declines to look, the rule is the only thing that
 /// can speak, so the narrowings ask this before staying silent. The hole it
-/// closes was found by `scripts/parity-tsc-ownership.mjs`, which held a declared
-/// `status: "policy"` deviation to its own claim and caught two upstream
+/// closes was found by the predecessor span audit and is now pinned by the
+/// product-owned TypeScript ownership cases, including the two former upstream
 /// `class:mt-10` cases where the claim was false.
 pub(super) fn jsx_name_is_type_checked(name: &str) -> bool {
     !name.contains('-')

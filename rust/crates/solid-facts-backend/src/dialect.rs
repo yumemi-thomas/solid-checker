@@ -714,6 +714,20 @@ mod tests {
     }
 
     #[test]
+    fn compatibility_registry_counts_match_the_catalog_migration() {
+        assert_eq!(
+            RULE_ALIASES.len(),
+            19,
+            "the migration note must list every transferred configuration key"
+        );
+        assert_eq!(
+            RETIRED_RULES.len(),
+            39,
+            "eight pre-existing TypeScript redundancies plus 31 catalog-reduction identities"
+        );
+    }
+
+    #[test]
     fn every_catalog_identity_resolves_to_its_metadata() {
         for dialect in ALL {
             #[cfg(feature = "dialect-v1")]

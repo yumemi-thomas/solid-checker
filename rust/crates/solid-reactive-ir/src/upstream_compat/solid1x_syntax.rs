@@ -166,7 +166,7 @@ fn jsx_no_duplicate_props(
     // TS2710: "'children' are specified twice. The attribute named 'children'
     // will be overwritten." -- word for word this arm's claim, in both passes and
     // on components as well as intrinsic elements. Narrowed 2026-08-17 after
-    // `scripts/parity-tsc-ownership.mjs` matched the two spans.
+    // the TypeScript ownership audit matched the two spans.
     //
     // Any intrinsic set that also includes `innerHTML` or `textContent` still reports: those
     // conflicts draw no diagnostic at all, so the finding asserts more than
