@@ -452,7 +452,7 @@
     {
       "upstreamCase": "jsx-no-duplicate-props__invalid__02",
       "disposition": "migrated",
-      "movedIn": "step-2",
+      "movedIn": "step-12",
       "ownershipCaseId": "upstream/jsx-no-duplicate-props__invalid__02",
       "reason": null
     },

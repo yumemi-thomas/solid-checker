@@ -22,16 +22,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2500,
-      "end": 2502,
-      "fixes": 0
-    },
-    {
       "rule": "v1/jsx-no-script-url",
       "code": "SC8004",
       "kind": "violation",

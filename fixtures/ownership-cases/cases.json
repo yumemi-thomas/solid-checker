@@ -849,6 +849,27 @@
       }
     },
     {
+      "id": "v1/jsx-no-duplicate-props/component-negative/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "const Panel = (props: Record<string, unknown>) => null;\nexport const Case = () => <Panel attr:title=\"first\" title=\"second\" innerHTML=\"<b>x</b>\">children</Panel>;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/jsx-no-duplicate-props",
+            "reason": "component props pass through as ordinary keys and may be combined by the component"
+          }
+        ]
+      }
+    },
+    {
       "id": "v1/no-innerhtml/positive/001",
       "dialect": "solid-v1",
       "source": {
@@ -1969,39 +1990,13 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
             "rule": "v1/jsx-no-duplicate-props",
-            "code": "SC8003",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                32,
-                33
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS2322",
-                  "span": {
-                    "textRange": [
-                      32,
-                      33
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses the surrounding attribute shape, while the checker proves that two authored values lower into one runtime slot and one is discarded."
-            }
+            "reason": "a spread followed by an explicit attribute is an intentional override"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {

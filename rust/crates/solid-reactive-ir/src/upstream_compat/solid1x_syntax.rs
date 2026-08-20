@@ -67,10 +67,7 @@ fn jsx_no_duplicate_props(
     // a later `onSave` overwrites an earlier one no matter how either is
     // spelled. Applying the DOM model there would silence real duplicates.
     let intrinsic = is_lowercase_led(text(file, element.name.span));
-    // Where the duplicate came from, so the narrowing below can tell which
-    // combinations TypeScript already reports. `None` is a direct attribute;
-    // `Some(index)` is a property of the index'th JSX spread.
-    let mut candidates: Vec<(Span, Option<String>, &str, Option<usize>)> = element
+    let mut candidates: Vec<(Span, Option<String>, &str)> = element
         .attributes
         .iter()
         .map(|attribute| {
@@ -88,11 +85,10 @@ fn jsx_no_duplicate_props(
                 attribute.name,
                 duplicate_slot(name, static_literal, intrinsic),
                 name,
-                None,
             )
         })
         .collect::<Vec<_>>();
-    for (index, spread) in element.spreads.iter().enumerate() {
+    for spread in &element.spreads {
         candidates.extend(
             super::direct_object_literal_properties(file, spread.argument)
                 .unwrap_or_default()
@@ -108,23 +104,20 @@ fn jsx_no_duplicate_props(
                             intrinsic,
                         ),
                         name,
-                        Some(index),
                     )
                 }),
         );
     }
     candidates.sort_by_key(|(span, ..)| (span.start, span.end));
 
-    let mut names: HashMap<String, (&str, Option<usize>)> = HashMap::new();
+    let mut names: HashMap<String, &str> = HashMap::new();
     let mut seen_slots = HashSet::new();
-    for (name_span, slot, written, origin) in candidates {
+    for (name_span, slot, written) in candidates {
         let Some(normalized) = slot else {
             continue;
         };
         seen_slots.insert(normalized.clone());
-        if let Some((first_written, first_origin)) =
-            names.insert(normalized.clone(), (written, origin))
-        {
+        if let Some(first_written) = names.insert(normalized.clone(), written) {
             // Narrowed 2026-08-17 under AGENTS.md's absolute rule. When both
             // occurrences are spelled *identically*, TypeScript already makes
             // this exact claim, and which diagnostic it makes depends on where
@@ -138,23 +131,19 @@ fn jsx_no_duplicate_props(
             //   one spread object      TS1117 "An object literal cannot have
             //                         multiple properties with the same name"
             //
-            // Two combinations are *not* covered and keep reporting: a spread
-            // followed by an attribute (the later attribute legitimately wins,
-            // so TypeScript says nothing) and two different spread objects.
-            //
-            // What survives regardless of origin is the case this rule exists
+            // Spread overrides are deliberate and no longer report.
+            // What survives is the case this rule exists
             // for: two *differently spelled* props that the DOM lowering folds
             // into one slot -- `onClick`/`onclick` both become the delegated
             // `el.$$click` write, and `attr:title`/`title` share the template
             // attribute slot. TypeScript sees two distinct, legal properties
             // and is silent.
-            let typed_duplicate = written == first_written
-                && match (first_origin, origin) {
-                    (None, None) | (None, Some(_)) => true,
-                    (Some(first), Some(current)) => first == current,
-                    (Some(_), None) => false,
-                };
-            if typed_duplicate {
+            // Exact spellings are either TypeScript-owned (two direct
+            // attributes or one object literal) or an intentional JSX spread
+            // override. Only differently spelled keys that the DOM compiler
+            // folds into one slot remain in this rule, and components never
+            // enter that lowering.
+            if written == first_written || !intrinsic {
                 continue;
             }
             let message = if normalized == "class" {
@@ -193,16 +182,17 @@ fn jsx_no_duplicate_props(
     // on components as well as intrinsic elements. Narrowed 2026-08-17 after
     // `scripts/parity-tsc-ownership.mjs` matched the two spans.
     //
-    // Any set that also includes `innerHTML` or `textContent` still reports: those
+    // Any intrinsic set that also includes `innerHTML` or `textContent` still reports: those
     // conflicts draw no diagnostic at all, so the finding asserts more than
     // TS2710 does even where TS2710 also fires. Verified: `innerHTML` with
-    // `textContent`, and `innerHTML` with JSX children, are both silent.
+    // `textContent`, and `innerHTML` with JSX children, are both silent. On a
+    // component these are ordinary props that its implementation may combine.
     let only_the_children_pair = used.len() == 2
         && has_children_prop
         && has_children
         && !has_inner_html
         && !has_text_content;
-    if used.len() > 1 && !only_the_children_pair {
+    if intrinsic && used.len() > 1 && !only_the_children_pair {
         violations.push(violation(
             file,
             "SC8003",
