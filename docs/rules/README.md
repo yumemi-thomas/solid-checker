@@ -47,8 +47,8 @@ that exact rule in the shared project configuration described below.
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
 | Shared concepts (15 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
-| Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 11 rules: actions, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 20 rules | 26 rules |
+| Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 10 rules: actions, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
+| Catalog size | 20 rules | 25 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -166,7 +166,6 @@ rule's page documents its additional options and defaults.
 | --- | --- | --- |
 | SC5001 | [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) | error |
 | SC5003 | [async-outside-loading-boundary](async-outside-loading-boundary.md) | warning |
-| SC5005 | [ssr-client-source-outside-loading-boundary](ssr-client-source-outside-loading-boundary.md) | error |
 
 ## Directives
 
@@ -209,7 +208,7 @@ describe defects that exist in both language versions — `uncalled-accessor`,
 `no-direct-mutation`, and `reactive-source-uncaptured` — so the 2.0 catalog
 carries them too, under the same codes. `no-async-tracked-scope` stays
 1.x-only: Solid 2.0 models async computations as a feature, and its async
-surface is owned by SC5001–SC5003 and SC5005 (SC5004 remains the 1.x rule's
+surface is owned by SC5001 and SC5003 (SC5004 remains the 1.x rule's
 code — it names a different defect concept, so the new 2.0-only SSR rule takes
 the next free code in the family).
 

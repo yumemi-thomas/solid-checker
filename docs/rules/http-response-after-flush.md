@@ -120,7 +120,7 @@ settled data.
 
 ## Related
 
-- [ssr-client-source-outside-loading-boundary](ssr-client-source-outside-loading-boundary.md)
+- [async-outside-loading-boundary](async-outside-loading-boundary.md)
   — the same server-render gate, for client-only sources
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) —
   where `Loading` boundaries come from

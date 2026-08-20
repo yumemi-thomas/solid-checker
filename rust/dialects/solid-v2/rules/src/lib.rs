@@ -324,6 +324,9 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     // reported on declared sources with this conditional wording, while
     // SC5003 never reaches this function for them (suppressed in selection).
     let declared = read.declared_loading;
+    let ssr_client_variant = matches!(read.execution, ExecutionRole::TrackedJsx)
+        && (read.ssr_client_hole || read.server_rendering_unresolved)
+        && !read.under_loading;
     let (rule, message, hint) = if let Some(owner) = &read.leaf_owner {
         (
             Rule::PendingAsyncUnsuspendableRead,
@@ -369,7 +372,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
                     && !read.under_loading => {
                 let unresolved = read.server_rendering_unresolved;
                 (
-                    Rule::SsrClientSourceOutsideLoadingBoundary,
+                    Rule::AsyncOutsideLoadingBoundary,
                     if unresolved {
                         format!(
                             "source {:?} declares ssrSource: \"client\" with no loadingValue/seedLoadingValue and is read outside a Loading boundary, but the analyzed project cannot prove whether a server-rendering entry exists; if this application server-renders, the read throws during SSR even when the compute is fully synchronous",
@@ -403,7 +406,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             }
         }
     };
-    let mut provenance = if rule == Rule::SsrClientSourceOutsideLoadingBoundary {
+    let mut provenance = if ssr_client_variant {
         if read.server_rendering_unresolved {
             "the source declares ssrSource: \"client\" and no loadingValue/seedLoadingValue; no server rendering entry point is visible in the analyzed project, which does not prove the application is CSR-only".to_owned()
         } else {
@@ -423,6 +426,8 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     let mut metadata = rule.metadata();
     if read.leaf_owner.is_some() {
         metadata.severity = "warning";
+    } else if ssr_client_variant {
+        metadata.severity = "error";
     }
     FindingWording::new(metadata, message.clone(), hint).with_evidence(vec![
         EvidenceStep {
@@ -474,7 +479,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::MissingOwner
         | Rule::PendingAsyncUnsuspendableRead
         | Rule::AsyncOutsideLoadingBoundary
-        | Rule::SsrClientSourceOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
         | Rule::PackageContractExportMissing

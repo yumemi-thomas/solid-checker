@@ -685,12 +685,13 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // declare a loadingValue, and a declared first flight cannot
             // throw — so the untracked-read error is no longer a *proven*
             // runtime throw and becomes a proof obligation instead. The
-            // boundary rules keep their reporting: SC5003 is informational
-            // either way, and SC5002's throw is timing-dependent by nature.
+            // boundary rules keep their reporting: ordinary SC5003 is
+            // informational either way, and the leaf-owner SC5001 variant's
+            // throw is timing-dependent by nature.
             if read.options_opaque && finding.id == "SC5001" {
                 finding.kind = "uncertifiable".into();
             }
-            if read.server_rendering_unresolved && finding.id == "SC5005" {
+            if read.server_rendering_unresolved {
                 finding.kind = "uncertifiable".into();
             }
         }

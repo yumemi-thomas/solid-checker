@@ -165,7 +165,7 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // Only the bare ssrSource: "client" read outside Loading in a
                 // server-rendering project; the bounded, loadingValue, and
                 // seedLoadingValue reads stay silent.
-                ("ssr-client-source-outside-loading-boundary", 1),
+                ("async-outside-loading-boundary", 1),
             ],
         ),
     ] {
@@ -482,7 +482,7 @@ fn ssr_client_hole_distinguishes_proven_and_unresolved_server_rendering() {
     let Some(findings) = diagnostic_fixture("ssr-client-boundary") else {
         return;
     };
-    let holes = findings_for_rule(&findings, "ssr-client-source-outside-loading-boundary");
+    let holes = findings_for_rule(&findings, "async-outside-loading-boundary");
     assert_eq!(holes.len(), 1, "{findings:#?}");
     assert_eq!(holes[0]["kind"], "violation", "{holes:#?}");
     // The server throw is unconditional, so the rule mirrors it as an error.
@@ -498,7 +498,7 @@ fn ssr_client_hole_distinguishes_proven_and_unresolved_server_rendering() {
     let Some(csr_findings) = diagnostic_fixture("ssr-client-boundary-csr") else {
         return;
     };
-    let unresolved = findings_for_rule(&csr_findings, "ssr-client-source-outside-loading-boundary");
+    let unresolved = findings_for_rule(&csr_findings, "async-outside-loading-boundary");
     assert_eq!(unresolved.len(), 1, "{csr_findings:#?}");
     assert_eq!(unresolved[0]["kind"], "uncertifiable", "{unresolved:#?}");
 }

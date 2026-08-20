@@ -2,8 +2,8 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "ssr-client-source-outside-loading-boundary",
-      "code": "SC5005",
+      "rule": "async-outside-loading-boundary",
+      "code": "SC5003",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/ssr-client-boundary-csr/App.tsx",

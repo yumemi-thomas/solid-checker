@@ -14,7 +14,7 @@ pub enum Rule {
     // are version-independent, so both catalogs carry them under the same SC
     // codes and suppressions survive a migration. `no-async-tracked-scope`
     // stays 1.x-only: 2.0 models async computations as a feature
-    // (SC5001–SC5003 and SC5005 own that surface).
+    // (SC5001 and SC5003 own that surface).
     UncalledAccessor,
     ExpectedFunctionGotExpression,
     NoDirectMutation,
@@ -29,7 +29,6 @@ pub enum Rule {
     MissingOwner,
     PendingAsyncUnsuspendableRead,
     AsyncOutsideLoadingBoundary,
-    SsrClientSourceOutsideLoadingBoundary,
     PrimitiveInDirectiveApplication,
     MissingEffectFunction,
     SyncNodeReceivedAsync,
@@ -53,7 +52,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 26] = [
+    pub const ALL: [Self; 25] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -70,7 +69,6 @@ impl Rule {
         Self::MissingOwner,
         Self::PendingAsyncUnsuspendableRead,
         Self::AsyncOutsideLoadingBoundary,
-        Self::SsrClientSourceOutsideLoadingBoundary,
         Self::PrimitiveInDirectiveApplication,
         Self::MissingEffectFunction,
         Self::SyncNodeReceivedAsync,
@@ -133,15 +131,6 @@ impl Rule {
             Self::AsyncOutsideLoadingBoundary => {
                 ("SC5003", "async-outside-loading-boundary", "warning", false)
             }
-            // SC5004 belongs to v1/no-async-tracked-scope, a different defect
-            // concept; per the shared-code-by-concept policy this new 2.0-only
-            // rule takes the next free code in the async family.
-            Self::SsrClientSourceOutsideLoadingBoundary => (
-                "SC5005",
-                "ssr-client-source-outside-loading-boundary",
-                "error",
-                false,
-            ),
             // The apply callback runs with no owner (`@solidjs/web` rc.0's
             // `ref()` is `runWithOwner(null, ...)`), so an owner-attaching
             // primitive created there is the SC4001-family defect: a real,
@@ -314,12 +303,6 @@ mod tests {
         // The server throw for a bare ssrSource: "client" read outside a
         // Loading boundary is unconditional (rc.0 dist/server.js), so the
         // static rule mirrors it as an error.
-        assert_eq!(
-            Rule::SsrClientSourceOutsideLoadingBoundary
-                .metadata()
-                .severity,
-            "error"
-        );
         // SETTLED_CLEANUP_UNOWNED is a dev *throw* (rc.0 dev bundle emits an
         // error diagnostic and throws), not a warning: an onSettled callback
         // returning a cleanup in an unowned scope halts in dev and drops the

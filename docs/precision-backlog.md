@@ -30,6 +30,12 @@ code; **Both** — either, depending on the code.
   old rule-options keys remain accepted as retired no-ops, disables do not
   transfer, and the old explicit ESLint keys are removed. Untracked variants
   retain error severity and leaf-owner variants retain warning severity.
+- **2026-08-20 — loading-boundary diagnostics merged.**
+  `ssr-client-source-outside-loading-boundary` now reports through the existing
+  `async-outside-loading-boundary` / `SC5003` identity. The absorbed key is a
+  retired no-op: its disable does not transfer and its explicit ESLint key is
+  removed. Proven SSR client-source holes retain error severity; ordinary
+  missing-fallback findings retain warning severity.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 
