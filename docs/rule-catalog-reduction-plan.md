@@ -1,14 +1,14 @@
 # Rule catalog reduction plan
 
-**Status: implementation-ready.** Every decision that could change rule
-membership, naming, compatibility behavior, or commit sequencing is settled in §2,
-including D8 (`no-implicit-draggable` is deleted from both dialects). The four
-interfaces this plan introduces are fully specified: the enablement interface for
-preferences and all of its cache identities (§7), the ownership case manifest
-and runner (§8), the identity-compatibility surface (§6.2), and the fail-closed
-rule-metadata lookup (§7.1). No intermediate commit loses compatibility or
-regression coverage (§10). Nothing here has been implemented; no source,
-fixture, snapshot, manifest, or rule-documentation file has been modified.
+**Status: implemented.** Completed on 2026-08-20 in the 31 green commits
+specified by §10. The resulting catalogs contain 18 Solid 1.x rows and 26
+Solid 2.0 rows: 28 concepts / 44 external keys. The compatibility registry
+contains the plan's 31 retired and 19 aliased external identities. The
+replacement ownership gate covers 284 cases, and all 465 migration-ledger rows
+have a final disposition. The public contract schema is unchanged. The full
+`make verify` handoff gate, including coverage, ownership, TypeScript oracle,
+performance, package, manifest, and bundled-contract checks, passed before this
+completion record was committed.
 
 **Date:** 2026-08-20
 
