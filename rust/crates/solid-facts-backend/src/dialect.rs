@@ -190,8 +190,8 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
 /// Former external rule identities that canonicalize onto a current rule.
 ///
 /// Unlike [`RETIRED_RULES`], an alias transfers configuration: disabling its
-/// old name disables the current target. Entries land atomically with the
-/// identity change that creates the target, so this table begins empty.
+/// old name disables the current target. Each entry landed atomically with
+/// the identity change that created its target.
 pub const RULE_ALIASES: &[(&str, &str)] = &[
     ("v1/no-owner-effect", "v1/missing-owner"),
     ("v1/no-owner-cleanup", "v1/missing-owner"),
@@ -312,6 +312,8 @@ pub struct Dialect {
     pub rule_metadata: fn(&str) -> Option<RuleMetadata>,
     /// Typed fact-acquisition requirements of the catalog.
     pub semantic_demands: SemanticDemandCapabilities,
+    /// Dialect-owned projection policy used after rule enablement filtering.
+    pub catalog_capabilities: solid_reactive_ir::CatalogCapabilities,
     /// Projects a package-contract issue through this dialect's catalog so
     /// SC9005 identity and every sentence remain catalog-owned.
     pub package_contract_finding: fn(&PackageContractIssue) -> Finding,
@@ -437,6 +439,7 @@ static SOLID_V2: Dialect = Dialect {
             .map(solid_v2_rules::Rule::metadata)
     },
     semantic_demands: SemanticDemandCapabilities::SOLID_2,
+    catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_2,
     package_contract_finding: solid_v2_rules::package_contract_finding,
     bundled_packages: &["solid-js", "@solidjs/web"],
     bundled_contract: crate::diagnostics::bundled_contract_v2,
@@ -462,6 +465,7 @@ static SOLID_V1: Dialect = Dialect {
             .map(solid_v1_rules::Rule::metadata)
     },
     semantic_demands: SemanticDemandCapabilities::SOLID_1,
+    catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_1,
     package_contract_finding: solid_v1_rules::package_contract_finding,
     bundled_packages: &["solid-js", "@solid-primitives/scheduled"],
     bundled_contract: crate::diagnostics::bundled_contract_v1,

@@ -58,7 +58,7 @@ mod tests {
     }
 
     #[test]
-    fn unchanged_snapshot_inputs_reuse_the_answer() {
+    fn every_snapshot_input_participates_in_reuse() {
         let cached = cached();
         let contracts = cached.contract_files.clone();
         assert_eq!(
@@ -71,37 +71,43 @@ mod tests {
             ),
             Some((Arc::from("certified"), Arc::from(&b"snapshot"[..])))
         );
-    }
-
-    #[test]
-    fn preset_change_misses_the_answer_cache() {
-        let cached = cached();
-        assert!(
-            cached
-                .snapshot_if_current(
-                    cached.generation,
-                    &cached.explicit,
-                    &cached.contract_files,
-                    &[],
-                    &cached.enable_rules,
-                )
-                .is_none()
-        );
-    }
-
-    #[test]
-    fn enabled_rule_change_misses_the_answer_cache() {
-        let cached = cached();
-        assert!(
-            cached
-                .snapshot_if_current(
-                    cached.generation,
-                    &cached.explicit,
-                    &cached.contract_files,
-                    &cached.presets,
-                    &[],
-                )
-                .is_none()
-        );
+        let changed = [
+            cached.snapshot_if_current(
+                cached.generation + 1,
+                &cached.explicit,
+                &cached.contract_files,
+                &cached.presets,
+                &cached.enable_rules,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &[],
+                &cached.contract_files,
+                &cached.presets,
+                &cached.enable_rules,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.explicit,
+                &[],
+                &cached.presets,
+                &cached.enable_rules,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.explicit,
+                &cached.contract_files,
+                &[],
+                &cached.enable_rules,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.explicit,
+                &cached.contract_files,
+                &cached.presets,
+                &[],
+            ),
+        ];
+        assert!(changed.into_iter().all(|snapshot| snapshot.is_none()));
     }
 }

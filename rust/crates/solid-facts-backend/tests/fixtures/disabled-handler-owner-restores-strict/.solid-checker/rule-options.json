@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "rules": {
+    "reactive-handler-frozen": { "enabled": false }
+  }
+}

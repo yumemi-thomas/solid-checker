@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "rules": {
+    "pending-async-unsuspendable-read": { "enabled": false }
+  }
+}

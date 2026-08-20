@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "jsx": "preserve",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "target": "ES2022"
+  },
+  "files": [
+    "../../../../../../fixtures/reactive-ir/props-callers/App.tsx",
+    "../../../../../../fixtures/reactive-ir/props-callers/solid-js.d.ts"
+  ]
+}

@@ -1792,6 +1792,7 @@ mod tests {
         has_rule: |_| false,
         rule_metadata: |rule| (rule == STUB_RULE.name).then_some(STUB_RULE),
         semantic_demands: dialect::SemanticDemandCapabilities::NONE,
+        catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_2,
         package_contract_finding: stub_package_contract_finding,
         bundled_packages: &[],
         bundled_contract: |_| Ok(None),

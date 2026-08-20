@@ -521,14 +521,6 @@
       "code": "function renderCard(show: boolean) {\n  return show ? <span /> : <strong />;\n}\nexport const View = () => <section>{renderCard(true)}</section>;\n"
     },
     {
-      "rule": "valid-jsx-nesting",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "silent",
-      "why": "JSX children are typed as `Element`, so nesting is unconstrained; the claim is that HTML parsing reshapes the tree and can break hydration.",
-      "code": "export const Case = () => <p><div /></p>;\n"
-    },
-    {
       "rule": "no-implicit-draggable",
       "dialect": "v1",
       "expect": "silent",
@@ -741,7 +733,6 @@
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
-      "presets": ["preferences"],
       "why": "`Array#map` returning elements is well typed; the claim is that `<For>` keys rows and `map` re-creates them all.",
       "code": "import { createSignal } from \"solid-js\";\nconst [items] = createSignal([1, 2]);\nexport const Case = () => <ul>{items().map((n) => <li>{n}</li>)}</ul>;\n"
     },
@@ -750,7 +741,6 @@
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
-      "presets": ["preferences"],
       "why": "The `&&` expression is legal JSX; the claim is a stylistic preference for `<Show>`.",
       "code": "import { createSignal } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport const Case = () => <div>{ready() && <span>on</span>}</div>;\n"
     },
@@ -1110,14 +1100,6 @@
       "code": "export const Case = () => <a draggable={false}>label</a>;\n"
     },
     {
-      "rule": "valid-jsx-nesting",
-      "dialect": "v2",
-      "expect": "silent",
-      "checker": "silent",
-      "why": "TypeScript accepts structurally well-typed JSX even when the browser reparses the HTML tree; the finding is about browser nesting semantics rather than JSX types.",
-      "code": "export const Case = () => <p><div /></p>;\n"
-    },
-    {
       "rule": "primitive-in-directive-application",
       "dialect": "v2",
       "expect": "silent",
@@ -1421,7 +1403,6 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "presets": ["preferences"],
       "why": "A directly rendered Array#map is valid TypeScript; the finding recommends Solid 2 list identity semantics that the type system cannot express.",
       "code": "import { createSignal } from \"solid-js\";\nconst [items] = createSignal([\"a\", \"b\"]);\nexport const Case = () => <ul>{items().map((item, index) => item + index)}</ul>;\n"
     },
@@ -1430,8 +1411,7 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "presets": ["preferences"],
-      "why": "A logical JSX branch is valid TypeScript; the finding is an opt-in control-flow preference and does not claim a type defect.",
+      "why": "A logical JSX branch is valid TypeScript; the finding is a default control-flow preference and does not claim a type defect.",
       "code": "import { createSignal } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport const Case = () => <main>{ready() && <span />}</main>;\n"
     },
     {

@@ -1,5 +1,12 @@
 # Precision backlog
 
+- **2026-08-20 — cross-rule ownership follows effective enablement.** SC1004,
+  SC5001, and Solid 2 SC1007 suppress an overlapping SC1001 only after both
+  findings pass rule enablement. Disabling a more specific owner therefore
+  restores the strict-read finding instead of silently deleting the whole
+  defect. The retired JSX-policy fixtures and their malformed-HTML oracle
+  cases were removed; catalog retirement remains pinned by the permanent
+  registry and migration tests without invoking the compiler parser warning.
 - **2026-08-20 — control-flow preferences require reactive governing inputs.**
   SC8014 `prefer-for` now reports only when evaluating the rendered `.map`
   receiver performs a proven reactive read; SC8015 `prefer-show` applies the
@@ -492,10 +499,8 @@ provenance fact with no type surface at all.
   `resolve-in-reactive-scope`. Which scope is active at a call is not typed.
 - **Compiler lowering** — SC8008 `v1/no-innerhtml` ✓ (`innerHTML` is a declared
   prop and a string is its declared type), SC8004 `v1/jsx-no-script-url` ✓
-  (`href` is `string`; the claim is about the scheme the string carries),
-  SC8019 `no-implicit-draggable` ✓ (`draggable={false}` is well typed; the claim
-  is what the rc.0 runtime does with `false`), SC8020 `valid-jsx-nesting` ✓
-  (`<p><div /></p>` type-checks), SC8007 `v1/no-array-handlers` ✓ — the case that
+  (`href` is `string`; the claim is about the scheme the string carries), and
+  SC8007 `v1/no-array-handlers` ✓ — the case that
   proves the JSX family is not uniformly redundant: `EventHandlerUnion` includes
   `BoundEventHandler`, so `onClick={[handler, 1]}` is **legal** per Solid's own
   types.
@@ -809,22 +814,6 @@ reason the removal was safe.
   memoized by callee symbol. Depth is capped at 8 with a cycle guard and the
   walk only starts for a non-primitive call inside a leaf callback, so the
   fan-out is small; memoizing it is open work.
-- **`draggable={false}` on draggable-by-default elements** (2.0 catalog).
-  The rc.0 runtime removes the attribute on `false` (RFC 07's remove half),
-  and removal selects `auto`, which is draggable on `img` and `a[href]` —
-  flagged with the `draggable="false"` fix hint; 1.x stringifies
-  (`draggable="false"` works) and is deliberately unaffected. The `a` default
-  needs a **proven-present** final `href` write — a JSX string or the bare
-  spelling. A spread-carried/final spread value may not be there, and a dynamic
-  `href={expr}` is removed by the runtime when `expr` is nullish, after which
-  the anchor is *not* draggable by default; both are now explicit
-  **uncertifiable** obligations rather than silent false negatives. A later
-  static href remains proven, while an anchor with no href and no spread is
-  proven non-draggable in auto state and stays clean. Every other element and
-  the string draggable spelling stay clean too.
-  Pinned in the backend `jsx-correctness` fixture for both dialects,
-  including the dynamic-`href` anchor.
-
 ## Resolved: upstream quirks that contradicted the compiler
 
 - **`on:`/`oncapture:` duplicate folding is gone** (2026-08-16,

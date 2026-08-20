@@ -539,46 +539,18 @@ pub fn project_findings(
         );
     }
 
-    suppress_owned_strict_reads(&mut findings);
-
-    // One defect class, one rule: when reactive-handler-frozen
-    // claims a handler expression, the strict-read finding on the identical
-    // span is the same defect worded twice — the handler rule carries the
-    // more specific consequence, so it wins and the strict read is dropped.
-    if capabilities.handler_expression_owns_strict_read {
-        let handler_spans: std::collections::HashSet<_> = program
-            .static_defects
-            .iter()
-            .filter(|defect| matches!(defect.kind, StaticDefectKind::ReactiveHandlerRead { .. }))
-            .map(|defect| {
-                (
-                    defect.location.path.clone(),
-                    defect.location.start_byte,
-                    defect.location.end_byte,
-                )
-            })
-            .collect();
-        if !handler_spans.is_empty() {
-            // SC1001 is the strict-read rule's stable diagnostic code in
-            // every catalog; the external rule name differs per dialect.
-            findings.retain(|finding| {
-                finding.id != "SC1001"
-                    || !handler_spans.contains(&(
-                        finding.primary_location.path.clone(),
-                        finding.primary_location.start_byte,
-                        finding.primary_location.end_byte,
-                    ))
-            });
-        }
-    }
-
     finish_findings(findings, total_started, construction_started)
 }
 
-/// Removes SC1001 findings whose exact read is already owned by a more
-/// specific defect. SC5001 names the same pending async read, while SC1004
-/// owns every reactive read inside the return-shape condition it reports.
-fn suppress_owned_strict_reads(findings: &mut Vec<Finding>) {
+/// Removes SC1001 findings already owned by a more specific finding that
+/// survived rule enablement. SC5001 names the same pending async read, SC1004
+/// owns reads inside its return-shape condition, and Solid 2 lets SC1007 own
+/// the exact handler expression it reports. Calling this before enablement
+/// filtering would let a disabled owner erase an enabled strict-read finding.
+pub fn suppress_findings_owned_by_enabled_rules(
+    findings: &mut Vec<Finding>,
+    capabilities: CatalogCapabilities,
+) {
     let pending_reads = findings
         .iter()
         .filter(|finding| finding.id == "SC5001")
@@ -595,20 +567,38 @@ fn suppress_owned_strict_reads(findings: &mut Vec<Finding>) {
         .filter(|finding| finding.id == "SC1004")
         .map(|finding| finding.primary_location.clone())
         .collect::<Vec<_>>();
+    let handler_reads = if capabilities.handler_expression_owns_strict_read {
+        findings
+            .iter()
+            .filter(|finding| finding.id == "SC1007")
+            .map(|finding| {
+                (
+                    finding.primary_location.path.clone(),
+                    finding.primary_location.start_byte,
+                    finding.primary_location.end_byte,
+                )
+            })
+            .collect::<std::collections::HashSet<_>>()
+    } else {
+        std::collections::HashSet::new()
+    };
     findings.retain(|finding| {
         if finding.id != "SC1001" {
             return true;
         }
         let location = &finding.primary_location;
-        !pending_reads.contains(&(
+        let exact = (
             location.path.clone(),
             location.start_byte,
             location.end_byte,
-        )) && !component_conditions.iter().any(|condition| {
-            condition.path == location.path
-                && condition.start_byte <= location.start_byte
-                && location.end_byte <= condition.end_byte
-        })
+        );
+        !pending_reads.contains(&exact)
+            && !handler_reads.contains(&exact)
+            && !component_conditions.iter().any(|condition| {
+                condition.path == location.path
+                    && condition.start_byte <= location.start_byte
+                    && location.end_byte <= condition.end_byte
+            })
     });
 }
 
@@ -791,24 +781,40 @@ mod tests {
     }
 
     #[test]
-    fn specific_async_and_component_defects_own_their_strict_reads() {
+    fn enabled_specific_defects_own_their_strict_reads() {
         let mut findings = vec![
             finding("SC1001", 10, 11),
             finding("SC5001", 10, 11),
             finding("SC1001", 21, 22),
             finding("SC1004", 20, 25),
+            finding("SC1001", 27, 28),
+            finding("SC1007", 27, 28),
             finding("SC1001", 30, 31),
         ];
 
-        suppress_owned_strict_reads(&mut findings);
+        suppress_findings_owned_by_enabled_rules(&mut findings, CatalogCapabilities::SOLID_2);
 
         assert_eq!(
             findings
                 .iter()
                 .map(|finding| (finding.id.as_str(), finding.primary_location.start_byte))
                 .collect::<Vec<_>>(),
-            [("SC5001", 10), ("SC1004", 20), ("SC1001", 30),]
+            [
+                ("SC5001", 10),
+                ("SC1004", 20),
+                ("SC1007", 27),
+                ("SC1001", 30),
+            ]
         );
+    }
+
+    #[test]
+    fn solid_one_keeps_the_handler_rule_split() {
+        let mut findings = vec![finding("SC1001", 10, 11), finding("SC1007", 10, 11)];
+
+        suppress_findings_owned_by_enabled_rules(&mut findings, CatalogCapabilities::SOLID_1);
+
+        assert_eq!(findings.len(), 2);
     }
 
     #[test]

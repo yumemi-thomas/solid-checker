@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
     CacheRetention, Finding, IncrementalBuilder, PackageContract, PackageContractIssue,
-    PackageContractIssueKind, Program, RuleOptions,
+    PackageContractIssueKind, Program, RuleOptions, suppress_findings_owned_by_enabled_rules,
 };
 
 use crate::dialect::{self, Dialect};
@@ -461,6 +461,7 @@ fn finish_analysis(
         })
     }));
     retain_enabled(dialect, &identity.rule_options, &mut findings)?;
+    suppress_findings_owned_by_enabled_rules(&mut findings, dialect.catalog_capabilities);
     let snapshot = snapshot(sources, &contracts, metrics, findings);
     Ok(DiagnosticAnalysis {
         program,

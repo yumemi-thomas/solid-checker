@@ -201,6 +201,55 @@ fn control_flow_preferences_are_defaults_with_explicit_disables_winning() {
 }
 
 #[test]
+fn disabling_a_specific_owner_restores_its_strict_read_findings() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let cases = [
+        (
+            "disabled-component-owner-restores-strict",
+            "SC1004",
+            vec![3254, 3532, 3723],
+        ),
+        (
+            "disabled-handler-owner-restores-strict",
+            "SC1007",
+            vec![1716],
+        ),
+        (
+            "disabled-pending-owner-restores-strict",
+            "SC5001",
+            vec![944, 1173, 4311, 4958],
+        ),
+    ];
+
+    for (fixture, disabled_owner, expected_starts) in cases {
+        let findings = project_snapshot_findings(
+            fixture_root.join(fixture).join("tsconfig.json"),
+            Some("solid-v2"),
+        );
+        assert!(
+            findings
+                .iter()
+                .all(|finding| finding["id"] != disabled_owner),
+            "disabled owner {disabled_owner} still reported in {fixture}: {findings:#?}"
+        );
+        let strict_starts = findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC1001")
+            .map(|finding| finding["primaryLocation"]["startByte"].as_u64().unwrap())
+            .collect::<Vec<_>>();
+        for expected in expected_starts {
+            assert!(
+                strict_starts.contains(&expected),
+                "disabling {disabled_owner} did not restore SC1001 at {expected} in {fixture}: {findings:#?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn project_rule_options_disable_one_exact_catalog_rule() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
@@ -257,41 +306,6 @@ fn component_ref_callbacks_are_setup_time_outputs_in_both_dialects() {
                 .all(|finding| finding["rule"] != "strict-read-untracked"
                     && finding["rule"] != "v1/strict-read-untracked"),
             "calling a component ref installs an imperative handle in {dialect}: {findings:#?}"
-        );
-    }
-}
-
-#[test]
-fn jsx_correctness_fixture_excludes_retired_policy_rules_in_both_dialects() {
-    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
-        return;
-    }
-    let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/jsx-correctness/tsconfig.json");
-    // Draggable serialization and JSX-returning helper naming are policies,
-    // not Solid semantic defects. Every spelling remains as a negative
-    // regression.
-    for dialect in ["solid-v1", "solid-v2"] {
-        let findings = project_snapshot_findings(project.clone(), Some(dialect));
-        assert!(
-            findings.is_empty(),
-            "unexpected {dialect} findings: {findings:#?}"
-        );
-    }
-}
-
-#[test]
-fn html_parser_nesting_policy_is_retired_in_both_dialects() {
-    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
-        return;
-    }
-    let project =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/jsx-nesting/tsconfig.json");
-    for dialect in ["solid-v1", "solid-v2"] {
-        let findings = project_snapshot_findings(project.clone(), Some(dialect));
-        assert!(
-            findings.is_empty(),
-            "unexpected {dialect} findings: {findings:#?}"
         );
     }
 }

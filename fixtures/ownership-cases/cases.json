@@ -754,27 +754,6 @@
       }
     },
     {
-      "id": "valid-jsx-nesting/positive/001",
-      "dialect": "solid-v1",
-      "source": {
-        "extension": ".tsx",
-        "prelude": "",
-        "text": "export const Case = () => <p><div /></p>;\n"
-      },
-      "ruleOptions": {},
-      "presets": [],
-      "enableRules": [],
-      "expect": {
-        "findings": [],
-        "absent": [
-          {
-            "rule": "v1/valid-jsx-nesting",
-            "reason": "retired generic HTML parser policy; outside the Solid semantic checker domain"
-          }
-        ]
-      }
-    },
-    {
       "id": "primitive-in-directive-application/positive/001",
       "dialect": "solid-v1",
       "source": {
@@ -8436,7 +8415,7 @@
         "text": "const [items] = createSignal([\"a\", \"b\"]);\nexport const App = () => <ul>{items().map((item, index) => item + index)}</ul>;\n"
       },
       "ruleOptions": {},
-      "presets": ["preferences"],
+      "presets": [],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -8469,7 +8448,7 @@
         "text": "const [ready] = createSignal(false);\nexport const App = () => <main>{ready() && <span />}</main>;\n"
       },
       "ruleOptions": {},
-      "presets": ["preferences"],
+      "presets": [],
       "enableRules": [],
       "expect": {
         "findings": [

@@ -165,8 +165,6 @@ fn plan_file(
             if handler {
                 add_symbol(expression, false);
                 type_descriptor_spans.insert(expression);
-            }
-            if handler {
                 runtime_value_domain_spans.insert(expression);
                 array_shape_spans.insert(expression);
                 if attribute.runtime_type_escape {
@@ -238,9 +236,9 @@ fn plan_file(
             add_symbol(member.property, false);
         }
     }
-    // `prefer-for` (1.x) rewrites `.map()` to `<For>` only when the
-    // receiver's type proves an actual array; demand it at exactly the call
-    // shape the rule fires on.
+    // Both dialects offer a `prefer-for` rewrite only when the receiver's type
+    // proves an actual array; demand it at exactly the call shape the rule
+    // fires on.
     if dialect.semantic_demands.array_map_receiver_types {
         for call in &file.ast.calls {
             let is_single_function_map = call.arguments.len() == 1
@@ -461,7 +459,6 @@ fn plan_file(
         planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
         planned.constant_value = constant_value_spans.contains(&span);
         planned.array_shape = array_shape_spans.contains(&span);
-        planned.tuple_shape = false;
         planned.library_types = library_type_spans.contains(&span);
         planned.reference_space = file.ast.imports.iter().any(|import| {
             import
@@ -534,6 +531,8 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         call_result_domain: false,
         constant_value: false,
         array_shape: false,
+        // Required by the pinned Type Facts v3 wire shape; no retained rule
+        // requests tuple facts after the handler-policy retirement.
         tuple_shape: false,
         library_types: false,
         reference_space: false,
@@ -596,7 +595,6 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.call_result_domain |= demand.call_result_domain;
             current.constant_value |= demand.constant_value;
             current.array_shape |= demand.array_shape;
-            current.tuple_shape |= demand.tuple_shape;
             current.library_types |= demand.library_types;
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;
