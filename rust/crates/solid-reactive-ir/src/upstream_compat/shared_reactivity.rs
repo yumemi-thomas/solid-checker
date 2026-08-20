@@ -68,7 +68,7 @@ pub(super) fn check_file(
 ///
 /// This reports the *gap*, not a defect, which is why it is uncertifiable
 /// rather than a violation. It is the call-site companion to
-/// `v1/package-contract-export-missing`: that rule fires once at an
+/// `v1/package-contract-incomplete`: that rule fires once at an
 /// undescribed import, this one fires where the missing description actually
 /// costs certification.
 ///

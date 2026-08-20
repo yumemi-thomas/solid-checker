@@ -35,9 +35,7 @@ pub enum Rule {
     HttpResponseAfterFlush,
     ServerFunctionModuleDirective,
     ServerFunctionRichArgument,
-    PackageContractExportMissing,
-    PackageContractMissing,
-    PackageContractCallbackMissing,
+    PackageContractIncomplete,
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/`.
@@ -52,7 +50,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 25] = [
+    pub const ALL: [Self; 23] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -75,9 +73,7 @@ impl Rule {
         Self::HttpResponseAfterFlush,
         Self::ServerFunctionModuleDirective,
         Self::ServerFunctionRichArgument,
-        Self::PackageContractExportMissing,
-        Self::PackageContractMissing,
-        Self::PackageContractCallbackMissing,
+        Self::PackageContractIncomplete,
     ];
 
     #[must_use]
@@ -164,12 +160,8 @@ impl Rule {
             Self::ServerFunctionRichArgument => {
                 ("SC7007", "server-function-rich-argument", "error", false)
             }
-            Self::PackageContractExportMissing => {
-                ("SC9001", "package-contract-export-missing", "error", true)
-            }
-            Self::PackageContractMissing => ("SC9005", "package-contract-missing", "error", true),
-            Self::PackageContractCallbackMissing => {
-                ("SC9006", "package-contract-callback-missing", "error", true)
+            Self::PackageContractIncomplete => {
+                ("SC9005", "package-contract-incomplete", "error", true)
             }
         };
         RuleMetadata {

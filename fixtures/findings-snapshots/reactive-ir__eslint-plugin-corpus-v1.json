@@ -302,8 +302,8 @@
       "fixes": 0
     },
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/control-flow-valid.tsx",
@@ -372,8 +372,8 @@
       "fixes": 0
     },
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-extended-invalid.tsx",
@@ -402,8 +402,8 @@
       "fixes": 0
     },
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-extended-valid.tsx",
@@ -412,8 +412,8 @@
       "fixes": 0
     },
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/props-extended-valid.tsx",

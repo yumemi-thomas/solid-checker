@@ -2,7 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/package-contract-missing",
+      "rule": "v1/package-contract-incomplete",
       "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",

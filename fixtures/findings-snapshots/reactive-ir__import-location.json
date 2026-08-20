@@ -2,8 +2,8 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "v1/package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/import-location/App.tsx",
@@ -14,8 +14,8 @@
       "hint": "Add an export summary for createStore to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/import-location/App.tsx",
@@ -26,8 +26,8 @@
       "hint": "Add an export summary for Portal to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/import-location/App.tsx",
@@ -38,8 +38,8 @@
       "hint": "Add an export summary for unwrap to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/import-location/App.tsx",
@@ -50,8 +50,8 @@
       "hint": "Add an export summary for createSignal to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/import-location/App.tsx",
@@ -62,8 +62,8 @@
       "hint": "Add an export summary for createMemo to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/import-location/App.tsx",
@@ -74,8 +74,8 @@
       "hint": "Add an export summary for render to the package's solid-reactivity.json (reactive reads, callbacks, return kind); an empty summary certifies explicitly that the export is not reactive. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/import-location/App.tsx",

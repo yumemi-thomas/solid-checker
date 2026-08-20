@@ -66,4 +66,4 @@ package's reactivity contract so callers can be certified.
 
 - [leaf-owner rules](leaf-owner-forbidden-call.md) — calls made under an owner whose lifetime is nevertheless unsuitable
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — async work that needs an owned loading boundary
-- [package-contract-missing](package-contract-missing.md) — missing external ownership facts
+- [package-contract-incomplete](package-contract-incomplete.md) — missing external ownership facts

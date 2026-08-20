@@ -415,7 +415,7 @@ fn solid_one_missing_wording_paths_are_end_to_end() {
                 .is_some_and(|message| message.contains("component or an ordinary helper"))
     }));
     assert_eq!(
-        findings_for_rule(&findings, "v1/package-contract-missing").len(),
+        findings_for_rule(&findings, "v1/package-contract-incomplete").len(),
         1,
         "v1 package-contract wording path must run end to end: {findings:#?}"
     );
@@ -743,7 +743,7 @@ fn unknown_callback_diagnostic_contains_actionable_contract_stub() {
     let Some(findings) = diagnostic_fixture("package-unknown-callback-producer") else {
         return;
     };
-    let callback_findings = findings_for_rule(&findings, "package-contract-callback-missing");
+    let callback_findings = findings_for_rule(&findings, "package-contract-incomplete");
     assert_eq!(callback_findings.len(), 1, "{findings:#?}");
     let finding = &callback_findings[0];
     let message = finding["message"].as_str().unwrap_or_default();

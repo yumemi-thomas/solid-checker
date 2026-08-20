@@ -40,5 +40,5 @@ See [package-contracts.md](../../package-contracts.md) for the contract format.
 
 ## Related
 
-- [v1/package-contract-export-missing](./package-contract-export-missing.md) — a contract exists but misses an export
+- [v1/package-contract-incomplete](./package-contract-incomplete.md) — a contract exists but misses an export
 - [v1/strict-read-untracked](./strict-read-untracked.md) — reads proven untracked

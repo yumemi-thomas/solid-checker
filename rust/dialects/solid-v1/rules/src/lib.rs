@@ -120,7 +120,7 @@ impl CatalogWording for Catalog {
                     ),
                 };
                 FindingWording::new(
-                    Rule::PackageContractMissing.metadata(),
+                    Rule::PackageContractIncomplete.metadata(),
                     format!(
                         "imported Solid package {:?} {condition}; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
                         issue.package
@@ -199,9 +199,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::NoDirectMutation
         | Rule::ReactiveSourceUncaptured
         | Rule::ReactiveDispatchUnresolved
-        | Rule::PackageContractExportMissing
-        | Rule::PackageContractCallbackMissing
-        | Rule::PackageContractMissing => panic!(
+        | Rule::PackageContractIncomplete => panic!(
             "v1 rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
@@ -222,11 +220,9 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::ReactiveObjectDestructure { .. } => Rule::NoDestructure,
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentsReturnOnce,
-        StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
-        StaticDefectKind::PackageContractEnvironmentDependent { .. } => {
-            Rule::PackageContractExportMissing
-        }
-        StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,
+        StaticDefectKind::PackageContractExportMissing { .. }
+        | StaticDefectKind::PackageContractEnvironmentDependent { .. }
+        | StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractIncomplete,
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
         StaticDefectKind::ReactiveDispatchUnresolved { .. }

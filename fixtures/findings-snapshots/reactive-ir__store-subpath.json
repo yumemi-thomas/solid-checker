@@ -2,8 +2,8 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "v1/package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/store-subpath/wrong-subpath.tsx",

@@ -54,4 +54,4 @@ precondition in the package's reactivity contract.
 ## Related
 
 - [v1/reactive-write-in-owned-scope](./reactive-write-in-owned-scope.md) — writes whose owner context changes their semantics
-- [v1/package-contract-missing](./package-contract-missing.md) — missing external ownership facts
+- [v1/package-contract-incomplete](./package-contract-incomplete.md) — missing external ownership facts

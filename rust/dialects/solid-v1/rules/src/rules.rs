@@ -45,9 +45,7 @@ pub enum Rule {
     PreferClasslist,
     PreferFor,
     PreferShow,
-    PackageContractExportMissing,
-    PackageContractCallbackMissing,
-    PackageContractMissing,
+    PackageContractIncomplete,
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/v1/`.
@@ -63,7 +61,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 18] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -81,9 +79,7 @@ impl Rule {
         Self::PreferClasslist,
         Self::PreferFor,
         Self::PreferShow,
-        Self::PackageContractExportMissing,
-        Self::PackageContractCallbackMissing,
-        Self::PackageContractMissing,
+        Self::PackageContractIncomplete,
     ];
 
     #[must_use]
@@ -119,20 +115,8 @@ impl Rule {
             Self::PreferClasslist => ("SC8013", "v1/prefer-classlist", "warning", false),
             Self::PreferFor => ("SC8014", "v1/prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "v1/prefer-show", "warning", false),
-            Self::PackageContractExportMissing => (
-                "SC9001",
-                "v1/package-contract-export-missing",
-                "error",
-                true,
-            ),
-            Self::PackageContractCallbackMissing => (
-                "SC9006",
-                "v1/package-contract-callback-missing",
-                "error",
-                true,
-            ),
-            Self::PackageContractMissing => {
-                ("SC9005", "v1/package-contract-missing", "error", true)
+            Self::PackageContractIncomplete => {
+                ("SC9005", "v1/package-contract-incomplete", "error", true)
             }
         };
         RuleMetadata {
@@ -278,6 +262,6 @@ mod tests {
         assert_eq!(Rule::StrictReadUntracked.metadata().code, "SC1001");
         assert_eq!(Rule::NoDestructure.metadata().code, "SC1003");
         assert_eq!(Rule::ComponentsReturnOnce.metadata().code, "SC1004");
-        assert_eq!(Rule::PackageContractMissing.metadata().code, "SC9005");
+        assert_eq!(Rule::PackageContractIncomplete.metadata().code, "SC9005");
     }
 }

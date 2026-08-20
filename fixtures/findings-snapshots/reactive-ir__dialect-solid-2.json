@@ -146,8 +146,8 @@
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component."
     },
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
@@ -158,8 +158,8 @@
       "hint": "batch was removed in Solid 2.0; see the migration guide — updates batch by default on the microtask queue; call flush() where you need the old synchronous application."
     },
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",

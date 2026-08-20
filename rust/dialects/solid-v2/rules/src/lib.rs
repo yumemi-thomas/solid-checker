@@ -168,7 +168,7 @@ impl CatalogWording for Catalog {
                     ),
                 };
                 FindingWording::new(
-                    Rule::PackageContractMissing.metadata(),
+                    Rule::PackageContractIncomplete.metadata(),
                     format!(
                         "imported Solid package {:?} {condition}; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
                         issue.package
@@ -481,9 +481,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
-        | Rule::PackageContractExportMissing
-        | Rule::PackageContractCallbackMissing
-        | Rule::PackageContractMissing => panic!(
+        | Rule::PackageContractIncomplete => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
@@ -504,11 +502,9 @@ fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
         StaticDefectKind::ReactiveObjectDestructure { .. } => Rule::ComponentPropsDestructure,
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
-        StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
-        StaticDefectKind::PackageContractEnvironmentDependent { .. } => {
-            Rule::PackageContractExportMissing
-        }
-        StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,
+        StaticDefectKind::PackageContractExportMissing { .. }
+        | StaticDefectKind::PackageContractEnvironmentDependent { .. }
+        | StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractIncomplete,
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
         StaticDefectKind::ReactiveDispatchUnresolved { .. }
@@ -657,7 +653,7 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
     ("writeSignal", "removed; it was an internal API"),
 ];
 
-/// Migration-oriented SC9001 hint for the removed 1.x APIs: telling the user
+/// Migration-oriented SC9005 hint for the removed 1.x APIs: telling the user
 /// to write a contract entry for `batch` would send them to document an
 /// export that no longer exists. Applies to the packages the v2 dialect
 /// itself contracts (`solid-js`, `@solidjs/web`); a same-named export of a
@@ -679,7 +675,7 @@ mod removed_export_tests {
     use super::{V2_REMOVED_EXPORTS, v2_removed_export_hint};
 
     /// A name the bundled 2.0 contract still exports is not removed: hinting
-    /// "migrate away" for it would be wrong, and SC9001 for it is a genuine
+    /// "migrate away" for it would be wrong, and SC9005 for it is a genuine
     /// contract gap. This holds the map to the shipped export list.
     #[test]
     fn removed_exports_are_absent_from_the_bundled_contract() {

@@ -46,9 +46,9 @@ that exact rule in the shared project configuration described below.
 
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
-| Shared concepts (15 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
+| Shared concepts (13 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
 | Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 10 rules: actions, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 20 rules | 25 rules |
+| Catalog size | 18 rules | 23 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -194,10 +194,8 @@ fails `--certify` until the response-head decision moves above the boundary.
 
 | Code | Rule | Severity |
 | --- | --- | --- |
-| SC9001 | [package-contract-export-missing](package-contract-export-missing.md) | error |
 | SC9004 | [execution-map-incomplete](execution-map-incomplete.md) | error |
-| SC9006 | [package-contract-callback-missing](package-contract-callback-missing.md) | error |
-| SC9005 | [package-contract-missing](package-contract-missing.md) | error |
+| SC9005 | [package-contract-incomplete](package-contract-incomplete.md) | error |
 | SC9011 | [reactive-source-uncaptured](reactive-source-uncaptured.md) | warning |
 | SC9012 | [reactive-dispatch-unresolved](reactive-dispatch-unresolved.md) | warning |
 
@@ -251,10 +249,8 @@ plugin keeps its rule names under the `v1/` namespace.
 | SC8018 | [v1/prefer-component-syntax](v1/prefer-component-syntax.md) | warning |
 | SC8019 | [v1/no-implicit-draggable](v1/no-implicit-draggable.md) | error |
 | SC8020 | [v1/valid-jsx-nesting](v1/valid-jsx-nesting.md) | error |
-| SC9001 | [v1/package-contract-export-missing](v1/package-contract-export-missing.md) | error |
 | SC9004 | [v1/execution-map-incomplete](v1/execution-map-incomplete.md) | error |
-| SC9006 | [v1/package-contract-callback-missing](v1/package-contract-callback-missing.md) | error |
-| SC9005 | [v1/package-contract-missing](v1/package-contract-missing.md) | error |
+| SC9005 | [v1/package-contract-incomplete](v1/package-contract-incomplete.md) | error |
 | SC9011 | [v1/reactive-source-uncaptured](v1/reactive-source-uncaptured.md) | warning |
 | SC9012 | [v1/reactive-dispatch-unresolved](v1/reactive-dispatch-unresolved.md) | warning |
 

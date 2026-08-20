@@ -36,6 +36,12 @@ code; **Both** — either, depending on the code.
   retired no-op: its disable does not transfer and its explicit ESLint key is
   removed. Proven SSR client-source holes retain error severity; ordinary
   missing-fallback findings retain warning severity.
+- **2026-08-20 — package-contract gaps merged.** Missing contracts, missing or
+  environment-dependent exports, and unknown callback execution now report as
+  `package-contract-incomplete` / `SC9005` (with `v1/` in the 1.x catalog).
+  All six old rule-options keys alias the merged family, so disabling one now
+  disables every contract-completeness variant. The old explicit ESLint keys
+  are removed as a breaking change.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 

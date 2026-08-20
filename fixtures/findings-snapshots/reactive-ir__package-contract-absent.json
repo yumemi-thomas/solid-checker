@@ -2,7 +2,7 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "package-contract-missing",
+      "rule": "package-contract-incomplete",
       "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",

@@ -61,7 +61,7 @@ fn cli_consumes_discovered_package_contracts() {
         ),
         (
             "package-unknown-export",
-            "package-contract-export-missing",
+            "package-contract-incomplete",
             "unknownPrimitive",
         ),
         ("bundled-solid-consumer", "strict-read-untracked", "doubled"),
@@ -339,7 +339,10 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
     let snapshot: serde_json::Value = serde_json::from_slice(&uncertifiable.stdout).unwrap();
     assert_eq!(snapshot["status"], "uncertifiable");
     assert_eq!(snapshot["findings"][0]["id"], "SC9005");
-    assert_eq!(snapshot["findings"][0]["rule"], "package-contract-missing");
+    assert_eq!(
+        snapshot["findings"][0]["rule"],
+        "package-contract-incomplete"
+    );
     assert!(
         snapshot["findings"][0]["primaryLocation"]["path"]
             .as_str()
@@ -509,7 +512,7 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
     assert_eq!(conditional.status.code(), Some(1));
     let conditional_findings = decode_findings(&conditional.stdout);
     assert_eq!(conditional_findings.len(), 1);
-    assert_eq!(conditional_findings[0]["id"], "SC9001");
+    assert_eq!(conditional_findings[0]["id"], "SC9005");
     assert!(
         conditional_findings[0]["message"]
             .as_str()
@@ -659,7 +662,7 @@ fn cli_refuses_to_emit_unknown_callback_execution() {
 
 /// SC9-class obligations arrive as structured defects since the contract
 /// resolver moved missing exports off `static_violations`; a contract must
-/// not be written over them either. `package-unknown-export` reports SC9001,
+/// not be written over them either. `package-unknown-export` reports SC9005,
 /// so emission over it has to refuse.
 #[test]
 fn cli_refuses_to_emit_over_unresolved_obligations() {
@@ -684,10 +687,10 @@ fn cli_refuses_to_emit_over_unresolved_obligations() {
         ])
         .output()
         .unwrap();
-    assert!(!result.status.success(), "emission must refuse over SC9001");
+    assert!(!result.status.success(), "emission must refuse over SC9005");
     let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(stderr.contains("unresolved obligation"), "{stderr}");
-    assert!(!output.exists(), "no contract may be written over SC9001");
+    assert!(!output.exists(), "no contract may be written over SC9005");
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -1629,7 +1632,7 @@ fn cli_reports_a_project_owned_contract_that_the_installed_version_outran() {
     assert_eq!(snapshot["status"], "uncertifiable");
     let finding = &snapshot["findings"][0];
     assert_eq!(finding["id"], "SC9005");
-    assert_eq!(finding["rule"], "package-contract-missing");
+    assert_eq!(finding["rule"], "package-contract-incomplete");
     // The message states what is true — a contract exists, for another
     // version — rather than claiming there is none.
     let message = finding["message"].as_str().unwrap();

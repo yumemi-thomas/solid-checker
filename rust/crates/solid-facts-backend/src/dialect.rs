@@ -198,6 +198,27 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
     ("no-owner-cleanup", "missing-owner"),
     ("no-owner-boundary", "missing-owner"),
     ("no-owner-settled-cleanup", "missing-owner"),
+    (
+        "v1/package-contract-export-missing",
+        "v1/package-contract-incomplete",
+    ),
+    (
+        "v1/package-contract-missing",
+        "v1/package-contract-incomplete",
+    ),
+    (
+        "v1/package-contract-callback-missing",
+        "v1/package-contract-incomplete",
+    ),
+    (
+        "package-contract-export-missing",
+        "package-contract-incomplete",
+    ),
+    ("package-contract-missing", "package-contract-incomplete"),
+    (
+        "package-contract-callback-missing",
+        "package-contract-incomplete",
+    ),
 ];
 
 /// The removal note for a retired rule identity, or `None` if the checker never
@@ -680,7 +701,7 @@ mod tests {
         let shared = v1.intersection(&v2).copied().collect::<HashSet<_>>();
         let expected = HashSet::from([
             "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1007", "SC2001", "SC2003",
-            "SC4001", "SC7001", "SC9001", "SC9005", "SC9006", "SC9011", "SC9012",
+            "SC4001", "SC7001", "SC9005", "SC9011", "SC9012",
         ]);
         assert_eq!(shared, expected);
         assert_eq!(
@@ -688,22 +709,22 @@ mod tests {
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            15
+            13
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            15
+            13
         );
         assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 15,
+            solid_v1_rules::Rule::ALL.len() - 13,
             5,
             "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
         assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 15,
+            solid_v2_rules::Rule::ALL.len() - 13,
             10,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
