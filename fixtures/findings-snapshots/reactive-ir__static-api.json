@@ -132,7 +132,7 @@
       "fixes": 0
     },
     {
-      "rule": "sync-node-received-async",
+      "rule": "sync-computation-received-async",
       "code": "SC7002",
       "kind": "violation",
       "severity": "error",
@@ -142,7 +142,7 @@
       "fixes": 0
     },
     {
-      "rule": "sync-node-received-async",
+      "rule": "sync-computation-received-async",
       "code": "SC7002",
       "kind": "violation",
       "severity": "error",
@@ -152,7 +152,7 @@
       "fixes": 0
     },
     {
-      "rule": "sync-node-received-async",
+      "rule": "sync-computation-received-async",
       "code": "SC7002",
       "kind": "violation",
       "severity": "error",

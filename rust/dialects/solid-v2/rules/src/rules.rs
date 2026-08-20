@@ -135,7 +135,9 @@ impl Rule {
                 false,
             ),
             Self::MissingEffectFunction => ("SC7001", "missing-effect-function", "error", false),
-            Self::SyncNodeReceivedAsync => ("SC7002", "sync-node-received-async", "error", false),
+            Self::SyncNodeReceivedAsync => {
+                ("SC7002", "sync-computation-received-async", "error", false)
+            }
             // SC7003 and SC9003 each carry two rule names on purpose: the
             // code identifies the defect (an invalid or unresolved target),
             // while the name identifies the surface it was found on
@@ -248,7 +250,7 @@ mod tests {
     fn every_v2_static_violation_identity_resolves() {
         for (code, name) in [
             ("SC2004", "resolve-in-tracked-scope"),
-            ("SC7002", "sync-node-received-async"),
+            ("SC7002", "sync-computation-received-async"),
             ("SC7005", "http-response-after-flush"),
             ("SC7006", "server-function-module-directive"),
             ("SC7007", "server-function-rich-argument"),

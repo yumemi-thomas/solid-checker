@@ -1,4 +1,4 @@
-# sync-node-received-async
+# sync-computation-received-async
 
 `SC7002` · **error** · violation
 

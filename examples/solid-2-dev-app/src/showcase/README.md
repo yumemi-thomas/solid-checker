@@ -18,7 +18,7 @@ SOLID_TYPEFACTS_BIN=../../bin/solid-typefacts \
 | `Uncertifiable.tsx` | `SC4001` no-owner-effect | **uncertifiable** | An exported effect whose caller ownership can't be proven in-project. Fail-closed: neither certified nor a definite violation. eslint has no "can't prove it" verdict. |
 | `AsyncLoadingBoundary.tsx` | `SC5003` async-outside-loading-boundary | violation | Uses the Solid Oxc compiler's JSX execution facts to prove an async read has no dominating `<Loading>` boundary. |
 | `LookalikeAccessor.tsx` | `SC1002` reactive-read-after-await | violation | Type-aware: flags the real branded `Accessor` read after `await` but leaves an identical-looking plain function call alone — no false positive. |
-| `SyncReceivedAsync.tsx` | `SC7002` sync-node-received-async | violation | Proves a `{ sync: true }` computation's callback returns a Promise — a type fact, not visible from syntax. |
+| `SyncReceivedAsync.tsx` | `SC7002` sync-computation-received-async | violation | Proves a `{ sync: true }` computation's callback returns a Promise — a type fact, not visible from syntax. |
 
 Note: `AsyncLoadingBoundary.tsx` also contains a corrected variant (`ProfileOk`,
 read under a `<Loading>` boundary) that is certified, and `LookalikeAccessor.tsx`

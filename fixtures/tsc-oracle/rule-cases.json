@@ -818,7 +818,7 @@
       "code": "import { createMemo, resolve } from \"solid-js\";\nexport const value = createMemo(() => resolve(() => 1));\n"
     },
     {
-      "rule": "sync-node-received-async",
+      "rule": "sync-computation-received-async",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
@@ -826,7 +826,7 @@
       "code": "import { createMemo } from \"solid-js\";\nexport const value = createMemo(async () => {\n  await Promise.resolve();\n  return 1;\n});\n"
     },
     {
-      "rule": "sync-node-received-async",
+      "rule": "sync-computation-received-async",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",

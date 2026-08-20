@@ -58,6 +58,10 @@ code; **Both** — either, depending on the code.
   `resolve-in-tracked-scope`, naming the precise execution fact the rule
   proves. The old rule-options key aliases the new identity; the explicit
   ESLint key remains temporarily as a deprecated delegate.
+- **2026-08-20 — SC7002 renamed.** `sync-node-received-async` is now
+  `sync-computation-received-async`, naming the affected computation rather
+  than an implementation node. The old rule-options key aliases the new
+  identity; the explicit ESLint key remains temporarily as a deprecated delegate.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 

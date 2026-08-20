@@ -115,7 +115,7 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // Signal-family only: the store constructors never route
                 // options.sync into their node, so their three sync: true
                 // async derives are negative cases now.
-                ("sync-node-received-async", 3),
+                ("sync-computation-received-async", 3),
                 // The refresh/affects target rules were removed on
                 // 2026-08-17: `Refreshable<T>` brands the target in the type
                 // system, so every spelling this fixture writes -- wrapper,
@@ -664,7 +664,7 @@ fn static_violation_evidence_describes_the_actual_proof() {
         return;
     };
     assert!(
-        findings_for_rule(&static_api, "sync-node-received-async")
+        findings_for_rule(&static_api, "sync-computation-received-async")
             .into_iter()
             .all(|finding| {
                 finding["evidence"][0]["message"]

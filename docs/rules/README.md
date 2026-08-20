@@ -178,7 +178,7 @@ rule's page documents its additional options and defaults.
 | Code | Rule | Severity |
 | --- | --- | --- |
 | SC7001 | [missing-effect-function](missing-effect-function.md) | error |
-| SC7002 | [sync-node-received-async](sync-node-received-async.md) | error |
+| SC7002 | [sync-computation-received-async](sync-computation-received-async.md) | error |
 | SC7005 | [http-response-after-flush](http-response-after-flush.md) | warning |
 | SC7006 | [server-function-module-directive](server-function-module-directive.md) | error |
 | SC7007 | [server-function-rich-argument](server-function-rich-argument.md) | error |

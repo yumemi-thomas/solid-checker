@@ -127,7 +127,7 @@ impl StaticApiContext<'_> {
             {
                 result.violations.push(StaticViolation {
                     id: "SC7002".into(),
-                    rule: "sync-node-received-async".into(),
+                    rule: "sync-computation-received-async".into(),
                     message: format!(
                         "{primitive} is marked sync: true but its computation can return a Promise or AsyncIterable; sync: true asserts a synchronous result so the runtime can skip the async-shape probe — dev still probes and throws SYNC_NODE_RECEIVED_ASYNC, and production stores the unawaited value as-is"
                     ),

@@ -80,7 +80,7 @@ Implemented rule slices are:
 - `primitive-in-leaf-owner`;
 - `flush-in-forbidden-scope`;
 - `missing-effect-function`;
-- `sync-node-received-async`;
+- `sync-computation-received-async`;
 - `refresh` writes flowing through the owned-scope rule (the refresh/affects
   *target* rules were removed: `Refreshable<T>` is the brand as a type, so
   every invalid target is already a TypeScript error);

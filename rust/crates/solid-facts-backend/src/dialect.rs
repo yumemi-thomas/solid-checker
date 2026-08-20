@@ -230,6 +230,10 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
         "v1/reactive-handler-frozen",
     ),
     ("resolve-in-reactive-scope", "resolve-in-tracked-scope"),
+    (
+        "sync-node-received-async",
+        "sync-computation-received-async",
+    ),
 ];
 
 /// The removal note for a retired rule identity, or `None` if the checker never

@@ -110,7 +110,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. If every caller runs this exported function under an owner, document that in the package's reactivity contract."
     },
     {
-      "rule": "sync-node-received-async",
+      "rule": "sync-computation-received-async",
       "code": "SC7002",
       "kind": "violation",
       "severity": "error",

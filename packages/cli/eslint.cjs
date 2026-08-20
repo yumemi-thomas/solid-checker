@@ -376,7 +376,8 @@ const DEPRECATED_RULE_KEYS = [
   ["component-returns-conditionally", "components-return-once"],
   ["expected-function-got-expression", "reactive-handler-frozen"],
   ["v1/expected-function-got-expression", "v1/reactive-handler-frozen"],
-  ["resolve-in-reactive-scope", "resolve-in-tracked-scope"]
+  ["resolve-in-reactive-scope", "resolve-in-tracked-scope"],
+  ["sync-node-received-async", "sync-computation-received-async"]
 ];
 
 for (const catalog of Object.values(manifests)) {

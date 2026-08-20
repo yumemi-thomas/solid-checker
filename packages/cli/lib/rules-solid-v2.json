@@ -23,7 +23,7 @@
     { "code": "SC5003", "name": "async-outside-loading-boundary", "severity": "warning", "uncertifiable": false },
     { "code": "SC6001", "name": "primitive-in-directive-application", "severity": "warning", "uncertifiable": false },
     { "code": "SC7001", "name": "missing-effect-function", "severity": "error", "uncertifiable": false },
-    { "code": "SC7002", "name": "sync-node-received-async", "severity": "error", "uncertifiable": false },
+    { "code": "SC7002", "name": "sync-computation-received-async", "severity": "error", "uncertifiable": false },
     { "code": "SC7005", "name": "http-response-after-flush", "severity": "warning", "uncertifiable": true },
     { "code": "SC7006", "name": "server-function-module-directive", "severity": "error", "uncertifiable": false },
     { "code": "SC7007", "name": "server-function-rich-argument", "severity": "error", "uncertifiable": false },
