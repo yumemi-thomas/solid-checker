@@ -1,4 +1,4 @@
-# component-props-destructure
+# no-destructure
 
 `SC1003` · **error** · violation · 🛠️ safe fix available
 

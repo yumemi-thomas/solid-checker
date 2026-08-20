@@ -483,7 +483,7 @@
       }
     },
     {
-      "id": "component-props-destructure/positive/001",
+      "id": "no-destructure/positive/001",
       "dialect": "solid-v2",
       "source": {
         "extension": ".tsx",
@@ -496,7 +496,7 @@
       "expect": {
         "findings": [
           {
-            "rule": "component-props-destructure",
+            "rule": "no-destructure",
             "code": "SC1003",
             "kind": "uncertifiable",
             "severity": "error",

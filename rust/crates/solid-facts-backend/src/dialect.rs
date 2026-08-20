@@ -219,6 +219,7 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
         "package-contract-callback-missing",
         "package-contract-incomplete",
     ),
+    ("component-props-destructure", "no-destructure"),
 ];
 
 /// The removal note for a retired rule identity, or `None` if the checker never

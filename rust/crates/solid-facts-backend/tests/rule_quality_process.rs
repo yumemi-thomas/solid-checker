@@ -16,7 +16,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ("action-called-in-owned-scope", 2),
         ("strict-read-untracked", 25),
         ("reactive-read-after-await", 20),
-        ("component-props-destructure", 1),
+        ("no-destructure", 1),
         ("component-returns-conditionally", 3),
         ("leaf-owner-forbidden-call", 7),
     ] {
@@ -54,11 +54,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "props-invalid.tsx",
-            [
-                ("strict-read-untracked", 3),
-                ("component-props-destructure", 1),
-            ]
-            .as_slice(),
+            [("strict-read-untracked", 3), ("no-destructure", 1)].as_slice(),
         ),
         (
             "control-flow-invalid.tsx",
@@ -193,15 +189,15 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "props-valid.tsx",
-            &["strict-read-untracked", "component-props-destructure"][..],
+            &["strict-read-untracked", "no-destructure"][..],
         ),
         (
             "control-flow-valid.tsx",
-            &["strict-read-untracked", "component-props-destructure"][..],
+            &["strict-read-untracked", "no-destructure"][..],
         ),
         (
             "props-extended-valid.tsx",
-            &["strict-read-untracked", "component-props-destructure"][..],
+            &["strict-read-untracked", "no-destructure"][..],
         ),
         (
             "component-return-valid.tsx",

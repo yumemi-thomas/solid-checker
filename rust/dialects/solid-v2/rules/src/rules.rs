@@ -95,9 +95,7 @@ impl Rule {
             Self::ReactiveDispatchUnresolved => {
                 ("SC9012", "reactive-dispatch-unresolved", "warning", true)
             }
-            Self::ComponentPropsDestructure => {
-                ("SC1003", "component-props-destructure", "error", false)
-            }
+            Self::ComponentPropsDestructure => ("SC1003", "no-destructure", "error", false),
             Self::ComponentReturnsConditionally => {
                 ("SC1004", "component-returns-conditionally", "error", false)
             }

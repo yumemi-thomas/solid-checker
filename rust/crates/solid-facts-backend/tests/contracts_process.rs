@@ -56,7 +56,7 @@ fn cli_consumes_discovered_package_contracts() {
         ),
         (
             "package-store-destructure",
-            "component-props-destructure",
+            "no-destructure",
             "destructuring",
         ),
         (

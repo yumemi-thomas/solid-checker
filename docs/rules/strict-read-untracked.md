@@ -100,6 +100,6 @@ explicit one-time snapshot; it does not make the prop reactive.
 
 ## Related
 
-- [component-props-destructure](component-props-destructure.md) — the destructuring special case
+- [no-destructure](no-destructure.md) — the destructuring special case
 - [reactive-read-after-await](reactive-read-after-await.md) — reads that lose tracking at an `await`
 - [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — the async variant, which throws

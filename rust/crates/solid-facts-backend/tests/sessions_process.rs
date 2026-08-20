@@ -206,12 +206,9 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         ),
         (
             "component-props-parameter-destructure.tsx",
-            "component-props-destructure",
+            "no-destructure",
         ),
-        (
-            "component-props-body-destructure.tsx",
-            "component-props-destructure",
-        ),
+        ("component-props-body-destructure.tsx", "no-destructure"),
         (
             "derived-signal-in-effect.tsx",
             "reactive-write-in-owned-scope",
@@ -250,15 +247,9 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         ),
         ("loop-await-accessor.tsx", "reactive-read-after-await"),
         ("component-props-tracked.tsx", "strict-read-untracked"),
-        (
-            "component-props-tracked-destructure.tsx",
-            "component-props-destructure",
-        ),
+        ("component-props-tracked-destructure.tsx", "no-destructure"),
         ("noncomponent-object-read.ts", "strict-read-untracked"),
-        (
-            "noncomponent-object-destructure.ts",
-            "component-props-destructure",
-        ),
+        ("noncomponent-object-destructure.ts", "no-destructure"),
         ("component-props-passthrough.tsx", "strict-read-untracked"),
         ("component-props-local-merge.tsx", "strict-read-untracked"),
         (
@@ -286,7 +277,7 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         findings
             .iter()
             .filter(|finding| {
-                finding["rule"] == "component-props-destructure"
+                finding["rule"] == "no-destructure"
                     && finding["primaryLocation"]["path"]
                         .as_str()
                         .is_some_and(|path| {

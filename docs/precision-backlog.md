@@ -42,6 +42,10 @@ code; **Both** — either, depending on the code.
   All six old rule-options keys alias the merged family, so disabling one now
   disables every contract-completeness variant. The old explicit ESLint keys
   are removed as a breaking change.
+- **2026-08-20 — SC1003 names unified.** Solid 2.0's
+  `component-props-destructure` is now `no-destructure`, matching the 1.x stem.
+  The old rule-options key aliases the new identity; the explicit ESLint key
+  remains temporarily as a deprecated delegate.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 

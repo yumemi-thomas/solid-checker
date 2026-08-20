@@ -64,7 +64,7 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                     crate::source_discovery::PropUse::Unknown => true,
                 };
                 draft.push_defect(
-                    "component-props-destructure",
+                    "no-destructure",
                     StaticDefect {
                         kind: StaticDefectKind::ReactiveObjectDestructure {
                             source: "props".into(),
@@ -174,7 +174,7 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                 .unwrap_or("reactive object")
                 .to_owned();
             draft.push_defect(
-                "component-props-destructure",
+                "no-destructure",
                 StaticDefect {
                     kind: StaticDefectKind::ReactiveObjectDestructure {
                         source,

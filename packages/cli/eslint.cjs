@@ -368,10 +368,34 @@ const plugin = {
   configs: {}
 };
 
+// Old explicit ESLint keys retained for one minor release. These entries do
+// not appear in generated catalogs or presets; they delegate to the current
+// identity and carry ESLint's deprecation metadata.
+const DEPRECATED_RULE_KEYS = [
+  ["component-props-destructure", "no-destructure"]
+];
+
 for (const catalog of Object.values(manifests)) {
   for (const entry of catalog.rules) {
     plugin.rules[entry.name] = reportingRule(entry, catalog);
   }
+}
+
+for (const [oldName, currentName] of DEPRECATED_RULE_KEYS) {
+  const catalog = Object.values(manifests).find(candidate =>
+    candidate.rules.some(entry => entry.name === currentName)
+  );
+  if (!catalog) throw new Error(`deprecated rule target ${currentName} is absent`);
+  const entry = catalog.rules.find(candidate => candidate.name === currentName);
+  const delegated = reportingRule(entry, catalog);
+  plugin.rules[oldName] = {
+    ...delegated,
+    meta: {
+      ...delegated.meta,
+      deprecated: true,
+      replacedBy: [currentName]
+    }
+  };
 }
 
 plugin.configs.recommended = {
@@ -405,6 +429,7 @@ module.exports._testing = {
   findingMessage,
   loadSnapshot,
   manifests,
+  deprecatedRuleKeys: DEPRECATED_RULE_KEYS,
   ownedRules,
   snapshotCache
 };

@@ -12,7 +12,7 @@
     { "code": "SC2003", "name": "no-direct-mutation", "severity": "warning", "uncertifiable": false },
     { "code": "SC9011", "name": "reactive-source-uncaptured", "severity": "warning", "uncertifiable": true },
     { "code": "SC9012", "name": "reactive-dispatch-unresolved", "severity": "warning", "uncertifiable": true },
-    { "code": "SC1003", "name": "component-props-destructure", "severity": "error", "uncertifiable": false },
+    { "code": "SC1003", "name": "no-destructure", "severity": "error", "uncertifiable": false },
     { "code": "SC1004", "name": "component-returns-conditionally", "severity": "error", "uncertifiable": false },
     { "code": "SC2001", "name": "reactive-write-in-owned-scope", "severity": "error", "uncertifiable": false },
     { "code": "SC2002", "name": "action-called-in-owned-scope", "severity": "error", "uncertifiable": false },

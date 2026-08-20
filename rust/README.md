@@ -96,7 +96,7 @@ Implemented rule slices are:
 - `reactive-read-after-await`, using TS-Go's dominance-proven
   `callsAfterAwait` facts rather than source-order guesses;
 - component props reads, aliases, Solid `merge`, and
-  `component-props-destructure`, plus `component-returns-conditionally` for
+  `no-destructure`, plus `component-returns-conditionally` for
   reactive return-shape guards, with Oxc binding/member shapes and checker
   identities.
 

@@ -130,7 +130,7 @@ test("projects safe same-file fixes and UTF-8 byte ranges", () => {
   const reports = run({
     findings: [{
       id: "SC1003",
-      rule: "component-props-destructure",
+      rule: "no-destructure",
       kind: "violation",
       severity: "error",
       message: "do not destructure props",
@@ -262,6 +262,19 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
   assert.equal(Object.keys(plugin.configs.v2.rules).length, v2.rules.length + 1);
   assert.equal(plugin.configs.v1.rules["solid-checker/certification"], "off");
   assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
+});
+
+test("deprecated rule keys delegate without entering dialect presets", () => {
+  for (const [oldName, currentName] of plugin._testing.deprecatedRuleKeys) {
+    const rule = plugin.rules[oldName];
+    assert.ok(rule, `missing deprecated rule ${oldName}`);
+    assert.equal(rule.meta.deprecated, true);
+    assert.deepEqual(rule.meta.replacedBy, [currentName]);
+    assert.ok(plugin.rules[currentName], `missing replacement ${currentName}`);
+    for (const config of [plugin.configs.v1, plugin.configs.v2]) {
+      assert.ok(!(`solid-checker/${oldName}` in config.rules));
+    }
+  }
 });
 
 test("recommended followed by a dialect config reports each finding once", () => {

@@ -112,7 +112,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
       "severity": "error",
@@ -132,7 +132,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
       "severity": "error",
@@ -142,7 +142,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
       "severity": "error",
@@ -152,7 +152,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
       "severity": "error",
@@ -162,7 +162,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
       "severity": "error",

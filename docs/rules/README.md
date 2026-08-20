@@ -125,7 +125,7 @@ rule's page documents its additional options and defaults.
 | --- | --- | --- |
 | SC1001 | [strict-read-untracked](strict-read-untracked.md) | warning |
 | SC1002 | [reactive-read-after-await](reactive-read-after-await.md) | error |
-| SC1003 | [component-props-destructure](component-props-destructure.md) | error |
+| SC1003 | [no-destructure](no-destructure.md) | error |
 | SC1004 | [component-returns-conditionally](component-returns-conditionally.md) | error |
 | SC1005 | [uncalled-accessor](uncalled-accessor.md) | warning |
 | SC1006 | [untracked-derived-function](untracked-derived-function.md) | warning |

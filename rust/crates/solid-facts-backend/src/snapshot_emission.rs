@@ -353,7 +353,7 @@ mod tests {
         let mut snapshot = snapshot("violation");
         snapshot.findings.push(SnapshotFinding {
             id: "SC1003".into(),
-            rule: "component-props-destructure".into(),
+            rule: "no-destructure".into(),
             kind: "violation".into(),
             severity: "error".into(),
             message: "destructuring component props reads them outside tracking".into(),
@@ -387,7 +387,7 @@ mod tests {
         assert!(text.contains("App.tsx"));
         assert!(text.contains("destructuring component props"));
         assert!(text.contains("Keep the props object intact"));
-        assert!(text.contains("docs/rules/component-props-destructure.md"));
+        assert!(text.contains("docs/rules/no-destructure.md"));
         assert!(text.contains(&format!(
             "Finished in 295ms on 1 files with {} rules using",
             solid_facts_backend::dialect::default_dialect().rule_count

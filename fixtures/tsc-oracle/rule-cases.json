@@ -488,7 +488,7 @@
       "code": "import { createSignal } from \"solid-js\";\nimport { isEqual } from \"@solidjs/signals\";\n\nexport function Widget() {\n  const [count] = createSignal(0);\n  const same = isEqual(count, count);\n  return <div>{same ? count() : 0}</div>;\n}\n"
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
