@@ -158,54 +158,6 @@
       "hint": "Keep the createMemo scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
     },
     {
-      "rule": "v1/cleanup-in-forbidden-scope",
-      "code": "SC3001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 3964,
-      "end": 3973,
-      "fixes": 0,
-      "message": "onCleanup is called inside createReaction, whose callback runs as a leaf with no owner to register cleanup on; the cleanup function will never run",
-      "hint": "Register the cleanup in the computation that owns the createReaction instead, or create the surrounding scope with createRoot so disposal exists."
-    },
-    {
-      "rule": "v1/no-owner-cleanup",
-      "code": "SC4002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 3964,
-      "end": 3973,
-      "fixes": 0,
-      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
-      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists."
-    },
-    {
-      "rule": "v1/reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 4400,
-      "end": 4439,
-      "fixes": 0,
-      "message": "createReaction receives a type-correct callback whose exact synchronous body cannot be resolved; whether it performs cleanup or creates a nested primitive in this leaf scope cannot be certified",
-      "hint": "Pass an exact in-project function or a function literal directly, so solid-checker can inspect the callback body and certify or report its leaf-scope operations."
-    },
-    {
-      "rule": "v1/no-owner-cleanup",
-      "code": "SC4002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 4419,
-      "end": 4428,
-      "fixes": 0,
-      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
-      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists."
-    },
-    {
       "rule": "v1/no-owner-effect",
       "code": "SC4001",
       "kind": "uncertifiable",

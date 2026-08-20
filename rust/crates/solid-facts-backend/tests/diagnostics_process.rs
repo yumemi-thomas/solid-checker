@@ -375,11 +375,7 @@ fn solid_one_missing_wording_paths_are_end_to_end() {
         return;
     };
 
-    for (rule, expected) in [
-        ("v1/no-owner-effect", 2),
-        ("v1/no-owner-boundary", 1),
-        ("v1/primitive-in-directive-application", 1),
-    ] {
+    for (rule, expected) in [("v1/no-owner-effect", 2), ("v1/no-owner-boundary", 1)] {
         assert_rule_findings(&findings, rule, expected);
     }
     let owner_effects = findings_for_rule(&findings, "v1/no-owner-effect");

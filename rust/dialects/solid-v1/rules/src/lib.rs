@@ -10,10 +10,10 @@
 mod rules;
 
 use solid_reactive_ir::{
-    CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, LeafOwnerOperationKind,
-    OwnerRequirementOperation, PackageContractIssue, PackageContractIssueKind, Program,
-    ReactiveSourceKind, ReactiveWriteOperation, StaticDefect, StaticDefectKind, project_finding,
-    project_findings, strict_read_evidence, strict_read_message,
+    CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, OwnerRequirementOperation,
+    PackageContractIssue, PackageContractIssueKind, Program, ReactiveSourceKind,
+    ReactiveWriteOperation, StaticDefect, StaticDefectKind, project_finding, project_findings,
+    strict_read_evidence, strict_read_message,
 };
 
 pub use rules::{Rule, docs_url, manifest_json};
@@ -46,98 +46,21 @@ impl CatalogWording for Catalog {
 
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
-            FindingSeed::StrictRead(read) => {
-                FindingWording::new(
-                    Rule::StrictReadUntracked.metadata(),
-                    strict_read_message(read),
-                    strict_read_hint(&read.kind),
-                )
-                .with_evidence(strict_read_evidence(read))
-            }
+            FindingSeed::StrictRead(read) => FindingWording::new(
+                Rule::StrictReadUntracked.metadata(),
+                strict_read_message(read),
+                strict_read_hint(&read.kind),
+            )
+            .with_evidence(strict_read_evidence(read)),
             FindingSeed::OwnedWrite(write) => owned_write_wording(write),
-            FindingSeed::LeafOperation(operation) => {
-                let (rule, message, hint) = match &operation.kind {
-                    LeafOwnerOperationKind::Cleanup => (
-                        Rule::CleanupInForbiddenScope,
-                        format!(
-                            "onCleanup is called inside {}, whose callback runs as a leaf with no owner to register cleanup on; the cleanup function will never run",
-                            operation.owner
-                        ),
-                        format!(
-                            "Register the cleanup in the computation that owns the {} instead, or create the surrounding scope with createRoot so disposal exists.",
-                            operation.owner
-                        ),
-                    ),
-                    LeafOwnerOperationKind::Primitive(primitive) => (
-                        Rule::PrimitiveInLeafOwner,
-                        format!(
-                            "reactive primitive {primitive} is created inside {}; {} runs its callback as a leaf owner with no children, so nested primitives are never tracked or disposed",
-                            operation.owner, operation.owner
-                        ),
-                        format!(
-                            "Create the primitive in the component body (or another owning scope) and read its accessor inside {}.",
-                            operation.owner
-                        ),
-                    ),
-                    LeafOwnerOperationKind::Flush => {
-                        panic!("Solid 1.x analysis emitted a 2.0-only flush leaf operation")
-                    }
-                    LeafOwnerOperationKind::UnresolvedCallback => (
-                        Rule::ReactiveDispatchUnresolved,
-                        format!(
-                            "{} receives a type-correct callback whose exact synchronous body cannot be resolved; whether it performs cleanup or creates a nested primitive in this leaf scope cannot be certified",
-                            operation.owner
-                        ),
-                        "Pass an exact in-project function or a function literal directly, so solid-checker can inspect the callback body and certify or report its leaf-scope operations.".into(),
-                    ),
-                };
-                let message = match &operation.via {
-                    _ if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) => {
-                        message
-                    }
-                    Some(via) => format!(
-                        "{message} — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
-                    ),
-                    None => message,
-                };
-                FindingWording::new(rule.metadata(), message, hint).with_evidence(vec![
-                    EvidenceStep {
-                        message: if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) {
-                            "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
-                        } else {
-                            match &operation.via {
-                            Some(via) => format!(
-                                "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
-                                operation.owner
-                            ),
-                            None => format!(
-                                "the call is lexically contained by the {} callback",
-                                operation.owner
-                            ),
-                            }
-                        },
-                        location: Some(operation.location.clone()),
-                    },
-                ])
+            FindingSeed::LeafOperation(_) => {
+                panic!("the Solid 1.x catalog does not project leaf-owner operations")
             }
             FindingSeed::StaticDefect(defect) => static_defect_wording(defect),
             FindingSeed::StaticViolation(violation) => static_violation_wording(violation),
-            FindingSeed::DirectiveCreation(creation) => FindingWording::new(
-                Rule::PrimitiveInDirectiveApplication.metadata(),
-                format!(
-                    "reactive primitive {} is created in a directive application callback; the apply phase runs per element as an unowned leaf, so primitives created here are never tracked or disposed",
-                    creation.primitive
-                ),
-                "Use the two-phase directive factory: create primitives and subscriptions in the setup phase (the factory body, which runs in an owned scope) and keep the returned ref callback to DOM work only.",
-            )
-            .with_evidence(vec![EvidenceStep {
-                message: if creation.returned_closure {
-                    "the primitive is created inside the callback returned to a compiler-recognized ref application".into()
-                } else {
-                    "the primitive is created inside a compiler-recognized ref application callback".into()
-                },
-                location: Some(creation.location.clone()),
-            }]),
+            FindingSeed::DirectiveCreation(_) => {
+                panic!("the Solid 1.x catalog does not project directive creations")
+            }
             FindingSeed::OwnerRequirement(requirement) => {
                 let (rule, message, hint) = match requirement.operation {
                     OwnerRequirementOperation::Cleanup => (
@@ -155,9 +78,9 @@ impl CatalogWording for Catalog {
                         "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
                         "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle.",
                     ),
-                    OwnerRequirementOperation::SettledCleanup => panic!(
-                        "Solid 1.x analysis emitted a 2.0-only settled-cleanup requirement"
-                    ),
+                    OwnerRequirementOperation::SettledCleanup => {
+                        panic!("Solid 1.x analysis emitted a 2.0-only settled-cleanup requirement")
+                    }
                 };
                 FindingWording::new(rule.metadata(), message, hint)
             }
@@ -292,12 +215,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::NoDestructure
         | Rule::ComponentsReturnOnce
         | Rule::ReactiveWriteInOwnedScope
-        | Rule::CleanupInForbiddenScope
-        | Rule::PrimitiveInLeafOwner
         | Rule::NoOwnerEffect
         | Rule::NoOwnerCleanup
         | Rule::NoOwnerBoundary
-        | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
         | Rule::UncalledAccessor
         | Rule::ExpectedFunctionGotExpression

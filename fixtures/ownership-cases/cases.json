@@ -764,28 +764,13 @@
               "ownership": "checker-only",
               "diagnostics": []
             }
-          },
-          {
-            "rule": "v1/primitive-in-directive-application",
-            "code": "SC6001",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                175,
-                185
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/primitive-in-directive-application"
+          }
+        ]
       }
     },
     {

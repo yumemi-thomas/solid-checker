@@ -41,9 +41,9 @@ export function App() {
     console.log(ticks());
   });
 
-  // v1/primitive-in-directive-application (SC6001): ref callbacks run in the
-  // compiler's directive-application phase. A primitive created directly in
-  // that phase is not attached to the component's normal owner lifetime.
+  // Solid 1.x ref callbacks preserve the component owner through untrack(), so
+  // creating state or computations here participates in normal disposal and
+  // does not emit the 2.0-only directive-application rule as expected.
   // readCount() also makes the uncontracted Solid-aware package observable,
   // pinning v1/package-contract-missing (SC9005) at its import above.
   return <div ref={element => createSignal(element)}>{readCount()}</div>;

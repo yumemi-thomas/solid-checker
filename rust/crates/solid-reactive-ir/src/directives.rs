@@ -131,9 +131,9 @@ pub(super) fn is_created_primitive(dialect: &dyn Dialect, primitive: &PrimitiveN
 
 /// Whether this concrete call registers work an owner would have to dispose.
 ///
-/// The directive apply callback runs with *no owner* — `@solidjs/web`
+/// Solid 2.0's directive apply callback runs with *no owner* — `@solidjs/web`
 /// rc.0's `ref()` is literally `runWithOwner(null, () => applyRef(...))` —
-/// so the defect this stage feeds (SC6001) is the unowned-leak class: a
+/// so the defect this stage feeds there (SC6001) is the unowned-leak class: a
 /// computation created there warns `NO_OWNER_EFFECT` in dev and is never
 /// disposed (probed on the rc.0 dev bundle). That leak needs a computation.
 /// The same [`CleanupRule::WhenFirstArgumentIsFunction`] distinction the
@@ -141,8 +141,9 @@ pub(super) fn is_created_primitive(dialect: &dyn Dialect, primitive: &PrimitiveN
 /// value-form `createStore` allocates plain state that needs no owner and
 /// misbehaves in no way, while `createSignal(fn)` registers a derived
 /// computation that does. Dialects whose state constructors never register
-/// work from a function argument (1.x answers [`CleanupRule::Never`]) keep
-/// their unconditional answer.
+/// work from a function argument keep their unconditional answer. A dialect
+/// whose directive application preserves Owner (Solid 1.x) answers false from
+/// `creates_directive_owner` before this function is reached.
 pub(super) fn creation_registers_work(
     dialect: &dyn Dialect,
     file: &solid_facts::FileFacts,

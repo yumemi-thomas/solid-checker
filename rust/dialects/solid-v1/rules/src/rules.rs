@@ -27,12 +27,9 @@ pub enum Rule {
     NoDestructure,
     ComponentsReturnOnce,
     ReactiveWriteInOwnedScope,
-    CleanupInForbiddenScope,
-    PrimitiveInLeafOwner,
     NoOwnerEffect,
     NoOwnerCleanup,
     NoOwnerBoundary,
-    PrimitiveInDirectiveApplication,
     MissingEffectFunction,
     // The fine-grained decomposition of eslint-plugin-solid's monolithic
     // `reactivity` rule. Untracked reads and after-await reads land on the
@@ -86,18 +83,15 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 41] = [
+    pub const ALL: [Self; 38] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
         Self::ComponentsReturnOnce,
         Self::ReactiveWriteInOwnedScope,
-        Self::CleanupInForbiddenScope,
-        Self::PrimitiveInLeafOwner,
         Self::NoOwnerEffect,
         Self::NoOwnerCleanup,
         Self::NoOwnerBoundary,
-        Self::PrimitiveInDirectiveApplication,
         Self::MissingEffectFunction,
         Self::UncalledAccessor,
         Self::ExpectedFunctionGotExpression,
@@ -142,19 +136,9 @@ impl Rule {
             Self::ReactiveWriteInOwnedScope => {
                 ("SC2001", "v1/reactive-write-in-owned-scope", "error", false)
             }
-            Self::CleanupInForbiddenScope => {
-                ("SC3001", "v1/cleanup-in-forbidden-scope", "error", false)
-            }
-            Self::PrimitiveInLeafOwner => ("SC3002", "v1/primitive-in-leaf-owner", "error", false),
             Self::NoOwnerEffect => ("SC4001", "v1/no-owner-effect", "warning", false),
             Self::NoOwnerCleanup => ("SC4002", "v1/no-owner-cleanup", "warning", false),
             Self::NoOwnerBoundary => ("SC4003", "v1/no-owner-boundary", "warning", false),
-            Self::PrimitiveInDirectiveApplication => (
-                "SC6001",
-                "v1/primitive-in-directive-application",
-                "error",
-                false,
-            ),
             Self::MissingEffectFunction => ("SC7001", "v1/missing-effect-function", "error", false),
             Self::UncalledAccessor => ("SC1005", "v1/uncalled-accessor", "warning", false),
             Self::ExpectedFunctionGotExpression => (

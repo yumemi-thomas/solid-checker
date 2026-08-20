@@ -377,6 +377,8 @@ fn uppercase_first(value: &str) -> String {
 pub struct CatalogCapabilities {
     pub actions: bool,
     pub async_reads: bool,
+    pub leaf_operations: bool,
+    pub directive_creations: bool,
     /// Whether module-scope reads are reported by the strict-read rule.
     /// The rc.0 runtime installs strict-read contexts only inside component
     /// and effect bodies (probed: a module-scope signal or memo read emits no
@@ -396,6 +398,8 @@ impl CatalogCapabilities {
     pub const SOLID_1: Self = Self {
         actions: false,
         async_reads: false,
+        leaf_operations: false,
+        directive_creations: false,
         module_scope_strict_reads: true,
         handler_expression_owns_strict_read: false,
     };
@@ -403,6 +407,8 @@ impl CatalogCapabilities {
     pub const SOLID_2: Self = Self {
         actions: true,
         async_reads: true,
+        leaf_operations: true,
+        directive_creations: true,
         module_scope_strict_reads: false,
         handler_expression_owns_strict_read: true,
     };
@@ -520,12 +526,14 @@ pub fn project_findings(
             .filter(|write| !write.allowed_by_option && write.execution.reports_disallowed_write())
             .map(|write| project_finding(FindingSeed::OwnedWrite(write), catalog)),
     );
-    findings.extend(
-        program
-            .leaf_operations
-            .iter()
-            .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
-    );
+    if capabilities.leaf_operations {
+        findings.extend(
+            program
+                .leaf_operations
+                .iter()
+                .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
+        );
+    }
     findings.extend(
         program
             .static_defects
@@ -538,12 +546,14 @@ pub fn project_findings(
             .iter()
             .map(|violation| project_finding(FindingSeed::StaticViolation(violation), catalog)),
     );
-    findings.extend(
-        program
-            .directive_creations
-            .iter()
-            .map(|creation| project_finding(FindingSeed::DirectiveCreation(creation), catalog)),
-    );
+    if capabilities.directive_creations {
+        findings.extend(
+            program
+                .directive_creations
+                .iter()
+                .map(|creation| project_finding(FindingSeed::DirectiveCreation(creation), catalog)),
+        );
+    }
     findings.extend(
         program
             .missing_owners

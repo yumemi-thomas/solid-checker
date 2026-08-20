@@ -152,16 +152,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/primitive-in-leaf-owner",
-      "code": "SC3002",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/upstream-divergences/resource-cases.tsx",
-      "start": 548,
-      "end": 562,
-      "fixes": 0
-    },
-    {
       "rule": "v1/style-prop",
       "code": "SC8017",
       "kind": "violation",

@@ -436,7 +436,7 @@ fn solid_one_array_callbacks_track_lists_but_not_mappers() {
 }
 
 #[test]
-fn solid_one_reaction_leaf_owner_requires_invoking_returned_tracker() {
+fn solid_one_reaction_callback_uses_its_disposing_computation_owner() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -445,14 +445,17 @@ fn solid_one_reaction_leaf_owner_requires_invoking_returned_tracker() {
             .join("tests/fixtures/solid-1x-resource-overloads/tsconfig.json"),
         Some("solid-v1"),
     );
-    let leaf_owner_findings = one
-        .iter()
-        .filter(|finding| finding["id"] == "SC3001")
-        .collect::<Vec<_>>();
-    assert_eq!(
-        leaf_owner_findings.len(),
-        1,
-        "only the invoked reaction tracker can reach its invalidation callback: {one:#?}"
+    assert!(
+        one.iter()
+            .all(|finding| !matches!(finding["id"].as_str(), Some("SC3001" | "SC3002"))),
+        "createReaction installs its own owner and disposes callback cleanups and children: {one:#?}"
+    );
+    assert!(
+        one.iter().any(|finding| {
+            finding["id"] == "SC2001"
+                && finding["analysisContext"] == "ReactionInvalidationReachability"
+        }),
+        "the invoked reaction callback must still be analyzed under its tracked computation owner: {one:#?}"
     );
 }
 
@@ -1517,9 +1520,10 @@ fn the_dialect_pair_reports_different_findings_from_identical_sources() {
         .concat()
     );
 
-    // createReaction is a leaf owner only in 1.x: onCleanup inside its
-    // callback is a 1.x finding and 2.0 silence.
-    assert!(one.iter().any(|(code, _, _, _)| code == "SC3001"));
+    // Neither dialect projects this as a forbidden leaf cleanup: 1.x runs the
+    // callback under the reaction's disposing computation, while 2.0's
+    // genuinely unowned callback belongs to the missing-owner family.
+    assert!(!one.iter().any(|(code, _, _, _)| code == "SC3001"));
     assert!(!two.iter().any(|(code, _, _, _)| code == "SC3001"));
 }
 

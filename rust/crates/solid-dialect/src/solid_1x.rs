@@ -282,7 +282,10 @@ impl Dialect for Solid1x {
             // The supplied owner is nullable. The call-site classifier
             // sharpens this to Creates or None when its value is proven.
             Primitive::RunWithOwner => &[(1, CallbackOwner::Conditional)],
-            Primitive::CreateReaction => &[(0, CallbackOwner::Leaf)],
+            // The reaction owns its invalidation callback: runComputation
+            // installs the reaction node as Owner, and cleanNode disposes the
+            // callback's cleanups and children before the next run.
+            Primitive::CreateReaction => &[(0, CallbackOwner::Creates)],
             // The flat package-contract form records the two-argument
             // fetcher. `callback_owner_at` supplies both overloads and the
             // tracked source's created owner; see it for why the fetcher's
@@ -669,9 +672,9 @@ impl Dialect for Solid1x {
             | Primitive::CreateSelector
             // createReaction allocates a computation the moment it is called
             // (1.9.14 builds one with `createComputation` and reuses it for
-            // every `track`), so like createEffect it needs an owner to
-            // dispose it -- one created in a leaf or cleanup scope leaks.
-            // Its `creates_directive_owner` row records the same obligation.
+            // every `track`), so like createEffect it needs a surrounding
+            // owner to dispose the reaction itself. Its invalidation callback
+            // separately runs under the reaction's own created owner.
             | Primitive::CreateReaction
             | Primitive::CreateRoot
             | Primitive::MapArray
@@ -681,8 +684,8 @@ impl Dialect for Solid1x {
             | Primitive::Render
             | Primitive::WebMemo
             // createResource eagerly creates computations (a render effect
-            // when a source is supplied) that need disposal, the same
-            // obligation its `creates_directive_owner` row records.
+            // when a source is supplied) that need disposal by their
+            // surrounding owner.
             | Primitive::CreateResource
             | Primitive::Children => CleanupRule::Always,
             _ => CleanupRule::Never,
@@ -746,25 +749,11 @@ impl Dialect for Solid1x {
         )
     }
 
-    fn creates_directive_owner(&self, primitive: Primitive) -> bool {
-        matches!(
-            primitive,
-            Primitive::CreateSignal
-                | Primitive::Children
-                | Primitive::CreateMemo
-                | Primitive::CreateStore
-                | Primitive::CreateMutable
-                | Primitive::CreateEffect
-                | Primitive::CreateDynamic
-                | Primitive::CreateRenderEffect
-                | Primitive::CreateComputed
-                | Primitive::CreateDeferred
-                | Primitive::CreateSelector
-                | Primitive::CreateReaction
-                | Primitive::CreateRoot
-                | Primitive::CreateResource
-                | Primitive::WebMemo
-        )
+    fn creates_directive_owner(&self, _primitive: Primitive) -> bool {
+        // Solid 1.x applies directives and refs through untrack(), which
+        // clears Listener but preserves Owner. Nothing created there enters
+        // the unowned directive-leak class modeled by SC6001 in Solid 2.0.
+        false
     }
 
     /// Source: `docs/solid-1x-api-surface.md`, the `solid-js` and

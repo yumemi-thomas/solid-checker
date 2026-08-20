@@ -77,11 +77,12 @@ function reader() {
   return 1;
 }
 
-// createReaction is 1.x's leaf owner -- an owner whose callback ends the
-// ownership chain, so onCleanup inside it is dropped. 2.0 does not treat it as
-// one, but the invalidation callback is still unowned there: onCleanup inside
-// it reports no-owner-cleanup, matching the runtime's NO_OWNER_CLEANUP. Before the leaf set came from the dialect, the engine used 2.0's pair
-// for both dialects and 1.x's leaf rules could not fire at all.
+// Solid 1.x createReaction installs its computation as Owner during the
+// invalidation callback. onCleanup and nested computations attach to that node;
+// cleanNode runs and disposes them before every rerun. The tracker below makes
+// the callback reachable, proving SC3001 and SC3002 must stay absent. Solid 2.0
+// instead runs this callback unowned and uses the missing-owner family.
+// This is the audited 1.9.14 runtime disposal path.
 const [reactionDependency, setReactionDependency] = createSignal(0);
 const trackReaction = createReaction(() => {
   onCleanup(() => {});
@@ -89,9 +90,9 @@ const trackReaction = createReaction(() => {
 trackReaction(() => reactionDependency());
 setReactionDependency(1);
 
-// The returned tracker makes the invalidation callback reachable. A wrapper
-// hides the exact callback body: 1.x keeps an SC9012 leaf obligation, while
-// 2.0 does not classify createReaction as the same leaf API.
+// The returned tracker also makes the wrapped invalidation callback reachable.
+// Its exact target is opaque, but 1.x still supplies an owner; opacity alone no
+// longer manufactures a leaf-scope SC9012 obligation.
 function wrapReaction(callback: () => void): () => void {
   return callback;
 }
