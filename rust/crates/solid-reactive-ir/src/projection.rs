@@ -69,19 +69,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
             "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
         ),
-        StaticDefectKind::InvalidJsxNesting {
-            parent,
-            child,
-            ancestor,
-        } => (
-            format!(
-                "HTML parsing changes <{child}> nested {} <{parent}>, so the browser DOM differs from the authored JSX and can fail hydration",
-                if *ancestor { "inside" } else { "directly under" }
-            ),
-            format!(
-                "Move <{child}> outside <{parent}> or add the HTML-required wrapper so the server and browser construct the same tree."
-            ),
-        ),
         StaticDefectKind::PackageContractExportMissing {
             module,
             export,
@@ -255,9 +242,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         }
         StaticDefectKind::ComponentReturnsConditionally => {
             "a proven reactive read controls the component's return shape"
-        }
-        StaticDefectKind::InvalidJsxNesting { .. } => {
-            "the intrinsic JSX ancestor chain is statically known and HTML parsing changes this nesting"
         }
         StaticDefectKind::PackageContractExportMissing { .. } => {
             "the imported package has a contract, but this export has no effect summary"

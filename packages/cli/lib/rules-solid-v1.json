@@ -24,7 +24,6 @@
     { "code": "SC8013", "name": "v1/prefer-classlist", "severity": "warning", "uncertifiable": false },
     { "code": "SC8014", "name": "v1/prefer-for", "severity": "error", "uncertifiable": false },
     { "code": "SC8015", "name": "v1/prefer-show", "severity": "warning", "uncertifiable": false },
-    { "code": "SC8020", "name": "v1/valid-jsx-nesting", "severity": "error", "uncertifiable": false },
     { "code": "SC9001", "name": "v1/package-contract-export-missing", "severity": "error", "uncertifiable": true },
     { "code": "SC9006", "name": "v1/package-contract-callback-missing", "severity": "error", "uncertifiable": true },
     { "code": "SC9005", "name": "v1/package-contract-missing", "severity": "error", "uncertifiable": true }

@@ -47,7 +47,6 @@ pub enum Rule {
     PreferClasslist,
     PreferFor,
     PreferShow,
-    ValidJsxNesting,
     PackageContractExportMissing,
     PackageContractCallbackMissing,
     PackageContractMissing,
@@ -66,7 +65,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 22] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -86,7 +85,6 @@ impl Rule {
         Self::PreferClasslist,
         Self::PreferFor,
         Self::PreferShow,
-        Self::ValidJsxNesting,
         Self::PackageContractExportMissing,
         Self::PackageContractCallbackMissing,
         Self::PackageContractMissing,
@@ -127,7 +125,6 @@ impl Rule {
             Self::PreferClasslist => ("SC8013", "v1/prefer-classlist", "warning", false),
             Self::PreferFor => ("SC8014", "v1/prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "v1/prefer-show", "warning", false),
-            Self::ValidJsxNesting => ("SC8020", "v1/valid-jsx-nesting", "error", false),
             Self::PackageContractExportMissing => (
                 "SC9001",
                 "v1/package-contract-export-missing",

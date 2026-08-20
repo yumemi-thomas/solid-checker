@@ -46,9 +46,9 @@ that exact rule in the shared project configuration described below.
 
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
-| Shared concepts (18 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
+| Shared concepts (17 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
 | Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 15 rules: actions, `flush`, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 23 rules | 33 rules |
+| Catalog size | 22 rules | 32 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the

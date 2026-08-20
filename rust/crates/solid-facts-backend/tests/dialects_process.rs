@@ -143,25 +143,17 @@ fn jsx_correctness_fixture_excludes_retired_policy_rules_in_both_dialects() {
 }
 
 #[test]
-fn valid_jsx_nesting_reports_only_parser_tree_changes() {
+fn html_parser_nesting_policy_is_retired_in_both_dialects() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
     let project =
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/jsx-nesting/tsconfig.json");
-    for (dialect, rule) in [
-        ("solid-v1", "v1/valid-jsx-nesting"),
-        ("solid-v2", "valid-jsx-nesting"),
-    ] {
+    for dialect in ["solid-v1", "solid-v2"] {
         let findings = project_snapshot_findings(project.clone(), Some(dialect));
-        let nesting = findings
-            .iter()
-            .filter(|finding| finding["rule"] == rule)
-            .collect::<Vec<_>>();
-        assert_eq!(
-            nesting.len(),
-            6,
-            "{dialect} should report each parser-changing nesting once (the standalone <tr><div> has two), cross no component boundary, and stop at WHATWG scope boundaries (nested lists, p behind button scope, button behind td): {findings:#?}"
+        assert!(
+            findings.is_empty(),
+            "unexpected {dialect} findings: {findings:#?}"
         );
     }
 }

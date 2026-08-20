@@ -784,25 +784,13 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
             "rule": "v1/valid-jsx-nesting",
-            "code": "SC8020",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "marker": "div"
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
+            "reason": "retired generic HTML parser policy; outside the Solid semantic checker domain"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {

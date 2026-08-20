@@ -151,6 +151,14 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "execution-map-incomplete",
         "removed 2026-08-20: compiler-fact completeness is a producer-integrity invariant, not a project diagnostic",
     ),
+    (
+        "v1/valid-jsx-nesting",
+        "removed 2026-08-20: generic HTML parser conformance is outside the Solid semantic checker domain",
+    ),
+    (
+        "valid-jsx-nesting",
+        "removed 2026-08-20: generic HTML parser conformance is outside the Solid semantic checker domain",
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.
@@ -640,8 +648,8 @@ mod tests {
         let shared = v1.intersection(&v2).copied().collect::<HashSet<_>>();
         let expected = HashSet::from([
             "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1007", "SC2001", "SC2003",
-            "SC4001", "SC4002", "SC4003", "SC7001", "SC8020", "SC9001", "SC9005", "SC9006",
-            "SC9011", "SC9012",
+            "SC4001", "SC4002", "SC4003", "SC7001", "SC9001", "SC9005", "SC9006", "SC9011",
+            "SC9012",
         ]);
         assert_eq!(shared, expected);
         assert_eq!(
@@ -649,22 +657,22 @@ mod tests {
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            18
+            17
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            18
+            17
         );
         assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 18,
+            solid_v1_rules::Rule::ALL.len() - 17,
             5,
             "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
         assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 18,
+            solid_v2_rules::Rule::ALL.len() - 17,
             15,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );

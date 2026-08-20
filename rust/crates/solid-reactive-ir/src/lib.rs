@@ -279,11 +279,6 @@ pub enum StaticDefectKind {
         accessor: String,
     },
     ComponentReturnsConditionally,
-    InvalidJsxNesting {
-        parent: String,
-        child: String,
-        ancestor: bool,
-    },
     PackageContractExportMissing {
         module: String,
         export: String,
