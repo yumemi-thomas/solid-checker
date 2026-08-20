@@ -162,16 +162,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-conditional-return.tsx",
-      "start": 53,
-      "end": 65,
-      "fixes": 0
-    },
-    {
       "rule": "v1/components-return-once",
       "code": "SC1004",
       "kind": "uncertifiable",
@@ -179,16 +169,6 @@
       "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-conditional-return.tsx",
       "start": 53,
       "end": 65,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-early-return.tsx",
-      "start": 50,
-      "end": 62,
       "fixes": 0
     },
     {

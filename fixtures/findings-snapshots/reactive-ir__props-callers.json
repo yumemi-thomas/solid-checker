@@ -32,10 +32,10 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
+      "rule": "component-returns-conditionally",
+      "code": "SC1004",
       "kind": "violation",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/props-callers/App.tsx",
       "start": 3254,
       "end": 3260,
@@ -47,38 +47,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/props-callers/App.tsx",
-      "start": 3254,
-      "end": 3260,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/props-callers/App.tsx",
       "start": 3532,
       "end": 3541,
-      "fixes": 0
-    },
-    {
-      "rule": "component-returns-conditionally",
-      "code": "SC1004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/props-callers/App.tsx",
-      "start": 3532,
-      "end": 3541,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/props-callers/App.tsx",
-      "start": 3723,
-      "end": 3729,
       "fixes": 0
     },
     {

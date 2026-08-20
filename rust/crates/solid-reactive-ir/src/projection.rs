@@ -539,6 +539,8 @@ pub fn project_findings(
         );
     }
 
+    suppress_owned_strict_reads(&mut findings);
+
     // One defect class, one rule: when expected-function-got-expression
     // claims a handler expression, the strict-read finding on the identical
     // span is the same defect worded twice — the handler rule carries the
@@ -571,6 +573,43 @@ pub fn project_findings(
     }
 
     finish_findings(findings, total_started, construction_started)
+}
+
+/// Removes SC1001 findings whose exact read is already owned by a more
+/// specific defect. SC5001 names the same pending async read, while SC1004
+/// owns every reactive read inside the return-shape condition it reports.
+fn suppress_owned_strict_reads(findings: &mut Vec<Finding>) {
+    let pending_reads = findings
+        .iter()
+        .filter(|finding| finding.id == "SC5001")
+        .map(|finding| {
+            (
+                finding.primary_location.path.clone(),
+                finding.primary_location.start_byte,
+                finding.primary_location.end_byte,
+            )
+        })
+        .collect::<std::collections::HashSet<_>>();
+    let component_conditions = findings
+        .iter()
+        .filter(|finding| finding.id == "SC1004")
+        .map(|finding| finding.primary_location.clone())
+        .collect::<Vec<_>>();
+    findings.retain(|finding| {
+        if finding.id != "SC1001" {
+            return true;
+        }
+        let location = &finding.primary_location;
+        !pending_reads.contains(&(
+            location.path.clone(),
+            location.start_byte,
+            location.end_byte,
+        )) && !component_conditions.iter().any(|condition| {
+            condition.path == location.path
+                && condition.start_byte <= location.start_byte
+                && location.end_byte <= condition.end_byte
+        })
+    });
 }
 
 /// Projects one seed. Used by the backend for package-contract issues that
@@ -727,6 +766,44 @@ mod tests {
             start_byte: index,
             end_byte: index + 1,
         }
+    }
+
+    fn finding(code: &'static str, start: u64, end: u64) -> Finding {
+        Finding::new(
+            RuleMetadata {
+                code,
+                name: "test",
+                severity: "warning",
+                uncertifiable: false,
+            },
+            "test".into(),
+            Location {
+                path: "projection.tsx".into(),
+                start_byte: start,
+                end_byte: end,
+            },
+        )
+    }
+
+    #[test]
+    fn specific_async_and_component_defects_own_their_strict_reads() {
+        let mut findings = vec![
+            finding("SC1001", 10, 11),
+            finding("SC5001", 10, 11),
+            finding("SC1001", 21, 22),
+            finding("SC1004", 20, 25),
+            finding("SC1001", 30, 31),
+        ];
+
+        suppress_owned_strict_reads(&mut findings);
+
+        assert_eq!(
+            findings
+                .iter()
+                .map(|finding| (finding.id.as_str(), finding.primary_location.start_byte))
+                .collect::<Vec<_>>(),
+            [("SC5001", 10), ("SC1004", 20), ("SC1001", 30),]
+        );
     }
 
     #[test]

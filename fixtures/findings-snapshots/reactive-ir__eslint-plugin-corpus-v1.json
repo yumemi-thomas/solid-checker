@@ -192,10 +192,10 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
+      "rule": "component-returns-conditionally",
+      "code": "SC1004",
+      "kind": "violation",
+      "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/component-return-invalid.tsx",
       "start": 126,
       "end": 135,
@@ -207,38 +207,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/component-return-invalid.tsx",
-      "start": 126,
-      "end": 135,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/component-return-invalid.tsx",
       "start": 249,
       "end": 260,
-      "fixes": 0
-    },
-    {
-      "rule": "component-returns-conditionally",
-      "code": "SC1004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/component-return-invalid.tsx",
-      "start": 249,
-      "end": 260,
-      "fixes": 0
-    },
-    {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus-v1/component-return-invalid.tsx",
-      "start": 410,
-      "end": 418,
       "fixes": 0
     },
     {
