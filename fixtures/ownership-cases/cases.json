@@ -623,7 +623,7 @@
       }
     },
     {
-      "id": "expected-function-got-expression/positive/001",
+      "id": "reactive-handler-frozen/positive/001",
       "dialect": "solid-v1",
       "source": {
         "extension": ".tsx",
@@ -655,7 +655,7 @@
             }
           },
           {
-            "rule": "v1/expected-function-got-expression",
+            "rule": "v1/reactive-handler-frozen",
             "code": "SC1007",
             "kind": "violation",
             "severity": "warning",
@@ -915,7 +915,7 @@
             }
           },
           {
-            "rule": "v1/expected-function-got-expression",
+            "rule": "v1/reactive-handler-frozen",
             "code": "SC1007",
             "kind": "violation",
             "severity": "warning",
@@ -8157,7 +8157,7 @@
             }
           },
           {
-            "rule": "v1/expected-function-got-expression",
+            "rule": "v1/reactive-handler-frozen",
             "code": "SC1007",
             "kind": "uncertifiable",
             "severity": "warning",
@@ -8783,7 +8783,7 @@
         "findings": [],
         "absent": [
           {
-            "rule": "v1/expected-function-got-expression",
+            "rule": "v1/reactive-handler-frozen",
             "reason": "current retained reactivity case is expected to produce no finding"
           }
         ]

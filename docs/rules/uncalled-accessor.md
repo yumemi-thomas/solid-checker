@@ -132,4 +132,4 @@ JSX child insertion—leave it uncalled.
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — reads that happen outside tracking
-- [expected-function-got-expression](expected-function-got-expression.md) — the inverse defect
+- [reactive-handler-frozen](reactive-handler-frozen.md) — the inverse defect

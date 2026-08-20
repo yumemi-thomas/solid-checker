@@ -640,7 +640,7 @@ fn broadened_rule_surfaces_pin_distinct_semantic_branches() {
         // TypeScript deliberately declines to check: one proven invalid and
         // one callable/non-callable proof obligation. Ordinary `onClick`
         // non-callable values remain TS2322-owned.
-        ("expected-function-got-expression", 3),
+        ("reactive-handler-frozen", 3),
     ] {
         assert_rule_findings(&reactivity_findings, rule, expected);
     }

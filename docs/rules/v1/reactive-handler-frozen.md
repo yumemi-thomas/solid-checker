@@ -1,4 +1,4 @@
-# v1/expected-function-got-expression
+# v1/reactive-handler-frozen
 
 `SC1007` · **warning** · violation or uncertifiable handler shape
 

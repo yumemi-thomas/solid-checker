@@ -129,7 +129,7 @@ rule's page documents its additional options and defaults.
 | SC1004 | [components-return-once](components-return-once.md) | error |
 | SC1005 | [uncalled-accessor](uncalled-accessor.md) | warning |
 | SC1006 | [untracked-derived-function](untracked-derived-function.md) | warning |
-| SC1007 | [expected-function-got-expression](expected-function-got-expression.md) | warning |
+| SC1007 | [reactive-handler-frozen](reactive-handler-frozen.md) | warning |
 
 ## JSX correctness
 
@@ -202,7 +202,7 @@ fails `--certify` until the response-head decision moves above the boundary.
 Five of the fine-grained rules decomposed out of `eslint-plugin-solid`'s
 `reactivity` (see [the migration table](#solidreactivity--the-fine-grained-rules))
 describe defects that exist in both language versions — `uncalled-accessor`,
-`untracked-derived-function`, `expected-function-got-expression`,
+`untracked-derived-function`, `reactive-handler-frozen`,
 `no-direct-mutation`, and `reactive-source-uncaptured` — so the 2.0 catalog
 carries them too, under the same codes. `no-async-tracked-scope` stays
 1.x-only: Solid 2.0 models async computations as a feature, and its async
@@ -225,7 +225,7 @@ plugin keeps its rule names under the `v1/` namespace.
 | SC1004 | [v1/components-return-once](v1/components-return-once.md) | warning |
 | SC1005 | [v1/uncalled-accessor](v1/uncalled-accessor.md) | warning |
 | SC1006 | [v1/untracked-derived-function](v1/untracked-derived-function.md) | warning |
-| SC1007 | [v1/expected-function-got-expression](v1/expected-function-got-expression.md) | warning |
+| SC1007 | [v1/reactive-handler-frozen](v1/reactive-handler-frozen.md) | warning |
 | SC2001 | [v1/reactive-write-in-owned-scope](v1/reactive-write-in-owned-scope.md) | error |
 | SC2003 | [v1/no-direct-mutation](v1/no-direct-mutation.md) | warning |
 | SC4001 | [v1/missing-owner](v1/missing-owner.md) | warning |
@@ -271,7 +271,7 @@ with without silencing the seven it wants. It is split.
 | `untrackedReactive`, on a props destructure | props unwrapped into frozen locals | [v1/no-destructure](v1/no-destructure.md) |
 | `badSignal` | a proven accessor used uncalled in a value-only position: an untagged template interpolation, coercive operator, computed key, or native JSX value attribute | [v1/uncalled-accessor](v1/uncalled-accessor.md) |
 | `badUnnamedDerivedSignal` | an anonymous function that closes over a reactive value and is neither tracked nor deferred by the position it sits in | [v1/untracked-derived-function](v1/untracked-derived-function.md) |
-| `expectedFunctionGotExpression` | a reactive expression in a position whose contract is a function, so it is evaluated once instead of per read | [v1/expected-function-got-expression](v1/expected-function-got-expression.md) |
+| `expectedFunctionGotExpression` | a reactive expression in a position whose contract is a function, so it is evaluated once instead of per read | [v1/reactive-handler-frozen](v1/reactive-handler-frozen.md) |
 | `noWrite` | a signal reassigned, or a props/store member written through | [v1/no-direct-mutation](v1/no-direct-mutation.md) |
 | `noAsyncTrackedScope` | an `async` function passed where a tracked computation is expected | [v1/no-async-tracked-scope](v1/no-async-tracked-scope.md) |
 | `shouldDestructure`, `shouldAssign` | the result of `createSignal`/`createStore`/`createMemo` not captured in the shape the analyzer can follow — upstream's own analysis-integrity warnings | not ported: these warn about upstream's *analyzer* losing track, and this checker follows the value regardless; the three upstream cases are recorded as `evidence-backed` deviations in `fixtures/upstream-parity/deviations.json` |
@@ -295,7 +295,7 @@ Two consequences worth knowing before switching a project over:
   `v1/no-async-tracked-scope`, and a reactive read after its `await` is a
   separate `v1/reactive-read-after-await` finding. One declared exception:
   a reactive handler expression (`onClick={count()}`) keeps both
-  `v1/expected-function-got-expression` and `v1/strict-read-untracked` in this
+  `v1/reactive-handler-frozen` and `v1/strict-read-untracked` in this
   catalog, pinned by the upstream parity ledger's rule-split entry; the 2.0
   catalog lets the handler rule own the expression and suppresses the
   strict-read duplicate.

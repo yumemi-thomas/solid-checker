@@ -312,7 +312,7 @@ pub struct CatalogCapabilities {
     /// 1.x catalog keeps upstream `reactivity` semantics, which report
     /// module-scope-adjacent reads.
     pub module_scope_strict_reads: bool,
-    /// Whether an `expected-function-got-expression` finding owns the
+    /// Whether a `reactive-handler-frozen` finding owns the
     /// handler expression it claims, suppressing the strict-read finding on
     /// the identical span (the README's one-defect-class-one-rule policy).
     /// The 1.x catalog keeps both, pinned by the upstream parity ledger's
@@ -541,7 +541,7 @@ pub fn project_findings(
 
     suppress_owned_strict_reads(&mut findings);
 
-    // One defect class, one rule: when expected-function-got-expression
+    // One defect class, one rule: when reactive-handler-frozen
     // claims a handler expression, the strict-read finding on the identical
     // span is the same defect worded twice — the handler rule carries the
     // more specific consequence, so it wins and the strict read is dropped.

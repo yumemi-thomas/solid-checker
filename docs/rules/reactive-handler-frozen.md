@@ -1,4 +1,4 @@
-# expected-function-got-expression
+# reactive-handler-frozen
 
 `SC1007` · **warning** · violation or uncertifiable handler shape
 
@@ -15,7 +15,7 @@ hyphenated JSX attribute names, while Solid still lowers a native `on*` name as
 a listener: a proven non-callable, non-array value is a violation, and a mixed,
 `any`, or unresolved array/bound-pair shape is uncertifiable. Shared with the
 1.x catalog as
-[v1/expected-function-got-expression](v1/expected-function-got-expression.md)
+[v1/reactive-handler-frozen](v1/reactive-handler-frozen.md)
 under the same code, so a suppression comment survives a migration.
 
 Handler props follow the component's caller classification (see

@@ -154,7 +154,7 @@ fn plan_file(
                 add_symbol(expression, false);
             }
             // A native event-handler value is judged by its resolved type:
-            // `expected-function-got-expression` (both catalogs) proves the
+            // `reactive-handler-frozen` (both catalogs) proves the
             // value non-callable. The
             // `on:` namespace form is a handler too.
             let handler = native

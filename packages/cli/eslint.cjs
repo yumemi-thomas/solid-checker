@@ -373,7 +373,9 @@ const plugin = {
 // identity and carry ESLint's deprecation metadata.
 const DEPRECATED_RULE_KEYS = [
   ["component-props-destructure", "no-destructure"],
-  ["component-returns-conditionally", "components-return-once"]
+  ["component-returns-conditionally", "components-return-once"],
+  ["expected-function-got-expression", "reactive-handler-frozen"],
+  ["v1/expected-function-got-expression", "v1/reactive-handler-frozen"]
 ];
 
 for (const catalog of Object.values(manifests)) {

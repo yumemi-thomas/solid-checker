@@ -32,7 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",
       "severity": "warning",
@@ -42,7 +42,7 @@
       "fixes": 0
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -52,7 +52,7 @@
       "fixes": 0
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "uncertifiable",
       "severity": "warning",

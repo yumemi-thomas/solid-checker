@@ -82,12 +82,9 @@ impl Rule {
             Self::StrictReadUntracked => ("SC1001", "strict-read-untracked", "warning", false),
             Self::ReactiveReadAfterAwait => ("SC1002", "reactive-read-after-await", "error", false),
             Self::UncalledAccessor => ("SC1005", "uncalled-accessor", "warning", false),
-            Self::ExpectedFunctionGotExpression => (
-                "SC1007",
-                "expected-function-got-expression",
-                "warning",
-                false,
-            ),
+            Self::ExpectedFunctionGotExpression => {
+                ("SC1007", "reactive-handler-frozen", "warning", false)
+            }
             Self::NoDirectMutation => ("SC2003", "no-direct-mutation", "warning", false),
             Self::ReactiveSourceUncaptured => {
                 ("SC9011", "reactive-source-uncaptured", "warning", true)

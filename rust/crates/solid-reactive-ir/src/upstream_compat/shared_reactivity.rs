@@ -192,7 +192,7 @@ fn reactive_source_uncaptured(
     }
 }
 
-/// `v1/expected-function-got-expression` — upstream's
+/// `v1/reactive-handler-frozen` — upstream's
 /// `expectedFunctionGotExpression`.
 ///
 /// A native element's event-handler binding receiving an already-evaluated

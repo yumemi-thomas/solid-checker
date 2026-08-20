@@ -97,12 +97,9 @@ impl Rule {
             Self::MissingOwner => ("SC4001", "v1/missing-owner", "warning", false),
             Self::MissingEffectFunction => ("SC7001", "v1/missing-effect-function", "error", false),
             Self::UncalledAccessor => ("SC1005", "v1/uncalled-accessor", "warning", false),
-            Self::ExpectedFunctionGotExpression => (
-                "SC1007",
-                "v1/expected-function-got-expression",
-                "warning",
-                false,
-            ),
+            Self::ExpectedFunctionGotExpression => {
+                ("SC1007", "v1/reactive-handler-frozen", "warning", false)
+            }
             Self::NoDirectMutation => ("SC2003", "v1/no-direct-mutation", "warning", false),
             Self::ReactiveSourceUncaptured => {
                 ("SC9011", "v1/reactive-source-uncaptured", "warning", true)

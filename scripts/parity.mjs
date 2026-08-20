@@ -83,7 +83,7 @@ const REACTIVITY = {
   // Passing a reactive prop member where a callback is expected is also an
   // untracked read of that member. The checker may surface the more general
   // proof when the callback's callable type itself is unresolved.
-  expectedFunctionGotExpression: ["v1/expected-function-got-expression", "v1/strict-read-untracked"],
+  expectedFunctionGotExpression: ["v1/reactive-handler-frozen", "v1/strict-read-untracked"],
   noWrite: ["v1/no-direct-mutation"],
   noAsyncTrackedScope: ["v1/no-async-tracked-scope"],
   // Upstream's analysis-integrity warnings (a createSignal/createMemo result

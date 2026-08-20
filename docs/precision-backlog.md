@@ -50,6 +50,10 @@ code; **Both** — either, depending on the code.
   `component-returns-conditionally` is now `components-return-once`, matching
   the 1.x stem. The old rule-options key aliases the new identity; the explicit
   ESLint key remains temporarily as a deprecated delegate.
+- **2026-08-20 — SC1007 renamed.** `expected-function-got-expression` and
+  `v1/expected-function-got-expression` are now `reactive-handler-frozen` and
+  `v1/reactive-handler-frozen`. Both old rule-options keys alias their current
+  identities; both explicit ESLint keys remain deprecated delegates.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 

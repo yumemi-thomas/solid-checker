@@ -429,7 +429,7 @@
       "ours": 2,
       "theirs": 1,
       "status": "rule-split",
-      "reason": "Upstream's single `expectedFunctionGotExpression` report covers a component prop read installed directly as an event listener; the checker preserves both semantic consequences. SC1001 (v1/strict-read-untracked) reports that `props.onClick` is read outside tracking, while SC1007 (v1/expected-function-got-expression) reports that DOM setup installs only that current value. Both rules map to upstream's one `reactivity` rule, so both count against its expected 1."
+      "reason": "Upstream's single `expectedFunctionGotExpression` report covers a component prop read installed directly as an event listener; the checker preserves both semantic consequences. SC1001 (v1/strict-read-untracked) reports that `props.onClick` is read outside tracking, while SC1007 (v1/reactive-handler-frozen) reports that DOM setup installs only that current value. Both rules map to upstream's one `reactivity` rule, so both count against its expected 1."
     },
     "reactivity__invalid__30": {
       "ours": 2,

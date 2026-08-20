@@ -221,6 +221,14 @@ pub const RULE_ALIASES: &[(&str, &str)] = &[
     ),
     ("component-props-destructure", "no-destructure"),
     ("component-returns-conditionally", "components-return-once"),
+    (
+        "expected-function-got-expression",
+        "reactive-handler-frozen",
+    ),
+    (
+        "v1/expected-function-got-expression",
+        "v1/reactive-handler-frozen",
+    ),
 ];
 
 /// The removal note for a retired rule identity, or `None` if the checker never

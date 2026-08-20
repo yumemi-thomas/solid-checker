@@ -13,7 +13,7 @@
     { "code": "SC4001", "name": "v1/missing-owner", "severity": "warning", "uncertifiable": false },
     { "code": "SC7001", "name": "v1/missing-effect-function", "severity": "error", "uncertifiable": false },
     { "code": "SC1005", "name": "v1/uncalled-accessor", "severity": "warning", "uncertifiable": false },
-    { "code": "SC1007", "name": "v1/expected-function-got-expression", "severity": "warning", "uncertifiable": false },
+    { "code": "SC1007", "name": "v1/reactive-handler-frozen", "severity": "warning", "uncertifiable": false },
     { "code": "SC2003", "name": "v1/no-direct-mutation", "severity": "warning", "uncertifiable": false },
     { "code": "SC9011", "name": "v1/reactive-source-uncaptured", "severity": "warning", "uncertifiable": true },
     { "code": "SC9012", "name": "v1/reactive-dispatch-unresolved", "severity": "warning", "uncertifiable": true },
