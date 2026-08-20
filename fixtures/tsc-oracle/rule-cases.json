@@ -1423,7 +1423,7 @@
       "checker": "reports",
       "presets": ["preferences"],
       "why": "A directly rendered Array#map is valid TypeScript; the finding recommends Solid 2 list identity semantics that the type system cannot express.",
-      "code": "const items = [\"a\", \"b\"];\nexport const Case = () => <ul>{items.map((item, index) => item + index)}</ul>;\n"
+      "code": "import { createSignal } from \"solid-js\";\nconst [items] = createSignal([\"a\", \"b\"]);\nexport const Case = () => <ul>{items().map((item, index) => item + index)}</ul>;\n"
     },
     {
       "rule": "prefer-show",
@@ -1432,7 +1432,7 @@
       "checker": "reports",
       "presets": ["preferences"],
       "why": "A logical JSX branch is valid TypeScript; the finding is an opt-in control-flow preference and does not claim a type defect.",
-      "code": "export const Case = (props: { ready: boolean }) => <main>{props.ready && <span />}</main>;\n"
+      "code": "import { createSignal } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport const Case = () => <main>{ready() && <span />}</main>;\n"
     },
     {
       "rule": "jsx-no-duplicate-props",

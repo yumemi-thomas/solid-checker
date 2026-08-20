@@ -5,15 +5,21 @@
 This preference is disabled by default. Enable the `preferences` preset or
 enable this rule explicitly.
 
-An `Array#map` call is rendered directly as JSX children instead of using
-Solid's list control flow.
+A reactively updating list is rendered with `Array#map` directly as JSX
+children instead of using Solid's list control flow.
 
 ## What it does
 
 Reports a `.map(function)` call only when the call itself occupies a JSX child
-expression. Maps assigned to variables or used in attributes are outside the
-rule. The callback may render JSX or text: the important fact is that the
-resulting array becomes a rendered list.
+expression and evaluating its receiver there performs a proven reactive read.
+Exact signal/accessor and memo calls and store paths qualify. Maps assigned to
+variables or used in attributes are outside the rule; static arrays, captured
+snapshots, unknown calls, and generic `.map` members remain clean. A reactive
+read inside the callback is not evidence that the receiver updates.
+
+Solid 1.x's retained caller model does not certify individual prop getters.
+Prop-only receivers therefore remain clean unless another fact domain proves a
+reactive source in the receiver expression.
 
 ## Why is this bad?
 

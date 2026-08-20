@@ -40,6 +40,153 @@ use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use typefacts::{ArrayShape, Location, RuntimeValueDomain};
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum ReactiveDependencyProof {
+    Reactive,
+    Static,
+    Unknown,
+}
+
+/// Whether evaluating exactly `expression` performs a proven reactive read.
+///
+/// The query is deliberately about evaluation at the current JSX position,
+/// not provenance of the resulting value. A call to a proven accessor and a
+/// member/path read rooted at a proven store or reactive props object subscribe
+/// when evaluated. A local that captured one of those results earlier does
+/// not. Unknown calls and unresolved roots remain `Unknown`; callers that make
+/// preference judgements treat both `Static` and `Unknown` as fail-closed.
+pub(super) fn reactive_dependency_proof(
+    context: &UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    expression: Span,
+) -> ReactiveDependencyProof {
+    use crate::source_discovery::PropUse;
+
+    let expression = file.ast.peel_ts_sugar_span(expression);
+    let nested_functions: Vec<Span> = file
+        .ast
+        .functions_within(expression)
+        .map(|function| function.span)
+        .collect();
+    let inside_nested = |span: Span| {
+        nested_functions
+            .iter()
+            .any(|function| function.contains(span))
+    };
+    let symbol_at = |span: Span| {
+        context
+            .entities
+            .at(file.path.as_str(), span)
+            .cloned()
+            .or_else(|| {
+                context
+                    .lookup
+                    .binding_at_reference(file.path.as_str(), span)
+                    .map(|(_, _, symbol)| symbol)
+            })
+    };
+    let mut proof = ReactiveDependencyProof::Static;
+
+    for member in &file.ast.members {
+        if !expression.contains(member.span)
+            || inside_nested(member.span)
+            || file.ast.members.iter().any(|candidate| {
+                expression.contains(candidate.span) && candidate.object == member.span
+            })
+        {
+            continue;
+        }
+        let mut root = member.object;
+        while let Some(inner) = file
+            .ast
+            .members
+            .iter()
+            .find(|candidate| candidate.span == root)
+        {
+            root = inner.object;
+        }
+        let Some(symbol) = symbol_at(root) else {
+            proof = ReactiveDependencyProof::Unknown;
+            continue;
+        };
+        if context.source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) {
+            return ReactiveDependencyProof::Reactive;
+        }
+        if let Some((_, declaration)) = context.prop_sources.get(&symbol) {
+            if context.uncertain_prop_sources.contains(&symbol) {
+                proof = ReactiveDependencyProof::Unknown;
+                continue;
+            }
+            let Some(first_member) =
+                file.ast.members.iter().find(|candidate| {
+                    candidate.object == root && expression.contains(candidate.span)
+                })
+            else {
+                proof = ReactiveDependencyProof::Unknown;
+                continue;
+            };
+            if file
+                .ast
+                .computed_members
+                .binary_search(&first_member.span)
+                .is_ok()
+            {
+                proof = ReactiveDependencyProof::Unknown;
+                continue;
+            }
+            match context
+                .props_reactivity
+                .proven_prop_use(declaration, text(file, first_member.property))
+            {
+                PropUse::Reactive => return ReactiveDependencyProof::Reactive,
+                PropUse::Unknown => proof = ReactiveDependencyProof::Unknown,
+                PropUse::Static => {}
+            }
+        }
+    }
+
+    for call in file.ast.calls_within(expression) {
+        if inside_nested(call.span) {
+            continue;
+        }
+        match symbol_at(file.ast.peel_ts_sugar_span(call.callee)) {
+            Some(symbol) if context.accessors.contains_key(&symbol) => {
+                return ReactiveDependencyProof::Reactive;
+            }
+            Some(_) | None => proof = ReactiveDependencyProof::Unknown,
+        }
+    }
+
+    for identifier in file.ast.identifiers_within(expression) {
+        if identifier.role != solid_facts::ast::IdentifierRole::Reference
+            || inside_nested(identifier.span)
+        {
+            continue;
+        }
+        match symbol_at(identifier.span) {
+            Some(symbol)
+                if context.source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) =>
+            {
+                return ReactiveDependencyProof::Reactive;
+            }
+            Some(symbol) if context.prop_sources.contains_key(&symbol) => {
+                let Some((_, declaration)) = context.prop_sources.get(&symbol) else {
+                    unreachable!("checked above")
+                };
+                match context.props_reactivity.proven_object_use(declaration) {
+                    PropUse::Reactive => return ReactiveDependencyProof::Reactive,
+                    PropUse::Unknown => proof = ReactiveDependencyProof::Unknown,
+                    PropUse::Static => {}
+                }
+            }
+            Some(_) => {}
+            None => proof = ReactiveDependencyProof::Unknown,
+        }
+    }
+
+    proof
+}
+
 /// The source text a span covers, or `""` when the span is not readable.
 ///
 /// Every rule here locates its report by span and phrases it with the

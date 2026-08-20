@@ -5,15 +5,22 @@
 This preference is disabled by default. Enable the `preferences` preset or
 enable this rule explicitly.
 
-Expensive JSX content is conditionally rendered with `&&` or `?:` instead of
-Solid's `<Show>` component.
+Expensive JSX content is controlled by a reactive `&&` or `?:` condition
+instead of Solid's `<Show>` component.
 
 ## What it does
 
 Checks logical-and and conditional expressions used directly as JSX children.
 At least one rendered branch must be an element, fragment, or bare identifier;
 small scalar expressions and conditions inside JSX attributes are left alone.
-Both the no-fallback and fallback forms have safe structural rewrites.
+The left operand of `&&`, or the test of `?:`, must itself contain a proven
+signal/accessor, memo, or store-path read. Both the no-fallback and fallback
+forms have safe structural rewrites.
+
+Static locals, literals, once-captured values, unknown calls, and reactive
+reads confined to a branch remain clean. Solid 1.x's retained caller model
+does not certify individual prop getters, so prop-only tests fail closed unless
+another fact domain proves a reactive source in the governing expression.
 
 ## Why is this bad?
 

@@ -4667,49 +4667,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-for",
-            "code": "SC8014",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                32,
-                70
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      17,
-                      22
-                    ]
-                  }
-                },
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      47,
-                      48
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-for",
+      "reason": "the rendered map receiver is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-for__invalid__01",
@@ -4723,46 +4688,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-for",
-            "code": "SC8014",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "marker": "props.data.map(d => <li>{d.text}</li>)"
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      17,
-                      22
-                    ]
-                  }
-                },
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      45,
-                      46
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-for",
+      "reason": "the rendered map receiver is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-for__invalid__02",
@@ -4776,58 +4709,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-for",
-            "code": "SC8014",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                32,
-                81
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      17,
-                      22
-                    ]
-                  }
-                },
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      47,
-                      48
-                    ]
-                  }
-                },
-                {
-                  "code": "TS2322",
-                  "span": {
-                    "textRange": [
-                      56,
-                      59
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-for",
+      "reason": "the rendered map receiver is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-for__invalid__03",
@@ -4841,46 +4730,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-for",
-            "code": "SC8014",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "marker": "props.data.map(d => <li>{d.text}</li>)"
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      26,
-                      31
-                    ]
-                  }
-                },
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      70,
-                      71
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-for",
+      "reason": "the rendered map receiver is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-for__invalid__04",
@@ -4894,49 +4751,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-for",
-            "code": "SC8014",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                55,
-                94
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      26,
-                      31
-                    ]
-                  }
-                },
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      71,
-                      72
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-for",
+      "reason": "the rendered map receiver is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-for__invalid__05",
@@ -4950,37 +4772,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-for",
-            "code": "SC8014",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "marker": "props.data.map(() => <li />)"
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      17,
-                      22
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-for",
+      "reason": "the rendered map receiver is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-for__invalid__06",
@@ -4994,49 +4793,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-for",
-            "code": "SC8014",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                32,
-                84
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      17,
-                      22
-                    ]
-                  }
-                },
-                {
-                  "code": "TS7019",
-                  "span": {
-                    "textRange": [
-                      48,
-                      55
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-for",
+      "reason": "the rendered map receiver is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-show__valid__00",
@@ -5092,38 +4856,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-show",
-            "code": "SC8015",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "marker": "props.cond && <span>Content</span>"
-            },
-            "fix": {
-              "behavior": "safe",
-              "text": "\n      function Component(props) {\n        return <div><Show when={props.cond}><span>Content</span></Show></div>;\n      }\nexport {};\n"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      26,
-                      31
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-show",
+      "reason": "the governing condition is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-show__invalid__01",
@@ -5137,41 +4877,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-show",
-            "code": "SC8015",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "textRange": [
-                53,
-                87
-              ]
-            },
-            "fix": {
-              "behavior": "safe",
-              "text": "\n      function Component(props) {\n        return <><Show when={props.cond}><span>Content</span></Show></>;\n      }\nexport {};\n"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      26,
-                      31
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-show",
+      "reason": "the governing condition is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-show__invalid__02",
@@ -5185,38 +4898,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-show",
-            "code": "SC8015",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "marker": "props.cond ? (\n              <span>Content</span> \n            ) : (\n              <span>Fallback</span>\n            )"
-            },
-            "fix": {
-              "behavior": "safe",
-              "text": "\n      function Component(props) {\n        return (\n          <div>\n            <Show when={props.cond} fallback={<span>Fallback</span>}><span>Content</span></Show>\n          </div>\n        );\n      }\nexport {};\n"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      26,
-                      31
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-show",
+      "reason": "the governing condition is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-show__invalid__03",
@@ -5230,41 +4919,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-show",
-            "code": "SC8015",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "textRange": [
-                117,
-                154
-              ]
-            },
-            "fix": {
-              "behavior": "safe",
-              "text": "\n      function Component(props) {\n        return (\n          <For each={props.someList}>\n            {(listItem) => <Show when={listItem.cond}><span>Content</span></Show>}\n          </For>\n        );\n      }\n"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      26,
-                      31
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-show",
+      "reason": "the governing condition is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/prefer-show__invalid__04",
@@ -5278,38 +4940,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-        "findings": [
-          {
-            "rule": "v1/prefer-show",
-            "code": "SC8015",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "marker": "listItem.cond ? (\n              <span>Content</span> \n            ) : (\n              <span>Fallback</span>\n            )"
-            },
-            "fix": {
-              "behavior": "safe",
-              "text": "\n      function Component(props) {\n        return (\n          <For each={props.someList}>\n            {(listItem) => (<Show when={listItem.cond} fallback={<span>Fallback</span>}><span>Content</span></Show>)}\n          </For>\n        );\n      }\n"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      26,
-                      31
-                    ]
-                  }
-                }
-              ],
-              "justification": "TypeScript diagnoses an incidental untyped upstream fragment, while the checker expresses a distinct Solid control-flow preference."
-            }
-          }
-        ],
-        "absent": []
-      }
+  "findings": [],
+  "absent": [
+    {
+      "rule": "v1/prefer-show",
+      "reason": "the governing condition is not proven reactive at this JSX position"
+    }
+  ]
+}
     },
     {
       "id": "upstream/reactivity__valid__00",
@@ -8794,8 +8432,8 @@
       "dialect": "solid-v2",
       "source": {
         "extension": ".tsx",
-        "prelude": "",
-        "text": "const items = [\"a\", \"b\"];\nexport const App = () => <ul>{items.map((item, index) => item + index)}</ul>;\n"
+        "prelude": "import { createSignal } from \"solid-js\";\n",
+        "text": "const [items] = createSignal([\"a\", \"b\"]);\nexport const App = () => <ul>{items().map((item, index) => item + index)}</ul>;\n"
       },
       "ruleOptions": {},
       "presets": ["preferences"],
@@ -8808,7 +8446,7 @@
             "kind": "violation",
             "severity": "error",
             "span": {
-              "marker": "items.map((item, index) => item + index)"
+              "marker": "items().map((item, index) => item + index)"
             },
             "fix": {
               "behavior": "none"
@@ -8827,8 +8465,8 @@
       "dialect": "solid-v2",
       "source": {
         "extension": ".tsx",
-        "prelude": "",
-        "text": "export const App = (props: { ready: boolean }) => <main>{props.ready && <span />}</main>;\n"
+        "prelude": "import { createSignal } from \"solid-js\";\n",
+        "text": "const [ready] = createSignal(false);\nexport const App = () => <main>{ready() && <span />}</main>;\n"
       },
       "ruleOptions": {},
       "presets": ["preferences"],
@@ -8841,11 +8479,11 @@
             "kind": "violation",
             "severity": "warning",
             "span": {
-              "marker": "props.ready && <span />"
+              "marker": "ready() && <span />"
             },
             "fix": {
               "behavior": "safe",
-              "text": "export const App = (props: { ready: boolean }) => <main><Show when={props.ready}><span /></Show></main>;\n"
+              "text": "const [ready] = createSignal(false);\nexport const App = () => <main><Show when={ready()}><span /></Show></main>;\n"
             },
             "typescript": {
               "ownership": "checker-only",

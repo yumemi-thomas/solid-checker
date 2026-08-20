@@ -1,5 +1,15 @@
 # Precision backlog
 
+- **2026-08-20 — control-flow preferences require reactive governing inputs.**
+  SC8014 `prefer-for` now reports only when evaluating the rendered `.map`
+  receiver performs a proven reactive read; SC8015 `prefer-show` applies the
+  same requirement to the `&&` left operand or ternary test. Exact
+  accessor/memo calls, store paths, and Solid 2 caller-proven prop reads are
+  supported. Static values, once-captured snapshots, unknown calls, generic
+  members, and reads confined to callbacks or branches fail closed. Solid 1.x
+  prop-only expressions remain clean because its retained props index does not
+  carry exact caller proof; accessor and store forms remain covered.
+
 ## 2026-08 preference defaults
 
 `prefer-classlist`, `prefer-for`, and `prefer-show` are retained as explicit

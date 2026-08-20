@@ -1,6 +1,7 @@
-//! Shared `prefer-for` and `prefer-show` structural preferences, ported from
-//! eslint-plugin-solid's Solid 1.x rules. Each judges a
-//! JavaScript-legal but Solid-unidiomatic shape.
+//! Shared `prefer-for` and `prefer-show` control-flow preferences, narrowed
+//! from eslint-plugin-solid's Solid 1.x structural rules. Each judges a
+//! JavaScript-legal but Solid-unidiomatic shape only when its governing input
+//! has a proven reactive dependency at the rendered JSX position.
 //!
 //! `prefer-for` and `prefer-show` are intent judgements, not correctness
 //! checks: Solid's compiler already handles a plain `.map()` or `&&`/ternary
@@ -16,7 +17,7 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind};
 use solid_facts::core::Span;
 
-use super::{UpstreamCompatContext, text};
+use super::{ReactiveDependencyProof, UpstreamCompatContext, reactive_dependency_proof, text};
 use crate::{Fix, StaticViolation, TextEdit, location};
 
 pub(super) fn check_file(
@@ -25,19 +26,19 @@ pub(super) fn check_file(
     violations: &mut Vec<StaticViolation>,
 ) {
     prefer_for(file, context, violations);
-    prefer_show(file, violations);
+    prefer_show(file, context, violations);
 }
 
 // ---------------------------------------------------------------------
 // SC8014 v1/prefer-for
 // ---------------------------------------------------------------------
 
-/// `Array#map` rendered as JSX children recreates every DOM node on each
+/// A reactive `Array#map` rendered as JSX children recreates every DOM node on each
 /// update; `<For>` keys elements by array identity instead so unchanged
 /// items keep their nodes. Position carries the whole judgement, exactly as
 /// upstream's `JSXExpressionContainer` parent checks do: the `.map()` call
 /// must itself be the expression a JSX element or fragment renders. The
-/// callback does not have to build JSX — `<ol>{items.map(x => x.name)}</ol>`
+/// callback does not have to build JSX — `<ol>{items().map(x => x.name)}</ol>`
 /// still renders a list — and a `.map()` anywhere else (assigned to a
 /// variable, inside an attribute) is not rendered as a list and is left
 /// alone.
@@ -59,6 +60,11 @@ fn prefer_for(
             continue;
         };
         if text(file, member.property) != "map" || call.arguments.len() != 1 {
+            continue;
+        }
+        if reactive_dependency_proof(context, file, member.object)
+            != ReactiveDependencyProof::Reactive
+        {
             continue;
         }
         let argument = &call.arguments[0];
@@ -359,7 +365,11 @@ fn show_conditional_replacement(test: &str, consequent: &str, alternate: &str) -
     )
 }
 
-fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
+fn prefer_show(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    violations: &mut Vec<StaticViolation>,
+) {
     for logical in &file.ast.logical_expressions {
         if logical.operator != LogicalOperatorKind::And || !expensive_branch(file, logical.right) {
             continue;
@@ -369,6 +379,11 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
         // attribute — `fallback={cond ? <A/> : <B/>}` — and upstream stays
         // silent there, so this port does too.
         if jsx_expression_position(file, logical.span) != Some(JsxExpressionPosition::Child) {
+            continue;
+        }
+        if reactive_dependency_proof(context, file, logical.left)
+            != ReactiveDependencyProof::Reactive
+        {
             continue;
         }
         let fixes = vec![Fix {
@@ -405,6 +420,11 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
             continue;
         }
         if jsx_expression_position(file, conditional.span) != Some(JsxExpressionPosition::Child) {
+            continue;
+        }
+        if reactive_dependency_proof(context, file, conditional.test)
+            != ReactiveDependencyProof::Reactive
+        {
             continue;
         }
         let fixes = vec![Fix {

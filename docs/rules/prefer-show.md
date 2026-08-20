@@ -5,14 +5,20 @@
 This preference is disabled by default. Enable the `preferences` preset or
 enable this rule explicitly.
 
-Expensive JSX content is conditionally rendered with `&&` or `?:` instead of
-Solid's `<Show>` component.
+Expensive JSX content is controlled by a reactive `&&` or `?:` condition
+instead of Solid's `<Show>` component.
 
 ## What it does
 
 Checks logical-and and conditional expressions used directly as JSX children.
 At least one branch must be an element, fragment, or bare identifier. Scalar
-expressions and conditions inside attributes stay clean.
+expressions and conditions inside attributes stay clean. The left operand of
+`&&`, or the test of `?:`, must itself contain a proven accessor/memo, store
+path, or caller-proven reactive-prop read at that JSX position.
+
+Static and once-captured conditions remain clean. So do unknown calls and
+conditions whose only reactive read occurs in the right, consequent, or
+alternate branch; those reads do not make the governing test update.
 
 ## Why is this bad?
 

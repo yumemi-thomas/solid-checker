@@ -78,41 +78,116 @@ fn preference_rules_are_opt_in_with_explicit_overrides_winning() {
     }
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     let v2 = fixture_root.join("preferences-v2/tsconfig.json");
+    let preference_findings = |findings: Vec<serde_json::Value>| {
+        findings
+            .into_iter()
+            .filter(|finding| matches!(finding["id"].as_str(), Some("SC8014" | "SC8015")))
+            .collect::<Vec<_>>()
+    };
 
-    let defaults = project_snapshot_findings_with(v2.clone(), Some("solid-v2"), &["--certify"]);
+    let defaults = preference_findings(project_snapshot_findings_with(
+        v2.clone(),
+        Some("solid-v2"),
+        &[],
+    ));
     assert!(
         defaults.is_empty(),
         "preferences must be disabled by default: {defaults:#?}"
     );
 
-    let preset =
-        project_snapshot_findings_with(v2.clone(), Some("solid-v2"), &["--preset", "preferences"]);
+    let preset = preference_findings(project_snapshot_findings_with(
+        v2.clone(),
+        Some("solid-v2"),
+        &["--preset", "preferences"],
+    ));
     assert_eq!(
         preset
             .iter()
-            .map(|finding| finding["rule"].as_str().unwrap())
+            .map(|finding| (
+                finding["rule"].as_str().unwrap(),
+                finding["id"].as_str().unwrap(),
+                finding["kind"].as_str().unwrap(),
+            ))
             .collect::<Vec<_>>(),
-        ["prefer-for", "prefer-show"]
+        [
+            ("prefer-for", "SC8014", "violation"),
+            ("prefer-show", "SC8015", "violation"),
+            ("prefer-for", "SC8014", "violation"),
+            ("prefer-show", "SC8015", "violation"),
+            ("prefer-for", "SC8014", "violation"),
+            ("prefer-show", "SC8015", "violation"),
+            ("prefer-for", "SC8014", "violation"),
+            ("prefer-show", "SC8015", "violation"),
+        ]
+    );
+    let v2_for_fix_texts = preset
+        .iter()
+        .filter(|finding| finding["rule"] == "prefer-for")
+        .flat_map(|finding| finding["fixes"].as_array().into_iter().flatten())
+        .flat_map(|fix| fix["edits"].as_array().into_iter().flatten())
+        .filter_map(|edit| edit["newText"].as_str())
+        .collect::<Vec<_>>();
+    assert!(!v2_for_fix_texts.is_empty());
+    assert!(
+        v2_for_fix_texts
+            .iter()
+            .all(|text| text.contains("<For keyed={false}"))
     );
 
-    let one_rule =
-        project_snapshot_findings_with(v2, Some("solid-v2"), &["--enable-rule", "prefer-show"]);
-    assert_eq!(one_rule.len(), 1);
-    assert_eq!(one_rule[0]["rule"], "prefer-show");
+    let one_rule = preference_findings(project_snapshot_findings_with(
+        v2,
+        Some("solid-v2"),
+        &["--enable-rule", "prefer-show"],
+    ));
+    assert_eq!(one_rule.len(), 4);
+    assert!(
+        one_rule
+            .iter()
+            .all(|finding| finding["rule"] == "prefer-show")
+    );
 
-    let enabled = project_snapshot_findings_with(
+    let enabled = preference_findings(project_snapshot_findings_with(
         fixture_root.join("preferences-v1-enabled/tsconfig.json"),
         Some("solid-v1"),
         &[],
+    ));
+    assert_eq!(
+        enabled
+            .iter()
+            .map(|finding| (
+                finding["rule"].as_str().unwrap(),
+                finding["id"].as_str().unwrap(),
+                finding["kind"].as_str().unwrap(),
+            ))
+            .collect::<Vec<_>>(),
+        [
+            ("v1/prefer-for", "SC8014", "violation"),
+            ("v1/prefer-show", "SC8015", "violation"),
+            ("v1/prefer-for", "SC8014", "violation"),
+            ("v1/prefer-show", "SC8015", "violation"),
+            ("v1/prefer-for", "SC8014", "violation"),
+            ("v1/prefer-show", "SC8015", "violation"),
+        ]
     );
-    assert_eq!(enabled.len(), 1);
-    assert_eq!(enabled[0]["rule"], "v1/prefer-show");
+    let v1_for_fix_texts = enabled
+        .iter()
+        .filter(|finding| finding["rule"] == "v1/prefer-for")
+        .flat_map(|finding| finding["fixes"].as_array().into_iter().flatten())
+        .flat_map(|fix| fix["edits"].as_array().into_iter().flatten())
+        .filter_map(|edit| edit["newText"].as_str())
+        .collect::<Vec<_>>();
+    assert!(!v1_for_fix_texts.is_empty());
+    assert!(
+        v1_for_fix_texts
+            .iter()
+            .all(|text| { text.contains("<For each={") && !text.contains("keyed={false}") })
+    );
 
-    let disabled = project_snapshot_findings_with(
+    let disabled = preference_findings(project_snapshot_findings_with(
         fixture_root.join("preferences-v1-disabled/tsconfig.json"),
         Some("solid-v1"),
         &["--preset", "preferences"],
-    );
+    ));
     assert!(
         disabled.is_empty(),
         "an explicit false must override the preset: {disabled:#?}"

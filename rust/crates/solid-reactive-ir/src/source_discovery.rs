@@ -1938,6 +1938,23 @@ pub(crate) struct PropsReactivityIndex {
 }
 
 impl PropsReactivityIndex {
+    /// The exact caller-proven classification for a preference or other rule
+    /// that must not inherit the Solid 1.x upstream over-approximation.
+    pub(crate) fn proven_prop_use(&self, declaration: &Location, name: &str) -> PropUse {
+        if !self.caller_proof {
+            return PropUse::Unknown;
+        }
+        self.prop_use(declaration, name)
+    }
+
+    /// Whole-object counterpart to [`Self::proven_prop_use`].
+    pub(crate) fn proven_object_use(&self, declaration: &Location) -> PropUse {
+        if !self.caller_proof {
+            return PropUse::Unknown;
+        }
+        self.object_use(declaration)
+    }
+
     pub(crate) fn prop_use(&self, declaration: &Location, name: &str) -> PropUse {
         if !self.caller_proof {
             return PropUse::Reactive;
