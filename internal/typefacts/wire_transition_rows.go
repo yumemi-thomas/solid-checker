@@ -634,7 +634,8 @@ func wireTransitionPrimitiveValueDomainBits(value PrimitiveValueDomain) uint64 {
 		boolBit(value.MayBeNull())<<5 |
 		boolBit(value.MayBeUndefined())<<6 |
 		boolBit(value.MayBeObject())<<7 |
-		boolBit(value.Unknown())<<8
+		boolBit(value.Unknown())<<8 |
+		boolBit(value.NumbersAreFinite())<<9
 }
 
 func wireTransitionReferenceSpaceCode(value ReferenceSpace) (uint64, error) {

@@ -18,6 +18,10 @@ unions combine their categories, and constrained type parameters follow the
 compiler's resolved constraint. `any`, `unknown`, recovery, and cycles include
 the unknown bit. The fact deliberately does not encode a consumer policy such
 as “JSON safe”.
+When number values are possible, `numbersAreFinite` is a separate compiler
+guarantee that every numeric constituent is a finite literal. It is stable
+across changes between finite literal values and avoids making consumers retain
+an exact numeric constant when their contract only asks about finiteness.
 
 `tupleShape.exactLength` is present only when every tuple constituent has the
 same required-only length. Optional, rest, variadic, and unequal-length union
@@ -26,7 +30,7 @@ optional slots and participates in the tuple-structure meet; using that value
 as runtime spread arity would be unsound.
 
 Compact demand bit 15 selects primitive domains. Entity flag bit 12 carries
-their nine-bit payload. A v13 tuple payload appends `exactLength + 1`, with
+their ten-bit payload. A v13 tuple payload appends `exactLength + 1`, with
 zero reserved for absence. Full, delta, retained-reuse, equality, and schema
 hash paths all carry the new values.
 

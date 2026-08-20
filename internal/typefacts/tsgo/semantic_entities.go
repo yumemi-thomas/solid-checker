@@ -150,11 +150,11 @@ func primitiveValueDomainOfTypeSeen(
 		return unknownPrimitiveValueDomain()
 	}
 	flags := value.Flags()
-	if flags&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsIncludesError) != 0 {
+	if flags&(checker.TypeFlagsAny|checker.TypeFlagsUnknown) != 0 {
 		return unknownPrimitiveValueDomain()
 	}
 	if flags&checker.TypeFlagsNever != 0 {
-		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, false, false, false)
 	}
 	if _, cycling := seen[value]; cycling {
 		return unknownPrimitiveValueDomain()
@@ -185,38 +185,42 @@ func primitiveValueDomainOfTypeSeen(
 		}
 		return domain
 	}
-
 	switch {
 	case flags&checker.TypeFlagsStringLike != 0:
-		return typefacts.NewPrimitiveValueDomain(true, false, false, false, false, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(true, false, false, false, false, false, false, false, false)
 	case flags&checker.TypeFlagsNumberLike != 0:
-		return typefacts.NewPrimitiveValueDomain(false, true, false, false, false, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, true, false, false, false, false, false, false, checker.NumberLiteralIsFinite(value))
 	case flags&checker.TypeFlagsBooleanLike != 0:
-		return typefacts.NewPrimitiveValueDomain(false, false, true, false, false, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, true, false, false, false, false, false, false)
 	case flags&checker.TypeFlagsBigIntLike != 0:
-		return typefacts.NewPrimitiveValueDomain(false, false, false, true, false, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, true, false, false, false, false, false)
 	case flags&checker.TypeFlagsESSymbolLike != 0:
-		return typefacts.NewPrimitiveValueDomain(false, false, false, false, true, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, true, false, false, false, false)
 	case flags&checker.TypeFlagsNull != 0:
-		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, true, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, true, false, false, false)
 	case flags&(checker.TypeFlagsUndefined|checker.TypeFlagsVoid) != 0:
-		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, true, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, true, false, false)
+	}
+	if flags&checker.TypeFlagsIncludesError != 0 {
+		return unknownPrimitiveValueDomain()
+	}
+	switch {
 	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetStringType()):
-		return typefacts.NewPrimitiveValueDomain(true, false, false, false, false, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(true, false, false, false, false, false, false, false, false)
 	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetNumberType()):
-		return typefacts.NewPrimitiveValueDomain(false, true, false, false, false, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, true, false, false, false, false, false, false, false)
 	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetBooleanType()):
-		return typefacts.NewPrimitiveValueDomain(false, false, true, false, false, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, true, false, false, false, false, false, false)
 	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetBigIntType()):
-		return typefacts.NewPrimitiveValueDomain(false, false, false, true, false, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, true, false, false, false, false, false)
 	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetESSymbolType()):
-		return typefacts.NewPrimitiveValueDomain(false, false, false, false, true, false, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, true, false, false, false, false)
 	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetNullType()):
-		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, true, false, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, true, false, false, false)
 	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetUndefinedType()):
-		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, true, false)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, true, false, false)
 	default:
-		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, false, true)
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, false, true, false)
 	}
 }
 

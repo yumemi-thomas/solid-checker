@@ -205,6 +205,9 @@ type BrandedText = string & { readonly __brand: unique symbol };
 declare const textValue: TextAlias;
 declare const brandedText: BrandedText;
 declare const numberValue: number;
+declare const finiteValue: 42;
+declare const finiteUnion: 1 | 2 | "three";
+declare const overflowValue: number;
 declare const booleanValue: boolean;
 declare const bigintValue: bigint;
 declare const symbolValue: symbol;
@@ -225,6 +228,9 @@ const voidResult = voidCall();
 textValue;
 brandedText;
 numberValue;
+finiteValue;
+finiteUnion;
+overflowValue;
 booleanValue;
 bigintValue;
 symbolValue;
@@ -255,9 +261,9 @@ voidResult;
 	semantic := opened.(typefacts.SemanticEntityLookup)
 
 	domain := typefacts.NewPrimitiveValueDomain
-	stringDomain := domain(true, false, false, false, false, false, false, false)
-	booleanDomain := domain(false, false, true, false, false, false, false, false)
-	objectDomain := domain(false, false, false, false, false, false, false, true)
+	stringDomain := domain(true, false, false, false, false, false, false, false, false)
+	booleanDomain := domain(false, false, true, false, false, false, false, false, false)
+	objectDomain := domain(false, false, false, false, false, false, false, true, false)
 	unknownDomain := unknownPrimitiveValueDomain()
 	cases := []struct {
 		name string
@@ -265,23 +271,26 @@ voidResult;
 	}{
 		{"textValue", stringDomain},
 		{"brandedText", stringDomain},
-		{"numberValue", domain(false, true, false, false, false, false, false, false)},
+		{"numberValue", domain(false, true, false, false, false, false, false, false, false)},
+		{"finiteValue", domain(false, true, false, false, false, false, false, false, true)},
+		{"finiteUnion", domain(true, true, false, false, false, false, false, false, true)},
+		{"overflowValue", domain(false, true, false, false, false, false, false, false, false)},
 		{"booleanValue", booleanDomain},
-		{"bigintValue", domain(false, false, false, true, false, false, false, false)},
-		{"symbolValue", domain(false, false, false, false, true, false, false, false)},
-		{"nullValue", domain(false, false, false, false, false, true, false, false)},
-		{"undefinedValue", domain(false, false, false, false, false, false, true, false)},
+		{"bigintValue", domain(false, false, false, true, false, false, false, false, false)},
+		{"symbolValue", domain(false, false, false, false, true, false, false, false, false)},
+		{"nullValue", domain(false, false, false, false, false, true, false, false, false)},
+		{"undefinedValue", domain(false, false, false, false, false, false, true, false, false)},
 		{"objectValue", objectDomain},
 		{"functionValue", objectDomain},
-		{"safeUnion", domain(true, false, true, false, false, true, true, false)},
-		{"unsafeUnion", domain(true, false, false, true, false, false, false, true)},
-		{"bounded", domain(true, false, true, false, false, false, false, false)},
+		{"safeUnion", domain(true, false, true, false, false, true, true, false, false)},
+		{"unsafeUnion", domain(true, false, false, true, false, false, false, true, false)},
+		{"bounded", domain(true, false, true, false, false, false, false, false, false)},
 		{"generic", unknownDomain},
 		{"anyValue", unknownDomain},
 		{"unknownValue", unknownDomain},
-		{"neverValue", domain(false, false, false, false, false, false, false, false)},
+		{"neverValue", domain(false, false, false, false, false, false, false, false, false)},
 		{"recoveryValue", unknownDomain},
-		{"voidResult", domain(false, false, false, false, false, false, true, false)},
+		{"voidResult", domain(false, false, false, false, false, false, true, false, false)},
 	}
 	demands := make([]typefacts.EntityDemand, 0, len(cases)+1)
 	for _, testCase := range cases {

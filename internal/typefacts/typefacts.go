@@ -78,12 +78,13 @@ const (
 	primitiveMayBeNull
 	primitiveMayBeUndefined
 	primitiveMayBeObject
+	primitiveNumbersFinite
 	primitiveEmpty
 )
 
 // NewPrimitiveValueDomain constructs one present, closed domain. The all-false
 // input is the known empty never domain, distinct from an undemanded zero value.
-func NewPrimitiveValueDomain(stringValue, number, boolean, bigint, symbol, nullValue, undefined, object bool) PrimitiveValueDomain {
+func NewPrimitiveValueDomain(stringValue, number, boolean, bigint, symbol, nullValue, undefined, object, numbersFinite bool) PrimitiveValueDomain {
 	bits := boolDomainBit(stringValue, primitiveMayBeString) |
 		boolDomainBit(number, primitiveMayBeNumber) |
 		boolDomainBit(boolean, primitiveMayBeBoolean) |
@@ -91,7 +92,8 @@ func NewPrimitiveValueDomain(stringValue, number, boolean, bigint, symbol, nullV
 		boolDomainBit(symbol, primitiveMayBeSymbol) |
 		boolDomainBit(nullValue, primitiveMayBeNull) |
 		boolDomainBit(undefined, primitiveMayBeUndefined) |
-		boolDomainBit(object, primitiveMayBeObject)
+		boolDomainBit(object, primitiveMayBeObject) |
+		boolDomainBit(number && numbersFinite, primitiveNumbersFinite)
 	if bits == 0 {
 		bits = primitiveEmpty
 	}
@@ -118,12 +120,20 @@ func (d PrimitiveValueDomain) MayBeSymbol() bool    { return d.bits&primitiveMay
 func (d PrimitiveValueDomain) MayBeNull() bool      { return d.bits&primitiveMayBeNull != 0 }
 func (d PrimitiveValueDomain) MayBeUndefined() bool { return d.bits&primitiveMayBeUndefined != 0 }
 func (d PrimitiveValueDomain) MayBeObject() bool    { return d.bits&primitiveMayBeObject != 0 }
-func (d PrimitiveValueDomain) Unknown() bool        { return d.bits == ^uint16(0) }
+func (d PrimitiveValueDomain) NumbersAreFinite() bool {
+	return d.MayBeNumber() && d.bits&primitiveNumbersFinite != 0
+}
+func (d PrimitiveValueDomain) Unknown() bool { return d.bits == ^uint16(0) }
 func (d PrimitiveValueDomain) Union(other PrimitiveValueDomain) PrimitiveValueDomain {
 	if d.Unknown() || other.Unknown() {
 		return UnknownPrimitiveValueDomain()
 	}
-	bits := (d.bits | other.bits) &^ primitiveEmpty
+	bits := (d.bits | other.bits) &^ (primitiveEmpty | primitiveNumbersFinite)
+	if bits&primitiveMayBeNumber != 0 &&
+		(!d.MayBeNumber() || d.NumbersAreFinite()) &&
+		(!other.MayBeNumber() || other.NumbersAreFinite()) {
+		bits |= primitiveNumbersFinite
+	}
 	if bits == 0 && (d.IsPresent() || other.IsPresent()) {
 		bits = primitiveEmpty
 	}

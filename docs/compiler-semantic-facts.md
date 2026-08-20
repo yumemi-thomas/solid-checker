@@ -140,6 +140,11 @@ into the JavaScript categories `string`, `number`, `boolean`, `bigint`,
 are objects for this purpose. Null and undefined remain separate so a consumer
 can apply its own runtime or serialization contract. The compact representation
 still keeps the retained Rust entity row within its existing 144-byte budget.
+When `number` is possible, `numbersAreFinite` additionally proves that every
+numeric constituent is a finite compiler literal. Broad `number`, non-finite
+numeric literals, and a union containing either leave the guarantee false.
+This lets a consumer apply JSON-style finite-number policies without retaining
+the literal's exact value.
 
 Unions OR their constituent categories. Aliases are transparent. Instantiable
 types follow the compiler's resolved constraint, so `T extends string |

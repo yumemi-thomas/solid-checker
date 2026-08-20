@@ -23,7 +23,7 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V11: u64 = 11;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V12: u64 = 12;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V13: u64 = 13;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:a1e82b7c340ddb9107b60ee5fc54cd45939e7ef1b6ed90d12bdafa7c16f78c62";
+    "sha256:aa7f1b024da4c5dfa83d84a2af639ab02abe75b604862cd4c33ad53959a028c5";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -894,7 +894,7 @@ fn parse_runtime_value_domain(value: u64) -> Result<RuntimeValueDomain, String> 
 }
 
 fn parse_primitive_value_domain(value: u64) -> Result<PrimitiveValueDomain, String> {
-    if value & !511 != 0 {
+    if value & !1023 != 0 {
         return Err(format!("unknown primitive value-domain bits {value}"));
     }
     Ok(PrimitiveValueDomain::new(
@@ -906,6 +906,7 @@ fn parse_primitive_value_domain(value: u64) -> Result<PrimitiveValueDomain, Stri
         value & 32 != 0,
         value & 64 != 0,
         value & 128 != 0,
+        value & 512 != 0,
         value & 256 != 0,
     ))
 }
@@ -1854,8 +1855,19 @@ mod tests {
         assert!(!domain.may_be_object());
         assert!(!domain.unknown());
 
+        let finite =
+            decode_table_transition(&primitive_value_domain_transition(13, 2 | 512)).unwrap();
+        let SlotOp::Replace(finite_entities) = &finite.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert!(
+            finite_entities[0]
+                .primitive_value_domain
+                .numbers_are_finite()
+        );
+
         assert!(decode_table_transition(&primitive_value_domain_transition(12, 1)).is_err());
-        assert!(decode_table_transition(&primitive_value_domain_transition(13, 512)).is_err());
+        assert!(decode_table_transition(&primitive_value_domain_transition(13, 1024)).is_err());
     }
 
     #[test]

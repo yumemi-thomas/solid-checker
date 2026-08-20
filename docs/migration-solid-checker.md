@@ -52,6 +52,9 @@ new facts:
   their compiler meaning, while `any`, `unknown`, recovery types, and an absent
   fact remain fail-closed. Serialization policy stays in the consumer — this
   fact reports language value categories, not “JSON safe”.
+  For policies that accept only finite numbers, require `numbersAreFinite`
+  whenever `mayBeNumber` is set; do not infer finiteness from a number literal's
+  rendered type text.
 - Synthetic probe calls and diagnostic filtering: demand `resolvedCall` and
   accept only `valid`.
 - Source-text searches that decide whether an import is type-only or runtime:

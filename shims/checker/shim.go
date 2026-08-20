@@ -9,6 +9,8 @@ package checker
 
 import ast "github.com/microsoft/typescript-go/internal/ast"
 import checker "github.com/microsoft/typescript-go/internal/checker"
+import jsnum "github.com/microsoft/typescript-go/internal/jsnum"
+import "math"
 import "sync"
 import _ "unsafe"
 
@@ -86,6 +88,7 @@ const TypeFlagsVoid = checker.TypeFlagsVoid
 const TypeFlagsNull = checker.TypeFlagsNull
 const TypeFlagsStringLike = checker.TypeFlagsStringLike
 const TypeFlagsNumberLike = checker.TypeFlagsNumberLike
+const TypeFlagsNumberLiteral = checker.TypeFlagsNumberLiteral
 const TypeFlagsBooleanLike = checker.TypeFlagsBooleanLike
 const TypeFlagsBigIntLike = checker.TypeFlagsBigIntLike
 const TypeFlagsESSymbolLike = checker.TypeFlagsESSymbolLike
@@ -97,3 +100,13 @@ const TypeFlagsIncludesError = checker.TypeFlagsIncludesError
 
 type Type = checker.Type
 type Signature = checker.Signature
+
+// NumberLiteralIsFinite reads the compiler's canonical numeric literal value,
+// not rendered type text. It is false for every non-literal number type.
+func NumberLiteralIsFinite(value *checker.Type) bool {
+	if value == nil || value.Flags()&checker.TypeFlagsNumberLiteral == 0 {
+		return false
+	}
+	number, ok := value.AsLiteralType().Value().(jsnum.Number)
+	return ok && !math.IsInf(float64(number), 0) && !math.IsNaN(float64(number))
+}

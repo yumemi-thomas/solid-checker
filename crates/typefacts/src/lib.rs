@@ -203,9 +203,10 @@ impl PrimitiveValueDomain {
     const NULL: u16 = 1 << 5;
     const UNDEFINED: u16 = 1 << 6;
     const OBJECT: u16 = 1 << 7;
+    const NUMBERS_FINITE: u16 = 1 << 8;
     // Zero is the absent entity-row sentinel. The next bit represents a
     // demanded empty `never` domain; unknown is the all-possibilities value.
-    const EMPTY: u16 = 1 << 8;
+    const EMPTY: u16 = 1 << 9;
     const UNKNOWN: u16 = u16::MAX;
 
     #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
@@ -218,6 +219,7 @@ impl PrimitiveValueDomain {
         may_be_null: bool,
         may_be_undefined: bool,
         may_be_object: bool,
+        numbers_are_finite: bool,
         unknown: bool,
     ) -> Self {
         if unknown {
@@ -230,7 +232,8 @@ impl PrimitiveValueDomain {
             | Self::selected(may_be_symbol, Self::SYMBOL)
             | Self::selected(may_be_null, Self::NULL)
             | Self::selected(may_be_undefined, Self::UNDEFINED)
-            | Self::selected(may_be_object, Self::OBJECT);
+            | Self::selected(may_be_object, Self::OBJECT)
+            | Self::selected(may_be_number && numbers_are_finite, Self::NUMBERS_FINITE);
         if bits == 0 {
             Self(Self::EMPTY)
         } else {
@@ -295,6 +298,10 @@ impl PrimitiveValueDomain {
         self.0 & Self::OBJECT != 0
     }
     #[must_use]
+    pub const fn numbers_are_finite(self) -> bool {
+        self.may_be_number() && self.0 & Self::NUMBERS_FINITE != 0
+    }
+    #[must_use]
     pub const fn unknown(self) -> bool {
         self.0 == Self::UNKNOWN
     }
@@ -320,6 +327,8 @@ struct PrimitiveValueDomainSerde {
     #[serde(default, skip_serializing_if = "is_false")]
     may_be_object: bool,
     #[serde(default, skip_serializing_if = "is_false")]
+    numbers_are_finite: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
     unknown: bool,
 }
 
@@ -337,6 +346,7 @@ impl Serialize for PrimitiveValueDomain {
             may_be_null: self.may_be_null(),
             may_be_undefined: self.may_be_undefined(),
             may_be_object: self.may_be_object(),
+            numbers_are_finite: self.numbers_are_finite(),
             unknown: self.unknown(),
         }
         .serialize(serializer)
@@ -358,6 +368,7 @@ impl<'de> Deserialize<'de> for PrimitiveValueDomain {
             value.may_be_null,
             value.may_be_undefined,
             value.may_be_object,
+            value.numbers_are_finite,
             value.unknown,
         ))
     }

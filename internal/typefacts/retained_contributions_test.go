@@ -10,7 +10,7 @@ import (
 func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	location := Location{Path: "/project/source.ts", StartByte: 1, EndByte: 2}
 	domain := &RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true}
-	primitiveDomain := NewPrimitiveValueDomain(true, false, true, false, false, false, false, false)
+	primitiveDomain := NewPrimitiveValueDomain(true, false, true, false, false, false, false, false, false)
 	callResultDomain := &RuntimeValueDomain{MayBeOther: true}
 	constantValue := &ConstantValue{Kind: ConstantValueString, String: "constant"}
 	tupleShape := &TupleShape{FixedLength: 2, ElementZero: CallabilityCallable, ElementZeroMinimumParameters: 2}
