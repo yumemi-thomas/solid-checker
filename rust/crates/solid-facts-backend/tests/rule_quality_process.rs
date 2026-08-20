@@ -142,26 +142,25 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "effect-apply-valid.tsx",
-            [("no-owner-effect", 3), ("cleanup-return-unresolved", 0)].as_slice(),
+            [("missing-owner", 3), ("cleanup-return-unresolved", 0)].as_slice(),
         ),
         (
             "effect-apply-extended-valid.tsx",
-            [("no-owner-effect", 4), ("cleanup-return-unresolved", 0)].as_slice(),
+            [("missing-owner", 4), ("cleanup-return-unresolved", 0)].as_slice(),
         ),
-        ("leaf-valid.tsx", [("no-owner-effect", 2)].as_slice()),
+        ("leaf-valid.tsx", [("missing-owner", 2)].as_slice()),
         (
             "owned-leaf-extended-valid.tsx",
             [
-                ("no-owner-settled-cleanup", 1),
-                // The module-scope createTrackedEffect that pins leaf-scope
-                // write legality is itself an undisposed effect.
-                ("no-owner-effect", 1),
+                // One unowned settled cleanup plus the module-scope
+                // createTrackedEffect that pins leaf-scope write legality.
+                ("missing-owner", 2),
             ]
             .as_slice(),
         ),
         (
             "owned-scope-valid.tsx",
-            [("no-owner-effect", 1), ("cleanup-return-unresolved", 0)].as_slice(),
+            [("missing-owner", 1), ("cleanup-return-unresolved", 0)].as_slice(),
         ),
     ]);
     for (file, rules) in incidental {

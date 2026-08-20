@@ -42,8 +42,8 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -92,8 +92,8 @@
       "fixes": 1
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -112,8 +112,8 @@
       "fixes": 1
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -122,8 +122,8 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
@@ -202,8 +202,8 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",

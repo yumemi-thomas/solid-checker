@@ -564,13 +564,13 @@ pub(crate) fn apply_settled_gates(
 
 /// The owner pass sees `onCleanup` as a normal owner requirement while the
 /// leaf pass sees the same call as SC3001. For an owned inline `onSettled`
-/// callback, keep the leaf finding and remove only the duplicate SC4002
+/// callback, keep the leaf finding and remove only the duplicate SC4001
 /// requirement. Out-of-band and uncertain gates remain conservative.
 ///
 /// Only a function literal written *directly* in the owner's argument is that
 /// callback: `onSettled(wrap(() => { onCleanup(dispose); }))` hands the arrow
 /// to an opaque wrapper that may run it out-of-band, where the cleanup really
-/// is unowned, so it keeps its SC4002.
+/// is unowned, so it keeps its SC4001.
 fn apply_settled_requirement_gates(
     lookup: &SemanticLookup<'_>,
     requirements: &mut Vec<OwnerRequirement>,

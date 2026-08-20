@@ -8,6 +8,17 @@ change — as opposed to the bounded corrections that land as ordinary fixes.
 Direction legend: **FN** — misses real defects; **FP** — reports correct
 code; **Both** — either, depending on the code.
 
+## Rule-catalog reduction release notes
+
+- **2026-08-20 — owner diagnostics merged.** `no-owner-effect`,
+  `no-owner-cleanup`, `no-owner-boundary`, and the Solid 2-only
+  `no-owner-settled-cleanup` now report as `missing-owner` / `SC4001` (with
+  the `v1/` namespace in the Solid 1 catalog). Old rule-options keys are
+  aliases to the merged family, so disabling any old member now disables all
+  missing-owner variants. Explicit ESLint keys for the former members are a
+  breaking removal. The `onSettled` cleanup message retains error severity;
+  other proven variants retain warning severity.
+
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 
 AGENTS.md carries an absolute rule — never report what `tsc` reports, judged

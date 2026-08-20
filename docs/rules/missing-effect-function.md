@@ -90,4 +90,4 @@ everything it needs in compute.
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — reads in the apply phase
-- [no-owner-effect](no-owner-effect.md) — an effect with no owner at all
+- [missing-owner](missing-owner.md) — an effect with no owner at all

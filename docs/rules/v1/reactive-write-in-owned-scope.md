@@ -63,4 +63,4 @@ callback that runs outside the current computation.
 ## Related
 
 - [v1/strict-read-untracked](./strict-read-untracked.md) — the read-side counterpart
-- [v1/no-owner-effect](./no-owner-effect.md) — effects created without an owner
+- [v1/missing-owner](./missing-owner.md) — effects created without an owner

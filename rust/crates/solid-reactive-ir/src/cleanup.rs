@@ -3,7 +3,7 @@
 //!
 //! Detects `onCleanup`/leaf-owner misuse, and answers the owner-analysis
 //! subsystem's question "does this callback hand the owner a cleanup"
-//! (`function_cleanup_return_proof`), which SC4002 and SC4004 depend on.
+//! (`function_cleanup_return_proof`), which SC4001 and SC4001 depend on.
 //!
 //! It deliberately reports nothing about a returned value's *legality*. Solid
 //! 2.0 types the effect callback's return as `(() => void) | void`
@@ -460,7 +460,7 @@ fn function_forbidden_operations(
 /// the owner receives.
 ///
 /// Only `ValidFunction` is load-bearing now: it is the ownership fact
-/// `function_returns_cleanup` (SC4002/SC4004) asks for — "does this hand the
+/// `function_returns_cleanup` (SC4001) asks for — "does this hand the
 /// owner an actual cleanup function". The other three outcomes are the ways
 /// that proof can fail, and they are kept apart because they fail for
 /// materially different reasons; collapsing them would hide that
@@ -470,7 +470,7 @@ fn function_forbidden_operations(
 /// None is a cleanup-legality finding. Legality is TypeScript's:
 /// `EffectFunction` returns `(() => void) | void`, so an unusable value is a
 /// type error and reporting it again would duplicate `tsc`. The owner pass may
-/// still turn `Unresolved` into an uncertifiable SC4004 when a possibly
+/// still turn `Unresolved` into an uncertifiable SC4001 when a possibly
 /// returned cleanup would need an owner.
 enum CleanupReturnStatus {
     /// Proven to be a function: an owner that reads returned cleanups

@@ -2,7 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -14,7 +14,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -26,7 +26,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -38,7 +38,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -62,7 +62,7 @@
       "hint": "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -74,7 +74,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -86,7 +86,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -98,7 +98,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -122,7 +122,7 @@
       "hint": "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned. Prove the effective client/server entry through project compiler facts before treating this as a violation."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -134,7 +134,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",

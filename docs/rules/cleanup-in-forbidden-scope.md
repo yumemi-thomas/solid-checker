@@ -24,13 +24,13 @@ builds runs later, in that function's scope. The nested function is proven clean
 for this leaf extent. Opaque wrapper/factory callbacks stay silent for this
 specific SC3001 claim but produce SC9012 `reactive-dispatch-unresolved`; a
 genuinely unowned cleanup is still reported by
-[no-owner-cleanup](no-owner-cleanup.md).
+[missing-owner](missing-owner.md).
 
 `onSettled` is only a leaf owner when it is called *owner-backed*. Called
 out-of-band — from an event handler, with no owner at all, or inside another
 leaf scope — the rc.0 runtime enqueues the callback as a plain function instead:
 `onCleanup` inside it does not throw (it warns, which
-[no-owner-cleanup](no-owner-cleanup.md) reports), so this rule stays silent
+[missing-owner](missing-owner.md) reports), so this rule stays silent
 there. Where the call site's ownership cannot be proven (an exported helper,
 a conditionally supplied owner) the finding is reported as **uncertifiable**
 rather than a proven violation. `createTrackedEffect` is a leaf owner
@@ -82,7 +82,7 @@ function Widget() {
 }
 
 // Out-of-band onSettled runs a plain queued callback, not a leaf owner —
-// this does not throw (the cleanup will never run; no-owner-cleanup warns).
+// this does not throw (the cleanup will never run; missing-owner warns).
 <button onClick={() => onSettled(() => onCleanup(dispose))} />;
 ```
 
@@ -95,5 +95,5 @@ and component bodies — just not inside leaf owners.
 ## Related
 
 - [primitive-in-leaf-owner](primitive-in-leaf-owner.md) — the same constraint for primitives
-- [no-owner-cleanup](no-owner-cleanup.md) — `onCleanup` with no owner at all
-- [no-owner-settled-cleanup](no-owner-settled-cleanup.md) — the out-of-band `onSettled` defect (a returned cleanup that is dropped)
+- [missing-owner](missing-owner.md) — `onCleanup` with no owner at all
+- [missing-owner](missing-owner.md) — the out-of-band `onSettled` defect (a returned cleanup that is dropped)

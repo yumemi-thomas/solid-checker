@@ -26,7 +26,7 @@
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -62,7 +62,7 @@
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument."
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -98,7 +98,7 @@
       "hint": "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument. Prove the effective client/server entry through project compiler facts before treating this as a violation."
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -122,8 +122,8 @@
       "hint": "Drop sync: true and let the read suspend to a <Loading> boundary, or make the computation synchronous by moving the async work into its own computation and reading the settled accessor here."
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
@@ -134,8 +134,8 @@
       "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component."
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/dialect-solid-2/App.tsx",
@@ -170,7 +170,7 @@
       "hint": "onMount was removed in Solid 2.0; see the migration guide — use onSettled, which can also return a cleanup function."
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",

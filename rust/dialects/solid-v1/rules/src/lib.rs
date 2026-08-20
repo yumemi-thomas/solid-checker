@@ -62,19 +62,16 @@ impl CatalogWording for Catalog {
                 panic!("the Solid 1.x catalog does not project directive creations")
             }
             FindingSeed::OwnerRequirement(requirement) => {
-                let (rule, message, hint) = match requirement.operation {
+                let (message, hint) = match requirement.operation {
                     OwnerRequirementOperation::Cleanup => (
-                        Rule::NoOwnerCleanup,
                         "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
                         "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists.",
                     ),
                     OwnerRequirementOperation::Boundary => (
-                        Rule::NoOwnerBoundary,
                         "boundary is created without a reactive owner; it can never be disposed, and the subtree it manages will leak",
                         "Render boundaries inside a component tree rooted by render() or hydrate(), or under an explicit createRoot; a boundary created in a bare helper function has no owner to attach to.",
                     ),
                     OwnerRequirementOperation::Effect => (
-                        Rule::NoOwnerEffect,
                         "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
                         "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle.",
                     ),
@@ -82,7 +79,7 @@ impl CatalogWording for Catalog {
                         panic!("Solid 1.x analysis emitted a 2.0-only settled-cleanup requirement")
                     }
                 };
-                FindingWording::new(rule.metadata(), message, hint)
+                FindingWording::new(Rule::MissingOwner.metadata(), message, hint)
             }
             FindingSeed::PackageContractIssue(issue) => {
                 let (condition, hint) = match &issue.status {
@@ -195,9 +192,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::NoDestructure
         | Rule::ComponentsReturnOnce
         | Rule::ReactiveWriteInOwnedScope
-        | Rule::NoOwnerEffect
-        | Rule::NoOwnerCleanup
-        | Rule::NoOwnerBoundary
+        | Rule::MissingOwner
         | Rule::MissingEffectFunction
         | Rule::UncalledAccessor
         | Rule::ExpectedFunctionGotExpression

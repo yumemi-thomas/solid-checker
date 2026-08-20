@@ -810,7 +810,7 @@ declare namespace JSX {
         selected
             .solve(&initial)
             .iter()
-            .all(|finding| finding.rule != "no-owner-effect"),
+            .all(|finding| finding.rule != "missing-owner"),
         "the JSX use should prove Card is an owned component"
     );
 
@@ -834,7 +834,7 @@ void Card;
     let fresh_findings = selected.solve(&fresh);
     assert!(
         fresh_findings.iter().any(|finding| {
-            finding.rule == "no-owner-effect" && finding.primary_location.path.ends_with("Card.tsx")
+            finding.rule == "missing-owner" && finding.primary_location.path.ends_with("Card.tsx")
         }),
         "without a JSX use, the exported untyped factory has no proven owner: {fresh_findings:#?}"
     );

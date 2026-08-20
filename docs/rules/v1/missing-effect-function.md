@@ -76,4 +76,4 @@ second callback.
 ## Related
 
 - [v1/strict-read-untracked](./strict-read-untracked.md) — reads that do not track
-- [v1/no-owner-effect](./no-owner-effect.md) — effects created without an owner
+- [v1/missing-owner](./missing-owner.md) — effects created without an owner

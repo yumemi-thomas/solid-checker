@@ -12,7 +12,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -22,7 +22,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -32,7 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -62,7 +62,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -82,7 +82,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -102,7 +102,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -122,7 +122,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -162,7 +162,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",

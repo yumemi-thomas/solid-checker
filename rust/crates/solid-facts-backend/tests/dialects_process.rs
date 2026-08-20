@@ -75,7 +75,7 @@ fn project_rule_options_disable_one_exact_catalog_rule() {
     assert!(
         findings
             .iter()
-            .any(|finding| finding["rule"] == "v1/no-owner-effect"),
+            .any(|finding| finding["rule"] == "v1/missing-owner"),
         "the enabled control rule should still report: {findings:#?}"
     );
     assert!(
@@ -444,7 +444,7 @@ fn solid_one_reaction_tracker_argument_is_a_tracked_computation() {
         .unwrap() as u64;
     assert!(
         one.iter().all(|finding| {
-            finding["id"] != "SC4002" || finding["primaryLocation"]["startByte"] != cleanup_start
+            finding["id"] != "SC4001" || finding["primaryLocation"]["startByte"] != cleanup_start
         }),
         "the returned reaction tracker creates the computation owner for its tracking callback: {one:#?}"
     );
@@ -722,7 +722,12 @@ fn solid_one_transition_starter_restores_the_callers_tracking_and_owner() {
         .unwrap() as u64;
     let cleanup_findings = findings
         .iter()
-        .filter(|finding| finding["id"] == "SC4002")
+        .filter(|finding| finding["id"] == "SC4001")
+        .filter(|finding| {
+            finding["message"]
+                .as_str()
+                .is_some_and(|message| message.starts_with("onCleanup"))
+        })
         .filter(|finding| {
             finding["primaryLocation"]["startByte"]
                 .as_u64()
@@ -752,7 +757,7 @@ fn solid_one_web_mount_callbacks_run_under_their_disposal_root() {
     let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some("solid-v1"));
     let impossible = findings
         .iter()
-        .filter(|finding| matches!(finding["id"].as_str(), Some("SC4001" | "SC4002")))
+        .filter(|finding| finding["id"] == "SC4001")
         .filter(|finding| {
             finding["primaryLocation"]["startByte"]
                 .as_u64()
@@ -792,7 +797,7 @@ fn solid_one_from_producer_inherits_its_callers_owner() {
     let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some("solid-v1"));
     let top_level_findings = findings
         .iter()
-        .filter(|finding| finding["id"] == "SC4002")
+        .filter(|finding| finding["id"] == "SC4001")
         .filter(|finding| finding["primaryLocation"]["startByte"] == invalid_cleanup)
         .collect::<Vec<_>>();
     assert_eq!(
@@ -802,7 +807,7 @@ fn solid_one_from_producer_inherits_its_callers_owner() {
     );
     assert!(
         findings.iter().any(|finding| {
-            finding["id"] == "SC4002"
+            finding["id"] == "SC4001"
                 && finding["primaryLocation"]["startByte"] == valid_cleanup
                 && finding["kind"] == "uncertifiable"
                 && finding["message"]
@@ -837,7 +842,7 @@ fn solid_one_web_effect_alias_retains_render_effect_ownership() {
     );
     assert!(
         findings.iter().all(|finding| {
-            finding["id"] != "SC4002" || finding["primaryLocation"]["startByte"] != cleanup_start
+            finding["id"] != "SC4001" || finding["primaryLocation"]["startByte"] != cleanup_start
         }),
         "the effect computation owns cleanup registered inside its callback: {findings:#?}"
     );
@@ -871,7 +876,10 @@ fn solid_one_web_derived_helpers_retain_their_computation_contracts() {
     }
     assert!(
         findings.iter().all(|finding| {
-            finding["id"] != "SC4002"
+            finding["id"] != "SC4001"
+                || finding["message"]
+                    .as_str()
+                    .is_none_or(|message| !message.starts_with("onCleanup"))
                 || finding["primaryLocation"]["startByte"]
                     .as_u64()
                     .is_none_or(|start| start < region_start || start >= region_end)
@@ -957,7 +965,7 @@ fn solid_one_higher_order_helpers_compose_tracking_reachability_and_owner() {
     };
     let cleanup_findings = findings
         .iter()
-        .filter(|finding| finding["id"] == "SC4002")
+        .filter(|finding| finding["id"] == "SC4001")
         .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
         .collect::<Vec<_>>();
     for owned in ["childrenSource", "onBodySource"] {
@@ -1075,7 +1083,10 @@ fn solid_one_catch_error_body_preserves_tracking_under_its_created_owner() {
     let region_end = source.find("const [childrenSource").unwrap() as u64;
     assert!(
         findings.iter().all(|finding| {
-            finding["id"] != "SC4002"
+            finding["id"] != "SC4001"
+                || finding["message"]
+                    .as_str()
+                    .is_none_or(|message| !message.starts_with("onCleanup"))
                 || finding["primaryLocation"]["startByte"]
                     .as_u64()
                     .is_none_or(|start| start < region_start || start >= region_end)
@@ -1128,7 +1139,7 @@ fn solid_one_lazy_loader_requires_a_proven_component_or_preload_invocation() {
     };
     let cleanup_findings = findings
         .iter()
-        .filter(|finding| finding["id"] == "SC4002")
+        .filter(|finding| finding["id"] == "SC4001")
         .collect::<Vec<_>>();
     let cleanup_finding_at = |start: u64| {
         cleanup_findings
@@ -1161,7 +1172,7 @@ fn solid_one_lazy_loader_requires_a_proven_component_or_preload_invocation() {
         .expect("cross-file cleanup") as u64;
     assert!(
         findings.iter().any(|finding| {
-            finding["id"] == "SC4002"
+            finding["id"] == "SC4001"
                 && finding["primaryLocation"]["path"]
                     .as_str()
                     .is_some_and(|path| path.ends_with("lazy-component.tsx"))

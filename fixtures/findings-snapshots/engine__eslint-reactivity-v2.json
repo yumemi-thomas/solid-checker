@@ -92,8 +92,8 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/engine/eslint-reactivity-v2/cleanup-thunk-write.tsx",
@@ -202,7 +202,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -242,7 +242,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -262,7 +262,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -282,8 +282,8 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v2/leaf-reexport-cleanup.tsx",
@@ -292,7 +292,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -312,7 +312,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -352,7 +352,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",

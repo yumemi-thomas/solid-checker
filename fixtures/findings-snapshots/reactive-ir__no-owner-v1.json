@@ -14,7 +14,7 @@
       "hint": "Create a local contract at <ROOT>/fixtures/reactive-ir/no-owner-v1/.solid-checker/contracts/uncontracted-package/solid-reactivity.json, or pass one explicitly with --contract <PATH>. If you maintain uncontracted-package, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -26,8 +26,8 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
     },
     {
-      "rule": "v1/no-owner-boundary",
-      "code": "SC4003",
+      "rule": "v1/missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
@@ -38,7 +38,7 @@
       "hint": "Render boundaries inside a component tree rooted by render() or hydrate(), or under an explicit createRoot; a boundary created in a bare helper function has no owner to attach to."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",

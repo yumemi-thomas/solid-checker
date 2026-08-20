@@ -104,29 +104,29 @@ impl CatalogWording for Catalog {
                 location: Some(creation.location.clone()),
             }]),
             FindingSeed::OwnerRequirement(requirement) => {
-                let (rule, message, hint) = match requirement.operation {
+                let (message, hint) = match requirement.operation {
                     OwnerRequirementOperation::Cleanup => (
-                        Rule::NoOwnerCleanup,
                         "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
                         "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component.",
                     ),
                     OwnerRequirementOperation::Boundary => (
-                        Rule::NoOwnerBoundary,
                         "boundary is created without a reactive owner; it can never be disposed, and the subtree it manages will leak",
                         "Render boundaries inside a component tree rooted by render() or hydrate(), or under an explicit createRoot; a boundary created in a bare helper function has no owner to attach to.",
                     ),
                     OwnerRequirementOperation::SettledCleanup => (
-                        Rule::NoOwnerSettledCleanup,
                         "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run",
                         "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead.",
                     ),
                     OwnerRequirementOperation::Effect => (
-                        Rule::NoOwnerEffect,
                         "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
                         "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle.",
                     ),
                 };
-                FindingWording::new(rule.metadata(), message, hint)
+                let mut metadata = Rule::MissingOwner.metadata();
+                if requirement.operation == OwnerRequirementOperation::SettledCleanup {
+                    metadata.severity = "error";
+                }
+                FindingWording::new(metadata, message, hint)
             }
             FindingSeed::AsyncRead(read) => async_read_wording(read),
             FindingSeed::PackageContractIssue(issue) => {
@@ -466,10 +466,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::CleanupInForbiddenScope
         | Rule::PrimitiveInLeafOwner
         | Rule::FlushInForbiddenScope
-        | Rule::NoOwnerEffect
-        | Rule::NoOwnerCleanup
-        | Rule::NoOwnerBoundary
-        | Rule::NoOwnerSettledCleanup
+        | Rule::MissingOwner
         | Rule::PendingAsyncUntrackedRead
         | Rule::PendingAsyncForbiddenScope
         | Rule::AsyncOutsideLoadingBoundary

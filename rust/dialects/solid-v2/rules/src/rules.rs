@@ -28,10 +28,7 @@ pub enum Rule {
     CleanupInForbiddenScope,
     PrimitiveInLeafOwner,
     FlushInForbiddenScope,
-    NoOwnerEffect,
-    NoOwnerCleanup,
-    NoOwnerBoundary,
-    NoOwnerSettledCleanup,
+    MissingOwner,
     PendingAsyncUntrackedRead,
     PendingAsyncForbiddenScope,
     AsyncOutsideLoadingBoundary,
@@ -59,7 +56,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 32] = [
+    pub const ALL: [Self; 29] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -75,10 +72,7 @@ impl Rule {
         Self::CleanupInForbiddenScope,
         Self::PrimitiveInLeafOwner,
         Self::FlushInForbiddenScope,
-        Self::NoOwnerEffect,
-        Self::NoOwnerCleanup,
-        Self::NoOwnerBoundary,
-        Self::NoOwnerSettledCleanup,
+        Self::MissingOwner,
         Self::PendingAsyncUntrackedRead,
         Self::PendingAsyncForbiddenScope,
         Self::AsyncOutsideLoadingBoundary,
@@ -137,15 +131,10 @@ impl Rule {
             }
             Self::PrimitiveInLeafOwner => ("SC3002", "primitive-in-leaf-owner", "error", false),
             Self::FlushInForbiddenScope => ("SC3003", "flush-in-forbidden-scope", "error", false),
-            Self::NoOwnerEffect => ("SC4001", "no-owner-effect", "warning", false),
-            Self::NoOwnerCleanup => ("SC4002", "no-owner-cleanup", "warning", false),
-            Self::NoOwnerBoundary => ("SC4003", "no-owner-boundary", "warning", false),
-            // Unlike the other owner rules (whose runtime consequence is a
-            // silent leak), the runtime enforces this one: an onSettled
-            // callback returning a cleanup with no owner throws
-            // SETTLED_CLEANUP_UNOWNED in dev (rc.0), so the proven form
-            // mirrors that as an error.
-            Self::NoOwnerSettledCleanup => ("SC4004", "no-owner-settled-cleanup", "error", false),
+            // Settled-cleanup findings override this family default to error:
+            // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
+            // other missing-owner operations leak silently.
+            Self::MissingOwner => ("SC4001", "missing-owner", "warning", false),
             Self::PendingAsyncUntrackedRead => {
                 ("SC5001", "pending-async-untracked-read", "error", false)
             }
@@ -347,7 +336,7 @@ mod tests {
         // error diagnostic and throws), not a warning: an onSettled callback
         // returning a cleanup in an unowned scope halts in dev and drops the
         // cleanup in production. The catalog mirrors the throw as an error.
-        assert_eq!(Rule::NoOwnerSettledCleanup.metadata().severity, "error");
+        assert_eq!(Rule::MissingOwner.metadata().severity, "warning");
         // resolve() under an active observer is a dev *throw* ("Cannot call
         // resolve inside a reactive scope", probed on the rc.0 signals dev
         // bundle), mirrored as an error like the other owned/tracked-scope

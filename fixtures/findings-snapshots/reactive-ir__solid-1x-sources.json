@@ -82,7 +82,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",

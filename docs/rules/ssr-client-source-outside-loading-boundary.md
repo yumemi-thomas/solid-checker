@@ -117,4 +117,4 @@ server has something to render.
   it on the same read when both would apply
 - [pending-async-untracked-read](pending-async-untracked-read.md) — untracked
   pending reads, which throw on the client
-- [no-owner-boundary](no-owner-boundary.md) — boundaries need owners
+- [missing-owner](missing-owner.md) — boundaries need owners

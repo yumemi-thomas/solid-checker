@@ -144,15 +144,7 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 ("primitive-in-directive-application", 3),
             ],
         ),
-        (
-            "owner-presence",
-            &[
-                ("no-owner-effect", 7),
-                ("no-owner-cleanup", 2),
-                ("no-owner-boundary", 3),
-                ("no-owner-settled-cleanup", 2),
-            ],
-        ),
+        ("owner-presence", &[("missing-owner", 14)]),
         (
             "async-boundary",
             &[
@@ -257,6 +249,17 @@ fn solid2_precision_corrections_are_end_to_end() {
             .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
             .collect::<Vec<_>>()
     };
+    let owner_starts = |message_prefix: &str| {
+        findings_for_rule(&findings, "missing-owner")
+            .iter()
+            .filter(|finding| {
+                finding["message"]
+                    .as_str()
+                    .is_some_and(|message| message.starts_with(message_prefix))
+            })
+            .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
+            .collect::<Vec<_>>()
+    };
 
     // Each count pins one side of a proof. SC1002: the accessor call and the
     // store member read inside the exact `Array#filter` callback, and nothing
@@ -268,12 +271,12 @@ fn solid2_precision_corrections_are_end_to_end() {
     // rules below instead of through a legality finding.
     // SC1001/SC2003: a plain store write is a write only,
     // while the compound and update forms also read their target and a
-    // computed key stays a read. SC3001/SC4002/SC4004: the one owner-backed
+    // computed key stays a read. SC3001/SC4001/SC4001: the one owner-backed
     // settled cleanup written as a literal callback reports SC3001 without a
-    // duplicate SC4002; the wrapper-built, identifier-referenced, and
-    // out-of-band cleanups are SC4002 only. The returned-call block adds three
+    // duplicate SC4001; the wrapper-built, identifier-referenced, and
+    // out-of-band cleanups are SC4001 only. The returned-call block adds three
     // SC3004 (a produced `number` in both return spellings, plus the unowned
-    // one), one SC9002 (`any`), and one SC4004 (a produced function is a real
+    // one), one SC9002 (`any`), and one SC4001 (a produced function is a real
     // cleanup); a produced function, `(() => void) | undefined`, and `void`
     // are legal and silent.
     for (rule, expected) in [
@@ -286,10 +289,9 @@ fn solid2_precision_corrections_are_end_to_end() {
         // asserted by span below. A count alone cannot tell those apart.
         ("no-direct-mutation", 4),
         ("cleanup-in-forbidden-scope", 1),
-        ("no-owner-cleanup", 3),
         // One proven returned cleanup plus four callbacks whose runtime
         // return may be a cleanup and therefore cannot be certified safe.
-        ("no-owner-settled-cleanup", 5),
+        ("missing-owner", 8),
     ] {
         assert_rule_findings(&findings, rule, expected);
     }
@@ -299,7 +301,7 @@ fn solid2_precision_corrections_are_end_to_end() {
     // fixture is wrapper-built, handed over as an identifier reference, or
     // has its onCleanup in a nested function the callback merely builds — no
     // leaf scope is proven at any of them, so SC3001 stops here while the
-    // genuinely unowned SC4002 continues.
+    // genuinely unowned SC4001 continues.
     let non_literal_leaf = start_of("// `wrap` may stash");
     assert!(
         starts("cleanup-in-forbidden-scope")
@@ -308,7 +310,7 @@ fn solid2_precision_corrections_are_end_to_end() {
         "a leaf callback that is not the literal argument proves no leaf scope"
     );
     assert_eq!(
-        starts("no-owner-cleanup")
+        owner_starts("onCleanup")
             .iter()
             .filter(|start| **start > non_literal_leaf)
             .count(),
@@ -366,7 +368,7 @@ fn solid2_precision_corrections_are_end_to_end() {
     // A returned call is still classified from its result, not from its
     // callable callee — the ownership half of that work is what survives the
     // removal of the legality rules. `return makeCount()` produces a number,
-    // so no cleanup is handed over and SC4004 must not fire; the neighbouring
+    // so no cleanup is handed over and SC4001 must not fire; the neighbouring
     // `onSettled(() => makeThunk())` produces a function and must.
     // Anchored on the module-level spellings: the returned expression is the
     // reported span, and both callees also appear inside the component above.
@@ -374,18 +376,18 @@ fn solid2_precision_corrections_are_end_to_end() {
     let unowned_thunk =
         start_of("onSettled(() => makeThunk())") + u64::try_from("onSettled(".len()).unwrap();
     assert!(
-        !starts("no-owner-settled-cleanup").contains(&returned_call),
+        !owner_starts("onSettled").contains(&returned_call),
         "a call producing a number hands the owner no cleanup to leak"
     );
     assert!(
-        starts("no-owner-settled-cleanup").contains(&unowned_thunk),
+        owner_starts("onSettled").contains(&unowned_thunk),
         "a call producing a function is an unowned returned cleanup"
     );
 
     // `return nothing` where `nothing: undefined` is a legal cleanup return
     // that hands the owner nothing, so it is not a returned cleanup that would
-    // make these unowned callbacks SC4004.
-    let cleanup_starts = starts("no-owner-settled-cleanup");
+    // make these unowned callbacks SC4001.
+    let cleanup_starts = owner_starts("onSettled");
     for typed_undefined in [
         start_of("return nothing;") + u64::try_from("return ".len()).unwrap(),
         start_of("=> nothing);") + u64::try_from("=> ".len()).unwrap(),
@@ -403,10 +405,8 @@ fn solid_one_missing_wording_paths_are_end_to_end() {
         return;
     };
 
-    for (rule, expected) in [("v1/no-owner-effect", 2), ("v1/no-owner-boundary", 1)] {
-        assert_rule_findings(&findings, rule, expected);
-    }
-    let owner_effects = findings_for_rule(&findings, "v1/no-owner-effect");
+    assert_rule_findings(&findings, "v1/missing-owner", 3);
+    let owner_effects = findings_for_rule(&findings, "v1/missing-owner");
     assert!(owner_effects.iter().any(|finding| {
         finding["kind"] == "violation"
             && finding["message"]
@@ -694,7 +694,7 @@ fn create_effect_owner_findings_require_runtime_allocation() {
     let Some(static_api) = diagnostic_fixture("static-api") else {
         return;
     };
-    let lines = findings_for_rule(&static_api, "no-owner-effect")
+    let lines = findings_for_rule(&static_api, "missing-owner")
         .into_iter()
         .map(|finding| finding["primaryLocation"]["line"].as_u64().unwrap())
         .collect::<Vec<_>>();

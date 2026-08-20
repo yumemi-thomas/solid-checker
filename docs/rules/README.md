@@ -46,9 +46,9 @@ that exact rule in the shared project configuration described below.
 
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
-| Shared concepts (17 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
-| Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 15 rules: actions, `flush`, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 22 rules | 32 rules |
+| Shared concepts (15 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
+| Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 14 rules: actions, `flush`, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
+| Catalog size | 20 rules | 29 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -62,10 +62,9 @@ Findings come in two kinds:
   each `SC9xxx` rule explains how to make the code provable.
 
 Uncertifiable findings normally carry **error** severity, including the ones
-the owner rules (`SC4001`–`SC4004`) emit for exported functions whose callers
-the analyzer cannot see (for `SC4004` this is no escalation: its proven form
-is already an error, mirroring the runtime's dev-mode
-`SETTLED_CLEANUP_UNOWNED` throw), and the ones `SC5001`
+`missing-owner` (`SC4001`) emits for exported functions whose callers the
+analyzer cannot see. Its proven `onSettled`-cleanup variant is also an error,
+mirroring the runtime's dev-mode `SETTLED_CLEANUP_UNOWNED` throw. The ones `SC5001`
 [pending-async-untracked-read](pending-async-untracked-read.md) emits when a
 source's options argument cannot be read (an unreadable `loadingValue`
 declaration would make the read safe during the first flight, so the throw is
@@ -161,10 +160,7 @@ rule's page documents its additional options and defaults.
 
 | Code | Rule | Severity |
 | --- | --- | --- |
-| SC4001 | [no-owner-effect](no-owner-effect.md) | warning |
-| SC4002 | [no-owner-cleanup](no-owner-cleanup.md) | warning |
-| SC4003 | [no-owner-boundary](no-owner-boundary.md) | warning |
-| SC4004 | [no-owner-settled-cleanup](no-owner-settled-cleanup.md) | error |
+| SC4001 | [missing-owner](missing-owner.md) | warning |
 
 ## Async
 
@@ -238,13 +234,7 @@ plugin keeps its rule names under the `v1/` namespace.
 | SC1007 | [v1/expected-function-got-expression](v1/expected-function-got-expression.md) | warning |
 | SC2001 | [v1/reactive-write-in-owned-scope](v1/reactive-write-in-owned-scope.md) | error |
 | SC2003 | [v1/no-direct-mutation](v1/no-direct-mutation.md) | warning |
-| SC3001 | [v1/cleanup-in-forbidden-scope](v1/cleanup-in-forbidden-scope.md) | error |
-| SC3002 | [v1/primitive-in-leaf-owner](v1/primitive-in-leaf-owner.md) | error |
-| SC4001 | [v1/no-owner-effect](v1/no-owner-effect.md) | warning |
-| SC4002 | [v1/no-owner-cleanup](v1/no-owner-cleanup.md) | warning |
-| SC4003 | [v1/no-owner-boundary](v1/no-owner-boundary.md) | warning |
-| SC5004 | [v1/no-async-tracked-scope](v1/no-async-tracked-scope.md) | warning |
-| SC6001 | [v1/primitive-in-directive-application](v1/primitive-in-directive-application.md) | error |
+| SC4001 | [v1/missing-owner](v1/missing-owner.md) | warning |
 | SC7001 | [v1/missing-effect-function](v1/missing-effect-function.md) | error |
 | SC8001 | [v1/event-handlers](v1/event-handlers.md) | warning |
 | SC8003 | [v1/jsx-no-duplicate-props](v1/jsx-no-duplicate-props.md) | error |

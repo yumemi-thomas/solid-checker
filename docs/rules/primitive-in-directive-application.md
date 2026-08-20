@@ -28,7 +28,7 @@ leaks for every element the directive is applied to. The dev runtime answers
 with the same `NO_OWNER_*` warnings as any other unowned creation (probed on
 the rc.0 dev bundle — a `createEffect` in the apply phase warns
 `NO_OWNER_EFFECT`; nothing throws), which is why this rule is a warning like
-the [no-owner-effect](no-owner-effect.md) family, not an error: the leak is
+the [missing-owner](missing-owner.md) family, not an error: the leak is
 real and proven, but the runtime keeps working.
 
 ## Examples
@@ -82,4 +82,4 @@ listener wiring only.
 ## Related
 
 - [primitive-in-leaf-owner](primitive-in-leaf-owner.md) — the leaf-owner analogue
-- [no-owner-effect](no-owner-effect.md) — the same unowned-leak class outside directives
+- [missing-owner](missing-owner.md) — the same unowned-leak class outside directives
