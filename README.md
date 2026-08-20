@@ -135,6 +135,10 @@ import solidChecker from "solid-checker/eslint";
 export default [solidChecker.configs.recommended];
 ```
 
+Stylistic control-flow preferences are opt-in and dialect-specific. Compose
+`solidChecker.configs["preferences-v1"]` for Solid 1.x or
+`solidChecker.configs["preferences-v2"]` for Solid 2.0.
+
 With Oxlint:
 
 ```json
@@ -164,6 +168,8 @@ Run `solid-checker --help` for the full list. The options you'll reach for most:
 | `--dialect <solid-v1\|solid-v2>` | Override automatic Solid major-version detection. |
 | `--format <default\|text\|json>` | Output format. `default` prints framed source excerpts, `text` is compact, `json` is machine-readable. |
 | `--certify` | Exit non-zero unless the project is fully certified. Use this in CI. |
+| `--preset <NAME>` | Enable an opt-in catalog preset (repeatable; currently `preferences`). |
+| `--enable-rule <NAME>` | Enable one default-disabled rule (repeatable). |
 | `--check-contracts` | Report imported Solid packages whose reactivity contract is missing, unverified, or stale, with the command that fixes each. Also spelled `solid-checker contract check`. |
 | `-h`, `--help` | Print help. |
 

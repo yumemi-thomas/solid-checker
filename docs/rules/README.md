@@ -36,13 +36,10 @@ writes reported by [`v1/no-direct-mutation`](v1/no-direct-mutation.md) keep the
 the same defect does not change severity merely because a project migrates
 dialects. The warning is compatibility policy, not lower certainty.
 
-For the eslint-plugin-solid 0.14.5 surface, every rule enabled by upstream's
-base policy keeps that policy's severity. Three rules that upstream ships off
-are deliberately available and enabled here: `v1/no-proxy-apis` is an
-**error** because it enforces a target-runtime compatibility constraint;
-`v1/prefer-classlist` and `v1/prefer-show` are **warnings** because they are
-stylistic preferences. Projects that accept one of those tradeoffs can disable
-that exact rule in the shared project configuration described below.
+For the eslint-plugin-solid 0.14.5 surface, every retained rule keeps its
+audited severity. The stylistic `prefer-classlist`, `prefer-for`, and
+`prefer-show` families are disabled by default and live in the opt-in
+`preferences` preset; proof-backed and uncertifiable rules remain enabled.
 
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
@@ -77,7 +74,8 @@ describes its proven violation form when one exists.
 ## Rule configuration
 
 Every rule in either catalog accepts an `enabled` boolean in the project-level
-`.solid-checker/rule-options.json` document. Rules default to enabled. The
+`.solid-checker/rule-options.json` document. Proof-backed and uncertifiable
+rules default to enabled; preference rules default to disabled. The
 document is discovered by the same ancestor walk as
 `.solid-checker/contracts/`, so the CLI, daemon, LSP, and ESLint snapshots all
 apply the same policy.
@@ -96,7 +94,13 @@ behaviour depends on: [v1/self-closing-comp](v1/self-closing-comp.md) and
 }
 ```
 
-An absent file means every catalog rule is enabled with its normal defaults.
+An absent file uses every catalog rule's generated default. Native callers can
+enable the dialect-neutral preference family with `--preset preferences`, or
+one rule with repeatable `--enable-rule <name>` flags. An explicit `enabled:
+false` in the file wins over either flag; an explicit `enabled: true` wins
+without a flag. ESLint exposes matching `preferences-v1` and `preferences-v2`
+configs, and explicitly configuring a default-disabled rule also opts it in.
+
 A file naming an unknown rule, an unknown option key, or a non-boolean
 `enabled` value fails the analysis rather than silently changing policy.
 

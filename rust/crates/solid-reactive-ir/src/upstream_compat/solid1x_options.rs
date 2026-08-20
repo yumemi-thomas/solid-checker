@@ -80,8 +80,18 @@ impl Solid1xRuleOptions {
 /// becoming the shared pipeline's interface.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct RuleOptions {
-    disabled: BTreeSet<String>,
+    overrides: BTreeMap<String, RuleOverride>,
+    requested_presets: BTreeSet<String>,
+    requested_rules: BTreeSet<String>,
     pub solid1x: Solid1xRuleOptions,
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum RuleOverride {
+    #[default]
+    Unset,
+    Enabled,
+    Disabled,
 }
 
 /// The document shape of `.solid-checker/rule-options.json`: a schema
@@ -127,7 +137,7 @@ impl RuleOptions {
         let mut options = Self::default();
         for (configured_rule, value) in document.rules {
             let rule = alias(&configured_rule).unwrap_or(&configured_rule);
-            if !has_rule(&rule) {
+            if !has_rule(rule) {
                 return Err(format!(
                     "the rule catalog has no rule named {configured_rule:?}"
                 ));
@@ -140,15 +150,20 @@ impl RuleOptions {
                     format!("rule options for {configured_rule:?}: enabled must be a boolean")
                 })
             })?;
-            if !enabled {
-                options.disabled.insert(rule.to_owned());
-            }
+            options.overrides.insert(
+                rule.to_owned(),
+                if enabled {
+                    RuleOverride::Enabled
+                } else {
+                    RuleOverride::Disabled
+                },
+            );
             let value = serde_json::Value::Object(fields);
             // This module owns 1.x option shapes, not the catalog's external
             // namespace. Match the final, stable upstream rule key after the
             // catalog has validated the full external name.
-            let local_rule = rule.rsplit('/').next().unwrap_or(&rule);
-            let result = owns_solid1x_options(&rule)
+            let local_rule = rule.rsplit('/').next().unwrap_or(rule);
+            let result = owns_solid1x_options(rule)
                 .then(|| options.solid1x.parse_rule(local_rule, &value))
                 .flatten()
                 .unwrap_or_else(|| {
@@ -167,12 +182,28 @@ impl RuleOptions {
         Ok(options)
     }
 
-    /// Whether a catalog finding participates in certification. Rules are
-    /// enabled unless the project document explicitly disables their exact
-    /// external name.
+    pub fn request_presets(&mut self, presets: impl IntoIterator<Item = String>) {
+        self.requested_presets.extend(presets);
+    }
+
+    pub fn request_rules(&mut self, rules: impl IntoIterator<Item = String>) {
+        self.requested_rules.extend(rules);
+    }
+
+    /// Whether a catalog finding participates in certification.
     #[must_use]
-    pub fn is_enabled(&self, rule: &str) -> bool {
-        !self.disabled.contains(rule)
+    pub fn is_enabled(&self, rule: &str, default_enabled: bool, presets: &[&str]) -> bool {
+        match self.overrides.get(rule) {
+            Some(RuleOverride::Disabled) => false,
+            Some(RuleOverride::Enabled) => true,
+            None | Some(RuleOverride::Unset) => {
+                default_enabled
+                    || self.requested_rules.contains(rule)
+                    || presets
+                        .iter()
+                        .any(|preset| self.requested_presets.contains(*preset))
+            }
+        }
     }
 }
 
@@ -240,11 +271,11 @@ mod tests {
             solid1x_rule,
         )
         .unwrap();
-        assert!(!options.is_enabled("v1/no-direct-mutation"));
-        assert!(options.is_enabled("strict-read-untracked"));
-        assert!(options.is_enabled("v1/no-destructure"));
-        assert!(!options.is_enabled("no-owner-cleanup"));
-        assert!(options.is_enabled("no-owner-settled-cleanup"));
+        assert!(!options.is_enabled("v1/no-direct-mutation", true, &[]));
+        assert!(options.is_enabled("strict-read-untracked", true, &[]));
+        assert!(options.is_enabled("v1/no-destructure", true, &[]));
+        assert!(!options.is_enabled("no-owner-cleanup", true, &[]));
+        assert!(options.is_enabled("no-owner-settled-cleanup", true, &[]));
     }
 
     #[test]
@@ -289,7 +320,29 @@ mod tests {
         )
         .unwrap();
 
-        assert!(!options.is_enabled("missing-owner"));
-        assert!(options.is_enabled("old-missing-owner"));
+        assert!(!options.is_enabled("missing-owner", true, &[]));
+        assert!(options.is_enabled("old-missing-owner", true, &[]));
+    }
+
+    #[test]
+    fn catalog_defaults_presets_requests_and_overrides_have_stable_precedence() {
+        let mut options = RuleOptions::default();
+        assert!(!options.is_enabled("prefer-show", false, &["preferences"]));
+        assert!(options.is_enabled("strict-read-untracked", true, &[]));
+
+        options.request_presets(["preferences".into()]);
+        assert!(options.is_enabled("prefer-show", false, &["preferences"]));
+
+        options.request_rules(["prefer-for".into()]);
+        assert!(options.is_enabled("prefer-for", false, &["preferences"]));
+
+        let mut disabled = RuleOptions::parse(
+            r#"{ "schemaVersion": 1, "rules": { "v1/prefer-classlist": { "enabled": false } } }"#,
+            known_rule,
+            solid1x_rule,
+        )
+        .unwrap();
+        disabled.request_presets(["preferences".into()]);
+        assert!(!disabled.is_enabled("v1/prefer-classlist", false, &["preferences"]));
     }
 }

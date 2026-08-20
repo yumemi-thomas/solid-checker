@@ -2,6 +2,9 @@
 
 `SC8015` · **warning** · violation
 
+This preference is disabled by default. Enable the `preferences` preset or
+enable this rule explicitly.
+
 Expensive JSX content is conditionally rendered with `&&` or `?:` instead of
 Solid's `<Show>` component.
 
@@ -41,6 +44,10 @@ Apply the safe `<Show>` rewrite or make the same transformation manually. Keep
 the original JavaScript conditional when its compact form communicates the
 intent better; this rule can be disabled project-wide without weakening the
 checker’s reactive correctness guarantees.
+
+Native checks accept `--preset preferences` or
+`--enable-rule v1/prefer-show`. ESLint users can compose
+`solidChecker.configs["preferences-v1"]`.
 
 ## Related
 

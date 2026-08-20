@@ -2,6 +2,9 @@
 
 `SC8014` · **error** · violation
 
+This preference is disabled by default. Enable the `preferences` preset or
+enable this rule explicitly.
+
 An `Array#map` call is rendered directly as JSX children instead of using
 Solid's list control flow.
 
@@ -42,6 +45,10 @@ Choose `<For>` or `<Index>` based on identity semantics. A safe `<For>` fix is
 offered only when TypeScript proves the receiver is array-like and the callback
 has exactly one non-rest parameter; index-aware or ambiguous callbacks require a
 human choice.
+
+Native checks accept `--preset preferences` or
+`--enable-rule v1/prefer-for`. ESLint users can compose
+`solidChecker.configs["preferences-v1"]`.
 
 ## Related
 

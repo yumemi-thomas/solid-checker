@@ -17,12 +17,13 @@ pub use contract_document::encode as encode_package_contract;
 pub use diagnostics::bundled_solid_js_contract;
 pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
-    PackageSummary, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit,
-    SourceLocation, analysis_metrics, analyze_project, analyze_project_measured,
-    analyze_project_measured_with, discovered_contract_paths, discovered_rule_options_path,
-    imported_package_roots, load_package_contracts, load_package_contracts_with,
-    package_contract_statuses, package_contract_statuses_with, read_package_contract, snapshot,
-    source_location,
+    PackageSummary, RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding,
+    SnapshotFix, SnapshotTextEdit, SourceLocation, analysis_metrics, analyze_project,
+    analyze_project_measured, analyze_project_measured_with,
+    analyze_project_measured_with_enablement, discovered_contract_paths,
+    discovered_rule_options_path, imported_package_roots, load_package_contracts,
+    load_package_contracts_with, package_contract_statuses, package_contract_statuses_with,
+    read_package_contract, snapshot, source_location,
 };
 pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,
@@ -100,6 +101,11 @@ pub enum BackendError {
     Handshake(String),
     #[error("rule options error: {0}")]
     RuleOptions(String),
+    #[error("dialect {dialect:?} produced unknown rule identities: {rules:?}")]
+    UnknownRuleIdentity {
+        dialect: &'static str,
+        rules: Vec<String>,
+    },
     #[error("analysis cancelled")]
     Cancelled,
 }
@@ -1733,6 +1739,8 @@ mod tests {
         name: "stub-dialect-ran",
         severity: "warning",
         uncertifiable: false,
+        default_enabled: true,
+        presets: &[],
     };
 
     const STUB_CONTRACT_RULE: solid_reactive_ir::RuleMetadata = solid_reactive_ir::RuleMetadata {
@@ -1740,6 +1748,8 @@ mod tests {
         name: "stub-contract-missing",
         severity: "error",
         uncertifiable: true,
+        default_enabled: true,
+        presets: &[],
     };
 
     fn stub_solve(
@@ -1780,6 +1790,7 @@ mod tests {
         solve_measured: stub_solve,
         docs_url: |rule| format!("stub://docs/{rule}"),
         has_rule: |_| false,
+        rule_metadata: |rule| (rule == STUB_RULE.name).then_some(STUB_RULE),
         semantic_demands: dialect::SemanticDemandCapabilities::NONE,
         package_contract_finding: stub_package_contract_finding,
         bundled_packages: &[],

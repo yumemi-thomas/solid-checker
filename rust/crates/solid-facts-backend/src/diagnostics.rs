@@ -117,6 +117,12 @@ pub struct DiagnosticTimings {
     pub reused: bool,
 }
 
+#[derive(Clone, Copy, Debug, Default)]
+pub struct RequestedRuleEnablement<'a> {
+    pub presets: &'a [String],
+    pub rules: &'a [String],
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct DiagnosticIdentity {
     /// Which dialect's catalog and compiler produced the retained analysis;
@@ -177,6 +183,29 @@ impl DiagnosticSession {
             .map(|(analysis, _)| analysis)
     }
 
+    pub fn analyze_with_enablement(
+        &mut self,
+        project: &Path,
+        sources: &[SourceFile],
+        facts: &ProjectFacts,
+        explicit_contract_paths: &[String],
+        presets: &[String],
+        enable_rules: &[String],
+    ) -> Result<Arc<DiagnosticAnalysis>, BackendError> {
+        self.analyze_measured_with_enablement(
+            project,
+            sources,
+            facts,
+            explicit_contract_paths,
+            None,
+            RequestedRuleEnablement {
+                presets,
+                rules: enable_rules,
+            },
+        )
+        .map(|(analysis, _)| analysis)
+    }
+
     pub fn analyze_measured(
         &mut self,
         project: &Path,
@@ -184,6 +213,25 @@ impl DiagnosticSession {
         facts: &ProjectFacts,
         explicit_contract_paths: &[String],
         bundled_solid_js: Option<PackageContract>,
+    ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        self.analyze_measured_with_enablement(
+            project,
+            sources,
+            facts,
+            explicit_contract_paths,
+            bundled_solid_js,
+            RequestedRuleEnablement::default(),
+        )
+    }
+
+    pub fn analyze_measured_with_enablement(
+        &mut self,
+        project: &Path,
+        sources: &[SourceFile],
+        facts: &ProjectFacts,
+        explicit_contract_paths: &[String],
+        bundled_solid_js: Option<PackageContract>,
+        enablement: RequestedRuleEnablement<'_>,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
         let ir_started = Instant::now();
         let loaded = load_package_contracts_reporting(
@@ -193,7 +241,9 @@ impl DiagnosticSession {
             explicit_contract_paths,
             bundled_solid_js,
         )?;
-        let rule_options = discover_rule_options(project)?;
+        let mut rule_options = discover_rule_options(project)?;
+        rule_options.request_presets(enablement.presets.iter().cloned());
+        rule_options.request_rules(enablement.rules.iter().cloned());
         let identity = DiagnosticIdentity {
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
@@ -314,6 +364,25 @@ pub fn analyze_project_measured_with(
     )
 }
 
+pub fn analyze_project_measured_with_enablement(
+    dialect: &'static Dialect,
+    project: &Path,
+    sources: &[SourceFile],
+    facts: &ProjectFacts,
+    explicit_contract_paths: &[String],
+    bundled_solid_js: Option<PackageContract>,
+    enablement: RequestedRuleEnablement<'_>,
+) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+    DiagnosticSession::new(dialect).analyze_measured_with_enablement(
+        project,
+        sources,
+        facts,
+        explicit_contract_paths,
+        bundled_solid_js,
+        enablement,
+    )
+}
+
 fn finish_analysis(
     dialect: &'static Dialect,
     project: &Path,
@@ -391,12 +460,38 @@ fn finish_analysis(
             location,
         })
     }));
-    findings.retain(|finding| identity.rule_options.is_enabled(&finding.rule));
+    retain_enabled(dialect, &identity.rule_options, &mut findings)?;
     let snapshot = snapshot(sources, &contracts, metrics, findings);
     Ok(DiagnosticAnalysis {
         program,
         contracts,
         snapshot,
+    })
+}
+
+fn retain_enabled(
+    dialect: &Dialect,
+    options: &RuleOptions,
+    findings: &mut Vec<Finding>,
+) -> Result<(), BackendError> {
+    let mut unknown = Vec::new();
+    findings.retain(|finding| match (dialect.rule_metadata)(&finding.rule) {
+        Some(metadata) => {
+            options.is_enabled(&finding.rule, metadata.default_enabled, metadata.presets)
+        }
+        None => {
+            unknown.push(finding.rule.clone());
+            false
+        }
+    });
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    unknown.sort_unstable();
+    unknown.dedup();
+    Err(BackendError::UnknownRuleIdentity {
+        dialect: dialect.id,
+        rules: unknown,
     })
 }
 
@@ -1548,7 +1643,39 @@ mod tests {
     use solid_facts::core::Generation;
     use solid_facts::{ProjectFacts, TypeScriptTable};
 
-    use super::DiagnosticSession;
+    use super::{DiagnosticSession, retain_enabled};
+
+    #[test]
+    fn unknown_finding_identities_fail_closed() {
+        let mut findings = vec![solid_reactive_ir::Finding::new(
+            solid_reactive_ir::RuleMetadata {
+                code: "TEST00",
+                name: "not-in-the-catalog",
+                severity: "error",
+                uncertifiable: false,
+                default_enabled: true,
+                presets: &[],
+            },
+            "synthetic".into(),
+            typefacts::Location {
+                path: "synthetic.tsx".into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        )];
+        let error = retain_enabled(
+            crate::dialect::default_dialect(),
+            &solid_reactive_ir::RuleOptions::default(),
+            &mut findings,
+        )
+        .unwrap_err();
+        assert!(findings.is_empty());
+        assert!(matches!(
+            error,
+            crate::BackendError::UnknownRuleIdentity { rules, .. }
+                if rules == ["not-in-the-catalog"]
+        ));
+    }
 
     #[test]
     fn diagnostic_session_reuses_the_complete_result() {
@@ -1579,6 +1706,84 @@ mod tests {
         assert!(Arc::ptr_eq(&initial, &reused));
         assert!(!initial_timings.reused);
         assert!(reused_timings.reused);
+    }
+
+    #[test]
+    fn diagnostic_session_keys_retention_on_requested_enablement() {
+        let facts = ProjectFacts {
+            generation: Generation::new(1).unwrap(),
+            project_id: "/virtual/tsconfig.json".into(),
+            files: Vec::new(),
+            typescript: TypeScriptTable::from_parts(
+                3,
+                1,
+                "/virtual/tsconfig.json",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            typescript_changes: None,
+        };
+        let mut session = DiagnosticSession::default();
+
+        let (_, baseline) = session
+            .analyze_measured(Path::new(&facts.project_id), &[], &facts, &[], None)
+            .unwrap();
+        let (preset_analysis, preset_miss) = session
+            .analyze_measured_with_enablement(
+                Path::new(&facts.project_id),
+                &[],
+                &facts,
+                &[],
+                None,
+                super::RequestedRuleEnablement {
+                    presets: &["preferences".into()],
+                    rules: &[],
+                },
+            )
+            .unwrap();
+        let (preset_reused, preset_hit) = session
+            .analyze_measured_with_enablement(
+                Path::new(&facts.project_id),
+                &[],
+                &facts,
+                &[],
+                None,
+                super::RequestedRuleEnablement {
+                    presets: &["preferences".into(), "preferences".into()],
+                    rules: &[],
+                },
+            )
+            .unwrap();
+        let (_, rule_miss) = session
+            .analyze_measured_with_enablement(
+                Path::new(&facts.project_id),
+                &[],
+                &facts,
+                &[],
+                None,
+                super::RequestedRuleEnablement {
+                    presets: &[],
+                    rules: &["prefer-show".into()],
+                },
+            )
+            .unwrap();
+
+        assert!(!baseline.reused);
+        assert!(
+            !preset_miss.reused,
+            "a preset change must miss retained analysis"
+        );
+        assert!(
+            preset_hit.reused,
+            "duplicate preset values must normalize to one identity"
+        );
+        assert!(Arc::ptr_eq(&preset_analysis, &preset_reused));
+        assert!(
+            !rule_miss.reused,
+            "an enabled-rule change must miss retained analysis"
+        );
     }
     /// A rule-options document naming a *removed* rule must load, and one
     /// naming a rule that never existed must still fail. The first half is the
@@ -1632,7 +1837,7 @@ mod tests {
             let loaded = super::discover_rule_options(&directory)
                 .unwrap_or_else(|error| panic!("alias {old:?} must load: {error}"));
             assert!(
-                !loaded.is_enabled(current),
+                !loaded.is_enabled(current, true, &[]),
                 "disabling alias {old:?} did not disable {current:?}"
             );
             assert!(

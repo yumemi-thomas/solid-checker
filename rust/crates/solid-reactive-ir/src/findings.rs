@@ -29,6 +29,8 @@ pub struct RuleMetadata {
     pub name: &'static str,
     pub severity: &'static str,
     pub uncertifiable: bool,
+    pub default_enabled: bool,
+    pub presets: &'static [&'static str],
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/`. Both
@@ -62,12 +64,20 @@ pub fn rule_manifest_json(
     );
     let count = rules.len();
     for (index, metadata) in rules.enumerate() {
+        let presets = metadata
+            .presets
+            .iter()
+            .map(|preset| format!("\"{preset}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
         out.push_str(&format!(
-            "    {{ \"code\": \"{}\", \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {} }}{}\n",
+            "    {{ \"code\": \"{}\", \"name\": \"{}\", \"severity\": \"{}\", \"uncertifiable\": {}, \"defaultEnabled\": {}, \"presets\": [{}] }}{}\n",
             metadata.code,
             metadata.name,
             metadata.severity,
             metadata.uncertifiable,
+            metadata.default_enabled,
+            presets,
             if index + 1 == count { "" } else { "," }
         ));
     }

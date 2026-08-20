@@ -26,3 +26,10 @@ shipping a version-specific payload can disable default features and enable
 only one; requests naming an omitted dialect receive the normal unknown-id
 error. CI compiles both single-dialect variants so shared infrastructure cannot
 grow an accidental dependency on either compiler or catalog.
+
+Rule configuration is not yet transported through the WASM `CheckRequest`.
+The adapter cannot read `.solid-checker/rule-options.json` and exposes no
+`presets` or `enableRules` fields, so it uses catalog defaults: proof-backed
+rules run, while `prefer-classlist`, `prefer-for`, and `prefer-show` remain
+disabled. CLI, daemon, and ESLint callers can opt into those preferences; WASM
+support requires a future rule-options channel rather than an adapter-only list.

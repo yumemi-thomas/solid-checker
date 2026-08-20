@@ -1,5 +1,13 @@
 # Precision backlog
 
+## 2026-08 preference defaults
+
+`prefer-classlist`, `prefer-for`, and `prefer-show` are retained as explicit
+style choices but no longer run by default. Native callers opt in with
+`--preset preferences` or `--enable-rule`; ESLint callers use the generated
+`preferences-v1` or `preferences-v2` config. Explicit project-level disables
+continue to win over the preset.
+
 The analyzer's known approximations, recorded so each is a decision with an
 owner rather than a rediscovery. Items live here when a fix is a *design
 change* — it would move findings broadly and needs its own fixture-gated

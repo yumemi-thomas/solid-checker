@@ -157,9 +157,13 @@ const runChecker = (testCase, index, strict) => {
     join(dir, caseSourceName),
     code,
   );
+  const enablementArgs = [
+    ...(testCase.presets ?? []).flatMap((preset) => ["--preset", preset]),
+    ...(testCase.enableRules ?? []).flatMap((rule) => ["--enable-rule", rule]),
+  ];
   const output = execFileSync(
     CHECKER,
-    ["--format", "json", "--project", join(dir, `tsconfig.${pass}.json`)],
+    ["--format", "json", "--project", join(dir, `tsconfig.${pass}.json`), ...enablementArgs],
     {
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
@@ -225,6 +229,15 @@ for (const [index, testCase] of ledger.cases.entries()) {
       typeof testCase.compilerOptions.verbatimModuleSyntax !== "boolean"
     ) {
       failures.push(`${label}: compilerOptions.verbatimModuleSyntax must be boolean`);
+      continue;
+    }
+  }
+  for (const field of ["presets", "enableRules"]) {
+    if (
+      testCase[field] !== undefined &&
+      (!Array.isArray(testCase[field]) || testCase[field].some((value) => typeof value !== "string"))
+    ) {
+      failures.push(`${label}: ${field} must be an array of strings`);
       continue;
     }
   }

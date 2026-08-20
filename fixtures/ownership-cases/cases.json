@@ -4063,7 +4063,7 @@
         "text": "let el = <div classlist={{ red: true }}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4084,7 +4084,7 @@
         "text": "let el = <div class=\"red\">Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4105,7 +4105,7 @@
         "text": "let el = <div className=\"red\">Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4126,7 +4126,7 @@
         "text": "let el = <div something={cn({ red: true })}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4147,7 +4147,7 @@
         "text": "let el = <div something={clsx({ red: true })}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4168,7 +4168,7 @@
         "text": "let el = <div something={classnames({ red: true })}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4189,7 +4189,7 @@
         "text": "let el = <div class={someOtherClassFunction({ red: true })}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4210,7 +4210,7 @@
         "text": "let el = <div class={cn({ red: true }, condition && \"yellow\")}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4231,7 +4231,7 @@
         "text": "let el = <div something={cn(condition && \"yellow\")}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4252,7 +4252,7 @@
         "text": "let el = <div class={clsx({ red: true })} classlist={{}}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4281,7 +4281,7 @@
           ]
         }
       },
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4302,7 +4302,7 @@
         "text": "let el = <div class={cn({ red: true })}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4346,7 +4346,7 @@
         "text": "let el = <div class={clsx({ red: true })}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4393,7 +4393,7 @@
         "text": "let el = <div class={classnames({ red: true })}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4445,7 +4445,7 @@
           ]
         }
       },
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4492,7 +4492,7 @@
         "text": "let el = <div className={cn({ red: true })}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4545,7 +4545,7 @@
         "text": "let el = <div class={cn({ red: true, \"mx-4\": props.size > 2 })}>Hello, world!</div>\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4601,7 +4601,7 @@
         "text": "let Component = (props) => <ol><For each={props.data}>{d => <li>{d.text}</li>}</For></ol>;\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4622,7 +4622,7 @@
         "text": "let abc = x.map(y => y + z);\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4643,7 +4643,7 @@
         "text": "let Component = (props) => {\n      let abc = x.map(y => y + z);\n      return <div>Hello, world!</div>;\n    }\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -4664,7 +4664,7 @@
         "text": "let Component = (props) => <ol>{props.data.map(d => <li>{d.text}</li>)}</ol>;\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4720,7 +4720,7 @@
         "text": "let Component = (props) => <>{props.data.map(d => <li>{d.text}</li>)}</>;\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4773,7 +4773,7 @@
         "text": "let Component = (props) => <ol>{props.data.map(d => <li key={d.id}>{d.text}</li>)}</ol>;\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4838,7 +4838,7 @@
         "text": "\n      function Component(props) {\n        return <ol>{props.data.map(d => <li>{d.text}</li>)}</ol>;\n      }\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4891,7 +4891,7 @@
         "text": "\n      function Component(props) {\n        return <ol>{props.data?.map(d => <li>{d.text}</li>)}</ol>;\n      }\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4947,7 +4947,7 @@
         "text": "let Component = (props) => <ol>{props.data.map(() => <li />)}</ol>;\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -4991,7 +4991,7 @@
         "text": "let Component = (props) => <ol>{props.data.map((...args) => <li>{args[0].text}</li>)}</ol>;\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -5047,7 +5047,7 @@
         "text": "function Component(props) {\n      return <Show when={props.cond}>Content</Show>;\n    }\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -5068,7 +5068,7 @@
         "text": "function Component(props) {\n      return <Show when={props.cond} fallback=\"Fallback\">Content</Show>;\n    }\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [],
@@ -5089,7 +5089,7 @@
         "text": "\n      function Component(props) {\n        return <div>{props.cond && <span>Content</span>}</div>;\n      }\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -5134,7 +5134,7 @@
         "text": "\n      function Component(props) {\n        return <>{props.cond && <span>Content</span>}</>;\n      }\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -5182,7 +5182,7 @@
         "text": "\n      function Component(props) {\n        return (\n          <div>\n            {props.cond ? (\n              <span>Content</span> \n            ) : (\n              <span>Fallback</span>\n            )}\n          </div>\n        );\n      }\nexport {};\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -5227,7 +5227,7 @@
         "text": "\n      function Component(props) {\n        return (\n          <For each={props.someList}>\n            {(listItem) => listItem.cond && <span>Content</span>}\n          </For>\n        );\n      }\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -5275,7 +5275,7 @@
         "text": "\n      function Component(props) {\n        return (\n          <For each={props.someList}>\n            {(listItem) => (listItem.cond ? (\n              <span>Content</span> \n            ) : (\n              <span>Fallback</span>\n            ))}\n          </For>\n        );\n      }\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -8798,7 +8798,7 @@
         "text": "const items = [\"a\", \"b\"];\nexport const App = () => <ul>{items.map((item, index) => item + index)}</ul>;\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -8831,7 +8831,7 @@
         "text": "export const App = (props: { ready: boolean }) => <main>{props.ready && <span />}</main>;\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [

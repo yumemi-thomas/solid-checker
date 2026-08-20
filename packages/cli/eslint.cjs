@@ -108,7 +108,20 @@ function loadSnapshot(context) {
     : [join(__dirname, "bin", "solid-checker.mjs")];
   const contracts = Array.isArray(config.contracts) ? config.contracts : [];
   const dialect = config.dialect ?? null;
-  const key = JSON.stringify({ command, commandArgs, project, contracts, dialect });
+  const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
+  const configuredRules = Array.isArray(config.enableRule) ? config.enableRule : [];
+  const activeDefaultDisabled = [...(ownedRules.get(contextFilename(context)) ?? [])]
+    .filter(rule => manifestEntriesByRule.get(rule)?.defaultEnabled === false);
+  const enableRules = [...new Set([...configuredRules, ...activeDefaultDisabled])].sort();
+  const key = JSON.stringify({
+    command,
+    commandArgs,
+    project,
+    contracts,
+    dialect,
+    presets,
+    enableRules
+  });
   if (snapshotCache.has(key)) {
     const cached = snapshotCache.get(key);
     if (cached instanceof Error) throw cached;
@@ -133,6 +146,8 @@ function loadSnapshot(context) {
   ];
   if (dialect) args.push("--dialect", dialect);
   for (const contract of contracts) args.push("--contract", contract);
+  for (const preset of presets) args.push("--preset", preset);
+  for (const rule of enableRules) args.push("--enable-rule", rule);
   const result = spawnSync(command, args, {
     cwd: dirname(project),
     encoding: "utf8",
@@ -212,6 +227,8 @@ const adapterSchema = [{
     cwd: { type: "string" },
     contracts: { type: "array", items: { type: "string" } },
     dialect: { type: "string" },
+    preset: { type: "array", items: { type: "string" } },
+    enableRule: { type: "array", items: { type: "string" } },
     snapshotPath: { type: "string" }
   }
 }];
@@ -293,7 +310,7 @@ function reportingRule(entry, catalog) {
       type: "problem",
       docs: {
         description: `solid-checker ${entry.code} ${entry.name}`,
-        recommended: !entry.uncertifiable,
+        recommended: entry.defaultEnabled && !entry.uncertifiable,
         url: `${catalog.docsBaseUrl}/${entry.name}.md`
       },
       fixable: "code",
@@ -344,7 +361,10 @@ const discoveredCatalogs = readdirSync(join(__dirname, "lib"))
       typeof catalog.dialect !== "string" ||
       typeof catalog.config !== "string" ||
       typeof catalog.namespace !== "string" ||
-      !Array.isArray(catalog.rules)
+      !Array.isArray(catalog.rules) ||
+      !catalog.rules.every(entry =>
+        typeof entry.defaultEnabled === "boolean" && Array.isArray(entry.presets)
+      )
     ) {
       throw new Error(`invalid solid-checker rule manifest ${file}`);
     }
@@ -360,6 +380,9 @@ const docsUrlsByRule = new Map(
   discoveredCatalogs.flatMap(catalog =>
     catalog.rules.map(entry => [entry.name, `${catalog.docsBaseUrl}/${entry.name}.md`])
   )
+);
+const manifestEntriesByRule = new Map(
+  discoveredCatalogs.flatMap(catalog => catalog.rules.map(entry => [entry.name, entry]))
 );
 
 const plugin = {
@@ -417,12 +440,25 @@ for (const catalog of Object.values(manifests)) {
       // per-rule rule owns, so both orders report each finding exactly once.
       "solid-checker/certification": "off",
       ...Object.fromEntries(
-        catalog.rules.map(entry => [
+        catalog.rules.filter(entry => entry.defaultEnabled).map(entry => [
           `solid-checker/${entry.name}`,
           entry.severity === "error" ? "error" : "warn"
         ])
       )
     }
+  };
+  const preferenceRules = catalog.rules.filter(entry =>
+    entry.presets.includes("preferences")
+  );
+  plugin.configs[`preferences-${catalog.config}`] = {
+    plugins: { "solid-checker": plugin },
+    settings: { solidChecker: { preset: ["preferences"] } },
+    rules: Object.fromEntries(
+      preferenceRules.map(entry => [
+        `solid-checker/${entry.name}`,
+        entry.severity === "error" ? "error" : "warn"
+      ])
+    )
   };
 }
 
@@ -434,6 +470,7 @@ module.exports._testing = {
   findingMessage,
   loadSnapshot,
   manifests,
+  manifestEntriesByRule,
   deprecatedRuleKeys: DEPRECATED_RULE_KEYS,
   ownedRules,
   snapshotCache

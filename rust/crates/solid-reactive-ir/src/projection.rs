@@ -754,6 +754,8 @@ mod tests {
                     name: "test",
                     severity: "warning",
                     uncertifiable: false,
+                    default_enabled: true,
+                    presets: &[],
                 },
                 message,
                 "",
@@ -776,6 +778,8 @@ mod tests {
                 name: "test",
                 severity: "warning",
                 uncertifiable: false,
+                default_enabled: true,
+                presets: &[],
             },
             "test".into(),
             Location {

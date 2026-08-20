@@ -12,7 +12,9 @@
 use std::path::Path;
 
 use solid_facts::compiler::CompilerFactsProvider;
-use solid_reactive_ir::{Finding, PackageContract, PackageContractIssue, Program, SolveTimings};
+use solid_reactive_ir::{
+    Finding, PackageContract, PackageContractIssue, Program, RuleMetadata, SolveTimings,
+};
 
 use crate::BackendError;
 
@@ -274,7 +276,7 @@ impl SemanticDemandCapabilities {
     /// pays for the library-type identities that rule reads.
     #[cfg(feature = "dialect-v2")]
     const SOLID_2: Self = Self {
-        array_map_receiver_types: false,
+        array_map_receiver_types: true,
         server_argument_library_types: true,
     };
     #[cfg(feature = "dialect-v1")]
@@ -306,6 +308,8 @@ pub struct Dialect {
     /// (for example, which type facts to demand) instead of naming a
     /// version.
     pub has_rule: fn(&str) -> bool,
+    /// Catalog metadata for one exact external rule identity.
+    pub rule_metadata: fn(&str) -> Option<RuleMetadata>,
     /// Typed fact-acquisition requirements of the catalog.
     pub semantic_demands: SemanticDemandCapabilities,
     /// Projects a package-contract issue through this dialect's catalog so
@@ -426,6 +430,12 @@ static SOLID_V2: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
+    rule_metadata: |name| {
+        solid_v2_rules::Rule::ALL
+            .into_iter()
+            .find(|rule| rule.metadata().name == name)
+            .map(solid_v2_rules::Rule::metadata)
+    },
     semantic_demands: SemanticDemandCapabilities::SOLID_2,
     package_contract_finding: solid_v2_rules::package_contract_finding,
     bundled_packages: &["solid-js", "@solidjs/web"],
@@ -444,6 +454,12 @@ static SOLID_V1: Dialect = Dialect {
         solid_v1_rules::Rule::ALL
             .into_iter()
             .any(|rule| rule.metadata().name == name)
+    },
+    rule_metadata: |name| {
+        solid_v1_rules::Rule::ALL
+            .into_iter()
+            .find(|rule| rule.metadata().name == name)
+            .map(solid_v1_rules::Rule::metadata)
     },
     semantic_demands: SemanticDemandCapabilities::SOLID_1,
     package_contract_finding: solid_v1_rules::package_contract_finding,
@@ -695,6 +711,65 @@ mod tests {
             assert_eq!(by_id(dialect.id).map(|found| found.id), Some(dialect.id));
         }
         assert!(by_id("solid-v3").is_none());
+    }
+
+    #[test]
+    fn every_catalog_identity_resolves_to_its_metadata() {
+        for dialect in ALL {
+            #[cfg(feature = "dialect-v1")]
+            if dialect.id == "solid-v1" {
+                for rule in solid_v1_rules::Rule::ALL {
+                    assert_eq!(
+                        (dialect.rule_metadata)(rule.metadata().name),
+                        Some(rule.metadata())
+                    );
+                }
+            }
+            #[cfg(feature = "dialect-v2")]
+            if dialect.id == "solid-v2" {
+                for rule in solid_v2_rules::Rule::ALL {
+                    assert_eq!(
+                        (dialect.rule_metadata)(rule.metadata().name),
+                        Some(rule.metadata())
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
+    #[test]
+    fn only_preference_rules_are_default_disabled_and_preset_members() {
+        let expected = HashSet::from([
+            "v1/prefer-classlist",
+            "v1/prefer-for",
+            "v1/prefer-show",
+            "prefer-for",
+            "prefer-show",
+        ]);
+        let observed = solid_v1_rules::Rule::ALL
+            .into_iter()
+            .map(|rule| rule.metadata())
+            .chain(
+                solid_v2_rules::Rule::ALL
+                    .into_iter()
+                    .map(|rule| rule.metadata()),
+            )
+            .filter_map(|metadata| {
+                if metadata.default_enabled {
+                    assert!(
+                        metadata.presets.is_empty(),
+                        "default-enabled {} unexpectedly belongs to a preset",
+                        metadata.name
+                    );
+                    None
+                } else {
+                    assert_eq!(metadata.presets, ["preferences"]);
+                    Some(metadata.name)
+                }
+            })
+            .collect::<HashSet<_>>();
+        assert_eq!(observed, expected);
     }
 
     /// The documentation and suppression model both depend on this exact

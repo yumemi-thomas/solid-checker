@@ -1,45 +1,4 @@
 {
-  "status": "violation",
-  "findings": [
-    {
-      "rule": "v1/prefer-for",
-      "code": "SC8014",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/map-receiver-cases.tsx",
-      "start": 1076,
-      "end": 1135,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/prefer-for",
-      "code": "SC8014",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/map-receiver-cases.tsx",
-      "start": 1144,
-      "end": 1203,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/prefer-for",
-      "code": "SC8014",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/map-receiver-cases.tsx",
-      "start": 1212,
-      "end": 1269,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/prefer-for",
-      "code": "SC8014",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/map-receiver-cases.tsx",
-      "start": 1439,
-      "end": 1492,
-      "fixes": 0
-    }
-  ]
+  "status": "certified",
+  "findings": []
 }

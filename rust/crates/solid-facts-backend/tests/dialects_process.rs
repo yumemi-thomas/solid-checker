@@ -29,6 +29,14 @@ fn dialect_snapshot_findings(fixture: &str) -> Vec<serde_json::Value> {
 }
 
 fn project_snapshot_findings(project: PathBuf, dialect: Option<&str>) -> Vec<serde_json::Value> {
+    project_snapshot_findings_with(project, dialect, &[])
+}
+
+fn project_snapshot_findings_with(
+    project: PathBuf,
+    dialect: Option<&str>,
+    extra_args: &[&str],
+) -> Vec<serde_json::Value> {
     // Callers skip when the harness is unarmed; reaching this helper without
     // the producer is a test bug, and an empty result here would let every
     // `all(...)`-shaped assertion pass vacuously.
@@ -43,6 +51,7 @@ fn project_snapshot_findings(project: PathBuf, dialect: Option<&str>) -> Vec<ser
     if let Some(dialect) = dialect {
         command.arg("--dialect").arg(dialect);
     }
+    command.args(extra_args);
     let output = command
         .arg("--project")
         .arg(&project)
@@ -60,6 +69,54 @@ fn project_snapshot_findings(project: PathBuf, dialect: Option<&str>) -> Vec<ser
         .as_array()
         .expect("findings array")
         .clone()
+}
+
+#[test]
+fn preference_rules_are_opt_in_with_explicit_overrides_winning() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let v2 = fixture_root.join("preferences-v2/tsconfig.json");
+
+    let defaults = project_snapshot_findings_with(v2.clone(), Some("solid-v2"), &["--certify"]);
+    assert!(
+        defaults.is_empty(),
+        "preferences must be disabled by default: {defaults:#?}"
+    );
+
+    let preset =
+        project_snapshot_findings_with(v2.clone(), Some("solid-v2"), &["--preset", "preferences"]);
+    assert_eq!(
+        preset
+            .iter()
+            .map(|finding| finding["rule"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        ["prefer-for", "prefer-show"]
+    );
+
+    let one_rule =
+        project_snapshot_findings_with(v2, Some("solid-v2"), &["--enable-rule", "prefer-show"]);
+    assert_eq!(one_rule.len(), 1);
+    assert_eq!(one_rule[0]["rule"], "prefer-show");
+
+    let enabled = project_snapshot_findings_with(
+        fixture_root.join("preferences-v1-enabled/tsconfig.json"),
+        Some("solid-v1"),
+        &[],
+    );
+    assert_eq!(enabled.len(), 1);
+    assert_eq!(enabled[0]["rule"], "v1/prefer-show");
+
+    let disabled = project_snapshot_findings_with(
+        fixture_root.join("preferences-v1-disabled/tsconfig.json"),
+        Some("solid-v1"),
+        &["--preset", "preferences"],
+    );
+    assert!(
+        disabled.is_empty(),
+        "an explicit false must override the preset: {disabled:#?}"
+    );
 }
 
 #[test]

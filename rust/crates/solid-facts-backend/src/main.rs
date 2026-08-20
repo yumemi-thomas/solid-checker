@@ -14,9 +14,10 @@ use std::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
-    BackendError, SourceFile, TypeFactsSession, analyze_project_measured_with,
-    build_project_native_measured, default_typefacts_executable, dialect, encode_package_contract,
-    package_contract_statuses, read_package_contract,
+    BackendError, RequestedRuleEnablement, SourceFile, TypeFactsSession,
+    analyze_project_measured_with_enablement, build_project_native_measured,
+    default_typefacts_executable, dialect, encode_package_contract, package_contract_statuses,
+    read_package_contract,
 };
 
 #[derive(Deserialize)]
@@ -34,6 +35,10 @@ struct Request {
     typefacts_args: Vec<String>,
     #[serde(default)]
     contract_paths: Vec<String>,
+    #[serde(default)]
+    presets: Vec<String>,
+    #[serde(default)]
+    enable_rules: Vec<String>,
     #[serde(default = "json_format")]
     format: String,
     #[serde(default)]
@@ -98,6 +103,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         print_help();
         return Ok(0);
     }
+    request.presets.sort();
+    request.presets.dedup();
+    request.enable_rules.sort();
+    request.enable_rules.dedup();
     let dialect = match request.dialect.as_deref() {
         Some(id) => dialect::by_id(id).ok_or_else(|| {
             format!(
@@ -255,13 +264,17 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         return Ok(i32::from(!actionable.is_empty()));
     }
     if diagnostics {
-        let (analysis, diagnostic_timings) = analyze_project_measured_with(
+        let (analysis, diagnostic_timings) = analyze_project_measured_with_enablement(
             dialect,
             Path::new(&facts.project_id),
             &request.sources,
             &facts,
             &request.contract_paths,
             preloaded_bundled,
+            RequestedRuleEnablement {
+                presets: &request.presets,
+                rules: &request.enable_rules,
+            },
         )?;
         if !request.emit_contract.is_empty() {
             emit_package_contract(dialect, &request, &analysis.program, &facts)?;
@@ -314,6 +327,8 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut typefacts = default_typefacts_executable();
     let mut dialect_id: Option<String> = None;
     let mut contract_paths = Vec::new();
+    let mut presets = Vec::new();
+    let mut enable_rules = Vec::new();
     let mut format = "default".to_owned();
     let mut certify = false;
     let mut check_contracts = false;
@@ -343,6 +358,14 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if let Some(value) = argument.strip_prefix("--contract=") {
             contract_paths.push(value.into());
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--preset=") {
+            presets.push(value.into());
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--enable-rule=") {
+            enable_rules.push(value.into());
             continue;
         }
         if let Some(value) = argument.strip_prefix("--format=") {
@@ -388,6 +411,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--typefacts" => typefacts = args.next().ok_or("--typefacts needs a path")?,
             "--dialect" => dialect_id = Some(args.next().ok_or("--dialect needs an id")?),
             "--contract" => contract_paths.push(args.next().ok_or("--contract needs a path")?),
+            "--preset" => presets.push(args.next().ok_or("--preset needs a name")?),
+            "--enable-rule" => {
+                enable_rules.push(args.next().ok_or("--enable-rule needs a rule name")?)
+            }
             "--format" => format = args.next().ok_or("--format needs a value")?,
             "--certify" => certify = true,
             "--check-contracts" => check_contracts = true,
@@ -425,6 +452,10 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     } else {
         project
     };
+    presets.sort();
+    presets.dedup();
+    enable_rules.sort();
+    enable_rules.dedup();
     Ok(Request {
         project_id: project.to_string_lossy().into_owned(),
         dialect: dialect_id,
@@ -433,6 +464,8 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         typefacts_executable: typefacts,
         typefacts_args: vec!["-project".into(), project.to_string_lossy().into_owned()],
         contract_paths,
+        presets,
+        enable_rules,
         format,
         certify,
         check_contracts,
@@ -462,6 +495,8 @@ fn print_help() {
                                         missing, unverified, or stale (audited against a\n\
                                         version this project no longer installs)\n\
            --contract <PATH>            Override/discover a package contract (repeatable)\n\
+           --preset <NAME>              Enable a catalog preset (repeatable)\n\
+           --enable-rule <NAME>         Enable one default-disabled rule (repeatable)\n\
            --validate-contract <PATH>   Validate a contract and artifact hashes\n\
            --emit-contract <PATH>       Write a generated solid-reactivity.json contract\n\
            --package-name <NAME>        Package name used by --emit-contract\n\

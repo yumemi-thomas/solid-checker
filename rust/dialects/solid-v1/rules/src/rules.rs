@@ -116,11 +116,17 @@ impl Rule {
                 ("SC9005", "v1/package-contract-incomplete", "error", true)
             }
         };
+        let preference = matches!(
+            self,
+            Self::PreferClasslist | Self::PreferFor | Self::PreferShow
+        );
         RuleMetadata {
             code,
             name,
             severity,
             uncertifiable,
+            default_enabled: !preference,
+            presets: if preference { &["preferences"] } else { &[] },
         }
     }
 

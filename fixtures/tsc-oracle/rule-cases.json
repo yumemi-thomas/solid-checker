@@ -723,6 +723,7 @@
       "dialect": "v1",
       "expect": "silent",
       "checker": "silent",
+      "presets": ["preferences"],
       "why": "A string `class` is the declared type; the claim is a stylistic preference for `classList`, which no type expresses.",
       "code": "import { createSignal } from \"solid-js\";\nconst [active] = createSignal(false);\nexport const Case = () => <div class={active() ? \"a b\" : \"a\"} />;\n"
     },
@@ -731,6 +732,7 @@
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
+      "presets": ["preferences"],
       "why": "SC8014's reporting spelling, and the reason the rule survives. An object-literal call to a `classnames`-style helper -- `cn`/`clsx`/`classnames`, upstream's own `classnames` option -- returns a string, so `class` accepts it and TypeScript is silent. The claim is the stylistic one no type expresses: Solid's `classList` takes that same object directly, so the helper is doing work the framework already does. The sibling case is the negative -- a conditional string is not a helper call and stays clean -- and on the `className` spelling the diagnostic is TS2322 and SC8011's, which is why this case uses `class`.",
       "code": "const cn = (classes: Record<string, boolean>) =>\n  Object.keys(classes).filter((key) => classes[key]).join(\" \");\nexport const Case = () => <div class={cn({ red: true })}>Hello</div>;\n"
     },
@@ -739,6 +741,7 @@
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
+      "presets": ["preferences"],
       "why": "`Array#map` returning elements is well typed; the claim is that `<For>` keys rows and `map` re-creates them all.",
       "code": "import { createSignal } from \"solid-js\";\nconst [items] = createSignal([1, 2]);\nexport const Case = () => <ul>{items().map((n) => <li>{n}</li>)}</ul>;\n"
     },
@@ -747,6 +750,7 @@
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
+      "presets": ["preferences"],
       "why": "The `&&` expression is legal JSX; the claim is a stylistic preference for `<Show>`.",
       "code": "import { createSignal } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport const Case = () => <div>{ready() && <span>on</span>}</div>;\n"
     },
@@ -1417,6 +1421,7 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
+      "presets": ["preferences"],
       "why": "A directly rendered Array#map is valid TypeScript; the finding recommends Solid 2 list identity semantics that the type system cannot express.",
       "code": "const items = [\"a\", \"b\"];\nexport const Case = () => <ul>{items.map((item, index) => item + index)}</ul>;\n"
     },
@@ -1425,6 +1430,7 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
+      "presets": ["preferences"],
       "why": "A logical JSX branch is valid TypeScript; the finding is an opt-in control-flow preference and does not claim a type defect.",
       "code": "export const Case = (props: { ready: boolean }) => <main>{props.ready && <span />}</main>;\n"
     },
