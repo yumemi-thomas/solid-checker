@@ -85,7 +85,7 @@ rows, turns them into a closed `FindingSeed` vocabulary, and assembles the
 final `Finding`. Each rules crate is a `CatalogWording` adapter that declares
 which optional tables it supports and exhaustively maps supported seeds to
 rule identity, severity, message, hint, and evidence. `solid-v2-rules` owns
-the 27-rule Solid 2.0 catalog; `solid-v1-rules` owns the 20-rule 1.x catalog
+the 26-rule Solid 2.0 catalog; `solid-v1-rules` owns the 20-rule 1.x catalog
 (`v1/<rule>` names, spanning the engine slices under 1.x vocabulary plus the
 eslint-plugin-solid file-local surface). The wording duplication between
 them is deliberate: a 1.x diagnostic never tells its reader to call an API

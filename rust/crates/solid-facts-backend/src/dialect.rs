@@ -171,6 +171,14 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "flush-in-forbidden-scope",
         "merged 2026-08-20 into leaf-owner-forbidden-call; existing disables intentionally do not transfer to the wider family",
     ),
+    (
+        "pending-async-untracked-read",
+        "merged 2026-08-20 into pending-async-unsuspendable-read; existing disables intentionally do not transfer to the wider family",
+    ),
+    (
+        "pending-async-forbidden-scope",
+        "merged 2026-08-20 into pending-async-unsuspendable-read; existing disables intentionally do not transfer to the wider family",
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.
@@ -692,7 +700,7 @@ mod tests {
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL.len() - 15,
-            12,
+            11,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
     }

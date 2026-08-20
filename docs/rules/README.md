@@ -47,8 +47,8 @@ that exact rule in the shared project configuration described below.
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
 | Shared concepts (15 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
-| Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 12 rules: actions, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 20 rules | 27 rules |
+| Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 11 rules: actions, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
+| Catalog size | 20 rules | 26 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -65,7 +65,7 @@ Uncertifiable findings normally carry **error** severity, including the ones
 `missing-owner` (`SC4001`) emits for exported functions whose callers the
 analyzer cannot see. Its proven `onSettled`-cleanup variant is also an error,
 mirroring the runtime's dev-mode `SETTLED_CLEANUP_UNOWNED` throw. The ones `SC5001`
-[pending-async-untracked-read](pending-async-untracked-read.md) emits when a
+[pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) emits when a
 source's options argument cannot be read (an unreadable `loadingValue`
 declaration would make the read safe during the first flight, so the throw is
 no longer proven). The sole exception is `SC9011`
@@ -164,8 +164,7 @@ rule's page documents its additional options and defaults.
 
 | Code | Rule | Severity |
 | --- | --- | --- |
-| SC5001 | [pending-async-untracked-read](pending-async-untracked-read.md) | error |
-| SC5002 | [pending-async-forbidden-scope](pending-async-forbidden-scope.md) | warning |
+| SC5001 | [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) | error |
 | SC5003 | [async-outside-loading-boundary](async-outside-loading-boundary.md) | warning |
 | SC5005 | [ssr-client-source-outside-loading-boundary](ssr-client-source-outside-loading-boundary.md) | error |
 

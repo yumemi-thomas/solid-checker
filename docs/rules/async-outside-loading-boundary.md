@@ -71,5 +71,5 @@ the fallback on key changes.
 ## Related
 
 - [ssr-client-source-outside-loading-boundary](ssr-client-source-outside-loading-boundary.md) — the same missing boundary over a bare `ssrSource: "client"` source, which is a hard server error rather than informational (it subsumes this warning on the same read)
-- [pending-async-untracked-read](pending-async-untracked-read.md) — untracked pending reads, which do throw
+- [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — untracked pending reads, which do throw
 - [missing-owner](missing-owner.md) — boundaries need owners

@@ -118,5 +118,5 @@ runtime guards on (runtime-legal; the value still will not update).
   owner-keyed counterpart for writes; note the inverted `untrack` semantics
 - [action-called-in-owned-scope](action-called-in-owned-scope.md) — the same
   family for actions
-- [pending-async-untracked-read](pending-async-untracked-read.md) — how
+- [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — how
   pending values are meant to be read

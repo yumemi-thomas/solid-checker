@@ -115,6 +115,6 @@ server has something to render.
 - [async-outside-loading-boundary](async-outside-loading-boundary.md) — the
   informational client-side counterpart for async sources; this rule subsumes
   it on the same read when both would apply
-- [pending-async-untracked-read](pending-async-untracked-read.md) — untracked
+- [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — untracked
   pending reads, which throw on the client
 - [missing-owner](missing-owner.md) — boundaries need owners

@@ -24,6 +24,12 @@ code; **Both** — either, depending on the code.
   `SC3001`. This is a declared configuration break: old rule-options keys are
   accepted as retired no-ops, their disables do not transfer to the merged
   family, and the former explicit ESLint keys are removed.
+- **2026-08-20 — unsuspendable pending reads merged.**
+  `pending-async-untracked-read` and `pending-async-forbidden-scope` now report
+  as `pending-async-unsuspendable-read` / `SC5001`. This is a declared break:
+  old rule-options keys remain accepted as retired no-ops, disables do not
+  transfer, and the old explicit ESLint keys are removed. Untracked variants
+  retain error severity and leaf-owner variants retain warning severity.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 

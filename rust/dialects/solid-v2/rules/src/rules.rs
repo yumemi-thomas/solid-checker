@@ -27,8 +27,7 @@ pub enum Rule {
     ResolveInReactiveScope,
     LeafOwnerForbiddenCall,
     MissingOwner,
-    PendingAsyncUntrackedRead,
-    PendingAsyncForbiddenScope,
+    PendingAsyncUnsuspendableRead,
     AsyncOutsideLoadingBoundary,
     SsrClientSourceOutsideLoadingBoundary,
     PrimitiveInDirectiveApplication,
@@ -54,7 +53,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 26] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -69,8 +68,7 @@ impl Rule {
         Self::ResolveInReactiveScope,
         Self::LeafOwnerForbiddenCall,
         Self::MissingOwner,
-        Self::PendingAsyncUntrackedRead,
-        Self::PendingAsyncForbiddenScope,
+        Self::PendingAsyncUnsuspendableRead,
         Self::AsyncOutsideLoadingBoundary,
         Self::SsrClientSourceOutsideLoadingBoundary,
         Self::PrimitiveInDirectiveApplication,
@@ -127,11 +125,10 @@ impl Rule {
             // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
             // other missing-owner operations leak silently.
             Self::MissingOwner => ("SC4001", "missing-owner", "warning", false),
-            Self::PendingAsyncUntrackedRead => {
-                ("SC5001", "pending-async-untracked-read", "error", false)
-            }
-            Self::PendingAsyncForbiddenScope => {
-                ("SC5002", "pending-async-forbidden-scope", "warning", false)
+            // Leaf-owner reads override this family default to warning so the
+            // merged rule preserves the runtime-mirroring severity split.
+            Self::PendingAsyncUnsuspendableRead => {
+                ("SC5001", "pending-async-unsuspendable-read", "error", false)
             }
             Self::AsyncOutsideLoadingBoundary => {
                 ("SC5003", "async-outside-loading-boundary", "warning", false)
@@ -310,10 +307,9 @@ mod tests {
             Rule::AsyncOutsideLoadingBoundary.metadata().severity,
             "warning"
         );
-        assert_eq!(Rule::PendingAsyncUntrackedRead.metadata().severity, "error");
         assert_eq!(
-            Rule::PendingAsyncForbiddenScope.metadata().severity,
-            "warning"
+            Rule::PendingAsyncUnsuspendableRead.metadata().severity,
+            "error"
         );
         // The server throw for a bare ssrSource: "client" read outside a
         // Loading boundary is unconditional (rc.0 dist/server.js), so the

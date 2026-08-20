@@ -320,13 +320,13 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     // seedLoadingValue node is born committed, so its *first flight* cannot
     // throw anywhere — but once the first real answer lands, a pending
     // re-ask (input change or refresh) throws for untracked and leaf reads
-    // exactly like an undeclared node. SC5001/SC5002 therefore stay
+    // exactly like an undeclared node. SC5001 therefore stays
     // reported on declared sources with this conditional wording, while
     // SC5003 never reaches this function for them (suppressed in selection).
     let declared = read.declared_loading;
     let (rule, message, hint) = if let Some(owner) = &read.leaf_owner {
         (
-            Rule::PendingAsyncForbiddenScope,
+            Rule::PendingAsyncUnsuspendableRead,
             if declared {
                 format!(
                     "async accessor {:?} declares a loadingValue, so its first flight serves the declared value here, but after the first real answer lands any pending re-ask read inside {} throws at runtime ({} runs after the graph settles and cannot suspend)",
@@ -345,7 +345,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     } else {
         match read.execution {
             ExecutionRole::ModuleInitialization | ExecutionRole::UntrackedRendering => (
-                Rule::PendingAsyncUntrackedRead,
+                Rule::PendingAsyncUnsuspendableRead,
                 if declared {
                     format!(
                         "async accessor {:?} declares a loadingValue, so this untracked read serves the declared value during the first flight, but after the first real answer lands a pending re-ask (input change or refresh) makes it throw PENDING_ASYNC_UNTRACKED_READ in dev",
@@ -412,12 +412,19 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     } else {
         "the accessor is returned by an async computation".to_owned()
     };
-    if read.options_opaque && rule == Rule::PendingAsyncUntrackedRead {
+    if read.options_opaque
+        && rule == Rule::PendingAsyncUnsuspendableRead
+        && read.leaf_owner.is_none()
+    {
         provenance.push_str(
             "; the source's options argument cannot be read statically, so a loadingValue declaration (which would make the first flight safe) can be neither proven nor ruled out — this finding is a proof obligation, not a proven throw",
         );
     }
-    FindingWording::new(rule.metadata(), message.clone(), hint).with_evidence(vec![
+    let mut metadata = rule.metadata();
+    if read.leaf_owner.is_some() {
+        metadata.severity = "warning";
+    }
+    FindingWording::new(metadata, message.clone(), hint).with_evidence(vec![
         EvidenceStep {
             message: provenance,
             location: Some(read.declaration.clone()),
@@ -465,8 +472,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ActionCalledInOwnedScope
         | Rule::LeafOwnerForbiddenCall
         | Rule::MissingOwner
-        | Rule::PendingAsyncUntrackedRead
-        | Rule::PendingAsyncForbiddenScope
+        | Rule::PendingAsyncUnsuspendableRead
         | Rule::AsyncOutsideLoadingBoundary
         | Rule::SsrClientSourceOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication

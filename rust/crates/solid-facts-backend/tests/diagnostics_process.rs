@@ -151,8 +151,7 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // window ends at the first real answer, so later re-asks
                 // throw; conditional wording), and the opaque-options source
                 // (downgraded to uncertifiable, asserted below).
-                ("pending-async-untracked-read", 4),
-                ("pending-async-forbidden-scope", 3),
+                ("pending-async-unsuspendable-read", 7),
                 // The declared sources (loadingValue memo, seedLoadingValue
                 // projection and store) render bare without any SC5003: their
                 // first flight never trips a Loading boundary. The
@@ -430,7 +429,10 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
     // Fail-honest policy: SC5001 stays a proven violation when the options
     // argument is absent or readable, and downgrades to a proof obligation
     // when an unreadable options argument could declare a loadingValue.
-    let untracked = findings_for_rule(&findings, "pending-async-untracked-read");
+    let untracked = findings_for_rule(&findings, "pending-async-unsuspendable-read")
+        .into_iter()
+        .filter(|finding| finding["severity"] == "error")
+        .collect::<Vec<_>>();
     let kinds = untracked
         .iter()
         .map(|finding| finding["kind"].as_str().unwrap_or_default())
@@ -448,7 +450,7 @@ fn declared_first_paint_and_opaque_options_split_the_async_rules() {
         1,
         "{untracked:#?}"
     );
-    // The declared source keeps SC5001/SC5002 with conditional wording: the
+    // The declared source keeps SC5001/SC5001 with conditional wording: the
     // first flight cannot throw, later re-asks can (probed against rc.0).
     assert!(
         untracked.iter().any(|finding| {
