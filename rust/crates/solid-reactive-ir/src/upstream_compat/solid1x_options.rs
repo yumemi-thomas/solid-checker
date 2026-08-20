@@ -29,33 +29,6 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
 
-/// Which empty elements of one category `v1/self-closing-comp` (SC8016)
-/// wants self-closed.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum SelfClosePolicy {
-    /// Every childless element of the category must self-close.
-    #[default]
-    All,
-    /// Only void HTML elements (`br`, `img`, ...) must self-close; other
-    /// childless elements must not. Only meaningful for the `html` category.
-    Void,
-    /// No element of the category may self-close.
-    None,
-}
-
-/// Options for `v1/self-closing-comp` (SC8016).
-#[derive(Clone, Debug, Default, Eq, PartialEq, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields, default)]
-pub struct SelfClosingCompOptions {
-    /// Upstream's `component`: policy for components. `void` is not a
-    /// meaningful component policy and is treated as `all`, as upstream's
-    /// schema forbids it outright.
-    pub component: SelfClosePolicy,
-    /// Upstream's `html`: policy for native elements.
-    pub html: SelfClosePolicy,
-}
-
 /// Options for `v1/prefer-classlist` (SC8013).
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields, default)]
@@ -79,26 +52,23 @@ impl Default for PreferClasslistOptions {
 /// Options owned specifically by the Solid 1.x compatibility implementation.
 #[derive(Clone, Debug, Default, Eq, PartialEq)]
 pub struct Solid1xRuleOptions {
-    pub self_closing_comp: SelfClosingCompOptions,
     pub prefer_classlist: PreferClasslistOptions,
 }
 
 impl Solid1xRuleOptions {
-    const CONFIGURABLE_RULES: [&'static str; 2] = ["self-closing-comp", "prefer-classlist"];
+    const CONFIGURABLE_RULES: [&'static str; 1] = ["prefer-classlist"];
 
     /// Applies an option object owned by the Solid 1.x compatibility layer.
     ///
     /// `None` means this is a catalog rule without dialect-specific options;
     /// the shared project parser therefore never needs to know these names.
     fn parse_rule(&mut self, rule: &str, value: &serde_json::Value) -> Option<Result<(), String>> {
-        let parsed =
-            match rule {
-                "self-closing-comp" => serde_json::from_value(value.clone())
-                    .map(|parsed| self.self_closing_comp = parsed),
-                "prefer-classlist" => serde_json::from_value(value.clone())
-                    .map(|parsed| self.prefer_classlist = parsed),
-                _ => return None,
-            };
+        let parsed = match rule {
+            "prefer-classlist" => {
+                serde_json::from_value(value.clone()).map(|parsed| self.prefer_classlist = parsed)
+            }
+            _ => return None,
+        };
         Some(parsed.map_err(|error| error.to_string()))
     }
 }
@@ -208,13 +178,12 @@ impl RuleOptions {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuleOptions, SelfClosePolicy};
+    use super::RuleOptions;
 
     fn known_rule(rule: &str) -> bool {
         matches!(
             rule,
-            "v1/self-closing-comp"
-                | "v1/prefer-classlist"
+            "v1/prefer-classlist"
                 | "v1/no-destructure"
                 | "v1/no-direct-mutation"
                 | "no-owner-cleanup"
@@ -233,7 +202,6 @@ mod tests {
             RuleOptions::parse(r#"{ "schemaVersion": 1 }"#, known_rule, solid1x_rule).unwrap();
         assert_eq!(options, RuleOptions::default());
         let options = options.solid1x;
-        assert_eq!(options.self_closing_comp.html, SelfClosePolicy::All);
         assert_eq!(
             options.prefer_classlist.classnames,
             ["cn", "clsx", "classnames"]
@@ -246,7 +214,6 @@ mod tests {
             r#"{
               "schemaVersion": 1,
               "rules": {
-                "v1/self-closing-comp": { "component": "none", "html": "void" },
                 "v1/prefer-classlist": { "classnames": ["cx"] }
               }
             }"#,
@@ -255,8 +222,6 @@ mod tests {
         )
         .unwrap();
         let options = options.solid1x;
-        assert_eq!(options.self_closing_comp.component, SelfClosePolicy::None);
-        assert_eq!(options.self_closing_comp.html, SelfClosePolicy::Void);
         assert_eq!(options.prefer_classlist.classnames, ["cx"]);
     }
 

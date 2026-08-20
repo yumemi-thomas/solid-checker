@@ -461,7 +461,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::ReactiveDispatchUnresolved
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
-        | Rule::PreferComponentSyntax
         | Rule::ValidJsxNesting
         | Rule::ReactiveWriteInOwnedScope
         | Rule::ActionCalledInOwnedScope
@@ -480,8 +479,7 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::MissingEffectFunction
         | Rule::PackageContractExportMissing
         | Rule::PackageContractCallbackMissing
-        | Rule::PackageContractMissing
-        | Rule::ExecutionMapIncomplete => panic!(
+        | Rule::PackageContractMissing => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
@@ -499,11 +497,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
 
 fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
     let rule = match &defect.kind {
-        StaticDefectKind::ExecutionMapIncomplete => Rule::ExecutionMapIncomplete,
         StaticDefectKind::ReactiveObjectDestructure { .. } => Rule::ComponentPropsDestructure,
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
-        StaticDefectKind::PreferComponentSyntax { .. } => Rule::PreferComponentSyntax,
         StaticDefectKind::InvalidJsxNesting { .. } => Rule::ValidJsxNesting,
         StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
         StaticDefectKind::PackageContractEnvironmentDependent { .. } => {

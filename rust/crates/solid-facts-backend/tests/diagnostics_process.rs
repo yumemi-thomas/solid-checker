@@ -758,20 +758,6 @@ fn unknown_callback_diagnostic_contains_actionable_contract_stub() {
 }
 
 #[test]
-fn prefer_component_syntax_follows_conditional_cross_file_returns() {
-    let Some(findings) = diagnostic_fixture("prefer-component-syntax-v2") else {
-        return;
-    };
-    let preferred = findings_for_rule(&findings, "prefer-component-syntax");
-    assert_eq!(preferred.len(), 1, "{findings:#?}");
-    assert!(
-        preferred[0]["message"]
-            .as_str()
-            .is_some_and(|message| message.contains("renderCard"))
-    );
-}
-
-#[test]
 fn control_flow_and_effect_phases_classify_strict_reads() {
     // control-flow: the two frozen Show-callback reads, plus the two frozen
     // reads under <For keyed={byId}> — a named key function proven callable

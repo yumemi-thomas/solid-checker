@@ -339,101 +339,101 @@
     },
     {
       "upstreamCase": "imports__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__valid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "imports__valid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/imports rule was removed because missing named exports are exactly TypeScript TS2305 territory."
     },
     {
       "upstreamCase": "jsx-no-duplicate-props__invalid__00",
@@ -549,73 +549,73 @@
     },
     {
       "upstreamCase": "jsx-no-script-url__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-script-url__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-script-url__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-script-url__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-script-url__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-script-url__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-script-url__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-script-url__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-script-url__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-script-url__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/jsx-no-script-url rule was removed because generic injection-sink policy is outside the checker domain."
     },
     {
       "upstreamCase": "jsx-no-undef__invalid__00",
@@ -1312,115 +1312,115 @@
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__invalid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__valid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-proxy-apis__valid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-proxy-apis rule was removed because runtime target compatibility is project policy and cannot be proven from source."
     },
     {
       "upstreamCase": "no-react-deps__invalid__00",
@@ -2887,178 +2887,178 @@
     },
     {
       "upstreamCase": "self-closing-comp__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__invalid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__invalid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__10",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__11",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__12",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__13",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__14",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "self-closing-comp__valid__15",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-13",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/self-closing-comp rule was removed because self-closing syntax is formatting rather than a runtime defect."
     },
     {
       "upstreamCase": "style-prop__invalid__00",

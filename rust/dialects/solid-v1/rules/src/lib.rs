@@ -186,18 +186,10 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
     });
     let evidence = match rule {
         Rule::JsxNoDuplicateProps => "the same JSX property is assigned more than once",
-        Rule::JsxNoScriptUrl => "the statically resolved URL uses the javascript: scheme",
         Rule::JsxNoUndef => "the JSX name has no value-space binding in lexical scope",
-        Rule::NoProxyApis => "the import or call requires Proxy-backed Solid APIs",
         Rule::PreferClasslist => "a class helper call matches the configured classList preference",
         Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
         Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
-        Rule::SelfClosingComp => {
-            "the element's child and closing-tag shape conflicts with the configured policy"
-        }
-        Rule::NoAsyncTrackedScope => {
-            "the tracked callback is syntactically async and can continue after an await"
-        }
         Rule::StrictReadUntracked
         | Rule::ReactiveReadAfterAwait
         | Rule::NoDestructure
@@ -212,13 +204,10 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         | Rule::NoDirectMutation
         | Rule::ReactiveSourceUncaptured
         | Rule::ReactiveDispatchUnresolved
-        | Rule::PreferComponentSyntax
         | Rule::ValidJsxNesting
-        | Rule::JsxUsesVars
         | Rule::PackageContractExportMissing
         | Rule::PackageContractCallbackMissing
-        | Rule::PackageContractMissing
-        | Rule::ExecutionMapIncomplete => panic!(
+        | Rule::PackageContractMissing => panic!(
             "v1 rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
@@ -236,11 +225,9 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
 
 fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
     let rule = match &defect.kind {
-        StaticDefectKind::ExecutionMapIncomplete => Rule::ExecutionMapIncomplete,
         StaticDefectKind::ReactiveObjectDestructure { .. } => Rule::NoDestructure,
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentsReturnOnce,
-        StaticDefectKind::PreferComponentSyntax { .. } => Rule::PreferComponentSyntax,
         StaticDefectKind::InvalidJsxNesting { .. } => Rule::ValidJsxNesting,
         StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
         StaticDefectKind::PackageContractEnvironmentDependent { .. } => {

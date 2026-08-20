@@ -64,9 +64,10 @@ Completeness invariant: every `jsx-expression` operation must be covered by a
 tracked region, an untracked region, a callback role, or a
 `component-property`, `component-spread`, or `component-child` operation.
 Because the trace is total, every site lands in
-exactly one category and the invariant holds by construction; the IR builder
-still reports any uncovered hole as an `SC9004 execution-map-incomplete`
-unresolved obligation rather than assuming untracked rendering.
+exactly one category and the invariant holds by construction. Completeness is
+a producer-integrity property: compiler-adapter tests must reject or expose an
+incomplete trace before project analysis, rather than translating a producer
+bug into a user-facing diagnostic.
 
 Only DOM generation is supported. Other renderer modes, malformed options,
 unknown fact kinds, invalid UTF-8 boundaries, stale hashes, and incompatible

@@ -38,28 +38,19 @@ pub enum Rule {
     UncalledAccessor,
     ExpectedFunctionGotExpression,
     NoDirectMutation,
-    NoAsyncTrackedScope,
     ReactiveSourceUncaptured,
     ReactiveDispatchUnresolved,
     // The eslint-plugin-solid 0.14.5 rule surface, one identity per upstream
-    // rule. `jsx-uses-vars` is catalog-only: upstream exists to mark JSX
-    // identifiers used for no-unused-vars, and TypeScript reference facts
-    // already model those uses, so nothing here ever emits it.
+    // rule.
     JsxNoDuplicateProps,
-    JsxNoScriptUrl,
     JsxNoUndef,
-    JsxUsesVars,
-    NoProxyApis,
     PreferClasslist,
     PreferFor,
     PreferShow,
-    SelfClosingComp,
-    PreferComponentSyntax,
     ValidJsxNesting,
     PackageContractExportMissing,
     PackageContractCallbackMissing,
     PackageContractMissing,
-    ExecutionMapIncomplete,
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/v1/`.
@@ -75,7 +66,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 30] = [
+    pub const ALL: [Self; 23] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -88,24 +79,17 @@ impl Rule {
         Self::UncalledAccessor,
         Self::ExpectedFunctionGotExpression,
         Self::NoDirectMutation,
-        Self::NoAsyncTrackedScope,
         Self::ReactiveSourceUncaptured,
         Self::ReactiveDispatchUnresolved,
         Self::JsxNoDuplicateProps,
-        Self::JsxNoScriptUrl,
         Self::JsxNoUndef,
-        Self::JsxUsesVars,
-        Self::NoProxyApis,
         Self::PreferClasslist,
         Self::PreferFor,
         Self::PreferShow,
-        Self::SelfClosingComp,
-        Self::PreferComponentSyntax,
         Self::ValidJsxNesting,
         Self::PackageContractExportMissing,
         Self::PackageContractCallbackMissing,
         Self::PackageContractMissing,
-        Self::ExecutionMapIncomplete,
     ];
 
     #[must_use]
@@ -132,7 +116,6 @@ impl Rule {
                 false,
             ),
             Self::NoDirectMutation => ("SC2003", "v1/no-direct-mutation", "warning", false),
-            Self::NoAsyncTrackedScope => ("SC5004", "v1/no-async-tracked-scope", "warning", false),
             Self::ReactiveSourceUncaptured => {
                 ("SC9011", "v1/reactive-source-uncaptured", "warning", true)
             }
@@ -140,17 +123,10 @@ impl Rule {
                 ("SC9012", "v1/reactive-dispatch-unresolved", "warning", true)
             }
             Self::JsxNoDuplicateProps => ("SC8003", "v1/jsx-no-duplicate-props", "error", false),
-            Self::JsxNoScriptUrl => ("SC8004", "v1/jsx-no-script-url", "error", false),
             Self::JsxNoUndef => ("SC8005", "v1/jsx-no-undef", "error", false),
-            Self::JsxUsesVars => ("SC8006", "v1/jsx-uses-vars", "error", false),
-            Self::NoProxyApis => ("SC8009", "v1/no-proxy-apis", "error", false),
             Self::PreferClasslist => ("SC8013", "v1/prefer-classlist", "warning", false),
             Self::PreferFor => ("SC8014", "v1/prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "v1/prefer-show", "warning", false),
-            Self::SelfClosingComp => ("SC8016", "v1/self-closing-comp", "warning", false),
-            Self::PreferComponentSyntax => {
-                ("SC8018", "v1/prefer-component-syntax", "warning", false)
-            }
             Self::ValidJsxNesting => ("SC8020", "v1/valid-jsx-nesting", "error", false),
             Self::PackageContractExportMissing => (
                 "SC9001",
@@ -167,9 +143,6 @@ impl Rule {
             Self::PackageContractMissing => {
                 ("SC9005", "v1/package-contract-missing", "error", true)
             }
-            Self::ExecutionMapIncomplete => {
-                ("SC9004", "v1/execution-map-incomplete", "error", true)
-            }
         };
         RuleMetadata {
             code,
@@ -185,7 +158,7 @@ impl Rule {
     /// The IR names its diagnostics in its own vocabulary — the identity it
     /// has carried since before dialects existed. Every identity that
     /// reaches this catalog as a *static violation* (the upstream-compat
-    /// surface plus `no-async-tracked-scope`) keeps its name here, so the
+    /// surface) keeps its name here, so the
     /// catalog scan below is the whole projection. Identities whose v1 rule
     /// is renamed (`component-props-destructure` → `v1/no-destructure`)
     /// arrive as static *defects* and are worded by `static_defect_finding`
@@ -288,22 +261,16 @@ mod tests {
     }
 
     /// Every identity the reactive IR emits as a *static violation* under
-    /// `Version::V1` (the upstream-compat surface plus
-    /// `no-async-tracked-scope`) must resolve here — a miss panics in
-    /// `solve`. SC8006 (`jsx-uses-vars`) is catalogued but deliberately
-    /// never fires, so it is absent.
+    /// `Version::V1` (the retained upstream-compat surface) must resolve
+    /// here — a miss panics in `solve`.
     #[test]
     fn every_v1_static_violation_identity_resolves() {
         for (code, name) in [
-            ("SC5004", "no-async-tracked-scope"),
             ("SC8003", "jsx-no-duplicate-props"),
-            ("SC8004", "jsx-no-script-url"),
             ("SC8005", "jsx-no-undef"),
-            ("SC8009", "no-proxy-apis"),
             ("SC8013", "prefer-classlist"),
             ("SC8014", "prefer-for"),
             ("SC8015", "prefer-show"),
-            ("SC8016", "self-closing-comp"),
         ] {
             assert!(
                 Rule::from_identity(code, name).is_some(),

@@ -246,9 +246,8 @@ pub(super) fn binding_initializer<'a>(
 /// compiler-resolved local variable indirection and one level of `+`
 /// concatenation. Not a general constant-folder: it is exactly the shape
 /// upstream's own scope-based `getStaticValue` recovers for the common
-/// patterns (a literal, a `const url = "..."`, or `"javascript:" +
-/// something`), no more. [`literal_string_type`] complements it with the
-/// values TypeScript proves.
+/// patterns (a literal, a `const value = "..."`, or literal concatenation),
+/// no more.
 pub(super) fn static_string_expression(
     context: &UpstreamCompatContext<'_>,
     file: &FileFacts,
@@ -330,14 +329,6 @@ fn quoted_literal_end(source: &str) -> Option<usize> {
         }
     }
     None
-}
-
-/// The literal text of a quoted string span, unwrapping one optional
-/// surrounding `{ ... }` JSX expression-container layer first (an
-/// attribute's `value` span includes the braces when it came from
-/// `attr={"literal"}` rather than `attr="literal"`).
-pub(super) fn static_string(file: &FileFacts, span: Span) -> Option<String> {
-    strip_string_literal(text(file, span))
 }
 
 pub(super) fn strip_string_literal(source: &str) -> Option<String> {
@@ -452,23 +443,6 @@ fn read_hex_escape(
     Some(value)
 }
 
-/// Widens a deletion span leftward over the whitespace that separated the
-/// deleted text from what precedes it, so removing a JSX attribute leaves
-/// `<div id="a"/>` rather than `<div  id="a"/>`. Purely byte-wise and ASCII:
-/// a multi-byte character can never end in an ASCII whitespace byte, so the
-/// walk cannot stop inside one.
-pub(super) fn deletion_with_leading_whitespace(source: &str, span: Span) -> Span {
-    let bytes = source.as_bytes();
-    let mut start = span.start as usize;
-    if start > bytes.len() {
-        return span;
-    }
-    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
-        start -= 1;
-    }
-    Span::new(u32::try_from(start).unwrap_or(span.start), span.end)
-}
-
 pub(super) fn fix_replace(
     file: &FileFacts,
     span: Span,
@@ -507,32 +481,6 @@ pub(super) fn violation(
         fixes,
         uncertain: false,
     }
-}
-
-/// The string value the compiler proves an expression to hold, wherever the
-/// value was written — another file, an inferred `const`, an enum member —
-/// which a same-file text trace cannot follow.
-///
-/// This is the `constantValue` fact, not the rendered type. A literal type is
-/// only incidentally a value: it is absent the moment a constant is *folded*
-/// rather than written, so `innerHTML={"a" + "b"}` widens to `string` and
-/// reads as non-static even though upstream's own static evaluation accepts
-/// it. The producer folds literals, substitution-free templates, transparent
-/// wrappers, unary signs, same-kind binary `+`, and immutable declarations,
-/// and answers only for a complete expression occupying exactly this span — a
-/// constant *operand* of a larger expression still proves nothing about the
-/// whole. Absence is "not proven constant", so every caller stays fail-closed.
-pub(super) fn literal_string_type(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> Option<String> {
-    let constant = context
-        .lookup
-        .entity_at(file.path.as_str(), span)
-        .and_then(|entity| entity.constant_value.as_ref())?;
-    (constant.kind == typefacts::ConstantValueKind::String)
-        .then(|| constant.string.as_ref().to_owned())
 }
 
 /// Everything one file's upstream-compat checks may consult.
@@ -599,7 +547,7 @@ fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiag
         solid1x_structure::check_file(file, context, &mut violations);
         solid1x_undef::check_file(file, context, &mut violations);
     }
-    shared_reactivity::check_file(file, context, &mut violations, &mut defects);
+    shared_reactivity::check_file(file, context, &mut defects);
     FileDiagnostics {
         violations,
         defects,
@@ -668,19 +616,8 @@ pub(crate) fn check_project(
 #[cfg(test)]
 mod tests {
     use super::{
-        concat_plus_joined_literal, decode_string_literal, deletion_with_leading_whitespace,
-        entire_delimited, strip_string_literal,
+        concat_plus_joined_literal, decode_string_literal, entire_delimited, strip_string_literal,
     };
-    use solid_facts::core::Span;
-
-    /// What a deletion fix's output would be: the span's text removed.
-    fn delete(source: &str, span: Span) -> String {
-        format!(
-            "{}{}",
-            &source[..span.start as usize],
-            &source[span.end as usize..]
-        )
-    }
 
     #[test]
     fn strips_quotes_from_string_literals() {
@@ -731,22 +668,6 @@ mod tests {
         assert_eq!(concat_plus_joined_literal("'a' 'b'"), None);
         assert_eq!(concat_plus_joined_literal("'a' + 'b' +"), None);
         assert_eq!(concat_plus_joined_literal("'a' === x ? f : 'b'"), None);
-    }
-
-    #[test]
-    fn attribute_deletion_swallows_the_separating_whitespace() {
-        let source = "<div key={x} />";
-        let span = Span::new(5, 12); // `key={x}`
-        assert_eq!(
-            delete(source, deletion_with_leading_whitespace(source, span)),
-            "<div />"
-        );
-        let multiline = "<div\n  key={x}\n/>";
-        let span = Span::new(7, 14); // `key={x}`
-        assert_eq!(
-            delete(multiline, deletion_with_leading_whitespace(multiline, span)),
-            "<div\n/>"
-        );
     }
 
     #[test]

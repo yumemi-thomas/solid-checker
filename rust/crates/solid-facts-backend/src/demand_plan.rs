@@ -130,26 +130,6 @@ fn plan_file(
     }
     for element in &file.ast.jsx_elements {
         add_symbol(element.name.span, false);
-        // Some catalogs judge a dotted tag by its root identifier
-        // alone (`Foo` in `<Foo.Bar/>`), so the root span needs its own
-        // resolution — the combined span above answers a different
-        // question. Demanded only when the catalog carries the rule that
-        // reads the answer.
-        if dialect.semantic_demands.jsx_member_root_symbols
-            && let Some(name) = file.source_text(element.name.span)
-            && let Some(dot) = name.find('.')
-        {
-            let root_length = name[..dot].trim_end().len();
-            if root_length > 0 {
-                add_symbol(
-                    solid_facts::core::Span::new(
-                        element.name.span.start,
-                        element.name.span.start + u32::try_from(root_length).unwrap_or_default(),
-                    ),
-                    false,
-                );
-            }
-        }
         // This is intrinsic-element syntax, not component identity. The case
         // check only decides whether DOM event-handler type facts are useful;
         // component classification remains semantic in the reactive IR.
@@ -182,27 +162,7 @@ fn plan_file(
                     || attribute
                         .namespace
                         .is_some_and(|namespace| file.source_text(namespace) == Some("on")));
-            // The 1.x catalog also recovers static string *values*:
-            // `no-innerhtml`'s allowStatic acceptance, and `jsx-no-script-url`
-            // for URL-carrying attributes. That is the constant-value fact, not
-            // the rendered type: a literal type is only incidentally a value,
-            // and it is absent for a folded constant such as `"a" + "b"`, whose
-            // type widens to `string`.
-            let static_value_type_required = dialect.semantic_demands.jsx_static_value_types
-                && matches!(
-                    name,
-                    "innerHTML"
-                        | "innerhtml"
-                        | "href"
-                        | "src"
-                        | "action"
-                        | "formaction"
-                        | "formAction"
-                        | "data"
-                        | "to"
-                        | "xlink:href"
-                );
-            if handler || static_value_type_required {
+            if handler {
                 add_symbol(expression, false);
                 type_descriptor_spans.insert(expression);
             }
@@ -218,9 +178,6 @@ fn plan_file(
                         array_shape_spans.insert(runtime_expression);
                     }
                 }
-            }
-            if static_value_type_required {
-                constant_value_spans.insert(expression);
             }
             // A non-literal `keyed` value on a control-flow component picks
             // the children-callback overload at runtime; source discovery

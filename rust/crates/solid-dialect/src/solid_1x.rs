@@ -609,12 +609,6 @@ impl Dialect for Solid1x {
         true
     }
 
-    /// `v1/no-async-tracked-scope`; 2.0 models async computations as a
-    /// feature and omits the rule.
-    fn reports_async_tracked_scope(&self) -> bool {
-        true
-    }
-
     fn static_event_values_are_attributes(&self) -> bool {
         true
     }

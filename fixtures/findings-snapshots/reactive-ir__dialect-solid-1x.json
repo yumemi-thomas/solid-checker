@@ -2,18 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/no-proxy-apis",
-      "code": "SC8009",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 751,
-      "end": 822,
-      "fixes": 0,
-      "message": "The store package relies on JavaScript Proxies.",
-      "hint": "The binding is not used at runtime, but whether TypeScript preserves this import depends on effective compiler emit options that are unavailable to this analysis."
-    },
-    {
       "rule": "v1/no-owner-effect",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -146,18 +134,6 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 3337,
-      "end": 3350,
-      "fixes": 0,
-      "message": "this createMemo scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing",
-      "hint": "Keep the createMemo scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
-    },
-    {
       "rule": "v1/no-owner-effect",
       "code": "SC4001",
       "kind": "uncertifiable",
@@ -168,18 +144,6 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the containing function may be a Solid component or an ordinary helper, so its owner context cannot be certified",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 7170,
-      "end": 7183,
-      "fixes": 0,
-      "message": "this createMemo scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing",
-      "hint": "Keep the createMemo scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
     }
   ]
 }

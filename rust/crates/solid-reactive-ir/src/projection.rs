@@ -41,10 +41,6 @@ pub struct StaticDefectText {
 #[must_use]
 pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> StaticDefectText {
     let (message, hint) = match &defect.kind {
-        StaticDefectKind::ExecutionMapIncomplete => (
-            "the Solid compiler did not classify this JSX expression as tracked, untracked, or a callback; without an execution role, solid-checker cannot certify any reactive read inside it".into(),
-            "Simplify the expression: hoist complex logic into a createMemo and interpolate the accessor. If this persists on plain JSX, re-run with fresh compiler facts and report the pattern as a solid-checker issue.".into(),
-        ),
         StaticDefectKind::ReactiveObjectDestructure {
             source,
             component_props,
@@ -72,15 +68,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ComponentReturnsConditionally => (
             "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
             "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
-        ),
-        StaticDefectKind::PreferComponentSyntax { name } => (
-            format!(
-                "JSX-returning function {name:?} is called imperatively inside JSX; this hides component identity and can evaluate setup logic in the caller's reactive expression"
-            ),
-            format!(
-                "Rename it with an uppercase component name and render it as <{} />. If this is intentionally a value helper, return data rather than JSX.",
-                uppercase_first(name)
-            ),
         ),
         StaticDefectKind::InvalidJsxNesting {
             parent,
@@ -269,9 +256,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ComponentReturnsConditionally => {
             "a proven reactive read controls the component's return shape"
         }
-        StaticDefectKind::PreferComponentSyntax { .. } => {
-            "the resolved local function directly returns JSX and this call is inside JSX"
-        }
         StaticDefectKind::InvalidJsxNesting { .. } => {
             "the intrinsic JSX ancestor chain is statically known and HTML parsing changes this nesting"
         }
@@ -309,8 +293,7 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 }
             }
         }
-        StaticDefectKind::ExecutionMapIncomplete
-        | StaticDefectKind::ReactiveReadAfterAwait { .. }
+        StaticDefectKind::ReactiveReadAfterAwait { .. }
         | StaticDefectKind::MissingEffectFunction
         | StaticDefectKind::ReactiveSourceUncaptured { .. }
         | StaticDefectKind::ReactiveHandlerRead { .. }
@@ -325,13 +308,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         hint,
         evidence,
     }
-}
-
-fn uppercase_first(value: &str) -> String {
-    let mut characters = value.chars();
-    characters.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(characters).collect()
-    })
 }
 
 /// The program tables a dialect catalog intentionally projects.

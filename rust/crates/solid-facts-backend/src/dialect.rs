@@ -115,6 +115,42 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "v1/style-prop",
         "removed 2026-08-20: its component arm was false and its intrinsic residue was CSS style policy or TypeScript-owned",
     ),
+    (
+        "v1/no-async-tracked-scope",
+        "removed 2026-08-20: an async tracked callback is not itself defective; SC1002 reports only proven reactive reads after await",
+    ),
+    (
+        "v1/jsx-no-script-url",
+        "removed 2026-08-20: generic injection-sink policy is outside the checker domain",
+    ),
+    (
+        "v1/jsx-uses-vars",
+        "removed 2026-08-20: it never emitted a diagnostic because semantic reference facts already model JSX uses",
+    ),
+    (
+        "v1/no-proxy-apis",
+        "removed 2026-08-20: runtime target compatibility is project policy and cannot be proven from source",
+    ),
+    (
+        "v1/self-closing-comp",
+        "removed 2026-08-20: self-closing syntax is formatting, not a runtime defect",
+    ),
+    (
+        "v1/prefer-component-syntax",
+        "removed 2026-08-20: imperative calls of JSX-returning functions are runtime-valid and the rule enforced a naming convention",
+    ),
+    (
+        "prefer-component-syntax",
+        "removed 2026-08-20: imperative calls of JSX-returning functions are runtime-valid and the rule enforced a naming convention",
+    ),
+    (
+        "v1/execution-map-incomplete",
+        "removed 2026-08-20: compiler-fact completeness is a producer-integrity invariant, not a project diagnostic",
+    ),
+    (
+        "execution-map-incomplete",
+        "removed 2026-08-20: compiler-fact completeness is a producer-integrity invariant, not a project diagnostic",
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.
@@ -149,16 +185,12 @@ pub fn rule_alias(name: &str) -> Option<&'static str> {
 /// rule therefore cannot silently change the fact plan.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SemanticDemandCapabilities {
-    pub jsx_member_root_symbols: bool,
-    pub jsx_static_value_types: bool,
     pub array_map_receiver_types: bool,
     pub server_argument_library_types: bool,
 }
 
 impl SemanticDemandCapabilities {
     pub const NONE: Self = Self {
-        jsx_member_root_symbols: false,
-        jsx_static_value_types: false,
         array_map_receiver_types: false,
         server_argument_library_types: false,
     };
@@ -166,15 +198,11 @@ impl SemanticDemandCapabilities {
     /// pays for the library-type identities that rule reads.
     #[cfg(feature = "dialect-v2")]
     const SOLID_2: Self = Self {
-        jsx_member_root_symbols: false,
-        jsx_static_value_types: false,
         array_map_receiver_types: false,
         server_argument_library_types: true,
     };
     #[cfg(feature = "dialect-v1")]
     const SOLID_1: Self = Self {
-        jsx_member_root_symbols: true,
-        jsx_static_value_types: true,
         array_map_receiver_types: true,
         server_argument_library_types: false,
     };
@@ -458,7 +486,6 @@ mod tests {
     /// finding from catalog-owned advice.
     fn catalog_prose_program() -> Program {
         let defect_kinds = [
-            StaticDefectKind::ExecutionMapIncomplete,
             StaticDefectKind::ReactiveObjectDestructure {
                 source: "props".into(),
                 component_props: true,
@@ -613,8 +640,8 @@ mod tests {
         let shared = v1.intersection(&v2).copied().collect::<HashSet<_>>();
         let expected = HashSet::from([
             "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1007", "SC2001", "SC2003",
-            "SC4001", "SC4002", "SC4003", "SC7001", "SC8018", "SC8020", "SC9001", "SC9004",
-            "SC9005", "SC9006", "SC9011", "SC9012",
+            "SC4001", "SC4002", "SC4003", "SC7001", "SC8020", "SC9001", "SC9005", "SC9006",
+            "SC9011", "SC9012",
         ]);
         assert_eq!(shared, expected);
         assert_eq!(
@@ -622,22 +649,22 @@ mod tests {
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            20
+            18
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            20
+            18
         );
         assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 20,
-            17,
+            solid_v1_rules::Rule::ALL.len() - 18,
+            5,
             "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
         assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 20,
+            solid_v2_rules::Rule::ALL.len() - 18,
             15,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );

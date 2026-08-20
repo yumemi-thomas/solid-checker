@@ -926,13 +926,6 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// Whether this dialect reports an async function handed to a tracked
-    /// scope (`no-async-tracked-scope`). 1.x does; Solid 2.0 models async
-    /// computations as a feature, so its catalog omits the rule.
-    fn reports_async_tracked_scope(&self) -> bool {
-        false
-    }
-
     /// Whether a statically known string/number in a native `on*` JSX
     /// position is emitted as an attribute instead of installed as a listener.
     /// Solid 1.x's compiler makes that node/value distinction; the shared

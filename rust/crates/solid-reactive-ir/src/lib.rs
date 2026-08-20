@@ -271,7 +271,6 @@ pub struct StaticDefect {
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
-    ExecutionMapIncomplete,
     ReactiveObjectDestructure {
         source: String,
         component_props: bool,
@@ -280,9 +279,6 @@ pub enum StaticDefectKind {
         accessor: String,
     },
     ComponentReturnsConditionally,
-    PreferComponentSyntax {
-        name: String,
-    },
     InvalidJsxNesting {
         parent: String,
         child: String,
@@ -374,8 +370,7 @@ impl StaticDefectKind {
     pub fn is_unresolved_obligation(&self) -> bool {
         matches!(
             self,
-            Self::ExecutionMapIncomplete
-                | Self::PackageContractExportMissing { .. }
+            Self::PackageContractExportMissing { .. }
                 | Self::PackageContractEnvironmentDependent { .. }
                 | Self::UnknownCallbackExecution { .. }
                 | Self::ReactiveSourceUncaptured { .. }

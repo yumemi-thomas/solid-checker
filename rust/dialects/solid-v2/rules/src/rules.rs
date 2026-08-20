@@ -22,7 +22,6 @@ pub enum Rule {
     ReactiveDispatchUnresolved,
     ComponentPropsDestructure,
     ComponentReturnsConditionally,
-    PreferComponentSyntax,
     ValidJsxNesting,
     ReactiveWriteInOwnedScope,
     ActionCalledInOwnedScope,
@@ -46,7 +45,6 @@ pub enum Rule {
     ServerFunctionRichArgument,
     PackageContractExportMissing,
     PackageContractMissing,
-    ExecutionMapIncomplete,
     PackageContractCallbackMissing,
 }
 
@@ -62,7 +60,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 35] = [
+    pub const ALL: [Self; 33] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -72,7 +70,6 @@ impl Rule {
         Self::ReactiveDispatchUnresolved,
         Self::ComponentPropsDestructure,
         Self::ComponentReturnsConditionally,
-        Self::PreferComponentSyntax,
         Self::ValidJsxNesting,
         Self::ReactiveWriteInOwnedScope,
         Self::ActionCalledInOwnedScope,
@@ -96,7 +93,6 @@ impl Rule {
         Self::ServerFunctionRichArgument,
         Self::PackageContractExportMissing,
         Self::PackageContractMissing,
-        Self::ExecutionMapIncomplete,
         Self::PackageContractCallbackMissing,
     ];
 
@@ -125,7 +121,6 @@ impl Rule {
             Self::ComponentReturnsConditionally => {
                 ("SC1004", "component-returns-conditionally", "error", false)
             }
-            Self::PreferComponentSyntax => ("SC8018", "prefer-component-syntax", "warning", false),
             Self::ValidJsxNesting => ("SC8020", "valid-jsx-nesting", "error", false),
             Self::ReactiveWriteInOwnedScope => {
                 ("SC2001", "reactive-write-in-owned-scope", "error", false)
@@ -211,7 +206,6 @@ impl Rule {
                 ("SC9001", "package-contract-export-missing", "error", true)
             }
             Self::PackageContractMissing => ("SC9005", "package-contract-missing", "error", true),
-            Self::ExecutionMapIncomplete => ("SC9004", "execution-map-incomplete", "error", true),
             Self::PackageContractCallbackMissing => {
                 ("SC9006", "package-contract-callback-missing", "error", true)
             }

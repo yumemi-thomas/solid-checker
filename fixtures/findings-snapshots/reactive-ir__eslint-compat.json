@@ -22,26 +22,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/jsx-no-script-url",
-      "code": "SC8004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4407,
-      "end": 4427,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/jsx-no-script-url",
-      "code": "SC8004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4590,
-      "end": 4615,
-      "fixes": 0
-    },
-    {
       "rule": "v1/jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "violation",
@@ -70,26 +50,6 @@
       "start": 7203,
       "end": 7207,
       "fixes": 0
-    },
-    {
-      "rule": "v1/self-closing-comp",
-      "code": "SC8016",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 7291,
-      "end": 7312,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/self-closing-comp",
-      "code": "SC8016",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 7326,
-      "end": 7332,
-      "fixes": 1
     },
     {
       "rule": "v1/expected-function-got-expression",

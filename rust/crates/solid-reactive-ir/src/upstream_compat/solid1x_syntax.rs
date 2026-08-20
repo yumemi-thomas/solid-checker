@@ -1,19 +1,9 @@
-//! `v1/jsx-no-duplicate-props`, `v1/jsx-no-script-url`, and
-//! `v1/self-closing-comp` — eslint-plugin-solid's
-//! purely structural JSX rules, ported from the 1.x reactive solver's
+//! `v1/jsx-no-duplicate-props` — eslint-plugin-solid's structural duplicate
+//! JSX property rule, ported from the 1.x reactive solver's
 //! `solid_1_rules.rs` onto this checker's fact tables.
 //!
 //! Every rule here reads `file.ast.jsx_elements` and its nested attribute /
-//! spread / object-property tables. The context is consulted twice, both
-//! times for vocabulary rather than syntax: `jsx-no-script-url` recovers a
-//! URL from a literal string *type* when the value's text lives in another
-//! file.
-//!
-//! # Options
-//!
-//! `self-closing-comp { component, html }` is read from the project's
-//! `.solid-checker/rule-options.json` (see [`super::solid1x_options`]),
-//! defaulting to upstream's defaults. `jsx-no-duplicate-props { ignoreCase }`
+//! spread / object-property tables. `jsx-no-duplicate-props { ignoreCase }`
 //! is the one option upstream ships here that the checker does not carry: no
 //! upstream corpus case exercises a behaviour difference for it, and an option
 //! nothing proves is a knob that can silently rot.
@@ -24,21 +14,16 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
 use solid_facts::core::Span;
 
-use super::{
-    UpstreamCompatContext, deletion_with_leading_whitespace, fix_replace, is_lowercase_led,
-    static_string_expression, text, violation,
-};
+use super::{UpstreamCompatContext, is_lowercase_led, text, violation};
 use crate::StaticViolation;
 
 pub(super) fn check_file(
     file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
+    _context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
     for element in &file.ast.jsx_elements {
         jsx_no_duplicate_props(file, element, violations);
-        jsx_no_script_url(file, context, element, violations);
-        self_closing_comp(file, context, element, violations);
     }
 }
 
@@ -388,228 +373,9 @@ fn is_numeric_literal(text: &str) -> bool {
     }
 }
 
-/// `v1/jsx-no-script-url` (SC8004) — a `javascript:` URL written as a static
-/// attribute value. Solid never executes these (nor do modern browsers, in
-/// most contexts), so the value is either dead or a mistaken stand-in for a
-/// real event handler.
-fn jsx_no_script_url(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    element: &JsxElementFact,
-    violations: &mut Vec<StaticViolation>,
-) {
-    for attribute in &element.attributes {
-        // The text folder recovers this file's literal shapes; the
-        // literal-string *type* recovers the same value when the binding
-        // lives elsewhere (an import, an inferred const in another file).
-        let value = attribute.expression.map_or_else(
-            || {
-                attribute
-                    .value
-                    .and_then(|span| super::static_string(file, span))
-            },
-            |span| {
-                static_string_expression(context, file, span)
-                    .or_else(|| super::literal_string_type(context, file, span))
-            },
-        );
-        let Some(value) = value else {
-            continue;
-        };
-        if is_javascript_protocol(&value) {
-            violations.push(violation(
-                file,
-                "SC8004",
-                "jsx-no-script-url",
-                "For security, don't use javascript: URLs. Use event handlers instead if you can.",
-                "Replace the javascript: URL with a real event handler prop (onClick, onSubmit, ...). Solid does not execute javascript: URLs, so the value only ever looked like it worked.",
-                attribute.value.unwrap_or(attribute.span),
-                vec![],
-            ));
-        }
-    }
-}
-
-/// Whether `value` is a `javascript:` URL, tolerating the leading control
-/// characters and interspersed tab/newline that a browser's URL parser
-/// ignores (and that an attacker can use to slip the literal string past a
-/// naive `.startsWith("javascript:")`).
-///
-/// The value is seen as source text, but a browser decodes character
-/// references in attribute values before URL parsing, so `java&#9;script:`
-/// and `javascript&colon;` are live URLs at runtime. Upstream's regex misses
-/// these; decoding first closes that gap.
-fn is_javascript_protocol(value: &str) -> bool {
-    let compact = decode_character_references(value)
-        .trim_start_matches(|character: char| character <= ' ')
-        .chars()
-        .filter(|character| !matches!(character, '\r' | '\n' | '\t'))
-        .collect::<String>();
-    compact
-        .get(..11)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("javascript:"))
-}
-
-/// Decodes the character references a `javascript:` URL can hide behind:
-/// numeric forms (`&#9;`, `&#x0A;`) and the named spellings of the
-/// characters the URL parser strips or the protocol needs (`&Tab;`,
-/// `&NewLine;`, `&colon;`). Everything else passes through unchanged.
-fn decode_character_references(value: &str) -> std::borrow::Cow<'_, str> {
-    if !value.contains('&') {
-        return std::borrow::Cow::Borrowed(value);
-    }
-    let mut decoded = String::with_capacity(value.len());
-    let mut rest = value;
-    while let Some(ampersand) = rest.find('&') {
-        decoded.push_str(&rest[..ampersand]);
-        rest = &rest[ampersand..];
-        let Some(semicolon) = rest.find(';') else {
-            break;
-        };
-        let reference = &rest[1..semicolon];
-        let replacement = match reference {
-            "Tab" => Some('\t'),
-            "NewLine" => Some('\n'),
-            "colon" => Some(':'),
-            _ => reference
-                .strip_prefix('#')
-                .and_then(|digits| {
-                    digits.strip_prefix(['x', 'X']).map_or_else(
-                        || digits.parse().ok(),
-                        |hex| u32::from_str_radix(hex, 16).ok(),
-                    )
-                })
-                .and_then(char::from_u32),
-        };
-        if let Some(replacement) = replacement {
-            decoded.push(replacement);
-            rest = &rest[semicolon + 1..];
-        } else {
-            decoded.push('&');
-            rest = &rest[1..];
-        }
-    }
-    decoded.push_str(rest);
-    std::borrow::Cow::Owned(decoded)
-}
-
-/// The HTML elements with no closing tag; the only ones upstream's
-/// `html: "void"` policy wants self-closed.
-fn is_void_element(name: &str) -> bool {
-    matches!(
-        name,
-        "area"
-            | "base"
-            | "br"
-            | "col"
-            | "embed"
-            | "hr"
-            | "img"
-            | "input"
-            | "link"
-            | "meta"
-            | "param"
-            | "source"
-            | "track"
-            | "wbr"
-    )
-}
-
-/// `v1/self-closing-comp` (SC8016) — an element whose self-closing form
-/// disagrees with the configured policy for its category. Under upstream's
-/// defaults (`component: "all"`, `html: "all"`) only one direction is
-/// reachable — a childless element that fails to self-close — and that is
-/// all this rule reported before options existed. A `"none"` (or, for HTML,
-/// `"void"`) policy makes the inverse reachable: an element that self-closes
-/// where the policy says it must not.
-fn self_closing_comp(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    element: &JsxElementFact,
-    violations: &mut Vec<StaticViolation>,
-) {
-    use crate::upstream_compat::solid1x_options::SelfClosePolicy;
-    let options = &context.solid1x_options.self_closing_comp;
-    let name = text(file, element.name.span);
-    let component = !is_lowercase_led(name);
-    let policy = if component {
-        // `void` is not a meaningful component policy (upstream's schema
-        // forbids it); treat it as the default.
-        match options.component {
-            SelfClosePolicy::Void => SelfClosePolicy::All,
-            policy => policy,
-        }
-    } else {
-        options.html
-    };
-    let wanted = match policy {
-        SelfClosePolicy::All => true,
-        SelfClosePolicy::Void => is_void_element(name),
-        SelfClosePolicy::None => false,
-    };
-    if wanted {
-        if element.self_closing || !children_are_insignificant(file, element) {
-            return;
-        }
-        violations.push(violation(
-            file,
-            "SC8016",
-            "self-closing-comp",
-            "Empty components are self-closing.",
-            "Self-close this tag: it has no meaningful children, so the separate closing tag is unnecessary.",
-            element.opening,
-            vec![fix_replace(
-                file,
-                Span::new(element.opening.end.saturating_sub(1), element.span.end),
-                "self-close the tag",
-                " />",
-            )],
-        ));
-    } else if element.self_closing {
-        violations.push(violation(
-            file,
-            "SC8016",
-            "self-closing-comp",
-            "This element should not be self-closing.",
-            "Write the closing tag out: this project's rule options ask for explicit closing tags here.",
-            element.opening,
-            // The `/>` is replaced by `></name>`, and the whitespace that
-            // separated it from the tag name or last attribute goes with it:
-            // `<div />` becomes `<div></div>`, not `<div ></div>`. The
-            // replacement text opens with `>`, so nothing that was holding
-            // tokens apart is lost.
-            vec![fix_replace(
-                file,
-                deletion_with_leading_whitespace(
-                    &file.source,
-                    Span::new(element.span.end.saturating_sub(2), element.span.end),
-                ),
-                "write the closing tag",
-                format!("></{name}>"),
-            )],
-        ));
-    }
-}
-
-/// Whether an opening tag has nothing between it and its closing tag worth
-/// keeping the closing tag for: no children at all, or a single whitespace
-/// text child that contains a newline (formatting-only, the same test
-/// upstream uses — a non-breaking space is deliberately excluded, since that
-/// is content, not layout whitespace).
-fn children_are_insignificant(file: &FileFacts, element: &JsxElementFact) -> bool {
-    element.children.is_empty()
-        || (element.children.len() == 1 && {
-            let content = text(file, element.children[0]);
-            content.contains('\n')
-                && content
-                    .chars()
-                    .all(|character| character != '\u{a0}' && character.is_whitespace())
-        })
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{duplicate_slot, is_javascript_protocol, is_lowercase_led, is_numeric_literal};
+    use super::{duplicate_slot, is_lowercase_led, is_numeric_literal};
 
     /// The compiler lowers delegated events to `el.$$event = handler`, a
     /// property write where a later occurrence overwrites an earlier one —
@@ -755,41 +521,6 @@ mod tests {
             );
         }
     }
-
-    #[test]
-    fn detects_javascript_urls_case_insensitively() {
-        assert!(is_javascript_protocol("javascript:alert(1)"));
-        assert!(is_javascript_protocol("JavaScript:alert(1)"));
-        assert!(is_javascript_protocol("  javascript:alert(1)"));
-    }
-
-    #[test]
-    fn detects_javascript_urls_with_interspersed_control_characters() {
-        assert!(is_javascript_protocol("java\nscript:alert(1)"));
-        assert!(is_javascript_protocol("j\ta\tv\ta\ts\tc\tr\ti\tp\tt:x"));
-    }
-
-    /// Browsers decode character references in attribute values before URL
-    /// parsing, so these spellings are live `javascript:` URLs at runtime
-    /// even though upstream's source-text regex misses them.
-    #[test]
-    fn detects_javascript_urls_hidden_behind_character_references() {
-        assert!(is_javascript_protocol("java&#9;script:alert(1)"));
-        assert!(is_javascript_protocol("java&#x0A;script:alert(1)"));
-        assert!(is_javascript_protocol("java&Tab;script:alert(1)"));
-        assert!(is_javascript_protocol("java&NewLine;script:alert(1)"));
-        assert!(is_javascript_protocol("javascript&colon;alert(1)"));
-    }
-
-    #[test]
-    fn does_not_flag_ordinary_urls() {
-        assert!(!is_javascript_protocol("https://example.com"));
-        assert!(!is_javascript_protocol("/relative/path"));
-        assert!(!is_javascript_protocol(""));
-        assert!(!is_javascript_protocol("https://example.com/?q=a&b=c"));
-        assert!(!is_javascript_protocol("/path?fish&chips"));
-    }
-
     #[test]
     fn classifies_element_names_by_leading_case() {
         assert!(is_lowercase_led("div"));

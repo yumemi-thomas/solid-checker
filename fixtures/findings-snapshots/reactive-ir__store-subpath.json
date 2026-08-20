@@ -1,16 +1,6 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
-    {
-      "rule": "v1/no-proxy-apis",
-      "code": "SC8009",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/store-subpath/right-subpath.tsx",
-      "start": 0,
-      "end": 45,
-      "fixes": 0
-    },
     {
       "rule": "v1/package-contract-export-missing",
       "code": "SC9001",

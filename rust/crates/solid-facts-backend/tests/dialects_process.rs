@@ -124,28 +124,19 @@ fn component_ref_callbacks_are_setup_time_outputs_in_both_dialects() {
 }
 
 #[test]
-fn jsx_correctness_fixture_excludes_retired_draggable_policy_in_both_dialects() {
+fn jsx_correctness_fixture_excludes_retired_policy_rules_in_both_dialects() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
     let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("tests/fixtures/jsx-correctness/tsconfig.json");
-    // Draggable serialization is generic HTML attribute-state policy, not a
-    // Solid semantic defect. Every spelling remains in this fixture as a
-    // negative regression; only the still-live JSX-returning helper rule may
-    // report.
-    for (dialect, expected) in [
-        ("solid-v1", "v1/prefer-component-syntax"),
-        ("solid-v2", "prefer-component-syntax"),
-    ] {
+    // Draggable serialization and JSX-returning helper naming are policies,
+    // not Solid semantic defects. Every spelling remains as a negative
+    // regression.
+    for dialect in ["solid-v1", "solid-v2"] {
         let findings = project_snapshot_findings(project.clone(), Some(dialect));
-        let rules = findings
-            .iter()
-            .map(|finding| finding["rule"].as_str().unwrap())
-            .collect::<Vec<_>>();
-        assert_eq!(
-            rules,
-            [expected],
+        assert!(
+            findings.is_empty(),
             "unexpected {dialect} findings: {findings:#?}"
         );
     }

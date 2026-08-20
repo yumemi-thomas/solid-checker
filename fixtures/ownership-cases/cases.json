@@ -5582,39 +5582,13 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
             "rule": "v1/no-proxy-apis",
-            "code": "SC8009",
-            "kind": "uncertifiable",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                81,
-                87
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      16,
-                      22
-                    ]
-                  }
-                }
-              ],
-              "justification": "The checker rule v1/no-proxy-apis asserts a Solid runtime semantic outcome; the overlapping TS7006 diagnostic concerns the source's type-level shape rather than that runtime outcome."
-            }
+            "reason": "retired target-compatibility policy; source does not prove a Solid runtime defect"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {
@@ -5811,36 +5785,13 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
             "rule": "v1/no-proxy-apis",
-            "code": "SC8009",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "marker": "props.nestedProps"
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      19,
-                      24
-                    ]
-                  }
-                }
-              ],
-              "justification": "The checker rule v1/no-proxy-apis asserts a Solid runtime semantic outcome; the overlapping TS7006 diagnostic concerns the source's type-level shape rather than that runtime outcome."
-            }
+            "reason": "retired target-compatibility policy; source does not prove a Solid runtime defect"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {
@@ -5855,28 +5806,13 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
             "rule": "v1/no-proxy-apis",
-            "code": "SC8009",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                97,
-                105
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
+            "reason": "retired target-compatibility policy; source does not prove a Solid runtime defect"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {
@@ -7316,49 +7252,13 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
             "rule": "v1/self-closing-comp",
-            "code": "SC8016",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "textRange": [
-                57,
-                85
-              ]
-            },
-            "fix": {
-              "behavior": "safe",
-              "text": "const [signal, setSignal] = createSignal();\n    let el = <Child foo={() => signal()} />\n"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS2304",
-                  "span": {
-                    "textRange": [
-                      58,
-                      63
-                    ]
-                  }
-                },
-                {
-                  "code": "TS2304",
-                  "span": {
-                    "textRange": [
-                      87,
-                      92
-                    ]
-                  }
-                }
-              ],
-              "justification": "The checker rule v1/self-closing-comp asserts a Solid runtime semantic outcome; the overlapping TS2304/TS2304 diagnostic concerns the source's type-level shape rather than that runtime outcome."
-            }
+            "reason": "retired formatting preference; explicit closing syntax is runtime-equivalent"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {
@@ -8734,25 +8634,6 @@
             }
           },
           {
-            "rule": "v1/no-async-tracked-scope",
-            "code": "SC5004",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "textRange": [
-                69,
-                153
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
-          },
-          {
             "rule": "v1/reactive-read-after-await",
             "code": "SC1002",
             "kind": "violation",
@@ -8772,7 +8653,12 @@
             }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/no-async-tracked-scope",
+            "reason": "retired shape rule; only a proven reactive read after await remains defective"
+          }
+        ]
       }
     },
     {
@@ -8808,22 +8694,6 @@
             }
           },
           {
-            "rule": "v1/no-async-tracked-scope",
-            "code": "SC5004",
-            "kind": "violation",
-            "severity": "warning",
-            "span": {
-              "marker": "async () => {\n        const res = await fetch(\"https://jsonplaceholder.typicode.com/photos?_limit=20\");\n        setPhotos(await res.json());\n      }"
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
-          },
-          {
             "rule": "v1/reactive-write-in-owned-scope",
             "code": "SC2001",
             "kind": "violation",
@@ -8843,7 +8713,12 @@
             }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/no-async-tracked-scope",
+            "reason": "retired shape rule; only a proven reactive read after await remains defective"
+          }
+        ]
       }
     },
     {

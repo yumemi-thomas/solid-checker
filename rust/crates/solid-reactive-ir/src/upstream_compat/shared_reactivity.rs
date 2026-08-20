@@ -14,7 +14,7 @@
 //! a value, a proxy written through, a listener bound to a call's result —
 //! so both dialects' catalogs carry them (1.x as `v1/<rule>`, 2.0 under the
 //! checker's plain names, same SC codes so suppressions survive a
-//! migration). The one exception is `no-async-tracked-scope`; see its doc.
+//! migration).
 //!
 //! # Proven sources, not named ones
 //!
@@ -32,7 +32,7 @@
 //! arrives through three wrappers still is.
 
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, FunctionFact, IdentifierRole};
+use solid_facts::ast::{ArgumentValueKind, IdentifierRole};
 use solid_facts::core::Span;
 use typefacts::{ArrayShape, Callability, ResolvedCallValidity};
 
@@ -42,24 +42,17 @@ use super::{
 };
 use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
 use crate::{
-    DirectMutationTarget, ReactiveSourceKind, StaticDefect, StaticDefectKind, StaticViolation,
-    known_primitive, location,
+    DirectMutationTarget, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive,
+    location,
 };
 
 pub(super) fn check_file(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
     defects: &mut Vec<StaticDefect>,
 ) {
     uncalled_accessor(file, context, defects);
     no_direct_mutation(file, context, defects);
-    // The one rule in this module whose defect is version-specific: Solid
-    // 2.0 models async computations as a feature (see the rule's doc), so
-    // only the 1.x catalog carries it.
-    if context.dialect.reports_async_tracked_scope() {
-        no_async_tracked_scope(file, context, violations);
-    }
     expected_function_got_expression(file, context, defects);
     reactive_source_uncaptured(file, context, defects);
 }
@@ -190,93 +183,6 @@ fn reactive_source_uncaptured(
                     source: name.to_owned(),
                     callee: callee_text.to_owned(),
                 },
-                location: location(file.path.shared(), argument.span),
-                analysis_context: String::new(),
-                fixes: vec![],
-                uncertain: false,
-            });
-        }
-    }
-}
-
-/// `v1/no-async-tracked-scope` — upstream's `noAsyncTrackedScope`.
-///
-/// An `async` function handed to a position the dialect tracks. A computation
-/// collects dependencies only until its first suspension point, so every read
-/// after an `await` subscribes to nothing and the scope silently stops
-/// responding.
-///
-/// Which slot tracks is asked of the dialect rather than assumed, and that is
-/// the whole reason this is a per-dialect rule: `createEffect`'s callback is
-/// argument 0 in 1.x and argument 1 in 2.0, so a table baked for one version
-/// reports the other's seed value as a tracked scope.
-///
-/// Scoped to functions written at the call. An identifier naming an `async`
-/// function declared elsewhere is the same defect, but proving the binding
-/// reaches this slot is interprocedural work the engine already does for
-/// reads — [`crate::StaticViolation`]s for those surface as
-/// `v1/reactive-read-after-await` instead, per-read and with the offending
-/// read located.
-///
-/// # Why this asks only the dialect, not contracts or async type facts
-///
-/// - **Package contracts.** A contract's `ContractCallback` carries an
-///   `execution` of `"tracked"`, but that means "the graph schedules it" —
-///   an `onSettled`-style callback is contract-tracked while its reads do
-///   not subscribe (see `Dialect::callback_semantics_at`). Flagging every
-///   async literal handed to a contract-tracked slot would therefore report
-///   correct code. The engine already threads contract callbacks through its
-///   interprocedural graph, so an actual read-after-await inside one still
-///   surfaces, per-read, as SC1001/SC1002.
-/// - **`can_return_async` type facts.** A non-`async` function that returns
-///   a Promise has no `await`, so every read in it runs before any
-///   suspension and subscribes normally — the defect this rule reports
-///   cannot occur in it.
-///
-/// # Why the 2.0 catalog does not carry this rule
-///
-/// Solid 2.0 models async computations as a feature: an async compute
-/// produces an async accessor the engine tracks through `async_reads` and
-/// the `Loading`-boundary rules (SC5001–SC5003). A blanket "no async in a
-/// tracked slot" would contradict the dialect's own model there; 2.0's
-/// after-await reads are still covered per-read by SC1002.
-fn no_async_tracked_scope(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
-) {
-    let primitives = context.lookup.primitives(file);
-    for (index, call) in file.ast.calls.iter().enumerate() {
-        let Some(primitive) = known_primitive(&primitives.calls[index]) else {
-            continue;
-        };
-        let name = primitives.calls[index]
-            .as_ref()
-            .map_or("", crate::PrimitiveName::as_str);
-        for slot in 0..call.arguments.len() {
-            if !context
-                .dialect
-                .callback_semantics_at(primitive, slot, call.arguments.len())
-                .tracks_reads
-            {
-                continue;
-            }
-            let argument = &call.arguments[slot];
-            let Some(function) = function_at(file, argument.span) else {
-                continue;
-            };
-            if !function.r#async {
-                continue;
-            }
-            violations.push(StaticViolation {
-                id: "SC5004".into(),
-                rule: "no-async-tracked-scope".into(),
-                message: format!(
-                    "this {name} scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing"
-                ),
-                hint: format!(
-                    "Keep the {name} scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
-                ),
                 location: location(file.path.shared(), argument.span),
                 analysis_context: String::new(),
                 fixes: vec![],
@@ -532,16 +438,6 @@ fn handler_value_is_absent_sentinel(
                     .initializer
                     .is_some_and(|initializer| is_sentinel_literal(binding_file, initializer))
         })
-}
-
-/// The function written at exactly this span, if the argument is a literal
-/// function rather than a reference to one.
-fn function_at(file: &FileFacts, span: Span) -> Option<&FunctionFact> {
-    let span = file.ast.peel_ts_sugar_span(span);
-    file.ast
-        .functions
-        .iter()
-        .find(|function| function.span == span)
 }
 
 /// `v1/uncalled-accessor` — upstream's `badSignal`.

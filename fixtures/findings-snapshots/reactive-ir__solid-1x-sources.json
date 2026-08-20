@@ -2,16 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/no-proxy-apis",
-      "code": "SC8009",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
-      "start": 143,
-      "end": 190,
-      "fixes": 0
-    },
-    {
       "rule": "v1/strict-read-untracked",
       "code": "SC1001",
       "kind": "uncertifiable",
@@ -99,16 +89,6 @@
       "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
       "start": 2999,
       "end": 3011,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/solid-1x-sources/App.tsx",
-      "start": 3598,
-      "end": 3664,
       "fixes": 0
     },
     {

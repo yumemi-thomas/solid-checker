@@ -181,6 +181,12 @@ fn execution_map_from_trace(
     }
 
     map.validate(source)?;
+    if !map.uncovered_jsx_expressions().is_empty() {
+        return Err(CompilerProviderError::Native(
+            "Solid 2.0 compiler trace is incomplete: a JSX expression has no execution classification"
+                .into(),
+        ));
+    }
     Ok(map)
 }
 

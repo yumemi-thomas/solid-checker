@@ -21,85 +21,9 @@ use typefacts::Location;
 
 /// The static-prepass stage: every prepass rule, in their pipeline order.
 pub(crate) fn static_prepass(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    execution_map_incomplete(ctx, draft);
     component_props_destructure(ctx, draft);
-    prefer_component_syntax(ctx, draft);
     valid_jsx_nesting(ctx, draft);
     reactive_read_after_await(ctx, draft);
-}
-
-/// SC8018: a local JSX-returning function called as an ordinary expression
-/// from JSX. Symbol identity rejects shadowed same-spelled functions; the
-/// direct-return check rejects ordinary value helpers.
-fn prefer_component_syntax(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    for file in &ctx.facts.files {
-        for function in &file.ast.functions {
-            let Some(name) = function_binding_name(file, function).or(function.name.as_ref())
-            else {
-                continue;
-            };
-            let name_text = file.source_text(name.span).unwrap_or_default();
-            if !name_text.starts_with(|character: char| character.is_ascii_lowercase())
-                || !function_directly_returns_jsx(file, function)
-            {
-                continue;
-            }
-            for (caller_file, callee) in ctx
-                .semantic_lookup
-                .function_call_sites(file.path.as_str(), function.span)
-            {
-                let Some(call) = caller_file
-                    .ast
-                    .calls
-                    .iter()
-                    .find(|candidate| candidate.callee == callee)
-                else {
-                    continue;
-                };
-                if !caller_file.ast.any_jsx_containing(call.span)
-                    || (caller_file.path == file.path && function.span.contains(call.span))
-                {
-                    continue;
-                }
-                draft.push_defect(
-                    "prefer-component-syntax",
-                    StaticDefect {
-                        kind: StaticDefectKind::PreferComponentSyntax {
-                            name: name_text.to_owned(),
-                        },
-                        location: location(caller_file.path.shared(), call.callee),
-                        analysis_context: enclosing_function_label(caller_file, call.span),
-                        fixes: vec![],
-                        uncertain: false,
-                    },
-                );
-            }
-        }
-    }
-}
-
-fn function_directly_returns_jsx(
-    file: &solid_facts::FileFacts,
-    function: &solid_facts::ast::FunctionFact,
-) -> bool {
-    function
-        .expression_return
-        .iter()
-        .chain(file.ast.returns.iter().filter(|returned| {
-            containing_ast_function(&file.ast, returned.span)
-                .is_some_and(|owner| owner.span == function.span)
-        }))
-        .filter_map(|returned| returned.argument)
-        .any(|argument| {
-            file.ast.jsx_within(argument).any(|element| {
-                containing_ast_function(&file.ast, element.span)
-                    .is_some_and(|owner| owner.span == function.span)
-            }) || file.ast.jsx_fragments.iter().any(|fragment| {
-                argument.contains(*fragment)
-                    && containing_ast_function(&file.ast, *fragment)
-                        .is_some_and(|owner| owner.span == function.span)
-            })
-        })
 }
 
 /// SC8020: nesting for which the HTML parser changes the authored tree by
@@ -449,24 +373,6 @@ fn is_implied_end_tag_boundary(name: &str) -> bool {
             | "desc"
             | "title"
     )
-}
-
-/// SC9004: JSX expressions the compiler left without an execution role.
-fn execution_map_incomplete(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    for file in &ctx.facts.files {
-        for span in file.compiler.uncovered_jsx_expressions() {
-            draft.push_defect(
-                "execution-map-incomplete",
-                StaticDefect {
-                    kind: StaticDefectKind::ExecutionMapIncomplete,
-                    location: location(file.path.shared(), span),
-                    analysis_context: String::new(),
-                    fixes: vec![],
-                    uncertain: false,
-                },
-            );
-        }
-    }
 }
 
 /// SC1003: a reactive object destructured outside tracking. Component

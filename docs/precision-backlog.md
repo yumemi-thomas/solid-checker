@@ -1096,15 +1096,16 @@ job and never receive SC9012.
 
 ## Design-change candidates (open)
 
-### `execution-map-incomplete` (SC9004) is unreachable from real source
+### `execution-map-incomplete` (SC9004) moved to producer integrity
 
 Both dialect compilers emit every `jsx-expression` operation together with a
 same-span region or callback role in every decision arm, and
 `CompilerFacts::classifies` matches by span containment — so
-`uncovered_jsx_expressions()` is empty by construction. The rule defends
-against externally produced or partial compiler facts only, which is why no
-fixture can pin it; if a third compiler adapter ever lands, that adapter's
-tests are where this rule gets its coverage.
+`uncovered_jsx_expressions()` is empty by construction. The former SC9004
+project rule could therefore describe only externally produced or partial
+compiler facts, not a defect in analyzed source. It was removed from both
+catalogs on 2026-08-20 and retained as a producer-integrity requirement. If a
+third compiler adapter lands, its adapter tests must prove the same totality.
 
 ### Shorthand property values follow exact project-local exports
 
@@ -1227,11 +1228,6 @@ answer when extension/index candidates are ambiguous.
   is from a dialect-owned module and the member is in that dialect's export
   vocabulary. The namespace and named-import twins are pinned by
   `fixtures/reactive-ir/namespace-import-v2/`.
-- **`prefer-component-syntax` covers conditional JSX returns and cross-file
-  calls.** It follows exact TypeScript function identities, so lower-case
-  value helpers and shadowed bindings stay out of the finding set. The focused
-  `prefer-component-syntax-v2` fixture pins this branch for issue #210.
-
 - **Component identity conventions are dialect-owned.** JSX call sites,
   direct JSX returns, and exact compiler-resolved Solid component aliases prove
   component identity. Solid 1 does not promote upstream's uppercase-name
