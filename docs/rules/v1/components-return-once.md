@@ -8,7 +8,7 @@ runs exactly once.
 > Severity deliberately differs from the Solid 2.0 catalog: this rule keeps
 > upstream eslint-plugin-solid's advisory **warning** for existing 1.x
 > codebases, while
-> [`component-returns-conditionally`](../component-returns-conditionally.md)
+> [`components-return-once`](../components-return-once.md)
 > reports the same `SC1004` defect as an **error**.
 
 ## What it does

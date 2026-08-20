@@ -97,7 +97,7 @@ impl Rule {
             }
             Self::ComponentPropsDestructure => ("SC1003", "no-destructure", "error", false),
             Self::ComponentReturnsConditionally => {
-                ("SC1004", "component-returns-conditionally", "error", false)
+                ("SC1004", "components-return-once", "error", false)
             }
             Self::ReactiveWriteInOwnedScope => {
                 ("SC2001", "reactive-write-in-owned-scope", "error", false)

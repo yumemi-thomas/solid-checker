@@ -46,6 +46,10 @@ code; **Both** — either, depending on the code.
   `component-props-destructure` is now `no-destructure`, matching the 1.x stem.
   The old rule-options key aliases the new identity; the explicit ESLint key
   remains temporarily as a deprecated delegate.
+- **2026-08-20 — SC1004 names unified.** Solid 2.0's
+  `component-returns-conditionally` is now `components-return-once`, matching
+  the 1.x stem. The old rule-options key aliases the new identity; the explicit
+  ESLint key remains temporarily as a deprecated delegate.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 

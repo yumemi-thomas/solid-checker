@@ -1,4 +1,4 @@
-# component-returns-conditionally
+# components-return-once
 
 `SC1004` · **error** · violation
 

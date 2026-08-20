@@ -212,7 +212,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "code": "SC1004",
       "kind": "violation",
       "severity": "error",
@@ -222,7 +222,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "code": "SC1004",
       "kind": "violation",
       "severity": "error",
@@ -232,7 +232,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "code": "SC1004",
       "kind": "violation",
       "severity": "error",

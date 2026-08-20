@@ -497,7 +497,7 @@
       "code": "export function Row(props: { name: string }) {\n  const { name } = props;\n  return <div>{name}</div>;\n}\n"
     },
     {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",

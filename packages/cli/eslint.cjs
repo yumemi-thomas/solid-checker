@@ -372,7 +372,8 @@ const plugin = {
 // not appear in generated catalogs or presets; they delegate to the current
 // identity and carry ESLint's deprecation metadata.
 const DEPRECATED_RULE_KEYS = [
-  ["component-props-destructure", "no-destructure"]
+  ["component-props-destructure", "no-destructure"],
+  ["component-returns-conditionally", "components-return-once"]
 ];
 
 for (const catalog of Object.values(manifests)) {

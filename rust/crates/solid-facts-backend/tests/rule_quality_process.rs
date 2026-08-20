@@ -17,7 +17,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ("strict-read-untracked", 25),
         ("reactive-read-after-await", 20),
         ("no-destructure", 1),
-        ("component-returns-conditionally", 3),
+        ("components-return-once", 3),
         ("leaf-owner-forbidden-call", 7),
     ] {
         assert_rule_findings(&findings, rule, count);
@@ -66,11 +66,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "component-return-invalid.tsx",
-            [
-                ("strict-read-untracked", 3),
-                ("component-returns-conditionally", 3),
-            ]
-            .as_slice(),
+            [("strict-read-untracked", 3), ("components-return-once", 3)].as_slice(),
         ),
         (
             "leaf-invalid.tsx",
@@ -201,7 +197,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "component-return-valid.tsx",
-            &["component-returns-conditionally"][..],
+            &["components-return-once"][..],
         ),
         (
             "leaf-valid.tsx",

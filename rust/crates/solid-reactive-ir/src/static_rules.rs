@@ -715,7 +715,7 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                 if reactive {
                     let location = location(file.path.shared(), *test);
                     draft.push_defect(
-                        "component-returns-conditionally",
+                        "components-return-once",
                         StaticDefect {
                             kind: StaticDefectKind::ComponentReturnsConditionally,
                             location,

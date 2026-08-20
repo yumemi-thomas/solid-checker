@@ -25,7 +25,7 @@ and, in one deliberate case, its own severity: `SC1004` is a **warning** as
 [`v1/components-return-once`](v1/components-return-once.md) (matching upstream
 eslint-plugin-solid's advisory level for existing 1.x codebases) and an
 **error** as
-[`component-returns-conditionally`](component-returns-conditionally.md), where
+[`components-return-once`](components-return-once.md), where
 the 2.0 catalog has no adoption legacy to accommodate. A suppression comment
 carried through a migration therefore lands on a stricter rule.
 
@@ -126,7 +126,7 @@ rule's page documents its additional options and defaults.
 | SC1001 | [strict-read-untracked](strict-read-untracked.md) | warning |
 | SC1002 | [reactive-read-after-await](reactive-read-after-await.md) | error |
 | SC1003 | [no-destructure](no-destructure.md) | error |
-| SC1004 | [component-returns-conditionally](component-returns-conditionally.md) | error |
+| SC1004 | [components-return-once](components-return-once.md) | error |
 | SC1005 | [uncalled-accessor](uncalled-accessor.md) | warning |
 | SC1006 | [untracked-derived-function](untracked-derived-function.md) | warning |
 | SC1007 | [expected-function-got-expression](expected-function-got-expression.md) | warning |

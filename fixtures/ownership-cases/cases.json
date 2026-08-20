@@ -516,7 +516,7 @@
       }
     },
     {
-      "id": "component-returns-conditionally/positive/001",
+      "id": "components-return-once/positive/001",
       "dialect": "solid-v2",
       "source": {
         "extension": ".tsx",
@@ -529,7 +529,7 @@
       "expect": {
         "findings": [
           {
-            "rule": "component-returns-conditionally",
+            "rule": "components-return-once",
             "code": "SC1004",
             "kind": "violation",
             "severity": "error",
