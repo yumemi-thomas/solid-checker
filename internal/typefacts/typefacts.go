@@ -60,6 +60,76 @@ type RuntimeValueDomain struct {
 	Unknown        bool `cbor:"unknown,omitempty" json:"unknown,omitempty"`
 }
 
+// PrimitiveValueDomain partitions the possible runtime values of a demanded
+// expression by JavaScript primitive kind. A known object/function value sets
+// MayBeObject; dynamic, recovery, or unconstrained types set every possibility
+// and Unknown. The all-false value is the known empty never domain.
+//
+// This is deliberately a language fact rather than a serialization verdict.
+// Consumers decide which closed subsets their own runtime contracts accept.
+type PrimitiveValueDomain struct{ bits uint16 }
+
+const (
+	primitiveMayBeString uint16 = 1 << iota
+	primitiveMayBeNumber
+	primitiveMayBeBoolean
+	primitiveMayBeBigInt
+	primitiveMayBeSymbol
+	primitiveMayBeNull
+	primitiveMayBeUndefined
+	primitiveMayBeObject
+	primitiveEmpty
+)
+
+// NewPrimitiveValueDomain constructs one present, closed domain. The all-false
+// input is the known empty never domain, distinct from an undemanded zero value.
+func NewPrimitiveValueDomain(stringValue, number, boolean, bigint, symbol, nullValue, undefined, object bool) PrimitiveValueDomain {
+	bits := boolDomainBit(stringValue, primitiveMayBeString) |
+		boolDomainBit(number, primitiveMayBeNumber) |
+		boolDomainBit(boolean, primitiveMayBeBoolean) |
+		boolDomainBit(bigint, primitiveMayBeBigInt) |
+		boolDomainBit(symbol, primitiveMayBeSymbol) |
+		boolDomainBit(nullValue, primitiveMayBeNull) |
+		boolDomainBit(undefined, primitiveMayBeUndefined) |
+		boolDomainBit(object, primitiveMayBeObject)
+	if bits == 0 {
+		bits = primitiveEmpty
+	}
+	return PrimitiveValueDomain{bits: bits}
+}
+
+func UnknownPrimitiveValueDomain() PrimitiveValueDomain {
+	return PrimitiveValueDomain{bits: ^uint16(0)}
+}
+
+func boolDomainBit(value bool, bit uint16) uint16 {
+	if value {
+		return bit
+	}
+	return 0
+}
+
+func (d PrimitiveValueDomain) IsPresent() bool      { return d.bits != 0 }
+func (d PrimitiveValueDomain) MayBeString() bool    { return d.bits&primitiveMayBeString != 0 }
+func (d PrimitiveValueDomain) MayBeNumber() bool    { return d.bits&primitiveMayBeNumber != 0 }
+func (d PrimitiveValueDomain) MayBeBoolean() bool   { return d.bits&primitiveMayBeBoolean != 0 }
+func (d PrimitiveValueDomain) MayBeBigInt() bool    { return d.bits&primitiveMayBeBigInt != 0 }
+func (d PrimitiveValueDomain) MayBeSymbol() bool    { return d.bits&primitiveMayBeSymbol != 0 }
+func (d PrimitiveValueDomain) MayBeNull() bool      { return d.bits&primitiveMayBeNull != 0 }
+func (d PrimitiveValueDomain) MayBeUndefined() bool { return d.bits&primitiveMayBeUndefined != 0 }
+func (d PrimitiveValueDomain) MayBeObject() bool    { return d.bits&primitiveMayBeObject != 0 }
+func (d PrimitiveValueDomain) Unknown() bool        { return d.bits == ^uint16(0) }
+func (d PrimitiveValueDomain) Union(other PrimitiveValueDomain) PrimitiveValueDomain {
+	if d.Unknown() || other.Unknown() {
+		return UnknownPrimitiveValueDomain()
+	}
+	bits := (d.bits | other.bits) &^ primitiveEmpty
+	if bits == 0 && (d.IsPresent() || other.IsPresent()) {
+		bits = primitiveEmpty
+	}
+	return PrimitiveValueDomain{bits: bits}
+}
+
 // ConstantValue is a compiler-proven, span-exact primitive value. Kind selects
 // the populated payload; an empty string and numeric zero are real values.
 type ConstantValue struct {
@@ -125,6 +195,12 @@ type TupleShape struct {
 	// FixedLength counts initial required-or-optional slots, matching the
 	// compiler's own fixedLength.
 	FixedLength int `cbor:"fixedLength,omitempty" json:"fixedLength,omitempty"`
+	// ExactLength is the tuple's exact runtime element count when every
+	// constituent has the same required-only shape. Read it only when
+	// ExactLengthKnown is true; optional, rest, variadic, and unequal union
+	// shapes deliberately leave it unknown.
+	ExactLength      int  `cbor:"exactLength,omitempty" json:"exactLength,omitempty"`
+	ExactLengthKnown bool `cbor:"exactLengthKnown,omitempty" json:"exactLengthKnown,omitempty"`
 	// HasRest reports a rest or variadic tail after the fixed slots.
 	HasRest bool `cbor:"hasRest,omitempty" json:"hasRest,omitempty"`
 	// ElementZero is the callability of the first slot's type, or

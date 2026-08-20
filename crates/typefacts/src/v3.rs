@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
     CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Declaration,
-    DeclarationOwner, EntityFact, FileFact, Location, ParameterFact, ReferenceSpace, ResolvedCall,
-    ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain, SourceBinding, SourceCall,
-    SourceFunction, SourceHash, SymbolFact, TupleShape, TypeDescriptor,
+    DeclarationOwner, EntityFact, FileFact, Location, ParameterFact, PrimitiveValueDomain,
+    ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain,
+    SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact, TupleShape, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -21,8 +21,9 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V8: u64 = 8;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V9: u64 = 9;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V11: u64 = 11;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V12: u64 = 12;
+pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V13: u64 = 13;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:2ea02d4f58dbc256540c33e58671010f201ddea72287c7a5a034f5b3e196cccb";
+    "sha256:a1e82b7c340ddb9107b60ee5fc54cd45939e7ef1b6ed90d12bdafa7c16f78c62";
 pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
@@ -82,6 +83,8 @@ pub struct EntityDemand {
     pub callability: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub runtime_value_domain: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub primitive_value_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
     pub call_result_domain: bool,
     #[serde(default, skip_serializing_if = "is_false")]
@@ -278,6 +281,7 @@ pub const DEMAND_FLAG_CONSTANT_VALUE: u64 = 1 << 11;
 pub const DEMAND_FLAG_ARRAY_SHAPE: u64 = 1 << 12;
 pub const DEMAND_FLAG_TUPLE_SHAPE: u64 = 1 << 13;
 pub const DEMAND_FLAG_LIBRARY_TYPES: u64 = 1 << 14;
+pub const DEMAND_FLAG_PRIMITIVE_VALUE_DOMAIN: u64 = 1 << 15;
 
 fn push_uvarint(output: &mut Vec<u8>, mut value: u64) {
     while value >= 0x80 {
@@ -726,6 +730,7 @@ fn decode_entity_run(
         let symbol = cursor.string_index(strings, "entity symbol")?;
         let flags = cursor.u64()?;
         let known_flags = match table_schema {
+            TYPE_FACTS_TABLE_SCHEMA_V13 => 8191,
             TYPE_FACTS_TABLE_SCHEMA_V12 => 4095,
             TYPE_FACTS_TABLE_SCHEMA_V11 => 2047,
             TYPE_FACTS_TABLE_SCHEMA_V9 => 1023,
@@ -806,13 +811,27 @@ fn decode_entity_run(
             let element_zero = parse_callability(cursor.u64()?)?;
             let element_zero_min_parameters = u32::try_from(cursor.u64()?)
                 .map_err(|_| "packed tuple parameter count overflows".to_string())?;
-            Some(TupleShape {
-                fixed_length: u32::try_from(packed >> 1)
+            let exact_length = if table_schema >= 13 {
+                let encoded = cursor.u64()?;
+                if encoded == 0 {
+                    None
+                } else {
+                    Some(
+                        u32::try_from(encoded - 1)
+                            .map_err(|_| "packed tuple exact length overflows".to_string())?,
+                    )
+                }
+            } else {
+                None
+            };
+            Some(TupleShape::try_new(
+                u32::try_from(packed >> 1)
                     .map_err(|_| "packed tuple fixed length overflows".to_string())?,
-                has_rest: packed & 1 != 0,
-                element_zero: Some(element_zero),
+                packed & 1 != 0,
+                Some(element_zero),
                 element_zero_min_parameters,
-            })
+                exact_length,
+            )?)
         } else {
             None
         };
@@ -826,6 +845,11 @@ fn decode_entity_run(
             Some(Arc::new(names))
         } else {
             None
+        };
+        let primitive_value_domain = if flags & 4096 != 0 {
+            parse_primitive_value_domain(cursor.u64()?)?
+        } else {
+            PrimitiveValueDomain::default()
         };
         let symbol_unresolved = flags & 64 != 0;
         if symbol_unresolved && !symbol.is_empty() {
@@ -848,6 +872,7 @@ fn decode_entity_run(
             array_shape,
             tuple_shape,
             library_types,
+            primitive_value_domain,
             reference_space,
             runtime_identity,
         });
@@ -860,12 +885,29 @@ fn parse_runtime_value_domain(value: u64) -> Result<RuntimeValueDomain, String> 
     if value & !15 != 0 {
         return Err(format!("unknown runtime value-domain bits {value}"));
     }
-    Ok(RuntimeValueDomain {
-        may_be_callable: value & 1 != 0,
-        may_be_undefined: value & 2 != 0,
-        may_be_other: value & 4 != 0,
-        unknown: value & 8 != 0,
-    })
+    Ok(RuntimeValueDomain::new(
+        value & 1 != 0,
+        value & 2 != 0,
+        value & 4 != 0,
+        value & 8 != 0,
+    ))
+}
+
+fn parse_primitive_value_domain(value: u64) -> Result<PrimitiveValueDomain, String> {
+    if value & !511 != 0 {
+        return Err(format!("unknown primitive value-domain bits {value}"));
+    }
+    Ok(PrimitiveValueDomain::new(
+        value & 1 != 0,
+        value & 2 != 0,
+        value & 4 != 0,
+        value & 8 != 0,
+        value & 16 != 0,
+        value & 32 != 0,
+        value & 64 != 0,
+        value & 128 != 0,
+        value & 256 != 0,
+    ))
 }
 
 fn parse_array_shape(value: u64) -> Result<ArrayShape, String> {
@@ -1071,6 +1113,7 @@ pub(crate) fn decode_table_transition(input: &[u8]) -> Result<WireTableTransitio
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V9
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V11
         && table_schema != TYPE_FACTS_TABLE_SCHEMA_V12
+        && table_schema != TYPE_FACTS_TABLE_SCHEMA_V13
     {
         return Err(format!("unsupported Wire table schema {table_schema}"));
     }
@@ -1365,6 +1408,9 @@ pub fn compact_demands(demands: &[EntityDemand]) -> CompactDemands {
         if demand.library_types {
             flags |= DEMAND_FLAG_LIBRARY_TYPES;
         }
+        if demand.primitive_value_domain {
+            flags |= DEMAND_FLAG_PRIMITIVE_VALUE_DOMAIN;
+        }
         let group = groups.last_mut().expect("group pushed above");
         let has_query = u64::from(demand.query_location.is_some());
         push_uvarint(&mut group.1, (flags << 1) | has_query);
@@ -1508,11 +1554,30 @@ mod tests {
         frame
     }
 
+    fn primitive_value_domain_transition(table_schema: u64, domain_bits: u64) -> Vec<u8> {
+        let mut frame = Vec::new();
+        for value in [1, 0, table_schema, 0, 1, 3] {
+            push_uvarint(&mut frame, value);
+        }
+        push_test_string(&mut frame, "");
+        push_test_string(&mut frame, "/p/tsconfig.json");
+        push_test_string(&mut frame, "/p/a.ts");
+        for value in [1, 0, 1, 2, 4] {
+            push_uvarint(&mut frame, value);
+        }
+        // One entity: start 0, length 1, no symbol, primitive-domain field.
+        for value in [1, 0, 1, 0, 4096, domain_bits, 0] {
+            push_uvarint(&mut frame, value);
+        }
+        frame
+    }
+
     fn tuple_shape_transition(
         table_schema: u64,
         packed: u64,
         element_zero: u64,
         min_parameters: u64,
+        exact_length_plus_one: u64,
     ) -> Vec<u8> {
         let mut frame = Vec::new();
         for value in [1, 0, table_schema, 0, 1, 3] {
@@ -1524,8 +1589,14 @@ mod tests {
         for value in [1, 0, 1, 2, 4] {
             push_uvarint(&mut frame, value);
         }
-        // One entity: start 0, length 1, no symbol, tuple-shape field.
-        for value in [1, 0, 1, 0, 1024, packed, element_zero, min_parameters, 0] {
+        // One entity: start 0, length 1, no symbol, tuple-shape field. V13
+        // appends exactLength + 1, reserving zero for absence.
+        let mut row = vec![1, 0, 1, 0, 1024, packed, element_zero, min_parameters];
+        if table_schema >= 13 {
+            row.push(exact_length_plus_one);
+        }
+        row.push(0);
+        for value in row {
             push_uvarint(&mut frame, value);
         }
         frame
@@ -1613,12 +1684,7 @@ mod tests {
         };
         assert_eq!(
             entities[0].runtime_value_domain,
-            Some(crate::RuntimeValueDomain {
-                may_be_callable: true,
-                may_be_undefined: true,
-                may_be_other: false,
-                unknown: false,
-            })
+            Some(crate::RuntimeValueDomain::new(true, true, false, false))
         );
         assert!(decode_table_transition(&runtime_value_domain_transition(4, 16)).is_err());
         assert!(decode_table_transition(&runtime_value_domain_transition(3, 3)).is_err());
@@ -1643,12 +1709,7 @@ mod tests {
         };
         assert_eq!(
             entities[0].call_result_domain,
-            Some(crate::RuntimeValueDomain {
-                may_be_callable: false,
-                may_be_undefined: false,
-                may_be_other: true,
-                unknown: false,
-            })
+            Some(crate::RuntimeValueDomain::new(false, false, true, false))
         );
         assert!(decode_table_transition(&call_result_domain_transition(7, 16)).is_err());
         assert!(decode_table_transition(&call_result_domain_transition(6, 4)).is_err());
@@ -1713,35 +1774,30 @@ mod tests {
     #[test]
     fn wire_table_v11_decodes_tuple_shapes_and_v10_stays_frozen() {
         // packed = fixed_length << 1 | has_rest; element zero code 0 = callable.
-        let transition = decode_table_transition(&tuple_shape_transition(11, 5, 0, 2)).unwrap();
+        let transition = decode_table_transition(&tuple_shape_transition(11, 5, 0, 2, 0)).unwrap();
         let SlotOp::Replace(entities) = &transition.paths[0].entities else {
             panic!("entity row was not replaced");
         };
         assert_eq!(
             entities[0].tuple_shape,
-            Some(crate::TupleShape {
-                fixed_length: 2,
-                has_rest: true,
-                element_zero: Some(Callability::Callable),
-                element_zero_min_parameters: 2,
-            })
+            Some(
+                crate::TupleShape::try_new(2, true, Some(Callability::Callable), 2, None,).unwrap()
+            )
         );
         assert!(entities[0].tuple_shape.unwrap().element_zero_accepts(2));
         // The same callable slot, asked for one fewer argument than it requires.
         assert!(!entities[0].tuple_shape.unwrap().element_zero_accepts(1));
 
-        let plain = decode_table_transition(&tuple_shape_transition(11, 4, 1, 0)).unwrap();
+        let plain = decode_table_transition(&tuple_shape_transition(11, 4, 1, 0, 0)).unwrap();
         let SlotOp::Replace(plain_entities) = &plain.paths[0].entities else {
             panic!("entity row was not replaced");
         };
         assert_eq!(
             plain_entities[0].tuple_shape,
-            Some(crate::TupleShape {
-                fixed_length: 2,
-                has_rest: false,
-                element_zero: Some(Callability::NonCallable),
-                element_zero_min_parameters: 0,
-            })
+            Some(
+                crate::TupleShape::try_new(2, false, Some(Callability::NonCallable), 0, None,)
+                    .unwrap()
+            )
         );
         assert!(
             !plain_entities[0]
@@ -1750,7 +1806,16 @@ mod tests {
                 .element_zero_accepts(2)
         );
 
-        assert!(decode_table_transition(&tuple_shape_transition(10, 4, 0, 0)).is_err());
+        assert!(decode_table_transition(&tuple_shape_transition(10, 4, 0, 0, 0)).is_err());
+
+        let exact = decode_table_transition(&tuple_shape_transition(13, 4, 0, 2, 3)).unwrap();
+        let SlotOp::Replace(exact_entities) = &exact.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        assert_eq!(
+            exact_entities[0].tuple_shape.unwrap().exact_length(),
+            Some(2)
+        );
     }
 
     #[test]
@@ -1765,7 +1830,32 @@ mod tests {
         // An absent set stays None rather than an empty list, so "not demanded"
         // and "nothing from the standard library" remain distinguishable.
         assert!(decode_table_transition(&library_types_transition(11, 1)).is_err());
-        assert!(decode_table_transition(&tuple_shape_transition(11, 4, 9, 0)).is_err());
+        assert!(decode_table_transition(&tuple_shape_transition(11, 4, 9, 0, 0)).is_err());
+    }
+
+    #[test]
+    fn wire_table_v13_decodes_primitive_value_domains_and_v12_stays_frozen() {
+        // string | boolean | null | undefined
+        let transition =
+            decode_table_transition(&primitive_value_domain_transition(13, 1 | 4 | 32 | 64))
+                .unwrap();
+        let SlotOp::Replace(entities) = &transition.paths[0].entities else {
+            panic!("entity row was not replaced");
+        };
+        let domain = entities[0]
+            .primitive_value_domain
+            .present()
+            .expect("primitive domain is present");
+        assert!(domain.may_be_string());
+        assert!(domain.may_be_boolean());
+        assert!(domain.may_be_null());
+        assert!(domain.may_be_undefined());
+        assert!(!domain.may_be_number());
+        assert!(!domain.may_be_object());
+        assert!(!domain.unknown());
+
+        assert!(decode_table_transition(&primitive_value_domain_transition(12, 1)).is_err());
+        assert!(decode_table_transition(&primitive_value_domain_transition(13, 512)).is_err());
     }
 
     #[test]

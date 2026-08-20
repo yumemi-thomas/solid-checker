@@ -55,16 +55,19 @@ from the standard library — never that the type was unresolved.
 ## Tuple shape
 
 `EntityDemand.tupleShape` produces an optional `EntityFact.tupleShape` with
-`fixedLength`, `hasRest`, `elementZero` (a callability), and
-`elementZeroMinimumParameters`. It is present only
-when the type at the exact demanded span is *itself* a tuple — never for a
-union, and never for the global `Array`/`ReadonlyArray` types, which have a
-number index signature rather than fixed slots.
+`fixedLength`, `hasRest`, `exactLength`, `elementZero` (a callability), and
+`elementZeroMinimumParameters`. It is present when every value-carrying
+constituent at the exact demanded span is a tuple, and never for the global
+`Array`/`ReadonlyArray` types, which have a number index signature rather than
+fixed slots.
 
 Use it, rather than `arrayShape`, when a value has to satisfy an interface with
 numbered members: an array has no `0` or `1` property and is not interchangeable
 with a two-slot tuple. `fixedLength` counts optional slots, matching the
 compiler, so "is there a value at index n" must also consider `hasRest`.
+`exactLength` is present only when every tuple constituent has the same number
+of required slots and has no optional, rest, or variadic element. It therefore
+proves runtime spread arity; `fixedLength` does not.
 
 `elementZero` alone cannot decide whether the first slot can be *invoked*: a
 function requiring more arguments than a caller supplies is not assignable to
@@ -127,6 +130,28 @@ mayBeOther == false && unknown == false
 This accepts callable values, `undefined`, their unions, and the vacuous
 `never` domain. Consumers should not infer that a missing fact is valid; absence
 means it was not demanded.
+
+## Primitive value domain
+
+`EntityDemand.primitiveValueDomain` produces an exact-span
+`EntityFact.primitiveValueDomain`. It partitions every possible runtime value
+into the JavaScript categories `string`, `number`, `boolean`, `bigint`,
+`symbol`, `null`, `undefined`, and `object`, plus an `unknown` bit. Functions
+are objects for this purpose. Null and undefined remain separate so a consumer
+can apply its own runtime or serialization contract. The compact representation
+still keeps the retained Rust entity row within its existing 144-byte budget.
+
+Unions OR their constituent categories. Aliases are transparent. Instantiable
+types follow the compiler's resolved constraint, so `T extends string |
+boolean` is closed while an unconstrained `T` is unknown. `any`, `unknown`,
+recovery types, circular constraints, and missing types conservatively expose
+every category with `unknown`; `never` is the present empty domain.
+
+The producer answers only when the demanded span is exactly one expression.
+Absence means not demanded or not an exact expression, never a negative fact.
+This fact deliberately does not name a serializer or a policy: a consumer may
+prove its own accepted subset without turning a package-runtime contract into
+compiler vocabulary.
 
 ## Call-result runtime value domain
 

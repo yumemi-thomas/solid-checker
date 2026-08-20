@@ -162,6 +162,9 @@ func prepareRetainedContribution(
 		if entity.RuntimeValueDomain != nil {
 			target.RuntimeValueDomain = entity.RuntimeValueDomain
 		}
+		if entity.PrimitiveValueDomain.IsPresent() {
+			target.PrimitiveValueDomain = entity.PrimitiveValueDomain
+		}
 		if entity.CallResultDomain != nil {
 			target.CallResultDomain = entity.CallResultDomain
 		}

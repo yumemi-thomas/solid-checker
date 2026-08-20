@@ -24,6 +24,7 @@ const (
 	wireTransitionEntityHasArrayShape
 	wireTransitionEntityHasTupleShape
 	wireTransitionEntityHasLibraryTypes
+	wireTransitionEntityHasPrimitiveValueDomain
 )
 
 const (
@@ -153,7 +154,7 @@ func writeWireTransitionEntityRun(
 			if err != nil {
 				return fmt.Errorf("entity %d tuple shape: %w", index, err)
 			}
-			if entity.TupleShape.FixedLength < 0 || entity.TupleShape.ElementZeroMinimumParameters < 0 {
+			if entity.TupleShape.FixedLength < 0 || entity.TupleShape.ElementZeroMinimumParameters < 0 || entity.TupleShape.ExactLength < 0 {
 				return fmt.Errorf("entity %d has a negative tuple count", index)
 			}
 		}
@@ -195,6 +196,9 @@ func writeWireTransitionEntityRun(
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV12 && len(entity.LibraryTypes) != 0 {
 			flags |= wireTransitionEntityHasLibraryTypes
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV13 && entity.PrimitiveValueDomain.IsPresent() {
+			flags |= wireTransitionEntityHasPrimitiveValueDomain
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV5 && entity.SymbolUnresolved {
 			flags |= wireTransitionEntitySymbolUnresolved
@@ -248,12 +252,22 @@ func writeWireTransitionEntityRun(
 			w.u64(packed)
 			w.u64(tupleElementZero)
 			w.u64(uint64(entity.TupleShape.ElementZeroMinimumParameters))
+			if tableSchema >= TypeFactsTableSchemaVersionV13 {
+				exactLengthPlusOne := uint64(0)
+				if entity.TupleShape.ExactLengthKnown {
+					exactLengthPlusOne = uint64(entity.TupleShape.ExactLength) + 1
+				}
+				w.u64(exactLengthPlusOne)
+			}
 		}
 		if tableSchema >= TypeFactsTableSchemaVersionV12 && len(entity.LibraryTypes) != 0 {
 			w.u64(uint64(len(entity.LibraryTypes)))
 			for _, name := range entity.LibraryTypes {
 				w.text(name)
 			}
+		}
+		if tableSchema >= TypeFactsTableSchemaVersionV13 && entity.PrimitiveValueDomain.IsPresent() {
+			w.u64(wireTransitionPrimitiveValueDomainBits(entity.PrimitiveValueDomain))
 		}
 		previousStart = start
 	}
@@ -609,6 +623,18 @@ func wireTransitionRuntimeValueDomainBits(value RuntimeValueDomain) uint64 {
 		bits |= 1 << 3
 	}
 	return bits
+}
+
+func wireTransitionPrimitiveValueDomainBits(value PrimitiveValueDomain) uint64 {
+	return boolBit(value.MayBeString()) |
+		boolBit(value.MayBeNumber())<<1 |
+		boolBit(value.MayBeBoolean())<<2 |
+		boolBit(value.MayBeBigInt())<<3 |
+		boolBit(value.MayBeSymbol())<<4 |
+		boolBit(value.MayBeNull())<<5 |
+		boolBit(value.MayBeUndefined())<<6 |
+		boolBit(value.MayBeObject())<<7 |
+		boolBit(value.Unknown())<<8
 }
 
 func wireTransitionReferenceSpaceCode(value ReferenceSpace) (uint64, error) {

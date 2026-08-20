@@ -10,21 +10,23 @@ import (
 func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	location := Location{Path: "/project/source.ts", StartByte: 1, EndByte: 2}
 	domain := &RuntimeValueDomain{MayBeCallable: true, MayBeUndefined: true}
+	primitiveDomain := NewPrimitiveValueDomain(true, false, true, false, false, false, false, false)
 	callResultDomain := &RuntimeValueDomain{MayBeOther: true}
 	constantValue := &ConstantValue{Kind: ConstantValueString, String: "constant"}
 	tupleShape := &TupleShape{FixedLength: 2, ElementZero: CallabilityCallable, ElementZeroMinimumParameters: 2}
 	entities := []EntityFact{
 		{Location: location, Symbol: "symbol"},
 		{
-			Location:           location,
-			TypeDescriptor:     &TypeDescriptor{Text: "Value"},
-			Callability:        CallabilityCallable,
-			RuntimeValueDomain: domain,
-			CallResultDomain:   callResultDomain,
-			ConstantValue:      constantValue,
-			ArrayShape:         ArrayShapeArray,
-			TupleShape:         tupleShape,
-			LibraryTypes:       []string{"Date"},
+			Location:             location,
+			TypeDescriptor:       &TypeDescriptor{Text: "Value"},
+			Callability:          CallabilityCallable,
+			RuntimeValueDomain:   domain,
+			PrimitiveValueDomain: primitiveDomain,
+			CallResultDomain:     callResultDomain,
+			ConstantValue:        constantValue,
+			ArrayShape:           ArrayShapeArray,
+			TupleShape:           tupleShape,
+			LibraryTypes:         []string{"Date"},
 		},
 	}
 	structural := []SymbolID{"", "accessor"}
@@ -33,7 +35,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 		1,
 		[]EntityDemand{
 			{Location: location, Symbol: true},
-			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true, CallResultDomain: true, ConstantValue: true, ArrayShape: true, TupleShape: true, LibraryTypes: true},
+			{Location: location, TypeDescriptor: true, Callability: true, RuntimeValueDomain: true, PrimitiveValueDomain: true, CallResultDomain: true, ConstantValue: true, ArrayShape: true, TupleShape: true, LibraryTypes: true},
 		},
 		SemanticDemandRunResult{
 			Entities:   entities,
@@ -58,6 +60,7 @@ func TestPreparedContributionTakesAndCompactsEntityBacking(t *testing.T) {
 	if contribution.entities[0].Symbol != "symbol" ||
 		contribution.entities[0].Callability != CallabilityCallable ||
 		contribution.entities[0].RuntimeValueDomain != domain ||
+		contribution.entities[0].PrimitiveValueDomain != primitiveDomain ||
 		contribution.entities[0].CallResultDomain != callResultDomain ||
 		contribution.entities[0].ConstantValue != constantValue ||
 		contribution.entities[0].ArrayShape != ArrayShapeArray ||

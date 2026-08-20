@@ -70,6 +70,7 @@ func Checker_getTypeArguments(recv *checker.Checker, t *checker.Type) []*checker
 type TupleType = checker.TupleType
 
 const ElementFlagsVariable = checker.ElementFlagsVariable
+const ElementFlagsNonRequired = checker.ElementFlagsNonRequired
 
 //go:linkname NewChecker github.com/microsoft/typescript-go/internal/checker.NewChecker
 func NewChecker(program checker.Program, tracer *checker.Tracer) (*checker.Checker, *sync.Mutex)
@@ -83,6 +84,11 @@ const TypeFlagsNever = checker.TypeFlagsNever
 const TypeFlagsUndefined = checker.TypeFlagsUndefined
 const TypeFlagsVoid = checker.TypeFlagsVoid
 const TypeFlagsNull = checker.TypeFlagsNull
+const TypeFlagsStringLike = checker.TypeFlagsStringLike
+const TypeFlagsNumberLike = checker.TypeFlagsNumberLike
+const TypeFlagsBooleanLike = checker.TypeFlagsBooleanLike
+const TypeFlagsBigIntLike = checker.TypeFlagsBigIntLike
+const TypeFlagsESSymbolLike = checker.TypeFlagsESSymbolLike
 const TypeFlagsTypeParameter = checker.TypeFlagsTypeParameter
 const TypeFlagsInstantiable = checker.TypeFlagsInstantiable
 const TypeFlagsUnion = checker.TypeFlagsUnion

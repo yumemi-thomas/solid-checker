@@ -56,21 +56,22 @@ type CompactDemandsV3 struct {
 
 // Demand flag bits shared with the Rust encoder.
 const (
-	demandFlagSymbol             = 1 << 0
-	demandFlagReferences         = 1 << 1
-	demandFlagTypeDescriptor     = 1 << 2
-	demandFlagResolvedCall       = 1 << 3
-	demandFlagAsync              = 1 << 4
-	demandFlagStructuralAccessor = 1 << 5
-	demandFlagCallability        = 1 << 6
-	demandFlagReferenceSpace     = 1 << 7
-	demandFlagRuntimeIdentity    = 1 << 8
-	demandFlagRuntimeValueDomain = 1 << 9
-	demandFlagCallResultDomain   = 1 << 10
-	demandFlagConstantValue      = 1 << 11
-	demandFlagArrayShape         = 1 << 12
-	demandFlagTupleShape         = 1 << 13
-	demandFlagLibraryTypes       = 1 << 14
+	demandFlagSymbol               = 1 << 0
+	demandFlagReferences           = 1 << 1
+	demandFlagTypeDescriptor       = 1 << 2
+	demandFlagResolvedCall         = 1 << 3
+	demandFlagAsync                = 1 << 4
+	demandFlagStructuralAccessor   = 1 << 5
+	demandFlagCallability          = 1 << 6
+	demandFlagReferenceSpace       = 1 << 7
+	demandFlagRuntimeIdentity      = 1 << 8
+	demandFlagRuntimeValueDomain   = 1 << 9
+	demandFlagCallResultDomain     = 1 << 10
+	demandFlagConstantValue        = 1 << 11
+	demandFlagArrayShape           = 1 << 12
+	demandFlagTupleShape           = 1 << 13
+	demandFlagLibraryTypes         = 1 << 14
+	demandFlagPrimitiveValueDomain = 1 << 15
 )
 
 // stringTableV3 interns strings in first-occurrence order; index 0 is "".
@@ -168,6 +169,9 @@ func CompactDemandsV3From(demands []EntityDemand) CompactDemandsV3 {
 		if demand.LibraryTypes {
 			flags |= demandFlagLibraryTypes
 		}
+		if demand.PrimitiveValueDomain {
+			flags |= demandFlagPrimitiveValueDomain
+		}
 		header := flags << 1
 		if demand.QueryLocation != nil {
 			header |= 1
@@ -234,22 +238,23 @@ func (compact CompactDemandsV3) Expand() ([]EntityDemand, error) {
 			previousStart = start
 			flags := header >> 1
 			demand := EntityDemand{
-				Location:           Location{Path: path, StartByte: int(start), EndByte: int(start + length)},
-				Symbol:             flags&demandFlagSymbol != 0,
-				References:         flags&demandFlagReferences != 0,
-				TypeDescriptor:     flags&demandFlagTypeDescriptor != 0,
-				ResolvedCall:       flags&demandFlagResolvedCall != 0,
-				Async:              flags&demandFlagAsync != 0,
-				StructuralAccessor: flags&demandFlagStructuralAccessor != 0,
-				Callability:        flags&demandFlagCallability != 0,
-				ReferenceSpace:     flags&demandFlagReferenceSpace != 0,
-				RuntimeIdentity:    flags&demandFlagRuntimeIdentity != 0,
-				RuntimeValueDomain: flags&demandFlagRuntimeValueDomain != 0,
-				CallResultDomain:   flags&demandFlagCallResultDomain != 0,
-				ConstantValue:      flags&demandFlagConstantValue != 0,
-				ArrayShape:         flags&demandFlagArrayShape != 0,
-				TupleShape:         flags&demandFlagTupleShape != 0,
-				LibraryTypes:       flags&demandFlagLibraryTypes != 0,
+				Location:             Location{Path: path, StartByte: int(start), EndByte: int(start + length)},
+				Symbol:               flags&demandFlagSymbol != 0,
+				References:           flags&demandFlagReferences != 0,
+				TypeDescriptor:       flags&demandFlagTypeDescriptor != 0,
+				ResolvedCall:         flags&demandFlagResolvedCall != 0,
+				Async:                flags&demandFlagAsync != 0,
+				StructuralAccessor:   flags&demandFlagStructuralAccessor != 0,
+				Callability:          flags&demandFlagCallability != 0,
+				ReferenceSpace:       flags&demandFlagReferenceSpace != 0,
+				RuntimeIdentity:      flags&demandFlagRuntimeIdentity != 0,
+				RuntimeValueDomain:   flags&demandFlagRuntimeValueDomain != 0,
+				CallResultDomain:     flags&demandFlagCallResultDomain != 0,
+				ConstantValue:        flags&demandFlagConstantValue != 0,
+				ArrayShape:           flags&demandFlagArrayShape != 0,
+				TupleShape:           flags&demandFlagTupleShape != 0,
+				LibraryTypes:         flags&demandFlagLibraryTypes != 0,
+				PrimitiveValueDomain: flags&demandFlagPrimitiveValueDomain != 0,
 			}
 			if header&1 != 0 {
 				queryPathIndex, next, err := takeCompactUvarint(rest)
@@ -368,22 +373,23 @@ func appendCompactDemandsWithFlag(
 		demand := EntityDemand{}
 		if selected {
 			demand = EntityDemand{
-				Location:           Location{Path: path, StartByte: int(start), EndByte: int(start + length)},
-				Symbol:             flags&demandFlagSymbol != 0,
-				References:         flags&demandFlagReferences != 0,
-				TypeDescriptor:     flags&demandFlagTypeDescriptor != 0,
-				ResolvedCall:       flags&demandFlagResolvedCall != 0,
-				Async:              flags&demandFlagAsync != 0,
-				StructuralAccessor: flags&demandFlagStructuralAccessor != 0,
-				Callability:        flags&demandFlagCallability != 0,
-				ReferenceSpace:     flags&demandFlagReferenceSpace != 0,
-				RuntimeIdentity:    flags&demandFlagRuntimeIdentity != 0,
-				RuntimeValueDomain: flags&demandFlagRuntimeValueDomain != 0,
-				CallResultDomain:   flags&demandFlagCallResultDomain != 0,
-				ConstantValue:      flags&demandFlagConstantValue != 0,
-				ArrayShape:         flags&demandFlagArrayShape != 0,
-				TupleShape:         flags&demandFlagTupleShape != 0,
-				LibraryTypes:       flags&demandFlagLibraryTypes != 0,
+				Location:             Location{Path: path, StartByte: int(start), EndByte: int(start + length)},
+				Symbol:               flags&demandFlagSymbol != 0,
+				References:           flags&demandFlagReferences != 0,
+				TypeDescriptor:       flags&demandFlagTypeDescriptor != 0,
+				ResolvedCall:         flags&demandFlagResolvedCall != 0,
+				Async:                flags&demandFlagAsync != 0,
+				StructuralAccessor:   flags&demandFlagStructuralAccessor != 0,
+				Callability:          flags&demandFlagCallability != 0,
+				ReferenceSpace:       flags&demandFlagReferenceSpace != 0,
+				RuntimeIdentity:      flags&demandFlagRuntimeIdentity != 0,
+				RuntimeValueDomain:   flags&demandFlagRuntimeValueDomain != 0,
+				CallResultDomain:     flags&demandFlagCallResultDomain != 0,
+				ConstantValue:        flags&demandFlagConstantValue != 0,
+				ArrayShape:           flags&demandFlagArrayShape != 0,
+				TupleShape:           flags&demandFlagTupleShape != 0,
+				LibraryTypes:         flags&demandFlagLibraryTypes != 0,
+				PrimitiveValueDomain: flags&demandFlagPrimitiveValueDomain != 0,
 			}
 		}
 		if header&1 != 0 {

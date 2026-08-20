@@ -129,10 +129,15 @@ func tupleShapeOfType(typeChecker *checker.Checker, value *checker.Type) *typefa
 		FixedLength: target.FixedLength(),
 		ElementZero: typefacts.CallabilityUnknown,
 	}
+	shape.ExactLengthKnown = true
+	shape.ExactLength = shape.FixedLength
 	for _, flags := range target.ElementFlags() {
+		if flags&checker.ElementFlagsNonRequired != 0 {
+			shape.ExactLengthKnown = false
+			shape.ExactLength = 0
+		}
 		if flags&checker.ElementFlagsVariable != 0 {
 			shape.HasRest = true
-			break
 		}
 	}
 	if elements := checker.Checker_getTypeArguments(typeChecker, value); shape.FixedLength > 0 && len(elements) > 0 {
@@ -155,6 +160,10 @@ func meetTupleShapes(left, right typefacts.TupleShape) typefacts.TupleShape {
 			left.ElementZeroMinimumParameters,
 			right.ElementZeroMinimumParameters,
 		),
+	}
+	if left.ExactLengthKnown && right.ExactLengthKnown && left.ExactLength == right.ExactLength {
+		met.ExactLengthKnown = true
+		met.ExactLength = left.ExactLength
 	}
 	switch {
 	case left.ElementZero == right.ElementZero:

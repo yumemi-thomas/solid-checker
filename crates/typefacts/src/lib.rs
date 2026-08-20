@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize, de::DeserializeOwned};
 use sha2::{Digest, Sha256};
 use std::fmt;
 use std::io::{Read, Write};
+use std::num::NonZeroU32;
 use std::sync::Arc;
 use thiserror::Error;
 
@@ -105,17 +106,261 @@ pub enum Callability {
 /// that remain possible. The all-false value is the known empty `never`
 /// domain, so absence is represented by `Option<RuntimeValueDomain>` on an
 /// entity rather than by this struct's zero value.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct RuntimeValueDomain(u8);
+
+impl RuntimeValueDomain {
+    pub const fn new(
+        may_be_callable: bool,
+        may_be_undefined: bool,
+        may_be_other: bool,
+        unknown: bool,
+    ) -> Self {
+        Self(
+            may_be_callable as u8
+                | (may_be_undefined as u8) << 1
+                | (may_be_other as u8) << 2
+                | (unknown as u8) << 3,
+        )
+    }
+
+    #[must_use]
+    pub const fn may_be_callable(self) -> bool {
+        self.0 & 1 != 0
+    }
+    #[must_use]
+    pub const fn may_be_undefined(self) -> bool {
+        self.0 & 2 != 0
+    }
+    #[must_use]
+    pub const fn may_be_other(self) -> bool {
+        self.0 & 4 != 0
+    }
+    #[must_use]
+    pub const fn unknown(self) -> bool {
+        self.0 & 8 != 0
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RuntimeValueDomain {
+struct RuntimeValueDomainSerde {
     #[serde(default, skip_serializing_if = "is_false")]
-    pub may_be_callable: bool,
+    may_be_callable: bool,
     #[serde(default, skip_serializing_if = "is_false")]
-    pub may_be_undefined: bool,
+    may_be_undefined: bool,
     #[serde(default, skip_serializing_if = "is_false")]
-    pub may_be_other: bool,
+    may_be_other: bool,
     #[serde(default, skip_serializing_if = "is_false")]
-    pub unknown: bool,
+    unknown: bool,
+}
+
+impl Serialize for RuntimeValueDomain {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        RuntimeValueDomainSerde {
+            may_be_callable: self.may_be_callable(),
+            may_be_undefined: self.may_be_undefined(),
+            may_be_other: self.may_be_other(),
+            unknown: self.unknown(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RuntimeValueDomain {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = RuntimeValueDomainSerde::deserialize(deserializer)?;
+        Ok(Self::new(
+            value.may_be_callable,
+            value.may_be_undefined,
+            value.may_be_other,
+            value.unknown,
+        ))
+    }
+}
+
+/// Compiler-proven JavaScript primitive possibilities at exactly one demanded
+/// expression span. Null and undefined remain distinct so consumers can apply
+/// their own runtime policy. Absence on [`EntityFact`] means the fact was not
+/// demanded.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+#[repr(transparent)]
+pub struct PrimitiveValueDomain(u16);
+
+impl PrimitiveValueDomain {
+    const STRING: u16 = 1;
+    const NUMBER: u16 = 1 << 1;
+    const BOOLEAN: u16 = 1 << 2;
+    const BIG_INT: u16 = 1 << 3;
+    const SYMBOL: u16 = 1 << 4;
+    const NULL: u16 = 1 << 5;
+    const UNDEFINED: u16 = 1 << 6;
+    const OBJECT: u16 = 1 << 7;
+    // Zero is the absent entity-row sentinel. The next bit represents a
+    // demanded empty `never` domain; unknown is the all-possibilities value.
+    const EMPTY: u16 = 1 << 8;
+    const UNKNOWN: u16 = u16::MAX;
+
+    #[allow(clippy::fn_params_excessive_bools, clippy::too_many_arguments)]
+    pub const fn new(
+        may_be_string: bool,
+        may_be_number: bool,
+        may_be_boolean: bool,
+        may_be_big_int: bool,
+        may_be_symbol: bool,
+        may_be_null: bool,
+        may_be_undefined: bool,
+        may_be_object: bool,
+        unknown: bool,
+    ) -> Self {
+        if unknown {
+            return Self(Self::UNKNOWN);
+        }
+        let bits = Self::selected(may_be_string, Self::STRING)
+            | Self::selected(may_be_number, Self::NUMBER)
+            | Self::selected(may_be_boolean, Self::BOOLEAN)
+            | Self::selected(may_be_big_int, Self::BIG_INT)
+            | Self::selected(may_be_symbol, Self::SYMBOL)
+            | Self::selected(may_be_null, Self::NULL)
+            | Self::selected(may_be_undefined, Self::UNDEFINED)
+            | Self::selected(may_be_object, Self::OBJECT);
+        if bits == 0 {
+            Self(Self::EMPTY)
+        } else {
+            Self(bits)
+        }
+    }
+
+    const fn selected(value: bool, bit: u16) -> u16 {
+        if value { bit } else { 0 }
+    }
+
+    /// The demanded `never` domain: present, but with no possible value kind.
+    #[must_use]
+    pub const fn empty() -> Self {
+        Self(Self::EMPTY)
+    }
+
+    /// Whether this is a demanded fact rather than the compact absent sentinel
+    /// stored in an entity row.
+    #[must_use]
+    pub const fn is_present(self) -> bool {
+        self.0 != 0
+    }
+
+    /// Recover an optional-fact view without making every retained entity row
+    /// carry an enum discriminant.
+    #[must_use]
+    pub const fn present(self) -> Option<Self> {
+        if self.is_present() { Some(self) } else { None }
+    }
+
+    #[must_use]
+    pub const fn may_be_string(self) -> bool {
+        self.0 & Self::STRING != 0
+    }
+    #[must_use]
+    pub const fn may_be_number(self) -> bool {
+        self.0 & Self::NUMBER != 0
+    }
+    #[must_use]
+    pub const fn may_be_boolean(self) -> bool {
+        self.0 & Self::BOOLEAN != 0
+    }
+    #[must_use]
+    pub const fn may_be_big_int(self) -> bool {
+        self.0 & Self::BIG_INT != 0
+    }
+    #[must_use]
+    pub const fn may_be_symbol(self) -> bool {
+        self.0 & Self::SYMBOL != 0
+    }
+    #[must_use]
+    pub const fn may_be_null(self) -> bool {
+        self.0 & Self::NULL != 0
+    }
+    #[must_use]
+    pub const fn may_be_undefined(self) -> bool {
+        self.0 & Self::UNDEFINED != 0
+    }
+    #[must_use]
+    pub const fn may_be_object(self) -> bool {
+        self.0 & Self::OBJECT != 0
+    }
+    #[must_use]
+    pub const fn unknown(self) -> bool {
+        self.0 == Self::UNKNOWN
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PrimitiveValueDomainSerde {
+    #[serde(default, skip_serializing_if = "is_false")]
+    may_be_string: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    may_be_number: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    may_be_boolean: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    may_be_big_int: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    may_be_symbol: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    may_be_null: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    may_be_undefined: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    may_be_object: bool,
+    #[serde(default, skip_serializing_if = "is_false")]
+    unknown: bool,
+}
+
+impl Serialize for PrimitiveValueDomain {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        PrimitiveValueDomainSerde {
+            may_be_string: self.may_be_string(),
+            may_be_number: self.may_be_number(),
+            may_be_boolean: self.may_be_boolean(),
+            may_be_big_int: self.may_be_big_int(),
+            may_be_symbol: self.may_be_symbol(),
+            may_be_null: self.may_be_null(),
+            may_be_undefined: self.may_be_undefined(),
+            may_be_object: self.may_be_object(),
+            unknown: self.unknown(),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for PrimitiveValueDomain {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        let value = PrimitiveValueDomainSerde::deserialize(deserializer)?;
+        Ok(Self::new(
+            value.may_be_string,
+            value.may_be_number,
+            value.may_be_boolean,
+            value.may_be_big_int,
+            value.may_be_symbol,
+            value.may_be_null,
+            value.may_be_undefined,
+            value.may_be_object,
+            value.unknown,
+        ))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -192,43 +437,158 @@ impl ArrayShape {
 /// This is the structural detail [`ArrayShape`] deliberately collapses. Ask for
 /// it when a value has to satisfy an interface with *numbered* members; ask
 /// [`ArrayShape`] when the question is only "is this iterable as an array".
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(try_from = "TupleShapeSerde", into = "TupleShapeSerde")]
 pub struct TupleShape {
-    /// Initial required-or-optional slots, matching the compiler's own
-    /// `fixedLength`.
-    #[serde(default, skip_serializing_if = "is_zero_u32")]
-    pub fixed_length: u32,
-    /// A rest or variadic tail follows the fixed slots.
-    #[serde(default, skip_serializing_if = "is_false")]
-    pub has_rest: bool,
-    /// Callability of the first slot's type, or `Unknown` when there is no
-    /// fixed first slot.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub element_zero: Option<Callability>,
-    /// The fewest arguments any call signature of the first slot's type
-    /// requires. This is what decides whether the slot can be invoked with a
-    /// given argument count: a function accepting fewer parameters than it is
-    /// handed is fine, one requiring more is not. Zero when the slot is absent
-    /// or not callable, so read it together with `element_zero`.
-    #[serde(default, skip_serializing_if = "is_zero_u32")]
-    pub element_zero_min_parameters: u32,
+    // Lower 28 bits: fixed length. Bit 28: rest. Bits 29..31: optional
+    // Callability tag. Keeping the four scalar facts in three u32 words makes
+    // Option<TupleShape> retain its previous footprint in every EntityFact.
+    // The packed value is biased by one so NonZeroU32 gives
+    // Option<TupleShape> an outer absence niche for free.
+    packed_shape_plus_one: NonZeroU32,
+    element_zero_min_parameters: u32,
+    // exactLength + 1; zero means absent and preserves exact length zero.
+    exact_length_plus_one: u32,
 }
 
 impl TupleShape {
+    const FIXED_LENGTH_MASK: u32 = (1 << 28) - 1;
+    const HAS_REST: u32 = 1 << 28;
+    const ELEMENT_ZERO_SHIFT: u32 = 29;
+
+    pub(crate) fn try_new(
+        fixed_length: u32,
+        has_rest: bool,
+        element_zero: Option<Callability>,
+        element_zero_min_parameters: u32,
+        exact_length: Option<u32>,
+    ) -> Result<Self, String> {
+        if fixed_length > Self::FIXED_LENGTH_MASK {
+            return Err("tuple fixed length exceeds compact representation".into());
+        }
+        let callability = match element_zero {
+            None => 0,
+            Some(Callability::Callable) => 1,
+            Some(Callability::NonCallable) => 2,
+            Some(Callability::Mixed) => 3,
+            Some(Callability::Unknown) => 4,
+        };
+        let exact_length_plus_one = exact_length
+            .map(|length| {
+                length
+                    .checked_add(1)
+                    .ok_or_else(|| "tuple exact length overflows compact representation".to_owned())
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let rest = if has_rest { Self::HAS_REST } else { 0 };
+        let packed_shape = fixed_length | rest | (callability << Self::ELEMENT_ZERO_SHIFT);
+        Ok(Self {
+            packed_shape_plus_one: NonZeroU32::new(packed_shape + 1)
+                .expect("packed tuple shape plus one is nonzero"),
+            element_zero_min_parameters,
+            exact_length_plus_one,
+        })
+    }
+
+    /// Initial required-or-optional slots, matching the compiler's own
+    /// `fixedLength`.
+    #[must_use]
+    pub const fn fixed_length(self) -> u32 {
+        (self.packed_shape_plus_one.get() - 1) & Self::FIXED_LENGTH_MASK
+    }
+
+    /// Whether a rest or variadic tail follows the fixed slots.
+    #[must_use]
+    pub const fn has_rest(self) -> bool {
+        (self.packed_shape_plus_one.get() - 1) & Self::HAS_REST != 0
+    }
+
+    /// Callability of the first slot's type.
+    #[must_use]
+    pub const fn element_zero(self) -> Option<Callability> {
+        match (self.packed_shape_plus_one.get() - 1) >> Self::ELEMENT_ZERO_SHIFT {
+            0 => None,
+            1 => Some(Callability::Callable),
+            2 => Some(Callability::NonCallable),
+            3 => Some(Callability::Mixed),
+            4 => Some(Callability::Unknown),
+            _ => None,
+        }
+    }
+
+    /// Fewest arguments required by a call signature in the first slot.
+    #[must_use]
+    pub const fn element_zero_min_parameters(self) -> u32 {
+        self.element_zero_min_parameters
+    }
+
     /// Whether the tuple has a value at index `index` — from a fixed slot, or
     /// from the rest tail when one follows.
     #[must_use]
     pub const fn has_slot(self, index: u32) -> bool {
-        index < self.fixed_length || (self.has_rest && index <= self.fixed_length)
+        index < self.fixed_length() || (self.has_rest() && index <= self.fixed_length())
+    }
+
+    /// The exact runtime element count, when compiler tuple structure proves it.
+    #[must_use]
+    pub const fn exact_length(self) -> Option<u32> {
+        self.exact_length_plus_one.checked_sub(1)
     }
 
     /// Whether the first slot is callable with `arguments` arguments — callable
     /// at all, and not requiring more than that many.
     #[must_use]
     pub fn element_zero_accepts(self, arguments: u32) -> bool {
-        self.element_zero == Some(Callability::Callable)
+        self.element_zero() == Some(Callability::Callable)
             && self.element_zero_min_parameters <= arguments
+    }
+}
+
+impl Default for TupleShape {
+    fn default() -> Self {
+        Self::try_new(0, false, None, 0, None).expect("empty tuple shape is representable")
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct TupleShapeSerde {
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    fixed_length: u32,
+    #[serde(default, skip_serializing_if = "is_false")]
+    has_rest: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    element_zero: Option<Callability>,
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    element_zero_min_parameters: u32,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    exact_length: Option<u32>,
+}
+
+impl TryFrom<TupleShapeSerde> for TupleShape {
+    type Error = String;
+
+    fn try_from(value: TupleShapeSerde) -> Result<Self, Self::Error> {
+        Self::try_new(
+            value.fixed_length,
+            value.has_rest,
+            value.element_zero,
+            value.element_zero_min_parameters,
+            value.exact_length,
+        )
+    }
+}
+
+impl From<TupleShape> for TupleShapeSerde {
+    fn from(value: TupleShape) -> Self {
+        Self {
+            fixed_length: value.fixed_length(),
+            has_rest: value.has_rest(),
+            element_zero: value.element_zero(),
+            element_zero_min_parameters: value.element_zero_min_parameters(),
+            exact_length: value.exact_length(),
+        }
     }
 }
 
@@ -393,6 +753,8 @@ pub struct EntityFact {
     pub callability: Option<Callability>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub runtime_value_domain: Option<RuntimeValueDomain>,
+    #[serde(default, skip_serializing_if = "primitive_value_domain_is_absent")]
+    pub primitive_value_domain: PrimitiveValueDomain,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub call_result_domain: Option<RuntimeValueDomain>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -797,6 +1159,10 @@ const fn is_false(value: &bool) -> bool {
     !*value
 }
 
+const fn primitive_value_domain_is_absent(value: &PrimitiveValueDomain) -> bool {
+    !value.is_present()
+}
+
 fn is_zero_f64(value: &f64) -> bool {
     *value == 0.0
 }
@@ -859,6 +1225,7 @@ mod tests {
                 structural_accessor: false,
                 callability: false,
                 runtime_value_domain: false,
+                primitive_value_domain: false,
                 call_result_domain: false,
                 constant_value: false,
                 array_shape: false,
@@ -905,6 +1272,7 @@ mod tests {
                 structural_accessor: false,
                 callability: false,
                 runtime_value_domain: false,
+                primitive_value_domain: false,
                 call_result_domain: false,
                 constant_value: false,
                 array_shape: false,
@@ -924,6 +1292,7 @@ mod tests {
                 structural_accessor: true,
                 callability: true,
                 runtime_value_domain: true,
+                primitive_value_domain: true,
                 call_result_domain: true,
                 constant_value: true,
                 array_shape: true,
@@ -943,6 +1312,7 @@ mod tests {
                 structural_accessor: false,
                 callability: false,
                 runtime_value_domain: false,
+                primitive_value_domain: false,
                 call_result_domain: false,
                 constant_value: false,
                 array_shape: false,

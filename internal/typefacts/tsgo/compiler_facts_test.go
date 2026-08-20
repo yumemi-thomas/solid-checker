@@ -197,6 +197,131 @@ const voidResult = voidCall();
 	}
 }
 
+func TestDemandedPrimitiveValueDomainUsesCheckerSemanticsAtExactSpans(t *testing.T) {
+	dir := t.TempDir()
+	source := `
+type TextAlias = string;
+type BrandedText = string & { readonly __brand: unique symbol };
+declare const textValue: TextAlias;
+declare const brandedText: BrandedText;
+declare const numberValue: number;
+declare const booleanValue: boolean;
+declare const bigintValue: bigint;
+declare const symbolValue: symbol;
+declare const nullValue: null;
+declare const undefinedValue: undefined;
+declare const objectValue: { value: string };
+declare const functionValue: () => void;
+declare const safeUnion: string | boolean | null | undefined;
+declare const unsafeUnion: string | bigint | object;
+function constrained<T extends string | boolean>(bounded: T) { return bounded; }
+function unconstrained<T>(generic: T) { return generic; }
+declare const anyValue: any;
+declare const unknownValue: unknown;
+declare const neverValue: never;
+declare const recoveryValue: MissingType;
+declare function voidCall(): void;
+const voidResult = voidCall();
+textValue;
+brandedText;
+numberValue;
+booleanValue;
+bigintValue;
+symbolValue;
+nullValue;
+undefinedValue;
+objectValue;
+functionValue;
+safeUnion;
+unsafeUnion;
+anyValue;
+unknownValue;
+neverValue;
+recoveryValue;
+voidResult;
+`
+	sourcePath := filepath.Join(dir, "primitive-domains.ts")
+	if err := os.WriteFile(filepath.Join(dir, "tsconfig.json"), []byte(`{"compilerOptions":{"strict":true,"module":"esnext","target":"esnext"},"include":["*.ts"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sourcePath, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opened, err := OpenProject(context.Background(), filepath.Join(dir, "tsconfig.json"), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer opened.Close()
+	semantic := opened.(typefacts.SemanticEntityLookup)
+
+	domain := typefacts.NewPrimitiveValueDomain
+	stringDomain := domain(true, false, false, false, false, false, false, false)
+	booleanDomain := domain(false, false, true, false, false, false, false, false)
+	objectDomain := domain(false, false, false, false, false, false, false, true)
+	unknownDomain := unknownPrimitiveValueDomain()
+	cases := []struct {
+		name string
+		want typefacts.PrimitiveValueDomain
+	}{
+		{"textValue", stringDomain},
+		{"brandedText", stringDomain},
+		{"numberValue", domain(false, true, false, false, false, false, false, false)},
+		{"booleanValue", booleanDomain},
+		{"bigintValue", domain(false, false, false, true, false, false, false, false)},
+		{"symbolValue", domain(false, false, false, false, true, false, false, false)},
+		{"nullValue", domain(false, false, false, false, false, true, false, false)},
+		{"undefinedValue", domain(false, false, false, false, false, false, true, false)},
+		{"objectValue", objectDomain},
+		{"functionValue", objectDomain},
+		{"safeUnion", domain(true, false, true, false, false, true, true, false)},
+		{"unsafeUnion", domain(true, false, false, true, false, false, false, true)},
+		{"bounded", domain(true, false, true, false, false, false, false, false)},
+		{"generic", unknownDomain},
+		{"anyValue", unknownDomain},
+		{"unknownValue", unknownDomain},
+		{"neverValue", domain(false, false, false, false, false, false, false, false)},
+		{"recoveryValue", unknownDomain},
+		{"voidResult", domain(false, false, false, false, false, false, true, false)},
+	}
+	demands := make([]typefacts.EntityDemand, 0, len(cases)+1)
+	for _, testCase := range cases {
+		start := strings.LastIndex(source, "\n"+testCase.name+";")
+		if start >= 0 {
+			start++
+		} else {
+			start = strings.LastIndex(source, testCase.name+";")
+		}
+		if start < 0 {
+			t.Fatalf("%q not found", testCase.name)
+		}
+		demands = append(demands, typefacts.EntityDemand{
+			Location:             typefacts.Location{Path: sourcePath, StartByte: start, EndByte: start + len(testCase.name)},
+			PrimitiveValueDomain: true,
+		})
+	}
+	textStart := strings.LastIndex(source, "textValue;")
+	demands = append(demands, typefacts.EntityDemand{
+		Location:             typefacts.Location{Path: sourcePath, StartByte: textStart, EndByte: textStart + len("textValue") - 1},
+		PrimitiveValueDomain: true,
+	})
+	entities, err := semantic.SemanticEntities(context.Background(), demands)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for index, testCase := range cases {
+		if !entities[index].PrimitiveValueDomain.IsPresent() {
+			t.Errorf("%s primitive value domain is absent", testCase.name)
+			continue
+		}
+		if got := entities[index].PrimitiveValueDomain; got != testCase.want {
+			t.Errorf("%s primitive value domain = %+v, want %+v", testCase.name, got, testCase.want)
+		}
+	}
+	if entities[len(cases)].PrimitiveValueDomain.IsPresent() {
+		t.Fatal("non-exact primitive-domain demand unexpectedly answered")
+	}
+}
+
 func TestDemandedCallResultDomainUsesExactCallSpans(t *testing.T) {
 	dir := t.TempDir()
 	source := `declare function makeCount(): number;
@@ -1684,25 +1809,25 @@ empty;
 		expression string
 		want       *typefacts.TupleShape
 	}{
-		{`pair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		{`pair`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
 		// The first slot is callable but demands more arguments than a caller
 		// with two will supply, which callability alone cannot express.
-		{`overArity`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 3}},
+		{`overArity`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 3}},
 		// Optional and rest parameters lower the requirement, matching
 		// assignability.
-		{`optionalArity`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
-		{`restArity`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable}},
+		{`optionalArity`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		{`restArity`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable}},
 		// A tuple whose first slot is not callable. Structurally a tuple, but
 		// nothing a numbered-member interface expecting a function would accept.
-		{`numbers`, &typefacts.TupleShape{FixedLength: 3, ElementZero: typefacts.CallabilityNonCallable}},
-		{`single`, &typefacts.TupleShape{FixedLength: 1, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
+		{`numbers`, &typefacts.TupleShape{FixedLength: 3, ExactLength: 3, ExactLengthKnown: true, ElementZero: typefacts.CallabilityNonCallable}},
+		{`single`, &typefacts.TupleShape{FixedLength: 1, ExactLength: 1, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
 		// An optional slot still counts toward fixedLength, matching the compiler.
 		{`optionalTail`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
 		{`restTail`, &typefacts.TupleShape{FixedLength: 1, HasRest: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
-		{`roPair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
+		{`roPair`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 1}},
 		// The alias is transparent, exactly as it is to arrayShape.
-		{`aliased`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
-		{`empty`, &typefacts.TupleShape{FixedLength: 0, ElementZero: typefacts.CallabilityUnknown}},
+		{`aliased`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		{`empty`, &typefacts.TupleShape{FixedLength: 0, ExactLengthKnown: true, ElementZero: typefacts.CallabilityUnknown}},
 		// Arrays have a number index signature, not fixed slots. This is the
 		// distinction arrayShape collapses and the duplicate it left open.
 		{`plainArray`, nil},
@@ -1715,13 +1840,13 @@ empty;
 		// A union answers with the meet of its constituents. A nullish
 		// constituent carries no structure and is skipped, so an optional pair
 		// still describes the pair it is when present.
-		{`maybePair`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
-		{`bothPairs`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		{`maybePair`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		{`bothPairs`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
 		// The meet takes the strictest demand: a caller must satisfy whichever
 		// constituent it gets.
-		{`unionOverArity`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 3}},
+		{`unionOverArity`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 3}},
 		// One head is not callable, so the union's is not provably callable.
-		{`unionBadHead`, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityMixed, ElementZeroMinimumParameters: 2}},
+		{`unionBadHead`, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityMixed, ElementZeroMinimumParameters: 2}},
 		// Slots are kept only where both have them: the rest tail is not shared,
 		// so the fixed length drops to the shorter one.
 		{`unionRest`, &typefacts.TupleShape{FixedLength: 1, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
@@ -1827,8 +1952,8 @@ export const Unconstrained = () => <loose onClick={[handler, 1]} />;
 		nth     int
 		want    *typefacts.TupleShape
 	}{
-		{"bound pair", "[handler, 1]", 0, &typefacts.TupleShape{FixedLength: 2, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
-		{"wrong element types", "[1, 2, 3]", 0, &typefacts.TupleShape{FixedLength: 3, ElementZero: typefacts.CallabilityNonCallable}},
+		{"bound pair", "[handler, 1]", 0, &typefacts.TupleShape{FixedLength: 2, ExactLength: 2, ExactLengthKnown: true, ElementZero: typefacts.CallabilityCallable, ElementZeroMinimumParameters: 2}},
+		{"wrong element types", "[1, 2, 3]", 0, &typefacts.TupleShape{FixedLength: 3, ExactLength: 3, ExactLengthKnown: true, ElementZero: typefacts.CallabilityNonCallable}},
 		// Same literal, unconstrained position: no fixed slots at all.
 		{"unconstrained", "[handler, 1]", 1, nil},
 	}

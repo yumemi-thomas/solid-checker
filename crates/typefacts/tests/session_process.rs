@@ -2,8 +2,8 @@ use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
     AnalysisDemand, ArrayShape, CallKind, Callability, ConstantValue, ConstantValueKind,
-    DemandGroup, Location, Producer, ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain,
-    Session,
+    DemandGroup, Location, PrimitiveValueDomain, Producer, ReferenceSpace, ResolvedCallValidity,
+    RuntimeValueDomain, Session,
     v3::{EntityDemand, FileChange},
 };
 
@@ -341,12 +341,7 @@ fn runtime_value_domain_survives_full_delta_and_reuse_responses() {
     let full = session.analyze(&analysis()).unwrap();
     assert_eq!(
         full.entities().next().unwrap().runtime_value_domain,
-        Some(RuntimeValueDomain {
-            may_be_callable: true,
-            may_be_undefined: true,
-            may_be_other: false,
-            unknown: false,
-        })
+        Some(RuntimeValueDomain::new(true, true, false, false))
     );
 
     let reused = session.analyze(&analysis()).unwrap();
@@ -364,12 +359,7 @@ fn runtime_value_domain_survives_full_delta_and_reuse_responses() {
     let delta = session.analyze(&analysis()).unwrap();
     assert_eq!(
         delta.entities().next().unwrap().runtime_value_domain,
-        Some(RuntimeValueDomain {
-            may_be_callable: true,
-            may_be_undefined: false,
-            may_be_other: true,
-            unknown: false,
-        })
+        Some(RuntimeValueDomain::new(true, false, true, false))
     );
     assert!(
         session
@@ -384,6 +374,113 @@ fn runtime_value_domain_survives_full_delta_and_reuse_responses() {
     assert_eq!(delta_reused.entities().next(), delta.entities().next());
     assert!(session.take_last_table_changes().unwrap().unchanged);
     session.close().unwrap();
+}
+
+#[test]
+fn v13_domains_and_exact_tuple_lengths_survive_full_delta_and_reuse_responses() {
+    let root = std::env::temp_dir().join(format!(
+        "typefacts-primitive-value-domain-{}",
+        std::process::id()
+    ));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let project = root.join("tsconfig.json");
+    fs::write(
+        &project,
+        r#"{"compilerOptions":{"strict":true,"noEmit":true},"include":["*.ts"]}"#,
+    )
+    .unwrap();
+    let path = root.join("value.ts");
+    let original = "export declare const value: string | boolean;\ndeclare const args: [() => void];\nvalue;\nargs;\n";
+    let changed = "export declare const value: bigint | symbol ;\ndeclare const args: [() => void];\nvalue;\nargs;\n";
+    assert_eq!(original.len(), changed.len());
+    fs::write(&path, original).unwrap();
+    let source = fs::read_to_string(&path).unwrap();
+    let start = source.rfind("value").unwrap();
+    let args_start = source.rfind("args").unwrap();
+    let demand = EntityDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: start as u64,
+            end_byte: (start + "value".len()) as u64,
+        },
+        primitive_value_domain: true,
+        ..EntityDemand::default()
+    };
+    let tuple_demand = EntityDemand {
+        location: Location {
+            path: path.to_string_lossy().into_owned().into(),
+            start_byte: args_start as u64,
+            end_byte: (args_start + "args".len()) as u64,
+        },
+        tuple_shape: true,
+        ..EntityDemand::default()
+    };
+    let analysis = || AnalysisDemand {
+        entities: vec![demand.clone(), tuple_demand.clone()],
+    };
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let full = session.analyze(&analysis()).unwrap();
+    let safe = full
+        .entities()
+        .next()
+        .unwrap()
+        .primitive_value_domain
+        .present()
+        .unwrap();
+    assert!(safe.may_be_string());
+    assert!(safe.may_be_boolean());
+    assert!(!safe.may_be_big_int());
+    assert!(!safe.unknown());
+    assert_eq!(
+        full.entities()
+            .find_map(|entity| entity.tuple_shape)
+            .unwrap()
+            .exact_length(),
+        Some(1)
+    );
+
+    let reused = session.analyze(&analysis()).unwrap();
+    assert_eq!(reused.entities().next(), full.entities().next());
+    assert!(session.take_last_table_changes().unwrap().unchanged);
+
+    session
+        .update([FileChange {
+            path: path.to_string_lossy().into_owned(),
+            source: changed.as_bytes().to_vec(),
+            deleted: false,
+            version: 1,
+        }])
+        .unwrap();
+    let delta = session.analyze(&analysis()).unwrap();
+    let unsafe_domain = delta
+        .entities()
+        .next()
+        .unwrap()
+        .primitive_value_domain
+        .present()
+        .unwrap();
+    assert!(unsafe_domain.may_be_big_int());
+    assert!(unsafe_domain.may_be_symbol());
+    assert!(!unsafe_domain.may_be_string());
+    assert_eq!(
+        delta
+            .entities()
+            .find_map(|entity| entity.tuple_shape)
+            .unwrap()
+            .exact_length(),
+        Some(1)
+    );
+    assert_eq!(std::mem::size_of::<PrimitiveValueDomain>(), 2);
+
+    session.close().unwrap();
+    fs::remove_dir_all(root).unwrap();
 }
 
 #[test]
@@ -428,24 +525,9 @@ fn call_result_domain_survives_the_process_seam() {
     assert_eq!(
         domains,
         vec![
-            Some(RuntimeValueDomain {
-                may_be_callable: false,
-                may_be_undefined: false,
-                may_be_other: true,
-                unknown: false,
-            }),
-            Some(RuntimeValueDomain {
-                may_be_callable: true,
-                may_be_undefined: false,
-                may_be_other: false,
-                unknown: false,
-            }),
-            Some(RuntimeValueDomain {
-                may_be_callable: true,
-                may_be_undefined: true,
-                may_be_other: false,
-                unknown: false,
-            }),
+            Some(RuntimeValueDomain::new(false, false, true, false)),
+            Some(RuntimeValueDomain::new(true, false, false, false)),
+            Some(RuntimeValueDomain::new(true, true, false, false)),
         ]
     );
     let reused = session

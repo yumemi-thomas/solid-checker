@@ -129,6 +129,97 @@ func unknownRuntimeValueDomain() typefacts.RuntimeValueDomain {
 	}
 }
 
+func unknownPrimitiveValueDomain() typefacts.PrimitiveValueDomain {
+	return typefacts.UnknownPrimitiveValueDomain()
+}
+
+// primitiveValueDomainOfType classifies the same checker type as
+// runtimeValueDomainOfType, but preserves JavaScript's primitive categories.
+// Constraints and unions are closed recursively; all remaining inhabited,
+// compiler-known types are objects/functions.
+func primitiveValueDomainOfType(typeChecker *checker.Checker, value *checker.Type) typefacts.PrimitiveValueDomain {
+	return primitiveValueDomainOfTypeSeen(typeChecker, value, make(map[*checker.Type]struct{}))
+}
+
+func primitiveValueDomainOfTypeSeen(
+	typeChecker *checker.Checker,
+	value *checker.Type,
+	seen map[*checker.Type]struct{},
+) typefacts.PrimitiveValueDomain {
+	if value == nil {
+		return unknownPrimitiveValueDomain()
+	}
+	flags := value.Flags()
+	if flags&(checker.TypeFlagsAny|checker.TypeFlagsUnknown|checker.TypeFlagsIncludesError) != 0 {
+		return unknownPrimitiveValueDomain()
+	}
+	if flags&checker.TypeFlagsNever != 0 {
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, false, false)
+	}
+	if _, cycling := seen[value]; cycling {
+		return unknownPrimitiveValueDomain()
+	}
+	seen[value] = struct{}{}
+	defer delete(seen, value)
+
+	if flags&checker.TypeFlagsInstantiable != 0 {
+		var constraint *checker.Type
+		if flags&checker.TypeFlagsTypeParameter != 0 {
+			constraint = typeChecker.GetConstraintOfTypeParameter(value)
+		} else {
+			constraint = checker.Checker_getBaseConstraintOfType(typeChecker, value)
+		}
+		if constraint == nil {
+			return unknownPrimitiveValueDomain()
+		}
+		if constraint != value {
+			return primitiveValueDomainOfTypeSeen(typeChecker, constraint, seen)
+		}
+	}
+
+	if flags&checker.TypeFlagsUnion != 0 {
+		var domain typefacts.PrimitiveValueDomain
+		for _, constituent := range value.Types() {
+			part := primitiveValueDomainOfTypeSeen(typeChecker, constituent, seen)
+			domain = domain.Union(part)
+		}
+		return domain
+	}
+
+	switch {
+	case flags&checker.TypeFlagsStringLike != 0:
+		return typefacts.NewPrimitiveValueDomain(true, false, false, false, false, false, false, false)
+	case flags&checker.TypeFlagsNumberLike != 0:
+		return typefacts.NewPrimitiveValueDomain(false, true, false, false, false, false, false, false)
+	case flags&checker.TypeFlagsBooleanLike != 0:
+		return typefacts.NewPrimitiveValueDomain(false, false, true, false, false, false, false, false)
+	case flags&checker.TypeFlagsBigIntLike != 0:
+		return typefacts.NewPrimitiveValueDomain(false, false, false, true, false, false, false, false)
+	case flags&checker.TypeFlagsESSymbolLike != 0:
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, true, false, false, false)
+	case flags&checker.TypeFlagsNull != 0:
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, true, false, false)
+	case flags&(checker.TypeFlagsUndefined|checker.TypeFlagsVoid) != 0:
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, true, false)
+	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetStringType()):
+		return typefacts.NewPrimitiveValueDomain(true, false, false, false, false, false, false, false)
+	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetNumberType()):
+		return typefacts.NewPrimitiveValueDomain(false, true, false, false, false, false, false, false)
+	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetBooleanType()):
+		return typefacts.NewPrimitiveValueDomain(false, false, true, false, false, false, false, false)
+	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetBigIntType()):
+		return typefacts.NewPrimitiveValueDomain(false, false, false, true, false, false, false, false)
+	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetESSymbolType()):
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, true, false, false, false)
+	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetNullType()):
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, true, false, false)
+	case typeChecker.IsTypeAssignableTo(value, typeChecker.GetUndefinedType()):
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, true, false)
+	default:
+		return typefacts.NewPrimitiveValueDomain(false, false, false, false, false, false, false, true)
+	}
+}
+
 // runtimeValueDomainOfType classifies checker types by runtime value kind.
 // Union members are combined, constrained generics are classified through the
 // checker's resolved base constraint, callable structured types are detected

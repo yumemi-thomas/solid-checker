@@ -8,23 +8,24 @@ import "crypto/sha256"
 // they arrive unconditionally through symbol closure, so the request has no way
 // to ask for them and no reason to.
 type EntityDemand struct {
-	Location           Location  `cbor:"location" json:"location"`
-	QueryLocation      *Location `cbor:"queryLocation,omitempty" json:"queryLocation,omitempty"`
-	Symbol             bool      `cbor:"symbol,omitempty" json:"symbol,omitempty"`
-	TypeDescriptor     bool      `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
-	ResolvedCall       bool      `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
-	Callability        bool      `cbor:"callability,omitempty" json:"callability,omitempty"`
-	RuntimeValueDomain bool      `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
-	CallResultDomain   bool      `cbor:"callResultDomain,omitempty" json:"callResultDomain,omitempty"`
-	ConstantValue      bool      `cbor:"constantValue,omitempty" json:"constantValue,omitempty"`
-	ArrayShape         bool      `cbor:"arrayShape,omitempty" json:"arrayShape,omitempty"`
-	TupleShape         bool      `cbor:"tupleShape,omitempty" json:"tupleShape,omitempty"`
-	LibraryTypes       bool      `cbor:"libraryTypes,omitempty" json:"libraryTypes,omitempty"`
-	ReferenceSpace     bool      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
-	RuntimeIdentity    bool      `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
-	References         bool      `cbor:"references,omitempty" json:"references,omitempty"`
-	Async              bool      `cbor:"async,omitempty" json:"async,omitempty"`
-	StructuralAccessor bool      `cbor:"structuralAccessor,omitempty" json:"structuralAccessor,omitempty"`
+	Location             Location  `cbor:"location" json:"location"`
+	QueryLocation        *Location `cbor:"queryLocation,omitempty" json:"queryLocation,omitempty"`
+	Symbol               bool      `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	TypeDescriptor       bool      `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
+	ResolvedCall         bool      `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
+	Callability          bool      `cbor:"callability,omitempty" json:"callability,omitempty"`
+	RuntimeValueDomain   bool      `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
+	PrimitiveValueDomain bool      `cbor:"primitiveValueDomain,omitempty" json:"primitiveValueDomain,omitempty"`
+	CallResultDomain     bool      `cbor:"callResultDomain,omitempty" json:"callResultDomain,omitempty"`
+	ConstantValue        bool      `cbor:"constantValue,omitempty" json:"constantValue,omitempty"`
+	ArrayShape           bool      `cbor:"arrayShape,omitempty" json:"arrayShape,omitempty"`
+	TupleShape           bool      `cbor:"tupleShape,omitempty" json:"tupleShape,omitempty"`
+	LibraryTypes         bool      `cbor:"libraryTypes,omitempty" json:"libraryTypes,omitempty"`
+	ReferenceSpace       bool      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
+	RuntimeIdentity      bool      `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
+	References           bool      `cbor:"references,omitempty" json:"references,omitempty"`
+	Async                bool      `cbor:"async,omitempty" json:"async,omitempty"`
+	StructuralAccessor   bool      `cbor:"structuralAccessor,omitempty" json:"structuralAccessor,omitempty"`
 }
 
 // SemanticDemandRun is one source file's canonically ordered demands.
@@ -54,20 +55,21 @@ type SemanticDemandRunResult struct {
 // EntityFact is one legal location-keyed entity in the finite fact universe.
 // Location ranges are ordered from outermost to innermost during encoding.
 type EntityFact struct {
-	Location           Location            `cbor:"location" json:"location"`
-	Symbol             SymbolID            `cbor:"symbol,omitempty" json:"symbol,omitempty"`
-	SymbolUnresolved   bool                `cbor:"symbolUnresolved,omitempty" json:"symbolUnresolved,omitempty"`
-	TypeDescriptor     *TypeDescriptor     `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
-	ResolvedCall       *Call               `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
-	Callability        Callability         `cbor:"callability,omitempty" json:"callability,omitempty"`
-	RuntimeValueDomain *RuntimeValueDomain `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
-	CallResultDomain   *RuntimeValueDomain `cbor:"callResultDomain,omitempty" json:"callResultDomain,omitempty"`
-	ConstantValue      *ConstantValue      `cbor:"constantValue,omitempty" json:"constantValue,omitempty"`
-	ArrayShape         ArrayShape          `cbor:"arrayShape,omitempty" json:"arrayShape,omitempty"`
-	TupleShape         *TupleShape         `cbor:"tupleShape,omitempty" json:"tupleShape,omitempty"`
-	LibraryTypes       []string            `cbor:"libraryTypes,omitempty" json:"libraryTypes,omitempty"`
-	ReferenceSpace     ReferenceSpace      `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
-	RuntimeIdentity    RuntimeSymbolID     `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
+	Location             Location             `cbor:"location" json:"location"`
+	Symbol               SymbolID             `cbor:"symbol,omitempty" json:"symbol,omitempty"`
+	SymbolUnresolved     bool                 `cbor:"symbolUnresolved,omitempty" json:"symbolUnresolved,omitempty"`
+	TypeDescriptor       *TypeDescriptor      `cbor:"typeDescriptor,omitempty" json:"typeDescriptor,omitempty"`
+	ResolvedCall         *Call                `cbor:"resolvedCall,omitempty" json:"resolvedCall,omitempty"`
+	Callability          Callability          `cbor:"callability,omitempty" json:"callability,omitempty"`
+	RuntimeValueDomain   *RuntimeValueDomain  `cbor:"runtimeValueDomain,omitempty" json:"runtimeValueDomain,omitempty"`
+	PrimitiveValueDomain PrimitiveValueDomain `cbor:"-" json:"-"`
+	CallResultDomain     *RuntimeValueDomain  `cbor:"callResultDomain,omitempty" json:"callResultDomain,omitempty"`
+	ConstantValue        *ConstantValue       `cbor:"constantValue,omitempty" json:"constantValue,omitempty"`
+	ArrayShape           ArrayShape           `cbor:"arrayShape,omitempty" json:"arrayShape,omitempty"`
+	TupleShape           *TupleShape          `cbor:"tupleShape,omitempty" json:"tupleShape,omitempty"`
+	LibraryTypes         []string             `cbor:"libraryTypes,omitempty" json:"libraryTypes,omitempty"`
+	ReferenceSpace       ReferenceSpace       `cbor:"referenceSpace,omitempty" json:"referenceSpace,omitempty"`
+	RuntimeIdentity      RuntimeSymbolID      `cbor:"runtimeIdentity,omitempty" json:"runtimeIdentity,omitempty"`
 }
 
 // SymbolFact contains every legal symbol-keyed response for a generation.

@@ -272,6 +272,7 @@ func (p *project) SemanticDemandRuns(
 				!demand.ResolvedCall &&
 				!demand.Callability &&
 				!demand.RuntimeValueDomain &&
+				!demand.PrimitiveValueDomain &&
 				!demand.CallResultDomain &&
 				!demand.ConstantValue &&
 				!demand.ArrayShape &&
@@ -338,6 +339,7 @@ func (p *project) SemanticDemandRuns(
 			if (demand.Callability || demand.RuntimeValueDomain) && queryNode != nil {
 				if !queryTypeLoaded {
 					queryType = p.checker.GetTypeAtLocation(queryNode)
+					queryTypeLoaded = true
 				}
 				if demand.Callability {
 					entity.Callability = callabilityOfType(p.checker, queryType)
@@ -345,6 +347,16 @@ func (p *project) SemanticDemandRuns(
 				if demand.RuntimeValueDomain {
 					domain := runtimeValueDomainOfType(p.checker, queryType)
 					entity.RuntimeValueDomain = &domain
+				}
+			}
+			if demand.PrimitiveValueDomain {
+				if primitiveNode := queryCursor.exactExpressionAt(query.StartByte, query.EndByte); primitiveNode != nil {
+					primitiveType := queryType
+					if !queryTypeLoaded || primitiveNode != queryNode {
+						primitiveType = p.checker.GetTypeAtLocation(primitiveNode)
+					}
+					domain := primitiveValueDomainOfType(p.checker, primitiveType)
+					entity.PrimitiveValueDomain = domain
 				}
 			}
 			if demand.CallResultDomain {
