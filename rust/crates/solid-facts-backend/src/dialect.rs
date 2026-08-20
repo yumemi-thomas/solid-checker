@@ -716,7 +716,7 @@ mod tests {
         let shared = v1.intersection(&v2).copied().collect::<HashSet<_>>();
         let expected = HashSet::from([
             "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1007", "SC2001", "SC2003",
-            "SC4001", "SC7001", "SC9005", "SC9011", "SC9012",
+            "SC4001", "SC7001", "SC8003", "SC8014", "SC8015", "SC9005", "SC9011", "SC9012",
         ]);
         assert_eq!(shared, expected);
         assert_eq!(
@@ -724,22 +724,22 @@ mod tests {
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            13
+            16
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            13
+            16
         );
         assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 13,
-            5,
+            solid_v1_rules::Rule::ALL.len() - 16,
+            2,
             "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
         assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 13,
+            solid_v2_rules::Rule::ALL.len() - 16,
             10,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );

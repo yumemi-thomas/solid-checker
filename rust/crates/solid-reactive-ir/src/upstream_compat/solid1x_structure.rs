@@ -1,5 +1,5 @@
-//! Solid 1.x `v1/prefer-for` and `v1/prefer-show` — eslint-plugin-solid's
-//! structural-preference rules, each judging a
+//! Shared `prefer-for` and `prefer-show` structural preferences, ported from
+//! eslint-plugin-solid's Solid 1.x rules. Each judges a
 //! JavaScript-legal but Solid-unidiomatic shape.
 //!
 //! `prefer-for` and `prefer-show` are intent judgements, not correctness
@@ -92,18 +92,32 @@ fn prefer_for(
             .iter()
             .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
             .is_some_and(|function| function.parameters.len() == 1);
+        let solid_one = context.dialect.carries_eslint_era_rules();
+        let for_name = if solid_one {
+            "<For>"
+        } else {
+            "<For keyed={false}>"
+        };
         let (message, fixes) = if one_parameter {
             let fixes = if receiver_is_array {
                 vec![Fix {
-                    message: "Replace Array#map with <For>.".into(),
+                    message: format!("Replace Array#map with {for_name}."),
                     applicability: "safe".into(),
                     edits: vec![TextEdit {
                         location: location(file.path.shared(), call.span),
-                        new_text: format!(
-                            "<For each={{{}}}>{{{}}}</For>",
-                            text(file, member.object),
-                            text(file, argument.span)
-                        ),
+                        new_text: if solid_one {
+                            format!(
+                                "<For each={{{}}}>{{{}}}</For>",
+                                text(file, member.object),
+                                text(file, argument.span)
+                            )
+                        } else {
+                            format!(
+                                "<For keyed={{false}} each={{{}}}>{{{}}}</For>",
+                                text(file, member.object),
+                                text(file, argument.span)
+                            )
+                        },
                     }],
                 }]
             } else {
@@ -123,7 +137,11 @@ fn prefer_for(
             id: "SC8014".into(),
             rule: "prefer-for".into(),
             message: message.into(),
-            hint: "Pick `<For>` when the callback needs the item value reactively, `<Index>` when it needs the index reactively.".into(),
+            hint: if solid_one {
+                "Pick `<For>` when the callback needs the item value reactively, `<Index>` when it needs the index reactively.".into()
+            } else {
+                "Use `<For keyed={false}>` for index-stable list rendering in Solid 2.0; `Index` is not part of the 2.0 API.".into()
+            },
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes,

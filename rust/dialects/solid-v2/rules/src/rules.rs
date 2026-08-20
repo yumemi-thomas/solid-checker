@@ -36,6 +36,9 @@ pub enum Rule {
     ServerFunctionModuleDirective,
     ServerFunctionRichArgument,
     PackageContractIncomplete,
+    JsxNoDuplicateProps,
+    PreferFor,
+    PreferShow,
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/`.
@@ -50,7 +53,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 23] = [
+    pub const ALL: [Self; 26] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
@@ -74,6 +77,9 @@ impl Rule {
         Self::ServerFunctionModuleDirective,
         Self::ServerFunctionRichArgument,
         Self::PackageContractIncomplete,
+        Self::JsxNoDuplicateProps,
+        Self::PreferFor,
+        Self::PreferShow,
     ];
 
     #[must_use]
@@ -160,6 +166,9 @@ impl Rule {
             Self::PackageContractIncomplete => {
                 ("SC9005", "package-contract-incomplete", "error", true)
             }
+            Self::JsxNoDuplicateProps => ("SC8003", "jsx-no-duplicate-props", "error", false),
+            Self::PreferFor => ("SC8014", "prefer-for", "error", false),
+            Self::PreferShow => ("SC8015", "prefer-show", "warning", false),
         };
         RuleMetadata {
             code,
@@ -254,6 +263,9 @@ mod tests {
             ("SC7005", "http-response-after-flush"),
             ("SC7006", "server-function-module-directive"),
             ("SC7007", "server-function-rich-argument"),
+            ("SC8003", "jsx-no-duplicate-props"),
+            ("SC8014", "prefer-for"),
+            ("SC8015", "prefer-show"),
         ] {
             assert!(
                 Rule::from_identity(code, name).is_some(),

@@ -12,8 +12,10 @@
 //!
 //! [`check_file`] gates each submodule on the dialect version, mirroring what
 //! the two catalogs declare. The module names make that ownership explicit:
-//! every `solid1x_*` group implements the 1.x ESLint-era surface, while
-//! `shared_reactivity` contains defect classes carried by both catalogs
+//! the `solid1x_*` modules retain their historical implementation names, but
+//! their entry points are gated per rule: structural preferences and intrinsic
+//! content competition are shared, while attributes, directives, and DOM-slot
+//! folding remain 1.x-only. `shared_reactivity` contains defect classes carried by both catalogs
 //! (minus the one 1.x-only rule its own gate documents). The version match
 //! here and the catalogs above cannot drift silently: each dialect's solver
 //! panics on an emitted identity its catalog does not resolve, and both rule
@@ -541,10 +543,10 @@ pub(super) struct UpstreamCompatContext<'a> {
 fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiagnostics {
     let mut violations = Vec::new();
     let mut defects = Vec::new();
+    solid1x_syntax::check_file(file, context, &mut violations);
+    solid1x_structure::check_file(file, context, &mut violations);
     if context.dialect.carries_eslint_era_rules() {
-        solid1x_syntax::check_file(file, context, &mut violations);
         solid1x_attributes::check_file(file, context, &mut violations);
-        solid1x_structure::check_file(file, context, &mut violations);
         solid1x_undef::check_file(file, context, &mut violations);
     }
     shared_reactivity::check_file(file, context, &mut defects);

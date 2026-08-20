@@ -387,17 +387,9 @@ for (const [index, testCase] of ledger.cases.entries()) {
 // silently. A new rule must arrive with its positive spelling and the oracle's
 // verdict on it.
 const EXEMPT = {
-  "package-contract-export-missing": "asks whether a package ships a usable reactivity contract, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
-  "package-contract-callback-missing": "same -- the subject is a third-party package's contract, not Solid's types",
-  "package-contract-missing": "same",
-  "v1/package-contract-export-missing": "same",
-  "v1/package-contract-callback-missing": "same",
-  "v1/package-contract-missing": "same",
-  "execution-map-incomplete": "unreachable from real source by construction (docs/precision-backlog.md): it defends against externally produced or partial compiler facts, so no snippet can trigger it",
-  "v1/execution-map-incomplete": "same",
+  "package-contract-incomplete": "asks whether a package ships a usable reactivity contract, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
+  "v1/package-contract-incomplete": "same -- the subject is a third-party package's contract, not Solid's types",
   "server-function-module-directive": "needs a module-level \"use server\" prologue and the project's server surface",
-  "pending-async-forbidden-scope": "needs a pending-state observer in a project with a Loading boundary above it",
-  "v1/jsx-uses-vars": "no diagnostic of its own: it marks a JSX-referenced binding used so an unused-variable pass does not flag it",
 };
 
 const catalogRules = [

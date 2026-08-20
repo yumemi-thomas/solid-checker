@@ -464,6 +464,11 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::ServerFunctionRichArgument => {
             "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
         }
+        Rule::JsxNoDuplicateProps => {
+            "the intrinsic element uses more than one competing source of DOM child content"
+        }
+        Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
+        Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
         Rule::StrictReadUntracked
         | Rule::ReactiveReadAfterAwait
         | Rule::UncalledAccessor

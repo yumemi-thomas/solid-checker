@@ -62,6 +62,11 @@ code; **Both** — either, depending on the code.
   `sync-computation-received-async`, naming the affected computation rather
   than an implementation node. The old rule-options key aliases the new
   identity; the explicit ESLint key remains temporarily as a deprecated delegate.
+- **2026-08-20 — three proven rule arms ported to Solid 2.0.** SC8014
+  `prefer-for`, SC8015 `prefer-show`, and SC8003
+  `jsx-no-duplicate-props`' intrinsic content-competition arm now run in the
+  2.0 catalog. The 1.x DOM-slot folding arm stays dialect-restricted, and the
+  2.0 list fix uses `<For keyed={false}>` because `Index` was removed.
 
 ## The `tsc` redundancy ledger (audited 2026-08-17)
 

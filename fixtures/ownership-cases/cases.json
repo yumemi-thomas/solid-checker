@@ -8788,6 +8788,106 @@
           }
         ]
       }
+    },
+    {
+      "id": "prefer-for/solid-v2/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "const items = [\"a\", \"b\"];\nexport const App = () => <ul>{items.map((item, index) => item + index)}</ul>;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "prefer-for",
+            "code": "SC8014",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "items.map((item, index) => item + index)"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "prefer-show/solid-v2/positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export const App = (props: { ready: boolean }) => <main>{props.ready && <span />}</main>;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "prefer-show",
+            "code": "SC8015",
+            "kind": "violation",
+            "severity": "warning",
+            "span": {
+              "marker": "props.ready && <span />"
+            },
+            "fix": {
+              "behavior": "safe",
+              "text": "export const App = (props: { ready: boolean }) => <main><Show when={props.ready}><span /></Show></main>;\n"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "jsx-no-duplicate-props/solid-v2/content-positive/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export const App = (props: { html: string }) => <div innerHTML={props.html}>fallback</div>;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "jsx-no-duplicate-props",
+            "code": "SC8003",
+            "kind": "violation",
+            "severity": "error",
+            "span": {
+              "marker": "<div innerHTML={props.html}>"
+            },
+            "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
     }
   ]
 }

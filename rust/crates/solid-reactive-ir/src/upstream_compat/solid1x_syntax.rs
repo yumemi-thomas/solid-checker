@@ -1,6 +1,5 @@
-//! `v1/jsx-no-duplicate-props` — eslint-plugin-solid's structural duplicate
-//! JSX property rule, ported from the 1.x reactive solver's
-//! `solid_1_rules.rs` onto this checker's fact tables.
+//! `jsx-no-duplicate-props` — intrinsic content competition in both dialects,
+//! plus eslint-plugin-solid's Solid 1.x DOM-slot folding.
 //!
 //! Every rule here reads `file.ast.jsx_elements` and its nested attribute /
 //! spread / object-property tables. `jsx-no-duplicate-props { ignoreCase }`
@@ -19,11 +18,11 @@ use crate::StaticViolation;
 
 pub(super) fn check_file(
     file: &FileFacts,
-    _context: &UpstreamCompatContext<'_>,
+    context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
     for element in &file.ast.jsx_elements {
-        jsx_no_duplicate_props(file, element, violations);
+        jsx_no_duplicate_props(file, element, context, violations);
     }
 }
 
@@ -34,6 +33,7 @@ pub(super) fn check_file(
 fn jsx_no_duplicate_props(
     file: &FileFacts,
     element: &JsxElementFact,
+    context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
     // Attributes and spread-carried object properties compete for the same
@@ -52,6 +52,7 @@ fn jsx_no_duplicate_props(
     // a later `onSave` overwrites an earlier one no matter how either is
     // spelled. Applying the DOM model there would silence real duplicates.
     let intrinsic = is_lowercase_led(text(file, element.name.span));
+    let folds_dom_slots = intrinsic && context.dialect.carries_eslint_era_rules();
     let mut candidates: Vec<(Span, Option<String>, &str)> = element
         .attributes
         .iter()
@@ -68,7 +69,7 @@ fn jsx_no_duplicate_props(
             let name = text(file, attribute.name);
             (
                 attribute.name,
-                duplicate_slot(name, static_literal, intrinsic),
+                duplicate_slot(name, static_literal, folds_dom_slots),
                 name,
             )
         })
@@ -86,7 +87,7 @@ fn jsx_no_duplicate_props(
                         duplicate_slot(
                             name,
                             expression_is_static_literal(file, property.value),
-                            intrinsic,
+                            folds_dom_slots,
                         ),
                         name,
                     )
@@ -128,7 +129,7 @@ fn jsx_no_duplicate_props(
             // override. Only differently spelled keys that the DOM compiler
             // folds into one slot remain in this rule, and components never
             // enter that lowering.
-            if written == first_written || !intrinsic {
+            if written == first_written || !folds_dom_slots {
                 continue;
             }
             let message = if normalized == "class" {

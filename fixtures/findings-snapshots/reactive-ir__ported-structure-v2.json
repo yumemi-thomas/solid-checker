@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 271,
+      "end": 307,
+      "fixes": 0
+    },
+    {
+      "rule": "prefer-show",
+      "code": "SC8015",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 330,
+      "end": 367,
+      "fixes": 1
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "code": "SC8003",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/ported-structure-v2/App.tsx",
+      "start": 385,
+      "end": 413,
+      "fixes": 0
+    }
+  ]
+}

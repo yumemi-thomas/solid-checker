@@ -46,9 +46,9 @@ that exact rule in the shared project configuration described below.
 
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
-| Shared concepts (13 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
+| Shared concepts (16 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
 | Version-only concepts | 5 rules: the retained ESLint-era surface and 1.x-specific proof obligations | 10 rules: actions, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 18 rules | 23 rules |
+| Catalog size | 18 rules | 26 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the
@@ -135,6 +135,9 @@ rule's page documents its additional options and defaults.
 
 | Code | Rule | Severity |
 | --- | --- | --- |
+| SC8003 | [jsx-no-duplicate-props](jsx-no-duplicate-props.md) | error |
+| SC8014 | [prefer-for](prefer-for.md) | error |
+| SC8015 | [prefer-show](prefer-show.md) | warning |
 | SC8018 | [prefer-component-syntax](prefer-component-syntax.md) | warning |
 | SC8019 | [no-implicit-draggable](no-implicit-draggable.md) | error |
 | SC8020 | [valid-jsx-nesting](valid-jsx-nesting.md) | error |
