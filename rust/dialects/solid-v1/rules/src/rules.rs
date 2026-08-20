@@ -50,7 +50,6 @@ pub enum Rule {
     JsxNoScriptUrl,
     JsxNoUndef,
     JsxUsesVars,
-    NoArrayHandlers,
     NoInnerhtml,
     NoProxyApis,
     NoReactDeps,
@@ -82,7 +81,7 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 36] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
@@ -103,7 +102,6 @@ impl Rule {
         Self::JsxNoScriptUrl,
         Self::JsxNoUndef,
         Self::JsxUsesVars,
-        Self::NoArrayHandlers,
         Self::NoInnerhtml,
         Self::NoProxyApis,
         Self::NoReactDeps,
@@ -158,7 +156,6 @@ impl Rule {
             Self::JsxNoScriptUrl => ("SC8004", "v1/jsx-no-script-url", "error", false),
             Self::JsxNoUndef => ("SC8005", "v1/jsx-no-undef", "error", false),
             Self::JsxUsesVars => ("SC8006", "v1/jsx-uses-vars", "error", false),
-            Self::NoArrayHandlers => ("SC8007", "v1/no-array-handlers", "error", false),
             Self::NoInnerhtml => ("SC8008", "v1/no-innerhtml", "error", false),
             Self::NoProxyApis => ("SC8009", "v1/no-proxy-apis", "error", false),
             Self::NoReactDeps => ("SC8010", "v1/no-react-deps", "warning", false),
@@ -323,7 +320,6 @@ mod tests {
             ("SC8003", "jsx-no-duplicate-props"),
             ("SC8004", "jsx-no-script-url"),
             ("SC8005", "jsx-no-undef"),
-            ("SC8007", "no-array-handlers"),
             ("SC8008", "no-innerhtml"),
             ("SC8009", "no-proxy-apis"),
             ("SC8010", "no-react-deps"),

@@ -37,7 +37,7 @@ use crate::{
 };
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
-use typefacts::{ArrayShape, Location, RuntimeValueDomain, TupleShape};
+use typefacts::{ArrayShape, Location, RuntimeValueDomain};
 
 /// The source text a span covers, or `""` when the span is not readable.
 ///
@@ -111,25 +111,6 @@ pub(super) fn expression_array_shape(
         .and_then(|entity| entity.array_shape)
 }
 
-/// [`expression_array_shape`]'s structural twin: the tuple at exactly this
-/// span, when the demand plan asked for it there.
-///
-/// Present only when the type is *itself* a tuple, so absence is "not proven a
-/// tuple" — for a union, for a plain array, and for anything unresolved alike.
-/// The distinction matters wherever a value has to satisfy numbered members: an
-/// array has no `0` or `1` property, so it is not interchangeable with a
-/// two-slot tuple even though [`ArrayShape::Array`] covers both.
-pub(super) fn expression_tuple_shape(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> Option<TupleShape> {
-    context
-        .lookup
-        .entity_at(file.path.as_str(), span)
-        .and_then(|entity| entity.tuple_shape)
-}
-
 /// The complete runtime value domain for exactly this expression span.
 ///
 /// Unlike a binary callability fact, this preserves a union whose
@@ -145,45 +126,6 @@ pub(super) fn expression_runtime_value_domain(
         .lookup
         .entity_at(file.path.as_str(), span)
         .and_then(|entity| entity.runtime_value_domain)
-}
-
-pub(super) fn expression_symbol_is_unresolved(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> bool {
-    context
-        .lookup
-        .entity_at(file.path.as_str(), span)
-        .is_some_and(|entity| entity.symbol_unresolved)
-}
-
-/// Whether this exact reference names an import whose relative module is not
-/// part of the analyzed project. The import binding itself still has a local
-/// symbol, so `symbol_unresolved` alone cannot detect TS2307 at the declaration.
-pub(super) fn expression_import_is_unresolved(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> bool {
-    let Some(symbol) = context.lookup.entities().at(file.path.as_str(), span) else {
-        return false;
-    };
-    file.ast.imports.iter().any(|import| {
-        import.bindings.iter().any(|binding| {
-            context
-                .lookup
-                .entities()
-                .at(file.path.as_str(), binding.local.span)
-                == Some(symbol)
-        }) && import.module.starts_with('.')
-            && solid_facts::resolve_relative_module_path(
-                file.path.as_str(),
-                import.module.as_str(),
-                context.lookup.files().iter().map(|file| file.path.as_str()),
-            )
-            .is_none()
-    })
 }
 
 // --- helpers shared by the rule modules ------------------------------------

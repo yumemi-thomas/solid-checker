@@ -87,6 +87,10 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "no-implicit-draggable",
         "removed 2026-08-20: the remaining claim was generic HTML draggable-state validation, outside the checker domain",
     ),
+    (
+        "v1/no-array-handlers",
+        "removed 2026-08-20: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove that a matched pair is defective",
+    ),
 ];
 
 /// Former external rule identities that canonicalize onto a current rule.
@@ -123,7 +127,6 @@ pub fn rule_alias(name: &str) -> Option<&'static str> {
 pub struct SemanticDemandCapabilities {
     pub jsx_member_root_symbols: bool,
     pub jsx_static_value_types: bool,
-    pub jsx_handler_array_shapes: bool,
     pub array_map_receiver_types: bool,
     pub server_argument_library_types: bool,
 }
@@ -132,7 +135,6 @@ impl SemanticDemandCapabilities {
     pub const NONE: Self = Self {
         jsx_member_root_symbols: false,
         jsx_static_value_types: false,
-        jsx_handler_array_shapes: false,
         array_map_receiver_types: false,
         server_argument_library_types: false,
     };
@@ -142,7 +144,6 @@ impl SemanticDemandCapabilities {
     const SOLID_2: Self = Self {
         jsx_member_root_symbols: false,
         jsx_static_value_types: false,
-        jsx_handler_array_shapes: false,
         array_map_receiver_types: false,
         server_argument_library_types: true,
     };
@@ -150,7 +151,6 @@ impl SemanticDemandCapabilities {
     const SOLID_1: Self = Self {
         jsx_member_root_symbols: true,
         jsx_static_value_types: true,
-        jsx_handler_array_shapes: true,
         array_map_receiver_types: true,
         server_argument_library_types: false,
     };

@@ -25,7 +25,6 @@
     { "code": "SC8004", "name": "v1/jsx-no-script-url", "severity": "error", "uncertifiable": false },
     { "code": "SC8005", "name": "v1/jsx-no-undef", "severity": "error", "uncertifiable": false },
     { "code": "SC8006", "name": "v1/jsx-uses-vars", "severity": "error", "uncertifiable": false },
-    { "code": "SC8007", "name": "v1/no-array-handlers", "severity": "error", "uncertifiable": false },
     { "code": "SC8008", "name": "v1/no-innerhtml", "severity": "error", "uncertifiable": false },
     { "code": "SC8009", "name": "v1/no-proxy-apis", "severity": "error", "uncertifiable": false },
     { "code": "SC8010", "name": "v1/no-react-deps", "severity": "warning", "uncertifiable": false },

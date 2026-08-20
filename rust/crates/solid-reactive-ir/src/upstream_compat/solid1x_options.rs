@@ -299,7 +299,7 @@ mod tests {
                 | "v1/style-prop"
                 | "v1/no-unknown-namespaces"
                 | "v1/no-destructure"
-                | "v1/no-array-handlers"
+                | "v1/no-direct-mutation"
                 | "no-owner-cleanup"
                 | "no-owner-settled-cleanup"
                 | "strict-read-untracked"
@@ -397,7 +397,7 @@ mod tests {
             r#"{
               "schemaVersion": 1,
               "rules": {
-                "v1/no-array-handlers": { "enabled": false },
+                "v1/no-direct-mutation": { "enabled": false },
                 "v1/no-innerhtml": { "enabled": false, "allowStatic": false },
                 "no-owner-cleanup": { "enabled": false },
                 "strict-read-untracked": { "enabled": true }
@@ -407,7 +407,7 @@ mod tests {
             solid1x_rule,
         )
         .unwrap();
-        assert!(!options.is_enabled("v1/no-array-handlers"));
+        assert!(!options.is_enabled("v1/no-direct-mutation"));
         assert!(!options.is_enabled("v1/no-innerhtml"));
         assert!(options.is_enabled("strict-read-untracked"));
         assert!(options.is_enabled("v1/no-destructure"));

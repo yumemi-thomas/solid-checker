@@ -36,7 +36,6 @@ fn plan_file(
     let mut runtime_value_domain_spans = HashSet::new();
     let mut constant_value_spans = HashSet::new();
     let mut array_shape_spans = HashSet::new();
-    let mut tuple_shape_spans = HashSet::new();
     let mut library_type_spans = HashSet::new();
     let mut async_symbol_spans = HashSet::new();
     let mut async_value_spans = Vec::new();
@@ -176,8 +175,8 @@ fn plan_file(
             }
             // A native event-handler value is judged by its resolved type:
             // `expected-function-got-expression` (both catalogs) proves the
-            // value non-callable, `event-handlers` and `no-array-handlers`
-            // (1.x) prove it statically string/number or array-shaped. The
+            // value non-callable and `event-handlers` (1.x) proves it
+            // statically string/number. The
             // `on:` namespace form is a handler too.
             let handler = native
                 && ((attribute.namespace.is_none() && name.starts_with("on"))
@@ -223,36 +222,6 @@ fn plan_file(
             }
             if static_value_type_required {
                 constant_value_spans.insert(expression);
-            }
-            // `no-array-handlers` (1.x) asks whether the handler value is an
-            // array or tuple. That is `arrayShape`, not the rendered type: an
-            // aliased tuple renders as its alias, and a trailing `[]` reads the
-            // same on an array of functions and on a function returning an
-            // array. The span already carries a demand, so this adds a field to
-            // an existing entity rather than a new entity that could outrank
-            // another rule's `smallest_contained_*` lookup.
-            if handler && dialect.semantic_demands.jsx_handler_array_shapes {
-                array_shape_spans.insert(expression);
-                runtime_value_domain_spans.insert(expression);
-                // Solid's handler prop accepts a `[handler, data]` pair through
-                // an interface with members `0` and `1`. Deciding whether a
-                // value satisfies *that* needs the slot count and the first
-                // slot's callability, which `arrayShape` collapses: it reports
-                // `array` for a plain array too, and a plain array has no
-                // numbered members, so TypeScript already rejects it.
-                tuple_shape_spans.insert(expression);
-                // Assertions and `satisfies` change the apparent type without
-                // changing the runtime value. Demand the peeled expression as
-                // a separate subject so the rule can distinguish an asserted
-                // array from an asserted function instead of treating the
-                // wrapper as a safety proof.
-                let runtime_expression = file.ast.peel_ts_sugar_span(expression);
-                if runtime_expression != expression {
-                    add_symbol(runtime_expression, false);
-                    array_shape_spans.insert(runtime_expression);
-                    tuple_shape_spans.insert(runtime_expression);
-                    runtime_value_domain_spans.insert(runtime_expression);
-                }
             }
             // A non-literal `keyed` value on a control-flow component picks
             // the children-callback overload at runtime; source discovery
@@ -536,7 +505,7 @@ fn plan_file(
         planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
         planned.constant_value = constant_value_spans.contains(&span);
         planned.array_shape = array_shape_spans.contains(&span);
-        planned.tuple_shape = tuple_shape_spans.contains(&span);
+        planned.tuple_shape = false;
         planned.library_types = library_type_spans.contains(&span);
         planned.reference_space = file.ast.imports.iter().any(|import| {
             import

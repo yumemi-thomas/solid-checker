@@ -773,136 +773,136 @@
     },
     {
       "upstreamCase": "no-array-handlers__invalid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__invalid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__invalid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__invalid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__invalid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__invalid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__invalid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__invalid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__00",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__01",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__02",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__03",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__04",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__05",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__06",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__07",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__08",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__09",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-array-handlers__valid__10",
-      "disposition": "pending",
-      "movedIn": null,
+      "disposition": "dropped",
+      "movedIn": "step-9",
       "ownershipCaseId": null,
-      "reason": null
+      "reason": "The v1/no-array-handlers rule was removed: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove a matched pair is defective."
     },
     {
       "upstreamCase": "no-destructure__invalid__00",

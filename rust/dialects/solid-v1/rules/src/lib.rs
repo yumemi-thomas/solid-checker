@@ -191,10 +191,6 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::JsxNoDuplicateProps => "the same JSX property is assigned more than once",
         Rule::JsxNoScriptUrl => "the statically resolved URL uses the javascript: scheme",
         Rule::JsxNoUndef => "the JSX name has no value-space binding in lexical scope",
-        Rule::NoArrayHandlers if violation.uncertain => {
-            "the native event attribute's value may be a plain function or a bound-handler array"
-        }
-        Rule::NoArrayHandlers => "the native event attribute receives an array-valued handler",
         Rule::NoInnerhtml => "the JSX attribute writes markup through an HTML injection sink",
         Rule::NoProxyApis => "the import or call requires Proxy-backed Solid APIs",
         Rule::NoReactDeps => "a Solid reactive primitive received a React-style dependency array",

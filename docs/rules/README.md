@@ -37,10 +37,9 @@ the same defect does not change severity merely because a project migrates
 dialects. The warning is compatibility policy, not lower certainty.
 
 For the eslint-plugin-solid 0.14.5 surface, every rule enabled by upstream's
-base policy keeps that policy's severity. Four rules that upstream ships off
-are deliberately available and enabled here: `v1/no-array-handlers` and
-`v1/no-proxy-apis` are **errors** because they enforce, respectively, a
-type-safe event boundary and a target-runtime compatibility constraint;
+base policy keeps that policy's severity. Three rules that upstream ships off
+are deliberately available and enabled here: `v1/no-proxy-apis` is an
+**error** because it enforces a target-runtime compatibility constraint;
 `v1/prefer-classlist` and `v1/prefer-show` are **warnings** because they are
 stylistic preferences. Projects that accept one of those tradeoffs can disable
 that exact rule in the shared project configuration described below.
@@ -48,8 +47,8 @@ that exact rule in the shared project configuration described below.
 | Category | Solid 1.x catalog | Solid 2.0 catalog |
 | --- | --- | --- |
 | Shared concepts (20 rules) | `v1/` names and 1.x fixes (`Suspense`, `onMount`, single-function effects) | Unprefixed names and 2.0 fixes (`Loading`, `onSettled`, split effects) |
-| Version-only concepts | 17 rules: `v1/no-async-tracked-scope` plus the SC8001–SC8017 ESLint-era surface | 15 rules: actions, `flush`, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
-| Catalog size | 37 rules | 35 rules |
+| Version-only concepts | 16 rules: `v1/no-async-tracked-scope` plus the retained SC8001–SC8017 ESLint-era surface | 15 rules: actions, `flush`, `resolve`, the 2.0-only leaf/directive restrictions, async computations and their SSR hydration options, the server surface (HTTP response head, server functions), and their proof obligations |
+| Catalog size | 36 rules | 35 rules |
 
 The analyzer beneath these catalogs is mostly shared. Version-specific
 primitive names, callback behavior, owners, and boundaries come from the

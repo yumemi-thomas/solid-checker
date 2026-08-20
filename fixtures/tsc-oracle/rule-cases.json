@@ -227,48 +227,6 @@
       "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\ncreateEffect(\n  async () => {\n    await Promise.resolve();\n    return count();\n  },\n  () => {},\n);\n"
     },
     {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "SC8007 is independent, and this is the case that shows the JSX family is not uniformly redundant: `EventHandlerUnion` includes `BoundEventHandler`, so the `[handler, data]` tuple is *legal* per Solid's own types. The claim is that the bound form defeats handler identity comparison, which no type expresses.",
-      "code": "const handler = (data: number, event: MouseEvent) => {};\nexport const Case = () => <button onClick={[handler, 1]} />;\n"
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "why": "A value that may be either a legal bound-handler tuple or a plain function is accepted by Solid's real 1.x typings. Neither a violation nor safety holds for every runtime value, so the checker must retain the ambiguity explicitly.",
-      "code": "type Pair = [(data: number, event: MouseEvent) => void, number];\ndeclare const handler: Pair | ((event: MouseEvent) => void);\nexport const Case = () => <button onClick={handler} />;\n"
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "why": "An optional bound-handler tuple has a common tuple shape, but undefined is also a real runtime outcome. Presence is therefore an obligation rather than a proven array defect.",
-      "code": "type Pair = [(data: number, event: MouseEvent) => void, number];\ndeclare const handler: Pair | undefined;\nexport const Case = () => <button onClick={handler} />;\n"
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "A TypeScript assertion can make the attribute acceptable but cannot change the array passed to Solid. The runtime value is a proven array, so this remains a checker-owned violation.",
-      "code": "const handler = (event: MouseEvent) => {};\nexport const Case = () => <button onClick={([handler, 1] as unknown as (event: MouseEvent) => void)} />;\n"
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "silent",
-      "why": "Peeling a TypeScript assertion around an actual function must preserve the proven-safe runtime shape and must not turn every asserted handler into an obligation.",
-      "code": "const handler = (event: MouseEvent) => {};\nexport const Case = () => <button onClick={(handler as unknown as (event: MouseEvent) => void)} />;\n"
-    },
-    {
       "rule": "v1/no-innerhtml",
       "dialect": "v1",
       "expect": "silent",

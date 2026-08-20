@@ -2,106 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/fail-closed-cases.tsx",
-      "start": 565,
-      "end": 592,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/fail-closed-cases.tsx",
-      "start": 857,
-      "end": 871,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/fail-closed-cases.tsx",
-      "start": 1647,
-      "end": 1664,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
-      "start": 2843,
-      "end": 2860,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
-      "start": 2878,
-      "end": 2894,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
-      "start": 2912,
-      "end": 2936,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
-      "start": 2954,
-      "end": 2970,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
-      "start": 2988,
-      "end": 3044,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
-      "start": 3062,
-      "end": 3082,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/handler-cases.tsx",
-      "start": 3100,
-      "end": 3118,
-      "fixes": 0
-    },
-    {
       "rule": "v1/prefer-for",
       "code": "SC8014",
       "kind": "violation",
@@ -139,26 +39,6 @@
       "path": "fixtures/reactive-ir/array-shape-v1/map-receiver-cases.tsx",
       "start": 1439,
       "end": 1492,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/uncertain-cases.tsx",
-      "start": 492,
-      "end": 516,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "code": "SC8007",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/array-shape-v1/uncertain-cases.tsx",
-      "start": 621,
-      "end": 687,
       "fixes": 0
     }
   ]

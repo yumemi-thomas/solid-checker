@@ -1,5 +1,5 @@
 //! `v1/no-innerhtml`, `v1/no-react-specific-props`, `v1/style-prop`,
-//! `v1/event-handlers`, `v1/no-array-handlers`, `v1/prefer-classlist` —
+//! `v1/event-handlers`, `v1/prefer-classlist` —
 //! eslint-plugin-solid's attribute-value rules, ported from the 1.x reactive
 //! solver's `solid_1_rules.rs` onto this checker's fact tables.
 //!
@@ -29,15 +29,12 @@ use std::collections::HashSet;
 
 use solid_facts::FileFacts;
 use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
-use solid_facts::core::Span;
 
 use super::{
-    UpstreamCompatContext, binding_initializer, fix_replace, is_lowercase_led,
-    jsx_name_is_type_checked, literal_string_type, static_string, static_string_expression, text,
-    violation,
+    UpstreamCompatContext, fix_replace, is_lowercase_led, jsx_name_is_type_checked,
+    literal_string_type, static_string, static_string_expression, text, violation,
 };
 use crate::StaticViolation;
-use typefacts::ArrayShape;
 
 pub(super) fn check_file(
     file: &FileFacts,
@@ -49,7 +46,6 @@ pub(super) fn check_file(
         no_react_specific_props(file, element, violations);
         style_prop(file, context, element, violations);
         event_handlers(file, context, element, violations);
-        no_array_handlers(file, context, element, violations);
         prefer_classlist(file, context, element, violations);
     }
 }
@@ -823,210 +819,6 @@ fn event_handlers(
     }
 }
 
-/// `v1/no-array-handlers` (SC8007) — an array literal passed where an event
-/// handler is expected. Solid's handler prop accepts a `[handler, data]`
-/// tuple as a type-unsafe shorthand for binding extra data; passing a plain
-/// array where a function was meant compiles but silently does nothing.
-///
-/// The `on:` namespace arm was removed on 2026-08-18 under AGENTS.md's absolute
-/// rule. `onXxx` is typed `EventHandlerUnion = EHandler | BoundEventHandler`,
-/// and `BoundEventHandler` is an interface with members `0` and `1`, so a
-/// `[handler, data]` tuple is legal per solid-js@1.9.14's own types and only
-/// this rule can speak about it. `on:xxx` is typed
-/// `EventHandlerWithOptionsUnion = EHandler | EventHandlerWithOptions`, which
-/// has **no** bound form at all — so every array and every tuple there is
-/// already TS2322, and reporting it again duplicated the type checker.
-/// Confirmed with `node scripts/tsc-oracle.mjs check --dialect v1` against the
-/// real typings, in both the strict and non-strict passes.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ArrayHandlerStatus {
-    Safe,
-    Violation,
-    Uncertain,
-}
-
-fn no_array_handlers(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    element: &JsxElementFact,
-    violations: &mut Vec<StaticViolation>,
-) {
-    if !is_lowercase_led(text(file, element.name.span)) {
-        return; // bail if this is not a DOM/SVG element or web component
-    }
-    for attribute in &element.attributes {
-        let name = text(file, attribute.name);
-        // Any namespaced attribute is out, not just `on:`. `attr:`/`prop:` were
-        // never handlers, and `on:` is TypeScript's — see the note above.
-        let handler = attribute.namespace.is_none()
-            && name.starts_with("on")
-            && name.as_bytes().get(2).is_some_and(u8::is_ascii_alphabetic);
-        if !handler {
-            continue;
-        }
-        let status = attribute
-            .expression
-            .map_or(ArrayHandlerStatus::Safe, |span| {
-                let runtime_span = file.ast.peel_ts_sugar_span(span);
-                if attribute.runtime_type_escape && runtime_span != span {
-                    // Assertions and non-null assertions can make an invalid
-                    // handler type-check without changing the value Solid sees.
-                    // Judge that runtime value, never the asserted outer type.
-                    return match super::expression_array_shape(context, file, runtime_span) {
-                        Some(ArrayShape::Array) => ArrayHandlerStatus::Violation,
-                        Some(ArrayShape::NotArray) => ArrayHandlerStatus::Safe,
-                        Some(ArrayShape::Mixed | ArrayShape::Unknown) | None
-                            if super::expression_symbol_is_unresolved(
-                                context,
-                                file,
-                                runtime_span,
-                            ) || super::expression_import_is_unresolved(
-                                context,
-                                file,
-                                runtime_span,
-                            ) =>
-                        {
-                            // The unresolved symbol is already TypeScript's
-                            // diagnostic. Its absence proves no runtime shape.
-                            ArrayHandlerStatus::Safe
-                        }
-                        Some(ArrayShape::Mixed | ArrayShape::Unknown) | None => {
-                            ArrayHandlerStatus::Uncertain
-                        }
-                    };
-                }
-                // `BoundEventHandler` is `{ 0: (data, ...event) => void; 1: any }`,
-                // so TypeScript accepts a value here only when it has both numbered
-                // members and the first is callable. That set — and nothing wider —
-                // is what this rule owns, and `tupleShape` is what decides it: an
-                // alias, a binding in another file, and an inline literal all reduce
-                // to the same slot count and first-slot callability.
-                if let Some(tuple) = super::expression_tuple_shape(context, file, span) {
-                    // Slot 0 is typed `(data: any, ...e: Parameters<EHandler>) => void`
-                    // and `EventHandler` takes one parameter, so Solid calls it with
-                    // exactly two arguments. A handler requiring three is not
-                    // assignable and is TS2322 — callable, but not callable *here*.
-                    if !(tuple.has_slot(0) && tuple.has_slot(1) && tuple.element_zero_accepts(2)) {
-                        return ArrayHandlerStatus::Safe;
-                    }
-                    // A tuple type alone does not prove presence when
-                    // strictNullChecks is disabled: TypeScript erases an explicit
-                    // `| undefined` before the runtime-domain fact is computed.
-                    // The analyzer does not currently receive that compiler
-                    // option, so reserve violations for an array value whose
-                    // runtime origin is structural and local. Type-only tuple
-                    // evidence remains visible as an obligation.
-                    return if runtime_array_origin_is_proven(context, file, span) {
-                        ArrayHandlerStatus::Violation
-                    } else {
-                        ArrayHandlerStatus::Uncertain
-                    };
-                }
-                let source = text(file, span).trim();
-                if looks_like_array_literal(source) {
-                    // Written here as an array literal, and yet the checker gave it
-                    // no fixed slots. Contextual typing is what creates those, so
-                    // its absence means no `[handler, data]`-shaped type applies at
-                    // this attribute — the ambient JSX typings are not checking it,
-                    // and where TypeScript declines to look this rule is the only
-                    // thing that can speak. Under Solid's real typings a literal in
-                    // a handler position always arrives here as a tuple, so this
-                    // branch never competes with a diagnostic.
-                    return ArrayHandlerStatus::Violation;
-                }
-                // A resolved shape that is not a tuple. A plain array has no `0`/`1`
-                // members and is already TS2322, and a proven non-array was never a
-                // handler pair; either way the rule stays out of it. `Mixed` and
-                // `Unknown` prove neither, so they fall through with absence.
-                let array_shape = super::expression_array_shape(context, file, span);
-                if matches!(array_shape, Some(ArrayShape::Array | ArrayShape::NotArray)) {
-                    return ArrayHandlerStatus::Safe;
-                }
-                if binding_initializer(context, file, span).is_some_and(|(_, _, initializer, _)| {
-                    looks_like_array_literal(initializer.trim_start())
-                }) {
-                    return ArrayHandlerStatus::Violation;
-                }
-                if super::expression_symbol_is_unresolved(context, file, span)
-                    || super::expression_import_is_unresolved(context, file, span)
-                {
-                    return ArrayHandlerStatus::Safe;
-                }
-                if array_shape == Some(ArrayShape::Unknown) {
-                    return ArrayHandlerStatus::Uncertain;
-                }
-                match super::expression_runtime_value_domain(context, file, span) {
-                    Some(domain)
-                        if domain.may_be_callable && !domain.may_be_other && !domain.unknown =>
-                    {
-                        ArrayHandlerStatus::Safe
-                    }
-                    Some(domain)
-                        if domain.may_be_callable
-                            && (domain.may_be_other
-                                || domain.may_be_undefined
-                                || domain.unknown) =>
-                    {
-                        ArrayHandlerStatus::Uncertain
-                    }
-                    Some(domain) if domain.unknown => ArrayHandlerStatus::Uncertain,
-                    Some(_) => ArrayHandlerStatus::Safe,
-                    None => ArrayHandlerStatus::Uncertain,
-                }
-            });
-        if status != ArrayHandlerStatus::Safe {
-            let uncertain = status == ArrayHandlerStatus::Uncertain;
-            let mut finding = violation(
-                file,
-                "SC8007",
-                "no-array-handlers",
-                if uncertain {
-                    "The event handler may be either a plain function or a bound-handler array, so its runtime behavior cannot be certified."
-                } else {
-                    "Passing an array as an event handler is potentially type-unsafe."
-                },
-                if uncertain {
-                    "Narrow the value to a plain function before passing it, or make the [handler, data] pair explicit so the checker can prove which runtime path Solid will take."
-                } else {
-                    "Use a plain function, or wrap the [handler, data] pair so its first element is unmistakably callable; an array typed as unknown[] compiles but does not check that its first element is callable."
-                },
-                attribute.span,
-                vec![],
-            );
-            finding.uncertain = uncertain;
-            if uncertain {
-                finding.analysis_context = "array-handler-shape-uncertain".into();
-            }
-            violations.push(finding);
-        }
-    }
-}
-
-fn looks_like_array_literal(source: &str) -> bool {
-    source.starts_with('[')
-}
-
-fn runtime_array_origin_is_proven(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> bool {
-    let runtime = file.ast.peel_ts_sugar_span(span);
-    if looks_like_array_literal(text(file, runtime).trim_start()) {
-        return true;
-    }
-    context
-        .lookup
-        .binding_at_reference(file.path.as_str(), runtime)
-        .is_some_and(|(binding_file, binding, _)| {
-            binding.immutable
-                && binding.initializer.is_some_and(|initializer| {
-                    let initializer = binding_file.ast.peel_ts_sugar_span(initializer);
-                    looks_like_array_literal(text(binding_file, initializer).trim_start())
-                })
-        })
-}
-
 /// `v1/prefer-classlist` (SC8013) — a `class`/`className` prop set from a
 /// `classnames`-shaped helper call (`cn`, `clsx`, `classnames`) applied to an
 /// object literal. Solid's `classlist` prop accepts that exact `{ [name]:
@@ -1120,8 +912,7 @@ fn prefer_classlist(
 mod tests {
     use super::super::strip_string_literal;
     use super::{
-        event_name, is_lowercase_led, looks_like_array_literal, missing_unit,
-        style_string_object_fix, to_kebab_case,
+        event_name, is_lowercase_led, missing_unit, style_string_object_fix, to_kebab_case,
     };
 
     #[test]
@@ -1155,13 +946,6 @@ mod tests {
         assert_eq!(strip_string_literal("\"hello\""), Some("hello".to_string()));
         assert_eq!(strip_string_literal("{ 'hi' }"), Some("hi".to_string()));
         assert_eq!(strip_string_literal("notAString"), None);
-    }
-
-    #[test]
-    fn recognizes_array_literal_prefixes() {
-        assert!(looks_like_array_literal("[handler, data]"));
-        assert!(!looks_like_array_literal("handler"));
-        assert!(!looks_like_array_literal("(a, b)"));
     }
 
     #[test]

@@ -853,25 +853,12 @@
       "presets": [],
       "enableRules": [],
       "expect": {
-        "findings": [
+        "findings": [],
+        "absent": [
           {
-            "rule": "v1/no-array-handlers",
-            "code": "SC8007",
-            "kind": "violation",
-            "severity": "error",
-            "span": {
-              "marker": "onClick={[handler, 1]}"
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "checker-only",
-              "diagnostics": []
-            }
+            "rule": "v1/no-array-handlers"
           }
-        ],
-        "absent": []
+        ]
       }
     },
     {
@@ -8525,36 +8512,6 @@
       "expect": {
         "findings": [
           {
-            "rule": "v1/no-array-handlers",
-            "code": "SC8007",
-            "kind": "uncertifiable",
-            "severity": "error",
-            "span": {
-              "textRange": [
-                56,
-                79
-              ]
-            },
-            "fix": {
-              "behavior": "none"
-            },
-            "typescript": {
-              "ownership": "distinct-claim",
-              "diagnostics": [
-                {
-                  "code": "TS7006",
-                  "span": {
-                    "textRange": [
-                      25,
-                      30
-                    ]
-                  }
-                }
-              ],
-              "justification": "The checker rule v1/no-array-handlers asserts a Solid runtime semantic outcome; the overlapping TS7006 diagnostic concerns the source's type-level shape rather than that runtime outcome."
-            }
-          },
-          {
             "rule": "v1/strict-read-untracked",
             "code": "SC1001",
             "kind": "uncertifiable",
@@ -8612,7 +8569,11 @@
             }
           }
         ],
-        "absent": []
+        "absent": [
+          {
+            "rule": "v1/no-array-handlers"
+          }
+        ]
       }
     },
     {
