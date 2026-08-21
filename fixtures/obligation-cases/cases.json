@@ -1,0 +1,141 @@
+{
+  "about": [
+    "Every uncertifiable finding is a falsifiable claim: it says the evidence that would",
+    "settle the question is not here. A case states the obligation, then either the ways it",
+    "can be discharged -- the evidence, and what the checker must say once it is present --",
+    "or a written reason why no evidence can. scripts/obligation-audit.mjs enforces both.",
+    "",
+    "Snippets run against the audited published typings, not fixture stubs, for the reason",
+    "AGENTS.md gives: an obligation that only exists against a loosened stub is not an",
+    "obligation."
+  ],
+  "cases": [
+    {
+      "rule": "strict-read-untracked",
+      "dialect": "v2",
+      "why": "Whether props.title is a reactive getter or a plain property is decided by the component's callers, and an exported component may be rendered by code this build cannot see.",
+      "obligation": "export function Card(props: { title: string }) {\n  const title = props.title;\n  return <h1>{title}</h1>;\n}\n",
+      "closes": [
+        {
+          "evidence": "a visible caller passes a signal, and no unseen caller can unwrite that call site",
+          "expect": "violation",
+          "code": "import { createSignal } from \"solid-js\";\nexport function Card(props: { title: string }) {\n  const title = props.title;\n  return <h1>{title}</h1>;\n}\nexport function Host() {\n  const [t] = createSignal(\"x\");\n  return <Card title={t()} />;\n}\n"
+        },
+        {
+          "evidence": "the caller set is complete because the component is local, and every caller passes a static value",
+          "expect": "silent",
+          "code": "function Card(props: { title: string }) {\n  const title = props.title;\n  return <h1>{title}</h1>;\n}\nexport function Host() {\n  return <Card title=\"fixed\" />;\n}\n"
+        },
+        {
+          "evidence": "the user asserts the analyzed files are the whole program, so the export reaches no unseen caller",
+          "expect": "silent",
+          "args": [
+            "--program-boundary",
+            "closed"
+          ],
+          "code": "export function Card(props: { title: string }) {\n  const title = props.title;\n  return <h1>{title}</h1>;\n}\nexport function Host() {\n  return <Card title=\"fixed\" />;\n}\n"
+        }
+      ]
+    },
+    {
+      "rule": "no-destructure",
+      "dialect": "v2",
+      "why": "Destructuring props unwraps each property once, which is a defect only if the property is reactive -- and that is the caller's fact.",
+      "obligation": "export function Card({ title }: { title: string }) {\n  return <h1>{title}</h1>;\n}\n",
+      "closes": [
+        {
+          "evidence": "a visible caller passes a signal",
+          "expect": "violation",
+          "code": "import { createSignal } from \"solid-js\";\nexport function Card({ title }: { title: string }) {\n  return <h1>{title}</h1>;\n}\nexport function Host() {\n  const [t] = createSignal(\"x\");\n  return <Card title={t()} />;\n}\n"
+        }
+      ]
+    },
+    {
+      "rule": "missing-owner",
+      "dialect": "v2",
+      "why": "An exported helper that creates an effect may be called with or without an owner, and its callers cannot be enumerated.",
+      "obligation": "import { createEffect, createRoot, createSignal } from \"solid-js\";\nexport function setup() {\n  const [n] = createSignal(0);\n  createEffect(() => n(), (v) => void v);\n}\ncreateRoot(() => { setup(); });\n",
+      "closes": [
+        {
+          "evidence": "the helper is local, so its sole call site inside createRoot is the whole caller set",
+          "expect": "silent",
+          "code": "import { createEffect, createRoot, createSignal } from \"solid-js\";\nfunction setup() {\n  const [n] = createSignal(0);\n  createEffect(() => n(), (v) => void v);\n}\ncreateRoot(() => { setup(); });\n"
+        },
+        {
+          "evidence": "the user asserts a closed program, so the enumerated call sites decide the owner",
+          "expect": "silent",
+          "args": [
+            "--program-boundary",
+            "closed"
+          ],
+          "code": "import { createEffect, createRoot, createSignal } from \"solid-js\";\nexport function setup() {\n  const [n] = createSignal(0);\n  createEffect(() => n(), (v) => void v);\n}\ncreateRoot(() => { setup(); });\n"
+        },
+        {
+          "evidence": "the sole call site is at module scope, where no owner can be live",
+          "expect": "violation",
+          "code": "import { createEffect, createSignal } from \"solid-js\";\nfunction setup() {\n  const [n] = createSignal(0);\n  createEffect(() => n(), (v) => void v);\n}\nsetup();\n"
+        }
+      ]
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "why": "A getter's body runs on access, so no value written in the literal proves what the property yields; the graph cannot be certified JSON-safe.",
+      "obligation": "type Payload = { title: string; when: Date };\nexport async function save(payload: Payload) {\n  \"use server\";\n  return payload.title;\n}\nconst boxed: Payload = { title: \"hello\", get when() { return new Date(); } };\nvoid save(boxed);\n",
+      "closes": [
+        {
+          "evidence": "the property is a plain data property holding a Date, so JSON.stringify provably flattens it",
+          "expect": "violation",
+          "code": "type Payload = { title: string; when: Date };\nexport async function save(payload: Payload) {\n  \"use server\";\n  return payload.title;\n}\nconst boxed: Payload = { title: \"hello\", when: new Date() };\nvoid save(boxed);\n"
+        },
+        {
+          "evidence": "every property is a data property with a JSON-safe leaf, in a literal closed against spreads and computed keys",
+          "expect": "silent",
+          "code": "type Payload = { title: string };\nexport async function save(payload: Payload) {\n  \"use server\";\n  return payload.title;\n}\nconst plain: Payload = { title: \"hello\" };\nvoid save(plain);\n"
+        }
+      ]
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "why": "A broad `number` may be NaN or Infinity, and JSON cannot carry either faithfully.",
+      "obligation": "declare const value: number;\nexport async function save(input: number) {\n  \"use server\";\n  return input;\n}\nvoid save(value);\n",
+      "irreducible": "No source fact narrows a declared `number` to the finite subset. A finite *literal* is a different value with its own constant fact, and the compiler's numeric domain is already consulted: an all-finite-constituents guarantee certifies, and its absence is the obligation. Nothing else about the program can decide it.",
+      "closes": [
+        {
+          "evidence": "the declared domain is a finite literal union, so every inhabitant is JSON-safe",
+          "expect": "silent",
+          "code": "type Finite = 0 | 1.5;\ndeclare const value: Finite;\nexport async function save(input: Finite) {\n  \"use server\";\n  return input;\n}\nvoid save(value);\n"
+        }
+      ]
+    },
+    {
+      "rule": "strict-read-untracked",
+      "dialect": "v1",
+      "why": "Solid 1.x does not treat a direct JSX return as component identity: an exported function returning JSX may instead be used as a tracked render callback, whose body *is* a tracking scope. Until a caller settles which, the read's execution model is unknown.",
+      "obligation": "import { createSignal } from \"solid-js\";\nexport function Panel() {\n  const [count] = createSignal(0);\n  const value = count();\n  return <div>{value}</div>;\n}\n",
+      "closes": [
+        {
+          "evidence": "an exact JSX call site proves the function is rendered as a component, so its body runs once and untracked",
+          "expect": "violation",
+          "code": "import { createSignal } from \"solid-js\";\nfunction Panel() {\n  const [count] = createSignal(0);\n  const value = count();\n  return <div>{value}</div>;\n}\nexport function Host() {\n  return <div><Panel /></div>;\n}\n"
+        }
+      ]
+    },
+    {
+      "rule": "http-response-after-flush",
+      "dialect": "v2",
+      "args": [
+        "--rendering",
+        "streaming-ssr",
+        "--runtime-target",
+        "node"
+      ],
+      "why": "Both primitives gate the write on !response.committed, and createSSRResponse commits at the shell flush. Content below a Loading boundary may settle on either side of that flush.",
+      "obligation": "import { Loading, createMemo } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nconst product = createMemo(async () => fetchProduct());\nfunction Details() {\n  httpStatus(410);\n  return <div>{product().name}</div>;\n}\nexport function Page() {\n  return <Loading fallback={<div />}><Details /></Loading>;\n}\ndeclare function fetchProduct(): Promise<{ name: string }>;\n",
+      "irreducible": "Whether the boundary settles before or after the shell flush is decided per request, by how long the awaited work takes. It is not a property of the program, so no fact about the source can decide it. Selecting a client-only rendering mode removes the subject entirely rather than deciding the timing, and that is a different case."
+    }
+  ]
+}

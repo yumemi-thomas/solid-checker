@@ -46,9 +46,18 @@ node --test scripts/tsc-oracle.test.mjs
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
 
+# The other half: an *unreported* finding is a claim too. This supplies the
+# evidence each obligation says is missing and asks whether the answer changes,
+# so an over-conservatism cannot pass as a missing fact. It shares the oracle's
+# provisioned installs for the same reason -- a loosened stub would invent the
+# obligation it is meant to test.
+SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/obligation-audit.mjs
+
 sh -n scripts/*.sh
 jq empty schema/*.json
 jq empty fixtures/tsc-oracle/*.json
+jq empty fixtures/obligation-cases/*.json
 find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
 node scripts/dialect-manifests.mjs validate
 node scripts/check-bundled-contracts.mjs

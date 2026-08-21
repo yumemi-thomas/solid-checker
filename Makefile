@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate clean
+.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean
 
 build: build-rust
 
@@ -50,6 +50,14 @@ tsc-oracle-provision:
 tsc-oracle: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
+
+# The other half of the precision contract. The oracle holds a *reported*
+# finding to being this checker's claim; this holds an *unreported* one to
+# being a missing fact rather than an over-conservatism, by supplying the
+# evidence and asking what changed.
+obligation-audit: tsc-oracle-provision build-checker-debug
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/obligation-audit.mjs
 
 # Compatibility target. Product ownership moved to ownership-gate after every
 # retained upstream case was migrated into the product-owned manifest.
