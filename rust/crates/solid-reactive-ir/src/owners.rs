@@ -2487,7 +2487,25 @@ pub(crate) fn returned_arrow_function(ast: &solid_facts::ast::AstFacts, span: Sp
         .is_some_and(|function| function.kind == solid_facts::ast::FunctionKind::Arrow)
 }
 
-pub(crate) fn inside_effect_apply(
+/// Whether a reactive read at `span` happens outside the synchronous extent
+/// of the function that lexically contains it — so calling that function does
+/// not perform the read, and the read must not enter its caller-visible
+/// summary.
+///
+/// The dialect's callback vocabulary answers this exactly, and the three
+/// executions divide cleanly. [`solid_dialect::Execution::Inline`] reads
+/// "subscribe whatever was tracking at the call site", so they *are* the
+/// caller's read and stay. [`solid_dialect::Execution::Tracked`] reads
+/// subscribe the callback's own observer, and
+/// [`solid_dialect::Execution::Deferred`] reads subscribe nothing the caller
+/// owns; either way the caller performs no read, and attributing one to it
+/// invents an untracked-read violation in a function whose only read is
+/// inside a tracked or deferred callback.
+///
+/// The read must sit inside a function *literal* in that argument. An
+/// eagerly evaluated argument — `createEffect(count())` — is read while the
+/// argument list is built, which is the caller's read after all.
+pub(crate) fn read_escapes_synchronous_extent(
     file: &solid_facts::FileFacts,
     span: Span,
     entities: &EntitySymbols,
@@ -2495,6 +2513,14 @@ pub(crate) fn inside_effect_apply(
     dialect: &dyn Dialect,
 ) -> bool {
     file.ast.arguments_containing(span).any(|(call, index)| {
+        let argument = &call.arguments[index];
+        if !file
+            .ast
+            .functions_within(argument.span)
+            .any(|function| function.span.contains(span))
+        {
+            return false;
+        }
         primitive_name(
             file.path.as_str(),
             call.callee,
@@ -2507,12 +2533,11 @@ pub(crate) fn inside_effect_apply(
         .and_then(PrimitiveName::primitive)
         .is_some_and(|primitive| {
             matches!(
-                primitive,
-                Primitive::CreateEffect | Primitive::CreateRenderEffect
-            ) && dialect
-                .callback_semantics_at(primitive, index, call.arguments.len())
-                .execution
-                == Some(solid_dialect::Execution::Deferred)
+                dialect
+                    .callback_semantics_at(primitive, index, call.arguments.len())
+                    .execution,
+                Some(solid_dialect::Execution::Tracked | solid_dialect::Execution::Deferred)
+            )
         })
     })
 }

@@ -2028,9 +2028,24 @@ pub(crate) enum PropsReactivity {
         accessor_values: BTreeSet<String>,
     },
     /// The component escapes enumeration — exported, referenced outside JSX,
-    /// or spread into at a call site — so nothing about its props is provable
-    /// and every use is a proof obligation.
-    Unknown,
+    /// or spread into at a call site — so no prop can be proven *static*.
+    ///
+    /// The JSX call sites that are visible still prove what they pass, and
+    /// that direction of the proof survives the escape. "Some caller passes a
+    /// reactive expression" is monotone under adding callers: a consumer
+    /// outside the project can add a call site, never remove the one written
+    /// here, so an untracked read of a witnessed prop is a proven defect on
+    /// that path. "Every caller passes a static value" is the opposite — one
+    /// unseen caller falsifies it — which is why it needs complete
+    /// enumeration and is never concluded here.
+    ///
+    /// `reactive` holds the witnessed prop names and `accessor_values` the
+    /// names some visible call site passes a proven accessor for. Every other
+    /// prop is a proof obligation.
+    Escaping {
+        reactive: BTreeSet<String>,
+        accessor_values: BTreeSet<String>,
+    },
 }
 
 /// The per-declaration classification map, keyed by the props parameter's
@@ -2053,7 +2068,15 @@ impl PropsReactivityIndex {
             return PropUse::Reactive;
         }
         match self.by_declaration.get(declaration) {
-            None | Some(PropsReactivity::Unknown) => PropUse::Unknown,
+            None => PropUse::Unknown,
+            // Witnessed reactive survives the escape; nothing else does.
+            Some(PropsReactivity::Escaping { reactive, .. }) => {
+                if reactive.contains(name) {
+                    PropUse::Reactive
+                } else {
+                    PropUse::Unknown
+                }
+            }
             Some(PropsReactivity::Enumerated {
                 reactive,
                 unresolved,
@@ -2078,7 +2101,14 @@ impl PropsReactivityIndex {
             return PropUse::Reactive;
         }
         match self.by_declaration.get(declaration) {
-            None | Some(PropsReactivity::Unknown) => PropUse::Unknown,
+            None => PropUse::Unknown,
+            Some(PropsReactivity::Escaping { reactive, .. }) => {
+                if reactive.is_empty() {
+                    PropUse::Unknown
+                } else {
+                    PropUse::Reactive
+                }
+            }
             Some(PropsReactivity::Enumerated {
                 reactive,
                 unresolved,
@@ -2104,11 +2134,18 @@ impl PropsReactivityIndex {
             return PropUse::Unknown;
         }
         match self.by_declaration.get(declaration) {
-            Some(PropsReactivity::Enumerated {
-                accessor_values, ..
-            }) if accessor_values.contains(name) => PropUse::Reactive,
+            Some(
+                PropsReactivity::Enumerated {
+                    accessor_values, ..
+                }
+                | PropsReactivity::Escaping {
+                    accessor_values, ..
+                },
+            ) if accessor_values.contains(name) => PropUse::Reactive,
+            // Only a complete caller set can prove the value is *not* an
+            // accessor; an escaping component keeps the obligation.
             Some(PropsReactivity::Enumerated { .. }) => PropUse::Static,
-            None | Some(PropsReactivity::Unknown) => PropUse::Unknown,
+            None | Some(PropsReactivity::Escaping { .. }) => PropUse::Unknown,
         }
     }
 
@@ -2215,12 +2252,20 @@ fn classify_one_component(
     let Some(symbol) = name.and_then(|name| entities.get(&location(file.path.shared(), name.span)))
     else {
         // An anonymous component value (a HOC argument, say) has no symbol to
-        // enumerate references through.
-        return PropsReactivity::Unknown;
+        // enumerate references through, so there are no call sites to witness
+        // either way.
+        return PropsReactivity::Escaping {
+            reactive: BTreeSet::new(),
+            accessor_values: BTreeSet::new(),
+        };
     };
-    // Exported: callers outside the project can pass anything.
+    // Escape hatches below only forfeit the *static* half of the proof. Each
+    // one sets this flag and keeps scanning, because the JSX call sites that
+    // are visible still witness what they pass.
+    let mut escapes = false;
+    // Exported: callers outside the project can pass anything as well.
     if component_symbol_is_exported(facts, entities, symbol) {
-        return PropsReactivity::Unknown;
+        escapes = true;
     }
     let empty = Vec::new();
     let component_uses = uses
@@ -2232,7 +2277,7 @@ fn classify_one_component(
     // the absence of the fact, not proof of no references.
     let references = lookup.symbol_references(symbol.as_str());
     if references.is_empty() {
-        return PropsReactivity::Unknown;
+        escapes = true;
     }
     let name_text = name
         .and_then(|name| file.source_text(name.span))
@@ -2242,7 +2287,8 @@ fn classify_one_component(
             u32::try_from(reference.start_byte),
             u32::try_from(reference.end_byte),
         ) else {
-            return PropsReactivity::Unknown;
+            escapes = true;
+            continue;
         };
         let span = Span::new(start, end);
         let own_declaration = *reference.path == *file.path.as_str()
@@ -2259,7 +2305,10 @@ fn classify_one_component(
                         && use_file.source_text(span) == Some(name_text)))
         });
         if !jsx_use {
-            return PropsReactivity::Unknown;
+            // Passed as a value, aliased, or re-exported: this hands the
+            // component to callers that cannot be seen. It does not unwrite
+            // the JSX call sites that can.
+            escapes = true;
         }
     }
     let mut reactive = BTreeSet::new();
@@ -2269,13 +2318,18 @@ fn classify_one_component(
         let use_file = &facts.files[*file_index];
         let element = &use_file.ast.jsx_elements[*element_index];
         // A spread hands over an object whose properties this cannot
-        // enumerate.
+        // enumerate — and, because a later spread wins over an earlier
+        // explicit attribute, it can also overwrite one of this element's own
+        // attributes with a static value. So this element witnesses nothing
+        // in either direction; other elements still do.
         if !element.spreads.is_empty() {
-            return PropsReactivity::Unknown;
+            escapes = true;
+            continue;
         }
         for attribute in &element.attributes {
             let Some(attribute_name) = use_file.source_text(attribute.local_name) else {
-                return PropsReactivity::Unknown;
+                escapes = true;
+                continue;
             };
             let value_use = if attribute.namespace.is_some() {
                 PropUse::Unknown
@@ -2338,6 +2392,16 @@ fn classify_one_component(
                 }
             }
         }
+    }
+    if escapes {
+        // `unresolved` is dropped on purpose: without a complete caller set
+        // every prop that is not a proven reactive witness is unresolved
+        // anyway, so recording the distinction would only invite a reader to
+        // treat the complement as static.
+        return PropsReactivity::Escaping {
+            reactive,
+            accessor_values,
+        };
     }
     PropsReactivity::Enumerated {
         reactive,

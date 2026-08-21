@@ -41,7 +41,7 @@ use crate::cache::{
 use crate::execution_role::direct_callback_contains;
 use crate::owners::{
     containing_ast_function, enclosing_function_label, enclosing_render_function,
-    function_binding_name, inside_effect_apply, solid_accessor_declaration,
+    function_binding_name, read_escapes_synchronous_extent, solid_accessor_declaration,
     source_function_exported,
 };
 use crate::pipeline::{parallel_file_results, parallel_slice_results};
@@ -257,7 +257,7 @@ fn discover_typed_accessors(
         ) else {
             continue;
         };
-        if inside_effect_apply(file, call.callee, entities, symbol_names, dialect)
+        if read_escapes_synchronous_extent(file, call.callee, entities, symbol_names, dialect)
             || enclosing_render_function(file, call.callee, lookup)
         {
             continue;
@@ -3483,7 +3483,13 @@ fn direct_reference_contributions(
         ) else {
             continue;
         };
-        if inside_effect_apply(file, reference_span, entities, symbol_names, lookup.dialect) {
+        if read_escapes_synchronous_extent(
+            file,
+            reference_span,
+            entities,
+            symbol_names,
+            lookup.dialect,
+        ) {
             continue;
         }
         if let Some(call) = project_indexes

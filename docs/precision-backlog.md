@@ -6,16 +6,55 @@ The dirty-worktree baseline was coherent on the current source: the Reactive
 IR library tests passed, all 76 armed backend process tests passed, and the
 fresh-debug-binary coverage comparison passed for 72 fixture projects (517
 findings). After the reviewed runtime-identity, environment-selector,
-package-owner, closed-local-callback, dialect-selection, and
-rendering-premise slices below, the snapshots contain 126 \`uncertifiable\`
-findings across 508 findings in 73 fixture projects. This is an
-inventory of the current proof obligations, not a promise that every row is
-reducible; the last column records the only sound owner that could discharge
-it.
+package-owner, closed-local-callback, dialect-selection,
+rendering-premise, caller-witness, and callback-extent slices below, the
+snapshots contain 128 \`uncertifiable\` findings across 515 findings in 75
+fixture projects. This is an inventory of the current proof obligations, not a
+promise that every row is reducible; the last column records the only sound
+owner that could discharge it.
+
+The count moved 126 → 128 while precision improved, and the two are not in
+tension. Both new proof paths below need their fail-closed control pinned, and
+\`props-caller-witness\` contributes two honest uncertifiable results doing
+exactly that. A negative control that reports an obligation is the evidence
+that the new positive path did not overreach; deleting it to lower the number
+would remove the only thing holding the reduction honest.
+
+### Where the floor actually is (measured 2026-08-21)
+
+The remaining obligations were probed rather than classified by eye: for each
+large cluster, the closing evidence was supplied in a scratch project and the
+checker was asked whether it closes.
+
+| Cluster | Count | Closes when the evidence is supplied? | Why the fixture case cannot |
+| --- | ---: | --- | --- |
+| SC1001 / SC1003 props | 49 | Yes. A dynamic in-project caller proves the violation; a complete static caller set certifies it silent. | The engine and corpus fixtures have no in-project callers at all. |
+| SC4001 owner | 27 | Yes. A \`createRoot\` call site certifies silent; a module-scope call site proves the violation. | Exported helpers whose caller set is incomplete. |
+| SC9005 | 22 | Not applicable. | Wrong subpath, absent export, or unreviewed package — the fixtures exist to pin that. |
+| SC9012 | 9 | No. | Divergent dispatch, globals, and opaque adapters by construction. |
+| SC7005 | 5 | Never. | Per-request settlement race; no source fact decides it. |
+| Type Facts–owned | 16 | Partly. | Broad numbers, object graphs, non-exact tuples, dynamic serializer config. |
+
+So the number is bounded by the corpus, not by the checker: the top two rows —
+76 of 128 — are cases where a fixture deliberately withholds the closing
+evidence, and the machinery demonstrably closes them the moment it is present.
+Lowering those rows would mean adding callers to fixtures whose purpose is to
+pin the open-world boundary, which destroys the case rather than improving
+precision. Two rows are irreducible in principle.
+
+One genuine fixture-hygiene item is recorded rather than taken: several SC4001
+obligations in \`dialect-solid-1x\`/\`dialect-solid-2\` are *incidental* to
+fixtures whose subject is \`createEffect\` argument shapes, and the technique
+that removes them without weakening the claim is now demonstrated in
+\`summary-callback-extent\` (render the host at an exact JSX call site so it is
+a proven owner, or wrap the call site in \`createRoot\`). It was not applied
+here: that pair is the pinned differential-dialect fixture and keeps message
+wording, so restructuring it is a deliberate change on its own, not a
+by-product of chasing a count.
 
 | Finding | Count | Current contexts | Missing evidence and audit classification |
 | --- | ---: | --- | --- |
-| SC1001 | 33 | component props aliases/read sites in the engine and eslint corpora; Solid 1.x sources; \`solid2-precision\`; v1 reactivity; upstream component cases | Exact JSX callers, immutable/enumerable prop backing, or a component contract. Project IR can reduce closed-world/cross-file cases; exported/open-world props remain genuinely uncertain. |
+| SC1001 | 35 | component props aliases/read sites in the engine and eslint corpora; Solid 1.x sources; \`solid2-precision\`; v1 reactivity; upstream component cases | Exact JSX callers, immutable/enumerable prop backing, or a component contract. Project IR can reduce closed-world/cross-file cases; exported/open-world props remain genuinely uncertain. |
 | SC1002 | 1 | \`props-callers\` callback after \`await\` | Exact synchronous callback extent and caller-proven prop/accessor identity. Project IR/compiler facts are reducible; opaque callbacks remain fail-closed. |
 | SC1003 | 14 | component parameter/body destructuring in engine/corpora and wrapped components | Proven component identity plus exact prop backing/caller set. Project/compiler facts can reduce exact JSX calls; ordinary/exported components remain uncertain. |
 | SC1004 | 2 | conditional component returns in the engine corpus | Proven component execution identity and return control-flow shape. JSX/compiler evidence is reducible; unknown component calls remain uncertain. |
@@ -37,6 +76,43 @@ environment-dependent SC5003/SC7001 paths and the TypeFacts-owned SC5001/
 SC7007 paths are separate workstreams. SC7005 is intentionally retained in
 the irreducible ledger even when SSR is explicitly selected.
 
+- **2026-08-21 — a caller witness survives the open world.** Caller-proven
+  prop reactivity is two questions with opposite quantifiers. "Some caller
+  passes a reactive expression" needs one witness and is *monotone*: a
+  consumer outside the project can add a call site, never unwrite the one
+  written here. "Every caller passes a static value" is falsified by a single
+  unseen caller and needs the complete set. `PropsReactivity` had one state
+  for both — an exported component collapsed to "nothing about its props is
+  provable" — so an in-project `<C title={n()} />` was discarded and the
+  untracked read of `title` reported an obligation where a violation was
+  proven. The state is now `Escaping`, carrying the witness sets from the JSX
+  call sites that *are* visible while refusing to conclude `Static` for
+  anything. Witnesses are per prop name, so one dynamic prop does not make
+  every prop on the same component report, and a spread anywhere on an element
+  discards that element's witnesses entirely (a later spread wins over an
+  earlier explicit attribute, so it can overwrite a dynamic value with a
+  static one). `props-caller-witness` pins all four rows. No existing fixture
+  moved: none has an exported component with an in-project dynamic caller,
+  which is why the over-conservatism survived.
+- **2026-08-21 — a read inside a tracked callback is not its caller's read.**
+  The interprocedural read summary excluded exactly one shape — Solid 2.0's
+  `createEffect` *apply* slot, matched by primitive name and `Deferred`. A
+  Solid 1.x effect's callback is `Tracked`, so it fell through, and a helper
+  whose only read sat inside `createEffect` exported that read to its callers.
+  Calling it from a render scope produced a **proven SC1001 violation** for a
+  read that never happens at the call site — while the identical read inside
+  the helper was correctly silent. The two halves of the analyzer disagreed
+  and the interprocedural half was wrong; a false violation is worse than a
+  missing one. The filter is now `read_escapes_synchronous_extent`, keyed on
+  the dialect's own callback vocabulary: `Inline` reads "subscribe whatever
+  was tracking at the call site" and propagate, while `Tracked` and `Deferred`
+  do not. It also requires a function literal between the read and the
+  argument, so an eagerly evaluated argument — `onMount(compute(count()))`,
+  where the slot is Deferred but nothing defers the read — still propagates.
+  `summary-callback-extent` pins all five executions and reports three
+  violations and nothing else. No existing fixture moved: the corpus's
+  `interprocedural` fixture covers only the direct-read case, which is why
+  this survived.
 - **2026-08-21 — a silently mis-dialected parity corpus, and the gate that
   catches the next one.** `fixtures/reactive-ir/eslint-plugin-corpus-v1`
   shipped an *empty* `node_modules/solid-js/` directory. Git cannot record an

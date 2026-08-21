@@ -62,6 +62,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/engine/eslint-reactivity-v1/node_modules/**
 !fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/
 !fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/**
+!fixtures/reactive-ir/summary-callback-extent/node_modules/
+!fixtures/reactive-ir/summary-callback-extent/node_modules/**
 !fixtures/package-contracts/solid-reexport/node_modules/
 !fixtures/package-contracts/solid-reexport/node_modules/**
 packages/wasm/browser.js
