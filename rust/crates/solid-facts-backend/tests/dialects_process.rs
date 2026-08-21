@@ -72,7 +72,7 @@ fn project_snapshot_findings_with(
 }
 
 #[test]
-fn control_flow_preferences_are_defaults_with_explicit_disables_winning() {
+fn control_flow_preferences_are_opt_in_with_explicit_disables_winning() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -90,7 +90,10 @@ fn control_flow_preferences_are_defaults_with_explicit_disables_winning() {
         Some("solid-v2"),
         &[],
     ));
-    assert_eq!(defaults.len(), 8, "control-flow preferences are defaults");
+    assert!(
+        defaults.is_empty(),
+        "stylistic preferences must not block default certification: {defaults:#?}"
+    );
 
     let preset = preference_findings(project_snapshot_findings_with(
         v2.clone(),
@@ -100,27 +103,46 @@ fn control_flow_preferences_are_defaults_with_explicit_disables_winning() {
     assert_eq!(
         preset
             .iter()
-            .map(|finding| (
-                finding["rule"].as_str().unwrap(),
-                finding["id"].as_str().unwrap(),
-                finding["kind"].as_str().unwrap(),
-            ))
-            .collect::<Vec<_>>(),
-        [
-            ("prefer-for", "SC8014", "violation"),
-            ("prefer-show", "SC8015", "violation"),
-            ("prefer-for", "SC8014", "violation"),
-            ("prefer-show", "SC8015", "violation"),
-            ("prefer-for", "SC8014", "violation"),
-            ("prefer-show", "SC8015", "violation"),
-            ("prefer-for", "SC8014", "violation"),
-            ("prefer-show", "SC8015", "violation"),
-        ]
+            .filter(|finding| finding["id"] == "SC8014")
+            .count(),
+        5,
+        "array Type Facts plus direct, prop-accessor, interprocedural, and v2 async facts select five lists: {preset:#?}"
     );
     assert_eq!(
-        preset, defaults,
-        "the legacy preset is redundant for defaults"
+        preset
+            .iter()
+            .filter(|finding| finding["id"] == "SC8015")
+            .count(),
+        5,
+        "per-prop caller facts must keep the static sibling clean: {preset:#?}"
     );
+    assert!(preset.iter().all(|finding| finding["kind"] == "violation"));
+    let v2_source = std::fs::read_to_string(fixture_root.join("preferences-v2/App.tsx"))
+        .expect("read v2 preference fixture");
+    let starts = preset
+        .iter()
+        .map(|finding| finding["primaryLocation"]["startByte"].as_u64().unwrap())
+        .collect::<Vec<_>>();
+    let marker = |source: &str| {
+        u64::try_from(v2_source.find(source).expect("fixture marker")).expect("offset fits u64")
+    };
+    let accessor_component = v2_source
+        .find("function AccessorProps")
+        .expect("fixture anchor");
+    let accessor_map = accessor_component
+        + v2_source[accessor_component..]
+            .find("props.items().map")
+            .expect("accessor prop marker");
+    assert!(starts.contains(&u64::try_from(accessor_map).expect("offset fits u64")));
+    assert!(starts.contains(&marker("derivedItems().map")));
+    assert!(!starts.contains(&marker("props.staticReady &&")));
+    assert!(!starts.contains(&marker("customCollection().map")));
+    let async_map = marker("items().map(async");
+    assert!(starts.contains(&async_map));
+    assert!(preset.iter().any(|finding| {
+        finding["primaryLocation"]["startByte"].as_u64() == Some(async_map)
+            && finding["fixes"].as_array().is_none_or(Vec::is_empty)
+    }));
     let v2_for_fix_texts = preset
         .iter()
         .filter(|finding| finding["rule"] == "prefer-for")
@@ -132,7 +154,12 @@ fn control_flow_preferences_are_defaults_with_explicit_disables_winning() {
     assert!(
         v2_for_fix_texts
             .iter()
-            .all(|text| text.contains("<For keyed={false}"))
+            .all(|text| !text.contains("keyed={false}"))
+    );
+    assert!(
+        v2_for_fix_texts
+            .iter()
+            .any(|text| text.contains("import { For as __SolidCheckerFor"))
     );
 
     let explicit_enable = preference_findings(project_snapshot_findings_with(
@@ -140,7 +167,12 @@ fn control_flow_preferences_are_defaults_with_explicit_disables_winning() {
         Some("solid-v2"),
         &["--enable-rule", "prefer-show"],
     ));
-    assert_eq!(explicit_enable, defaults, "enabling a default is a no-op");
+    assert_eq!(explicit_enable.len(), 5);
+    assert!(
+        explicit_enable
+            .iter()
+            .all(|finding| finding["rule"] == "prefer-show")
+    );
 
     let v2_disabled = preference_findings(project_snapshot_findings_with(
         fixture_root.join("preferences-v2-disabled/tsconfig.json"),
@@ -160,21 +192,20 @@ fn control_flow_preferences_are_defaults_with_explicit_disables_winning() {
     assert_eq!(
         enabled
             .iter()
-            .map(|finding| (
-                finding["rule"].as_str().unwrap(),
-                finding["id"].as_str().unwrap(),
-                finding["kind"].as_str().unwrap(),
-            ))
-            .collect::<Vec<_>>(),
-        [
-            ("v1/prefer-for", "SC8014", "violation"),
-            ("v1/prefer-show", "SC8015", "violation"),
-            ("v1/prefer-for", "SC8014", "violation"),
-            ("v1/prefer-show", "SC8015", "violation"),
-            ("v1/prefer-for", "SC8014", "violation"),
-            ("v1/prefer-show", "SC8015", "violation"),
-        ]
+            .filter(|finding| finding["id"] == "SC8014")
+            .count(),
+        2,
+        "v1 reports only receivers Type Facts prove are arrays: {enabled:#?}"
     );
+    assert_eq!(
+        enabled
+            .iter()
+            .filter(|finding| finding["id"] == "SC8015")
+            .count(),
+        3,
+        "v1 preferences must not promote uncertain prop backing into proof: {enabled:#?}"
+    );
+    assert!(enabled.iter().all(|finding| finding["kind"] == "violation"));
     let v1_for_fix_texts = enabled
         .iter()
         .filter(|finding| finding["rule"] == "v1/prefer-for")
@@ -186,7 +217,12 @@ fn control_flow_preferences_are_defaults_with_explicit_disables_winning() {
     assert!(
         v1_for_fix_texts
             .iter()
-            .all(|text| { text.contains("<For each={") && !text.contains("keyed={false}") })
+            .all(|text| !text.contains("keyed={false}"))
+    );
+    assert!(
+        v1_for_fix_texts
+            .iter()
+            .any(|text| text.contains("import { For as __SolidCheckerFor"))
     );
 
     let v1_disabled = preference_findings(project_snapshot_findings_with(
@@ -206,25 +242,61 @@ fn disabling_a_specific_owner_restores_its_strict_read_findings() {
         return;
     }
     let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
-    let cases = [
+    type FindingMarker<'a> = (&'a str, &'a str);
+    type DisabledOwnerCase<'a> = (&'a str, &'a str, &'a [FindingMarker<'a>]);
+    let cases: [DisabledOwnerCase<'_>; 3] = [
         (
             "disabled-component-owner-restores-strict",
             "SC1004",
-            vec![3254, 3532, 3723],
+            &[
+                ("function NestedAttrTernary", "cond()"),
+                ("function LogicalReturn", "visible()"),
+                ("function SwitchReturn", "mode()"),
+            ],
         ),
         (
             "disabled-handler-owner-restores-strict",
             "SC1007",
-            vec![1716],
+            &[("function ReactiveCard", "props.onSave")],
         ),
         (
             "disabled-pending-owner-restores-strict",
             "SC5001",
-            vec![944, 1173, 4311, 4958],
+            &[
+                ("export function BadDirect", "user().name"),
+                ("export function BadSignalDirect", "signalUser().name"),
+                (
+                    "export function BadDeclaredUntracked",
+                    "declaredFeed().name",
+                ),
+                (
+                    "export function OpaqueOptionsUntracked",
+                    "opaqueUser().name",
+                ),
+            ],
         ),
     ];
 
-    for (fixture, disabled_owner, expected_starts) in cases {
+    for (fixture, disabled_owner, markers) in cases {
+        let source_path = if disabled_owner == "SC5001" {
+            fixture_root.join("../../../../../fixtures/reactive-ir/async-boundary/App.tsx")
+        } else {
+            fixture_root.join("../../../../../fixtures/reactive-ir/props-callers/App.tsx")
+        };
+        let source = std::fs::read_to_string(&source_path)
+            .unwrap_or_else(|error| panic!("read {}: {error}", source_path.display()));
+        let expected_starts = markers.iter().map(|(anchor, marker)| {
+            let anchor_start = source.find(anchor).unwrap_or_else(|| {
+                panic!("missing anchor {anchor:?} in {}", source_path.display())
+            });
+            let relative = source[anchor_start..].find(marker).unwrap_or_else(|| {
+                panic!(
+                    "missing marker {marker:?} after {anchor:?} in {}",
+                    source_path.display()
+                )
+            });
+            u64::try_from(anchor_start + relative).expect("source offset fits u64")
+        });
         let findings = project_snapshot_findings(
             fixture_root.join(fixture).join("tsconfig.json"),
             Some("solid-v2"),
@@ -382,6 +454,28 @@ fn package_contract_async_behavior_reaches_async_sensitive_rules() {
     assert!(
         findings.iter().any(|finding| finding["id"] == "SC7002"),
         "the dependency contract's asyncBehavior did not classify the computation: {findings:#?}"
+    );
+}
+
+#[test]
+fn package_contract_reactive_reads_reach_control_flow_preferences() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let findings = project_snapshot_findings_with(
+        root.join("fixtures/reactive-ir/package-consumer/tsconfig.json"),
+        Some("solid-v2"),
+        &["--preset", "preferences"],
+    );
+    assert!(
+        findings.iter().any(|finding| {
+            finding["id"] == "SC8014"
+                && finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("package-consumer/App.tsx"))
+        }),
+        "the package contract's reactiveReads summary did not reach prefer-for: {findings:#?}"
     );
 }
 

@@ -27,6 +27,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::RuntimeEnvironment;
 use serde::Deserialize;
 
 /// Options for `v1/prefer-classlist` (SC8013).
@@ -84,6 +85,11 @@ pub struct RuleOptions {
     requested_presets: BTreeSet<String>,
     requested_rules: BTreeSet<String>,
     pub solid1x: Solid1xRuleOptions,
+    /// Host-selected runtime evidence is part of the retained analysis
+    /// identity, but is not a rule-owned option. Keeping it beside the
+    /// catalog options lets the shared pipeline thread one immutable selector
+    /// through every proof stage without making dialect code guess globals.
+    pub runtime: RuntimeEnvironment,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]

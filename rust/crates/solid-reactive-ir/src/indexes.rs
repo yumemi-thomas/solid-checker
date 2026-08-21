@@ -413,6 +413,20 @@ impl<'a> SemanticLookup<'a> {
             .map(|binding| binding.summary.callbacks.as_slice())
     }
 
+    pub(super) fn contract_owner_requirements(
+        &self,
+        symbol: &str,
+    ) -> Option<&[super::ContractOwnerRequirement]> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| binding.summary.owner_requirements.as_slice())
+    }
+
+    pub(super) fn has_contract_binding(&self, symbol: &SymbolId) -> bool {
+        self.resolved_contracts.by_symbol.contains_key(symbol)
+    }
+
     /// Every primitive this build can resolve at a call site.
     ///
     /// `primitive_name` answers only through the symbol-name table, so a

@@ -2,13 +2,23 @@
   "status": "violation",
   "findings": [
     {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-callback-consumer/App.tsx",
+      "start": 195,
+      "end": 211,
+      "fixes": 0
+    },
+    {
       "rule": "strict-read-untracked",
       "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-callback-consumer/App.tsx",
-      "start": 321,
-      "end": 340,
+      "start": 459,
+      "end": 478,
       "fixes": 0
     }
   ]

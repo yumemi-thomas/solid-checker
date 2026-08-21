@@ -9,16 +9,18 @@ use typefacts::v3::EntityDemand;
 
 use crate::dialect::Dialect;
 use crate::{
-    BackendError, callee_property_location, structural_accessor_spans, typefacts_location,
+    BackendError, SemanticDemandOptions, callee_property_location, structural_accessor_spans,
+    typefacts_location,
 };
 
 pub(crate) fn plan(
     dialect: &'static Dialect,
     files: &[FileFacts],
+    options: SemanticDemandOptions,
 ) -> Result<Vec<EntityDemand>, BackendError> {
     let mut demands = Vec::new();
     for file in files {
-        plan_file(dialect, file, &mut demands)?;
+        plan_file(dialect, file, options, &mut demands)?;
     }
     stable_deduplicate(&mut demands);
     Ok(demands)
@@ -27,6 +29,7 @@ pub(crate) fn plan(
 fn plan_file(
     dialect: &'static Dialect,
     file: &FileFacts,
+    options: SemanticDemandOptions,
     demands: &mut Vec<EntityDemand>,
 ) -> Result<(), BackendError> {
     let path = file.path.to_string();
@@ -34,8 +37,10 @@ fn plan_file(
     let mut symbol_spans = HashMap::new();
     let mut type_descriptor_spans = HashSet::new();
     let mut runtime_value_domain_spans = HashSet::new();
+    let mut primitive_value_domain_spans = HashSet::new();
     let mut constant_value_spans = HashSet::new();
     let mut array_shape_spans = HashSet::new();
+    let mut tuple_shape_spans = HashSet::new();
     let mut library_type_spans = HashSet::new();
     let mut async_symbol_spans = HashSet::new();
     let mut async_value_spans = Vec::new();
@@ -239,17 +244,20 @@ fn plan_file(
     // Both dialects offer a `prefer-for` rewrite only when the receiver's type
     // proves an actual array; demand it at exactly the call shape the rule
     // fires on.
-    if dialect.semantic_demands.array_map_receiver_types {
+    if dialect.semantic_demands.array_map_receiver_types && options.array_map_receiver_types {
         for call in &file.ast.calls {
-            let is_single_function_map = call.arguments.len() == 1
-                && matches!(
-                    call.arguments[0].value,
-                    solid_facts::ast::ArgumentValueKind::Function
-                        | solid_facts::ast::ArgumentValueKind::AsyncFunction
-                )
-                && file.ast.members.iter().any(|member| {
-                    member.span == call.callee && file.source_text(member.property) == Some("map")
-                });
+            let is_single_function_map =
+                file.compiler.jsx_operations.iter().any(|operation| {
+                    operation.kind == "jsx-expression" && operation.span == call.span
+                }) && call.arguments.len() == 1
+                    && (call.arguments[0].value == solid_facts::ast::ArgumentValueKind::Function
+                        || (dialect.semantic_demands.async_array_map_callbacks
+                            && call.arguments[0].value
+                                == solid_facts::ast::ArgumentValueKind::AsyncFunction))
+                    && file.ast.members.iter().any(|member| {
+                        member.span == call.callee
+                            && file.source_text(member.property) == Some("map")
+                    });
             if is_single_function_map {
                 let member = file
                     .ast
@@ -393,19 +401,19 @@ fn plan_file(
             // dialect; an empty identity set proves the value is outside the
             // rich transport set, while an absent fact remains explicit.
             //
-            // Library identities are the same for every inhabitant of a type,
-            // so this demand is insensitive to the *value* written. The
-            // remaining three are not: a type descriptor and a constant value
-            // both spell the literal out, so demanding them at every argument
-            // made `createSignal(0)` -> `createSignal(1)` a project-wide
-            // TypeScript-table change that invalidated every late-stage cache.
-            // A primitive or nullish literal is already classified by the AST
-            // and cannot be a rich transport value except as a regexp, which
-            // its library identity still reports -- so those shapes are left
-            // out of the value-carrying demands.
+            // Library identities and primitive domains are stable for every
+            // inhabitant of a type, so these demands are insensitive to the
+            // exact value written. Type descriptors and constant values are
+            // not: both can spell the literal out, so demanding them at every
+            // argument made `createSignal(0)` -> `createSignal(1)` a
+            // project-wide TypeScript-table change that invalidated every
+            // late-stage cache. A primitive or nullish literal is already
+            // classified without those value-carrying facts; regexp remains
+            // distinguishable through its library identity.
             if dialect.semantic_demands.server_argument_library_types && !argument.spread {
                 add_symbol(argument.span, false);
                 library_type_spans.insert(argument.span);
+                primitive_value_domain_spans.insert(argument.span);
                 if !matches!(
                     argument.runtime_value_kind,
                     solid_facts::ast::RuntimeValueKind::Primitive
@@ -414,6 +422,20 @@ fn plan_file(
                     type_descriptor_spans.insert(argument.span);
                     constant_value_spans.insert(argument.span);
                 }
+            }
+            if argument.spread {
+                let span = file
+                    .ast
+                    .spreads
+                    .iter()
+                    .find(|spread| spread.span == argument.span)
+                    .map_or(argument.span, |spread| spread.argument);
+                add_symbol(span, false);
+                // A spread call's visible argument count is not its expanded
+                // arity. Type Facts reports exactLength only for required-only
+                // tuple types whose union constituents agree; optional, rest,
+                // and array shapes stay absent and therefore fail closed.
+                tuple_shape_spans.insert(span);
             }
             // Solid 2 effect bundles accept a callable `effect` property. An
             // asserted or nullable identifier in that slot cannot be judged
@@ -457,8 +479,10 @@ fn plan_file(
         planned.type_descriptor = type_descriptor_spans.contains(&span);
         planned.callability = type_descriptor_spans.contains(&span);
         planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
+        planned.primitive_value_domain = primitive_value_domain_spans.contains(&span);
         planned.constant_value = constant_value_spans.contains(&span);
         planned.array_shape = array_shape_spans.contains(&span);
+        planned.tuple_shape = tuple_shape_spans.contains(&span);
         planned.library_types = library_type_spans.contains(&span);
         planned.reference_space = file.ast.imports.iter().any(|import| {
             import
@@ -528,11 +552,10 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         structural_accessor: false,
         callability: false,
         runtime_value_domain: false,
+        primitive_value_domain: false,
         call_result_domain: false,
         constant_value: false,
         array_shape: false,
-        // Required by the pinned Type Facts v3 wire shape; no retained rule
-        // requests tuple facts after the handler-policy retirement.
         tuple_shape: false,
         library_types: false,
         reference_space: false,
@@ -592,9 +615,11 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.structural_accessor |= demand.structural_accessor;
             current.callability |= demand.callability;
             current.runtime_value_domain |= demand.runtime_value_domain;
+            current.primitive_value_domain |= demand.primitive_value_domain;
             current.call_result_domain |= demand.call_result_domain;
             current.constant_value |= demand.constant_value;
             current.array_shape |= demand.array_shape;
+            current.tuple_shape |= demand.tuple_shape;
             current.library_types |= demand.library_types;
             current.reference_space |= demand.reference_space;
             current.runtime_identity |= demand.runtime_identity;

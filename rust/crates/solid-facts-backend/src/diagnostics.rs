@@ -11,11 +11,12 @@ use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
     CacheRetention, Finding, IncrementalBuilder, PackageContract, PackageContractIssue,
-    PackageContractIssueKind, Program, RuleOptions, suppress_findings_owned_by_enabled_rules,
+    PackageContractIssueKind, Program, RuleOptions, RuntimeEnvironment,
+    suppress_findings_owned_by_enabled_rules,
 };
 
 use crate::dialect::{self, Dialect};
-use crate::{BackendError, SourceFile};
+use crate::{BackendError, SemanticDemandOptions, SourceFile};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,10 +118,11 @@ pub struct DiagnosticTimings {
     pub reused: bool,
 }
 
-#[derive(Clone, Copy, Debug, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct RequestedRuleEnablement<'a> {
     pub presets: &'a [String],
     pub rules: &'a [String],
+    pub runtime: RuntimeEnvironment,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -201,6 +203,7 @@ impl DiagnosticSession {
             RequestedRuleEnablement {
                 presets,
                 rules: enable_rules,
+                runtime: RuntimeEnvironment::default(),
             },
         )
         .map(|(analysis, _)| analysis)
@@ -244,6 +247,11 @@ impl DiagnosticSession {
         let mut rule_options = discover_rule_options(project)?;
         rule_options.request_presets(enablement.presets.iter().cloned());
         rule_options.request_rules(enablement.rules.iter().cloned());
+        enablement
+            .runtime
+            .validate()
+            .map_err(BackendError::Contract)?;
+        rule_options.runtime = enablement.runtime.clone();
         let identity = DiagnosticIdentity {
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
@@ -768,12 +776,22 @@ fn bundled_solidjs_web_contract() -> Result<PackageContract, BackendError> {
     Ok(bundled)
 }
 
+#[cfg(feature = "dialect-v2")]
+fn bundled_solidjs_signals_contract() -> Result<PackageContract, BackendError> {
+    let mut bundled = decode_package_contract(include_bytes!(
+        "../../../../pkg/contracts/bundled/solid-v2/solidjs-signals.json"
+    ))?;
+    bundled.source_path = "bundled://solid-v2/solidjs-signals.json".into();
+    Ok(bundled)
+}
+
 /// The Solid 2.0 dialect's bundled contract set, keyed by package root.
 #[cfg(feature = "dialect-v2")]
 pub(crate) fn bundled_contract_v2(package: &str) -> Result<Option<PackageContract>, BackendError> {
     Ok(match package {
         "solid-js" => Some(bundled_solid_js_contract()?),
         "@solidjs/web" => Some(bundled_solidjs_web_contract()?),
+        "@solidjs/signals" => Some(bundled_solidjs_signals_contract()?),
         _ => None,
     })
 }
@@ -1507,6 +1525,29 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
     )
 }
 
+/// Facts needed before diagnostic rule execution, derived from the same
+/// project options and request enablement that the diagnostic identity uses.
+pub fn semantic_demand_options_for_enablement(
+    dialect: &Dialect,
+    project: &Path,
+    enablement: RequestedRuleEnablement<'_>,
+) -> Result<SemanticDemandOptions, BackendError> {
+    let mut options = discover_rule_options(project)?;
+    options.request_presets(enablement.presets.iter().cloned());
+    options.request_rules(enablement.rules.iter().cloned());
+    let rule = if dialect.id == "solid-v1" {
+        "v1/prefer-for"
+    } else {
+        "prefer-for"
+    };
+    let metadata = (dialect.rule_metadata)(rule);
+    Ok(SemanticDemandOptions {
+        array_map_receiver_types: metadata.is_some_and(|metadata| {
+            options.is_enabled(rule, metadata.default_enabled, metadata.presets)
+        }),
+    })
+}
+
 fn discover_rule_options_with(
     project: &Path,
     has_rule: impl Fn(&str) -> bool,
@@ -1643,6 +1684,7 @@ mod tests {
 
     use solid_facts::core::Generation;
     use solid_facts::{ProjectFacts, TypeScriptTable};
+    use solid_reactive_ir::RuntimeEnvironment;
 
     use super::{DiagnosticSession, retain_enabled};
 
@@ -1741,6 +1783,7 @@ mod tests {
                 super::RequestedRuleEnablement {
                     presets: &["preferences".into()],
                     rules: &[],
+                    runtime: RuntimeEnvironment::default(),
                 },
             )
             .unwrap();
@@ -1754,6 +1797,7 @@ mod tests {
                 super::RequestedRuleEnablement {
                     presets: &["preferences".into(), "preferences".into()],
                     rules: &[],
+                    runtime: RuntimeEnvironment::default(),
                 },
             )
             .unwrap();
@@ -1767,6 +1811,7 @@ mod tests {
                 super::RequestedRuleEnablement {
                     presets: &[],
                     rules: &["prefer-show".into()],
+                    runtime: RuntimeEnvironment::default(),
                 },
             )
             .unwrap();

@@ -107,11 +107,12 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
         (
             "static-api",
             &[
-                // The valid deprecated one-argument overload plus five
-                // cast-hidden non-callable runtime values, including a bad
-                // EffectBundle.effect field. Raw invalid apply arguments are
-                // TypeScript's diagnostics and stay silent.
-                ("missing-effect-function", 6),
+                // The valid deprecated one-argument overload, the same absent
+                // apply slot behind an exact one-element tuple spread, plus
+                // five cast-hidden non-callable runtime values (including a
+                // bad EffectBundle.effect field). Raw invalid apply arguments
+                // are TypeScript's diagnostics and stay silent.
+                ("missing-effect-function", 7),
                 // Signal-family only: the store constructors never route
                 // options.sync into their node, so their three sync: true
                 // async derives are negative cases now.
@@ -548,10 +549,11 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
     }
     if let Some(findings) = diagnostic_fixture("server-function-rich-args") {
-        // Nine proven rich values plus three explicit obligations where the
-        // available facts cannot close the full JSON graph. Lone/trailing
-        // Uint8Array and compiler-known JSON-safe values remain certified.
-        assert_rule_findings(&findings, "server-function-rich-argument", 12);
+        // Twelve proven rich/non-JSON primitive values plus three explicit
+        // obligations where the available facts cannot close the full JSON
+        // graph or number finiteness. Lone/trailing Uint8Array and
+        // compiler-proven JSON-safe primitive domains remain certified.
+        assert_rule_findings(&findings, "server-function-rich-argument", 15);
         if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
             assert!(
                 enabled.is_empty(),
@@ -696,10 +698,11 @@ fn create_effect_owner_findings_require_runtime_allocation() {
         .into_iter()
         .map(|finding| finding["primaryLocation"]["line"].as_u64().unwrap())
         .collect::<Vec<_>>();
-    // Solid 2 throws before allocating an effect node for an absent,
-    // undefined, or null apply argument (including cast-hidden null). Other
-    // non-callable values allocate first and still create an owner leak.
-    assert_eq!(lines, [8, 9, 13, 15, 16, 17, 23, 36]);
+    // Solid 2 throws before allocating an effect node for an absent apply slot
+    // (including the exact one-element tuple spread), undefined, or null apply
+    // argument (including cast-hidden null). Other non-callable values
+    // allocate first and still create an owner leak.
+    assert_eq!(lines, [12, 13, 17, 19, 20, 21, 27, 40]);
 }
 
 #[test]

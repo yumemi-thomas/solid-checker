@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, ExportKind, FunctionKind, RuntimeValueKind};
+use solid_facts::ast::{ArgumentValueKind, ExportKind, FunctionKind};
 use solid_facts::core::Span;
 use typefacts::{ConstantValueKind, EntityFact, ResolvedCallValidity};
 
@@ -58,8 +58,12 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             .and_then(crate::PrimitiveName::primitive) else {
                 continue;
             };
-            let server_renders = *server_renders
-                .get_or_insert_with(|| crate::source_discovery::project_server_renders(ctx.facts));
+            let server_renders = *server_renders.get_or_insert_with(|| {
+                crate::source_discovery::project_server_renders(
+                    ctx.facts,
+                    &ctx.rule_options.runtime,
+                )
+            });
             // Render-time scopes only. An event handler or deferred callback
             // is a client-time (or post-render) call and is a no-op for a
             // different reason than the post-flush drop; unknown scopes stay
@@ -445,18 +449,34 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     if argument_is_proven_json_safe(argument, entity) {
                         continue;
                     }
-                    if *serializer_proof
-                        .get_or_insert_with(|| project_rich_argument_serializer(ctx))
-                        != SerializerProof::Enabled
-                    {
+                    let serializer = *serializer_proof
+                        .get_or_insert_with(|| project_rich_argument_serializer(ctx));
+                    if serializer == SerializerProof::Enabled {
+                        return;
+                    }
+                    if argument_is_proven_json_unsafe_primitive(entity) {
+                        if serializer == SerializerProof::Unresolved {
+                            push_rich_argument_uncertainty(
+                                draft,
+                                file,
+                                argument.span,
+                                "the argument is outside JSON's primitive domain, but the project's serializer configuration cannot be resolved exactly",
+                            );
+                        } else {
+                            push_non_json_primitive_violation(
+                                draft,
+                                file,
+                                argument.span,
+                                function,
+                                declaration_file,
+                            );
+                        }
+                    } else {
                         push_rich_argument_uncertainty(
                             draft,
                             file,
                             argument.span,
-                            if *serializer_proof
-                                .get_or_insert_with(|| project_rich_argument_serializer(ctx))
-                                == SerializerProof::Unresolved
-                            {
+                            if serializer == SerializerProof::Unresolved {
                                 "neither the argument's JSON safety nor the project's serializer configuration can be resolved exactly"
                             } else {
                                 "the argument's complete JSON safety cannot be proven from the available type and literal facts"
@@ -519,20 +539,19 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
     }
 }
 
-/// A deliberately small safe set, proved from the value the call actually
-/// passes: `null`, a constant string, a finite constant number, and a written
-/// primitive or nullish literal. Objects, arrays, aliases, unions, `any`, and
-/// `unknown` are not guessed -- nested rich values, cycles, non-finite
-/// numbers, and runtime type escapes remain possible, so their branch is
-/// explicit `uncertifiable` unless a serializer is proven.
+/// A deliberately small safe set, proved from the value and compiler type the
+/// call actually passes: null, strings, booleans, and number domains whose
+/// every constituent is a finite literal. Objects, arrays, bigint, symbol,
+/// undefined, broad numbers, `any`, and `unknown` are not guessed -- nested
+/// rich values, cycles, and runtime type escapes remain possible, so their
+/// branch is explicit `uncertifiable` unless a serializer is proven.
 ///
 /// This deliberately does *not* consult `TypeDescriptor.text`. A rendered name
 /// is not a fact about the value: `type Name = string` renders as `Name`, so a
 /// text test certified `save(plain)` and raised an obligation on the identical
-/// `save(aliased)`. Type Facts exposes no structural primitive-kind fact to
-/// replace it with, so an unresolved declared type is now uniformly an
-/// obligation rather than a spelling-dependent one. See
-/// docs/precision-backlog.md for the ledger entry.
+/// `save(aliased)`. `primitiveValueDomain` is alias-transparent and carries a
+/// separate all-numbers-finite guarantee, so this decision never parses a
+/// rendered name or retains an exact numeric value.
 fn argument_is_proven_json_safe(
     argument: &solid_facts::ast::ArgumentFact,
     entity: &EntityFact,
@@ -546,14 +565,54 @@ fn argument_is_proven_json_safe(
             ConstantValueKind::Number => value.number.is_finite(),
         };
     }
-    // A written primitive or nullish literal is JSON-safe, and the AST proves
-    // the shape without any compiler fact. This is only reached once the
-    // library identities have already ruled the value out of the rich
-    // transport set, so a regexp literal never lands here.
-    matches!(
-        argument.runtime_value_kind,
-        RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
-    )
+    let Some(domain) = entity.primitive_value_domain.present() else {
+        return false;
+    };
+    !domain.unknown()
+        && !domain.may_be_big_int()
+        && !domain.may_be_symbol()
+        && !domain.may_be_undefined()
+        && !domain.may_be_object()
+        && (!domain.may_be_number() || domain.numbers_are_finite())
+}
+
+fn argument_is_proven_json_unsafe_primitive(entity: &EntityFact) -> bool {
+    let Some(domain) = entity.primitive_value_domain.present() else {
+        return false;
+    };
+    !domain.unknown()
+        && (domain.may_be_big_int() || domain.may_be_symbol() || domain.may_be_undefined())
+        && !domain.may_be_string()
+        && !domain.may_be_number()
+        && !domain.may_be_boolean()
+        && !domain.may_be_null()
+        && !domain.may_be_object()
+}
+
+fn push_non_json_primitive_violation(
+    draft: &mut ProgramDraft,
+    file: &solid_facts::FileFacts,
+    span: Span,
+    function: &solid_facts::ast::FunctionFact,
+    declaration_file: &solid_facts::FileFacts,
+) {
+    let name = function
+        .name
+        .as_ref()
+        .and_then(|name| declaration_file.source_text(name.span))
+        .unwrap_or("this server function");
+    draft.static_violations.push(StaticViolation {
+        id: "SC7007".into(),
+        rule: "server-function-rich-argument".into(),
+        message: format!(
+            "server function {name} receives a bigint, symbol, or undefined value; the default server-function transport is plain JSON and cannot encode that primitive faithfully"
+        ),
+        hint: "Convert the argument to a JSON value at the call site, or install the rich-argument serializer once at client startup.".into(),
+        location: location(file.path.shared(), span),
+        analysis_context: String::new(),
+        fixes: vec![],
+        uncertain: false,
+    });
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

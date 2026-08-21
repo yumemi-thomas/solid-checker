@@ -116,7 +116,10 @@ impl Rule {
                 ("SC9005", "v1/package-contract-incomplete", "error", true)
             }
         };
-        let opt_in_preference = matches!(self, Self::PreferClasslist);
+        let opt_in_preference = matches!(
+            self,
+            Self::PreferClasslist | Self::PreferFor | Self::PreferShow
+        );
         RuleMetadata {
             code,
             name,

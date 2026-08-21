@@ -10,10 +10,13 @@ import {
   saveEvent,
   saveIds,
   savePlain,
+  saveNumber,
+  saveScalar,
   saveStamps,
+  saveUnsafeScalar,
   uploadChunk,
 } from "./api";
-import type { Boxed, Ids, Stamps } from "./api";
+import type { Boxed, Ids, SafeScalar, Stamps } from "./api";
 import { recordPattern } from "./server-module";
 
 // Same spelling and same property shape as the real configuration API, but a
@@ -22,6 +25,9 @@ function configureServerFunctionsClient(_options: {
   serializeArgs: (args: unknown[]) => string;
 }) {}
 configureServerFunctionsClient({ serializeArgs: JSON.stringify });
+
+declare const safeScalar: SafeScalar;
+declare const broadNumber: number;
 
 export function Toolbar() {
   const when = new Date();
@@ -47,6 +53,11 @@ export function Toolbar() {
         await uploadChunk(bytes); // silent: lone Uint8Array is a request body
         await appendChunk("chunk", bytes); // silent: trailing Uint8Array after JSON-safe leading
         await savePlain(payload); // uncertifiable: the available fact cannot close the object graph
+        await saveScalar(safeScalar); // silent: compiler-proven JSON-safe primitive domain
+        await saveUnsafeScalar(1n); // violation: JSON cannot encode bigint
+        await saveUnsafeScalar(Symbol("id")); // violation: JSON cannot encode symbol
+        await saveUnsafeScalar(undefined); // violation: JSON cannot encode undefined faithfully
+        await saveNumber(broadNumber); // uncertifiable: number may be non-finite
         await saveStamps(stamps); // finding: Date behind an imported alias
         await saveIds(ids); // finding: Set behind an imported alias
         await saveBoxed(boxed); // uncertifiable: nested Date is outside the top-level fact

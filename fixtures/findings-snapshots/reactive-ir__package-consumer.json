@@ -7,8 +7,8 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/package-consumer/App.tsx",
-      "start": 150,
-      "end": 161,
+      "start": 161,
+      "end": 172,
       "fixes": 0
     }
   ]

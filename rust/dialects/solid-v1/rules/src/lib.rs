@@ -21,6 +21,8 @@ pub use solid_reactive_ir::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
 
 struct Catalog;
 
+pub const CATALOG_CAPABILITIES: CatalogCapabilities = CatalogCapabilities::SOLID_1;
+
 #[must_use]
 pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
     project_findings(program, &Catalog)
@@ -41,7 +43,7 @@ fn strict_read_hint(kind: &str) -> &'static str {
 
 impl CatalogWording for Catalog {
     fn capabilities(&self) -> CatalogCapabilities {
-        CatalogCapabilities::SOLID_1
+        CATALOG_CAPABILITIES
     }
 
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {

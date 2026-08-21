@@ -22,6 +22,11 @@
       "exportsIndex": "rust/crates/solid-dialect/src/exports/solid_v2_solidjs_web.rs",
       "bundledContract": "pkg/contracts/bundled/solid-v2/solidjs-web.json",
       "probeRuntime": true
+    },
+    {
+      "package": "@solidjs/signals",
+      "bundledContract": "pkg/contracts/bundled/solid-v2/solidjs-signals.json",
+      "generated": false
     }
   ]
 }

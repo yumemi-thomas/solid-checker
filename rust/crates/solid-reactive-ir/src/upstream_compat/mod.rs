@@ -40,151 +40,152 @@ use solid_facts::FileFacts;
 use solid_facts::core::Span;
 use typefacts::{ArrayShape, Location, RuntimeValueDomain};
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) enum ReactiveDependencyProof {
-    Reactive,
-    Static,
-    Unknown,
+#[derive(Clone, Copy)]
+struct IndexedReactiveRead {
+    span: Span,
+    proven: bool,
 }
 
-/// Whether evaluating exactly `expression` performs a proven reactive read.
-///
-/// The query is deliberately about evaluation at the current JSX position,
-/// not provenance of the resulting value. A call to a proven accessor and a
-/// member/path read rooted at a proven store or reactive props object subscribe
-/// when evaluated. A local that captured one of those results earlier does
-/// not. Unknown calls and unresolved roots remain `Unknown`; callers that make
-/// preference judgements treat both `Static` and `Unknown` as fail-closed.
-pub(super) fn reactive_dependency_proof(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    expression: Span,
-) -> ReactiveDependencyProof {
-    use crate::source_discovery::PropUse;
+/// Exact reactive reads already proven by local and interprocedural analysis,
+/// grouped once by file for the preference rules that ask whether evaluating a
+/// governing expression subscribes. This is deliberately downstream of the
+/// engine's read analysis: aliases, caller-classified props, derived helpers,
+/// and package-contract reads must all receive the same answer here that they
+/// receive everywhere else.
+#[derive(Default)]
+pub(super) struct ReactiveReadIndex {
+    by_path: HashMap<String, Vec<IndexedReactiveRead>>,
+}
 
-    let expression = file.ast.peel_ts_sugar_span(expression);
-    let nested_functions: Vec<Span> = file
-        .ast
-        .functions_within(expression)
-        .map(|function| function.span)
-        .collect();
-    let inside_nested = |span: Span| {
-        nested_functions
-            .iter()
-            .any(|function| function.contains(span))
-    };
-    let symbol_at = |span: Span| {
-        context
-            .entities
-            .at(file.path.as_str(), span)
-            .cloned()
-            .or_else(|| {
-                context
-                    .lookup
-                    .binding_at_reference(file.path.as_str(), span)
-                    .map(|(_, _, symbol)| symbol)
-            })
-    };
-    let mut proof = ReactiveDependencyProof::Static;
-
-    for member in &file.ast.members {
-        if !expression.contains(member.span)
-            || inside_nested(member.span)
-            || file.ast.members.iter().any(|candidate| {
-                expression.contains(candidate.span) && candidate.object == member.span
-            })
-        {
-            continue;
+impl ReactiveReadIndex {
+    fn new(reads: &[crate::ReactiveRead]) -> Self {
+        let mut by_path = HashMap::<String, Vec<IndexedReactiveRead>>::new();
+        for read in reads {
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(read.location.start_byte),
+                u32::try_from(read.location.end_byte),
+            ) else {
+                continue;
+            };
+            by_path
+                .entry(read.location.path.to_string())
+                .or_default()
+                .push(IndexedReactiveRead {
+                    span: Span::new(start, end),
+                    // `uncertain` specifically means that a component prop's
+                    // reactive backing is not established. Accessor, store,
+                    // and contract identities remain proven reactive even
+                    // when their surrounding function is only a possible
+                    // component. A style preference cannot promote the 1.x
+                    // catalog's historical all-props heuristic into proof.
+                    proven: !read.uncertain || read.kind.as_ref() != "component-props",
+                });
         }
-        let mut root = member.object;
-        while let Some(inner) = file
+        for reads in by_path.values_mut() {
+            reads.sort_by_key(|read| (read.span.start, read.span.end, read.proven));
+        }
+        Self { by_path }
+    }
+
+    /// Whether evaluating exactly `expression` performs a proven reactive
+    /// read outside a nested function. A read summarized onto an enclosing
+    /// call remains eligible: that is the interprocedural proof that invoking
+    /// the helper executes the dependency. An unresolved read never qualifies.
+    pub(super) fn has_proven_read(
+        &self,
+        context: &UpstreamCompatContext<'_>,
+        file: &FileFacts,
+        expression: Span,
+    ) -> bool {
+        let expression = file.ast.peel_ts_sugar_span(expression);
+        let nested_functions = file
+            .ast
+            .functions_within(expression)
+            .map(|function| function.span)
+            .collect::<Vec<_>>();
+        let inside_nested = |span: Span| {
+            nested_functions
+                .iter()
+                .any(|function| function.contains(span))
+        };
+        let indexed_read = self.by_path.get(file.path.as_str()).is_some_and(|reads| {
+            let start = reads.partition_point(|read| read.span.start < expression.start);
+            reads[start..]
+                .iter()
+                .take_while(|read| read.span.start <= expression.end)
+                .filter(|read| read.proven && expression.contains(read.span))
+                .any(|read| !inside_nested(read.span))
+        });
+        if indexed_read {
+            return true;
+        }
+
+        // A caller can pass an accessor function as a static prop value:
+        // `<List items={items}>`. The property read itself is correctly absent
+        // from `ReactiveRead`, but invoking `props.items()` subscribes. Caller
+        // enumeration owns that fact, so consult its exact per-prop value
+        // classification rather than guessing from the function type.
+        file.ast.calls_within(expression).any(|call| {
+            if inside_nested(call.span) {
+                return false;
+            }
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            let Some(root) = member_root(file, callee) else {
+                return false;
+            };
+            let Some(symbol) = source_symbol_at(context, file, root) else {
+                return false;
+            };
+            let Some((_, declaration)) = context.prop_sources.get(symbol) else {
+                return false;
+            };
+            let Some(first_member) = file
+                .ast
+                .members
+                .iter()
+                .find(|member| member.object == root && callee.contains(member.span))
+            else {
+                return false;
+            };
+            file.ast
+                .computed_members
+                .binary_search(&first_member.span)
+                .is_err()
+                && context
+                    .props_reactivity
+                    .accessor_value_use(declaration, text(file, first_member.property))
+                    == crate::source_discovery::PropUse::Reactive
+        })
+    }
+}
+
+pub(super) fn source_symbol_at<'a>(
+    context: &'a UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<&'a crate::SymbolId> {
+    context.entities.at(file.path.as_str(), span).or_else(|| {
+        context
+            .source_reference_index
+            .get(file.path.as_str())
+            .and_then(|by_range| by_range.get(&(u64::from(span.start), u64::from(span.end))))
+    })
+}
+
+/// The object a member chain is rooted at: `store.a.b` -> `store`.
+pub(super) fn member_root(file: &FileFacts, span: Span) -> Option<Span> {
+    let mut current = file.ast.members.iter().find(|member| member.span == span)?;
+    loop {
+        match file
             .ast
             .members
             .iter()
-            .find(|candidate| candidate.span == root)
+            .find(|member| member.span == current.object)
         {
-            root = inner.object;
-        }
-        let Some(symbol) = symbol_at(root) else {
-            proof = ReactiveDependencyProof::Unknown;
-            continue;
-        };
-        if context.source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) {
-            return ReactiveDependencyProof::Reactive;
-        }
-        if let Some((_, declaration)) = context.prop_sources.get(&symbol) {
-            if context.uncertain_prop_sources.contains(&symbol) {
-                proof = ReactiveDependencyProof::Unknown;
-                continue;
-            }
-            let Some(first_member) =
-                file.ast.members.iter().find(|candidate| {
-                    candidate.object == root && expression.contains(candidate.span)
-                })
-            else {
-                proof = ReactiveDependencyProof::Unknown;
-                continue;
-            };
-            if file
-                .ast
-                .computed_members
-                .binary_search(&first_member.span)
-                .is_ok()
-            {
-                proof = ReactiveDependencyProof::Unknown;
-                continue;
-            }
-            match context
-                .props_reactivity
-                .proven_prop_use(declaration, text(file, first_member.property))
-            {
-                PropUse::Reactive => return ReactiveDependencyProof::Reactive,
-                PropUse::Unknown => proof = ReactiveDependencyProof::Unknown,
-                PropUse::Static => {}
-            }
+            Some(outer) => current = outer,
+            None => return Some(current.object),
         }
     }
-
-    for call in file.ast.calls_within(expression) {
-        if inside_nested(call.span) {
-            continue;
-        }
-        match symbol_at(file.ast.peel_ts_sugar_span(call.callee)) {
-            Some(symbol) if context.accessors.contains_key(&symbol) => {
-                return ReactiveDependencyProof::Reactive;
-            }
-            Some(_) | None => proof = ReactiveDependencyProof::Unknown,
-        }
-    }
-
-    for identifier in file.ast.identifiers_within(expression) {
-        if identifier.role != solid_facts::ast::IdentifierRole::Reference
-            || inside_nested(identifier.span)
-        {
-            continue;
-        }
-        match symbol_at(identifier.span) {
-            Some(symbol)
-                if context.source_kinds.get(&symbol) == Some(&ReactiveSourceKind::Store) =>
-            {
-                return ReactiveDependencyProof::Reactive;
-            }
-            Some(symbol) if context.prop_sources.contains_key(&symbol) => {
-                let Some((_, declaration)) = context.prop_sources.get(&symbol) else {
-                    unreachable!("checked above")
-                };
-                match context.props_reactivity.proven_object_use(declaration) {
-                    PropUse::Reactive => return ReactiveDependencyProof::Reactive,
-                    PropUse::Unknown => proof = ReactiveDependencyProof::Unknown,
-                    PropUse::Static => {}
-                }
-            }
-            Some(_) => {}
-            None => proof = ReactiveDependencyProof::Unknown,
-        }
-    }
-
-    proof
 }
 
 /// The source text a span covers, or `""` when the span is not readable.
@@ -663,6 +664,9 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// `Reactive` everywhere for dialects that keep the upstream
     /// over-approximation.
     pub(super) props_reactivity: &'a crate::source_discovery::PropsReactivityIndex,
+    /// Local, interprocedural, alias-propagated, and contract-derived reads,
+    /// indexed once for exact governing-expression queries.
+    pub(super) reactive_reads: ReactiveReadIndex,
     /// The proven-source symbol at each exact TypeScript reference location,
     /// indexed path → byte range. Entity facts intentionally cover only
     /// semantically interesting expression shapes; ordinary operator operands
@@ -683,6 +687,8 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// carries no `.solid-checker/rule-options.json`. See
     /// [`solid1x_options`].
     pub(super) solid1x_options: &'a solid1x_options::Solid1xRuleOptions,
+    pub(super) prefer_for_enabled: bool,
+    pub(super) prefer_show_enabled: bool,
 }
 
 /// Runs every upstream-compat rule the dialect's catalog declares over one
@@ -691,7 +697,9 @@ fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiag
     let mut violations = Vec::new();
     let mut defects = Vec::new();
     solid1x_syntax::check_file(file, context, &mut violations);
-    solid1x_structure::check_file(file, context, &mut violations);
+    if context.prefer_for_enabled || context.prefer_show_enabled {
+        solid1x_structure::check_file(file, context, &mut violations);
+    }
     if context.dialect.carries_eslint_era_rules() {
         solid1x_attributes::check_file(file, context, &mut violations);
         solid1x_undef::check_file(file, context, &mut violations);
@@ -725,6 +733,22 @@ pub(crate) fn check_project(
     reusable: bool,
     draft: &mut ProgramDraft,
 ) {
+    let (prefer_for_name, prefer_show_name) = if ctx.dialect.carries_eslint_era_rules() {
+        ("v1/prefer-for", "v1/prefer-show")
+    } else {
+        ("prefer-for", "prefer-show")
+    };
+    let prefer_for_enabled = ctx
+        .rule_options
+        .is_enabled(prefer_for_name, false, &["preferences"]);
+    let prefer_show_enabled =
+        ctx.rule_options
+            .is_enabled(prefer_show_name, false, &["preferences"]);
+    let reactive_reads = if prefer_for_enabled || prefer_show_enabled {
+        ReactiveReadIndex::new(&draft.reads)
+    } else {
+        ReactiveReadIndex::default()
+    };
     let retained = reference_slot.as_deref_mut().and_then(|slot| {
         if reusable {
             slot.take()
@@ -743,6 +767,7 @@ pub(crate) fn check_project(
         prop_sources: ctx.prop_sources,
         uncertain_prop_sources: ctx.uncertain_prop_sources,
         props_reactivity: ctx.props_reactivity,
+        reactive_reads,
         source_reference_index: retained.unwrap_or_else(|| {
             crate::symbols::source_reference_locations(
                 &ctx.facts.typescript,
@@ -752,6 +777,8 @@ pub(crate) fn check_project(
         }),
         contracted: ctx.contracted,
         solid1x_options: ctx.solid1x_rule_options,
+        prefer_for_enabled,
+        prefer_show_enabled,
     };
     for diagnostics in parallel_file_results(&ctx.facts.files, |file| check_file(file, &context)) {
         draft.static_violations.extend(diagnostics.violations);

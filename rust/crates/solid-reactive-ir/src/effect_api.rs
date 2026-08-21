@@ -43,6 +43,14 @@ pub(crate) enum EffectFunctionUncertainty {
     RuntimeEntryAndArgumentShape,
 }
 
+#[derive(Clone, Copy)]
+enum ExpandedArgument<'a> {
+    Visible(&'a ArgumentFact),
+    HiddenBySpread,
+    Absent,
+    Uncertain,
+}
+
 impl EffectFunctionUncertainty {
     pub(crate) const fn analysis_context(self) -> &'static str {
         match self {
@@ -109,32 +117,67 @@ pub(crate) fn classify_effect_call(
         .resolved_callee_call(file, call.callee)
         .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
     if call.arguments.iter().any(|argument| argument.spread) {
-        // A spread hides arity: `createEffect(...operands)` may pass both
-        // slots. Absence of a *visible* apply argument is not absence of the
-        // argument, and both fields below are claims -- the missing-apply
-        // defect, and in 2.0 whether the call throws before allocation. A
-        // valid spread call therefore leaves the missing-function outcome
-        // explicit as uncertifiable; silence would incorrectly certify the
-        // hidden runtime arguments. Solid 1.x allocates before invoking its
-        // callback at every arity, so its ownership answer remains proven.
-        let missing_effect_function = if call_is_valid {
-            ProofStatus::Uncertain
-        } else {
-            ProofStatus::No
-        };
-        return EffectCallSemantics {
-            missing_effect_uncertainty: missing_effect_uncertainty(
-                missing_effect_function,
-                server_entry_possible,
-            ),
-            missing_effect_function: missing_effect_function
-                .with_server_entry_possible(server_entry_possible),
-            owner_registration: match version {
-                Version::V1 => {
-                    ProofStatus::Proven.with_server_entry_possible(server_entry_possible)
+        // A spread's static tuple type can prove where the apply slot is only
+        // when Type Facts reports exactLength. Optional/rest/array/unequal
+        // union shapes stay explicit uncertainty. Even an exact spread does
+        // not describe a hidden slot's value, so only proven absence (or a
+        // visible argument preceding/following exact spreads) is classified.
+        return match version {
+            Version::V1 => {
+                let first = expanded_argument(file, call, 0, lookup);
+                let missing_effect_function = if !call_is_valid {
+                    ProofStatus::No
+                } else if let ExpandedArgument::Visible(argument) = first {
+                    v1_effect_function_status(file, Some(argument), lookup)
+                } else {
+                    ProofStatus::Uncertain
+                };
+                EffectCallSemantics {
+                    missing_effect_uncertainty: missing_effect_uncertainty(
+                        missing_effect_function,
+                        server_entry_possible,
+                    ),
+                    missing_effect_function: missing_effect_function
+                        .with_server_entry_possible(server_entry_possible),
+                    owner_registration: ProofStatus::Proven
+                        .with_server_entry_possible(server_entry_possible),
                 }
-                Version::V2 => ProofStatus::Uncertain,
-            },
+            }
+            Version::V2 => {
+                let apply = expanded_argument(file, call, 1, lookup);
+                let missing_effect_function = if !call_is_valid {
+                    ProofStatus::No
+                } else {
+                    match apply {
+                        ExpandedArgument::Visible(argument) => {
+                            v2_effect_function_status(file, argument, lookup)
+                        }
+                        ExpandedArgument::Absent => ProofStatus::Proven,
+                        ExpandedArgument::HiddenBySpread | ExpandedArgument::Uncertain => {
+                            ProofStatus::Uncertain
+                        }
+                    }
+                };
+                let owner_registration = match apply {
+                    ExpandedArgument::Visible(argument) => {
+                        v2_owner_registration(file, argument, lookup)
+                            .with_server_entry_possible(server_entry_possible)
+                    }
+                    ExpandedArgument::Absent => ProofStatus::No,
+                    ExpandedArgument::HiddenBySpread | ExpandedArgument::Uncertain => {
+                        ProofStatus::Uncertain
+                    }
+                };
+                EffectCallSemantics {
+                    missing_effect_uncertainty: missing_effect_uncertainty(
+                        missing_effect_function,
+                        server_entry_possible,
+                    ),
+                    missing_effect_function: missing_effect_function
+                        .with_server_entry_possible(server_entry_possible),
+                    owner_registration,
+                }
+            }
         };
     }
 
@@ -194,6 +237,48 @@ pub(crate) fn classify_effect_call(
     }
 }
 
+fn expanded_argument<'a>(
+    file: &FileFacts,
+    call: &'a CallFact,
+    wanted: usize,
+    lookup: &SemanticLookup<'_>,
+) -> ExpandedArgument<'a> {
+    let mut position = 0usize;
+    for argument in &call.arguments {
+        if !argument.spread {
+            if position == wanted {
+                return ExpandedArgument::Visible(argument);
+            }
+            position = position.saturating_add(1);
+            continue;
+        }
+        let span = file
+            .ast
+            .spreads
+            .iter()
+            .find(|spread| spread.span == argument.span)
+            .map_or(argument.span, |spread| spread.argument);
+        let Some(length) = lookup
+            .entity_at(file.path.as_str(), span)
+            .and_then(|entity| entity.tuple_shape)
+            .and_then(typefacts::TupleShape::exact_length)
+            .and_then(|length| usize::try_from(length).ok())
+        else {
+            return if position > wanted {
+                ExpandedArgument::Absent
+            } else {
+                ExpandedArgument::Uncertain
+            };
+        };
+        let end = position.saturating_add(length);
+        if wanted >= position && wanted < end {
+            return ExpandedArgument::HiddenBySpread;
+        }
+        position = end;
+    }
+    ExpandedArgument::Absent
+}
+
 fn v1_effect_function_status(
     file: &FileFacts,
     argument: Option<&ArgumentFact>,
@@ -225,7 +310,9 @@ fn v1_effect_function_status(
                 ProofStatus::No
             }
             Some(domain)
-                if !domain.unknown && !domain.may_be_callable && argument.runtime_type_escape =>
+                if !domain.unknown()
+                    && !domain.may_be_callable()
+                    && argument.runtime_type_escape =>
             {
                 ProofStatus::Proven
             }
@@ -283,8 +370,8 @@ fn v2_effect_function_status(
                         ProofStatus::No
                     }
                     Some(domain)
-                        if !domain.unknown
-                            && !domain.may_be_callable
+                        if !domain.unknown()
+                            && !domain.may_be_callable()
                             && (argument.runtime_type_escape || property.runtime_type_escape) =>
                     {
                         ProofStatus::Proven
@@ -316,7 +403,10 @@ fn runtime_value_domain(
 }
 
 fn only_callable(domain: RuntimeValueDomain) -> bool {
-    domain.may_be_callable && !domain.may_be_undefined && !domain.may_be_other && !domain.unknown
+    domain.may_be_callable()
+        && !domain.may_be_undefined()
+        && !domain.may_be_other()
+        && !domain.unknown()
 }
 
 fn v2_owner_registration(

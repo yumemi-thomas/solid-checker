@@ -14,10 +14,10 @@
 //! shapes upstream defines (a JSX element/fragment, or a bare identifier).
 
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind};
+use solid_facts::ast::{ArgumentValueKind, IdentifierRole, ImportKind, LogicalOperatorKind};
 use solid_facts::core::Span;
 
-use super::{ReactiveDependencyProof, UpstreamCompatContext, reactive_dependency_proof, text};
+use super::{UpstreamCompatContext, text};
 use crate::{Fix, StaticViolation, TextEdit, location};
 
 pub(super) fn check_file(
@@ -25,8 +25,12 @@ pub(super) fn check_file(
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
-    prefer_for(file, context, violations);
-    prefer_show(file, context, violations);
+    if context.prefer_for_enabled {
+        prefer_for(file, context, violations);
+    }
+    if context.prefer_show_enabled {
+        prefer_show(file, context, violations);
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -47,6 +51,7 @@ fn prefer_for(
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
+    let mut may_add_import = true;
     for call in &file.ast.calls {
         if direct_container_position(file, call.span) != Some(JsxExpressionPosition::Child) {
             continue;
@@ -62,69 +67,87 @@ fn prefer_for(
         if text(file, member.property) != "map" || call.arguments.len() != 1 {
             continue;
         }
-        if reactive_dependency_proof(context, file, member.object)
-            != ReactiveDependencyProof::Reactive
+        let standard_array_map = context
+            .lookup
+            .resolved_callee_call(file, call.callee)
+            .filter(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .is_some_and(|declaration| {
+                declaration.standard_library && declaration.name.as_ref() == "map"
+            });
+        if !standard_array_map {
+            continue;
+        }
+        if !context
+            .reactive_reads
+            .has_proven_read(context, file, member.object)
         {
             continue;
         }
         let argument = &call.arguments[0];
+        let solid_one = context.dialect.carries_eslint_era_rules();
         if !matches!(
             argument.value,
             ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction
-        ) {
+        ) || solid_one && argument.value == ArgumentValueKind::AsyncFunction
+        {
             continue;
         }
-        // Upstream's autofix applies only when the callback takes exactly
-        // one non-rest parameter (`(item) => ...`); an index parameter, no
-        // parameter, or a rest parameter leaves too many candidate
+        // The autofix applies only to an arrow with exactly one non-rest
+        // parameter (`(item) => ...`). A regular function can observe
+        // Array#map's three callback arguments through `arguments`, while
+        // `<For>` supplies only its declared parameter. An index parameter,
+        // no parameter, or a rest parameter also leaves too many candidate
         // rewrites (`<For>` with its own index callback, or `<Index>`) to
         // pick between. `FunctionFact::parameters` already excludes rest
         // parameters, so a rest-only callback also reads as zero
         // parameters here, which correctly falls through to "no fix".
         //
-        // The rewrite additionally requires the receiver to be a *proven*
-        // array. `.map` is matched by name, as upstream matches it, and the
-        // report is safe on a name alone — but `<For each>` iterates arrays,
-        // so rewriting an Immutable.js collection or any other `.map`-bearing
-        // type would change behaviour. The checker's array/tuple classification
-        // of the receiver is that proof; anything short of it — `Mixed`,
-        // `Unknown`, or no fact — leaves the report standing and withholds the
-        // fix.
+        // The judgement itself requires a proven array/tuple. A reactive
+        // collection can expose a completely unrelated `.map`; recommending
+        // `<For each>` for it would be a type and runtime error, not merely an
+        // unsafe autofix. Async callbacks are also left to TypeScript because
+        // the published Solid 1.x types reject their Promise-valued children.
         let receiver_is_array = super::expression_array_shape(context, file, member.object)
             .is_some_and(typefacts::ArrayShape::is_array_or_tuple);
-        let one_parameter = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
-            .is_some_and(|function| function.parameters.len() == 1);
-        let solid_one = context.dialect.carries_eslint_era_rules();
-        let for_name = if solid_one {
-            "<For>"
-        } else {
-            "<For keyed={false}>"
-        };
-        let (message, fixes) = if one_parameter {
-            let fixes = if receiver_is_array {
+        if !receiver_is_array {
+            continue;
+        }
+        let one_parameter_arrow = argument.value == ArgumentValueKind::Function
+            && file
+                .ast
+                .functions
+                .iter()
+                .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
+                .is_some_and(|function| {
+                    function.kind == solid_facts::ast::FunctionKind::Arrow
+                        && function.parameters.len() == 1
+                });
+        let fix_target = one_parameter_arrow
+            .then(|| solid_component_fix_target(file, "For", call.span, may_add_import))
+            .flatten();
+        if fix_target
+            .as_ref()
+            .is_some_and(|target| target.added_import)
+        {
+            may_add_import = false;
+        }
+        let (message, fixes) = if one_parameter_arrow {
+            let fixes = if let Some(target) = fix_target {
+                let mut edits = target.import_edit.into_iter().collect::<Vec<_>>();
+                edits.push(TextEdit {
+                    location: location(file.path.shared(), call.span),
+                    new_text: format!(
+                        "<{name} each={{{receiver}}}>{{{callback}}}</{name}>",
+                        name = target.name,
+                        receiver = text(file, member.object),
+                        callback = text(file, argument.span),
+                    ),
+                });
                 vec![Fix {
-                    message: format!("Replace Array#map with {for_name}."),
+                    message: "Replace Array#map with <For>.".into(),
                     applicability: "safe".into(),
-                    edits: vec![TextEdit {
-                        location: location(file.path.shared(), call.span),
-                        new_text: if solid_one {
-                            format!(
-                                "<For each={{{}}}>{{{}}}</For>",
-                                text(file, member.object),
-                                text(file, argument.span)
-                            )
-                        } else {
-                            format!(
-                                "<For keyed={{false}} each={{{}}}>{{{}}}</For>",
-                                text(file, member.object),
-                                text(file, argument.span)
-                            )
-                        },
-                    }],
+                    edits,
                 }]
             } else {
                 vec![]
@@ -146,7 +169,7 @@ fn prefer_for(
             hint: if solid_one {
                 "Pick `<For>` when the callback needs the item value reactively, `<Index>` when it needs the index reactively.".into()
             } else {
-                "Use `<For keyed={false}>` for index-stable list rendering in Solid 2.0; `Index` is not part of the 2.0 API.".into()
+                "Solid 2.0's default `<For>` preserves item identity; `keyed={false}` instead passes an accessor and is not a semantics-preserving rewrite of an Array#map callback.".into()
             },
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
@@ -154,6 +177,112 @@ fn prefer_for(
             uncertain: false,
         });
     }
+}
+
+struct SolidComponentFixTarget {
+    name: String,
+    import_edit: Option<TextEdit>,
+    added_import: bool,
+}
+
+/// Names a runtime Solid control-flow component without guessing that a JSX
+/// identifier exists. Existing named/namespace imports are used only when no
+/// second binding can shadow them anywhere in the file. Otherwise the first
+/// fix of that component kind adds a collision-free named import; later
+/// findings wait for the normal lint fix pass to rerun, avoiding overlapping
+/// import edits when a client applies every safe fix in one batch.
+fn solid_component_fix_target(
+    file: &FileFacts,
+    imported: &str,
+    candidate: Span,
+    may_add_import: bool,
+) -> Option<SolidComponentFixTarget> {
+    for import in &file.ast.imports {
+        if import.module.as_str() != "solid-js" || import.type_only {
+            continue;
+        }
+        for binding in &import.bindings {
+            if binding.type_only {
+                continue;
+            }
+            let matches = match binding.kind {
+                ImportKind::Named => binding.imported.as_deref() == Some(imported),
+                ImportKind::Namespace => true,
+                ImportKind::SideEffect | ImportKind::Default => false,
+            };
+            if !matches {
+                continue;
+            }
+            let local = text(file, binding.local.span);
+            let binding_count = file
+                .ast
+                .identifiers
+                .iter()
+                .filter(|identifier| {
+                    identifier.role == IdentifierRole::Binding
+                        && text(file, identifier.span) == local
+                })
+                .count();
+            if binding_count == 1 {
+                return Some(SolidComponentFixTarget {
+                    name: if binding.kind == ImportKind::Namespace {
+                        format!("{local}.{imported}")
+                    } else {
+                        local.to_string()
+                    },
+                    import_edit: None,
+                    added_import: false,
+                });
+            }
+        }
+    }
+    if !may_add_import {
+        return None;
+    }
+
+    let stem = format!("__SolidChecker{imported}{}", candidate.start);
+    let mut name = stem.clone();
+    let mut suffix = 2;
+    while file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| text(file, identifier.span) == name)
+    {
+        name = format!("{stem}_{suffix}");
+        suffix += 1;
+    }
+    let insertion = file
+        .ast
+        .imports
+        .last()
+        .map(|import| import.span.end)
+        .or_else(|| {
+            file.ast
+                .module_directives
+                .last()
+                .map(|directive| directive.span.end)
+        })
+        .or_else(|| {
+            file.source
+                .starts_with("#!")
+                .then(|| file.source.find('\n').unwrap_or(file.source.len()))
+                .and_then(|offset| u32::try_from(offset).ok())
+        });
+    let (offset, prefix, suffix_text) = match insertion {
+        Some(offset) => (offset, "\n", ""),
+        None => (0, "", "\n"),
+    };
+    Some(SolidComponentFixTarget {
+        name: name.clone(),
+        import_edit: Some(TextEdit {
+            location: location(file.path.shared(), Span::new(offset, offset)),
+            new_text: format!(
+                "{prefix}import {{ {imported} as {name} }} from \"solid-js\";{suffix_text}"
+            ),
+        }),
+        added_import: true,
+    })
 }
 
 // ---------------------------------------------------------------------
@@ -357,9 +486,19 @@ fn show_replacement_span(source: &str, span: Span) -> Span {
     }
 }
 
+#[cfg(test)]
 fn show_conditional_replacement(test: &str, consequent: &str, alternate: &str) -> String {
+    show_conditional_replacement_with_name("Show", test, consequent, alternate)
+}
+
+fn show_conditional_replacement_with_name(
+    name: &str,
+    test: &str,
+    consequent: &str,
+    alternate: &str,
+) -> String {
     format!(
-        "<Show when={{{test}}} fallback={}>{}</Show>",
+        "<{name} when={{{test}}} fallback={}>{}</{name}>",
         as_jsx_attribute_expression(alternate),
         as_jsx_child(consequent)
     )
@@ -370,6 +509,7 @@ fn prefer_show(
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
+    let mut may_add_import = true;
     for logical in &file.ast.logical_expressions {
         if logical.operator != LogicalOperatorKind::And || !expensive_branch(file, logical.right) {
             continue;
@@ -381,26 +521,12 @@ fn prefer_show(
         if jsx_expression_position(file, logical.span) != Some(JsxExpressionPosition::Child) {
             continue;
         }
-        if reactive_dependency_proof(context, file, logical.left)
-            != ReactiveDependencyProof::Reactive
+        if !context
+            .reactive_reads
+            .has_proven_read(context, file, logical.left)
         {
             continue;
         }
-        let fixes = vec![Fix {
-            message: "Replace with <Show>.".into(),
-            applicability: "safe".into(),
-            edits: vec![TextEdit {
-                location: location(
-                    file.path.shared(),
-                    show_replacement_span(&file.source, logical.span),
-                ),
-                new_text: format!(
-                    "<Show when={{{}}}>{}</Show>",
-                    text(file, logical.left),
-                    as_jsx_child(text(file, logical.right))
-                ),
-            }],
-        }];
         violations.push(StaticViolation {
             id: "SC8015".into(),
             rule: "prefer-show".into(),
@@ -409,7 +535,10 @@ fn prefer_show(
                 .into(),
             location: location(file.path.shared(), logical.span),
             analysis_context: String::new(),
-            fixes,
+            // `0 && child` renders the text `0`, while `<Show when={0}>`
+            // renders nothing. Type Facts do not currently prove a Boolean
+            // value domain, so this rewrite cannot honestly be called safe.
+            fixes: vec![],
             uncertain: false,
         });
     }
@@ -422,26 +551,37 @@ fn prefer_show(
         if jsx_expression_position(file, conditional.span) != Some(JsxExpressionPosition::Child) {
             continue;
         }
-        if reactive_dependency_proof(context, file, conditional.test)
-            != ReactiveDependencyProof::Reactive
+        if !context
+            .reactive_reads
+            .has_proven_read(context, file, conditional.test)
         {
             continue;
         }
-        let fixes = vec![Fix {
-            message: "Replace with <Show fallback>.".into(),
-            applicability: "safe".into(),
-            edits: vec![TextEdit {
-                location: location(
-                    file.path.shared(),
-                    show_replacement_span(&file.source, conditional.span),
-                ),
-                new_text: show_conditional_replacement(
-                    text(file, conditional.test),
-                    text(file, conditional.consequent),
-                    text(file, conditional.alternate),
-                ),
-            }],
-        }];
+        let fixes = solid_component_fix_target(file, "Show", conditional.span, may_add_import)
+            .map(|target| {
+                if target.added_import {
+                    may_add_import = false;
+                }
+                let mut edits = target.import_edit.into_iter().collect::<Vec<_>>();
+                edits.push(TextEdit {
+                    location: location(
+                        file.path.shared(),
+                        show_replacement_span(&file.source, conditional.span),
+                    ),
+                    new_text: show_conditional_replacement_with_name(
+                        &target.name,
+                        text(file, conditional.test),
+                        text(file, conditional.consequent),
+                        text(file, conditional.alternate),
+                    ),
+                });
+                vec![Fix {
+                    message: "Replace with <Show fallback>.".into(),
+                    applicability: "safe".into(),
+                    edits,
+                }]
+            })
+            .unwrap_or_default();
         violations.push(StaticViolation {
             id: "SC8015".into(),
             rule: "prefer-show".into(),

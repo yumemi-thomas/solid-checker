@@ -37,34 +37,44 @@ fn cli_consumes_discovered_package_contracts() {
         Err(_) => return,
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for (fixture, rule, message) in [
-        ("package-consumer", "strict-read-untracked", "readCount"),
+    for (fixture, rule, message, expected_count) in [
+        ("package-consumer", "strict-read-untracked", "readCount", 1),
         (
             "package-return-consumer",
             "strict-read-untracked",
             "created count",
+            1,
         ),
         (
             "package-callback-consumer",
             "strict-read-untracked",
             "runMixed",
+            2,
         ),
         (
             "package-store-consumer",
             "strict-read-untracked",
             "state.value",
+            1,
         ),
         (
             "package-store-destructure",
             "no-destructure",
             "destructuring",
+            1,
         ),
         (
             "package-unknown-export",
             "package-contract-incomplete",
             "unknownPrimitive",
+            1,
         ),
-        ("bundled-solid-consumer", "strict-read-untracked", "doubled"),
+        (
+            "bundled-solid-consumer",
+            "strict-read-untracked",
+            "doubled",
+            1,
+        ),
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
             .env("SOLID_TYPEFACTS_BIN", &typefacts)
@@ -78,12 +88,19 @@ fn cli_consumes_discovered_package_contracts() {
             String::from_utf8_lossy(&output.stderr)
         );
         let findings = decode_findings(&output.stdout);
-        assert_eq!(findings.len(), 1, "fixture {fixture}: {findings:#?}");
-        assert_eq!(findings[0]["rule"], rule, "fixture {fixture}");
+        assert_eq!(
+            findings.len(),
+            expected_count,
+            "fixture {fixture}: {findings:#?}"
+        );
         assert!(
-            findings[0]["message"]
-                .as_str()
-                .is_some_and(|finding| finding.contains(message))
+            findings.iter().any(|finding| {
+                finding["rule"] == rule
+                    && finding["message"]
+                        .as_str()
+                        .is_some_and(|message_text| message_text.contains(message))
+            }),
+            "fixture {fixture}: expected {rule} mentioning {message}, got {findings:#?}"
         );
     }
 }
@@ -97,7 +114,17 @@ fn cli_consumes_structured_returns_in_schema_one_contracts() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
-        .args(["--format", "json", "--project"])
+        .args([
+            "--format",
+            "json",
+            "--runtime-target",
+            "node",
+            "--rendering",
+            "string-ssr",
+            "--runtime-conditions",
+            "node,import",
+            "--project",
+        ])
         .arg(root.join("fixtures/reactive-ir/package-structured-return/tsconfig.json"))
         .output()
         .expect("run Rust diagnostic CLI");
@@ -157,7 +184,17 @@ fn bundled_contract_resolves_the_exact_web_subpath() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
-        .args(["--format", "json", "--project"])
+        .args([
+            "--format",
+            "json",
+            "--runtime-target",
+            "node",
+            "--rendering",
+            "string-ssr",
+            "--runtime-conditions",
+            "node,import",
+            "--project",
+        ])
         .arg(root.join("fixtures/reactive-ir/bundled-web-subpath-consumer/tsconfig.json"))
         .output()
         .unwrap();
@@ -181,7 +218,17 @@ fn bundled_scheduled_contract_marks_debounce_callback_deferred() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
-        .args(["--format", "json", "--dialect", "solid-v1", "--project"])
+        .args([
+            "--format",
+            "json",
+            "--dialect",
+            "solid-v1",
+            "--runtime-target",
+            "browser",
+            "--runtime-conditions",
+            "browser,import",
+            "--project",
+        ])
         .arg(root.join("fixtures/reactive-ir/bundled-scheduled-consumer/tsconfig.json"))
         .output()
         .unwrap();
@@ -366,7 +413,7 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
   "entrypoints": {
     ".": {
       "exports": {
-        "function": ["readCount"]
+        "function": ["readCount", "readItems"]
       }
     }
   },
@@ -413,7 +460,7 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
   "entrypoints": {
     ".": {
       "exports": {
-        "function-1": ["readCount"]
+        "function-1": ["readCount", "readItems"]
       }
     }
   },
@@ -491,7 +538,7 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
   "entrypoints": {
     ".": {
       "exports": {
-        "function-1": ["readCount"]
+        "function-1": ["readCount", "readItems"]
       }
     }
   },
@@ -511,13 +558,17 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
         .unwrap();
     assert_eq!(conditional.status.code(), Some(1));
     let conditional_findings = decode_findings(&conditional.stdout);
-    assert_eq!(conditional_findings.len(), 1);
-    assert_eq!(conditional_findings[0]["id"], "SC9005");
+    assert_eq!(conditional_findings.len(), 2);
     assert!(
-        conditional_findings[0]["message"]
+        conditional_findings
+            .iter()
+            .all(|finding| finding["id"] == "SC9005")
+    );
+    assert!(conditional_findings.iter().all(|finding| {
+        finding["message"]
             .as_str()
             .is_some_and(|message| message.contains("conditional runtime targets"))
-    );
+    }));
 
     fs::remove_dir_all(directory).unwrap();
 }

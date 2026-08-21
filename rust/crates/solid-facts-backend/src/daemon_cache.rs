@@ -6,6 +6,8 @@
 
 use std::{path::PathBuf, sync::Arc};
 
+use solid_reactive_ir::RuntimeEnvironment;
+
 pub(crate) type ContractFile = (PathBuf, [u8; 32]);
 pub(crate) type CachedSnapshot = (Arc<str>, Arc<[u8]>);
 
@@ -16,6 +18,7 @@ pub(crate) struct CachedAnswer {
     pub(crate) contract_files: Vec<ContractFile>,
     pub(crate) presets: Vec<String>,
     pub(crate) enable_rules: Vec<String>,
+    pub(crate) runtime: RuntimeEnvironment,
     pub(crate) status: Arc<str>,
     pub(crate) body: Arc<[u8]>,
 }
@@ -28,12 +31,14 @@ impl CachedAnswer {
         contract_files: &[ContractFile],
         presets: &[String],
         enable_rules: &[String],
+        runtime: &RuntimeEnvironment,
     ) -> Option<CachedSnapshot> {
         (self.generation == generation
             && self.explicit == explicit
             && self.contract_files == contract_files
             && self.presets == presets
-            && self.enable_rules == enable_rules)
+            && self.enable_rules == enable_rules
+            && self.runtime == *runtime)
             .then(|| (Arc::clone(&self.status), Arc::clone(&self.body)))
     }
 }
@@ -43,6 +48,7 @@ mod tests {
     use std::{path::PathBuf, sync::Arc};
 
     use super::CachedAnswer;
+    use solid_reactive_ir::{RuntimeEnvironment, RuntimeTarget};
 
     fn cached() -> CachedAnswer {
         CachedAnswer {
@@ -52,6 +58,7 @@ mod tests {
             contract_files: vec![(PathBuf::from("solid-reactivity.json"), [7; 32])],
             presets: vec!["preferences".into()],
             enable_rules: vec!["prefer-show".into()],
+            runtime: RuntimeEnvironment::default(),
             status: Arc::from("certified"),
             body: Arc::from(&b"snapshot"[..]),
         }
@@ -68,6 +75,7 @@ mod tests {
                 &contracts,
                 &cached.presets,
                 &cached.enable_rules,
+                &cached.runtime,
             ),
             Some((Arc::from("certified"), Arc::from(&b"snapshot"[..])))
         );
@@ -78,6 +86,7 @@ mod tests {
                 &cached.contract_files,
                 &cached.presets,
                 &cached.enable_rules,
+                &cached.runtime,
             ),
             cached.snapshot_if_current(
                 cached.generation,
@@ -85,6 +94,7 @@ mod tests {
                 &cached.contract_files,
                 &cached.presets,
                 &cached.enable_rules,
+                &cached.runtime,
             ),
             cached.snapshot_if_current(
                 cached.generation,
@@ -92,6 +102,7 @@ mod tests {
                 &[],
                 &cached.presets,
                 &cached.enable_rules,
+                &cached.runtime,
             ),
             cached.snapshot_if_current(
                 cached.generation,
@@ -99,6 +110,7 @@ mod tests {
                 &cached.contract_files,
                 &[],
                 &cached.enable_rules,
+                &cached.runtime,
             ),
             cached.snapshot_if_current(
                 cached.generation,
@@ -106,6 +118,18 @@ mod tests {
                 &cached.contract_files,
                 &cached.presets,
                 &[],
+                &cached.runtime,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.explicit,
+                &cached.contract_files,
+                &cached.presets,
+                &cached.enable_rules,
+                &RuntimeEnvironment {
+                    target: Some(RuntimeTarget::Browser),
+                    ..RuntimeEnvironment::default()
+                },
             ),
         ];
         assert!(changed.into_iter().all(|snapshot| snapshot.is_none()));

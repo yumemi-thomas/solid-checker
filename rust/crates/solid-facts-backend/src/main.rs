@@ -14,11 +14,12 @@ use std::{
 use serde::Deserialize;
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
-    BackendError, RequestedRuleEnablement, SourceFile, TypeFactsSession,
-    analyze_project_measured_with_enablement, build_project_native_measured,
+    BackendError, RequestedRuleEnablement, SemanticDemandOptions, SourceFile, TypeFactsSession,
+    analyze_project_measured_with_enablement, build_project_native_measured_with_demands,
     default_typefacts_executable, dialect, encode_package_contract, package_contract_statuses,
-    read_package_contract,
+    read_package_contract, semantic_demand_options_for_enablement,
 };
+use solid_reactive_ir::{RuntimeBuild, RuntimeEnvironment, RuntimeRendering, RuntimeTarget};
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -65,6 +66,8 @@ struct Request {
     help: bool,
     #[serde(default)]
     serve: bool,
+    #[serde(default)]
+    runtime: RuntimeEnvironment,
 }
 
 /// Strips the `-project <path>` pair the session now supplies itself, leaving
@@ -174,13 +177,28 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         sources_bytes = request.sources.iter().map(|s| s.source.len()).sum();
     }
     let source_setup_ns = started.elapsed().as_nanos();
+    let requested_enablement = RequestedRuleEnablement {
+        presets: &request.presets,
+        rules: &request.enable_rules,
+        runtime: request.runtime.clone(),
+    };
+    let semantic_demand_options = if diagnostics {
+        semantic_demand_options_for_enablement(
+            dialect,
+            Path::new(&request.project_id),
+            requested_enablement.clone(),
+        )?
+    } else {
+        SemanticDemandOptions::NONE
+    };
     let (mut facts, native_timings) = {
-        let (facts, timings) = build_project_native_measured(
+        let (facts, timings) = build_project_native_measured_with_demands(
             dialect,
             request.project_id.clone(),
             request.generation,
             request.sources.clone(),
             &mut typescript,
+            semantic_demand_options,
         )?;
         (facts, Some(timings))
     };
@@ -271,10 +289,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             &facts,
             &request.contract_paths,
             preloaded_bundled,
-            RequestedRuleEnablement {
-                presets: &request.presets,
-                rules: &request.enable_rules,
-            },
+            requested_enablement,
         )?;
         if !request.emit_contract.is_empty() {
             emit_package_contract(dialect, &request, &analysis.program, &facts)?;
@@ -340,6 +355,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut implementation_artifact = String::new();
     let mut contract_entry_file = String::new();
     let mut contract_package_root = String::new();
+    let mut runtime = RuntimeEnvironment::default();
     let mut help = false;
     let mut serve = false;
     let mut args = arguments.into_iter();
@@ -404,6 +420,36 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             contract_package_root = value.into();
             continue;
         }
+        if let Some(value) = argument.strip_prefix("--runtime-target=") {
+            runtime.target = Some(parse_runtime_target(value)?);
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--runtime-build=") {
+            runtime.build = Some(parse_runtime_build(value)?);
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--rendering=") {
+            runtime.rendering = Some(parse_runtime_rendering(value)?);
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--runtime-condition=") {
+            runtime.conditions.insert(value.to_owned());
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--runtime-conditions=") {
+            runtime.conditions.extend(
+                value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|condition| !condition.is_empty())
+                    .map(str::to_owned),
+            );
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--framework-transform=") {
+            runtime.framework_transforms.insert(value.to_owned());
+            continue;
+        }
         match argument.as_str() {
             "--project" | "-project" => {
                 project = PathBuf::from(args.next().ok_or("--project needs a path")?)
@@ -444,6 +490,41 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--contract-package-root" => {
                 contract_package_root = args.next().ok_or("--contract-package-root needs a path")?
             }
+            "--runtime-target" => {
+                runtime.target = Some(parse_runtime_target(
+                    &args.next().ok_or("--runtime-target needs a value")?,
+                )?)
+            }
+            "--runtime-build" => {
+                runtime.build = Some(parse_runtime_build(
+                    &args.next().ok_or("--runtime-build needs a value")?,
+                )?)
+            }
+            "--rendering" => {
+                runtime.rendering = Some(parse_runtime_rendering(
+                    &args.next().ok_or("--rendering needs a value")?,
+                )?)
+            }
+            "--runtime-condition" => {
+                runtime
+                    .conditions
+                    .insert(args.next().ok_or("--runtime-condition needs a value")?);
+            }
+            "--runtime-conditions" => {
+                runtime.conditions.extend(
+                    args.next()
+                        .ok_or("--runtime-conditions needs a comma-separated value")?
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|condition| !condition.is_empty())
+                        .map(str::to_owned),
+                );
+            }
+            "--framework-transform" => {
+                runtime
+                    .framework_transforms
+                    .insert(args.next().ok_or("--framework-transform needs a value")?);
+            }
             unknown => return Err(format!("unknown argument {unknown:?}").into()),
         }
     }
@@ -479,7 +560,38 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         contract_package_root,
         help,
         serve,
+        runtime,
     })
+}
+
+fn parse_runtime_target(value: &str) -> Result<RuntimeTarget, Box<dyn std::error::Error>> {
+    match value {
+        "browser" => Ok(RuntimeTarget::Browser),
+        "node" => Ok(RuntimeTarget::Node),
+        _ => Err(format!("unknown runtime target {value:?}; expected browser or node").into()),
+    }
+}
+
+fn parse_runtime_build(value: &str) -> Result<RuntimeBuild, Box<dyn std::error::Error>> {
+    match value {
+        "development" => Ok(RuntimeBuild::Development),
+        "production" => Ok(RuntimeBuild::Production),
+        _ => Err(
+            format!("unknown runtime build {value:?}; expected development or production").into(),
+        ),
+    }
+}
+
+fn parse_runtime_rendering(value: &str) -> Result<RuntimeRendering, Box<dyn std::error::Error>> {
+    match value {
+        "csr" => Ok(RuntimeRendering::Csr),
+        "string-ssr" => Ok(RuntimeRendering::StringSsr),
+        "streaming-ssr" => Ok(RuntimeRendering::StreamingSsr),
+        _ => Err(format!(
+            "unknown rendering mode {value:?}; expected csr, string-ssr, or streaming-ssr"
+        )
+        .into()),
+    }
 }
 
 fn print_help() {
@@ -497,6 +609,14 @@ fn print_help() {
            --contract <PATH>            Override/discover a package contract (repeatable)\n\
            --preset <NAME>              Enable a catalog preset (repeatable)\n\
            --enable-rule <NAME>         Enable one default-disabled rule (repeatable)\n\
+           --runtime-target <browser|node>\n\
+                                        Select the runtime target explicitly\n\
+           --runtime-build <development|production>\n\
+                                        Select the build mode explicitly\n\
+           --rendering <csr|string-ssr|streaming-ssr>\n\
+                                        Select the rendering mode explicitly\n\
+           --runtime-condition <NAME>   Select an exact package/runtime condition\n\
+           --framework-transform <NAME> Select an explicit framework/compiler transform\n\
            --validate-contract <PATH>   Validate a contract and artifact hashes\n\
            --emit-contract <PATH>       Write a generated solid-reactivity.json contract\n\
            --package-name <NAME>        Package name used by --emit-contract\n\
@@ -683,6 +803,8 @@ fn contract_exports_for_entry_file(
             )
         })?;
         let summary = promote_entry_callable(facts, &entry_file, &name, summary);
+        let summary =
+            attach_generated_owner_requirements(facts, program, &entry_file, &name, summary);
         exports.insert(name, summary);
     }
     unify_runtime_alias_summaries(facts, &entry_file, &mut exports);
@@ -694,6 +816,69 @@ fn contract_exports_for_entry_file(
         .into());
     }
     Ok(exports)
+}
+
+/// Adds exact owner requirements observed inside a direct exported function to
+/// the generated package summary. The source project may report the function
+/// as open-world/uncertain because its callers are not enumerable; that is
+/// precisely the obligation a consumer contract must carry. Conditional or
+/// runtime-dependent owner paths are not representable by the unconditional
+/// schema row and remain absent for explicit review.
+fn attach_generated_owner_requirements(
+    facts: &solid_facts::ProjectFacts,
+    program: &solid_reactive_ir::Program,
+    entry_file: &Path,
+    export_name: &str,
+    mut summary: solid_reactive_ir::ContractExport,
+) -> solid_reactive_ir::ContractExport {
+    let Some(file) = facts
+        .files
+        .iter()
+        .find(|file| same_canonical_path(Path::new(file.path.as_str()), entry_file))
+    else {
+        return summary;
+    };
+    let Some(function) = file.ast.functions.iter().find(|function| {
+        function
+            .name
+            .as_ref()
+            .and_then(|name| file.source_text(name.span))
+            .is_some_and(|name| name == export_name)
+    }) else {
+        return summary;
+    };
+    for requirement in program.missing_owners.iter().filter(|requirement| {
+        requirement.location.path.as_ref() == file.path.as_str()
+            && function.span.contains(solid_facts::core::Span::new(
+                u32::try_from(requirement.location.start_byte).unwrap_or(u32::MAX),
+                u32::try_from(requirement.location.end_byte).unwrap_or(u32::MAX),
+            ))
+            && !requirement.runtime_uncertain
+            && !requirement.conditional_owner
+            && !requirement.component_uncertain
+    }) {
+        if !summary
+            .owner_requirements
+            .iter()
+            .any(|existing| existing.operation == requirement.operation)
+        {
+            summary
+                .owner_requirements
+                .push(solid_reactive_ir::ContractOwnerRequirement {
+                    operation: requirement.operation,
+                    evidence: None,
+                });
+        }
+    }
+    summary
+        .owner_requirements
+        .sort_by_key(|requirement| match requirement.operation {
+            solid_reactive_ir::OwnerRequirementOperation::Effect => 0,
+            solid_reactive_ir::OwnerRequirementOperation::Cleanup => 1,
+            solid_reactive_ir::OwnerRequirementOperation::Boundary => 2,
+            solid_reactive_ir::OwnerRequirementOperation::SettledCleanup => 3,
+        });
+    summary
 }
 
 fn promote_entry_callable(

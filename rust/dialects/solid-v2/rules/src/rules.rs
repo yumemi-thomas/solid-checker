@@ -170,13 +170,18 @@ impl Rule {
             Self::PreferFor => ("SC8014", "prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "prefer-show", "warning", false),
         };
+        let opt_in_preference = matches!(self, Self::PreferFor | Self::PreferShow);
         RuleMetadata {
             code,
             name,
             severity,
             uncertifiable,
-            default_enabled: true,
-            presets: &[],
+            default_enabled: !opt_in_preference,
+            presets: if opt_in_preference {
+                &["preferences"]
+            } else {
+                &[]
+            },
         }
     }
 

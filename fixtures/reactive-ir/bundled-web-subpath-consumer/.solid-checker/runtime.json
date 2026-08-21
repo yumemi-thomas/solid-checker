@@ -1,0 +1,5 @@
+{
+  "target": "node",
+  "rendering": "string-ssr",
+  "conditions": ["node", "import"]
+}

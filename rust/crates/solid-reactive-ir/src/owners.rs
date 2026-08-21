@@ -672,6 +672,8 @@ pub(crate) fn find_missing_owners(
         .collect::<HashMap<_, _>>();
     let mut contexts = seed_contexts(&nodes);
     let mut edges = Vec::<(usize, usize, OwnerEdgeKind)>::new();
+    let mut requirements = Vec::new();
+    let mut seen = HashSet::new();
     for (file_index, file) in facts.files.iter().enumerate() {
         for (call_index, call) in file.ast.calls.iter().enumerate() {
             let owner =
@@ -748,9 +750,7 @@ pub(crate) fn find_missing_owners(
     }
     propagate_owner_contexts(&mut contexts, &outgoing);
 
-    let mut requirements = Vec::new();
     let mut settled_gates = SettledGateDecisions::new();
-    let mut seen = HashSet::new();
     for (file_index, file) in facts.files.iter().enumerate() {
         for (call_index, call) in file.ast.calls.iter().enumerate() {
             let primitive =
@@ -766,6 +766,39 @@ pub(crate) fn find_missing_owners(
                 &owner_file_indexes[file_index].providing_regions,
                 call.span,
             );
+            if !root_owned
+                && let Some(symbol) = lookup.callee_symbol(file, call.callee)
+                && let Some(requirements_for_call) = lookup.contract_owner_requirements(symbol)
+            {
+                let proven_unowned = context & OWNER_CONTEXT_PROVEN_UNOWNED != 0;
+                let conditional_owner = !proven_unowned
+                    && context & (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED)
+                        == (OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED);
+                let component_uncertain = context & OWNER_CONTEXT_COMPONENT_UNCERTAIN != 0;
+                for requirement in requirements_for_call {
+                    let operation = match requirement.operation {
+                        crate::OwnerRequirementOperation::Effect => "effect",
+                        crate::OwnerRequirementOperation::Cleanup => "cleanup",
+                        crate::OwnerRequirementOperation::Boundary => "boundary",
+                        crate::OwnerRequirementOperation::SettledCleanup => "settled-cleanup",
+                    };
+                    push_owner_requirement(
+                        &mut requirements,
+                        &mut seen,
+                        operation,
+                        file.path.as_str(),
+                        call.span,
+                        OwnerRequirementStatus {
+                            uncertain: conditional_owner || component_uncertain,
+                            runtime_uncertain: false,
+                            caller_uncertain: false,
+                            conditional_owner,
+                            component_uncertain,
+                            report: context & OWNER_CONTEXT_UNOWNED != 0,
+                        },
+                    );
+                }
+            }
             if !root_owned
                 && primitive.is_some_and(|primitive| {
                     lookup
@@ -1065,6 +1098,28 @@ pub(crate) fn discover_owner_file(
         }
         if inside_owner_providing_region(&providing_regions, call.span) {
             continue;
+        }
+        if let Some(symbol) = lookup.callee_symbol(file, call.callee)
+            && let Some(contract_requirements) = lookup.contract_owner_requirements(symbol)
+        {
+            for requirement in contract_requirements {
+                let operation = match requirement.operation {
+                    crate::OwnerRequirementOperation::Effect => "effect",
+                    crate::OwnerRequirementOperation::Cleanup => "cleanup",
+                    crate::OwnerRequirementOperation::Boundary => "boundary",
+                    crate::OwnerRequirementOperation::SettledCleanup => "settled-cleanup",
+                };
+                requirements.push(OwnerRequirementCandidate {
+                    operation,
+                    operation_span: call.span,
+                    owner,
+                    report_mask: OWNER_CONTEXT_UNOWNED,
+                    allow_uncertain: true,
+                    runtime_uncertain: false,
+                    settled_target: None,
+                    settled_gate: None,
+                });
+            }
         }
         let operation = match known_primitive(&call_primitives[call_index]) {
             // See the batch owner pass: `createRenderEffect` belongs with the
@@ -1523,6 +1578,30 @@ pub(crate) fn owner_callback_edges(
     primitive: &Option<PrimitiveName>,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<OwnerCallbackEdge> {
+    // Package contracts can describe callback owner behavior that is not
+    // available from the consumer's declarations. A present owner row is an
+    // exact runtime claim; an omitted row remains the legacy timing-only
+    // contract and must not be treated as inherited-owner proof.
+    if let Some(symbol) = lookup.callee_symbol(file, call.callee)
+        && let Some(callbacks) = lookup.contract_callbacks(symbol)
+    {
+        let contracted = callbacks
+            .iter()
+            .filter_map(|callback| {
+                call.arguments.get(callback.parameter)?;
+                let owner = callback.owner.as_deref()?;
+                Some(OwnerCallbackEdge {
+                    argument: callback.parameter,
+                    kind: contract_callback_owner_edge_kind(owner)?,
+                    source_path: file.path.to_string(),
+                    source: call.span,
+                })
+            })
+            .collect::<Vec<_>>();
+        if !contracted.is_empty() {
+            return contracted;
+        }
+    }
     let Some(primitive) = known_primitive(primitive) else {
         // A call that names no primitive can still be an invocation of a
         // function some primitive returned -- but only where the dialect models
@@ -1596,6 +1675,17 @@ pub(crate) const fn callback_owner_edge_kind(owner: solid_dialect::CallbackOwner
         solid_dialect::CallbackOwner::None => OwnerEdgeKind::Unowned,
         solid_dialect::CallbackOwner::Leaf => OwnerEdgeKind::Leaf,
     }
+}
+
+fn contract_callback_owner_edge_kind(owner: &str) -> Option<OwnerEdgeKind> {
+    Some(match owner {
+        "created" => OwnerEdgeKind::Owned,
+        "conditional" => OwnerEdgeKind::Conditional,
+        "inherited" => OwnerEdgeKind::Preserve,
+        "unowned" => OwnerEdgeKind::Unowned,
+        "leaf" => OwnerEdgeKind::Leaf,
+        _ => return None,
+    })
 }
 
 /// Compose the owner supplied by a returned function's invocation with the

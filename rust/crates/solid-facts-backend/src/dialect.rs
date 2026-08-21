@@ -264,12 +264,14 @@ pub fn rule_alias(name: &str) -> Option<&'static str> {
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SemanticDemandCapabilities {
     pub array_map_receiver_types: bool,
+    pub async_array_map_callbacks: bool,
     pub server_argument_library_types: bool,
 }
 
 impl SemanticDemandCapabilities {
     pub const NONE: Self = Self {
         array_map_receiver_types: false,
+        async_array_map_callbacks: false,
         server_argument_library_types: false,
     };
     /// Only the 2.0 catalog carries `server-function-rich-argument`, so only it
@@ -277,11 +279,13 @@ impl SemanticDemandCapabilities {
     #[cfg(feature = "dialect-v2")]
     const SOLID_2: Self = Self {
         array_map_receiver_types: true,
+        async_array_map_callbacks: true,
         server_argument_library_types: true,
     };
     #[cfg(feature = "dialect-v1")]
     const SOLID_1: Self = Self {
         array_map_receiver_types: true,
+        async_array_map_callbacks: false,
         server_argument_library_types: false,
     };
 }
@@ -439,9 +443,9 @@ static SOLID_V2: Dialect = Dialect {
             .map(solid_v2_rules::Rule::metadata)
     },
     semantic_demands: SemanticDemandCapabilities::SOLID_2,
-    catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_2,
+    catalog_capabilities: solid_v2_rules::CATALOG_CAPABILITIES,
     package_contract_finding: solid_v2_rules::package_contract_finding,
-    bundled_packages: &["solid-js", "@solidjs/web"],
+    bundled_packages: &["solid-js", "@solidjs/web", "@solidjs/signals"],
     bundled_contract: crate::diagnostics::bundled_contract_v2,
 };
 
@@ -465,7 +469,7 @@ static SOLID_V1: Dialect = Dialect {
             .map(solid_v1_rules::Rule::metadata)
     },
     semantic_demands: SemanticDemandCapabilities::SOLID_1,
-    catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_1,
+    catalog_capabilities: solid_v1_rules::CATALOG_CAPABILITIES,
     package_contract_finding: solid_v1_rules::package_contract_finding,
     bundled_packages: &["solid-js", "@solid-primitives/scheduled"],
     bundled_contract: crate::diagnostics::bundled_contract_v1,
@@ -757,8 +761,14 @@ mod tests {
 
     #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
     #[test]
-    fn only_prefer_classlist_is_default_disabled_and_a_preset_member() {
-        let expected = HashSet::from(["v1/prefer-classlist"]);
+    fn all_style_preferences_are_default_disabled_preset_members() {
+        let expected = HashSet::from([
+            "v1/prefer-classlist",
+            "v1/prefer-for",
+            "v1/prefer-show",
+            "prefer-for",
+            "prefer-show",
+        ]);
         let observed = solid_v1_rules::Rule::ALL
             .into_iter()
             .map(|rule| rule.metadata())

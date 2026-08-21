@@ -38,7 +38,8 @@ use typefacts::{ArrayShape, Callability, ResolvedCallValidity};
 
 use super::{
     UpstreamCompatContext, expression_array_shape, expression_runtime_value_domain,
-    is_lowercase_led, jsx_name_is_type_checked, static_string_expression, text,
+    is_lowercase_led, jsx_name_is_type_checked, member_root, source_symbol_at,
+    static_string_expression, text,
 };
 use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
 use crate::{
@@ -374,24 +375,24 @@ fn unchecked_handler_value_proof(
     let Some(domain) = expression_runtime_value_domain(context, file, runtime) else {
         return HandlerValueProof::Unresolved;
     };
-    if domain.unknown {
+    if domain.unknown() {
         return HandlerValueProof::Unresolved;
     }
     // `never` cannot reach the listener. A callable (optionally absent) is a
     // valid handler, while absence sentinels disable the handler harmlessly.
-    if (!domain.may_be_callable && !domain.may_be_undefined && !domain.may_be_other)
-        || (domain.may_be_callable && !domain.may_be_other)
-        || (!domain.may_be_callable && domain.may_be_undefined && !domain.may_be_other)
+    if (!domain.may_be_callable() && !domain.may_be_undefined() && !domain.may_be_other())
+        || (domain.may_be_callable() && !domain.may_be_other())
+        || (!domain.may_be_callable() && domain.may_be_undefined() && !domain.may_be_other())
     {
         return HandlerValueProof::Safe;
     }
-    if !domain.may_be_callable
-        && !domain.may_be_undefined
+    if !domain.may_be_callable()
+        && !domain.may_be_undefined()
         && handler_value_is_absent_sentinel(context, file, runtime)
     {
         return HandlerValueProof::Safe;
     }
-    if domain.may_be_callable || domain.may_be_undefined {
+    if domain.may_be_callable() || domain.may_be_undefined() {
         return HandlerValueProof::Unresolved;
     }
     match expression_array_shape(context, file, runtime) {
@@ -498,19 +499,6 @@ fn uncalled_accessor(
             uncertain: false,
         });
     }
-}
-
-fn source_symbol_at<'a>(
-    context: &'a UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> Option<&'a crate::SymbolId> {
-    context.entities.at(file.path.as_str(), span).or_else(|| {
-        context
-            .source_reference_index
-            .get(file.path.as_str())
-            .and_then(|by_range| by_range.get(&(u64::from(span.start), u64::from(span.end))))
-    })
 }
 
 /// `v1/no-direct-mutation` — upstream's `noWrite`.
@@ -768,20 +756,4 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     // TS2538 ("Type 'Accessor<string>' cannot be used as an index type") in
     // both dialects, so it never reaches this function's callers any more.
     None
-}
-
-/// The object a member chain is rooted at: `store.a.b` → `store`.
-fn member_root(file: &FileFacts, span: Span) -> Option<Span> {
-    let mut current = file.ast.members.iter().find(|member| member.span == span)?;
-    loop {
-        match file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == current.object)
-        {
-            Some(outer) => current = outer,
-            None => return Some(current.object),
-        }
-    }
 }

@@ -636,13 +636,13 @@ fn identifier_return_is_exact_function(
 /// spelling. A missing fact (the demand was not planned, or the compiler had
 /// no answer) is likewise unresolved.
 fn domain_cleanup_return_status(domain: Option<&RuntimeValueDomain>) -> CleanupReturnStatus {
-    let Some(domain) = domain.filter(|domain| !domain.unknown) else {
+    let Some(domain) = domain.filter(|domain| !domain.unknown()) else {
         return CleanupReturnStatus::Unresolved;
     };
     match (
-        domain.may_be_callable,
-        domain.may_be_other,
-        domain.may_be_undefined,
+        domain.may_be_callable(),
+        domain.may_be_other(),
+        domain.may_be_undefined(),
     ) {
         // Only ever a function, or only ever a function or `undefined`: legal
         // either way, but the optional form keeps owner registration open.

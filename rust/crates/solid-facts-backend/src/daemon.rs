@@ -27,10 +27,12 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use solid_facts_backend::{
-    DiagnosticSession, NativeIncrementalSession, SourceChange, SourceFile, TypeFactsSession,
-    discovered_contract_paths, imported_package_roots,
+    DiagnosticSession, NativeIncrementalSession, RequestedRuleEnablement, SourceChange, SourceFile,
+    TypeFactsSession, discovered_contract_paths, imported_package_roots,
+    semantic_demand_options_for_enablement,
 };
 use solid_reactive_ir::CacheRetention;
+use solid_reactive_ir::RuntimeEnvironment;
 
 use super::{Request, snapshot_emission};
 use crate::daemon_cache::{CachedAnswer, CachedSnapshot, ContractFile};
@@ -46,6 +48,8 @@ struct CheckRequest {
     presets: Vec<String>,
     #[serde(default)]
     enable_rules: Vec<String>,
+    #[serde(default)]
+    runtime: RuntimeEnvironment,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -230,6 +234,7 @@ fn process_tree_resident_bytes(root: u32) -> Option<u64> {
 }
 
 struct State {
+    dialect: &'static solid_facts_backend::dialect::Dialect,
     project: PathBuf,
     session: NativeIncrementalSession,
     diagnostics: DiagnosticSession,
@@ -317,6 +322,7 @@ impl State {
         }
         let cache_retention = cache_retention(sources.len());
         Ok(Self {
+            dialect,
             project,
             session,
             diagnostics: DiagnosticSession::new(dialect),
@@ -579,19 +585,38 @@ fn answer(
             analysis_ns: u64::try_from(started.elapsed().as_nanos()).unwrap_or(u64::MAX),
         });
     }
+    let semantic_demand_options = semantic_demand_options_for_enablement(
+        state.dialect,
+        &state.project,
+        RequestedRuleEnablement {
+            presets: &check.presets,
+            rules: &check.enable_rules,
+            runtime: check.runtime.clone(),
+        },
+    )?;
+    state
+        .session
+        .set_semantic_demand_options(semantic_demand_options);
     let facts = if changes.is_empty() {
         state.session.analyze()?
     } else {
         state.session.edit(changes, None)?
     };
-    let analysis = state.diagnostics.analyze_with_enablement(
-        &state.project,
-        &state.sources,
-        &facts,
-        &check.contract_paths,
-        &check.presets,
-        &check.enable_rules,
-    )?;
+    let analysis = state
+        .diagnostics
+        .analyze_measured_with_enablement(
+            &state.project,
+            &state.sources,
+            &facts,
+            &check.contract_paths,
+            None,
+            RequestedRuleEnablement {
+                presets: &check.presets,
+                rules: &check.enable_rules,
+                runtime: check.runtime.clone(),
+            },
+        )?
+        .0;
     let body: Arc<[u8]> = snapshot_emission::emit(
         resolve_dialect(request)?,
         "json",
@@ -610,6 +635,7 @@ fn answer(
         contract_files: contract_files(state, &modules, &check.contract_paths)?,
         presets: check.presets.clone(),
         enable_rules: check.enable_rules.clone(),
+        runtime: check.runtime.clone(),
         modules,
         status: Arc::clone(&status),
         body: Arc::clone(&body),
@@ -641,6 +667,7 @@ fn cached_answer(
         &current,
         &check.presets,
         &check.enable_rules,
+        &check.runtime,
     ))
 }
 
@@ -697,6 +724,7 @@ pub fn check(request: &Request) -> Result<i32, Box<dyn Error>> {
         contract_paths: request.contract_paths.clone(),
         presets: request.presets.clone(),
         enable_rules: request.enable_rules.clone(),
+        runtime: request.runtime.clone(),
     })?;
     let mut stream = stream;
     stream.write_all(&payload)?;
@@ -814,7 +842,7 @@ mod tests {
         process_tree_resident_bytes_from, refresh_file_with, retained_format, socket_path,
         timing_value,
     };
-    use solid_reactive_ir::CacheRetention;
+    use solid_reactive_ir::{CacheRetention, RuntimeEnvironment};
 
     #[test]
     fn release_default_and_explicit_daemon_policy_are_unambiguous() {
@@ -868,6 +896,7 @@ mod tests {
                 "prefer-for".into(),
                 "prefer-show".into(),
             ],
+            runtime: RuntimeEnvironment::default(),
         };
         normalize_enablement(&mut repeated);
         assert_eq!(repeated.presets, ["preferences", "z"]);

@@ -11,7 +11,8 @@ use crate::owners::{
 use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
 use crate::{
     BuildTimings, ContractCallback, ContractReturn, PackageContract, PrimitiveName,
-    ReactiveSourceKind, jsx_primitive_name, known_primitive, location, primitive_name,
+    ReactiveSourceKind, RuntimeEnvironment, RuntimeRendering, jsx_primitive_name, known_primitive,
+    location, primitive_name,
 };
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -372,7 +373,16 @@ const SERVER_RENDER_IMPORTS: [&str; 6] = [
 
 /// Whether any analyzed file imports a server rendering entry point from
 /// `@solidjs/web` (or one of its subpaths).
-pub(crate) fn project_server_renders(facts: &ProjectFacts) -> bool {
+pub(crate) fn project_server_renders(
+    facts: &ProjectFacts,
+    environment: &RuntimeEnvironment,
+) -> bool {
+    if let Some(rendering) = environment.rendering {
+        return matches!(
+            rendering,
+            RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr
+        );
+    }
     facts.files.iter().any(|file| {
         file.ast.imports.iter().any(|import| {
             (import.module == "@solidjs/web" || import.module.starts_with("@solidjs/web/"))
@@ -1916,6 +1926,11 @@ pub(crate) enum PropsReactivity {
     Enumerated {
         reactive: BTreeSet<String>,
         unresolved: BTreeSet<String>,
+        /// Prop names for which at least one exact JSX call site passes a
+        /// proven accessor value. Reading the property is static, but calling
+        /// that value performs a reactive read and must stay distinguishable
+        /// from ordinary prop backing.
+        accessor_values: BTreeSet<String>,
     },
     /// The component escapes enumeration — exported, referenced outside JSX,
     /// or spread into at a call site — so nothing about its props is provable
@@ -1938,23 +1953,6 @@ pub(crate) struct PropsReactivityIndex {
 }
 
 impl PropsReactivityIndex {
-    /// The exact caller-proven classification for a preference or other rule
-    /// that must not inherit the Solid 1.x upstream over-approximation.
-    pub(crate) fn proven_prop_use(&self, declaration: &Location, name: &str) -> PropUse {
-        if !self.caller_proof {
-            return PropUse::Unknown;
-        }
-        self.prop_use(declaration, name)
-    }
-
-    /// Whole-object counterpart to [`Self::proven_prop_use`].
-    pub(crate) fn proven_object_use(&self, declaration: &Location) -> PropUse {
-        if !self.caller_proof {
-            return PropUse::Unknown;
-        }
-        self.object_use(declaration)
-    }
-
     pub(crate) fn prop_use(&self, declaration: &Location, name: &str) -> PropUse {
         if !self.caller_proof {
             return PropUse::Reactive;
@@ -1964,6 +1962,7 @@ impl PropsReactivityIndex {
             Some(PropsReactivity::Enumerated {
                 reactive,
                 unresolved,
+                ..
             }) => {
                 if reactive.contains(name) {
                     PropUse::Reactive
@@ -1988,6 +1987,7 @@ impl PropsReactivityIndex {
             Some(PropsReactivity::Enumerated {
                 reactive,
                 unresolved,
+                ..
             }) => {
                 if !reactive.is_empty() {
                     PropUse::Reactive
@@ -1997,6 +1997,23 @@ impl PropsReactivityIndex {
                     PropUse::Static
                 }
             }
+        }
+    }
+
+    /// Whether invoking this prop value is proven to invoke an accessor at
+    /// any enumerated JSX call site. This is separate from [`Self::prop_use`]:
+    /// passing `items` as `<List items={items}>` stores a stable function in
+    /// the prop, while `props.items()` still subscribes when evaluated.
+    pub(crate) fn accessor_value_use(&self, declaration: &Location, name: &str) -> PropUse {
+        if !self.caller_proof {
+            return PropUse::Unknown;
+        }
+        match self.by_declaration.get(declaration) {
+            Some(PropsReactivity::Enumerated {
+                accessor_values, ..
+            }) if accessor_values.contains(name) => PropUse::Reactive,
+            Some(PropsReactivity::Enumerated { .. }) => PropUse::Static,
+            None | Some(PropsReactivity::Unknown) => PropUse::Unknown,
         }
     }
 
@@ -2152,6 +2169,7 @@ fn classify_one_component(
     }
     let mut reactive = BTreeSet::new();
     let mut unresolved = BTreeSet::new();
+    let mut accessor_values = BTreeSet::new();
     for (file_index, element_index) in component_uses {
         let use_file = &facts.files[*file_index];
         let element = &use_file.ast.jsx_elements[*element_index];
@@ -2188,6 +2206,14 @@ fn classify_one_component(
                     }
                 }
             };
+            if attribute.namespace.is_none()
+                && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+                && attribute.expression.is_some_and(|expression| {
+                    passed_expression_is_accessor(lookup, entities, accessors, use_file, expression)
+                })
+            {
+                accessor_values.insert(attribute_name.to_owned());
+            }
             match value_use {
                 PropUse::Static => {}
                 PropUse::Reactive => {
@@ -2221,7 +2247,27 @@ fn classify_one_component(
     PropsReactivity::Enumerated {
         reactive,
         unresolved,
+        accessor_values,
     }
+}
+
+fn passed_expression_is_accessor(
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    file: &FileFacts,
+    expression: solid_facts::core::Span,
+) -> bool {
+    let expression = file.ast.peel_ts_sugar_span(expression);
+    entities
+        .get(&location(file.path.shared(), expression))
+        .cloned()
+        .or_else(|| {
+            lookup
+                .binding_at_reference(file.path.as_str(), expression)
+                .map(|(_, _, symbol)| symbol)
+        })
+        .is_some_and(|symbol| accessors.contains_key(&symbol))
 }
 
 /// Whether the component's canonical symbol is exported from any analyzed
