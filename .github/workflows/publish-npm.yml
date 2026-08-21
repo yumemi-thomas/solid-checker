@@ -105,7 +105,9 @@ jobs:
         with:
           workspaces: rust
           # Same reasoning as the native build: a tag's cache scope has no
-          # readers, so restore from main's and do not write.
+          # readers, so restore from main's explicitly shared WASM key and do
+          # not write.
+          shared-key: release-wasm
           save-if: false
       - run: npm ci
         working-directory: packages/wasm

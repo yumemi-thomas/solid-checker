@@ -80,7 +80,10 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - runner: ubuntu-24.04
+          # Keep this tuple identical to publish-npm.yml: main owns the cache
+          # that tag-scoped release jobs restore, and the shipped x64 binary
+          # must still be compiled against the older supported glibc baseline.
+          - runner: ubuntu-22.04
             platform: linux
             arch: x64
           - runner: ubuntu-24.04-arm
@@ -107,11 +110,11 @@ jobs:
           workspaces: rust
           # The release workflow compiles the same release dependency graph, so
           # it reads this key instead of keeping a second copy of every entry.
-          # Keyed on the runner image rather than the platform because the
-          # release builds linux-x64 on 22.04 on purpose: a dependency's C
-          # objects compiled against a newer image's headers have no business
-          # being linked into that artifact. Identical images share; 22.04
-          # compiles its own.
+          # Keyed on the runner image rather than the platform because a
+          # dependency's C objects compiled against a newer image's headers
+          # have no business being linked into the portable Linux artifact.
+          # The matrix is kept identical to publish-npm.yml so every tag job
+          # can restore the entry main owns.
           shared-key: release-${{ matrix.runner }}-${{ matrix.arch }}
           save-if: ${{ github.ref == 'refs/heads/main' }}
       # The build id is CI's rather than the commit's on purpose: it is an
@@ -168,6 +171,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           workspaces: rust
+          # publish-npm.yml restores this default-branch entry. Without an
+          # explicit key the action includes the different CI/release job names.
+          shared-key: release-wasm
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - run: npm ci
         working-directory: packages/wasm
