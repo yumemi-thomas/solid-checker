@@ -9,7 +9,7 @@ findings). After the reviewed runtime-identity, environment-selector,
 package-owner, closed-local-callback, dialect-selection,
 rendering-premise, caller-witness, callback-extent, nested-transport,
 object-graph, and program-boundary slices below, the snapshots contain 130
-\`uncertifiable\` findings across 521 findings in 76 fixture projects. This is an inventory of the current proof obligations, not a
+\`uncertifiable\` findings across 524 findings in 77 fixture projects. This is an inventory of the current proof obligations, not a
 promise that every row is reducible; the last column records the only sound
 owner that could discharge it.
 
@@ -21,6 +21,38 @@ reports an obligation is the evidence that the new positive path did not
 overreach; deleting one to lower the number would remove the only thing holding
 the reduction honest. **The count is not a precision score, and the sections
 below are the reason.**
+
+### The corpus was the blind spot, not the facts (2026-08-21)
+
+All four fact sources are saturated: every field `EntityFact` emits (15), every
+`AstFacts` table (28), every schema-v1 contract property (39), and every
+compiler execution-map table is consumed by a rule. "Extract more from the
+producers" is largely finished as a strategy, and the two capabilities that
+were genuinely missing are now supplied.
+
+What is not finished is the corpus. Three real defects were found in one week
+— a discarded caller witness, a false violation from a mis-attributed callback
+read, and an undemanded nested library identity — and **none of them moved a
+single fixture** across 76 projects. All three were found by writing a scratch
+project by hand. The fixtures test the shapes their authors thought of: the
+`interprocedural` fixture was two files and seventeen lines with one shape, and
+the component fixtures are single files whose exported components have no
+callers at all.
+
+Two things came out of that:
+
+- `scripts/obligation-audit.mjs` turns the manual probing into a gate. Every
+  obligation states the evidence that would settle it and what the checker must
+  say once it is present, so an over-conservatism can no longer pass as a
+  missing fact. An obligation that closes on its own fails too — that is a real
+  change, and it should be recorded rather than absorbed. Seven obligations,
+  eleven closures, run against the audited published typings.
+- `fixtures/reactive-ir/realistic-topology` is a project shaped like a project:
+  components in their own files rendered by other components, a helper called
+  from a component body, a module-scope source read across files. Under a closed
+  boundary it produces six analyzed sites, three findings, all proven, and no
+  obligations — which is what a well-analyzed application should look like, and
+  is only reachable because the topology supplies the facts.
 
 ### Where the floor actually is (measured 2026-08-21)
 
