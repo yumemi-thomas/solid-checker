@@ -113,6 +113,7 @@ function runtimeConfiguration(config) {
     target: allowed(runtime.target, "target"),
     build: allowed(runtime.build, "build"),
     rendering: allowed(runtime.rendering, "rendering"),
+    programBoundary: allowed(runtime.programBoundary, "programBoundary"),
     conditions: list(runtime.conditions, "conditions"),
     frameworkTransforms: list(runtime.frameworkTransforms, "frameworkTransforms")
   };
@@ -182,6 +183,9 @@ function loadSnapshot(context) {
   if (runtime?.target) args.push("--runtime-target", runtime.target);
   if (runtime?.build) args.push("--runtime-build", runtime.build);
   if (runtime?.rendering) args.push("--rendering", runtime.rendering);
+  if (runtime?.programBoundary) {
+    args.push("--program-boundary", runtime.programBoundary);
+  }
   for (const condition of runtime?.conditions ?? []) {
     args.push("--runtime-condition", condition);
   }

@@ -295,6 +295,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         &symbol_names,
         dialect,
         &resolved_contracts,
+        rule_options.runtime.program_is_closed(),
     );
     let semantic_lookup = &semantic_lookup;
     let reuse = ReusePlan::prepare(
@@ -322,6 +323,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         semantic_lookup,
         resolved_contracts: &resolved_contracts,
         contracts,
+        runtime: &rule_options.runtime,
     };
     let discover = move || {
         let mut timings = BuildTimings::default();

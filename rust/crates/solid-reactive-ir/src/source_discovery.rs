@@ -1199,6 +1199,7 @@ pub(crate) struct StageContext<'a> {
     pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
     pub(crate) resolved_contracts: &'a ResolvedContracts,
     pub(crate) contracts: &'a [PackageContract],
+    pub(crate) runtime: &'a crate::RuntimeEnvironment,
 }
 
 /// Classifies a non-literal `keyed` attribute value.
@@ -1273,6 +1274,7 @@ pub(crate) fn discover_sources(
         semantic_lookup,
         resolved_contracts,
         contracts,
+        runtime,
     } = *ctx;
     let mut clock = StageClock::new(emit_timings);
     let mut accessors = HashMap::<SymbolId, (SymbolId, Location)>::new();
@@ -1940,6 +1942,7 @@ pub(crate) fn discover_sources(
         }
     }
     let props_reactivity = classify_component_props(
+        runtime,
         facts,
         semantic_lookup,
         entities,
@@ -2177,6 +2180,7 @@ impl PropsReactivityIndex {
 /// sites. Empty (answering [`PropUse::Reactive`] everywhere) when the dialect
 /// keeps the upstream over-approximation.
 fn classify_component_props(
+    runtime: &crate::RuntimeEnvironment,
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
@@ -2210,6 +2214,7 @@ fn classify_component_props(
                 continue;
             }
             let classification = classify_one_component(
+                runtime,
                 facts,
                 lookup,
                 entities,
@@ -2237,6 +2242,7 @@ fn classify_component_props(
 
 #[allow(clippy::too_many_arguments)]
 fn classify_one_component(
+    runtime: &crate::RuntimeEnvironment,
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
@@ -2263,8 +2269,12 @@ fn classify_one_component(
     // one sets this flag and keeps scanning, because the JSX call sites that
     // are visible still witness what they pass.
     let mut escapes = false;
-    // Exported: callers outside the project can pass anything as well.
-    if component_symbol_is_exported(facts, entities, symbol) {
+    // Exported: callers outside the project can pass anything as well --
+    // unless the user has asserted that there is no outside. That assertion
+    // removes only the assumption of an *unseen* caller; every reference below
+    // must still resolve to a use this analysis understands.
+    let closed = runtime.program_is_closed();
+    if !closed && component_symbol_is_exported(facts, entities, symbol) {
         escapes = true;
     }
     let empty = Vec::new();
@@ -2308,7 +2318,17 @@ fn classify_one_component(
             // Passed as a value, aliased, or re-exported: this hands the
             // component to callers that cannot be seen. It does not unwrite
             // the JSX call sites that can.
-            escapes = true;
+            //
+            // An export specifier is the one reference a closed program
+            // disposes of: `export { Card }` reaches an importer only if an
+            // importer exists, and a closed program says none does outside the
+            // files analyzed here -- where every importer's use is itself a
+            // reference in this list. Aliasing and passing as a value still
+            // escape under a closed program, because the analyzer still does
+            // not know what the receiver does with the component.
+            if !(closed && reference_is_export_specifier(facts, span, reference.path.as_ref())) {
+                escapes = true;
+            }
         }
     }
     let mut reactive = BTreeSet::new();
@@ -2427,6 +2447,30 @@ fn passed_expression_is_accessor(
                 .map(|(_, _, symbol)| symbol)
         })
         .is_some_and(|symbol| accessors.contains_key(&symbol))
+}
+
+/// Whether a reference span is an export specifier's local name in the file it
+/// appears in. Only an exact specifier span counts; a re-export with a module
+/// clause is a different fact and is not one of these.
+fn reference_is_export_specifier(
+    facts: &ProjectFacts,
+    span: solid_facts::core::Span,
+    path: &str,
+) -> bool {
+    facts
+        .files
+        .iter()
+        .filter(|file| file.path.as_str() == path)
+        .any(|file| {
+            file.ast.exports.iter().any(|export| {
+                export.module.is_none()
+                    && export
+                        .specifiers
+                        .iter()
+                        .chain(export.declarations.iter())
+                        .any(|specifier| specifier.local.span == span)
+            })
+        })
 }
 
 /// Whether the component's canonical symbol is exported from any analyzed

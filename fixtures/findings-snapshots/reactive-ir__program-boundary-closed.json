@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/program-boundary-closed/App.tsx",
+      "start": 1439,
+      "end": 1450,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/program-boundary-closed/App.tsx",
+      "start": 2036,
+      "end": 2048,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "uncertifiable",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/program-boundary-closed/App.tsx",
+      "start": 2337,
+      "end": 2347,
+      "fixes": 0
+    }
+  ]
+}

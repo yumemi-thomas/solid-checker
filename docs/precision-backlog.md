@@ -7,13 +7,13 @@ IR library tests passed, all 76 armed backend process tests passed, and the
 fresh-debug-binary coverage comparison passed for 72 fixture projects (517
 findings). After the reviewed runtime-identity, environment-selector,
 package-owner, closed-local-callback, dialect-selection,
-rendering-premise, caller-witness, callback-extent, nested-transport, and
-object-graph slices below, the snapshots contain 129 \`uncertifiable\` findings
-across 518 findings in 75 fixture projects. This is an inventory of the current proof obligations, not a
+rendering-premise, caller-witness, callback-extent, nested-transport,
+object-graph, and program-boundary slices below, the snapshots contain 130
+\`uncertifiable\` findings across 521 findings in 76 fixture projects. This is an inventory of the current proof obligations, not a
 promise that every row is reducible; the last column records the only sound
 owner that could discharge it.
 
-The count moved 126 → 129 while precision improved, and the two are not in
+The count moved 126 → 130 while precision improved, and the two are not in
 tension. Every new proof path below needs its fail-closed controls pinned:
 \`props-caller-witness\` contributes two honest uncertifiable results doing
 exactly that, and the nested-transport slice two more. A negative control that
@@ -85,6 +85,38 @@ environment-dependent SC5003/SC7001 paths and the TypeFacts-owned SC5001/
 SC7007 paths are separate workstreams. SC7005 is intentionally retained in
 the irreducible ledger even when SSR is explicitly selected.
 
+- **2026-08-21 — an explicit program boundary is evidence, and it is the
+  largest lever in the corpus.** Seventy-six of the obligations came from one
+  assumption: an exported symbol may be imported by code this build cannot
+  see, so its callers cannot be enumerated and neither its props' backing nor
+  its owner can be settled. Nothing inside a tsconfig proves the opposite,
+  which puts this in the same class as `rendering` — a premise only the user
+  can supply. `RuntimeEnvironment::program_boundary` now carries it
+  (`--program-boundary open|closed`, `"programBoundary"` in
+  `.solid-checker/runtime.json` and in the ESLint adapter's runtime settings,
+  where it joins the snapshot cache key).
+  Selecting `closed` removes exactly one assumption: that an *additional,
+  unseen* caller exists. It licenses nothing else. Two places consume it, and
+  each drops one open-world artifact. `classify_one_component` stops treating
+  exportedness as an escape, and stops treating an `export { Card }` specifier
+  as a non-JSX reference — that specifier reaches an importer only if one
+  exists, and under a closed program every importer's use is itself in the
+  reference list. Aliasing and passing the component to a receiver still
+  escape, because closing the program says nothing about what the receiver
+  does. The owner graph stops *seeding* an exported non-component helper
+  `UNOWNED`; that seed is the unseen caller, and with it gone the enumerated
+  call sites decide the owner.
+  Everything else is unchanged and deliberately so: a caller set must still be
+  enumerated exactly, a reference that resolves to a use the analyzer does not
+  understand still escapes, and a missing reference list is still the absence
+  of a fact rather than proof of no callers. `program-boundary-closed` pins all
+  five rows, including the two that prove the assertion cannot manufacture a
+  finding (a dynamic witness and an unowned module-scope call are violations
+  either way) and the one that proves it is not a blanket amnesty. A unit test
+  pins that the boundary never reaches `selected_conditions`, so asserting a
+  closed program cannot silently select a different package entrypoint. The
+  open-world fixtures keep the default and keep their obligations: they exist
+  to pin what is provable *without* this premise.
 - **2026-08-21 — the object-graph floor: the binder resolves the reference,
   and a property kind closes the literal.** Two facts finished the job the
   nested-transport slice started, and each removed a different obstacle.

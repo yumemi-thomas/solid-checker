@@ -7,6 +7,13 @@ export interface SolidCheckerRuntimeSettings {
   build?: "development" | "production" | (string & {});
   /** Explicit CSR, string SSR, or streaming SSR rendering mode. */
   rendering?: "csr" | "string-ssr" | "streaming-ssr" | (string & {});
+  /**
+   * Whether code outside this project may import from it. `"closed"` asserts
+   * the analyzed files are the whole program, which lets an exported symbol's
+   * caller set be enumerated. It never licenses guessing one: every reference
+   * must still resolve to a use the analyzer understands.
+   */
+  programBoundary?: "open" | "closed" | (string & {});
   /** Exact package/framework conditions selected for this analysis. */
   conditions?: string[];
   /** Explicit framework/compiler transforms, such as `use-server`. */

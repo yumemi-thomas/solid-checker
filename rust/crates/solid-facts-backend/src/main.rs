@@ -505,6 +505,11 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
                     &args.next().ok_or("--rendering needs a value")?,
                 )?)
             }
+            "--program-boundary" => {
+                runtime.program_boundary = Some(parse_program_boundary(
+                    &args.next().ok_or("--program-boundary needs a value")?,
+                )?)
+            }
             "--runtime-condition" => {
                 runtime
                     .conditions
@@ -594,6 +599,16 @@ fn parse_runtime_rendering(value: &str) -> Result<RuntimeRendering, Box<dyn std:
     }
 }
 
+fn parse_program_boundary(
+    value: &str,
+) -> Result<solid_reactive_ir::ProgramBoundary, Box<dyn std::error::Error>> {
+    match value {
+        "open" => Ok(solid_reactive_ir::ProgramBoundary::Open),
+        "closed" => Ok(solid_reactive_ir::ProgramBoundary::Closed),
+        _ => Err(format!("unknown program boundary {value:?}; expected open or closed").into()),
+    }
+}
+
 fn print_help() {
     println!(
         "Usage: solid-checker-rust [OPTIONS]\n\
@@ -617,6 +632,10 @@ fn print_help() {
                                         Select the rendering mode explicitly\n\
            --runtime-condition <NAME>   Select an exact package/runtime condition\n\
            --framework-transform <NAME> Select an explicit framework/compiler transform\n\
+           --program-boundary <open|closed>\n\
+                                        Assert whether code outside this project may import\n\
+                                        from it. `closed` lets an exported symbol's caller set\n\
+                                        be enumerated; it never licenses guessing one\n\
            --validate-contract <PATH>   Validate a contract and artifact hashes\n\
            --emit-contract <PATH>       Write a generated solid-reactivity.json contract\n\
            --package-name <NAME>        Package name used by --emit-contract\n\

@@ -290,6 +290,10 @@ pub(super) struct SemanticLookup<'a> {
     /// The Solid-version vocabulary this build analyzes with. Every consumer
     /// of the lookup shares one dialect; a build never mixes two.
     pub(super) dialect: &'a dyn solid_dialect::Dialect,
+    /// Whether the user asserted that the analyzed files are the whole
+    /// program. Build-wide like the dialect, and false unless selected: a
+    /// build that was never told stays fail-closed.
+    pub(super) program_closed: bool,
     ast_indexes: &'a HashMap<solid_facts::core::SourcePath, CachedAstFileIndex>,
     entities: &'a EntitySymbols,
     symbol_names: &'a HashMap<SymbolId, SymbolName>,
@@ -365,6 +369,7 @@ impl<'a> SemanticLookup<'a> {
         symbol_names: &'a HashMap<SymbolId, SymbolName>,
         dialect: &'a dyn solid_dialect::Dialect,
         resolved_contracts: &'a crate::contracts::ResolvedContracts,
+        program_closed: bool,
     ) -> Self {
         debug_assert!(
             facts
@@ -377,6 +382,7 @@ impl<'a> SemanticLookup<'a> {
         Self {
             facts,
             dialect,
+            program_closed,
             ast_indexes,
             entities,
             symbol_names,

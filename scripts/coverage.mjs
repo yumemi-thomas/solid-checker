@@ -214,7 +214,8 @@ function runtimeArguments(tsconfig) {
   for (const [key, flag] of [
     ["target", "--runtime-target"],
     ["build", "--runtime-build"],
-    ["rendering", "--rendering"]
+    ["rendering", "--rendering"],
+    ["programBoundary", "--program-boundary"]
   ]) {
     if (runtime[key] !== undefined) args.push(flag, runtime[key]);
   }

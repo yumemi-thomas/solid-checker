@@ -102,6 +102,45 @@ pub struct RuntimeEnvironment {
     pub conditions: BTreeSet<String>,
     #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
     pub framework_transforms: BTreeSet<String>,
+    /// Whether the analyzed project is the whole program.
+    ///
+    /// This is evidence the analyzer cannot derive, in the same class as
+    /// [`Self::rendering`]: nothing inside a tsconfig proves that nothing
+    /// outside it imports from the tsconfig. Left unset, every exported symbol
+    /// is assumed reachable by callers this build cannot see, which is why an
+    /// exported component's props and an exported helper's owner stay proof
+    /// obligations however completely the project itself is analyzed.
+    ///
+    /// Selecting [`ProgramBoundary::Closed`] asserts that the analyzed files
+    /// are the entire program. It does **not** license guessing: the caller
+    /// set must still be enumerated exactly, every reference must still
+    /// resolve to a use the analyzer understands, and a missing reference list
+    /// is still the absence of a fact. All it removes is the assumption that
+    /// an *additional*, unseen caller exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program_boundary: Option<ProgramBoundary>,
+}
+
+/// Whether callers outside the analyzed project may exist.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProgramBoundary {
+    /// The default. An exported symbol may be imported by code this build
+    /// cannot see.
+    Open,
+    /// The analyzed files are the whole program; an export reaches no caller
+    /// outside them.
+    Closed,
+}
+
+impl RuntimeEnvironment {
+    /// Whether the user has asserted that the analyzed project is the whole
+    /// program. Absent selection is [`ProgramBoundary::Open`], never closed:
+    /// a build that was never told stays fail-closed.
+    #[must_use]
+    pub const fn program_is_closed(&self) -> bool {
+        matches!(self.program_boundary, Some(ProgramBoundary::Closed))
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -1920,6 +1959,7 @@ mod tests {
             rendering: Some(RuntimeRendering::Csr),
             conditions: BTreeSet::from(["import".into()]),
             framework_transforms: BTreeSet::from(["use-server".into()]),
+            program_boundary: None,
         };
         assert!(environment.validate().is_ok());
         assert_eq!(
@@ -1935,6 +1975,18 @@ mod tests {
         assert!(environment.matches_conditions(&["browser".into(), "import".into()]));
         assert!(environment.matches_entrypoint_conditions(&["node".into(), "browser".into()]));
         assert!(!environment.matches_conditions(&["node".into()]));
+        // The program boundary is a build-wide premise, not a package export
+        // condition. It must never reach contract variant selection, or
+        // asserting a closed program would silently pick a different
+        // entrypoint.
+        environment.program_boundary = Some(ProgramBoundary::Closed);
+        assert!(environment.validate().is_ok());
+        assert!(!environment.selected_conditions().contains("closed"));
+        assert!(environment.program_is_closed());
+        environment.program_boundary = Some(ProgramBoundary::Open);
+        assert!(!environment.program_is_closed());
+        environment.program_boundary = None;
+        assert!(!environment.program_is_closed());
         let unselected = RuntimeEnvironment::default();
         assert!(unselected.matches_entrypoint_conditions(&["default".into(), "import".into()]));
         assert!(!unselected.matches_entrypoint_conditions(&["browser".into(), "import".into()]));

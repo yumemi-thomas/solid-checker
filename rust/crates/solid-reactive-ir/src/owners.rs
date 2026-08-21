@@ -390,7 +390,17 @@ fn owner_node(
             seed_context |=
                 OWNER_CONTEXT_OWNED | OWNER_CONTEXT_UNOWNED | OWNER_CONTEXT_COMPONENT_UNCERTAIN;
         }
-        crate::indexes::ComponentStatus::No if exported && name.is_some() => {
+        // An exported non-component helper may be called by code this build
+        // cannot see, and such a caller supplies no owner -- so the node is
+        // seeded unowned and every owner question inside it stays a proof
+        // obligation. That seed *is* the open-world assumption: when the user
+        // asserts the analyzed files are the whole program, the enumerated
+        // call sites are the complete caller set and the seed would assert a
+        // caller that does not exist. Nothing else changes; a call site the
+        // analysis cannot classify still contributes its own uncertainty.
+        crate::indexes::ComponentStatus::No
+            if exported && name.is_some() && !lookup.program_closed =>
+        {
             seed_context |= OWNER_CONTEXT_UNOWNED;
         }
         crate::indexes::ComponentStatus::No => {}
