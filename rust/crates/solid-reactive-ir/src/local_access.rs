@@ -51,7 +51,7 @@ pub(crate) struct LocalAccessContext<'a, 'facts> {
     /// Whether any file in the analyzed project imports a server rendering
     /// entry point. False means unresolved, not proven CSR: the server entry
     /// may live in another tsconfig or package.
-    pub(crate) server_renders: bool,
+    pub(crate) server_rendering: crate::source_discovery::ServerRenderingPremise,
     pub(crate) source_declarations: &'a HashMap<SymbolId, Declaration>,
     pub(crate) contract_reads: &'a HashMap<SymbolId, Vec<(String, String, Location, String)>>,
     pub(crate) contract_returns: &'a HashMap<SymbolId, (ContractReturn, Location)>,
@@ -246,8 +246,15 @@ impl LocalAccessContext<'_, '_> {
             .get(symbol)
             .copied()
             .unwrap_or_default();
-        options.server_rendering_unresolved = options.ssr_client_bare && !self.server_renders;
-        options.ssr_client_bare &= self.server_renders;
+        // Three states, not two. A bare `ssrSource: "client"` source is a
+        // server-render hole only where server rendering is proven; it is a
+        // proof obligation only where the premise is unresolved. Where an
+        // explicit rendering selector proves the application is client-only,
+        // the hole cannot exist and neither claim is made.
+        use crate::source_discovery::ServerRenderingPremise;
+        options.server_rendering_unresolved =
+            options.ssr_client_bare && self.server_rendering == ServerRenderingPremise::Unresolved;
+        options.ssr_client_bare &= self.server_rendering.renders();
         options
     }
 

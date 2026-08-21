@@ -1,0 +1,5 @@
+{
+  "target": "browser",
+  "rendering": "csr",
+  "conditions": ["browser", "import"]
+}

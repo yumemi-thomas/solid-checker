@@ -6,28 +6,28 @@ The dirty-worktree baseline was coherent on the current source: the Reactive
 IR library tests passed, all 76 armed backend process tests passed, and the
 fresh-debug-binary coverage comparison passed for 72 fixture projects (517
 findings). After the reviewed runtime-identity, environment-selector,
-package-owner, and closed-local-callback slices below, the snapshots contain
-133 \`uncertifiable\`
-findings across 517 findings. This is an
+package-owner, closed-local-callback, dialect-selection, and
+rendering-premise slices below, the snapshots contain 126 \`uncertifiable\`
+findings across 508 findings in 73 fixture projects. This is an
 inventory of the current proof obligations, not a promise that every row is
 reducible; the last column records the only sound owner that could discharge
 it.
 
 | Finding | Count | Current contexts | Missing evidence and audit classification |
 | --- | ---: | --- | --- |
-| SC1001 | 35 | component props aliases/read sites in the engine and eslint corpora; Solid 1.x sources; \`solid2-precision\`; v1 reactivity; upstream component cases | Exact JSX callers, immutable/enumerable prop backing, or a component contract. Project IR can reduce closed-world/cross-file cases; exported/open-world props remain genuinely uncertain. |
+| SC1001 | 33 | component props aliases/read sites in the engine and eslint corpora; Solid 1.x sources; \`solid2-precision\`; v1 reactivity; upstream component cases | Exact JSX callers, immutable/enumerable prop backing, or a component contract. Project IR can reduce closed-world/cross-file cases; exported/open-world props remain genuinely uncertain. |
 | SC1002 | 1 | \`props-callers\` callback after \`await\` | Exact synchronous callback extent and caller-proven prop/accessor identity. Project IR/compiler facts are reducible; opaque callbacks remain fail-closed. |
-| SC1003 | 15 | component parameter/body destructuring in engine/corpora and wrapped components | Proven component identity plus exact prop backing/caller set. Project/compiler facts can reduce exact JSX calls; ordinary/exported components remain uncertain. |
+| SC1003 | 14 | component parameter/body destructuring in engine/corpora and wrapped components | Proven component identity plus exact prop backing/caller set. Project/compiler facts can reduce exact JSX calls; ordinary/exported components remain uncertain. |
 | SC1004 | 2 | conditional component returns in the engine corpus | Proven component execution identity and return control-flow shape. JSX/compiler evidence is reducible; unknown component calls remain uncertain. |
 | SC1007 | 3 | reactive handler reads in shared Solid 2 and v1 reactivity fixtures | Exact runtime handler domain/tuple shape and reactive prop backing. Existing TypeFacts closes exact values; mixed/opaque prop sources remain uncertain. |
 | SC3001 | 1 | exported \`onSettled\` helper in \`leaf-owner\` | Exact callback identity and synchronous dynamic extent. The exported helper's owner call sites remain open-world; closed local callback adapters are now followed. |
 | SC4001 | 27 | exported/ambiguous component and helper owners across dialect, engine, corpus, and precision fixtures | Compiler owner regions, exact caller topology, and package callback owner behavior. Local/closed callers are reducible; exported library callers and conditional owners remain open-world obligations. |
 | SC5001 | 1 | async boundary with opaque source options | Exact option-object initializer (\`loadingValue\`/\`seedLoadingValue\`) and selected runtime entry. TypeFacts/options facts and explicit runtime conditions are reducible; dynamic options remain uncertain. |
-| SC5003 | 1 | unresolved CSR/SSR boundary fixture | Explicit rendering mode and \`ssrSource\` contract. Environment configuration can prove the rendering premise; absent configuration is reducible only by user/compiler evidence. |
+| SC5003 | 1 | unresolved CSR/SSR boundary fixture | An explicit rendering selector now discharges this outright: \`rendering: "csr"\` proves the premise false and SSR proves it true. The remaining case has no selector, and no visible server entry does not prove CSR-only, so it is reducible only by user configuration or a cross-project compiler fact. |
 | SC7001 | 2 | spread-hidden Solid 1.x/2.0 effect callback and \`"use server"\` controls | Exact tuple-slot/expanded spread facts plus selected runtime/framework entry. TypeFacts tuple arity is reducible; framework directives without an explicit compiler contract remain uncertain. |
-| SC7005 | 5 | HTTP response writes in CSR and SSR flush fixtures | Request-dependent settlement relative to shell flush. Rendering mode may prove the premise, but post-flush latency is genuinely runtime-dependent and remains irreducible. |
+| SC7005 | 5 | HTTP response writes in CSR and SSR flush fixtures | Request-dependent settlement relative to shell flush. An explicit \`rendering: "csr"\` selector now discharges the claim entirely — no shell, no committed response head — but that removes the subject rather than deciding the timing. Where SSR is selected or unresolved, whether a boundary settles before or after the flush is a per-request race no source fact can decide, and all five remain irreducible. |
 | SC7007 | 4 | server-function rich arguments and dynamic serializer configuration | Exact immutable serializer options and closed finite literal graphs. TypeFacts can reduce exact constants/primitive domains; arbitrary object graphs, casts, spreads, and dynamic configuration remain uncertain. |
-| SC9005 | 26 | missing/partial Solid contracts, unknown package callbacks/exports, wrong subpaths, and stale fixture contracts | Exact reviewed package/entrypoint/export summaries, runtime identity, and selected variants. Contract schema/generator/consumer parity and bundled ecosystem coverage are reducible; unreviewed or absent packages remain correctly uncertain. |
+| SC9005 | 22 | missing/partial Solid contracts, unknown package callbacks/exports, wrong subpaths, and stale fixture contracts | Exact reviewed package/entrypoint/export summaries, runtime identity, and selected variants. Contract schema/generator/consumer parity and bundled ecosystem coverage are reducible; unreviewed or absent packages remain correctly uncertain. |
 | SC9011 | 1 | exported reactive source in v1 reactivity | Exact caller capture or package/source contract. Closed local callers are reducible; an exported source escaping to uncontracted code is genuinely open-world. |
 | SC9012 | 9 | divergent method dispatch, opaque package/leaf callbacks, structured returns, and Solid 2 precision | Exhaustive equivalent target summaries, exact returned adapters, callback owner behavior, and contract propagation through aliases/re-exports. Indexed identity/contract fields are reducible; divergent/opaque targets remain fail-closed. |
 
@@ -37,6 +37,59 @@ environment-dependent SC5003/SC7001 paths and the TypeFacts-owned SC5001/
 SC7007 paths are separate workstreams. SC7005 is intentionally retained in
 the irreducible ledger even when SSR is explicitly selected.
 
+- **2026-08-21 — a silently mis-dialected parity corpus, and the gate that
+  catches the next one.** `fixtures/reactive-ir/eslint-plugin-corpus-v1`
+  shipped an *empty* `node_modules/solid-js/` directory. Git cannot record an
+  empty directory, so the stub never existed, dialect selection fell back to
+  the 2.0 default, and the fixture named `-v1` — with a `solid-js.d.ts`
+  headed "Solid 1.x declarations … verified against solid-js 1.9.14" — pinned
+  the 2.0 catalog. Its snapshot recorded that as if intended: no rule carried
+  the `v1/` prefix. Adding the tracked stub moves 10 findings. Four SC9005
+  obligations discharge against the reviewed bundled Solid 1.x contract, which
+  exports `Index`, `mergeProps`, and `splitProps` from `.` — they were only
+  missing because the *2.0* contract was being consulted. Seven SC1001/SC1003
+  props obligations become proven violations, because 1.x props are always the
+  compiler's reactive proxy while 2.0 needs caller-proven backing. Three
+  findings on files named `*-valid.tsx` disappear: two SC7001
+  `missing-effect-function` and one SC2001 were the 2.0 catalog misreading
+  1.x `createEffect`, i.e. false positives on the corpus's own negative cases.
+  Four SC1001 violations inside `Show`/`For` callbacks become uncertifiable,
+  which is correct and not a regression: `direct_jsx_return_is_component()` is
+  false for 1.x, where an exported PascalCase function returning JSX may be a
+  *tracked render callback* rather than a component, and its callers cannot be
+  enumerated. `control-flow-invalid.tsx` was a byte copy of the 2.0 corpus
+  file, `keyed` prop and all; 1.x `For` has no `keyed`, so `keyed={false}` and
+  `keyed={item => …}` are TS2322 against the fixture's own 1.x declarations.
+  The accessor-item case is now spelled the way 1.x spells it, with `<Index>`;
+  custom keying has no 1.x equivalent and stays covered only by the 2.0
+  corpus. `fixtures/package-contracts/solid-reexport` had the second shape of
+  the same trap — a stub present locally but with no `.gitignore` exception,
+  so absent in CI. `scripts/coverage.mjs` now holds every fixture dialect stub
+  to being present, parseable, versioned, and git-tracked, and names the
+  `.gitignore` lines to add; both shapes fail it.
+- **2026-08-21 — an explicit client-only rendering selector is evidence.**
+  `project_server_renders` returned a bool, folding "the user selected CSR"
+  into the same state as "no server entry is visible here". So selecting
+  `--rendering csr` produced an SC5003 uncertifiable result whose own message
+  read "the analyzed project cannot prove whether a server-rendering entry
+  exists" — it could; the user had said so. The fact is now three-state
+  (`ServerRenderingPremise::{Renders, ProvenClientOnly, Unresolved}`). A bare
+  `ssrSource: "client"` source is a server-render hole only under `Renders`
+  and a proof obligation only under `Unresolved`; under `ProvenClientOnly`
+  the hole cannot exist and SC5003 makes neither claim. SC7005 follows the
+  same premise for the same reason: its whole subject is the SSR shell flush
+  committing the response head, and under proven CSR there is no shell, no
+  committed head, and nothing to drop. `Unresolved` still reports for both,
+  because a server entry in another tsconfig or package would make the defect
+  real, and absence of a visible entry is not evidence of absence. The new
+  `rendering-csr-selected` fixture pins the third state and carries a positive
+  control — SC5003's *async* arm does not depend on the rendering premise and
+  still fires — so the fixture cannot pass by containing nothing analyzable;
+  dropping its selector turns the two quiet cases into three uncertifiable
+  findings. This adds a proof path and its coverage; it lowers no count in the
+  baseline above, because no pre-existing fixture selects a rendering mode of
+  CSR, and neither `ssr-client-boundary-csr` nor `http-response-flush-csr` may
+  gain one — pinning the unresolved state is exactly what they are for.
 - **2026-08-21 — primitive domains, tuple arity, and runtime identity close
   three compiler-owned gaps.** Type Facts now exposes an alias-transparent
   primitive value domain, an all-numeric-constituents-are-finite guarantee,

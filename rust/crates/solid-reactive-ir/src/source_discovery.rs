@@ -371,19 +371,68 @@ const SERVER_RENDER_IMPORTS: [&str; 6] = [
     "hydrate",
 ];
 
-/// Whether any analyzed file imports a server rendering entry point from
-/// `@solidjs/web` (or one of its subpaths).
-pub(crate) fn project_server_renders(
+/// Whether the analyzed application server-renders.
+///
+/// The three outcomes are not two: a project with no visible server entry is
+/// not the same fact as a project the user has explicitly selected a
+/// client-only rendering mode for. The first is an absence of evidence -- the
+/// server entry may live in another tsconfig or package -- and rules must
+/// report a proof obligation. The second is evidence, and a rule whose whole
+/// premise is "if this application server-renders" has had that premise
+/// disproven and must stay silent rather than report an obligation the user
+/// has already discharged.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ServerRenderingPremise {
+    /// An explicit rendering selector, or a visible server-rendering entry
+    /// import, proves the application server-renders.
+    Renders,
+    /// An explicit rendering selector proves it does not.
+    ProvenClientOnly,
+    /// No selector, and no server-rendering entry point is visible in the
+    /// analyzed project -- which does not prove the application is CSR-only.
+    Unresolved,
+}
+
+impl ServerRenderingPremise {
+    /// The premise from the two inputs that decide it: the explicit rendering
+    /// selector when the user set one, and otherwise whether a
+    /// server-rendering entry point is visible in the analyzed project.
+    ///
+    /// A selector answers the question outright in both directions. Only
+    /// without one does the import survey matter, and then only one way: a
+    /// visible entry proves server rendering, while no visible entry proves
+    /// nothing at all.
+    pub(crate) const fn select(
+        rendering: Option<RuntimeRendering>,
+        imports_server_entry: bool,
+    ) -> Self {
+        match rendering {
+            Some(RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr) => Self::Renders,
+            Some(RuntimeRendering::Csr) => Self::ProvenClientOnly,
+            None if imports_server_entry => Self::Renders,
+            None => Self::Unresolved,
+        }
+    }
+
+    /// Whether server rendering is proven to happen. `ProvenClientOnly` and
+    /// `Unresolved` are both "not proven", and callers that need to tell them
+    /// apart must match on the enum instead.
+    pub(crate) const fn renders(self) -> bool {
+        matches!(self, Self::Renders)
+    }
+}
+
+/// Whether the analyzed project server-renders: an explicit rendering
+/// selector when there is one, otherwise whether any analyzed file imports a
+/// server rendering entry point from `@solidjs/web` (or one of its subpaths).
+pub(crate) fn project_server_rendering(
     facts: &ProjectFacts,
     environment: &RuntimeEnvironment,
-) -> bool {
+) -> ServerRenderingPremise {
     if let Some(rendering) = environment.rendering {
-        return matches!(
-            rendering,
-            RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr
-        );
+        return ServerRenderingPremise::select(Some(rendering), false);
     }
-    facts.files.iter().any(|file| {
+    let imports_server_entry = facts.files.iter().any(|file| {
         file.ast.imports.iter().any(|import| {
             (import.module == "@solidjs/web" || import.module.starts_with("@solidjs/web/"))
                 && !import.type_only
@@ -395,7 +444,53 @@ pub(crate) fn project_server_renders(
                             .is_some_and(|imported| SERVER_RENDER_IMPORTS.contains(&imported))
                 })
         })
-    })
+    });
+    ServerRenderingPremise::select(None, imports_server_entry)
+}
+
+#[cfg(test)]
+mod server_rendering_premise_tests {
+    use super::ServerRenderingPremise;
+    use crate::RuntimeRendering;
+
+    /// The three states must stay three. Folding `ProvenClientOnly` into
+    /// `Unresolved` is what made an explicitly CSR project report an
+    /// uncertifiable result whose own message said the premise could not be
+    /// proven, and folding it into `Renders` would invent an SSR violation
+    /// for an application that has no server.
+    #[test]
+    fn an_explicit_rendering_selector_decides_the_premise_in_both_directions() {
+        for rendering in [RuntimeRendering::StringSsr, RuntimeRendering::StreamingSsr] {
+            for imports in [false, true] {
+                let premise = ServerRenderingPremise::select(Some(rendering), imports);
+                assert_eq!(premise, ServerRenderingPremise::Renders);
+                assert!(premise.renders());
+            }
+        }
+        // The selector outranks the survey in the other direction too: an
+        // unused `renderToStream` import in a project the user has declared
+        // client-only does not resurrect the server.
+        for imports in [false, true] {
+            let premise = ServerRenderingPremise::select(Some(RuntimeRendering::Csr), imports);
+            assert_eq!(premise, ServerRenderingPremise::ProvenClientOnly);
+            assert!(!premise.renders());
+        }
+    }
+
+    /// Without a selector the survey decides one way only. A visible server
+    /// entry proves server rendering; no visible entry is an absence of
+    /// evidence, not evidence of absence, because the entry may live in
+    /// another tsconfig or package.
+    #[test]
+    fn without_a_selector_a_visible_entry_proves_and_its_absence_does_not() {
+        assert_eq!(
+            ServerRenderingPremise::select(None, true),
+            ServerRenderingPremise::Renders
+        );
+        let unresolved = ServerRenderingPremise::select(None, false);
+        assert_eq!(unresolved, ServerRenderingPremise::Unresolved);
+        assert!(!unresolved.renders());
+    }
 }
 
 /// Whether a store-family creation is provably the value form

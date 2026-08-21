@@ -41,7 +41,7 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
 /// *before* the flush still applies its writes; source analysis cannot prove
 /// which side of that request-time race any invocation reaches.
 fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    let mut server_renders = None;
+    let mut server_rendering = None;
     let mut loading_hosts: Option<HashSet<(&str, Span)>> = None;
     for file in &ctx.facts.files {
         let mut allowed = None;
@@ -58,12 +58,22 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             .and_then(crate::PrimitiveName::primitive) else {
                 continue;
             };
-            let server_renders = *server_renders.get_or_insert_with(|| {
-                crate::source_discovery::project_server_renders(
+            let server_rendering = *server_rendering.get_or_insert_with(|| {
+                crate::source_discovery::project_server_rendering(
                     ctx.facts,
                     &ctx.rule_options.runtime,
                 )
             });
+            // The whole claim is about the SSR shell flush. Where an explicit
+            // rendering selector proves the application is client-only there
+            // is no shell, no committed response head, and nothing to drop —
+            // so the obligation is discharged rather than reported. An
+            // unresolved premise still reports, because a server entry in
+            // another tsconfig or package would make the drop real.
+            if server_rendering == crate::source_discovery::ServerRenderingPremise::ProvenClientOnly
+            {
+                continue;
+            }
             // Render-time scopes only. An event handler or deferred callback
             // is a client-time (or post-render) call and is a no-op for a
             // different reason than the post-flush drop; unknown scopes stay
@@ -104,7 +114,7 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             draft.static_violations.push(StaticViolation {
                 id: "SC7005".into(),
                 rule: "http-response-after-flush".into(),
-                message: if server_renders {
+                message: if server_rendering.renders() {
                     format!(
                         "{name}() is called by content below a <Loading> boundary; under streaming SSR the response head commits at the shell flush, and when this boundary settles after the shell has flushed the call is a committed no-op — the {} is silently dropped, with no queue holding it for later",
                         if kind == Primitive::HttpStatus { "status" } else { "header" }
