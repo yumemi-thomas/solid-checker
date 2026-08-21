@@ -11,7 +11,8 @@ use serde::Deserialize;
 use solid_facts::TypeScriptTable;
 use solid_facts_backend::SemanticDemandGroup;
 use solid_facts_backend::{
-    BackendError, SourceFile, TypeFactsProvider, analyze_project, build_project_native,
+    BackendError, SemanticDemandOptions, SourceFile, TypeFactsProvider, analyze_project,
+    build_project_native_measured_with_demands,
 };
 
 #[derive(Deserialize)]
@@ -117,13 +118,15 @@ pub fn plan(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
             .ok_or_else(|| format!("unknown dialect {id:?}"))?,
     };
     let mut typescript = PlanningTypeFacts::default();
-    let built = build_project_native(
+    let built = build_project_native_measured_with_demands(
         dialect,
         request.project_id.clone(),
         request.generation,
         request.sources,
         &mut typescript,
-    );
+        SemanticDemandOptions::PREFERENCES,
+    )
+    .map(|(facts, _)| facts);
     let demands = match (typescript.demands, built) {
         // The planned stop: the demands were captured, so the error that ended
         // the build is this function's own signal rather than a failure.
@@ -156,12 +159,13 @@ pub fn check(request_json: &str) -> Result<String, Box<dyn std::error::Error>> {
             .ok_or_else(|| format!("unknown dialect {id:?}"))?,
     };
     let mut typescript = InMemoryTypeFacts(Some(request.type_facts));
-    let facts = build_project_native(
+    let (facts, _) = build_project_native_measured_with_demands(
         dialect,
         request.project_id.clone(),
         request.generation,
         request.sources.clone(),
         &mut typescript,
+        SemanticDemandOptions::PREFERENCES,
     )?;
     let analysis = analyze_project(
         dialect,

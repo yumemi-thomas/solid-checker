@@ -18,37 +18,40 @@ owners, directives, async computations, and the server surface.
 
 ## Configuration
 
-Proof-backed and uncertifiable correctness rules are enabled by default. The
-style preferences `prefer-for`, `prefer-show`, and Solid 1.x
-`prefer-classlist` are opt-in through the dialect-neutral `preferences` preset
-or an explicit rule enable:
-
-```sh
-solid-checker --project tsconfig.json --preset preferences
-solid-checker --project tsconfig.json --enable-rule prefer-show
-```
-
-Both flags are repeatable. Project configuration lives in
-`.solid-checker/rule-options.json`; an explicit `enabled: false` wins over CLI
-enablement, and `enabled: true` enables a preference without a preset:
+Every catalog rule is enabled by default, including `prefer-for`,
+`prefer-show`, and Solid 1.x `prefer-classlist`. Native projects opt out in
+`.solid-checker/rule-options.json`:
 
 ```json
 {
   "schemaVersion": 1,
   "rules": {
-    "v1/prefer-show": { "enabled": true },
+    "prefer-show": { "enabled": false },
+    "v1/prefer-classlist": { "enabled": false }
+  }
+}
+```
+
+An explicit `enabled: false` wins over defaults, presets, and CLI enablement.
+The repeatable `--preset preferences` and `--enable-rule` interfaces remain
+accepted for compatibility, but are redundant for these rules. Other
+per-rule options live in the same project file:
+
+```json
+{
+  "schemaVersion": 1,
+  "rules": {
     "v1/prefer-classlist": {
-      "enabled": true,
       "classnames": ["cn", "clsx"]
     }
   }
 }
 ```
 
-ESLint exposes generated `v1` and `v2` default configs, which include
-`prefer-for` and `prefer-show`, plus opt-in `preferences-v1` and
-`preferences-v2` configs. The latter is empty for Solid 2.0; in Solid 1.x it
-adds `prefer-classlist`. Setting either control-flow rule to `off` opts out.
+ESLint's generated `v1` and `v2` configs include every `prefer-*` rule.
+Setting one to `off` opts out. The legacy `preferences-v1` and
+`preferences-v2` configs remain available for compatibility and are now
+redundant.
 
 Renamed and merged configuration keys, retired identities, and the six merges
 whose disables deliberately do not transfer are listed in the
@@ -105,7 +108,7 @@ uncertifiable results. Their pages name the missing evidence and remediation.
 | SC7001 | [v1/missing-effect-function](v1/missing-effect-function.md) | error | on |
 | SC8003 | [v1/jsx-no-duplicate-props](v1/jsx-no-duplicate-props.md) | error | on |
 | SC8005 | [v1/jsx-no-undef](v1/jsx-no-undef.md) | error | on |
-| SC8013 | [v1/prefer-classlist](v1/prefer-classlist.md) | warning | preferences |
+| SC8013 | [v1/prefer-classlist](v1/prefer-classlist.md) | warning | on |
 | SC8014 | [v1/prefer-for](v1/prefer-for.md) | error | on |
 | SC8015 | [v1/prefer-show](v1/prefer-show.md) | warning | on |
 | SC9005 | [v1/package-contract-incomplete](v1/package-contract-incomplete.md) | error | on |

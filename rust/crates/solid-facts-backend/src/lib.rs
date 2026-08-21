@@ -1796,7 +1796,7 @@ mod tests {
         .unwrap();
         assert!(
             default_demands.iter().all(|demand| !demand.array_shape),
-            "default-disabled preferences must not request map receiver shapes"
+            "the low-level NONE option must not request map receiver shapes"
         );
 
         let demands = semantic_demands(

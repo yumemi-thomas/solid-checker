@@ -72,7 +72,7 @@ fn project_snapshot_findings_with(
 }
 
 #[test]
-fn control_flow_preferences_are_opt_in_with_explicit_disables_winning() {
+fn preferences_are_default_on_with_explicit_disables_winning() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -90,36 +90,39 @@ fn control_flow_preferences_are_opt_in_with_explicit_disables_winning() {
         Some("solid-v2"),
         &[],
     ));
-    assert!(
-        defaults.is_empty(),
-        "stylistic preferences must not block default certification: {defaults:#?}"
-    );
-
     let preset = preference_findings(project_snapshot_findings_with(
         v2.clone(),
         Some("solid-v2"),
         &["--preset", "preferences"],
     ));
     assert_eq!(
-        preset
+        defaults, preset,
+        "the compatibility preset must be redundant once preferences are default-enabled"
+    );
+    assert_eq!(
+        defaults
             .iter()
             .filter(|finding| finding["id"] == "SC8014")
             .count(),
         5,
-        "array Type Facts plus direct, prop-accessor, interprocedural, and v2 async facts select five lists: {preset:#?}"
+        "array Type Facts plus direct, prop-accessor, interprocedural, and v2 async facts select five lists: {defaults:#?}"
     );
     assert_eq!(
-        preset
+        defaults
             .iter()
             .filter(|finding| finding["id"] == "SC8015")
             .count(),
         5,
-        "per-prop caller facts must keep the static sibling clean: {preset:#?}"
+        "per-prop caller facts must keep the static sibling clean: {defaults:#?}"
     );
-    assert!(preset.iter().all(|finding| finding["kind"] == "violation"));
+    assert!(
+        defaults
+            .iter()
+            .all(|finding| finding["kind"] == "violation")
+    );
     let v2_source = std::fs::read_to_string(fixture_root.join("preferences-v2/App.tsx"))
         .expect("read v2 preference fixture");
-    let starts = preset
+    let starts = defaults
         .iter()
         .map(|finding| finding["primaryLocation"]["startByte"].as_u64().unwrap())
         .collect::<Vec<_>>();
@@ -139,11 +142,11 @@ fn control_flow_preferences_are_opt_in_with_explicit_disables_winning() {
     assert!(!starts.contains(&marker("customCollection().map")));
     let async_map = marker("items().map(async");
     assert!(starts.contains(&async_map));
-    assert!(preset.iter().any(|finding| {
+    assert!(defaults.iter().any(|finding| {
         finding["primaryLocation"]["startByte"].as_u64() == Some(async_map)
             && finding["fixes"].as_array().is_none_or(Vec::is_empty)
     }));
-    let v2_for_fix_texts = preset
+    let v2_for_fix_texts = defaults
         .iter()
         .filter(|finding| finding["rule"] == "prefer-for")
         .flat_map(|finding| finding["fixes"].as_array().into_iter().flatten())
@@ -167,21 +170,19 @@ fn control_flow_preferences_are_opt_in_with_explicit_disables_winning() {
         Some("solid-v2"),
         &["--enable-rule", "prefer-show"],
     ));
-    assert_eq!(explicit_enable.len(), 5);
-    assert!(
-        explicit_enable
-            .iter()
-            .all(|finding| finding["rule"] == "prefer-show")
+    assert_eq!(
+        explicit_enable, defaults,
+        "explicitly enabling an already-default rule must be idempotent"
     );
 
     let v2_disabled = preference_findings(project_snapshot_findings_with(
         fixture_root.join("preferences-v2-disabled/tsconfig.json"),
         Some("solid-v2"),
-        &["--preset", "preferences"],
+        &[],
     ));
     assert!(
         v2_disabled.is_empty(),
-        "explicit v2 disables must win over defaults and presets: {v2_disabled:#?}"
+        "explicit v2 disables must win over catalog defaults: {v2_disabled:#?}"
     );
 
     let enabled = preference_findings(project_snapshot_findings_with(
@@ -228,11 +229,11 @@ fn control_flow_preferences_are_opt_in_with_explicit_disables_winning() {
     let v1_disabled = preference_findings(project_snapshot_findings_with(
         fixture_root.join("preferences-v1-disabled/tsconfig.json"),
         Some("solid-v1"),
-        &["--preset", "preferences"],
+        &[],
     ));
     assert!(
         v1_disabled.is_empty(),
-        "explicit v1 disables must win over defaults and presets: {v1_disabled:#?}"
+        "explicit v1 disables must win over catalog defaults: {v1_disabled:#?}"
     );
 }
 

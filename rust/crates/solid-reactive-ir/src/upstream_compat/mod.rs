@@ -740,10 +740,10 @@ pub(crate) fn check_project(
     };
     let prefer_for_enabled = ctx
         .rule_options
-        .is_enabled(prefer_for_name, false, &["preferences"]);
-    let prefer_show_enabled =
-        ctx.rule_options
-            .is_enabled(prefer_show_name, false, &["preferences"]);
+        .is_enabled(prefer_for_name, true, &["preferences"]);
+    let prefer_show_enabled = ctx
+        .rule_options
+        .is_enabled(prefer_show_name, true, &["preferences"]);
     let reactive_reads = if prefer_for_enabled || prefer_show_enabled {
         ReactiveReadIndex::new(&draft.reads)
     } else {

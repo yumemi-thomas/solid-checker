@@ -397,23 +397,25 @@ arbitrary uncontracted packages remain SC9005/SC9012 obligations.
   and skipped in Solid 1.x; Solid 2.0's published types accept them, so they can
   report but never receive the synchronous rewrite. Neither dialect promotes
   uncertain prop backing into proof for these preferences.
-- **2026-08-21 — control-flow preferences use exact dispatch and opt-in
+- **2026-08-21 — control-flow preferences use exact dispatch and scoped
   demands.** SC8014 now requires the compiler-selected declaration to be the
   standard-library `map` signature as well as an array/tuple receiver; a local
   or overridden same-name method fails closed. Its safe fix is limited to
   one-parameter arrows because a regular function can observe Array#map's
   three callback arguments through `arguments`. Array-shape Type Facts are
-  requested only when `prefer-for` is effectively enabled, so default native
-  and WASM certification do not pay for the opt-in preference.
+  requested only when `prefer-for` is effectively enabled. With the rule now
+  default-on, default native and WASM analysis request them; an explicit native
+  rule disable still removes the demand.
 
 ## 2026-08 preference defaults
 
-`prefer-for` and `prefer-show` remain style preferences and are opt-in in both
-catalogs, alongside `v1/prefer-classlist`. Native and ESLint callers enable
-them through `--preset preferences`, `--enable-rule`, rule options, or the
-generated dialect-specific preferences config. They do not block default
-certification. WASM still lacks a rule-options transport, so these rules remain
-off there.
+`prefer-for` and `prefer-show` remain style preferences in both catalogs,
+alongside `v1/prefer-classlist`, but all five external rule identities are now
+enabled by default. Native callers opt out with `enabled: false` in rule
+options; ESLint callers set the corresponding generated dialect rule to `off`.
+The legacy preset and preference configs remain accepted but redundant. WASM
+still lacks a rule-options transport, so it uses the new defaults and cannot
+yet opt out.
 
 The analyzer's known approximations, recorded so each is a decision with an
 owner rather than a rediscovery. Items live here when a fix is a *design

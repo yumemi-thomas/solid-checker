@@ -10,6 +10,16 @@
       "start": 161,
       "end": 172,
       "fixes": 0
+    },
+    {
+      "rule": "prefer-for",
+      "code": "SC8014",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-consumer/App.tsx",
+      "start": 249,
+      "end": 280,
+      "fixes": 1
     }
   ]
 }

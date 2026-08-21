@@ -2,8 +2,7 @@
 
 `SC8014` · **error** · violation
 
-This preference is opt-in through the `preferences` preset or an explicit rule
-enable. It does not participate in default certification.
+This preference is enabled by default. Opt out with an explicit rule disable.
 
 A reactively updating list is rendered with `Array#map` directly as JSX
 children instead of using Solid's list control flow.
@@ -54,11 +53,9 @@ unshadowed runtime import can be reused or added. Regular functions can observe
 Array#map's additional callback arguments, so they report without a fix.
 Index-aware, async, or ambiguous callbacks require a human choice.
 
-Native projects opt in with `--preset preferences`,
-`--enable-rule v1/prefer-for`, or
-`"v1/prefer-for": { "enabled": true }` in
-`.solid-checker/rule-options.json`. ESLint users enable the rule or compose the
-generated `preferences-v1` config.
+Native projects opt out with `"v1/prefer-for": { "enabled": false }` in
+`.solid-checker/rule-options.json`. ESLint users set
+`"solid-checker/v1/prefer-for": "off"` after the generated v1 config.
 
 ## Related
 
