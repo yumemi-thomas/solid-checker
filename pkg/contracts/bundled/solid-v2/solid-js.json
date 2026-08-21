@@ -51,36 +51,6 @@
         },
         {
           "conditions": [
-            "browser",
-            "development",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "deferred",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "development"
-                  ],
-                  "calls": 2
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "development"
-              ],
-              "calls": 2
-            }
-          }
-        },
-        {
-          "conditions": [
             "deno",
             "import"
           ],
@@ -208,47 +178,6 @@
         },
         {
           "conditions": [
-            "browser",
-            "development",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "tracked",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "development"
-                  ],
-                  "calls": 2
-                }
-              },
-              {
-                "parameter": 1,
-                "execution": "deferred",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "development"
-                  ],
-                  "calls": 2
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "development"
-              ],
-              "calls": 2
-            }
-          }
-        },
-        {
-          "conditions": [
             "deno",
             "import"
           ],
@@ -369,47 +298,6 @@
         },
         {
           "conditions": [
-            "browser",
-            "development",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "tracked",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "development"
-                  ],
-                  "calls": 2
-                }
-              },
-              {
-                "parameter": 1,
-                "execution": "deferred",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "development"
-                  ],
-                  "calls": 2
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "development"
-              ],
-              "calls": 2
-            }
-          }
-        },
-        {
-          "conditions": [
             "deno",
             "import"
           ],
@@ -474,36 +362,6 @@
                 "client",
                 "development",
                 "production"
-              ],
-              "calls": 2
-            }
-          }
-        },
-        {
-          "conditions": [
-            "browser",
-            "development",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "tracked",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "development"
-                  ],
-                  "calls": 2
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "development"
               ],
               "calls": 2
             }
@@ -665,47 +523,6 @@
         },
         {
           "conditions": [
-            "browser",
-            "development",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "returns": {
-              "kind": "accessor",
-              "label": "memo result",
-              "evidence": {
-                "kind": "probed",
-                "modes": [
-                  "development"
-                ],
-                "calls": 1
-              }
-            },
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "tracked",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "development"
-                  ],
-                  "calls": 2
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "development"
-              ],
-              "calls": 2
-            }
-          }
-        },
-        {
-          "conditions": [
             "deno",
             "import"
           ],
@@ -850,47 +667,6 @@
                 "client",
                 "development",
                 "production"
-              ],
-              "calls": 2
-            }
-          }
-        },
-        {
-          "conditions": [
-            "browser",
-            "development",
-            "import"
-          ],
-          "summary": {
-            "kind": "function",
-            "returns": {
-              "kind": "store-path",
-              "label": "projection result",
-              "evidence": {
-                "kind": "probed",
-                "modes": [
-                  "development"
-                ],
-                "calls": 1
-              }
-            },
-            "callbacks": [
-              {
-                "parameter": 0,
-                "execution": "tracked",
-                "evidence": {
-                  "kind": "probed",
-                  "modes": [
-                    "development"
-                  ],
-                  "calls": 2
-                }
-              }
-            ],
-            "evidence": {
-              "kind": "probed",
-              "modes": [
-                "development"
               ],
               "calls": 2
             }

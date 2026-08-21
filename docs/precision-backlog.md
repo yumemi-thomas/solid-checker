@@ -7,7 +7,7 @@ IR library tests passed, all 76 armed backend process tests passed, and the
 fresh-debug-binary coverage comparison passed for 72 fixture projects (517
 findings). After the reviewed runtime-identity, environment-selector, and
 package-owner slices below, the snapshots contain 135 \`uncertifiable\`
-findings across 516 findings. This is an
+findings across 517 findings. This is an
 inventory of the current proof obligations, not a promise that every row is
 reducible; the last column records the only sound owner that could discharge
 it.
@@ -77,6 +77,23 @@ the irreducible ledger even when SSR is explicitly selected.
   request-dependent owner paths remain review obligations. The generator
   checklist calls out both missing callback-owner rows and generated owner
   requirements.
+- **2026-08-21 — contract proof boundary and exact conditional summaries.**
+  Discovered inferred/generated contracts remain visible as SC9005
+  `unverified` status but no longer enter Reactive IR, so an unreviewed claim
+  cannot create a violation or suppress an obligation. Conditional generation
+  collapses evidence-only and redundant development branches, merges their
+  probe modes, retains genuinely disjoint target variants, and refuses
+  overlapping semantic differences that schema v1 cannot express without
+  negative predicates. Runtime configuration rejects contradictory target,
+  build, and rendering selectors. Generated owner requirements now attach by
+  canonical compiler symbol (including aliases and anonymous defaults) and by
+  the immediate containing function, eliminating name and broad-span matches.
+- **2026-08-21 — asserted server arguments use runtime-value facts.** SC7007
+  now demands and consumes primitive, constant, and library facts at the peeled
+  runtime expression behind transparent TypeScript wrappers. A bigint asserted
+  as a safe scalar remains a proven violation; a finite number asserted as an
+  unsafe scalar remains silent. The paired strict-`tsc` oracle is clean and the
+  fixture adds one violation without increasing the uncertifiable baseline.
 
 ### Package-contract parity ledger
 

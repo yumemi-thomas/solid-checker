@@ -16,7 +16,7 @@ import {
   saveUnsafeScalar,
   uploadChunk,
 } from "./api";
-import type { Boxed, Ids, SafeScalar, Stamps } from "./api";
+import type { Boxed, Ids, SafeScalar, Stamps, UnsafeScalar } from "./api";
 import { recordPattern } from "./server-module";
 
 // Same spelling and same property shape as the real configuration API, but a
@@ -57,6 +57,8 @@ export function Toolbar() {
         await saveUnsafeScalar(1n); // violation: JSON cannot encode bigint
         await saveUnsafeScalar(Symbol("id")); // violation: JSON cannot encode symbol
         await saveUnsafeScalar(undefined); // violation: JSON cannot encode undefined faithfully
+        await saveScalar(1n as unknown as SafeScalar); // violation: the assertion does not change the runtime bigint
+        await saveUnsafeScalar(1 as unknown as UnsafeScalar); // silent: the runtime number is JSON-safe despite the asserted type
         await saveNumber(broadNumber); // uncertifiable: number may be non-finite
         await saveStamps(stamps); // finding: Date behind an imported alias
         await saveIds(ids); // finding: Set behind an imported alias

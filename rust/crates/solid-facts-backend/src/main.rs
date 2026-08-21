@@ -4,7 +4,7 @@ mod json_output;
 mod snapshot_emission;
 
 use std::{
-    collections::{BTreeMap, BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     fs,
     io::{self, IsTerminal, Read, Write},
     path::{Path, PathBuf},
@@ -785,6 +785,9 @@ fn contract_exports_for_entry_file(
     let entry_file = entry_file.canonicalize()?;
     let mut visiting = HashSet::new();
     let names = exported_names_for_file(facts, &entry_file, dependency_contracts, &mut visiting)?;
+    let symbol_aliases = canonical_symbol_aliases(facts);
+    let generated_owner_requirements =
+        generated_owner_requirements_by_symbol(facts, program, &symbol_aliases);
     let mut exports = BTreeMap::new();
     for name in names {
         let summary = external_export_summary_for_file(
@@ -803,8 +806,14 @@ fn contract_exports_for_entry_file(
             )
         })?;
         let summary = promote_entry_callable(facts, &entry_file, &name, summary);
-        let summary =
-            attach_generated_owner_requirements(facts, program, &entry_file, &name, summary);
+        let summary = attach_generated_owner_requirements(
+            facts,
+            &symbol_aliases,
+            &generated_owner_requirements,
+            &entry_file,
+            &name,
+            summary,
+        );
         exports.insert(name, summary);
     }
     unify_runtime_alias_summaries(facts, &entry_file, &mut exports);
@@ -818,54 +827,204 @@ fn contract_exports_for_entry_file(
     Ok(exports)
 }
 
-/// Adds exact owner requirements observed inside a direct exported function to
-/// the generated package summary. The source project may report the function
-/// as open-world/uncertain because its callers are not enumerable; that is
-/// precisely the obligation a consumer contract must carry. Conditional or
-/// runtime-dependent owner paths are not representable by the unconditional
-/// schema row and remain absent for explicit review.
-fn attach_generated_owner_requirements(
+type FunctionKey = (String, u32, u32);
+
+#[derive(Default)]
+struct GeneratedOwnerRequirements {
+    by_symbol: HashMap<String, Vec<solid_reactive_ir::OwnerRequirementOperation>>,
+    by_function: HashMap<FunctionKey, Vec<solid_reactive_ir::OwnerRequirementOperation>>,
+}
+
+fn canonical_symbol_aliases(facts: &solid_facts::ProjectFacts) -> HashMap<String, String> {
+    let mut aliases = facts
+        .typescript
+        .symbols()
+        .filter(|symbol| !symbol.alias_target().is_empty())
+        .map(|symbol| (symbol.id().to_owned(), symbol.alias_target().to_owned()))
+        .collect::<HashMap<_, _>>();
+    for _ in 0..aliases.len() {
+        let previous = aliases.clone();
+        let mut changed = false;
+        for target in aliases.values_mut() {
+            if let Some(next) = previous.get(target)
+                && next != target
+            {
+                *target = next.clone();
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    aliases
+}
+
+fn canonical_symbol(symbol: &str, aliases: &HashMap<String, String>) -> String {
+    aliases
+        .get(symbol)
+        .map_or_else(|| symbol.to_owned(), Clone::clone)
+}
+
+/// Indexes exact owner requirements by canonical compiler symbol and by exact
+/// function identity. Symbols follow aliases and re-exports; the function key
+/// is the fail-closed fallback for an anonymous default export, which has no
+/// name symbol. An operation belongs only to its immediate containing function
+/// so a nested closure cannot make its outer factory require an owner merely
+/// because their spans nest.
+fn generated_owner_requirements_by_symbol(
     facts: &solid_facts::ProjectFacts,
     program: &solid_reactive_ir::Program,
+    aliases: &HashMap<String, String>,
+) -> GeneratedOwnerRequirements {
+    let entities = facts
+        .typescript
+        .entities()
+        .map(|entity| {
+            (
+                (
+                    entity.location.path.to_string(),
+                    entity.location.start_byte,
+                    entity.location.end_byte,
+                ),
+                entity,
+            )
+        })
+        .collect::<HashMap<_, _>>();
+    let mut function_symbols = HashMap::<FunctionKey, Option<String>>::new();
+
+    for file in &facts.files {
+        for function in &file.ast.functions {
+            let Some(name) = function.name.as_ref() else {
+                continue;
+            };
+            let key = (
+                file.path.to_string(),
+                u64::from(name.span.start),
+                u64::from(name.span.end),
+            );
+            let Some(entity) = entities.get(&key) else {
+                continue;
+            };
+            if entity.symbol.is_empty() {
+                continue;
+            }
+            function_symbols.insert(
+                (
+                    file.path.to_string(),
+                    function.span.start,
+                    function.span.end,
+                ),
+                Some(canonical_symbol(&entity.symbol, aliases)),
+            );
+        }
+    }
+
+    let mut indexed = GeneratedOwnerRequirements::default();
+    for requirement in program.missing_owners.iter().filter(|requirement| {
+        !requirement.runtime_uncertain
+            && !requirement.conditional_owner
+            && !requirement.component_uncertain
+    }) {
+        let Some(file) = facts
+            .files
+            .iter()
+            .find(|file| file.path.as_str() == requirement.location.path.as_ref())
+        else {
+            continue;
+        };
+        let span = solid_facts::core::Span::new(
+            u32::try_from(requirement.location.start_byte).unwrap_or(u32::MAX),
+            u32::try_from(requirement.location.end_byte).unwrap_or(u32::MAX),
+        );
+        let Some(function) = file
+            .ast
+            .functions_body_containing(span)
+            .min_by_key(|function| function.body.end - function.body.start)
+        else {
+            continue;
+        };
+        let key = (
+            file.path.to_string(),
+            function.span.start,
+            function.span.end,
+        );
+        let operations = indexed.by_function.entry(key.clone()).or_default();
+        if !operations.contains(&requirement.operation) {
+            operations.push(requirement.operation);
+        }
+        if let Some(Some(symbol)) = function_symbols.get(&key) {
+            let operations = indexed.by_symbol.entry(symbol.clone()).or_default();
+            if !operations.contains(&requirement.operation) {
+                operations.push(requirement.operation);
+            }
+        }
+    }
+    indexed
+}
+
+/// Adds exact owner requirements observed inside the exact exported function
+/// to the generated package summary. The source project may report the
+/// function as open-world/uncertain because its callers are not enumerable;
+/// that is precisely the obligation a consumer contract must carry.
+fn attach_generated_owner_requirements(
+    facts: &solid_facts::ProjectFacts,
+    aliases: &HashMap<String, String>,
+    generated: &GeneratedOwnerRequirements,
     entry_file: &Path,
     export_name: &str,
     mut summary: solid_reactive_ir::ContractExport,
 ) -> solid_reactive_ir::ContractExport {
-    let Some(file) = facts
-        .files
-        .iter()
-        .find(|file| same_canonical_path(Path::new(file.path.as_str()), entry_file))
-    else {
+    let operations = entry_export_entity(facts, entry_file, export_name)
+        .map(|entity| canonical_symbol(&entity.symbol, aliases))
+        .filter(|symbol| !symbol.is_empty())
+        .and_then(|symbol| generated.by_symbol.get(&symbol))
+        .or_else(|| {
+            (export_name == "default").then(|| {
+                let file = facts
+                    .files
+                    .iter()
+                    .find(|file| same_canonical_path(Path::new(file.path.as_str()), entry_file))?;
+                let default_span = file
+                    .ast
+                    .exports
+                    .iter()
+                    .filter(|export| {
+                        !export.type_only && export.kind == solid_facts::ast::ExportKind::Default
+                    })
+                    .flat_map(|export| export.declarations.iter())
+                    .find(|specifier| !specifier.type_only && specifier.exported == "default")?
+                    .local
+                    .span;
+                let function = file
+                    .ast
+                    .functions
+                    .iter()
+                    .filter(|function| {
+                        function.span.contains(default_span)
+                            && !function.body.contains(default_span)
+                    })
+                    .min_by_key(|function| function.span.end - function.span.start)?;
+                generated.by_function.get(&(
+                    file.path.to_string(),
+                    function.span.start,
+                    function.span.end,
+                ))
+            })?
+        });
+    let Some(operations) = operations else {
         return summary;
     };
-    let Some(function) = file.ast.functions.iter().find(|function| {
-        function
-            .name
-            .as_ref()
-            .and_then(|name| file.source_text(name.span))
-            .is_some_and(|name| name == export_name)
-    }) else {
-        return summary;
-    };
-    for requirement in program.missing_owners.iter().filter(|requirement| {
-        requirement.location.path.as_ref() == file.path.as_str()
-            && function.span.contains(solid_facts::core::Span::new(
-                u32::try_from(requirement.location.start_byte).unwrap_or(u32::MAX),
-                u32::try_from(requirement.location.end_byte).unwrap_or(u32::MAX),
-            ))
-            && !requirement.runtime_uncertain
-            && !requirement.conditional_owner
-            && !requirement.component_uncertain
-    }) {
+    for operation in operations {
         if !summary
             .owner_requirements
             .iter()
-            .any(|existing| existing.operation == requirement.operation)
+            .any(|existing| existing.operation == *operation)
         {
             summary
                 .owner_requirements
                 .push(solid_reactive_ir::ContractOwnerRequirement {
-                    operation: requirement.operation,
+                    operation: *operation,
                     evidence: None,
                 });
         }

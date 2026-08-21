@@ -28,10 +28,19 @@ the package directory the default output is `solid-reactivity.json`.
 When conditional builds invoke the same callback parameter with different
 timing, every observed timing mode is preserved. Consumers analyze each mode;
 the merge does not discard one branch or treat the modes as contradictory.
-When a conditional build changes a complete export summary (including removing
-reactive behavior on the server), schema-v1 adds `variants`: each variant names
-the conditions and the complete summary proven for that target. A consumer without
-an explicit runtime-condition selector fails closed with an uncertifiable
+Evidence-only differences do not create runtime variants: for example, equal
+development and production semantics collapse to one summary whose probe modes
+are unioned when both claims were independently probed. Evidence from a
+narrower branch never promotes an inferred broader claim. A more-specific equal branch such as
+`browser,development,import` also collapses into its broader
+`browser,import` branch, preventing two variants from matching the same runtime.
+When disjoint targets such as browser and node change a complete export summary
+(including removing reactive behavior on the server), schema-v1 adds
+`variants`: each variant names the conditions and the complete summary proven
+for that target. Schema v1 cannot encode negative conditions or export-map
+fallback ordering, so generation refuses semantically different overlapping
+branches instead of emitting an ambiguous contract. A consumer without an
+explicit runtime-condition selector fails closed with an uncertifiable
 environment-dependent contract result; it never applies the merged union.
 
 Bundled conformance probes each applicable claim in client, server,
@@ -300,9 +309,11 @@ checked-in expected outputs are reviewed like snapshots: an unexplained drift
 fails the engine-change gate, and the runner never updates those pins.
 
 Evidence is enforced, not decorative. Contracts emitted by this CLI use
-`inferred`; consumers report them as `unverified` and cannot certify through
-them. Certification accepts `verified`, `reviewed`, `trusted`, and `attested`
-contracts. Legacy `generated` remains parseable but is also unverified.
+`inferred`; consumers report them as `unverified`, and their summaries are not
+inserted into Reactive IR at all. They therefore cannot prove a violation,
+suppress an obligation, or certify a consumer. Certification accepts
+`verified`, `reviewed`, `trusted`, and `attested` contracts. Legacy `generated`
+remains parseable but is also unverified.
 
 Schema-v1 contracts may also put `evidence` on an export summary, reactive-read
 row, callback row, or recursive return row. Row evidence is one of `inferred`,
@@ -335,6 +346,13 @@ generics, async functions, multiple const declarations, classes, re-exports,
 aliases, and subpath imports. Consumers support named imports and local aliases.
 Calls in compiler-tracked JSX retain their tracked status; calls in ordinary
 function bodies produce `strict-read-untracked` findings.
+
+Generated `ownerRequirements` use the compiler's canonical symbol identity for
+aliases and re-exports, plus exact AST function identity for anonymous default
+exports that have no name symbol. An operation is assigned only to its
+immediate containing function body. A same-named declaration or a nested
+closure inside an exported factory cannot lend its owner requirement to that
+export.
 
 Structured returns are an additive part of `schemaVersion: 1`. A tuple uses an
 `elements` array (with `null` for an uncontracted slot), while an object uses a
@@ -385,7 +403,8 @@ Runtime selection is explicit at the native CLI (`--runtime-target`,
 conditions, and transforms participate in one-shot, daemon, and adapter cache
 identity. A conditional entrypoint or variant is consumed only when exactly
 one compatible summary is selected; incomplete, contradictory, or ambiguous
-conditions remain uncertifiable. Explicit CSR/SSR configuration selects the
+conditions remain uncertifiable. Contradictory target, build, or rendering
+conditions are rejected at configuration validation. Explicit CSR/SSR selects the
 rendering premise but does not prove request-dependent post-flush timing.
 
 Local deferred-flow proofs are structural rather than name-based. A function

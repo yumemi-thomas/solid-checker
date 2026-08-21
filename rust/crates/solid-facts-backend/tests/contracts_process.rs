@@ -408,7 +408,12 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
   },
   "compilerFactsProtocol": 1,
   "summaries": {
-    "function": { "kind": "function" }
+    "function": {
+      "kind": "function",
+      "reactiveReads": [
+        { "kind": "accessor", "label": "unreviewed generated value" }
+      ]
+    }
   },
   "entrypoints": {
     ".": {
@@ -435,6 +440,22 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
     let report: serde_json::Value = serde_json::from_slice(&unverified.stdout).unwrap();
     assert_eq!(report["missing"], 1);
     assert_eq!(report["packages"][0]["status"], "unverified");
+
+    let analysis = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--format", "json", "--project"])
+        .arg(directory.join("tsconfig.json"))
+        .output()
+        .unwrap();
+    assert!(analysis.status.success());
+    let findings = decode_findings(&analysis.stdout);
+    assert_eq!(findings.len(), 1, "{findings:#?}");
+    assert_eq!(findings[0]["id"], "SC9005");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("unverified"))
+    );
 
     fs::write(
         local.join("solid-reactivity.json"),
@@ -1297,7 +1318,7 @@ fn package_generator_follows_runtime_esm_behind_declarations() {
 }
 
 #[test]
-fn package_generator_conservatively_merges_conditional_targets() {
+fn package_generator_collapses_semantically_identical_conditional_targets() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
         Err(_) => return,
@@ -1329,11 +1350,12 @@ fn package_generator_conservatively_merges_conditional_targets() {
     assert_eq!(summary["kind"], "function");
     assert_eq!(summary["callbacks"][0]["parameter"], 0);
     assert_eq!(summary["callbacks"][0]["execution"], "inline");
+    assert!(summary["variants"].is_null());
     fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
-fn package_generator_preserves_conditional_callback_execution_modes() {
+fn package_generator_refuses_overlapping_conditional_callback_semantics() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
         Err(_) => return,
@@ -1355,39 +1377,15 @@ fn package_generator_preserves_conditional_callback_execution_modes() {
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
         .output()
         .unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
+        stderr.contains("overlapping conditional-export branches"),
+        "{stderr}"
     );
-    let contract = expanded_contract(&output);
-    let callbacks = contract["entrypoints"]["."]["exports"]["schedule"]["callbacks"]
-        .as_array()
-        .unwrap();
-    assert_eq!(callbacks.len(), 2);
-    assert_eq!(callbacks[0]["parameter"], 0);
-    assert_eq!(callbacks[0]["execution"], "deferred");
-    assert_eq!(callbacks[1]["parameter"], 0);
-    assert_eq!(callbacks[1]["execution"], "inline");
-    let variants = contract["entrypoints"]["."]["exports"]["schedule"]["variants"]
-        .as_array()
-        .unwrap();
-    assert_eq!(variants.len(), 2);
-    let development = variants
-        .iter()
-        .find(|variant| variant["conditions"] == serde_json::json!(["development"]))
-        .unwrap();
-    assert_eq!(
-        development["summary"]["callbacks"][0]["execution"],
-        "inline"
-    );
-    let production = variants
-        .iter()
-        .find(|variant| variant["conditions"] == serde_json::json!(["default"]))
-        .unwrap();
-    assert_eq!(
-        production["summary"]["callbacks"][0]["execution"],
-        "deferred"
+    assert!(
+        stderr.contains("schema v1 cannot represent export-map fallback ordering"),
+        "{stderr}"
     );
     fs::remove_dir_all(directory).unwrap();
 }

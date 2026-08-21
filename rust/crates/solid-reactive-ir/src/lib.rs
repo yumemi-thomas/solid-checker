@@ -148,6 +148,27 @@ impl RuntimeEnvironment {
         {
             return Err("SSR cannot be selected with the browser runtime".into());
         }
+        let selected = self.selected_conditions();
+        for (label, alternatives) in [
+            ("runtime target", &["browser", "node", "deno", "worker"][..]),
+            ("build mode", &["development", "production"][..]),
+            (
+                "rendering mode",
+                &["csr", "string-ssr", "streaming-ssr"][..],
+            ),
+        ] {
+            let present = alternatives
+                .iter()
+                .filter(|condition| selected.contains(**condition))
+                .copied()
+                .collect::<Vec<_>>();
+            if present.len() > 1 {
+                return Err(format!(
+                    "runtime selection contains contradictory {label} conditions: {}",
+                    present.join(", ")
+                ));
+            }
+        }
         Ok(())
     }
 
@@ -1922,6 +1943,12 @@ mod tests {
         assert!(environment.validate().is_err());
         environment.target = Some(RuntimeTarget::Browser);
         environment.conditions.insert(String::new());
+        assert!(environment.validate().is_err());
+        environment.conditions.remove("");
+        environment.conditions.insert("node".into());
+        assert!(environment.validate().is_err());
+        environment.conditions.remove("node");
+        environment.conditions.insert("development".into());
         assert!(environment.validate().is_err());
     }
 

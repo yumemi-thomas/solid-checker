@@ -114,7 +114,7 @@ function createSourceProject(directory) {
   });
   write(
     join(directory, "implementation.ts"),
-    `import { createEffect } from "solid-js";\n\nexport function runMixed(callback: () => unknown) {\n  callback();\n  queueMicrotask(callback);\n}\n\nexport function ownedEffect() {\n  createEffect(() => 0, () => {});\n}\n`
+    `import { createEffect } from "solid-js";\n\nexport function runMixed(callback: () => unknown) {\n  callback();\n  queueMicrotask(callback);\n}\n\nfunction ownedEffectImplementation() {\n  createEffect(() => 0, () => {});\n}\nexport { ownedEffectImplementation as ownedEffect };\n`
   );
   write(
     join(directory, "implementation.js"),
@@ -139,7 +139,7 @@ function createContractProject(directory, contract) {
   });
   write(
     join(packageRoot, "index.js"),
-    `import { createEffect } from "solid-js";\n\nexport function runMixed(callback) {\n  callback();\n  queueMicrotask(callback);\n}\n\nexport function ownedEffect() {\n  createEffect(() => 0, () => {});\n}\n`
+    `import { createEffect } from "solid-js";\n\nexport function runMixed(callback) {\n  callback();\n  queueMicrotask(callback);\n}\n\nfunction ownedEffectImplementation() {\n  createEffect(() => 0, () => {});\n}\nexport { ownedEffectImplementation as ownedEffect };\n`
   );
   write(
     join(packageRoot, "index.d.ts"),
@@ -182,9 +182,11 @@ function promoteReviewed(contract) {
     for (const element of returned.elements ?? []) if (element) visitReturn(element);
     for (const property of Object.values(returned.properties ?? {})) visitReturn(property);
   };
-  for (const entrypoint of Object.values(reviewed.entrypoints ?? {})) {
-    for (const summary of Object.values(entrypoint.exports ?? {})) visit(summary);
-  }
+  // Normalized contracts store summaries once at the document root;
+  // entrypoint exports contain summary-id -> export-name arrays. Visiting
+  // those arrays left every generated row inferred while the harness claimed
+  // to have promoted it.
+  for (const summary of Object.values(reviewed.summaries ?? {})) visit(summary);
   return reviewed;
 }
 
@@ -204,7 +206,7 @@ try {
   linkSolid(packageRoot);
   write(
     join(packageRoot, "index.js"),
-    `import { createEffect } from "solid-js";\n\nexport function runMixed(callback) {\n  callback();\n  queueMicrotask(callback);\n}\n\nexport function ownedEffect() {\n  createEffect(() => 0, () => {});\n}\n`
+    `import { createEffect } from "solid-js";\n\nexport function runMixed(callback) {\n  callback();\n  queueMicrotask(callback);\n}\n\nfunction ownedEffectImplementation() {\n  createEffect(() => 0, () => {});\n}\nexport { ownedEffectImplementation as ownedEffect };\n\nexport default function () {\n  createEffect(() => 0, () => {});\n}\n`
   );
   createSourceProject(source);
   generateContract(packageRoot, contractPath);
@@ -224,6 +226,14 @@ try {
     contract.summaries?.[ownedEffectSummary]?.ownerRequirements?.map(row => row.operation),
     ["effect"],
     "the generated contract must retain the exported owner requirement"
+  );
+  const defaultSummary = Object.entries(contract.entrypoints?.["."]?.exports ?? {})
+    .find(([, names]) => names.includes("default"))?.[0];
+  assert.ok(defaultSummary, "the generated contract must retain the anonymous default export");
+  assert.deepEqual(
+    contract.summaries?.[defaultSummary]?.ownerRequirements?.map(row => row.operation),
+    ["effect"],
+    "the generated contract must attach the anonymous default owner requirement by exact export identity"
   );
   createContractProject(consumer, promoteReviewed(contract));
 

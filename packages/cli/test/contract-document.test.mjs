@@ -81,3 +81,100 @@ test("round-trips conditional export summaries without collapsing variants", () 
   assert.deepEqual(expanded.entrypoints["."].exports.createMemo, conditional.entrypoints["."].exports.createMemo);
   assert.equal(normalized.summaries.function.variants, undefined);
 });
+
+test("collapses evidence-only variants and merges their probe modes", () => {
+  const conditional = expandedContract();
+  conditional.entrypoints["."].exports.createMemo = {
+    ...trackedSummary,
+    evidence: { kind: "probed", modes: ["production"], calls: 1 },
+    variants: [
+      {
+        conditions: ["browser", "import"],
+        summary: {
+          ...trackedSummary,
+          evidence: { kind: "probed", modes: ["production"], calls: 1 }
+        }
+      },
+      {
+        conditions: ["browser", "development", "import"],
+        summary: {
+          ...trackedSummary,
+          evidence: { kind: "probed", modes: ["development"], calls: 2 }
+        }
+      }
+    ]
+  };
+
+  const expanded = expandContract(normalizeContract(conditional));
+  const summary = expanded.entrypoints["."].exports.createMemo;
+  assert.equal(summary.variants, undefined);
+  assert.deepEqual(summary.evidence, {
+    kind: "probed",
+    modes: ["development", "production"],
+    calls: 2
+  });
+});
+
+test("removes a redundant specific variant while preserving distinct target behavior", () => {
+  const conditional = expandedContract();
+  conditional.entrypoints["."].exports.createMemo = {
+    ...trackedSummary,
+    variants: [
+      {
+        conditions: ["browser", "import"],
+        summary: {
+          ...trackedSummary,
+          evidence: { kind: "probed", modes: ["production"], calls: 1 }
+        }
+      },
+      {
+        conditions: ["browser", "development", "import"],
+        summary: {
+          ...trackedSummary,
+          evidence: { kind: "probed", modes: ["development"], calls: 2 }
+        }
+      },
+      {
+        conditions: ["import", "node"],
+        summary: { kind: "function" }
+      }
+    ]
+  };
+
+  const expanded = expandContract(normalizeContract(conditional));
+  const variants = expanded.entrypoints["."].exports.createMemo.variants;
+  assert.equal(variants.length, 2);
+  assert.equal(
+    variants.some(variant => variant.conditions.includes("development")),
+    false
+  );
+  const browser = variants.find(variant => variant.conditions.includes("browser"));
+  assert.deepEqual(browser.summary.evidence, {
+    kind: "probed",
+    modes: ["development", "production"],
+    calls: 2
+  });
+});
+
+test("does not promote broad inferred evidence from a reviewed specific branch", () => {
+  const conditional = expandedContract();
+  conditional.entrypoints["."].exports.createMemo = {
+    ...trackedSummary,
+    evidence: { kind: "inferred" },
+    variants: [
+      {
+        conditions: ["browser", "import"],
+        summary: { ...trackedSummary, evidence: { kind: "inferred" } }
+      },
+      {
+        conditions: ["browser", "development", "import"],
+        summary: { ...trackedSummary, evidence: { kind: "reviewed" } }
+      }
+    ]
+  };
+
+  const expanded = expandContract(normalizeContract(conditional));
+  const summary = expanded.entrypoints["."].exports.createMemo;
+  assert.equal(summary.variants, undefined);
+  assert.deepEqual(summary.evidence, { kind: "inferred" });
+});

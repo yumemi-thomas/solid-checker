@@ -437,8 +437,73 @@ function dependencyContracts(packageRoot, manifest) {
   return contracts;
 }
 
+function semanticSummary(summary) {
+  if (Array.isArray(summary)) return summary.map(semanticSummary);
+  if (!summary || typeof summary !== "object") return summary;
+  return Object.fromEntries(
+    Object.entries(summary)
+      .filter(([key]) => key !== "evidence")
+      .map(([key, value]) => [key, semanticSummary(value)])
+  );
+}
+
+function semanticSummaryKey(summary) {
+  return JSON.stringify(semanticSummary(summary));
+}
+
 function sameSummary(left, right) {
-  return JSON.stringify(left) === JSON.stringify(right);
+  return semanticSummaryKey(left) === semanticSummaryKey(right);
+}
+
+const exclusiveConditionGroups = [
+  new Set(["browser", "node", "deno", "worker"]),
+  new Set(["development", "production"]),
+  new Set(["csr", "string-ssr", "streaming-ssr"])
+];
+
+// Positive condition lists can represent disjoint branches such as browser
+// versus node. They cannot represent export-map ordering: a development path
+// and its default/import fallback overlap unless the contract also records a
+// negative predicate. Refuse that semantic split instead of manufacturing an
+// ambiguous variant which every consumer must leave uncertifiable.
+function conditionBranchesOverlap(left, right) {
+  if (left.includes("default") || right.includes("default")) return true;
+  for (const group of exclusiveConditionGroups) {
+    const leftMember = left.find(condition => group.has(condition));
+    const rightMember = right.find(condition => group.has(condition));
+    if (leftMember && rightMember && leftMember !== rightMember) return false;
+  }
+  return true;
+}
+
+function conditionsContain(container, contained) {
+  return contained.every(condition => container.includes(condition));
+}
+
+// When a more-specific export-map path proves the same behavior as a broader
+// path, retaining both would make runtime selection match two variants and
+// therefore become uncertifiable. Keep the broader semantic representative;
+// disjoint equal branches remain separate because neither condition set
+// contains the other.
+function removeRedundantConditionalSummaries(summaries) {
+  const kept = [];
+  for (const candidate of [...summaries].sort(
+    (left, right) =>
+      left.conditions.length - right.conditions.length ||
+      JSON.stringify(left.conditions).localeCompare(JSON.stringify(right.conditions))
+  )) {
+    if (
+      kept.some(
+        representative =>
+          sameSummary(representative.summary, candidate.summary) &&
+          conditionsContain(candidate.conditions, representative.conditions)
+      )
+    ) {
+      continue;
+    }
+    kept.push(candidate);
+  }
+  return kept;
 }
 
 function mergeUnique(left = [], right = [], compare) {
@@ -752,13 +817,29 @@ export async function generatePackageContract(arguments_) {
         }
       }
       for (const [name, summaries] of conditionalSummaries) {
+        const minimalSummaries = removeRedundantConditionalSummaries(summaries);
         const distinct = new Map(
-          summaries.map(variant => [JSON.stringify(variant.summary), variant.summary]),
+          minimalSummaries.map(variant => [semanticSummaryKey(variant.summary), variant.summary]),
         );
         if (distinct.size > 1) {
+          for (let left = 0; left < minimalSummaries.length; left++) {
+            for (let right = left + 1; right < minimalSummaries.length; right++) {
+              if (
+                !sameSummary(minimalSummaries[left].summary, minimalSummaries[right].summary) &&
+                conditionBranchesOverlap(
+                  minimalSummaries[left].conditions,
+                  minimalSummaries[right].conditions,
+                )
+              ) {
+                throw new Error(
+                  `${manifest.name} ${entrypoint}:${name} has different semantics across overlapping conditional-export branches ${JSON.stringify(minimalSummaries[left].conditions)} and ${JSON.stringify(minimalSummaries[right].conditions)}; schema v1 cannot represent export-map fallback ordering, so split the entrypoint or review an explicit contract`
+                );
+              }
+            }
+          }
           exports[name] = {
             ...exports[name],
-            variants: summaries
+            variants: minimalSummaries
               .map(variant => ({
                 conditions: variant.conditions.length
                   ? [...variant.conditions].sort()

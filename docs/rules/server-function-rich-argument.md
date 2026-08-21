@@ -25,6 +25,12 @@ finite numeric-literal domains, and unions made only from those categories.
 Bigint/symbol/undefined-only domains are proven violations. Broad numbers,
 mixed safe/unsafe primitive unions, spreads, structurally typed objects,
 arrays, and missing compiler facts remain uncertifiable.
+Type assertions, `satisfies`, non-null assertions, and parentheses are
+transparent to this transport proof: the checker classifies the peeled runtime
+value with compiler facts demanded at that exact span. Consequently
+`1n as unknown as SafeScalar` remains a violation, while
+`1 as unknown as UnsafeScalar` is certified; an assertion is neither a safety
+voucher nor evidence that a safe runtime value became unsafe.
 
 **Premise: probe-confirmed** on the pinned
 `@solidjs/web@2.0.0-rc.0` server-functions client
@@ -119,6 +125,10 @@ to a JSON-safe shape at the call site (`date.toISOString()`,
   are violations because plain JSON cannot encode them faithfully. Object
   graphs still need a recursive compiler JSON-safety fact before the checker
   can certify them without guessing.
+- **Type assertions do not change runtime transport.** The proof uses the
+  compiler facts for the peeled runtime expression. If those demanded facts
+  are absent, the result is explicitly uncertifiable rather than falling back
+  to the asserted type.
 - **Natural HTTP encodings.** A `Uint8Array` as the only argument — or in
   trailing position after JSON-safe leading arguments — is sent as a request
   body, not as JSON (probed: it reaches `fetch`), so those positions are

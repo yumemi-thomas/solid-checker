@@ -278,10 +278,21 @@ impl DiagnosticSession {
             ));
         }
 
+        // Contract discovery and contract proof are deliberately separate.
+        // Keep every discovered document for the status report, but only let
+        // reviewed/verified claims cross the semantic trust boundary. An
+        // inferred row may explain what the generator observed; it cannot
+        // prove a violation or suppress an obligation in the consumer.
+        let certifiable_contracts = loaded
+            .contracts
+            .iter()
+            .filter(|contract| contract_evidence_is_certifiable(contract))
+            .cloned()
+            .collect::<Vec<_>>();
         let (program, _) = self.builder.build_with_contracts_shared(
             facts,
             self.dialect.vocabulary,
-            &loaded.contracts,
+            &certifiable_contracts,
             &rule_options,
         )?;
         let reactive_ir = ir_started.elapsed();
@@ -858,16 +869,18 @@ pub fn load_package_contracts_with(
     explicit_paths: &[String],
     bundled_solid_js: Option<PackageContract>,
 ) -> Result<Vec<PackageContract>, BackendError> {
-    Ok(
-        load_package_contracts_reporting(
-            dialect,
-            project,
-            facts,
-            explicit_paths,
-            bundled_solid_js,
-        )?
-        .contracts,
-    )
+    let loaded = load_package_contracts_reporting(
+        dialect,
+        project,
+        facts,
+        explicit_paths,
+        bundled_solid_js,
+    )?;
+    Ok(loaded
+        .contracts
+        .into_iter()
+        .filter(contract_evidence_is_certifiable)
+        .collect())
 }
 
 /// As [`load_package_contracts_with`], but also returns the contracts that were
@@ -1367,7 +1380,13 @@ pub fn package_contract_statuses_with(
             .map(package_uses_solid)
             .transpose()?
             .unwrap_or(false);
-        if !bundled && !uses_solid {
+        // A package-published/local contract is itself a declaration that the
+        // package participates in this semantic protocol. Report its evidence
+        // even when package.json does not list Solid directly (peer wrappers
+        // and framework adapters frequently keep that edge outside their own
+        // manifest). Otherwise an inferred contract can enter analysis without
+        // any unverified status at all.
+        if !bundled && !uses_solid && !by_name.contains_key(module.as_str()) {
             continue;
         }
         // A refusal recorded during loading wins: the package has a contract

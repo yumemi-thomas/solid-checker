@@ -429,15 +429,24 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     }
                     continue;
                 }
+                let proof_span = if argument.runtime_type_escape {
+                    argument.value_span.unwrap_or(argument.span)
+                } else {
+                    argument.span
+                };
                 let Some(entity) = ctx
                     .semantic_lookup
-                    .entity_at(file.path.as_str(), argument.span)
+                    .entity_at(file.path.as_str(), proof_span)
                 else {
                     push_rich_argument_uncertainty(
                         draft,
                         file,
                         argument.span,
-                        "the compiler did not return the demanded argument facts",
+                        if argument.runtime_type_escape {
+                            "the compiler did not return the demanded runtime-value facts hidden by this type assertion"
+                        } else {
+                            "the compiler did not return the demanded argument facts"
+                        },
                     );
                     continue;
                 };

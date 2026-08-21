@@ -394,6 +394,16 @@ fn plan_file(
                 add_symbol(value_span, true);
                 type_descriptor_spans.insert(value_span);
                 runtime_value_domain_spans.insert(value_span);
+                // Assertions change the apparent type at the argument span,
+                // not the runtime value. SC7007 therefore needs the same
+                // primitive/library proof fields on the peeled expression;
+                // consulting the asserted span would certify `1n as string`
+                // and reject `1 as bigint` backwards.
+                if dialect.semantic_demands.server_argument_library_types {
+                    library_type_spans.insert(value_span);
+                    primitive_value_domain_spans.insert(value_span);
+                    constant_value_spans.insert(value_span);
+                }
             }
             // SC7007 must classify inline values such as `new Date()` as
             // well as identifiers. Demand the compiler's library identities

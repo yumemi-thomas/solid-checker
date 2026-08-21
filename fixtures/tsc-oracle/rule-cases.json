@@ -1342,6 +1342,16 @@
       "sourceExtension": "ts",
       "expect": "silent",
       "checker": "reports",
+      "checkerCount": 1,
+      "why": "Type assertions change only TypeScript's apparent type. The runtime bigint still fails the default JSON transport and must report, while the runtime number asserted to bigint remains JSON-safe and must stay silent.",
+      "code": "type Safe = string | boolean | null;\ntype Unsafe = bigint | symbol | undefined;\nexport async function saveSafe(value: Safe) {\n  \"use server\";\n  return value;\n}\nexport async function saveUnsafe(value: Unsafe) {\n  \"use server\";\n  return typeof value;\n}\nvoid saveSafe(1n as unknown as Safe);\nvoid saveUnsafe(1 as unknown as Unsafe);\n"
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
       "checkerKind": "uncertifiable",
       "why": "A broad number type may contain finite JSON numbers or non-finite values such as NaN and Infinity. Without an exact finite-value guarantee, the checker must retain the transport obligation.",
       "code": "declare const value: number;\nexport async function save(input: number) {\n  \"use server\";\n  return input;\n}\nvoid save(value);\n"
