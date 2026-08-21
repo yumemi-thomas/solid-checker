@@ -62,7 +62,10 @@ export function Toolbar() {
         await saveNumber(broadNumber); // uncertifiable: number may be non-finite
         await saveStamps(stamps); // finding: Date behind an imported alias
         await saveIds(ids); // finding: Set behind an imported alias
-        await saveBoxed(boxed); // uncertifiable: nested Date is outside the top-level fact
+        await saveBoxed(boxed); // uncertifiable: the nested fact is not demanded through a binding
+        await saveBoxed({ title: "hello", when }); // violation: JSON reaches the nested Date
+        await savePlain({ title: "hello" }); // uncertifiable: no rich leaf, and proving safety needs the property set closed against getters
+        await saveBoxed({ ...boxed }); // uncertifiable: a spread could overwrite the witness
         await saveEvent(new Date(), tags); // two findings: inline Date, Set
       }}
     >

@@ -463,6 +463,14 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         Rule::ServerFunctionModuleDirective => {
             "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"
         }
+        // The nested claim is about a value the argument *holds*, not the
+        // argument's own resolved type, so it cannot borrow the top-level
+        // sentence: that one would assert a fact the analysis never proved.
+        Rule::ServerFunctionRichArgument
+            if violation.analysis_context == "nested-rich-argument" =>
+        {
+            "the callee carries a \"use server\" directive, a closed object literal reaching it holds a value in the JSON-unsafe set, and nothing in the project installs an argument serializer"
+        }
         Rule::ServerFunctionRichArgument => {
             "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
         }

@@ -7,18 +7,20 @@ IR library tests passed, all 76 armed backend process tests passed, and the
 fresh-debug-binary coverage comparison passed for 72 fixture projects (517
 findings). After the reviewed runtime-identity, environment-selector,
 package-owner, closed-local-callback, dialect-selection,
-rendering-premise, caller-witness, and callback-extent slices below, the
-snapshots contain 128 \`uncertifiable\` findings across 515 findings in 75
-fixture projects. This is an inventory of the current proof obligations, not a
+rendering-premise, caller-witness, callback-extent, and nested-transport
+slices below, the snapshots contain 130 \`uncertifiable\` findings across 518
+findings in 75 fixture projects. This is an inventory of the current proof obligations, not a
 promise that every row is reducible; the last column records the only sound
 owner that could discharge it.
 
-The count moved 126 → 128 while precision improved, and the two are not in
-tension. Both new proof paths below need their fail-closed control pinned, and
+The count moved 126 → 130 while precision improved, and the two are not in
+tension. Every new proof path below needs its fail-closed controls pinned:
 \`props-caller-witness\` contributes two honest uncertifiable results doing
-exactly that. A negative control that reports an obligation is the evidence
-that the new positive path did not overreach; deleting it to lower the number
-would remove the only thing holding the reduction honest.
+exactly that, and the nested-transport slice two more. A negative control that
+reports an obligation is the evidence that the new positive path did not
+overreach; deleting one to lower the number would remove the only thing holding
+the reduction honest. **The count is not a precision score, and the sections
+below are the reason.**
 
 ### Where the floor actually is (measured 2026-08-21)
 
@@ -33,7 +35,28 @@ checker was asked whether it closes.
 | SC9005 | 22 | Not applicable. | Wrong subpath, absent export, or unreviewed package — the fixtures exist to pin that. |
 | SC9012 | 9 | No. | Divergent dispatch, globals, and opaque adapters by construction. |
 | SC7005 | 5 | Never. | Per-request settlement race; no source fact decides it. |
-| Type Facts–owned | 16 | Partly. | Broad numbers, object graphs, non-exact tuples, dynamic serializer config. |
+| Type Facts–owned | 18 | Partly — and this is the only fact-limited row. | Broad numbers, non-exact tuples, dynamic serializer config; plus the two object-graph residues below. |
+
+Only **two** of the 130 turned out to be limited by the facts themselves, and
+both were found by reading the produced facts rather than the rules. In
+`server-function-rich-args`, `saveBoxed(boxed)` and `savePlain(payload)` hand a
+server function an object built as a local literal. The entity exists at every
+property value span, but `libraryTypes` is **absent** there: it is a
+demand-driven field, and nothing demanded it inside an object literal. Two
+distinct things are missing, and only one of them is now supplied:
+
+- **Reached through a binding** — still open. Demanding the per-property fact
+  needs either identifier resolution inside the demand plan or a file-wide
+  sweep of every immutable binding initializer, and the second is unbounded
+  producer work for a project that may contain no server function at all. The
+  inline demand is bounded by the argument; that one is not.
+- **Proving a graph JSON-*safe*** — still open, and blocked on a different
+  fact. `exact_object_literal` exists only for an *argument* that is written
+  as a literal, and `ObjectPropertyFact` carries no property kind, so a
+  consumer cannot tell a getter from a data property. Without that, "every
+  property is safe" cannot be concluded for any literal: `{ get when() {
+  return new Date(); } }` reads as all-safe. Closing it means carrying the
+  exactness predicate for literals in every position, not just arguments.
 
 So the number is bounded by the corpus, not by the checker: the top two rows —
 76 of 128 — are cases where a fixture deliberately withholds the closing
@@ -76,6 +99,28 @@ environment-dependent SC5003/SC7001 paths and the TypeFacts-owned SC5001/
 SC7007 paths are separate workstreams. SC7005 is intentionally retained in
 the irreducible ledger even when SSR is explicitly selected.
 
+- **2026-08-21 — JSON reaches nested values, and so does the proof.**
+  `JSON.stringify` flattens a Date sealed inside an object exactly as it
+  flattens a top-level one, but SC7007 only ever checked the argument's own
+  library identity, so `save({ title, when })` shrugged where `save(when)`
+  reported. The demand plan now asks for the same library identity at each
+  property value of an object-literal argument — spans taken from *inside* the
+  argument, so the cost is bounded by the argument rather than the project, and
+  a library identity is stable across a type's inhabitants, so unlike a type
+  descriptor or constant value it cannot make `{ n: 0 }` → `{ n: 1 }` a
+  table-invalidating edit. The consumer witnesses a rich leaf at any depth.
+  This is the *presence* half of the proof and only that half: it never
+  concludes a graph is JSON-safe. Every condition is a soundness requirement —
+  no spread at any depth (a later spread overwrites an earlier explicit
+  property), no computed key (it may collide with the witness's name), distinct
+  static keys (a duplicate later key wins), and for the through-a-binding path
+  an immutable binding referenced exactly once, so nothing can mutate a
+  property or hand the object to something that does between construction and
+  the call. Shorthand properties resolve through the binder's recorded
+  `shorthandBinding`, because a symbol query at a shorthand span answers with
+  the property's symbol, never the value binding's. The oracle ledger entry
+  that documented the old limitation now records the proof; `tsc` is still
+  silent there, so this remains transport behavior no signature expresses.
 - **2026-08-21 — a caller witness survives the open world.** Caller-proven
   prop reactivity is two questions with opposite quantifiers. "Some caller
   passes a reactive expression" needs one witness and is *monotone*: a

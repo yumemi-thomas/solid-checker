@@ -424,6 +424,46 @@ fn plan_file(
                 add_symbol(argument.span, false);
                 library_type_spans.insert(argument.span);
                 primitive_value_domain_spans.insert(argument.span);
+                // `JSON.stringify` reaches nested values, so a Date sealed
+                // inside an object literal argument is flattened exactly as a
+                // top-level one is. Demand the same library identity at each
+                // of that literal's property values so the nested case has a
+                // fact to stand on instead of an obligation.
+                //
+                // The spans all come from *inside* this argument, so the cost
+                // is bounded by the argument rather than by the project. And
+                // like the identities above -- unlike a type descriptor or a
+                // constant value -- a library identity is stable for every
+                // inhabitant of a type, so this cannot turn `{ n: 0 }` into
+                // `{ n: 1 }` as a table-invalidating edit.
+                //
+                // An object written through a binding is deliberately not
+                // covered: reaching it would need either identifier
+                // resolution here or a file-wide sweep of every immutable
+                // binding initializer, and the second is unbounded producer
+                // work for a project that may contain no server function at
+                // all. That case stays an explicit obligation; see
+                // docs/precision-backlog.md.
+                if matches!(
+                    argument.runtime_value_kind,
+                    solid_facts::ast::RuntimeValueKind::Object
+                ) {
+                    let literal = argument.value_span.unwrap_or(argument.span);
+                    for property in file
+                        .ast
+                        .object_properties
+                        .iter()
+                        .filter(|property| literal.contains(property.span))
+                    {
+                        for span in [Some(property.value), property.shorthand_binding]
+                            .into_iter()
+                            .flatten()
+                        {
+                            add_symbol(span, false);
+                            library_type_spans.insert(span);
+                        }
+                    }
+                }
                 if !matches!(
                     argument.runtime_value_kind,
                     solid_facts::ast::RuntimeValueKind::Primitive

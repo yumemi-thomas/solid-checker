@@ -473,6 +473,26 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     if serializer == SerializerProof::Enabled {
                         return;
                     }
+                    // JSON.stringify reaches nested values, so a Date sealed
+                    // one level down is lost exactly as a top-level Date is.
+                    // Only a *witnessed* rich value counts; a graph that
+                    // cannot be witnessed falls through to the obligation
+                    // below rather than being certified safe.
+                    if serializer == SerializerProof::Disabled
+                        && let Some((nested, nested_span)) =
+                            nested_rich_transport_value(ctx, file, argument, proof_span)
+                    {
+                        push_nested_rich_argument_violation(
+                            draft,
+                            file,
+                            argument.span,
+                            nested_span,
+                            nested.member,
+                            function,
+                            declaration_file,
+                        );
+                        continue;
+                    }
                     if argument_is_proven_json_unsafe_primitive(entity) {
                         if serializer == SerializerProof::Unresolved {
                             push_rich_argument_uncertainty(
@@ -608,6 +628,35 @@ fn argument_is_proven_json_unsafe_primitive(entity: &EntityFact) -> bool {
         && !domain.may_be_object()
 }
 
+fn push_nested_rich_argument_violation(
+    draft: &mut ProgramDraft,
+    file: &solid_facts::FileFacts,
+    span: Span,
+    value_span: Span,
+    member: &str,
+    function: &solid_facts::ast::FunctionFact,
+    declaration_file: &solid_facts::FileFacts,
+) {
+    let name = function
+        .name
+        .as_ref()
+        .and_then(|name| declaration_file.source_text(name.span))
+        .unwrap_or("this server function");
+    let property = file.source_text(value_span).unwrap_or("a property");
+    draft.static_violations.push(StaticViolation {
+        id: "SC7007".into(),
+        rule: "server-function-rich-argument".into(),
+        message: format!(
+            "server function {name} receives an object holding {member} at {property}; the default server-function transport is plain JSON, which reaches nested values, so this one is silently flattened rather than sent"
+        ),
+        hint: "Convert the nested value to a JSON-safe shape where the object is built (date.toISOString(), Array.from(set)), or call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup.".into(),
+        location: location(file.path.shared(), span),
+        analysis_context: "nested-rich-argument".into(),
+        fixes: vec![],
+        uncertain: false,
+    });
+}
+
 fn push_non_json_primitive_violation(
     draft: &mut ProgramDraft,
     file: &solid_facts::FileFacts,
@@ -689,6 +738,140 @@ struct RichMember {
 /// the global. The name list stays here because which types are interesting —
 /// and that a lone `Uint8Array` has a natural HTTP encoding — is this rule's
 /// knowledge, not the compiler's.
+/// A rich transport value proven to sit *inside* an object literal handed to
+/// a server function, at any depth.
+///
+/// `JSON.stringify` reaches nested values, so `{ when: new Date() }` loses the
+/// Date exactly as a top-level Date does; only the top-level check existed, so
+/// the nested case shrugged. This is the presence half of the proof, and the
+/// presence half alone: it witnesses that a rich value *is* in the graph and
+/// never concludes that a graph is JSON-safe. Proving safety needs the whole
+/// property set closed against getters, which the AST facts cannot express
+/// today (see docs/precision-backlog.md).
+///
+/// Every condition below is a soundness requirement, not a convenience:
+///
+/// - the argument resolves to an **immutable** binding whose initializer is
+///   the literal, so the binding cannot be reassigned to something else;
+/// - the binding is referenced exactly once outside its declaration — here —
+///   so nothing can mutate a property, spread the object elsewhere, or hand it
+///   to a function that does, between construction and this call;
+/// - the literal contains **no spread** at any depth, because a later spread
+///   overwrites an earlier explicit property and could replace the witness;
+/// - it contains **no computed key** at any depth, because a computed key may
+///   collide with the witness's name;
+/// - its static keys are **distinct**, because a duplicate key later in the
+///   literal wins.
+///
+/// Any of them missing returns `None` and the caller keeps its obligation.
+fn nested_rich_transport_value<'a>(
+    ctx: &AnalysisContext<'a>,
+    file: &'a solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+    argument_span: Span,
+) -> Option<(RichMember, Span)> {
+    // An inline literal is constructed at the call, so there is no window in
+    // which anything could have mutated it and none of the binding conditions
+    // below apply. `closed_object_literal` still has to hold: a spread could
+    // overwrite the witness.
+    if argument.closed_object_literal {
+        return rich_leaf_in_literal(ctx, file, argument.value_span.unwrap_or(argument.span));
+    }
+    let symbol = ctx.entities.at(file.path.as_str(), argument_span)?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.names.len() == 1
+            && binding
+                .names
+                .first()
+                .is_some_and(|name| ctx.entities.at(file.path.as_str(), name.span) == Some(symbol))
+    })?;
+    let literal = binding.initializer?;
+    // Exactly one reference outside the declaration, and it is this argument.
+    let references = ctx.semantic_lookup.symbol_references(symbol.as_str());
+    let mut outside = references.iter().filter(|reference| {
+        *reference.path != *file.path.as_str()
+            || !binding.declaration.contains(Span::new(
+                u32::try_from(reference.start_byte).unwrap_or(u32::MAX),
+                u32::try_from(reference.end_byte).unwrap_or(u32::MAX),
+            ))
+    });
+    let only = outside.next()?;
+    if outside.next().is_some() {
+        return None;
+    }
+    if *only.path != *file.path.as_str()
+        || u32::try_from(only.start_byte).ok()? != argument_span.start
+    {
+        return None;
+    }
+    rich_leaf_in_literal(ctx, file, literal)
+}
+
+/// The rich-leaf witness inside one object literal span.
+fn rich_leaf_in_literal<'a>(
+    ctx: &AnalysisContext<'a>,
+    file: &'a solid_facts::FileFacts,
+    literal: Span,
+) -> Option<(RichMember, Span)> {
+    // No spread and no computed key anywhere inside the literal.
+    if file
+        .ast
+        .spreads
+        .iter()
+        .any(|spread| literal.contains(spread.span))
+    {
+        return None;
+    }
+    let properties = file
+        .ast
+        .object_properties
+        .iter()
+        .filter(|property| literal.contains(property.span))
+        .collect::<Vec<_>>();
+    if properties.is_empty() || properties.iter().any(|property| property.computed) {
+        return None;
+    }
+    let mut keys = Vec::with_capacity(properties.len());
+    for property in &properties {
+        let key = file.source_text(property.key)?;
+        if keys.contains(&key) {
+            return None;
+        }
+        keys.push(key);
+    }
+    // A property whose value is itself a literal in this graph is a container,
+    // not a leaf; the walk sees its own properties in this same flat list.
+    properties.iter().find_map(|property| {
+        let value = property.value;
+        if properties
+            .iter()
+            .any(|nested| value.contains(nested.span) && nested.span != property.span)
+        {
+            return None;
+        }
+        // A shorthand writes one identifier where a key and a value both
+        // stand, and TypeScript answers a symbol query there with the
+        // *property's* symbol rather than the value binding's. The binder
+        // recorded the declaration it resolved, so ask at that span instead of
+        // re-deriving it from the spelling. `None` there is the absence of the
+        // fact and keeps the obligation.
+        let mut value_facts = [Some(value), property.shorthand_binding]
+            .into_iter()
+            .flatten();
+        let member = value_facts.find_map(|span| {
+            ctx.semantic_lookup
+                .entity_at(file.path.as_str(), span)?
+                .library_types
+                .as_deref()
+                .and_then(|types| rich_transport_member(types))
+        })?;
+        // A lone/trailing typed array is a natural HTTP body only in an
+        // argument position; nested in an object it is JSON like anything else.
+        Some((member, value))
+    })
+}
+
 fn rich_transport_member(library_types: &[std::sync::Arc<str>]) -> Option<RichMember> {
     library_types.iter().find_map(|name| {
         let matched = match name.as_ref() {

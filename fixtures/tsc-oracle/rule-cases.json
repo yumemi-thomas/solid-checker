@@ -1313,8 +1313,8 @@
       "sourceExtension": "ts",
       "expect": "silent",
       "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "why": "The object argument is well typed, but its nested Date makes the default transport reject it. Top-level library identity cannot prove the complete object graph, so the checker must expose the unresolved transport obligation rather than silently miss it.",
+      "checkerKind": "violation",
+      "why": "The object argument is well typed, but its nested Date makes the default transport reject it. JSON.stringify reaches nested values, and this literal is closed -- no spread, no computed key, distinct keys -- so the nested library identity proves the flattening rather than leaving an obligation. TypeScript stays silent because the declared parameter type is satisfied; the defect is transport behavior the signature does not express.",
       "code": "type Payload = { title: string; when: Date };\nexport async function save(payload: Payload) {\n  \"use server\";\n  return payload.title;\n}\nvoid save({ title: \"event\", when: new Date() });\n"
     },
     {

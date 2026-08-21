@@ -547,11 +547,19 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
     }
     if let Some(findings) = diagnostic_fixture("server-function-rich-args") {
-        // Thirteen proven rich/non-JSON primitive values plus three explicit
+        // Fourteen proven rich/non-JSON primitive values -- thirteen at the
+        // top level plus one witnessed inside a closed object literal, since
+        // JSON.stringify reaches nested values -- plus five explicit
         // obligations where the available facts cannot close the full JSON
         // graph or number finiteness. Lone/trailing Uint8Array and
         // compiler-proven JSON-safe primitive domains remain certified.
-        assert_rule_findings(&findings, "server-function-rich-argument", 16);
+        //
+        // The five obligations are the honest cost of the nested proof being
+        // a *presence* witness only: an object reached through a binding has
+        // no demanded per-property fact, a literal with no rich leaf cannot
+        // be certified safe while a getter could hide one, and a spread could
+        // overwrite the witness. Each is pinned in the fixture.
+        assert_rule_findings(&findings, "server-function-rich-argument", 19);
         if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
             assert!(
                 enabled.is_empty(),
