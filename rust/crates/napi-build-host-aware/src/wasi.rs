@@ -41,9 +41,9 @@ pub fn setup() {
         println!("cargo:rustc-link-arg=--export=_initialize");
     } else {
         println!(
-      "cargo:warning=crt1-reactor.o not found at {}, the multi-threaded runtime may not be initialized correctly",
-      crt_reactor_path.display()
-    );
+            "cargo:warning=crt1-reactor.o not found at {}, the multi-threaded runtime may not be initialized correctly",
+            crt_reactor_path.display()
+        );
     }
     if let Ok(wasi_sdk_path) = env::var("WASI_SDK_PATH") {
         println!(

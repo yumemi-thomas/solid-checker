@@ -89,7 +89,7 @@ exist only after provisioning. All probes are read-only and were run from a
 scratch directory.
 
 Compiler claims cite the revisions pinned in `rust/Cargo.toml`:
-`dom-expressions-compiler` rev `b0965a934120d238dfefbc04274f5e6c9c55387f` (2.0)
+`dom-expressions-compiler` rev `e6ab3469a94addd6f72c7e8347e871a1a0c7edf5` (2.0)
 and `solid1-dom-expressions-compiler` rev
 `79b9b63721c59b0acfd72348438bbb6e090ec81c` (1.x), under
 `~/.cargo/git/checkouts/`.

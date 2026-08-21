@@ -15,8 +15,9 @@ members = [
 
 [patch.crates-io]
 # solid-1x-compiler's build.rs still calls napi-build when its optional `node`
-# feature is disabled. The host-aware shim preserves napi-build 2.3.2 everywhere
-# else and suppresses only that invalid WASI cdylib registration edge.
+# feature is disabled. The host-aware shim advertises napi-build 2.4.1 for
+# dependency resolution, retains the audited emnapi 1.x WASI link behavior,
+# and suppresses only that invalid WASI cdylib registration edge.
 napi-build = { path = "crates/napi-build-host-aware" }
 
 [workspace.package]
@@ -32,10 +33,10 @@ rust-version = "1.97"
 # Pinned to `main` (the semantic-trace and census branches are merged into
 # it), which stops a constant-folded `on*`/`ref`/`children` attribute
 # leaving a mismatched census site and failing the whole file, and carries
-# upstream `next` at 0.50.0-next.42 for Solid 2.0 RC.0, merged through
-# `598606109208aad35f100060789910876b7e6fc4` while retaining the semantic
+# upstream `next` at 0.50.0-next.43 for Solid 2.0 RC.0, merged through
+# `8069eb66821c7d36f327cd3a0790b3d47ae4d276` while retaining the semantic
 # ownership trace required by this checker.
-dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "b0965a934120d238dfefbc04274f5e6c9c55387f", default-features = false }
+dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-expressions", rev = "e6ab3469a94addd6f72c7e8347e871a1a0c7edf5", default-features = false }
 # The Solid 1.x compiler: the same crate name from its own repository, kept at
 # differential parity with the Babel compiler Solid 1.x ships. The renamed key
 # is how one workspace holds both; each dialect's compiler crate depends on
