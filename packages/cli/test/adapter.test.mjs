@@ -382,7 +382,7 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
   plugin._testing.snapshotCache.clear();
 });
 
-test("an explicitly configured default-disabled ESLint rule enables native analysis", () => {
+test("an explicitly configured default-enabled ESLint rule needs no native override", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-explicit-"));
   const project = join(root, "tsconfig.json");
   const calls = join(root, "calls.txt");
@@ -411,7 +411,7 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
   listeners.Program({ type: "Program" });
   listeners["Program:exit"]();
   const args = JSON.parse(readFileSync(calls, "utf8"));
-  assert.deepEqual(args.slice(-2), ["--enable-rule", "v1/prefer-classlist"]);
+  assert.ok(!args.includes("--enable-rule"));
   plugin._testing.snapshotCache.clear();
 });
 

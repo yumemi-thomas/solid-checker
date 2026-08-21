@@ -47,9 +47,10 @@ test("checks an in-memory project through WASI", () => {
   assert.deepEqual(snapshot.findings, []);
 });
 
-test("documents the intentionally absent preference enablement channel", () => {
+test("documents the intentionally absent preference override channel", () => {
   const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
   const declarations = readFileSync(new URL("../index.d.ts", import.meta.url), "utf8");
   assert.match(readme, /cannot read `.solid-checker\/rule-options\.json`/);
+  assert.match(readme, /all `prefer-\*` rules run/);
   assert.doesNotMatch(declarations, /presets|enableRules/);
 });

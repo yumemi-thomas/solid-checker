@@ -334,6 +334,7 @@ mod tests {
     fn catalog_defaults_presets_requests_and_overrides_have_stable_precedence() {
         let mut options = RuleOptions::default();
         assert!(!options.is_enabled("prefer-show", false, &["preferences"]));
+        assert!(options.is_enabled("prefer-show", true, &["preferences"]));
         assert!(options.is_enabled("strict-read-untracked", true, &[]));
 
         options.request_presets(["preferences".into()]);
@@ -349,6 +350,6 @@ mod tests {
         )
         .unwrap();
         disabled.request_presets(["preferences".into()]);
-        assert!(!disabled.is_enabled("v1/prefer-classlist", false, &["preferences"]));
+        assert!(!disabled.is_enabled("v1/prefer-classlist", true, &["preferences"]));
     }
 }

@@ -38,7 +38,7 @@ fn cli_consumes_discovered_package_contracts() {
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     for (fixture, rule, message, expected_count) in [
-        ("package-consumer", "strict-read-untracked", "readCount", 1),
+        ("package-consumer", "strict-read-untracked", "readCount", 2),
         (
             "package-return-consumer",
             "strict-read-untracked",
@@ -521,8 +521,19 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
         String::from_utf8_lossy(&analysis.stderr)
     );
     let findings = decode_findings(&analysis.stdout);
-    assert_eq!(findings.len(), 1);
-    assert_eq!(findings[0]["rule"], "strict-read-untracked");
+    assert_eq!(findings.len(), 2, "{findings:#?}");
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["rule"] == "strict-read-untracked"),
+        "the project-owned contract must still prove the reactive read: {findings:#?}"
+    );
+    assert!(
+        findings
+            .iter()
+            .any(|finding| finding["rule"] == "prefer-for"),
+        "the same contract must prove the default list preference: {findings:#?}"
+    );
 
     fs::write(
         local.join("solid-reactivity.json"),

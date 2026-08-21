@@ -102,8 +102,10 @@ This change itself adds 31 retired identities and 19 aliases.
 
 ## Preference default change
 
-`prefer-for` and `prefer-show` remain opt-in style preferences even after being
-narrowed to proven reactive governing inputs. Native projects enable them with
-`--preset preferences`, `--enable-rule`, or `enabled: true` in
-`rule-options.json`; ESLint projects enable the corresponding rule or compose
-`preferences-v1` / `preferences-v2`. They do not block default certification.
+As of the beta following this catalog reduction, every retained `prefer-*`
+rule is enabled by default: `prefer-for` and `prefer-show` in both dialects,
+plus Solid 1.x `prefer-classlist`. Native projects opt out with
+`enabled: false` in `.solid-checker/rule-options.json`; ESLint projects set the
+corresponding generated dialect rule to `off`. The `preferences` preset,
+`--enable-rule`, and `preferences-v1` / `preferences-v2` configs remain
+accepted as redundant compatibility interfaces.

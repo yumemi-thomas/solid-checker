@@ -116,7 +116,7 @@ impl Rule {
                 ("SC9005", "v1/package-contract-incomplete", "error", true)
             }
         };
-        let opt_in_preference = matches!(
+        let preference = matches!(
             self,
             Self::PreferClasslist | Self::PreferFor | Self::PreferShow
         );
@@ -125,12 +125,8 @@ impl Rule {
             name,
             severity,
             uncertifiable,
-            default_enabled: !opt_in_preference,
-            presets: if opt_in_preference {
-                &["preferences"]
-            } else {
-                &[]
-            },
+            default_enabled: true,
+            presets: if preference { &["preferences"] } else { &[] },
         }
     }
 

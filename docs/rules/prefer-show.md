@@ -2,8 +2,7 @@
 
 `SC8015` · **warning** · violation
 
-This preference is opt-in through the `preferences` preset or an explicit rule
-enable. It does not participate in default certification.
+This preference is enabled by default. Opt out with an explicit rule disable.
 
 Expensive JSX content is controlled by a reactive `&&` or `?:` condition
 instead of Solid's `<Show>` component.
@@ -44,10 +43,9 @@ or add an unshadowed runtime import. The `&&` form has no automatic fix: for
 example, `0 && child` renders `0`, while `<Show when={0}>` renders nothing, and
 the available Type Facts do not yet prove a Boolean-only condition.
 
-Native projects opt in with `--preset preferences`,
-`--enable-rule prefer-show`, or `"prefer-show": { "enabled": true }` in
-`.solid-checker/rule-options.json`. ESLint users enable the rule or compose the
-generated `preferences-v2` config.
+Native projects opt out with `"prefer-show": { "enabled": false }` in
+`.solid-checker/rule-options.json`. ESLint users set
+`"solid-checker/prefer-show": "off"` after the generated dialect config.
 
 ## Related
 

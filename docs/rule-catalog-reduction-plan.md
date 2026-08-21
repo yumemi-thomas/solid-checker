@@ -10,6 +10,13 @@ have a final disposition. The public contract schema is unchanged. The full
 performance, package, manifest, and bundled-contract checks, passed before this
 completion record was committed.
 
+**Enablement amendment (2026-08-21):** the implemented opt-in policy described
+for SC8013/SC8014/SC8015 below has since been superseded. All five per-dialect
+`prefer-*` identities are default-enabled and native/ESLint callers opt out
+explicitly. The `preferences` preset and generated preference configs remain
+as backward-compatible, redundant interfaces. Historical sections retain the
+original rollout rationale and test plan.
+
 **Date:** 2026-08-20
 
 ---

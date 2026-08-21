@@ -2,9 +2,10 @@
 
 `SC8013` · **warning** · violation
 
-This preference is disabled by default. Enable it with
-`--preset preferences`, `--enable-rule v1/prefer-classlist`, or ESLint's
-`solidChecker.configs["preferences-v1"]` config.
+This preference is enabled by default. Native projects opt out with
+`"v1/prefer-classlist": { "enabled": false }` in
+`.solid-checker/rule-options.json`; ESLint users set
+`"solid-checker/v1/prefer-classlist": "off"` after the generated v1 config.
 
 Suggests `classList` for conditional class expressions.
 

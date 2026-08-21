@@ -623,7 +623,7 @@ fn print_help() {
                                         version this project no longer installs)\n\
            --contract <PATH>            Override/discover a package contract (repeatable)\n\
            --preset <NAME>              Enable a catalog preset (repeatable)\n\
-           --enable-rule <NAME>         Enable one default-disabled rule (repeatable)\n\
+           --enable-rule <NAME>         Explicitly enable one rule (repeatable)\n\
            --runtime-target <browser|node>\n\
                                         Select the runtime target explicitly\n\
            --runtime-build <development|production>\n\

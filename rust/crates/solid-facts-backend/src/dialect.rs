@@ -761,7 +761,7 @@ mod tests {
 
     #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
     #[test]
-    fn all_style_preferences_are_default_disabled_preset_members() {
+    fn all_style_preferences_are_default_enabled_preset_members() {
         let expected = HashSet::from([
             "v1/prefer-classlist",
             "v1/prefer-for",
@@ -778,17 +778,12 @@ mod tests {
                     .map(|rule| rule.metadata()),
             )
             .filter_map(|metadata| {
-                if metadata.default_enabled {
-                    assert!(
-                        metadata.presets.is_empty(),
-                        "default-enabled {} unexpectedly belongs to a preset",
-                        metadata.name
-                    );
-                    None
-                } else {
-                    assert_eq!(metadata.presets, ["preferences"]);
-                    Some(metadata.name)
-                }
+                assert!(
+                    metadata.default_enabled,
+                    "{} unexpectedly remains default-disabled",
+                    metadata.name
+                );
+                (metadata.presets == ["preferences"]).then_some(metadata.name)
             })
             .collect::<HashSet<_>>();
         assert_eq!(observed, expected);
