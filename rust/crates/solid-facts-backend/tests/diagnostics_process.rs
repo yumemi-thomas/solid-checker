@@ -76,16 +76,14 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // Three owner-backed inline violations, two dynamic-extent
                 // violations reached through exact helpers (registerTeardown
                 // and the transitive indirectTeardown), plus the
-                // exported-helper proof obligation. Silent, each for its own
-                // reason: the out-of-band (event handler) onSettled, the
-                // helper call written inside the event handler, the helper
-                // that only builds a nested function, and — because the
-                // argument is not a function literal the owner receives —
-                // both `createTrackedEffect(makeTeardownCallback())` and
-                // `createTrackedEffect(wrapCallback(() => …))`. Those two are
-                // not silent overall: SC9012 preserves their opaque callback
-                // behavior as explicit proof obligations.
-                ("leaf-owner-forbidden-call", 15),
+                // exported-helper proof obligation. The two closed local
+                // callback adapters are now included: their exact returned
+                // function values reach the leaf scope and report SC3001 at
+                // registerTeardown(). Silent, each for its own reason: the
+                // out-of-band (event handler) onSettled, the helper call
+                // written inside the event handler, and the helper that only
+                // builds a nested function.
+                ("leaf-owner-forbidden-call", 17),
                 // Three inline (the function-seeded createSignal, createMemo,
                 // createRoot) plus the dynamic-extent trackDouble() reached
                 // through its helper.
@@ -98,10 +96,9 @@ fn diagnostic_domains_match_the_solid_two_matrix() {
                 // classify them.
                 ("invalid-cleanup-return", 0),
                 ("cleanup-return-unresolved", 0),
-                // Both call-expression callback arguments are type-correct but
-                // return opaque runtime functions. They must remain explicit
-                // rather than being mistaken for their wrapper declarations.
-                ("reactive-dispatch-unresolved", 2),
+                // The local callback adapters have exact closed returns and
+                // are no longer dispatch obligations.
+                ("reactive-dispatch-unresolved", 0),
             ][..],
         ),
         (
@@ -208,14 +205,15 @@ fn settled_leaf_rules_follow_call_site_ownership() {
     // The exported helper's call sites are unknowable, so its onSettled leaf
     // finding is a proof obligation, not a proven violation; the owner-backed
     // component-body ones stay violations — three inline, three reached
-    // through exactly-resolved dynamic-extent helpers.
+    // through exactly-resolved dynamic-extent helpers, and two through the
+    // closed local callback adapters.
     let kinds = cleanup
         .iter()
         .map(|finding| finding["kind"].as_str().unwrap_or_default())
         .collect::<Vec<_>>();
     assert_eq!(
         kinds.iter().filter(|kind| **kind == "violation").count(),
-        6,
+        8,
         "{cleanup:#?}"
     );
     assert_eq!(
@@ -549,11 +547,11 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
     }
     if let Some(findings) = diagnostic_fixture("server-function-rich-args") {
-        // Twelve proven rich/non-JSON primitive values plus three explicit
+        // Thirteen proven rich/non-JSON primitive values plus three explicit
         // obligations where the available facts cannot close the full JSON
         // graph or number finiteness. Lone/trailing Uint8Array and
         // compiler-proven JSON-safe primitive domains remain certified.
-        assert_rule_findings(&findings, "server-function-rich-argument", 15);
+        assert_rule_findings(&findings, "server-function-rich-argument", 16);
         if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
             assert!(
                 enabled.is_empty(),

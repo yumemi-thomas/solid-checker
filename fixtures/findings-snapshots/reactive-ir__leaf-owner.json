@@ -182,33 +182,13 @@
       "fixes": 0
     },
     {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 4590,
-      "end": 4612,
-      "fixes": 0
-    },
-    {
-      "rule": "reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 4935,
-      "end": 4988,
-      "fixes": 0
-    },
-    {
-      "rule": "missing-owner",
-      "code": "SC4001",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
-      "severity": "warning",
+      "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 5051,
-      "end": 5060,
+      "start": 4158,
+      "end": 4174,
       "fixes": 0
     },
     {
@@ -217,8 +197,28 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
-      "start": 5420,
-      "end": 5436,
+      "start": 4794,
+      "end": 4810,
+      "fixes": 0
+    },
+    {
+      "rule": "missing-owner",
+      "code": "SC4001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 4883,
+      "end": 4892,
+      "fixes": 0
+    },
+    {
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/leaf-owner/App.tsx",
+      "start": 5252,
+      "end": 5268,
       "fixes": 0
     }
   ]

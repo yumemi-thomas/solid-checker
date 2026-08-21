@@ -17,7 +17,6 @@ use std::collections::{HashMap, HashSet};
 
 use solid_dialect::{CleanupRule, Primitive};
 use solid_facts::FileFacts;
-use solid_facts::ast::ArgumentValueKind;
 use solid_facts::core::Span;
 use typefacts::{ResolvedCallValidity, RuntimeValueDomain};
 
@@ -58,6 +57,9 @@ pub(super) fn leaf_owner_operations_for_file(
     safe_call_symbols: &HashSet<SymbolId>,
     lookup: &SemanticLookup<'_>,
 ) -> Vec<LeafOwnerOperation> {
+    let Some(file) = lookup.file_by_path(file.path.as_str()) else {
+        return Vec::new();
+    };
     let entities = lookup.entities();
     let dialect = lookup.dialect;
     let resolution = LeafScopeResolution {
@@ -114,35 +116,21 @@ pub(super) fn leaf_owner_operations_for_file(
         // argument text it was written in, and the answer is the same for
         // every call in the region — compute it once per owner call.
         //
-        // The argument must be a function *literal* — the callback the owner
-        // receives — because `createTrackedEffect(makeCb())` evaluates
-        // `makeCb()` at argument-evaluation time under the *enclosing* owner,
-        // and `onSettled(wrap(cb))` hands `cb` to `wrap`, which decides
-        // whether and where it runs. In neither case is a leaf scope proven
-        // to exist where the call is written, so nothing in the argument
-        // region is proven to throw. An exact identifier callback is inspected
-        // below; every other valid opaque shape becomes SC9012 rather than a
-        // violation claim or silent certification.
-        let Some(leaf_callback) = callback_argument_literal(file, region) else {
-            let valid_call = lookup
-                .resolved_callee_call(file, owner_call.callee)
-                .is_some_and(|call| call.validity == ResolvedCallValidity::Valid);
-            if !valid_call {
-                // Invalid callback shapes belong to TypeScript. A missing
-                // validity fact cannot safely distinguish those from a valid
-                // opaque callback, so it cannot produce this obligation.
-                continue;
-            }
+        // The callback must be an exact function value. Direct literals and
+        // identifiers are resolved as before. A call is followed only through
+        // a closed local return: one unconditional return of a function
+        // literal, or one unconditional return of the exact callback
+        // parameter. This proves the value received by the owner without
+        // trusting a name, package, conditional, or wrapper with unknown
+        // behavior. Every other valid opaque shape becomes SC9012.
+        let callback_literal = callback_argument_literal(file, region);
+        if callback_literal.is_none() && file.ast.call_at(region).is_none() {
             let callback_span = file.ast.peel_ts_sugar_span(region);
-            // Only a value reference denotes the function that is actually
-            // handed to the owner. A call expression's entity may resolve to
-            // its *callee* (`makeCallback` or `wrap`) even though the runtime
-            // callback is the callee's opaque return value. Following that
-            // declaration falsely certifies the wrapper body and drops the
-            // very obligation this branch exists to preserve.
-            let exact_callback = (callback_argument.value == ArgumentValueKind::Identifier)
-                .then(|| entities.at(file.path.as_str(), callback_span))
-                .flatten()
+            // Preserve the identifier path's existing diagnostic anchor: the
+            // owner receives the identifier itself, while the forbidden body
+            // is only evidence for that operation.
+            let exact_callback = entities
+                .at(file.path.as_str(), callback_span)
                 .and_then(|symbol| lookup.function_for_symbol(symbol));
             if let Some((callback_file, callback)) = exact_callback {
                 let mut kinds = Vec::new();
@@ -173,7 +161,32 @@ pub(super) fn leaf_owner_operations_for_file(
                 if complete {
                     continue;
                 }
+                operations.push(LeafOwnerOperation {
+                    kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
+                    owner: owner.to_string(),
+                    location: location(file.path.shared(), callback_span),
+                    fix: None,
+                    call_site_gate,
+                    uncertain: true,
+                    via: None,
+                });
+                continue;
             }
+        }
+        let Some((callback_file, leaf_callback)) = callback_literal
+            .map(|callback| (file, callback))
+            .or_else(|| callback_argument_function(lookup, file, region, 8))
+        else {
+            let valid_call = lookup
+                .resolved_callee_call(file, owner_call.callee)
+                .is_some_and(|call| call.validity == ResolvedCallValidity::Valid);
+            if !valid_call {
+                // Invalid callback shapes belong to TypeScript. A missing
+                // validity fact cannot safely distinguish those from a valid
+                // opaque callback, so it cannot produce this obligation.
+                continue;
+            }
+            let callback_span = file.ast.peel_ts_sugar_span(region);
             operations.push(LeafOwnerOperation {
                 kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                 owner: owner.to_string(),
@@ -185,21 +198,22 @@ pub(super) fn leaf_owner_operations_for_file(
             });
             continue;
         };
-        for call in &file.ast.calls {
-            if call.span == owner_call.span || !region.contains(call.span) {
+        let callback_region = leaf_callback.span;
+        for call in &callback_file.ast.calls {
+            if call.span == owner_call.span || !callback_region.contains(call.span) {
                 continue;
             }
             // And the call must sit in that callback's own synchronous
             // extent: a call inside a nested function (an event handler built
             // in the callback) runs later, in that function's scope, where
             // the leaf scope is no longer live.
-            if !direct_callback_contains(file, leaf_callback.span, call.span) {
+            if !direct_callback_contains(callback_file, leaf_callback.span, call.span) {
                 continue;
             }
             let primitive = primitive_name(
-                file.path.as_str(),
+                callback_file.path.as_str(),
                 call.callee,
-                call.static_callee(&file.source),
+                call.static_callee(&callback_file.source),
                 entities,
                 symbol_names,
                 dialect,
@@ -212,7 +226,7 @@ pub(super) fn leaf_owner_operations_for_file(
                 let mut visited = Vec::new();
                 let complete = helper_forbidden_operations(
                     resolution,
-                    file,
+                    callback_file,
                     call,
                     &mut kinds,
                     &mut visited,
@@ -221,12 +235,15 @@ pub(super) fn leaf_owner_operations_for_file(
                 if kinds.is_empty() && complete {
                     continue;
                 }
-                let via = file.source_text(call.callee).unwrap_or_default().to_owned();
+                let via = callback_file
+                    .source_text(call.callee)
+                    .unwrap_or_default()
+                    .to_owned();
                 for kind in kinds {
                     operations.push(LeafOwnerOperation {
                         kind,
                         owner: owner.to_string(),
-                        location: location(file.path.shared(), call.callee),
+                        location: location(callback_file.path.shared(), call.callee),
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: false,
@@ -237,7 +254,7 @@ pub(super) fn leaf_owner_operations_for_file(
                     operations.push(LeafOwnerOperation {
                         kind: crate::LeafOwnerOperationKind::UnresolvedCallback,
                         owner: owner.to_string(),
-                        location: location(file.path.shared(), call.callee),
+                        location: location(callback_file.path.shared(), call.callee),
                         fix: None,
                         call_site_gate: call_site_gate.clone(),
                         uncertain: true,
@@ -246,7 +263,8 @@ pub(super) fn leaf_owner_operations_for_file(
                 }
                 continue;
             };
-            let Some(kind) = forbidden_operation_kind(dialect, file, call, &primitive) else {
+            let Some(kind) = forbidden_operation_kind(dialect, callback_file, call, &primitive)
+            else {
                 continue;
             };
             // Only `onCleanup` has a rewrite -- return the cleanup
@@ -258,12 +276,12 @@ pub(super) fn leaf_owner_operations_for_file(
                 && owner
                     .primitive()
                     .is_some_and(|owner| dialect.accepts_cleanup_return(owner)))
-            .then(|| terminal_cleanup_fix(file, region, call))
+            .then(|| terminal_cleanup_fix(callback_file, leaf_callback.span, call))
             .flatten();
             operations.push(LeafOwnerOperation {
                 kind,
                 owner: owner.to_string(),
-                location: location(file.path.shared(), call.callee),
+                location: location(callback_file.path.shared(), call.callee),
                 fix,
                 call_site_gate: call_site_gate.clone(),
                 uncertain: false,
@@ -272,6 +290,99 @@ pub(super) fn leaf_owner_operations_for_file(
         }
     }
     operations
+}
+
+/// Resolve the function value an owner actually receives at an exact callback
+/// argument. In addition to literals and identifiers, this follows a very
+/// small closed-world return shape for local functions: the callee must be an
+/// exact local function, and any compiler-resolved call fact present must be
+/// valid. It must have exactly one unconditional return, and that return must
+/// be a function literal or the exact callback parameter. A conditional
+/// return, local alias, member, package function, or invalid fact remains
+/// unresolved.
+fn callback_argument_function<'a>(
+    lookup: &SemanticLookup<'a>,
+    file: &'a FileFacts,
+    argument: Span,
+    depth: usize,
+) -> Option<(&'a FileFacts, &'a solid_facts::ast::FunctionFact)> {
+    if depth == 0 {
+        return None;
+    }
+    if let Some(function) = callback_argument_literal(file, argument) {
+        return Some((file, function));
+    }
+    let raw_argument = argument;
+    let argument = file.ast.peel_ts_sugar_span(raw_argument);
+    let Some(call) = file
+        .ast
+        .call_at(raw_argument)
+        .or_else(|| file.ast.call_at(argument))
+    else {
+        let symbol = lookup.entities().at(file.path.as_str(), argument)?;
+        return lookup.function_for_symbol(symbol);
+    };
+    let symbol = lookup.entities().at(file.path.as_str(), call.callee)?;
+    let (factory_file, factory) = lookup.function_for_symbol(symbol)?;
+    if lookup
+        .resolved_callee_call(file, call.callee)
+        .is_some_and(|resolved| resolved.validity != ResolvedCallValidity::Valid)
+    {
+        return None;
+    }
+    let returned = exact_function_return(factory_file, factory)?;
+    let returned_value = returned.argument?;
+    match returned.value {
+        solid_facts::ast::ReturnValueKind::Function => factory_file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.span == returned_value)
+            .map(|function| (factory_file, function)),
+        solid_facts::ast::ReturnValueKind::Identifier => {
+            let returned_symbol = lookup
+                .entities()
+                .at(factory_file.path.as_str(), returned_value)?;
+            let parameter_index = factory.parameters.iter().position(|parameter| {
+                parameter.names.iter().any(|name| {
+                    lookup.entities().at(factory_file.path.as_str(), name.span)
+                        == Some(returned_symbol)
+                })
+            })?;
+            let argument = call.arguments.get(parameter_index)?;
+            if argument.spread {
+                return None;
+            }
+            callback_argument_function(lookup, file, argument.span, depth - 1)
+        }
+        solid_facts::ast::ReturnValueKind::Undefined
+        | solid_facts::ast::ReturnValueKind::Call
+        | solid_facts::ast::ReturnValueKind::Member
+        | solid_facts::ast::ReturnValueKind::Other => None,
+    }
+}
+
+/// The sole unconditional return of a local callback adapter.
+fn exact_function_return<'a>(
+    file: &'a FileFacts,
+    function: &'a solid_facts::ast::FunctionFact,
+) -> Option<&'a solid_facts::ast::ReturnFact> {
+    if let Some(returned) = function.expression_return.as_ref() {
+        return Some(returned);
+    }
+    let returned = file
+        .ast
+        .returns
+        .iter()
+        .filter(|returned| {
+            containing_ast_function(&file.ast, returned.span)
+                .is_some_and(|owner| owner.span == function.span)
+        })
+        .collect::<Vec<_>>();
+    match returned.as_slice() {
+        [only] if !only.conditional => Some(only),
+        _ => None,
+    }
 }
 
 /// The function literal written *directly* in a callback argument, or `None`

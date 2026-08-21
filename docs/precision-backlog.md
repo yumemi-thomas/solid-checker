@@ -5,8 +5,9 @@
 The dirty-worktree baseline was coherent on the current source: the Reactive
 IR library tests passed, all 76 armed backend process tests passed, and the
 fresh-debug-binary coverage comparison passed for 72 fixture projects (517
-findings). After the reviewed runtime-identity, environment-selector, and
-package-owner slices below, the snapshots contain 135 \`uncertifiable\`
+findings). After the reviewed runtime-identity, environment-selector,
+package-owner, and closed-local-callback slices below, the snapshots contain
+133 \`uncertifiable\`
 findings across 517 findings. This is an
 inventory of the current proof obligations, not a promise that every row is
 reducible; the last column records the only sound owner that could discharge
@@ -19,7 +20,7 @@ it.
 | SC1003 | 15 | component parameter/body destructuring in engine/corpora and wrapped components | Proven component identity plus exact prop backing/caller set. Project/compiler facts can reduce exact JSX calls; ordinary/exported components remain uncertain. |
 | SC1004 | 2 | conditional component returns in the engine corpus | Proven component execution identity and return control-flow shape. JSX/compiler evidence is reducible; unknown component calls remain uncertain. |
 | SC1007 | 3 | reactive handler reads in shared Solid 2 and v1 reactivity fixtures | Exact runtime handler domain/tuple shape and reactive prop backing. Existing TypeFacts closes exact values; mixed/opaque prop sources remain uncertain. |
-| SC3001 | 1 | opaque leaf-owner callback in \`leaf-owner\` | Exact callback identity and synchronous dynamic extent. Project IR can follow exact local functions; factories and uncontracted callbacks are irreducible without a contract owner summary. |
+| SC3001 | 1 | exported \`onSettled\` helper in \`leaf-owner\` | Exact callback identity and synchronous dynamic extent. The exported helper's owner call sites remain open-world; closed local callback adapters are now followed. |
 | SC4001 | 27 | exported/ambiguous component and helper owners across dialect, engine, corpus, and precision fixtures | Compiler owner regions, exact caller topology, and package callback owner behavior. Local/closed callers are reducible; exported library callers and conditional owners remain open-world obligations. |
 | SC5001 | 1 | async boundary with opaque source options | Exact option-object initializer (\`loadingValue\`/\`seedLoadingValue\`) and selected runtime entry. TypeFacts/options facts and explicit runtime conditions are reducible; dynamic options remain uncertain. |
 | SC5003 | 1 | unresolved CSR/SSR boundary fixture | Explicit rendering mode and \`ssrSource\` contract. Environment configuration can prove the rendering premise; absent configuration is reducible only by user/compiler evidence. |
@@ -28,7 +29,7 @@ it.
 | SC7007 | 4 | server-function rich arguments and dynamic serializer configuration | Exact immutable serializer options and closed finite literal graphs. TypeFacts can reduce exact constants/primitive domains; arbitrary object graphs, casts, spreads, and dynamic configuration remain uncertain. |
 | SC9005 | 26 | missing/partial Solid contracts, unknown package callbacks/exports, wrong subpaths, and stale fixture contracts | Exact reviewed package/entrypoint/export summaries, runtime identity, and selected variants. Contract schema/generator/consumer parity and bundled ecosystem coverage are reducible; unreviewed or absent packages remain correctly uncertain. |
 | SC9011 | 1 | exported reactive source in v1 reactivity | Exact caller capture or package/source contract. Closed local callers are reducible; an exported source escaping to uncontracted code is genuinely open-world. |
-| SC9012 | 11 | divergent method dispatch, opaque leaf callbacks, package callbacks, structured returns, and Solid 2 precision | Exhaustive equivalent target summaries, exact returned adapters, callback owner behavior, and contract propagation through aliases/re-exports. Indexed identity/contract fields are reducible; divergent/opaque targets remain fail-closed. |
+| SC9012 | 9 | divergent method dispatch, opaque package/leaf callbacks, structured returns, and Solid 2 precision | Exhaustive equivalent target summaries, exact returned adapters, callback owner behavior, and contract propagation through aliases/re-exports. Indexed identity/contract fields are reducible; divergent/opaque targets remain fail-closed. |
 
 The package-contract audit therefore starts with SC9005/SC9012 and the
 contract-owned portions of SC1001, SC3001, SC4001, SC7001, and SC9011. The
@@ -51,6 +52,13 @@ the irreducible ledger even when SSR is explicitly selected.
   produce SC9012. The producer keeps compact bitsets, preserves the
   retained entity-row budget, and showed no material latency/allocation
   regression in the retained benchmark.
+- **2026-08-21 — closed local leaf callback adapters.** `cleanup.rs` now
+  follows a callback-producing call only when its exact in-project function has
+  one unconditional return of a function literal or the exact callback
+  parameter. The returned function is then scanned in its own synchronous
+  extent, so the factory and identity-wrapper cases in `leaf-owner` become
+  proven SC3001 violations instead of SC9012 obligations. Conditional returns,
+  local aliases, package calls, and missing/invalid facts remain fail-closed.
 - **2026-08-21 — reviewed contract joins and explicit runtime selection.**
   Exact Type Facts `runtimeIdentity` now joins direct package bindings to
   relative project re-export barrels in one indexed pass; conflicting exact
@@ -850,8 +858,8 @@ reason the removal was safe.
   and only when the callback is the literal argument; SC3001, genuinely unowned
   SC4002, and unowned returned-cleanup SC4004 remain distinct. Indirect,
   exported, and unresolved cases stay conservative.
-- **The lexical leaf pass requires an exact callback and its synchronous
-  extent** (`cleanup.rs`). The leaf-scope rules (SC3001/SC3002/SC3003) used to
+- **The leaf pass requires an exact callback value and its synchronous extent**
+  (`cleanup.rs`). The leaf-scope rules (SC3001/SC3002/SC3003) used to
   fire for a primitive written lexically *anywhere* inside the leaf-owner
   argument, so `onSettled(wrap(() => { onCleanup(fn) }))` reported SC3001 even
   though `wrap` may stash the callback and run it out-of-band, where no leaf
@@ -859,15 +867,17 @@ reason the removal was safe.
   containment facts the dynamic-extent path already did: a literal or exact
   in-project callback exposes its body, and the call must sit in that
   callback's own synchronous extent (`direct_callback_contains`). An exact
-  identifier callback is followed transitively, so forbidden operations keep
-  their SC3xxx identity and an exact safe body is certified. A wrapper call,
-  callback-returning call, or unresolved helper cannot support a specific
-  violation claim and now produces SC9012 `uncertifiable` instead of silent
-  failure. Known accessors, setters, actions, primitives, and exact
-  standard-library calls discharge that walk, preventing false uncertainty on
-  ordinary signal operations. The genuinely unowned SC4002 and the unowned
-  returned-cleanup SC4004 are unaffected, as are the settled call-site gates.
-  Pinned by `fixtures/reactive-ir/solid2-precision` and the opaque/exact pairs
+  identifier callback and a closed local adapter with one unconditional
+  function-literal or callback-parameter return are followed transitively, so
+  forbidden operations keep their SC3xxx identity and an exact safe body is
+  certified. Conditional, aliased, package, and otherwise opaque callbacks
+  cannot support a specific violation claim and produce SC9012
+  `uncertifiable` instead of silent failure. Known accessors, setters, actions,
+  primitives, and exact standard-library calls discharge that walk, preventing
+  false uncertainty on ordinary signal operations. The genuinely unowned
+  SC4002 and the unowned returned-cleanup SC4004 are unaffected, as are the
+  settled call-site gates. Pinned by `fixtures/reactive-ir/solid2-precision`
+  and the closed/opaque pairs
   in `fixtures/reactive-ir/leaf-owner/`.
 
 ### Remaining approximations from this slice
@@ -932,17 +942,16 @@ reason the removal was safe.
   is the contract surface's), IIFEs inside a helper count as nested bodies
   (silent), and helper calls written inside nested functions within the leaf
   callback are not the leaf's synchronous extent (silent, correct).
-  The leaf callback must also be a **function literal written directly in the
-  owner's callback argument**, or an exact in-project function reference:
-  `createTrackedEffect(makeCallback())` evaluates its factory under the
-  enclosing owner *before* any leaf scope exists, and
-  `createTrackedEffect(wrap(() => …))` hands the arrow to an opaque wrapper
-  that decides what the owner receives. Neither is a violation proof, so both
-  are SC9012 obligations rather than silent false negatives.
+  The leaf callback must be a **function literal, exact in-project function
+  reference, or closed local callback return**. The last form is followed only
+  when one exact local function unconditionally returns a function literal or
+  its callback parameter; this proves the value received by the owner rather
+  than treating the factory call itself as the callback. Conditional returns,
+  local aliases, package calls, and opaque wrappers remain SC9012 obligations.
   `fixtures/reactive-ir/leaf-owner/` pins the `onCleanup`, `flush`, and
   primitive positives, the transitive hop, exact safe and defective
   references, both literal spellings, the nested-body and event-handler
-  negatives, and both opaque argument forms.
+  negatives, and the two closed local callback-return forms.
   Cost, accepted: the helper traversal is redone per call site rather than
   memoized by callee symbol. Depth is capped at 8 with a cycle guard and the
   walk only starts for a non-primitive call inside a leaf callback, so the

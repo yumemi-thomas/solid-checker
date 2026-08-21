@@ -16,12 +16,14 @@ and `flush()` cannot re-enter the flush cycle. Solid throws in development for
 all three operation variants. Value-form state such as `createSignal(0)` and
 `createStore(object)` is allowed because it attaches no child work.
 
-The callback must be a directly written function literal, and the operation
-must occur in its synchronous extent. Exactly resolved project helpers are
-followed transitively. Wrapper-built, ambiguous, package, or otherwise
-unresolved callbacks produce `reactive-dispatch-unresolved` instead of being
-guessed. A nested function merely created by the callback executes outside the
-leaf extent.
+The callback must be a directly written function literal, an exact function
+reference, or a closed local callback return. For the last form, the adapter
+must have one unconditional return of a function literal or its exact callback
+parameter; the returned function is then checked in its own synchronous extent.
+Exactly resolved project helpers are followed transitively. Conditional,
+aliased, wrapper-built, package, or otherwise unresolved callbacks produce
+`reactive-dispatch-unresolved` instead of being guessed. A nested function
+merely created by the callback executes outside the leaf extent.
 
 `onSettled` becomes a leaf owner only when its call is proven owner-backed.
 Out-of-band calls enqueue a plain callback and remain outside this rule; an

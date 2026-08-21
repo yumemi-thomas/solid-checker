@@ -19,10 +19,12 @@ reactivity analysis but cannot be established. Covered forms include:
 - an exported helper that directly invokes a member supplied through a
   parameter outside a proven tracked JSX region, because callers outside the
   analyzed project can supply unseen behavior.
-- a leaf-owner API receiving a callback through an opaque factory or wrapper,
-  or an exact callback whose synchronous helper chain reaches an unresolved
-  call. A specific cleanup/flush/primitive violation is not proven, but the
-  leaf callback is not certifiably free of all three either; and
+- a leaf-owner API receiving a callback through a conditional, aliased,
+  package, or otherwise opaque factory/wrapper, or an exact callback whose
+  synchronous helper chain reaches an unresolved call. A specific
+  cleanup/flush/primitive violation is not proven, but the leaf callback is
+  not certifiably free of all three either; closed local returns of one
+  function literal or the exact callback parameter are followed instead; and
 - an exact built-in synchronous callback position after tracking has ended,
   such as `Array.prototype.filter` after `await`, when the callback body is
   hidden behind a wrapper or is async; and
