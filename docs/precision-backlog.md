@@ -7,13 +7,13 @@ IR library tests passed, all 76 armed backend process tests passed, and the
 fresh-debug-binary coverage comparison passed for 72 fixture projects (517
 findings). After the reviewed runtime-identity, environment-selector,
 package-owner, closed-local-callback, dialect-selection,
-rendering-premise, caller-witness, callback-extent, and nested-transport
-slices below, the snapshots contain 130 \`uncertifiable\` findings across 518
-findings in 75 fixture projects. This is an inventory of the current proof obligations, not a
+rendering-premise, caller-witness, callback-extent, nested-transport, and
+object-graph slices below, the snapshots contain 129 \`uncertifiable\` findings
+across 518 findings in 75 fixture projects. This is an inventory of the current proof obligations, not a
 promise that every row is reducible; the last column records the only sound
 owner that could discharge it.
 
-The count moved 126 → 130 while precision improved, and the two are not in
+The count moved 126 → 129 while precision improved, and the two are not in
 tension. Every new proof path below needs its fail-closed controls pinned:
 \`props-caller-witness\` contributes two honest uncertifiable results doing
 exactly that, and the nested-transport slice two more. A negative control that
@@ -35,28 +35,14 @@ checker was asked whether it closes.
 | SC9005 | 22 | Not applicable. | Wrong subpath, absent export, or unreviewed package — the fixtures exist to pin that. |
 | SC9012 | 9 | No. | Divergent dispatch, globals, and opaque adapters by construction. |
 | SC7005 | 5 | Never. | Per-request settlement race; no source fact decides it. |
-| Type Facts–owned | 18 | Partly — and this is the only fact-limited row. | Broad numbers, non-exact tuples, dynamic serializer config; plus the two object-graph residues below. |
+| Type Facts–owned | 17 | Partly — and no longer fact-limited. | Broad numbers, non-exact tuples, dynamic serializer config. Object graphs now certify or report; what remains there is a non-finite `number` and three deliberate controls. |
 
-Only **two** of the 130 turned out to be limited by the facts themselves, and
-both were found by reading the produced facts rather than the rules. In
-`server-function-rich-args`, `saveBoxed(boxed)` and `savePlain(payload)` hand a
-server function an object built as a local literal. The entity exists at every
-property value span, but `libraryTypes` is **absent** there: it is a
-demand-driven field, and nothing demanded it inside an object literal. Two
-distinct things are missing, and only one of them is now supplied:
-
-- **Reached through a binding** — still open. Demanding the per-property fact
-  needs either identifier resolution inside the demand plan or a file-wide
-  sweep of every immutable binding initializer, and the second is unbounded
-  producer work for a project that may contain no server function at all. The
-  inline demand is bounded by the argument; that one is not.
-- **Proving a graph JSON-*safe*** — still open, and blocked on a different
-  fact. `exact_object_literal` exists only for an *argument* that is written
-  as a literal, and `ObjectPropertyFact` carries no property kind, so a
-  consumer cannot tell a getter from a data property. Without that, "every
-  property is safe" cannot be concluded for any literal: `{ get when() {
-  return new Date(); } }` reads as all-safe. Closing it means carrying the
-  exactness predicate for literals in every position, not just arguments.
+Only **two** of the 130 were ever limited by the facts themselves, and both
+were found by reading the produced facts rather than the rules. Both are now
+closed, and the object-graph residue is at its floor — see the
+nested-transport and object-graph entries below. What is left in that row is
+irreducible in principle (a broad `number` may be non-finite) or a deliberate
+control (a getter, a twice-referenced binding, a spread).
 
 So the number is bounded by the corpus, not by the checker: the top two rows —
 76 of 128 — are cases where a fixture deliberately withholds the closing
@@ -99,6 +85,32 @@ environment-dependent SC5003/SC7001 paths and the TypeFacts-owned SC5001/
 SC7007 paths are separate workstreams. SC7005 is intentionally retained in
 the irreducible ledger even when SSR is explicitly selected.
 
+- **2026-08-21 — the object-graph floor: the binder resolves the reference,
+  and a property kind closes the literal.** Two facts finished the job the
+  nested-transport slice started, and each removed a different obstacle.
+  `ArgumentFact::binding_declaration` records the declaration Oxc's scope tree
+  resolved an identifier argument to — the same contract
+  `ObjectPropertyFact::shorthand_binding` already carried. The demand plan now
+  follows `save(payload)` to the literal `payload` was built from through the
+  binder's own answer: one reference, one declaration, one literal. No
+  spelling match, and none of the file-wide sweep that made this look
+  unbounded. `ObjectPropertyFact::data` records whether a property is a plain
+  data property (`kind: Init`, not a method), which is the fact a consumer
+  needs to close a literal *against accessors* and so conclude something about
+  every value in it. Without it `{ get when() { return new Date(); } }` is
+  indistinguishable from `{ when: "2026-01-01" }`, and would read as JSON-safe
+  when it is not; `exact_object_literal` carries the same guarantee but only
+  for a literal written directly as an argument.
+  Together they make the graph walk two-sided: witnessing a rich leaf needs
+  only that nothing displaced it (no spread, no computed or duplicate key),
+  while certifying the graph safe additionally needs every property to be a
+  data property with a proven JSON-safe leaf. `savePlain(payload)` and a
+  nested container now certify silent, `saveBoxed(boxed)` is a proven
+  violation, and the getter, twice-referenced-binding, and spread cases are
+  each pinned as obligations. Both new demands are cache-stable — a library
+  identity and a primitive domain are the same for every inhabitant of a type,
+  so unlike a type descriptor or a constant value neither makes `{ n: 0 }` →
+  `{ n: 1 }` invalidate the table. Performance re-certified.
 - **2026-08-21 — JSON reaches nested values, and so does the proof.**
   `JSON.stringify` flattens a Date sealed inside an object exactly as it
   flattens a top-level one, but SC7007 only ever checked the argument's own

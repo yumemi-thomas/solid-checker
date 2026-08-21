@@ -547,19 +547,27 @@ fn server_surface_and_resolve_rules_pin_their_probed_gates() {
         );
     }
     if let Some(findings) = diagnostic_fixture("server-function-rich-args") {
-        // Fourteen proven rich/non-JSON primitive values -- thirteen at the
-        // top level plus one witnessed inside a closed object literal, since
-        // JSON.stringify reaches nested values -- plus five explicit
-        // obligations where the available facts cannot close the full JSON
-        // graph or number finiteness. Lone/trailing Uint8Array and
-        // compiler-proven JSON-safe primitive domains remain certified.
+        // Fifteen proven rich/non-JSON primitive values -- thirteen at the
+        // top level plus two witnessed inside a closed object literal, since
+        // JSON.stringify reaches nested values -- and four explicit
+        // obligations. Lone/trailing Uint8Array, compiler-proven JSON-safe
+        // primitive domains, and object graphs closed against spreads,
+        // computed and duplicate keys, and accessors are all certified.
         //
-        // The five obligations are the honest cost of the nested proof being
-        // a *presence* witness only: an object reached through a binding has
-        // no demanded per-property fact, a literal with no rich leaf cannot
-        // be certified safe while a getter could hide one, and a spread could
-        // overwrite the witness. Each is pinned in the fixture.
+        // The four obligations are each irreducible for a different reason,
+        // and every one is pinned: a broad `number` may be non-finite; a
+        // getter's body runs on access, so no written value proves what the
+        // property yields; a binding referenced twice could be mutated before
+        // the call; and a spread could overwrite the witness.
         assert_rule_findings(&findings, "server-function-rich-argument", 19);
+        assert_eq!(
+            findings_for_rule(&findings, "server-function-rich-argument")
+                .iter()
+                .filter(|finding| finding["kind"] == "uncertifiable")
+                .count(),
+            4,
+            "{findings:#?}"
+        );
         if let Some(enabled) = diagnostic_fixture("server-function-rich-args-enabled") {
             assert!(
                 enabled.is_empty(),

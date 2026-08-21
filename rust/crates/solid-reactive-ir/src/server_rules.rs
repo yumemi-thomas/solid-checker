@@ -474,24 +474,26 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                         return;
                     }
                     // JSON.stringify reaches nested values, so a Date sealed
-                    // one level down is lost exactly as a top-level Date is.
-                    // Only a *witnessed* rich value counts; a graph that
-                    // cannot be witnessed falls through to the obligation
-                    // below rather than being certified safe.
-                    if serializer == SerializerProof::Disabled
-                        && let Some((nested, nested_span)) =
-                            nested_rich_transport_value(ctx, file, argument, proof_span)
-                    {
-                        push_nested_rich_argument_violation(
-                            draft,
-                            file,
-                            argument.span,
-                            nested_span,
-                            nested.member,
-                            function,
-                            declaration_file,
-                        );
-                        continue;
+                    // one level down is lost exactly as a top-level Date is —
+                    // and a graph closed against spreads, computed and
+                    // duplicate keys, and accessors is JSON-safe for the same
+                    // reason. A graph that proves neither falls through to the
+                    // obligation below.
+                    if serializer == SerializerProof::Disabled {
+                        match object_argument_graph_proof(ctx, file, argument, proof_span) {
+                            ObjectGraphProof::RichLeaf => {
+                                push_nested_rich_argument_violation(
+                                    draft,
+                                    file,
+                                    argument.span,
+                                    function,
+                                    declaration_file,
+                                );
+                                continue;
+                            }
+                            ObjectGraphProof::JsonSafe => continue,
+                            ObjectGraphProof::Open => {}
+                        }
                     }
                     if argument_is_proven_json_unsafe_primitive(entity) {
                         if serializer == SerializerProof::Unresolved {
@@ -598,6 +600,13 @@ fn argument_is_proven_json_safe(
     if argument.value == ArgumentValueKind::Null {
         return true;
     }
+    value_is_proven_json_safe(entity)
+}
+
+/// Whether one runtime value is proven to be inside JSON's domain, from the
+/// compiler's constant value or its primitive domain. Shared by the argument
+/// check and the object-graph walk so the two cannot drift.
+fn value_is_proven_json_safe(entity: &EntityFact) -> bool {
     if let Some(value) = entity.constant_value.as_ref() {
         return match value.kind {
             ConstantValueKind::String => true,
@@ -632,8 +641,6 @@ fn push_nested_rich_argument_violation(
     draft: &mut ProgramDraft,
     file: &solid_facts::FileFacts,
     span: Span,
-    value_span: Span,
-    member: &str,
     function: &solid_facts::ast::FunctionFact,
     declaration_file: &solid_facts::FileFacts,
 ) {
@@ -642,12 +649,11 @@ fn push_nested_rich_argument_violation(
         .as_ref()
         .and_then(|name| declaration_file.source_text(name.span))
         .unwrap_or("this server function");
-    let property = file.source_text(value_span).unwrap_or("a property");
     draft.static_violations.push(StaticViolation {
         id: "SC7007".into(),
         rule: "server-function-rich-argument".into(),
         message: format!(
-            "server function {name} receives an object holding {member} at {property}; the default server-function transport is plain JSON, which reaches nested values, so this one is silently flattened rather than sent"
+            "server function {name} receives an object holding a Date, Map, Set, RegExp, or typed array; the default server-function transport is plain JSON, which reaches nested values, so the nested one is silently flattened rather than sent"
         ),
         hint: "Convert the nested value to a JSON-safe shape where the object is built (date.toISOString(), Array.from(set)), or call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup.".into(),
         location: location(file.path.shared(), span),
@@ -764,20 +770,21 @@ struct RichMember {
 ///   literal wins.
 ///
 /// Any of them missing returns `None` and the caller keeps its obligation.
-fn nested_rich_transport_value<'a>(
+fn object_argument_graph_proof<'a>(
     ctx: &AnalysisContext<'a>,
     file: &'a solid_facts::FileFacts,
     argument: &solid_facts::ast::ArgumentFact,
     argument_span: Span,
-) -> Option<(RichMember, Span)> {
+) -> ObjectGraphProof {
     // An inline literal is constructed at the call, so there is no window in
     // which anything could have mutated it and none of the binding conditions
-    // below apply. `closed_object_literal` still has to hold: a spread could
-    // overwrite the witness.
+    // below apply.
     if argument.closed_object_literal {
-        return rich_leaf_in_literal(ctx, file, argument.value_span.unwrap_or(argument.span));
+        return object_graph_proof(ctx, file, argument.value_span.unwrap_or(argument.span));
     }
-    let symbol = ctx.entities.at(file.path.as_str(), argument_span)?;
+    let Some(symbol) = ctx.entities.at(file.path.as_str(), argument_span) else {
+        return ObjectGraphProof::Open;
+    };
     let binding = file.ast.bindings.iter().find(|binding| {
         binding.immutable
             && binding.names.len() == 1
@@ -785,9 +792,15 @@ fn nested_rich_transport_value<'a>(
                 .names
                 .first()
                 .is_some_and(|name| ctx.entities.at(file.path.as_str(), name.span) == Some(symbol))
-    })?;
-    let literal = binding.initializer?;
+    });
+    let Some(literal) = binding.and_then(|binding| binding.initializer.map(|l| (binding, l)))
+    else {
+        return ObjectGraphProof::Open;
+    };
+    let (binding, literal) = literal;
     // Exactly one reference outside the declaration, and it is this argument.
+    // A second reference could mutate a property, spread the object elsewhere,
+    // or hand it to a function that does, between construction and this call.
     let references = ctx.semantic_lookup.symbol_references(symbol.as_str());
     let mut outside = references.iter().filter(|reference| {
         *reference.path != *file.path.as_str()
@@ -796,32 +809,55 @@ fn nested_rich_transport_value<'a>(
                 u32::try_from(reference.end_byte).unwrap_or(u32::MAX),
             ))
     });
-    let only = outside.next()?;
-    if outside.next().is_some() {
-        return None;
-    }
-    if *only.path != *file.path.as_str()
-        || u32::try_from(only.start_byte).ok()? != argument_span.start
+    let Some(only) = outside.next() else {
+        return ObjectGraphProof::Open;
+    };
+    if outside.next().is_some()
+        || *only.path != *file.path.as_str()
+        || u32::try_from(only.start_byte).ok() != Some(argument_span.start)
     {
-        return None;
+        return ObjectGraphProof::Open;
     }
-    rich_leaf_in_literal(ctx, file, literal)
+    object_graph_proof(ctx, file, literal)
 }
 
-/// The rich-leaf witness inside one object literal span.
-fn rich_leaf_in_literal<'a>(
+/// What one object literal's graph proves about the default JSON transport.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ObjectGraphProof {
+    /// Some leaf is proven to be a rich transport value. `JSON.stringify`
+    /// reaches it, so the argument is a proven violation.
+    RichLeaf,
+    /// Every leaf is proven JSON-safe *and* every property on the way is a
+    /// plain data property in a closed literal — so there is no unseen
+    /// property and no getter that could yield something else.
+    JsonSafe,
+    /// Neither: some leaf is unclassifiable, or a literal is not closed.
+    Open,
+}
+
+/// Walks one object literal's graph.
+///
+/// The two conclusions need different amounts of closure, and conflating them
+/// is exactly how a getter would slip through. Witnessing that a rich value
+/// *is* present needs only that nothing can have displaced it: no spread (a
+/// later spread overwrites an earlier explicit property) and no duplicate or
+/// computed key (either can collide with the witness's name). An accessor
+/// elsewhere in the literal is irrelevant, because it cannot unwrite the
+/// property that is there. Concluding the graph is *safe* additionally needs
+/// every property to be a plain data property: `{ get when() { return new
+/// Date(); } }` contains no literal Date anywhere and is still not JSON-safe.
+fn object_graph_proof<'a>(
     ctx: &AnalysisContext<'a>,
     file: &'a solid_facts::FileFacts,
     literal: Span,
-) -> Option<(RichMember, Span)> {
-    // No spread and no computed key anywhere inside the literal.
+) -> ObjectGraphProof {
     if file
         .ast
         .spreads
         .iter()
         .any(|spread| literal.contains(spread.span))
     {
-        return None;
+        return ObjectGraphProof::Open;
     }
     let properties = file
         .ast
@@ -830,46 +866,62 @@ fn rich_leaf_in_literal<'a>(
         .filter(|property| literal.contains(property.span))
         .collect::<Vec<_>>();
     if properties.is_empty() || properties.iter().any(|property| property.computed) {
-        return None;
+        return ObjectGraphProof::Open;
     }
     let mut keys = Vec::with_capacity(properties.len());
     for property in &properties {
-        let key = file.source_text(property.key)?;
+        let Some(key) = file.source_text(property.key) else {
+            return ObjectGraphProof::Open;
+        };
         if keys.contains(&key) {
-            return None;
+            return ObjectGraphProof::Open;
         }
         keys.push(key);
     }
-    // A property whose value is itself a literal in this graph is a container,
-    // not a leaf; the walk sees its own properties in this same flat list.
-    properties.iter().find_map(|property| {
+    let mut all_safe = true;
+    for property in &properties {
         let value = property.value;
+        // A property whose value is itself a literal in this graph is a
+        // container, not a leaf: the flat scan already sees its own
+        // properties, so descending here would double-count them.
         if properties
             .iter()
             .any(|nested| value.contains(nested.span) && nested.span != property.span)
         {
-            return None;
+            all_safe &= property.data;
+            continue;
         }
         // A shorthand writes one identifier where a key and a value both
         // stand, and TypeScript answers a symbol query there with the
         // *property's* symbol rather than the value binding's. The binder
-        // recorded the declaration it resolved, so ask at that span instead of
-        // re-deriving it from the spelling. `None` there is the absence of the
-        // fact and keeps the obligation.
-        let mut value_facts = [Some(value), property.shorthand_binding]
+        // recorded the declaration it resolved, so ask at that span too.
+        let mut leaf_safe = false;
+        for span in [Some(value), property.shorthand_binding]
             .into_iter()
-            .flatten();
-        let member = value_facts.find_map(|span| {
-            ctx.semantic_lookup
-                .entity_at(file.path.as_str(), span)?
+            .flatten()
+        {
+            let Some(entity) = ctx.semantic_lookup.entity_at(file.path.as_str(), span) else {
+                continue;
+            };
+            if entity
                 .library_types
                 .as_deref()
                 .and_then(|types| rich_transport_member(types))
-        })?;
-        // A lone/trailing typed array is a natural HTTP body only in an
-        // argument position; nested in an object it is JSON like anything else.
-        Some((member, value))
-    })
+                .is_some()
+            {
+                return ObjectGraphProof::RichLeaf;
+            }
+            leaf_safe |= value_is_proven_json_safe(entity);
+        }
+        // An accessor's written value is a function whose body runs on access,
+        // so it proves nothing about what the property yields.
+        all_safe &= leaf_safe && property.data;
+    }
+    if all_safe {
+        ObjectGraphProof::JsonSafe
+    } else {
+        ObjectGraphProof::Open
+    }
 }
 
 fn rich_transport_member(library_types: &[std::sync::Arc<str>]) -> Option<RichMember> {

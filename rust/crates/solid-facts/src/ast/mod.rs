@@ -166,6 +166,23 @@ pub struct ArgumentFact {
     /// not rebuild a partial literal taxonomy from source text.
     #[serde(default)]
     pub runtime_value_kind: RuntimeValueKind,
+    /// Declaration this argument's identifier refers to, as resolved by the
+    /// binder for that exact reference.
+    ///
+    /// The same contract as [`ObjectPropertyFact::shorthand_binding`]: Oxc's
+    /// scope tree resolved the reference, so the declaration it chose is
+    /// recorded rather than left to be re-derived from the spelling. It exists
+    /// so a *demand* can follow `save(payload)` to the literal `payload` was
+    /// built from without either resolving names by text or sweeping every
+    /// binding in the file. A consumer proving something still resolves the
+    /// symbol semantically; this only decides what to ask the compiler about.
+    ///
+    /// `None` for a non-identifier argument, and for an identifier the binder
+    /// resolves to no declaration in this file's scope tree — an import or a
+    /// global. Consumers fail closed on `None`; it is the absence of a fact,
+    /// never proof of a missing binding.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub binding_declaration: Option<Span>,
     /// The span of the runtime value expression when TypeScript sugar
     /// (parentheses, `as`, `satisfies`, `!`) wraps it; `None` when the
     /// argument span already is the runtime value.
@@ -570,6 +587,21 @@ pub struct ObjectPropertyFact {
     /// statically acceptable without changing what reaches the runtime.
     #[serde(default)]
     pub runtime_type_escape: bool,
+    /// Whether this is a plain **data** property: `kind: Init` and not a
+    /// method. A getter, setter, or method makes `value` a function whose body
+    /// runs on access, so the property's runtime value is not the thing
+    /// written here.
+    ///
+    /// This is the fact that lets a consumer prove a literal's property set is
+    /// *closed against accessors*, and so conclude something about every value
+    /// in it. Without it `{ get when() { return new Date(); } }` is
+    /// indistinguishable from `{ when: "2026-01-01" }` — the first would read
+    /// as JSON-safe when it is not. `ArgumentFact::exact_object_literal`
+    /// carries the same guarantee for a literal written directly as an
+    /// argument; this carries it per property, so a literal in any position
+    /// can be judged.
+    #[serde(default)]
+    pub data: bool,
     /// Declaration this shorthand property's value binding refers to, as
     /// resolved by the binder for that exact reference.
     ///
@@ -1292,8 +1324,17 @@ impl<'s, 'semantic> Collector<'s, 'semantic> {
         let runtime_type_escape = argument
             .as_expression()
             .is_some_and(contains_runtime_type_escape);
+        let binding_declaration = match argument {
+            Argument::Identifier(identifier) => identifier
+                .reference_id
+                .get()
+                .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                .map(|symbol| span(self.scoping.symbol_span(symbol))),
+            _ => None,
+        };
         ArgumentFact {
             span: span(argument.span()),
+            binding_declaration,
             spread: argument.is_spread(),
             value,
             boolean_properties,
@@ -1956,6 +1997,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
             value_kind: self.runtime_value_kind(&property.value),
             runtime_type_escape: contains_runtime_type_escape(&property.value),
             shorthand_binding: self.shorthand_binding(property),
+            data: property.kind == PropertyKind::Init && !property.method,
         });
         walk::walk_object_property(self, property);
         self.method_names.pop();

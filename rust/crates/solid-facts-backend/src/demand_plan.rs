@@ -437,18 +437,31 @@ fn plan_file(
                 // inhabitant of a type, so this cannot turn `{ n: 0 }` into
                 // `{ n: 1 }` as a table-invalidating edit.
                 //
-                // An object written through a binding is deliberately not
-                // covered: reaching it would need either identifier
-                // resolution here or a file-wide sweep of every immutable
-                // binding initializer, and the second is unbounded producer
-                // work for a project that may contain no server function at
-                // all. That case stays an explicit obligation; see
-                // docs/precision-backlog.md.
-                if matches!(
-                    argument.runtime_value_kind,
-                    solid_facts::ast::RuntimeValueKind::Object
-                ) {
-                    let literal = argument.value_span.unwrap_or(argument.span);
+                // The same object written through a binding is reached by
+                // following the binder's own resolution for this exact
+                // reference — never by matching the spelling, and never by
+                // sweeping every binding in the file. One reference, one
+                // declaration, one literal.
+                let literals = [
+                    matches!(
+                        argument.runtime_value_kind,
+                        solid_facts::ast::RuntimeValueKind::Object
+                    )
+                    .then(|| argument.value_span.unwrap_or(argument.span)),
+                    argument
+                        .binding_declaration
+                        .and_then(|declaration| {
+                            file.ast.bindings.iter().find(|binding| {
+                                binding.immutable
+                                    && binding
+                                        .names
+                                        .first()
+                                        .is_some_and(|name| name.span == declaration)
+                            })
+                        })
+                        .and_then(|binding| binding.initializer),
+                ];
+                for literal in literals.into_iter().flatten() {
                     for property in file
                         .ast
                         .object_properties
@@ -461,6 +474,11 @@ fn plan_file(
                         {
                             add_symbol(span, false);
                             library_type_spans.insert(span);
+                            // The safety half of the proof needs each leaf's
+                            // primitive domain as well. Both fields are stable
+                            // for every inhabitant of a type, so neither makes
+                            // a value edit invalidate the table.
+                            primitive_value_domain_spans.insert(span);
                         }
                     }
                 }
