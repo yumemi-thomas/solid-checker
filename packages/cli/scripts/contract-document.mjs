@@ -8,6 +8,7 @@ function plainSummary(summary) {
     !summary.reactiveReads?.length &&
     !summary.returns &&
     !summary.callbacks?.length &&
+    !summary.ownerRequirements?.length &&
     !summary.variants?.length &&
     !summary.asyncBehavior
   );

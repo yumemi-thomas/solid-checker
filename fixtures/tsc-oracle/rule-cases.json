@@ -160,8 +160,17 @@
       "checker": "reports",
       "checkerKind": "uncertifiable",
       "sourceExtension": "ts",
-      "why": "A spread hides arity from the current fact domain. TypeScript accepts this tuple, but without resolving the spread contents the checker cannot prove either a missing apply function or a safe callable one, so it retains an uncertifiable obligation instead of silently certifying the call.",
+      "why": "The compiler proves this tuple has two elements, but exact arity does not describe the hidden apply value. The value may be callable or may trigger MISSING_EFFECT_FN, so the checker retains an uncertifiable obligation instead of silently certifying the call.",
       "code": "import { createEffect } from \"solid-js\";\nconst operands: [() => number, (value: number) => void] = [() => 1, value => { void value; }];\nexport function inOwner() {\n  createEffect(...operands);\n}\n"
+    },
+    {
+      "rule": "missing-effect-function",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "sourceExtension": "ts",
+      "why": "The compiler proves this required-only tuple has exactly one element. After expansion the Solid 2 apply slot is therefore absent, so the runtime MISSING_EFFECT_FN failure is a violation even though TypeScript accepts the deprecated one-argument overload.",
+      "code": "import { createEffect } from \"solid-js\";\nconst operands: [() => number] = [() => 1];\nexport function inOwner() {\n  createEffect(...operands);\n}\n"
     },
     {
       "rule": "missing-effect-function",
@@ -481,11 +490,18 @@
       "rule": "reactive-source-uncaptured",
       "dialect": "v2",
       "expect": "silent",
+      "checker": "silent",
+      "why": "The exact reviewed `@solidjs/signals@2.0.0-rc.0` contract proves `isEqual` is an inert function that compares its arguments without invoking them. The prior uncertifiable result was a package-contract gap; the v2 bundled contract now closes it while the v1 case below remains open because the package is audited only for the v2 runtime.",
+      "code": "import { createSignal } from \"solid-js\";\nimport { isEqual } from \"@solidjs/signals\";\n\nexport function Widget() {\n  const [count] = createSignal(0);\n  const same = isEqual(count, count);\n  return <div>{same ? count() : 0}</div>;\n}\n"
+    },
+    {
+      "rule": "reactive-source-uncaptured",
+      "dialect": "v2",
+      "expect": "silent",
       "checker": "reports",
       "checkerKind": "uncertifiable",
-      "checkerCount": 2,
-      "why": "A proven reactive source handed, uncalled, to a package export nothing describes -- the gap this rule reports. `@solidjs/signals` is installed but not a bundled package, so `isEqual` carries no contract summary, is not a dialect primitive, and has no body in the project. Its signature accepts the accessor, so TypeScript is silent, and the claim is the analyzability one no type expresses: whether the callee calls the source in a tracking scope, reads it once and severs the reactivity, or stores it for later decides whether the surrounding code is correct. Both arguments are the source, so the rule reports once per argument. The previous snippet here returned a signal tuple, which no spelling of this rule can reach -- it pinned TypeScript's silence over code the rule never spoke about.",
-      "code": "import { createSignal } from \"solid-js\";\nimport { isEqual } from \"@solidjs/signals\";\n\nexport function Widget() {\n  const [count] = createSignal(0);\n  const same = isEqual(count, count);\n  return <div>{same ? count() : 0}</div>;\n}\n"
+      "why": "The function is declared through the real published `@solidjs/web` type surface but its implementation is deliberately outside this project and no package contract is attached to the ambient binding. Passing a proven Solid accessor to that opaque boundary remains a correct uncertifiable obligation; this preserves a positive keystone without treating the partially audited `@solidjs/signals` package as if its unmodeled exports were known.",
+      "code": "import { createSignal } from \"solid-js\";\n\ntype ExternalScope = typeof import(\"@solidjs/web\").scope;\ndeclare const externalScope: ExternalScope;\n\nexport function Widget() {\n  const [count] = createSignal(0);\n  externalScope(count);\n}\n"
     },
     {
       "rule": "no-destructure",
@@ -1305,6 +1321,35 @@
       "rule": "server-function-rich-argument",
       "dialect": "v2",
       "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The compiler proves the alias contains only strings, booleans, null, and finite numeric literals. Those values are all faithfully JSON-serializable, so no transport obligation remains.",
+      "code": "type Safe = string | boolean | null | 0 | 1.5;\ndeclare const safe: Safe;\nexport async function save(value: Safe) {\n  \"use server\";\n  return value;\n}\nvoid save(safe);\n"
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 3,
+      "why": "Bigint, symbol, and undefined are accepted by the declared parameter type, but the compiler proves that each call passes a primitive the default JSON transport cannot encode faithfully. These are transport violations, not TypeScript diagnostics.",
+      "code": "type Unsafe = bigint | symbol | undefined;\nexport async function save(value: Unsafe) {\n  \"use server\";\n  return typeof value;\n}\nvoid save(1n);\nvoid save(Symbol(\"id\"));\nvoid save(undefined);\n"
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "A broad number type may contain finite JSON numbers or non-finite values such as NaN and Infinity. Without an exact finite-value guarantee, the checker must retain the transport obligation.",
+      "code": "declare const value: number;\nexport async function save(input: number) {\n  \"use server\";\n  return input;\n}\nvoid save(value);\n"
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
       "expect": "removed-because-redundant",
       "checker": "silent",
       "allow": [
@@ -1411,8 +1456,25 @@
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
-      "why": "A logical JSX branch is valid TypeScript; the finding is a default control-flow preference and does not claim a type defect.",
+      "why": "A logical JSX branch is valid TypeScript; the finding is an opt-in control-flow preference and does not claim a type defect.",
       "code": "import { createSignal } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport const Case = () => <main>{ready() && <span />}</main>;\n"
+    },
+    {
+      "rule": "prefer-for",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "allow": [2322],
+      "why": "An async Array#map callback produces Promise<Element>[], which the real Solid 1.x JSX Element type rejects. The checker must leave this spelling to TypeScript rather than restating the return-type error as a list preference.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [items] = createSignal([1, 2]);\nexport const Case = () => <ul>{items().map(async (item) => <li>{item}</li>)}</ul>;\n"
+    },
+    {
+      "rule": "prefer-for",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "Solid 2.0's published JSX child types accept this async mapped array. The opt-in finding still expresses list identity rather than a type defect, but withholds its synchronous-callback autofix.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [items] = createSignal([1, 2]);\nexport const Case = () => <ul>{items().map(async (item) => <li>{item}</li>)}</ul>;\n"
     },
     {
       "rule": "jsx-no-duplicate-props",

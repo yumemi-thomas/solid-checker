@@ -39,12 +39,14 @@ const dialectShort = (dialect) => dialect === "solid-v1" ? "v1" : dialect === "s
 
 const fail = (failures, message) => failures.push(message);
 
+const safeEdits = (fixes) => fixes
+  .filter((fix) => fix.applicability === "safe")
+  .flatMap((fix) => fix.edits)
+  .sort((a, b) => a.location.startByte - b.location.startByte);
+
 const applyFixes = (source, fixes) => {
   const bytes = Buffer.from(source, "utf8");
-  const edits = fixes
-    .filter((fix) => fix.applicability === "safe")
-    .flatMap((fix) => fix.edits)
-    .sort((a, b) => a.location.startByte - b.location.startByte);
+  const edits = safeEdits(fixes);
   const pieces = [];
   let cursor = 0;
   for (const edit of edits) {
@@ -54,6 +56,25 @@ const applyFixes = (source, fixes) => {
   }
   pieces.push(bytes.subarray(cursor));
   return Buffer.concat(pieces).toString("utf8");
+};
+
+// Preserve only diagnostics whose complete source range survives every edit.
+// Insertions/replacements before the range shift it; an edit touching the
+// range invalidates the old diagnostic instead of allowing a same-code error
+// newly manufactured inside the replacement.
+const remapUnchangedRange = (range, edits) => {
+  let delta = 0;
+  for (const edit of edits) {
+    const start = edit.location.startByte;
+    const end = edit.location.endByte;
+    if (end <= range.start) {
+      delta += byteLength(edit.newText) - (end - start);
+      continue;
+    }
+    if (start >= range.end) break;
+    return null;
+  }
+  return { start: range.start + delta, end: range.end + delta };
 };
 
 const locate = (variable, ...candidates) => {
@@ -251,6 +272,7 @@ for (const { config, members } of groups.values()) {
 }
 
 const results = [];
+const safeFixInputs = new Map([["v1", []], ["v2", []]]);
 for (const value of resolved.values()) {
   const { testCase, label, findingSpans } = value;
   const actual = checkerByCase.get(testCase.id) ?? [];
@@ -279,6 +301,16 @@ for (const value of resolved.values()) {
         const fixed = applyFixes(source, fixes);
         if (fixed !== `${testCase.source.prelude}${expectation.fix.text}`) fail(failures, `${label} finding[${index}]: safe fix output differs from expected text`);
       }
+      if (behavior === "safe") {
+        const source = `${testCase.source.prelude}${testCase.source.text}`;
+        const fixed = applyFixes(source, fixes);
+        safeFixInputs.get(value.short).push({
+          name: `${safeName(testCase.id)}__finding_${index}${testCase.source.extension}`,
+          code: fixed,
+          allowedDiagnostics: diagnostics,
+          edits: safeEdits(fixes),
+        });
+      }
     }
     const expectedDiagnostics = expectation.typescript.diagnostics ?? [];
     for (const [diagnosticIndex, expected] of expectedDiagnostics.entries()) {
@@ -302,6 +334,40 @@ for (const value of resolved.values()) {
     if (matched.length) fail(failures, `${label}: absent ${absent.rule ?? absent.family} emitted ${matched.length} finding(s)`);
   }
   results.push(`${testCase.id}: ${testCase.expect.findings.length} expected, ${actual.length} emitted`);
+}
+
+for (const [short, inputs] of safeFixInputs) {
+  if (!inputs.length) continue;
+  const oracle = runOracle(short, inputs);
+  for (const pass of ["strict", "loose"]) {
+    for (const input of inputs) {
+      const observed = new Map();
+      for (const diagnostic of oracle.passes[pass]) {
+        if (diagnostic.category !== "error" || diagnostic.file !== input.name) continue;
+        const identity = `TS${diagnostic.code}:${diagnostic.startByte}:${diagnostic.endByte}`;
+        observed.set(identity, (observed.get(identity) ?? 0) + 1);
+      }
+      const allowed = new Map();
+      for (const diagnostic of input.allowedDiagnostics) {
+        if (diagnostic.pass !== pass) continue;
+        const mapped = remapUnchangedRange(
+          { start: diagnostic.start, end: diagnostic.end },
+          input.edits,
+        );
+        if (!mapped) continue;
+        const identity = `${diagnostic.code}:${mapped.start}:${mapped.end}`;
+        allowed.set(identity, (allowed.get(identity) ?? 0) + 1);
+      }
+      for (const [identity, count] of observed) {
+        if (count > (allowed.get(identity) ?? 0)) {
+          fail(
+            failures,
+            `safe fix ${input.name} introduces ${count - (allowed.get(identity) ?? 0)} new ${identity.split(":", 1)[0]} error(s) against the real ${short} published typings in ${pass} mode`,
+          );
+        }
+      }
+    }
+  }
 }
 
 if (failures.length) {

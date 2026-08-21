@@ -103,6 +103,11 @@ const CHECKER = locate(
   join(ROOT, "rust/target/debug/solid-checker-rust"),
 );
 const TYPEFACTS = locate("SOLID_TYPEFACTS_BIN", join(ROOT, "bin/solid-typefacts"));
+const catalogEntries = [
+  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v1.json"), "utf8")).rules,
+  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v2.json"), "utf8")).rules,
+];
+const catalogByName = new Map(catalogEntries.map((rule) => [rule.name, rule]));
 
 // One directory per dialect, holding a symlink to that dialect's audited
 // install. A symlink rather than a copy because the checker picks its dialect
@@ -161,6 +166,13 @@ const runChecker = (testCase, index, strict) => {
     ...(testCase.presets ?? []).flatMap((preset) => ["--preset", preset]),
     ...(testCase.enableRules ?? []).flatMap((rule) => ["--enable-rule", rule]),
   ];
+  const testedRule = canonicalRule(testCase);
+  if (
+    catalogByName.get(testedRule)?.defaultEnabled === false &&
+    !(testCase.enableRules ?? []).includes(testedRule)
+  ) {
+    enablementArgs.push("--enable-rule", testedRule);
+  }
   const output = execFileSync(
     CHECKER,
     ["--format", "json", "--project", join(dir, `tsconfig.${pass}.json`), ...enablementArgs],
@@ -405,10 +417,7 @@ const EXEMPT = {
   "server-function-module-directive": "needs a module-level \"use server\" prologue and the project's server surface",
 };
 
-const catalogRules = [
-  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v1.json"), "utf8")).rules,
-  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v2.json"), "utf8")).rules,
-].map((rule) => rule.name);
+const catalogRules = catalogEntries.map((rule) => rule.name);
 
 const declared = new Set(ledger.cases.map(canonicalRule));
 const uncovered = [...new Set(catalogRules)].filter(

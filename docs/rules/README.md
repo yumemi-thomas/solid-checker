@@ -18,14 +18,14 @@ owners, directives, async computations, and the server surface.
 
 ## Configuration
 
-Proof-backed and uncertifiable rules are enabled by default. The reactive-input
-`prefer-for` and `prefer-show` preferences are also enabled by default and can
-be opted out individually. Solid 1.x `prefer-classlist` remains opt-in through
-the dialect-neutral `preferences` preset:
+Proof-backed and uncertifiable correctness rules are enabled by default. The
+style preferences `prefer-for`, `prefer-show`, and Solid 1.x
+`prefer-classlist` are opt-in through the dialect-neutral `preferences` preset
+or an explicit rule enable:
 
 ```sh
 solid-checker --project tsconfig.json --preset preferences
-solid-checker --project tsconfig.json --enable-rule v1/prefer-classlist
+solid-checker --project tsconfig.json --enable-rule prefer-show
 ```
 
 Both flags are repeatable. Project configuration lives in
@@ -36,7 +36,7 @@ enablement, and `enabled: true` enables a preference without a preset:
 {
   "schemaVersion": 1,
   "rules": {
-    "v1/prefer-show": { "enabled": false },
+    "v1/prefer-show": { "enabled": true },
     "v1/prefer-classlist": {
       "enabled": true,
       "classnames": ["cn", "clsx"]

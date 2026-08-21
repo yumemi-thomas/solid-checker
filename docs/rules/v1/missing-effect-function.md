@@ -9,9 +9,11 @@
 Flags `createEffect` calls whose first argument is provably not a function but
 only type-checks because a TypeScript assertion defeated the published
 signature. Missing and raw invalid arguments are TypeScript's diagnostics.
-An `any`, unresolved value, or type-correct spread is **uncertifiable**: its
-runtime callback may be callable or non-callable, so neither a violation nor
-safety is proven. A compiler-proven callable identifier stays silent.
+An `any`, unresolved value, or spread that hides the first runtime slot is
+**uncertifiable**: its callback may be callable or non-callable, so neither a
+violation nor safety is proven. Exact tuple arity can locate a visible argument
+before or after a spread, but does not describe a value hidden inside one. A
+compiler-proven callable identifier stays silent.
 When such a call is covered by a `"use server"` directive, the finding is
 **uncertifiable**. The directive is a framework and bundler convention that no
 core Solid package reads, so it proves neither client nor server execution.

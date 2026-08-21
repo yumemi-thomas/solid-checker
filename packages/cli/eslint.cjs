@@ -89,6 +89,35 @@ function configuredProject(context, config) {
   return discovered;
 }
 
+function runtimeConfiguration(config) {
+  const runtime = config.runtime;
+  if (runtime == null) return null;
+  if (typeof runtime !== "object" || Array.isArray(runtime)) {
+    throw new Error("settings.solidChecker.runtime must be an object");
+  }
+  const list = (value, name) => {
+    if (value == null) return [];
+    if (!Array.isArray(value) || !value.every(item => typeof item === "string" && item.length > 0)) {
+      throw new Error(`settings.solidChecker.runtime.${name} must be a non-empty string array`);
+    }
+    return [...new Set(value)].sort();
+  };
+  const allowed = (value, name) => {
+    if (value == null) return null;
+    if (typeof value !== "string" || value.length === 0) {
+      throw new Error(`settings.solidChecker.runtime.${name} must be a non-empty string`);
+    }
+    return value;
+  };
+  return {
+    target: allowed(runtime.target, "target"),
+    build: allowed(runtime.build, "build"),
+    rendering: allowed(runtime.rendering, "rendering"),
+    conditions: list(runtime.conditions, "conditions"),
+    frameworkTransforms: list(runtime.frameworkTransforms, "frameworkTransforms")
+  };
+}
+
 function loadSnapshot(context) {
   const config = configuration(context);
   if (config.snapshot != null) return config.snapshot;
@@ -109,6 +138,7 @@ function loadSnapshot(context) {
   const contracts = Array.isArray(config.contracts) ? config.contracts : [];
   const dialect = config.dialect ?? null;
   const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
+  const runtime = runtimeConfiguration(config);
   const configuredRules = Array.isArray(config.enableRule) ? config.enableRule : [];
   const activeDefaultDisabled = [...(ownedRules.get(contextFilename(context)) ?? [])]
     .filter(rule => manifestEntriesByRule.get(rule)?.defaultEnabled === false);
@@ -120,7 +150,8 @@ function loadSnapshot(context) {
     contracts,
     dialect,
     presets,
-    enableRules
+    enableRules,
+    runtime
   });
   if (snapshotCache.has(key)) {
     const cached = snapshotCache.get(key);
@@ -148,6 +179,15 @@ function loadSnapshot(context) {
   for (const contract of contracts) args.push("--contract", contract);
   for (const preset of presets) args.push("--preset", preset);
   for (const rule of enableRules) args.push("--enable-rule", rule);
+  if (runtime?.target) args.push("--runtime-target", runtime.target);
+  if (runtime?.build) args.push("--runtime-build", runtime.build);
+  if (runtime?.rendering) args.push("--rendering", runtime.rendering);
+  for (const condition of runtime?.conditions ?? []) {
+    args.push("--runtime-condition", condition);
+  }
+  for (const transform of runtime?.frameworkTransforms ?? []) {
+    args.push("--framework-transform", transform);
+  }
   const result = spawnSync(command, args, {
     cwd: dirname(project),
     encoding: "utf8",

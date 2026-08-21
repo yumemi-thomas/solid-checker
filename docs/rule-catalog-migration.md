@@ -102,9 +102,8 @@ This change itself adds 31 retired identities and 19 aliases.
 
 ## Preference default change
 
-`prefer-for` and `prefer-show` are enabled by default after being narrowed to
-proven reactive governing inputs. Native projects opt out with an explicit
-`enabled: false` in `rule-options.json`; ESLint projects set the corresponding
-rule to `off`. `v1/prefer-classlist` remains opt-in through `preferences-v1`,
-`--preset preferences`, or `--enable-rule`. `preferences-v2` remains as an
-empty compatibility config.
+`prefer-for` and `prefer-show` remain opt-in style preferences even after being
+narrowed to proven reactive governing inputs. Native projects enable them with
+`--preset preferences`, `--enable-rule`, or `enabled: true` in
+`rule-options.json`; ESLint projects enable the corresponding rule or compose
+`preferences-v1` / `preferences-v2`. They do not block default certification.

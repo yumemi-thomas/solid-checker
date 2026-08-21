@@ -754,6 +754,27 @@
       }
     },
     {
+      "id": "valid-jsx-nesting/positive/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "",
+        "text": "export const Case = () => <p><div /></p>;\n"
+      },
+      "ruleOptions": {},
+      "presets": [],
+      "enableRules": [],
+      "expect": {
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/valid-jsx-nesting",
+            "reason": "retired generic HTML parser policy; outside the Solid semantic checker domain"
+          }
+        ]
+      }
+    },
+    {
       "id": "primitive-in-directive-application/positive/001",
       "dialect": "solid-v1",
       "source": {
@@ -4646,14 +4667,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-for",
-      "reason": "the rendered map receiver is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-for",
+            "reason": "the rendered map receiver is not proven reactive at this JSX position"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-for__invalid__01",
@@ -4667,14 +4688,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-for",
-      "reason": "the rendered map receiver is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-for",
+            "reason": "the rendered map receiver is not proven reactive at this JSX position"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-for__invalid__02",
@@ -4688,14 +4709,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-for",
-      "reason": "the rendered map receiver is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-for",
+            "reason": "the rendered map receiver is not proven reactive at this JSX position"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-for__invalid__03",
@@ -4709,14 +4730,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-for",
-      "reason": "the rendered map receiver is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-for",
+            "reason": "the rendered map receiver is not proven reactive at this JSX position"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-for__invalid__04",
@@ -4730,14 +4751,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-for",
-      "reason": "the rendered map receiver is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-for",
+            "reason": "the rendered map receiver is not proven reactive at this JSX position"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-for__invalid__05",
@@ -4751,14 +4772,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-for",
-      "reason": "the rendered map receiver is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-for",
+            "reason": "the rendered map receiver is not proven reactive at this JSX position"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-for__invalid__06",
@@ -4772,14 +4793,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-for",
-      "reason": "the rendered map receiver is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-for",
+            "reason": "the rendered map receiver is not proven reactive at this JSX position"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-show__valid__00",
@@ -4835,14 +4856,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-show",
-      "reason": "the governing condition is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-show",
+            "reason": "the exported component prop has no proven reactive backing"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-show__invalid__01",
@@ -4856,14 +4877,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-show",
-      "reason": "the governing condition is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-show",
+            "reason": "the exported component prop has no proven reactive backing"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-show__invalid__02",
@@ -4877,14 +4898,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-show",
-      "reason": "the governing condition is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-show",
+            "reason": "the exported component prop has no proven reactive backing"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-show__invalid__03",
@@ -4898,14 +4919,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-show",
-      "reason": "the governing condition is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-show",
+            "reason": "the governing condition is not proven reactive at this JSX position"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/prefer-show__invalid__04",
@@ -4919,14 +4940,14 @@
       "presets": ["preferences"],
       "enableRules": [],
       "expect": {
-  "findings": [],
-  "absent": [
-    {
-      "rule": "v1/prefer-show",
-      "reason": "the governing condition is not proven reactive at this JSX position"
-    }
-  ]
-}
+        "findings": [],
+        "absent": [
+          {
+            "rule": "v1/prefer-show",
+            "reason": "the governing condition is not proven reactive at this JSX position"
+          }
+        ]
+      }
     },
     {
       "id": "upstream/reactivity__valid__00",
@@ -8415,7 +8436,7 @@
         "text": "const [items] = createSignal([\"a\", \"b\"]);\nexport const App = () => <ul>{items().map((item, index) => item + index)}</ul>;\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -8448,7 +8469,7 @@
         "text": "const [ready] = createSignal(false);\nexport const App = () => <main>{ready() && <span />}</main>;\n"
       },
       "ruleOptions": {},
-      "presets": [],
+      "presets": ["preferences"],
       "enableRules": [],
       "expect": {
         "findings": [
@@ -8461,8 +8482,153 @@
               "marker": "ready() && <span />"
             },
             "fix": {
+              "behavior": "none"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "prefer-for/solid-v1/safe-fix/001",
+      "dialect": "solid-v1",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "import { createSignal } from \"solid-js\";\n",
+        "text": "const [items] = createSignal([\"a\", \"b\"]);\nexport const App = () => <ul>{items().map((item) => item)}</ul>;\n"
+      },
+      "ruleOptions": {},
+      "presets": ["preferences"],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "v1/prefer-for",
+            "code": "SC8014",
+            "kind": "violation",
+            "severity": "error",
+            "span": { "marker": "items().map((item) => item)" },
+            "fix": {
               "behavior": "safe",
-              "text": "const [ready] = createSignal(false);\nexport const App = () => <main><Show when={ready()}><span /></Show></main>;\n"
+              "text": "import { For as __SolidCheckerFor113 } from \"solid-js\";\nconst [items] = createSignal([\"a\", \"b\"]);\nexport const App = () => <ul>{<__SolidCheckerFor113 each={items()}>{(item) => item}</__SolidCheckerFor113>}</ul>;\n"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "prefer-for/solid-v2/regular-function-no-fix/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "import { createSignal } from \"solid-js\";\n",
+        "text": "const [items] = createSignal([\"a\", \"b\"]);\nexport const App = () => <ul>{items().map(function (item) { return arguments.length + item.length; })}</ul>;\n"
+      },
+      "ruleOptions": {},
+      "presets": ["preferences"],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "prefer-for",
+            "code": "SC8014",
+            "kind": "violation",
+            "severity": "error",
+            "span": { "marker": "items().map(function (item) { return arguments.length + item.length; })" },
+            "fix": { "behavior": "none" },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "prefer-for/solid-v2/custom-map-target/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "import { createSignal } from \"solid-js\";\n",
+        "text": "interface Rows extends Array<string> { map(callback: (item: string) => string): string[]; }\ndeclare const rows: Rows;\nconst [items] = createSignal(rows);\nexport const App = () => <ul>{items().map((item) => item)}</ul>;\n"
+      },
+      "ruleOptions": {},
+      "presets": ["preferences"],
+      "enableRules": [],
+      "expect": {
+        "findings": [],
+        "absent": [
+          {
+            "rule": "prefer-for",
+            "reason": "the compiler resolves the selected map signature to a project declaration, not standard Array#map"
+          }
+        ]
+      }
+    },
+    {
+      "id": "prefer-for/solid-v2/safe-fix/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "import { createSignal } from \"solid-js\";\n",
+        "text": "const [items] = createSignal([\"a\", \"b\"]);\nexport const App = () => <ul>{items().map((item) => item)}</ul>;\n"
+      },
+      "ruleOptions": {},
+      "presets": ["preferences"],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "prefer-for",
+            "code": "SC8014",
+            "kind": "violation",
+            "severity": "error",
+            "span": { "marker": "items().map((item) => item)" },
+            "fix": {
+              "behavior": "safe",
+              "text": "import { For as __SolidCheckerFor113 } from \"solid-js\";\nconst [items] = createSignal([\"a\", \"b\"]);\nexport const App = () => <ul>{<__SolidCheckerFor113 each={items()}>{(item) => item}</__SolidCheckerFor113>}</ul>;\n"
+            },
+            "typescript": {
+              "ownership": "checker-only",
+              "diagnostics": []
+            }
+          }
+        ],
+        "absent": []
+      }
+    },
+    {
+      "id": "prefer-show/solid-v2/safe-fix/001",
+      "dialect": "solid-v2",
+      "source": {
+        "extension": ".tsx",
+        "prelude": "import { createSignal } from \"solid-js\";\n",
+        "text": "const [ready] = createSignal(false);\nexport const App = () => <main>{ready() ? <span /> : <em />}</main>;\n"
+      },
+      "ruleOptions": {},
+      "presets": ["preferences"],
+      "enableRules": [],
+      "expect": {
+        "findings": [
+          {
+            "rule": "prefer-show",
+            "code": "SC8015",
+            "kind": "violation",
+            "severity": "warning",
+            "span": { "marker": "ready() ? <span /> : <em />" },
+            "fix": {
+              "behavior": "safe",
+              "text": "import { Show as __SolidCheckerShow110 } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport const App = () => <main><__SolidCheckerShow110 when={ready()} fallback={<em />}><span /></__SolidCheckerShow110></main>;\n"
             },
             "typescript": {
               "ownership": "checker-only",

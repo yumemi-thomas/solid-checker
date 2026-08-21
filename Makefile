@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate clean
+.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate clean
 
 build: build-rust
 
@@ -78,6 +78,11 @@ corpus: build-rust
 
 contract-corpus: build-rust
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/bin/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/contract-corpus.mjs
+
+# Source-vs-contract parity requires the exact audited Solid typings used by
+# the consumer side of the probe; provisioning is intentionally explicit.
+contract-differential: build-checker-debug tsc-oracle-provision
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/contract-differential.mjs
 
 contract-conformance:
 	node scripts/check-bundled-contracts.mjs

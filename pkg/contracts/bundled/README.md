@@ -9,6 +9,9 @@ dialect id used by the checker:
   overlay for `@solid-primitives/scheduled@1.5.3`;
 - `solid-v2/solid-js.json` models `solid-js@2.0.0-rc.0`;
 - `solid-v2/solidjs-web.json` models `@solidjs/web@2.0.0-rc.0`;
+- `solid-v2/solidjs-signals.json` carries the reviewed inert `isEqual`
+  export from `@solidjs/signals@2.0.0-rc.0`; other package exports remain
+  explicitly incomplete until their runtime behavior is audited;
 - `runtime-lock.json` pins the resolved dependency closure used by the Solid 2
   runtime probes, including `@solidjs/signals`, with version and npm integrity.
 

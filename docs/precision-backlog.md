@@ -1,31 +1,144 @@
 # Precision backlog
 
+## Uncertifiable baseline and evidence-owner matrix (2026-08-21)
+
+The dirty-worktree baseline was coherent on the current source: the Reactive
+IR library tests passed, all 76 armed backend process tests passed, and the
+fresh-debug-binary coverage comparison passed for 72 fixture projects (517
+findings). After the reviewed runtime-identity, environment-selector, and
+package-owner slices below, the snapshots contain 135 \`uncertifiable\`
+findings across 516 findings. This is an
+inventory of the current proof obligations, not a promise that every row is
+reducible; the last column records the only sound owner that could discharge
+it.
+
+| Finding | Count | Current contexts | Missing evidence and audit classification |
+| --- | ---: | --- | --- |
+| SC1001 | 35 | component props aliases/read sites in the engine and eslint corpora; Solid 1.x sources; \`solid2-precision\`; v1 reactivity; upstream component cases | Exact JSX callers, immutable/enumerable prop backing, or a component contract. Project IR can reduce closed-world/cross-file cases; exported/open-world props remain genuinely uncertain. |
+| SC1002 | 1 | \`props-callers\` callback after \`await\` | Exact synchronous callback extent and caller-proven prop/accessor identity. Project IR/compiler facts are reducible; opaque callbacks remain fail-closed. |
+| SC1003 | 15 | component parameter/body destructuring in engine/corpora and wrapped components | Proven component identity plus exact prop backing/caller set. Project/compiler facts can reduce exact JSX calls; ordinary/exported components remain uncertain. |
+| SC1004 | 2 | conditional component returns in the engine corpus | Proven component execution identity and return control-flow shape. JSX/compiler evidence is reducible; unknown component calls remain uncertain. |
+| SC1007 | 3 | reactive handler reads in shared Solid 2 and v1 reactivity fixtures | Exact runtime handler domain/tuple shape and reactive prop backing. Existing TypeFacts closes exact values; mixed/opaque prop sources remain uncertain. |
+| SC3001 | 1 | opaque leaf-owner callback in \`leaf-owner\` | Exact callback identity and synchronous dynamic extent. Project IR can follow exact local functions; factories and uncontracted callbacks are irreducible without a contract owner summary. |
+| SC4001 | 27 | exported/ambiguous component and helper owners across dialect, engine, corpus, and precision fixtures | Compiler owner regions, exact caller topology, and package callback owner behavior. Local/closed callers are reducible; exported library callers and conditional owners remain open-world obligations. |
+| SC5001 | 1 | async boundary with opaque source options | Exact option-object initializer (\`loadingValue\`/\`seedLoadingValue\`) and selected runtime entry. TypeFacts/options facts and explicit runtime conditions are reducible; dynamic options remain uncertain. |
+| SC5003 | 1 | unresolved CSR/SSR boundary fixture | Explicit rendering mode and \`ssrSource\` contract. Environment configuration can prove the rendering premise; absent configuration is reducible only by user/compiler evidence. |
+| SC7001 | 2 | spread-hidden Solid 1.x/2.0 effect callback and \`"use server"\` controls | Exact tuple-slot/expanded spread facts plus selected runtime/framework entry. TypeFacts tuple arity is reducible; framework directives without an explicit compiler contract remain uncertain. |
+| SC7005 | 5 | HTTP response writes in CSR and SSR flush fixtures | Request-dependent settlement relative to shell flush. Rendering mode may prove the premise, but post-flush latency is genuinely runtime-dependent and remains irreducible. |
+| SC7007 | 4 | server-function rich arguments and dynamic serializer configuration | Exact immutable serializer options and closed finite literal graphs. TypeFacts can reduce exact constants/primitive domains; arbitrary object graphs, casts, spreads, and dynamic configuration remain uncertain. |
+| SC9005 | 26 | missing/partial Solid contracts, unknown package callbacks/exports, wrong subpaths, and stale fixture contracts | Exact reviewed package/entrypoint/export summaries, runtime identity, and selected variants. Contract schema/generator/consumer parity and bundled ecosystem coverage are reducible; unreviewed or absent packages remain correctly uncertain. |
+| SC9011 | 1 | exported reactive source in v1 reactivity | Exact caller capture or package/source contract. Closed local callers are reducible; an exported source escaping to uncontracted code is genuinely open-world. |
+| SC9012 | 11 | divergent method dispatch, opaque leaf callbacks, package callbacks, structured returns, and Solid 2 precision | Exhaustive equivalent target summaries, exact returned adapters, callback owner behavior, and contract propagation through aliases/re-exports. Indexed identity/contract fields are reducible; divergent/opaque targets remain fail-closed. |
+
+The package-contract audit therefore starts with SC9005/SC9012 and the
+contract-owned portions of SC1001, SC3001, SC4001, SC7001, and SC9011. The
+environment-dependent SC5003/SC7001 paths and the TypeFacts-owned SC5001/
+SC7007 paths are separate workstreams. SC7005 is intentionally retained in
+the irreducible ledger even when SSR is explicitly selected.
+
+- **2026-08-21 — primitive domains, tuple arity, and runtime identity close
+  three compiler-owned gaps.** Type Facts now exposes an alias-transparent
+  primitive value domain, an all-numeric-constituents-are-finite guarantee,
+  exact required-only tuple length, and exact runtime identity through the
+  existing schema-v1 lifecycle. SC7007 certifies declared safe primitive
+  aliases/unions and proves bigint/symbol/undefined-only arguments unsafe;
+  broad numbers and object graphs remain uncertifiable. SC7001 proves an
+  absent Solid 2 apply slot through an exact one-element spread tuple while
+  hidden tuple contents and non-exact tuple shapes remain uncertifiable.
+  Structured-return shorthands use compiler runtime identity and exact symbol
+  declarations to close tsconfig paths and compiler-selected relative targets;
+  external packages (including relative project re-exports) and globals still
+  produce SC9012. The producer keeps compact bitsets, preserves the
+  retained entity-row budget, and showed no material latency/allocation
+  regression in the retained benchmark.
+- **2026-08-21 — reviewed contract joins and explicit runtime selection.**
+  Exact Type Facts `runtimeIdentity` now joins direct package bindings to
+  relative project re-export barrels in one indexed pass; conflicting exact
+  summaries stay explicit SC9012/SC9005. The structured-return fixture lost
+  its two external-barrel SC9012 obligations while its global remains
+  uncertifiable. Native CLI, daemon, ESLint, and coverage metadata now carry
+  target/build/rendering/condition/transform selectors in cache identity;
+  conditional entrypoints and variants are consumed only when their selected
+  evidence is exact. Explicit CSR/SSR selects the rendering premise but does
+  not discharge request-dependent SC7005 timing.
+- **2026-08-21 — schema-v1 package owner fields.** Additive callback `owner`
+  rows and exported-call `ownerRequirements` preserve reviewed owner and leaf
+  behavior across a package boundary. The incremental owner index consumes
+  both fields; missing rows remain fail-closed and generated contracts put
+  owner rows on the review checklist. The callback/owner consumer fixture now
+  has one proven SC4001 owner violation and no false owner finding for its
+  reviewed leaf callback.
+- **2026-08-21 — source-vs-contract differential audit.**
+  `scripts/contract-differential.mjs` now analyzes a source implementation,
+  generates a contract, and compares the equivalent declaration/runtime
+  consumer after an explicit reviewed promotion inside the harness. The
+  generated-contract path now carries exact non-conditional owner requirements
+  found inside direct exported functions; runtime-conditional and
+  request-dependent owner paths remain review obligations. The generator
+  checklist calls out both missing callback-owner rows and generated owner
+  requirements.
+
+### Package-contract parity ledger
+
+The source `ContractExport`/`ContractCallback` surface is now audited against
+the consumer boundary. These claims are representable and consumed: reactive
+reads, callback timing, callback owner context (including `leaf`), structured
+returns, async behavior, exact conditional variants, exact runtime identity,
+and direct exported owner requirements (`effect`, `cleanup`, `boundary`, and
+`settled-cleanup`). Inferred rows still require review or attestation before
+certification.
+
+The following source/runtime behaviors remain explicit fail-closed obligations,
+not silent omissions: parameter-member invocation such as `reader.read(value)`;
+component identity and reactive-prop obligations; reactive-write/action
+constraints inside owned or leaf scopes; returned adapters whose callback
+behavior appears only when the adapter is invoked; async/reactive-source
+settlement through an uncontracted package; and conditional behavior whose
+environment has not been selected. Each needs a stable contract field plus a
+consumer proof path before it can be reduced. The generator currently refuses
+CJS-only targets rather than inventing claims, and review output records
+callback/owner gaps. No unreviewed inferred contract is used as certification.
+
+The exact reviewed `@solidjs/signals@2.0.0-rc.0` `isEqual` contract now closes
+the v2 oracle's inert-comparison gap. Its other exports remain intentionally
+unmodeled until each runtime surface is audited; the v1 equivalent and
+arbitrary uncontracted packages remain SC9005/SC9012 obligations.
 - **2026-08-20 — cross-rule ownership follows effective enablement.** SC1004,
   SC5001, and Solid 2 SC1007 suppress an overlapping SC1001 only after both
   findings pass rule enablement. Disabling a more specific owner therefore
   restores the strict-read finding instead of silently deleting the whole
-  defect. The retired JSX-policy fixtures and their malformed-HTML oracle
-  cases were removed; catalog retirement remains pinned by the permanent
-  registry and migration tests without invoking the compiler parser warning.
+  defect. Retired JSX policies remain pinned by explicit negative ownership
+  cases (including valid-jsx-nesting and no-implicit-draggable) as well as the
+  permanent registry and migration tests.
 - **2026-08-20 — control-flow preferences require reactive governing inputs.**
   SC8014 `prefer-for` now reports only when evaluating the rendered `.map`
   receiver performs a proven reactive read; SC8015 `prefer-show` applies the
   same requirement to the `&&` left operand or ternary test. Exact
-  accessor/memo calls, store paths, and Solid 2 caller-proven prop reads are
-  supported. Static values, once-captured snapshots, unknown calls, generic
-  members, and reads confined to callbacks or branches fail closed. Solid 1.x
-  prop-only expressions remain clean because its retained props index does not
-  carry exact caller proof; accessor and store forms remain covered.
+  accessor/memo calls, store paths, interprocedural and package-contract read
+  summaries, and Solid 2 caller-proven prop/accessor-prop reads are supported.
+  SC8014 additionally requires an array/tuple Type Fact. Static values,
+  once-captured snapshots, unknown calls, non-array members, and reads confined
+  to callbacks or branches fail closed. Async callbacks are TypeScript-owned
+  and skipped in Solid 1.x; Solid 2.0's published types accept them, so they can
+  report but never receive the synchronous rewrite. Neither dialect promotes
+  uncertain prop backing into proof for these preferences.
+- **2026-08-21 — control-flow preferences use exact dispatch and opt-in
+  demands.** SC8014 now requires the compiler-selected declaration to be the
+  standard-library `map` signature as well as an array/tuple receiver; a local
+  or overridden same-name method fails closed. Its safe fix is limited to
+  one-parameter arrows because a regular function can observe Array#map's
+  three callback arguments through `arguments`. Array-shape Type Facts are
+  requested only when `prefer-for` is effectively enabled, so default native
+  and WASM certification do not pay for the opt-in preference.
 
 ## 2026-08 preference defaults
 
-`prefer-for` and `prefer-show` now run by default because their governing input
-must be proven reactive; native and ESLint callers can opt out per rule.
-`v1/prefer-classlist` remains the sole default-disabled preference and is
-available through `--preset preferences`, `--enable-rule`, or the generated
-`preferences-v1` ESLint config. The Solid 2 preferences config is retained as
-an empty compatibility surface. WASM still lacks a rule-options transport, so
-its callers receive the defaults but cannot yet opt out.
+`prefer-for` and `prefer-show` remain style preferences and are opt-in in both
+catalogs, alongside `v1/prefer-classlist`. Native and ESLint callers enable
+them through `--preset preferences`, `--enable-rule`, rule options, or the
+generated dialect-specific preferences config. They do not block default
+certification. WASM still lacks a rule-options transport, so these rules remain
+off there.
 
 The analyzer's known approximations, recorded so each is a decision with an
 owner rather than a rediscovery. Items live here when a fix is a *design
@@ -513,12 +626,13 @@ provenance fact with no type surface at all.
   in the required `{ effect, error }` bundle. Raw invalid arguments, including
   nullish values accepted only with `strictNullChecks` disabled, are excluded
   because the strict published-type pass reports them.
-  Missing facts now remain explicit rather than becoming silent gaps. A
-  spread argument hides the call's arity, so `missing-effect-function` reports
-  an uncertifiable obligation; in 2.0 `no-owner-effect` does the same when
-  allocation depends on the hidden tuple length. Recovering a proof needs
-  tuple-arity facts the fact layer does not carry. Unknown or `any` callback
-  values are also uncertifiable, as is a nullable callback hidden by the
+  Missing facts now remain explicit rather than becoming silent gaps. Exact
+  required-only tuple length can prove that a spread-expanded Solid 2 call has
+  no apply slot; the one-element case is therefore a violation and is proven
+  not to allocate an owner-bound computation. A tuple slot hidden inside a
+  spread still has no value fact, while optional/rest/array/unequal-union
+  shapes have no exact length, so those paths remain uncertifiable. Unknown or
+  `any` callback values are also uncertifiable, as is a nullable callback hidden by the
   runtime-transparent `!` wrapper, while compiler-proven callable identifiers retain a proven
   violation path. A `"use server"`
   directive is a framework and bundler convention that no core package reads;
@@ -661,11 +775,13 @@ reason the removal was safe.
   function with a `serializeArgs` property cannot silence the project. A valid
   exact configuration call with a dynamic options object produces an
   uncertifiable SC7007 until `serializeArgs` presence is closed. The remaining
-  top-level fact boundary no longer creates silent nested false negatives:
-  arguments outside the deliberately proven JSON-safe primitive set now carry
-  an uncertifiable transport obligation, including object graphs, arrays,
-  aliases, unions, arbitrary numbers, spreads, and missing facts. Invalid calls
-  remain TypeScript-owned through an exact call-validity gate.
+  top-level fact boundary no longer creates silent nested false negatives.
+  Alias-transparent primitive-domain facts now certify strings, booleans,
+  null, and unions whose numeric constituents are all finite literals; domains
+  containing only bigint, symbol, or undefined are proven violations. Broad
+  numbers, mixed safe/unsafe primitive unions, object graphs, arrays, spreads,
+  and missing facts remain uncertifiable. Invalid calls remain TypeScript-owned
+  through an exact call-validity gate.
 
 - **Synchronous standard callbacks after `await`** (`static_rules.rs` and
   `runtime_semantics.rs`): SC1002's accessor-call *and* member-read proofs now
@@ -901,13 +1017,11 @@ the SC7007 transport domain were being widened, and both are closed again:
 - `server_rules.rs::argument_is_proven_json_safe` matched `"string" |
   "boolean" | "true" | "false" | "null"` for JSON safety, with the same alias
   asymmetry in the other direction — a spurious obligation on `type Name =
-  string`. Type Facts exposes no structural primitive-kind fact, so the
-  certification is now `null`, a constant string, a finite constant number, and
-  an AST-proven primitive/nullish literal. **Remaining approximation:** a
-  declared `string`/`boolean` *identifier* is no longer certified and produces
-  an explicit SC7007 obligation. That is the fail-closed direction, and it is
-  uniform across spellings, but it is a real precision loss until a structural
-  primitive fact exists.
+  string`. **Resolved 2026-08-21:** Type Facts' primitive value domain is
+  structural and alias-transparent. Declared strings/booleans/null and
+  safe unions now certify identically to literals; numeric domains certify
+  only when every numeric constituent is a finite literal. No proof decision
+  reads `TypeDescriptor.text`.
 
 ## Resolved: static attribute values are a fact, not a rendered type 2026-08-17
 
@@ -1195,7 +1309,7 @@ compiler facts, not a defect in analyzed source. It was removed from both
 catalogs on 2026-08-20 and retained as a producer-integrity requirement. If a
 third compiler adapter lands, its adapter tests must prove the same totality.
 
-### Shorthand property values follow exact project-local exports
+### Resolved: shorthand property values follow compiler runtime identity
 
 TypeScript projects a shorthand property's *own* symbol at `{ pathname }` --
 never the referenced value binding's -- so no TypeFacts entity, reference, or
@@ -1206,28 +1320,23 @@ on `ObjectPropertyFact::shorthand_binding`; `interproc.rs`
 of matching the spelling within the enclosing function. That is scope-exact, so
 the previous block-scoping hole is closed in both directions.
 
-The cross-file gap is now closed for named and default relative imports: a
-shorthand whose binder declaration is an import specifier follows the relative
-specifier to the exporting file — exact ESM resolution against the analyzed
-file set, never the filesystem — and matches that file's exported declaration
-in the accessor map exactly as the same-file arm does
-(`interproc.rs::imported_accessor`). Named re-exports, default re-exports,
-export-all chains, and cycles are followed with a cycle guard. What remains
-unavailable for an exact structured-property claim is listed below. Each
-exported shorthand now produces SC9012 instead of disappearing; the generated
-summary still omits the unproven property rather than inventing a reactive leaf:
+The cross-file gap is now closed from TypeScript's exact runtime identity and
+symbol chain, not from a second module resolver. The imported binding must
+carry a non-empty identity and its alias chain must end at a declaration in an
+analyzed project source file. That directly incorporates the project's
+selected module mode, extension priority, `baseUrl`/`paths`, package exports,
+and re-export traversal without mistaking a project re-export of an external
+value for project ownership. `interproc.rs::imported_accessor` joins the same
+identity to the exact accessor/source export; the former textual relative
+resolver remains only an accessor fallback for older or missing facts.
 
-- **an ambiguous relative specifier.** `./values` can name `values.ts`,
-  `values.tsx`, or `values/index.ts`, and which one a bundler picks depends on
-  resolution settings this pass does not model. When more than one project
-  file matches, `relative_module_file` returns `None` rather than taking the
-  first one enumerated — file order is not evidence, and a proven accessor
-  claim sourced from the wrong module would be worse than no claim. **Pinned**
-  by the fixture's `ambiguousShorthand` (`ambiguous.ts` +
-  `ambiguous/index.ts`, both exporting the accessor).
-- **bare and path-mapped specifiers**, which the resolver rejects outright
-  (it only walks `./` and `../` against the analyzed file set, never the
-  filesystem or `tsconfig` `paths`).
+Two boundaries remain unavailable for an exact structured-property claim.
+Each exported shorthand produces SC9012 instead of disappearing, and the
+generated summary omits the unproven property rather than inventing a leaf:
+
+- **external packages.** Their symbol chain has no declaration in an analyzed
+  project source, even when a relative project module re-exports the value.
+  Exact behavior belongs in an audited package contract.
 - **globals/unresolved bindings.** A namespace import is an exact non-reactive
   namespace object and remains certified without SC9012. An unresolved export
   cycle is TypeScript-owned (TS2303), so it receives no checker finding.
@@ -1235,17 +1344,19 @@ summary still omits the unproven property rather than inventing a reactive leaf:
 What the fixture pins today is the same-file resolution set
 (`scopedShorthand`, `unprovenShorthand`, `shadowedShorthand`,
 `writtenShorthand`), the cross-file named-import join
-(`importedAccessorShorthand`), the ambiguity bail (`ambiguousShorthand`), a
-nondeterministic import set (`importedShorthand`, `namespaceShorthand`,
-`bareImportShorthand`, `pathMappedShorthand`, `cyclicReexportShorthand`),
+(`importedAccessorShorthand`), compiler-selected ambiguous and path-mapped
+joins (`ambiguousShorthand`, `pathMappedShorthand`), a nondeterministic import
+set (`importedShorthand`, `namespaceShorthand`, `bareImportShorthand`,
+`cyclicReexportShorthand`),
 the default/named/export-all joins (`defaultReexportShorthand`,
 `namedReexportShorthand`, `exportAllShorthand`), and a global
 (`globalShorthand`).
 
-The same fixture asserts the five unresolved exported shorthands explicitly:
-ambiguous relative resolution, bare import, path mapping, and global binding.
-Exact local non-reactive values and namespace objects remain certified without
-SC9012.
+The focused unresolved fixture now asserts three obligations explicitly: a
+bare external import, the same value behind a relative project re-export, and
+a global binding. Its path-mapped and ambiguous-relative controls certify
+through runtime identity and project declarations. Exact local non-reactive
+values and namespace objects likewise remain certified without SC9012.
 
 The shared `solid_facts::resolve_relative_module_path` helper now answers
 "which file does this relative specifier name" for both

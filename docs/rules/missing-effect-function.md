@@ -27,10 +27,12 @@ nor server execution. The call fails on the client, while Solid's server entry
 evaluates through `serverEffect` and ignores the apply argument. The v1 rule
 preserves the same uncertainty.
 
-A type-correct spread call is likewise **uncertifiable**.
-`createEffect(...operands)` hides the call's arity, so neither a missing apply
-function nor a safe one is proven. An invalid spread call remains TypeScript's
-diagnostic and stays silent.
+A type-correct spread call is classified from its compiler-proven tuple shape.
+An exact required-only one-element tuple proves the apply slot is absent and
+is a **violation**. If the apply slot is hidden inside the spread, exact arity
+does not prove that hidden value callable; optional/rest/array/unequal-union
+shapes have no exact length. Those cases remain **uncertifiable**. An invalid
+spread call remains TypeScript's diagnostic and stays silent.
 
 ## Why is this bad?
 
@@ -58,6 +60,10 @@ createEffect(() => name(), {
   effect: 5 as unknown as (value: string) => void,
   error: (error) => reportError(error),
 });
+
+// Exact tuple arity proves that expansion still supplies no apply function.
+const sourceOnly: [() => string] = [() => name()];
+createEffect(...sourceOnly);
 ```
 
 Examples of **correct** code for this rule:

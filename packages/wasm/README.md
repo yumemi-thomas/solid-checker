@@ -29,8 +29,9 @@ grow an accidental dependency on either compiler or catalog.
 
 Rule configuration is not yet transported through the WASM `CheckRequest`.
 The adapter cannot read `.solid-checker/rule-options.json` and exposes no
-`presets` or `enableRules` fields, so it uses catalog defaults: `prefer-for`
-and `prefer-show` run, while `v1/prefer-classlist` remains disabled. Unlike
-CLI, daemon, and ESLint callers, WASM callers cannot yet opt out of the two
-control-flow preferences; that requires a future rule-options channel rather
-than an adapter-only list.
+`presets` or `enableRules` fields, so it uses catalog defaults: all three style
+preferences remain disabled. Unlike CLI, daemon, and ESLint callers, WASM
+callers cannot yet opt into them; that requires a future rule-options channel
+rather than an adapter-only list. The fact demand planner follows that
+effective enablement, so WASM also omits the array-shape queries used only by
+`prefer-for`.

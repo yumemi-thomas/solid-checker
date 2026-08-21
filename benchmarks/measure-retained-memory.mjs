@@ -99,7 +99,7 @@ try {
     .filter(
       row =>
         row.command.includes(`${basename(checker)} --serve`) &&
-        row.command.includes(temporary.split("/").at(-1))
+        row.command.includes(project)
     )
     .sort((left, right) => right.pid - left.pid)[0];
   if (!root) throw new Error("retained checker process was not found");

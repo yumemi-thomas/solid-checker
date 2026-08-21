@@ -18,7 +18,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
 
 const root = resolve(import.meta.dirname, "..");
@@ -140,16 +140,42 @@ function driftedSources() {
   return drifted;
 }
 
+function runtimeArguments(tsconfig) {
+  const metadata = join(dirname(tsconfig), ".solid-checker", "runtime.json");
+  if (!existsSync(metadata)) return [];
+  const runtime = JSON.parse(readFileSync(metadata, "utf8"));
+  if (runtime == null || typeof runtime !== "object" || Array.isArray(runtime)) {
+    throw new Error(`${metadata}: runtime metadata must be an object`);
+  }
+  const args = [];
+  for (const [key, flag] of [
+    ["target", "--runtime-target"],
+    ["build", "--runtime-build"],
+    ["rendering", "--rendering"]
+  ]) {
+    if (runtime[key] !== undefined) args.push(flag, runtime[key]);
+  }
+  for (const condition of runtime.conditions ?? []) args.push("--runtime-condition", condition);
+  for (const transform of runtime.frameworkTransforms ?? []) {
+    args.push("--framework-transform", transform);
+  }
+  return args;
+}
+
 function analyze(tsconfig, keepWording) {
-  const output = execFileSync(checker, ["--format", "json", "--project", tsconfig], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-    env: {
-      ...process.env,
-      SOLID_TYPEFACTS_BIN: typefacts
+  const output = execFileSync(
+    checker,
+    ["--format", "json", "--project", tsconfig, ...runtimeArguments(tsconfig)],
+    {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+      env: {
+        ...process.env,
+        SOLID_TYPEFACTS_BIN: typefacts
+      }
     }
-  });
+  );
   const snapshot = JSON.parse(output);
   const findings = (snapshot.findings ?? []).map((finding) => comparable(finding, keepWording));
   findings.sort(

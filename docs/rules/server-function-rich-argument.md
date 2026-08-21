@@ -20,8 +20,11 @@ through the exact resolved `configureServerFunctionsClient` API. A dynamic
 options value that may or may not contain `serializeArgs` makes SC7007
 uncertifiable instead of silently suppressing the transport check. Arguments
 whose complete JSON safety is not proven are likewise explicit uncertifiable
-results; this includes spreads, structurally typed objects, arrays, aliases,
-unions, arbitrary numbers, and missing compiler facts.
+results. Alias-transparent compiler facts certify strings, booleans, null,
+finite numeric-literal domains, and unions made only from those categories.
+Bigint/symbol/undefined-only domains are proven violations. Broad numbers,
+mixed safe/unsafe primitive unions, spreads, structurally typed objects,
+arrays, and missing compiler facts remain uncertifiable.
 
 **Premise: probe-confirmed** on the pinned
 `@solidjs/web@2.0.0-rc.0` server-functions client
@@ -104,15 +107,18 @@ to a JSON-safe shape at the call site (`date.toISOString()`,
   rule is silent for the whole project.
 - **Missing or incomplete facts are explicit.** Inline expressions such as
   `new Date()` are demanded and reported exactly like identifiers. A spread,
-  structurally typed object, array, alias, union, arbitrary number, or missing
-  fact cannot prove the complete object graph JSON-safe, so SC7007 is
-  `uncertifiable` rather than silent. This closes the former nested-value hole:
-  `{ when: Date }` is no longer silently missed even though the available
+  structurally typed object, array, broad number, mixed safe/unsafe primitive
+  union, or missing fact cannot prove the complete value JSON-safe, so SC7007
+  is `uncertifiable` rather than silent. This closes the former nested-value
+  hole: `{ when: Date }` is no longer silently missed even though the available
   library identity is top-level only.
-- **Only a deliberately small safe set is certified:** `null`, compiler-known
-  strings, booleans, finite numeric constants, and the natural binary body
-  positions below. Broader values need a recursive compiler JSON-safety fact
-  before the checker can certify them without guessing.
+- **The proven primitive set is structural, not textual:** `null`, strings,
+  booleans, finite numeric constants, and aliases/unions composed only from
+  those categories certify. A numeric type certifies only when every numeric
+  constituent is a finite literal. Bigint, symbol, and undefined-only domains
+  are violations because plain JSON cannot encode them faithfully. Object
+  graphs still need a recursive compiler JSON-safety fact before the checker
+  can certify them without guessing.
 - **Natural HTTP encodings.** A `Uint8Array` as the only argument — or in
   trailing position after JSON-safe leading arguments — is sent as a request
   body, not as JSON (probed: it reaches `fetch`), so those positions are

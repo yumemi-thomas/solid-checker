@@ -330,6 +330,58 @@ process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
   plugin._testing.snapshotCache.clear();
 });
 
+test("adapter forwards explicit runtime conditions and includes them in cache identity", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-runtime-"));
+  const project = join(root, "tsconfig.json");
+  const calls = join(root, "calls.txt");
+  const analyzer = join(root, "analyzer.mjs");
+  writeFileSync(project, "{}\n");
+  writeFileSync(analyzer, `import { appendFileSync } from "node:fs";
+appendFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)) + "\\n");
+process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
+`);
+  const context = runtime => ({
+    filename: join(root, "App.tsx"),
+    physicalFilename: join(root, "App.tsx"),
+    settings: { solidChecker: {
+      command: process.execPath,
+      commandArgs: [analyzer, calls],
+      project,
+      runtime
+    } },
+    options: []
+  });
+  plugin._testing.snapshotCache.clear();
+  plugin._testing.loadSnapshot(context({
+    target: "browser",
+    rendering: "csr",
+    conditions: ["import", "browser", "import"],
+    frameworkTransforms: ["use-server"]
+  }));
+  plugin._testing.loadSnapshot(context({
+    target: "browser",
+    rendering: "csr",
+    conditions: ["browser", "import"],
+    frameworkTransforms: ["use-server"]
+  }));
+  plugin._testing.loadSnapshot(context({ target: "node", rendering: "string-ssr" }));
+  const invocations = readFileSync(calls, "utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(invocations.length, 2);
+  assert.deepEqual(invocations[0].slice(-12), [
+    "--format", "json",
+    "--runtime-target", "browser",
+    "--rendering", "csr",
+    "--runtime-condition", "browser",
+    "--runtime-condition", "import",
+    "--framework-transform", "use-server"
+  ]);
+  assert.deepEqual(invocations[1].slice(-4), [
+    "--runtime-target", "node",
+    "--rendering", "string-ssr"
+  ]);
+  plugin._testing.snapshotCache.clear();
+});
+
 test("an explicitly configured default-disabled ESLint rule enables native analysis", () => {
   const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-explicit-"));
   const project = join(root, "tsconfig.json");

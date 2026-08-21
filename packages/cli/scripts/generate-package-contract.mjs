@@ -314,6 +314,8 @@ function collectReviewItems(entrypoints, selected) {
     .filter(entrypoint => !entrypoints[entrypoint])
     .map(entrypoint => `${entrypoint}: no generated export summary`);
   const callbackGaps = [];
+  const callbackOwnerGaps = [];
+  const ownerRequirementGaps = [];
   const inheritedRows = [];
   const environmentBranches = [];
   const visit = (summary, location) => {
@@ -333,11 +335,21 @@ function collectReviewItems(entrypoints, selected) {
       }
     }
     for (const [index, callback] of (summary.callbacks ?? []).entries()) {
+      if (callback.owner == null) {
+        callbackOwnerGaps.push(
+          `${location}.callbacks[${index}]: owner behavior requires review`
+        );
+      }
       if (callback.evidence?.kind === "inherited-from") {
         inheritedRows.push(
           `${location}.callbacks[${index}]: ${callback.evidence.package}@${callback.evidence.version}`
         );
       }
+    }
+    for (const [index, requirement] of (summary.ownerRequirements ?? []).entries()) {
+      ownerRequirementGaps.push(
+        `${location}.ownerRequirements[${index}]: ${requirement.operation} requires exact caller-owner review`
+      );
     }
     const visitReturn = (returned, returnLocation) => {
       if (!returned) return;
@@ -366,6 +378,8 @@ function collectReviewItems(entrypoints, selected) {
   return {
     "exports with no summary": missingSummaries,
     "callbacks with no execution row": callbackGaps,
+    "callbacks with no owner row": callbackOwnerGaps,
+    "owner requirements requiring review": ownerRequirementGaps,
     "inherited rows": inheritedRows,
     "environment-branching exports": environmentBranches
   };
@@ -457,6 +471,12 @@ function mergeSummaries(left, right) {
     (a, b) => a.parameter - b.parameter || a.execution.localeCompare(b.execution)
   );
   if (callbacks.length) merged.callbacks = callbacks;
+  const ownerRequirements = mergeUnique(
+    left.ownerRequirements,
+    right.ownerRequirements,
+    (a, b) => a.operation.localeCompare(b.operation)
+  );
+  if (ownerRequirements.length) merged.ownerRequirements = ownerRequirements;
   const asyncBehavior = left.asyncBehavior ?? right.asyncBehavior;
   if (asyncBehavior) merged.asyncBehavior = asyncBehavior;
   const reactiveReads = mergeUnique(
@@ -518,6 +538,14 @@ function annotateClaimEvidence(summary) {
           callbacks: summary.callbacks.map(callback => ({
             ...callback,
             evidence: callback.evidence ?? inferredClaimEvidence()
+          }))
+        }
+      : {}),
+    ...(summary.ownerRequirements
+      ? {
+          ownerRequirements: summary.ownerRequirements.map(requirement => ({
+            ...requirement,
+            evidence: requirement.evidence ?? inferredClaimEvidence()
           }))
         }
       : {}),
