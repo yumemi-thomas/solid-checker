@@ -46,7 +46,7 @@ import { createSignal, createMemo } from "solid-js/store";
 import { onMount, render } from "solid-js";
 
 // Not a Solid module, so not this rule's business however familiar the name.
-// `package-contract-missing` covers packages the checker has no model for.
+// `package-contract-incomplete` covers packages the checker has no model for.
 import { createStore as fromElsewhere } from "@my/ui";
 
 // A Solid subpath, and a name the bundled index has never heard of -- a patch

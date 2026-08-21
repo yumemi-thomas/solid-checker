@@ -7,7 +7,7 @@ whose original notices remain applicable.
 
 - Upstream: https://github.com/ryansolid/dom-expressions
 - Consumed fork: https://github.com/yumemi-thomas/dom-expressions
-- Pinned revision: `b0965a934120d238dfefbc04274f5e6c9c55387f`
+- Pinned revision: `e6ab3469a94addd6f72c7e8347e871a1a0c7edf5`
 - License: MIT
 
 The `dom-expressions-compiler` crate is consumed as a pinned Cargo git
@@ -72,10 +72,9 @@ not redistributed as part of this repository.
 - Version: `0.14.5` (test corpus extracted from commit `6d3bc311`)
 - License: MIT
 
-The plugin's rule test suites are vendored as data in
-`fixtures/upstream-parity/upstream-cases.json`: every `valid` and `invalid`
-case, including its verbatim source snippet, extracted by
-`scripts/extract-upstream-cases.mjs`. The Rust rules in
+Retained source snippets from the plugin's rule test suites are preserved in
+the product-owned `fixtures/ownership-cases/cases.json`; the accompanying
+`migration-ledger.json` reconciles all 465 former cases. The Rust rules in
 `rust/crates/solid-reactive-ir/src/upstream_compat/` reproduce the plugin's
 rule surface over this checker's own fact tables; the plugin's implementation
 is not copied.

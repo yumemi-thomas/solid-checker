@@ -27,51 +27,25 @@ pub enum Rule {
     NoDestructure,
     ComponentsReturnOnce,
     ReactiveWriteInOwnedScope,
-    CleanupInForbiddenScope,
-    PrimitiveInLeafOwner,
-    NoOwnerEffect,
-    NoOwnerCleanup,
-    NoOwnerBoundary,
-    PrimitiveInDirectiveApplication,
+    MissingOwner,
     MissingEffectFunction,
     // The fine-grained decomposition of eslint-plugin-solid's monolithic
     // `reactivity` rule. Untracked reads and after-await reads land on the
     // engine's own SC1001/SC1002 above; these are the remaining distinct
     // defects that rule bundled. See docs/rules/README.md for the mapping.
     UncalledAccessor,
-    UntrackedDerivedFunction,
     ExpectedFunctionGotExpression,
     NoDirectMutation,
-    NoAsyncTrackedScope,
     ReactiveSourceUncaptured,
     ReactiveDispatchUnresolved,
     // The eslint-plugin-solid 0.14.5 rule surface, one identity per upstream
-    // rule. `jsx-uses-vars` is catalog-only: upstream exists to mark JSX
-    // identifiers used for no-unused-vars, and TypeScript reference facts
-    // already model those uses, so nothing here ever emits it.
-    EventHandlers,
+    // rule.
     JsxNoDuplicateProps,
-    JsxNoScriptUrl,
     JsxNoUndef,
-    JsxUsesVars,
-    NoArrayHandlers,
-    NoInnerhtml,
-    NoProxyApis,
-    NoReactDeps,
-    NoReactSpecificProps,
-    NoUnknownNamespaces,
     PreferClasslist,
     PreferFor,
     PreferShow,
-    SelfClosingComp,
-    StyleProp,
-    PreferComponentSyntax,
-    NoImplicitDraggable,
-    ValidJsxNesting,
-    PackageContractExportMissing,
-    PackageContractCallbackMissing,
-    PackageContractMissing,
-    ExecutionMapIncomplete,
+    PackageContractIncomplete,
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/v1/`.
@@ -87,49 +61,25 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 42] = [
+    pub const ALL: [Self; 18] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::NoDestructure,
         Self::ComponentsReturnOnce,
         Self::ReactiveWriteInOwnedScope,
-        Self::CleanupInForbiddenScope,
-        Self::PrimitiveInLeafOwner,
-        Self::NoOwnerEffect,
-        Self::NoOwnerCleanup,
-        Self::NoOwnerBoundary,
-        Self::PrimitiveInDirectiveApplication,
+        Self::MissingOwner,
         Self::MissingEffectFunction,
         Self::UncalledAccessor,
-        Self::UntrackedDerivedFunction,
         Self::ExpectedFunctionGotExpression,
         Self::NoDirectMutation,
-        Self::NoAsyncTrackedScope,
         Self::ReactiveSourceUncaptured,
         Self::ReactiveDispatchUnresolved,
-        Self::EventHandlers,
         Self::JsxNoDuplicateProps,
-        Self::JsxNoScriptUrl,
         Self::JsxNoUndef,
-        Self::JsxUsesVars,
-        Self::NoArrayHandlers,
-        Self::NoInnerhtml,
-        Self::NoProxyApis,
-        Self::NoReactDeps,
-        Self::NoReactSpecificProps,
-        Self::NoUnknownNamespaces,
         Self::PreferClasslist,
         Self::PreferFor,
         Self::PreferShow,
-        Self::SelfClosingComp,
-        Self::StyleProp,
-        Self::PreferComponentSyntax,
-        Self::NoImplicitDraggable,
-        Self::ValidJsxNesting,
-        Self::PackageContractExportMissing,
-        Self::PackageContractCallbackMissing,
-        Self::PackageContractMissing,
-        Self::ExecutionMapIncomplete,
+        Self::PackageContractIncomplete,
     ];
 
     #[must_use]
@@ -144,85 +94,43 @@ impl Rule {
             Self::ReactiveWriteInOwnedScope => {
                 ("SC2001", "v1/reactive-write-in-owned-scope", "error", false)
             }
-            Self::CleanupInForbiddenScope => {
-                ("SC3001", "v1/cleanup-in-forbidden-scope", "error", false)
-            }
-            Self::PrimitiveInLeafOwner => ("SC3002", "v1/primitive-in-leaf-owner", "error", false),
-            Self::NoOwnerEffect => ("SC4001", "v1/no-owner-effect", "warning", false),
-            Self::NoOwnerCleanup => ("SC4002", "v1/no-owner-cleanup", "warning", false),
-            Self::NoOwnerBoundary => ("SC4003", "v1/no-owner-boundary", "warning", false),
-            Self::PrimitiveInDirectiveApplication => (
-                "SC6001",
-                "v1/primitive-in-directive-application",
-                "error",
-                false,
-            ),
+            Self::MissingOwner => ("SC4001", "v1/missing-owner", "warning", false),
             Self::MissingEffectFunction => ("SC7001", "v1/missing-effect-function", "error", false),
             Self::UncalledAccessor => ("SC1005", "v1/uncalled-accessor", "warning", false),
-            Self::UntrackedDerivedFunction => {
-                ("SC1006", "v1/untracked-derived-function", "warning", false)
+            Self::ExpectedFunctionGotExpression => {
+                ("SC1007", "v1/reactive-handler-frozen", "warning", false)
             }
-            Self::ExpectedFunctionGotExpression => (
-                "SC1007",
-                "v1/expected-function-got-expression",
-                "warning",
-                false,
-            ),
             Self::NoDirectMutation => ("SC2003", "v1/no-direct-mutation", "warning", false),
-            Self::NoAsyncTrackedScope => ("SC5004", "v1/no-async-tracked-scope", "warning", false),
             Self::ReactiveSourceUncaptured => {
                 ("SC9011", "v1/reactive-source-uncaptured", "warning", true)
             }
             Self::ReactiveDispatchUnresolved => {
                 ("SC9012", "v1/reactive-dispatch-unresolved", "warning", true)
             }
-            Self::EventHandlers => ("SC8001", "v1/event-handlers", "warning", false),
             Self::JsxNoDuplicateProps => ("SC8003", "v1/jsx-no-duplicate-props", "error", false),
-            Self::JsxNoScriptUrl => ("SC8004", "v1/jsx-no-script-url", "error", false),
             Self::JsxNoUndef => ("SC8005", "v1/jsx-no-undef", "error", false),
-            Self::JsxUsesVars => ("SC8006", "v1/jsx-uses-vars", "error", false),
-            Self::NoArrayHandlers => ("SC8007", "v1/no-array-handlers", "error", false),
-            Self::NoInnerhtml => ("SC8008", "v1/no-innerhtml", "error", false),
-            Self::NoProxyApis => ("SC8009", "v1/no-proxy-apis", "error", false),
-            Self::NoReactDeps => ("SC8010", "v1/no-react-deps", "warning", false),
-            Self::NoReactSpecificProps => {
-                ("SC8011", "v1/no-react-specific-props", "warning", false)
-            }
-            Self::NoUnknownNamespaces => ("SC8012", "v1/no-unknown-namespaces", "error", false),
             Self::PreferClasslist => ("SC8013", "v1/prefer-classlist", "warning", false),
             Self::PreferFor => ("SC8014", "v1/prefer-for", "error", false),
             Self::PreferShow => ("SC8015", "v1/prefer-show", "warning", false),
-            Self::SelfClosingComp => ("SC8016", "v1/self-closing-comp", "warning", false),
-            Self::StyleProp => ("SC8017", "v1/style-prop", "warning", false),
-            Self::PreferComponentSyntax => {
-                ("SC8018", "v1/prefer-component-syntax", "warning", false)
-            }
-            Self::NoImplicitDraggable => ("SC8019", "v1/no-implicit-draggable", "error", false),
-            Self::ValidJsxNesting => ("SC8020", "v1/valid-jsx-nesting", "error", false),
-            Self::PackageContractExportMissing => (
-                "SC9001",
-                "v1/package-contract-export-missing",
-                "error",
-                true,
-            ),
-            Self::PackageContractCallbackMissing => (
-                "SC9006",
-                "v1/package-contract-callback-missing",
-                "error",
-                true,
-            ),
-            Self::PackageContractMissing => {
-                ("SC9005", "v1/package-contract-missing", "error", true)
-            }
-            Self::ExecutionMapIncomplete => {
-                ("SC9004", "v1/execution-map-incomplete", "error", true)
+            Self::PackageContractIncomplete => {
+                ("SC9005", "v1/package-contract-incomplete", "error", true)
             }
         };
+        let opt_in_preference = matches!(
+            self,
+            Self::PreferClasslist | Self::PreferFor | Self::PreferShow
+        );
         RuleMetadata {
             code,
             name,
             severity,
             uncertifiable,
+            default_enabled: !opt_in_preference,
+            presets: if opt_in_preference {
+                &["preferences"]
+            } else {
+                &[]
+            },
         }
     }
 
@@ -232,7 +140,7 @@ impl Rule {
     /// The IR names its diagnostics in its own vocabulary — the identity it
     /// has carried since before dialects existed. Every identity that
     /// reaches this catalog as a *static violation* (the upstream-compat
-    /// surface plus `no-async-tracked-scope`) keeps its name here, so the
+    /// surface) keeps its name here, so the
     /// catalog scan below is the whole projection. Identities whose v1 rule
     /// is renamed (`component-props-destructure` → `v1/no-destructure`)
     /// arrive as static *defects* and are worded by `static_defect_finding`
@@ -335,29 +243,16 @@ mod tests {
     }
 
     /// Every identity the reactive IR emits as a *static violation* under
-    /// `Version::V1` (the upstream-compat surface plus
-    /// `no-async-tracked-scope`) must resolve here — a miss panics in
-    /// `solve`. SC8006 (`jsx-uses-vars`) is catalogued but deliberately
-    /// never fires, so it is absent.
+    /// `Version::V1` (the retained upstream-compat surface) must resolve
+    /// here — a miss panics in `solve`.
     #[test]
     fn every_v1_static_violation_identity_resolves() {
         for (code, name) in [
-            ("SC5004", "no-async-tracked-scope"),
-            ("SC8001", "event-handlers"),
             ("SC8003", "jsx-no-duplicate-props"),
-            ("SC8004", "jsx-no-script-url"),
             ("SC8005", "jsx-no-undef"),
-            ("SC8007", "no-array-handlers"),
-            ("SC8008", "no-innerhtml"),
-            ("SC8009", "no-proxy-apis"),
-            ("SC8010", "no-react-deps"),
-            ("SC8011", "no-react-specific-props"),
-            ("SC8012", "no-unknown-namespaces"),
             ("SC8013", "prefer-classlist"),
             ("SC8014", "prefer-for"),
             ("SC8015", "prefer-show"),
-            ("SC8016", "self-closing-comp"),
-            ("SC8017", "style-prop"),
         ] {
             assert!(
                 Rule::from_identity(code, name).is_some(),
@@ -374,6 +269,6 @@ mod tests {
         assert_eq!(Rule::StrictReadUntracked.metadata().code, "SC1001");
         assert_eq!(Rule::NoDestructure.metadata().code, "SC1003");
         assert_eq!(Rule::ComponentsReturnOnce.metadata().code, "SC1004");
-        assert_eq!(Rule::PackageContractMissing.metadata().code, "SC9005");
+        assert_eq!(Rule::PackageContractIncomplete.metadata().code, "SC9005");
     }
 }

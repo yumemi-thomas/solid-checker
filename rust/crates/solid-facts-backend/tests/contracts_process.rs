@@ -37,34 +37,44 @@ fn cli_consumes_discovered_package_contracts() {
         Err(_) => return,
     };
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
-    for (fixture, rule, message) in [
-        ("package-consumer", "strict-read-untracked", "readCount"),
+    for (fixture, rule, message, expected_count) in [
+        ("package-consumer", "strict-read-untracked", "readCount", 1),
         (
             "package-return-consumer",
             "strict-read-untracked",
             "created count",
+            1,
         ),
         (
             "package-callback-consumer",
             "strict-read-untracked",
             "runMixed",
+            2,
         ),
         (
             "package-store-consumer",
             "strict-read-untracked",
             "state.value",
+            1,
         ),
         (
             "package-store-destructure",
-            "component-props-destructure",
+            "no-destructure",
             "destructuring",
+            1,
         ),
         (
             "package-unknown-export",
-            "package-contract-export-missing",
+            "package-contract-incomplete",
             "unknownPrimitive",
+            1,
         ),
-        ("bundled-solid-consumer", "strict-read-untracked", "doubled"),
+        (
+            "bundled-solid-consumer",
+            "strict-read-untracked",
+            "doubled",
+            1,
+        ),
     ] {
         let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
             .env("SOLID_TYPEFACTS_BIN", &typefacts)
@@ -78,12 +88,19 @@ fn cli_consumes_discovered_package_contracts() {
             String::from_utf8_lossy(&output.stderr)
         );
         let findings = decode_findings(&output.stdout);
-        assert_eq!(findings.len(), 1, "fixture {fixture}: {findings:#?}");
-        assert_eq!(findings[0]["rule"], rule, "fixture {fixture}");
+        assert_eq!(
+            findings.len(),
+            expected_count,
+            "fixture {fixture}: {findings:#?}"
+        );
         assert!(
-            findings[0]["message"]
-                .as_str()
-                .is_some_and(|finding| finding.contains(message))
+            findings.iter().any(|finding| {
+                finding["rule"] == rule
+                    && finding["message"]
+                        .as_str()
+                        .is_some_and(|message_text| message_text.contains(message))
+            }),
+            "fixture {fixture}: expected {rule} mentioning {message}, got {findings:#?}"
         );
     }
 }
@@ -97,7 +114,17 @@ fn cli_consumes_structured_returns_in_schema_one_contracts() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
-        .args(["--format", "json", "--project"])
+        .args([
+            "--format",
+            "json",
+            "--runtime-target",
+            "node",
+            "--rendering",
+            "string-ssr",
+            "--runtime-conditions",
+            "node,import",
+            "--project",
+        ])
         .arg(root.join("fixtures/reactive-ir/package-structured-return/tsconfig.json"))
         .output()
         .expect("run Rust diagnostic CLI");
@@ -157,7 +184,17 @@ fn bundled_contract_resolves_the_exact_web_subpath() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
-        .args(["--format", "json", "--project"])
+        .args([
+            "--format",
+            "json",
+            "--runtime-target",
+            "node",
+            "--rendering",
+            "string-ssr",
+            "--runtime-conditions",
+            "node,import",
+            "--project",
+        ])
         .arg(root.join("fixtures/reactive-ir/bundled-web-subpath-consumer/tsconfig.json"))
         .output()
         .unwrap();
@@ -181,7 +218,17 @@ fn bundled_scheduled_contract_marks_debounce_callback_deferred() {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let output = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
-        .args(["--format", "json", "--dialect", "solid-v1", "--project"])
+        .args([
+            "--format",
+            "json",
+            "--dialect",
+            "solid-v1",
+            "--runtime-target",
+            "browser",
+            "--runtime-conditions",
+            "browser,import",
+            "--project",
+        ])
         .arg(root.join("fixtures/reactive-ir/bundled-scheduled-consumer/tsconfig.json"))
         .output()
         .unwrap();
@@ -339,7 +386,10 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
     let snapshot: serde_json::Value = serde_json::from_slice(&uncertifiable.stdout).unwrap();
     assert_eq!(snapshot["status"], "uncertifiable");
     assert_eq!(snapshot["findings"][0]["id"], "SC9005");
-    assert_eq!(snapshot["findings"][0]["rule"], "package-contract-missing");
+    assert_eq!(
+        snapshot["findings"][0]["rule"],
+        "package-contract-incomplete"
+    );
     assert!(
         snapshot["findings"][0]["primaryLocation"]["path"]
             .as_str()
@@ -358,12 +408,17 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
   },
   "compilerFactsProtocol": 1,
   "summaries": {
-    "function": { "kind": "function" }
+    "function": {
+      "kind": "function",
+      "reactiveReads": [
+        { "kind": "accessor", "label": "unreviewed generated value" }
+      ]
+    }
   },
   "entrypoints": {
     ".": {
       "exports": {
-        "function": ["readCount"]
+        "function": ["readCount", "readItems"]
       }
     }
   },
@@ -385,6 +440,22 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
     let report: serde_json::Value = serde_json::from_slice(&unverified.stdout).unwrap();
     assert_eq!(report["missing"], 1);
     assert_eq!(report["packages"][0]["status"], "unverified");
+
+    let analysis = Command::new(env!("CARGO_BIN_EXE_solid-checker-rust"))
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .args(["--format", "json", "--project"])
+        .arg(directory.join("tsconfig.json"))
+        .output()
+        .unwrap();
+    assert!(analysis.status.success());
+    let findings = decode_findings(&analysis.stdout);
+    assert_eq!(findings.len(), 1, "{findings:#?}");
+    assert_eq!(findings[0]["id"], "SC9005");
+    assert!(
+        findings[0]["message"]
+            .as_str()
+            .is_some_and(|message| message.contains("unverified"))
+    );
 
     fs::write(
         local.join("solid-reactivity.json"),
@@ -410,7 +481,7 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
   "entrypoints": {
     ".": {
       "exports": {
-        "function-1": ["readCount"]
+        "function-1": ["readCount", "readItems"]
       }
     }
   },
@@ -488,7 +559,7 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
   "entrypoints": {
     ".": {
       "exports": {
-        "function-1": ["readCount"]
+        "function-1": ["readCount", "readItems"]
       }
     }
   },
@@ -508,13 +579,17 @@ fn cli_reports_missing_contracts_and_loads_project_owned_overrides() {
         .unwrap();
     assert_eq!(conditional.status.code(), Some(1));
     let conditional_findings = decode_findings(&conditional.stdout);
-    assert_eq!(conditional_findings.len(), 1);
-    assert_eq!(conditional_findings[0]["id"], "SC9001");
+    assert_eq!(conditional_findings.len(), 2);
     assert!(
-        conditional_findings[0]["message"]
+        conditional_findings
+            .iter()
+            .all(|finding| finding["id"] == "SC9005")
+    );
+    assert!(conditional_findings.iter().all(|finding| {
+        finding["message"]
             .as_str()
             .is_some_and(|message| message.contains("conditional runtime targets"))
-    );
+    }));
 
     fs::remove_dir_all(directory).unwrap();
 }
@@ -659,7 +734,7 @@ fn cli_refuses_to_emit_unknown_callback_execution() {
 
 /// SC9-class obligations arrive as structured defects since the contract
 /// resolver moved missing exports off `static_violations`; a contract must
-/// not be written over them either. `package-unknown-export` reports SC9001,
+/// not be written over them either. `package-unknown-export` reports SC9005,
 /// so emission over it has to refuse.
 #[test]
 fn cli_refuses_to_emit_over_unresolved_obligations() {
@@ -684,10 +759,10 @@ fn cli_refuses_to_emit_over_unresolved_obligations() {
         ])
         .output()
         .unwrap();
-    assert!(!result.status.success(), "emission must refuse over SC9001");
+    assert!(!result.status.success(), "emission must refuse over SC9005");
     let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(stderr.contains("unresolved obligation"), "{stderr}");
-    assert!(!output.exists(), "no contract may be written over SC9001");
+    assert!(!output.exists(), "no contract may be written over SC9005");
     fs::remove_dir_all(directory).unwrap();
 }
 
@@ -1243,7 +1318,7 @@ fn package_generator_follows_runtime_esm_behind_declarations() {
 }
 
 #[test]
-fn package_generator_conservatively_merges_conditional_targets() {
+fn package_generator_collapses_semantically_identical_conditional_targets() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
         Err(_) => return,
@@ -1275,11 +1350,12 @@ fn package_generator_conservatively_merges_conditional_targets() {
     assert_eq!(summary["kind"], "function");
     assert_eq!(summary["callbacks"][0]["parameter"], 0);
     assert_eq!(summary["callbacks"][0]["execution"], "inline");
+    assert!(summary["variants"].is_null());
     fs::remove_dir_all(directory).unwrap();
 }
 
 #[test]
-fn package_generator_preserves_conditional_callback_execution_modes() {
+fn package_generator_refuses_overlapping_conditional_callback_semantics() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
         Ok(value) => value,
         Err(_) => return,
@@ -1301,39 +1377,15 @@ fn package_generator_preserves_conditional_callback_execution_modes() {
         .env("SOLID_TYPEFACTS_BIN", &typefacts)
         .output()
         .unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(
-        result.status.success(),
-        "{}",
-        String::from_utf8_lossy(&result.stderr)
+        stderr.contains("overlapping conditional-export branches"),
+        "{stderr}"
     );
-    let contract = expanded_contract(&output);
-    let callbacks = contract["entrypoints"]["."]["exports"]["schedule"]["callbacks"]
-        .as_array()
-        .unwrap();
-    assert_eq!(callbacks.len(), 2);
-    assert_eq!(callbacks[0]["parameter"], 0);
-    assert_eq!(callbacks[0]["execution"], "deferred");
-    assert_eq!(callbacks[1]["parameter"], 0);
-    assert_eq!(callbacks[1]["execution"], "inline");
-    let variants = contract["entrypoints"]["."]["exports"]["schedule"]["variants"]
-        .as_array()
-        .unwrap();
-    assert_eq!(variants.len(), 2);
-    let development = variants
-        .iter()
-        .find(|variant| variant["conditions"] == serde_json::json!(["development"]))
-        .unwrap();
-    assert_eq!(
-        development["summary"]["callbacks"][0]["execution"],
-        "inline"
-    );
-    let production = variants
-        .iter()
-        .find(|variant| variant["conditions"] == serde_json::json!(["default"]))
-        .unwrap();
-    assert_eq!(
-        production["summary"]["callbacks"][0]["execution"],
-        "deferred"
+    assert!(
+        stderr.contains("schema v1 cannot represent export-map fallback ordering"),
+        "{stderr}"
     );
     fs::remove_dir_all(directory).unwrap();
 }
@@ -1629,7 +1681,7 @@ fn cli_reports_a_project_owned_contract_that_the_installed_version_outran() {
     assert_eq!(snapshot["status"], "uncertifiable");
     let finding = &snapshot["findings"][0];
     assert_eq!(finding["id"], "SC9005");
-    assert_eq!(finding["rule"], "package-contract-missing");
+    assert_eq!(finding["rule"], "package-contract-incomplete");
     // The message states what is true — a contract exists, for another
     // version — rather than claiming there is none.
     let message = finding["message"].as_str().unwrap();

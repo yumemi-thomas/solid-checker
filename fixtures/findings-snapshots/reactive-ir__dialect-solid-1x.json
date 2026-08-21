@@ -2,19 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/no-proxy-apis",
-      "code": "SC8009",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 751,
-      "end": 822,
-      "fixes": 0,
-      "message": "The store package relies on JavaScript Proxies.",
-      "hint": "The binding is not used at runtime, but whether TypeScript preserves this import depends on effective compiler emit options that are unavailable to this analysis."
-    },
-    {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -26,7 +14,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -38,7 +26,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -50,7 +38,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -74,7 +62,7 @@
       "hint": "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -86,7 +74,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -98,7 +86,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -110,7 +98,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -134,7 +122,7 @@
       "hint": "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned. Prove the effective client/server entry through project compiler facts before treating this as a violation."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -146,67 +134,7 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
     },
     {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 3337,
-      "end": 3350,
-      "fixes": 0,
-      "message": "this createMemo scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing",
-      "hint": "Keep the createMemo scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
-    },
-    {
-      "rule": "v1/cleanup-in-forbidden-scope",
-      "code": "SC3001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 3964,
-      "end": 3973,
-      "fixes": 0,
-      "message": "onCleanup is called inside createReaction, whose callback runs as a leaf with no owner to register cleanup on; the cleanup function will never run",
-      "hint": "Register the cleanup in the computation that owns the createReaction instead, or create the surrounding scope with createRoot so disposal exists."
-    },
-    {
-      "rule": "v1/no-owner-cleanup",
-      "code": "SC4002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 3964,
-      "end": 3973,
-      "fixes": 0,
-      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
-      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists."
-    },
-    {
-      "rule": "v1/reactive-dispatch-unresolved",
-      "code": "SC9012",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 4400,
-      "end": 4439,
-      "fixes": 0,
-      "message": "createReaction receives a type-correct callback whose exact synchronous body cannot be resolved; whether it performs cleanup or creates a nested primitive in this leaf scope cannot be certified",
-      "hint": "Pass an exact in-project function or a function literal directly, so solid-checker can inspect the callback body and certify or report its leaf-scope operations."
-    },
-    {
-      "rule": "v1/no-owner-cleanup",
-      "code": "SC4002",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 4419,
-      "end": 4428,
-      "fixes": 0,
-      "message": "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
-      "hint": "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists."
-    },
-    {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -216,18 +144,6 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the containing function may be a Solid component or an ordinary helper, so its owner context cannot be certified",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/dialect-solid-1x/App.tsx",
-      "start": 7170,
-      "end": 7183,
-      "fixes": 0,
-      "message": "this createMemo scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing",
-      "hint": "Keep the createMemo scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
     }
   ]
 }

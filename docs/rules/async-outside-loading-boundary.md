@@ -1,13 +1,15 @@
 # async-outside-loading-boundary
 
-`SC5003` · **warning** · violation
+`SC5003` · **warning** by default · violation
 
 An async accessor is rendered with no `<Loading>` boundary above it.
 
 ## What it does
 
-Flags tracked JSX reads of accessors returned by async computations when no
-`<Loading>` boundary dominates the read.
+Flags tracked JSX reads that require a `<Loading>` boundary but have none. The
+ordinary async variant is informational. A source that declares
+`ssrSource: "client"` with no first-paint value is an **error** when the project
+server-renders, or uncertifiable when no server entry is visible.
 
 This is the static counterpart of Solid's dev-mode `ASYNC_OUTSIDE_LOADING_BOUNDARY`
 warning — and like the runtime warning, it is informational rather than halting.
@@ -68,8 +70,39 @@ once content has rendered, the boundary keeps it visible. Use
 `isPending(() => expr)` under the same boundary, or `<Loading on={key}>` to re-show
 the fallback on key changes.
 
+## SSR client-source variant
+
+The server never runs a computation marked `ssrSource: "client"`. Without a
+declared `loadingValue` or store-family `seedLoadingValue`, the source is a hole
+the server cannot fill. Under `<Loading>`, the server flushes the fallback and
+hands the position to the client. Outside a boundary, Solid throws
+`ssrSource: "client" read during SSR outside a <Loading> boundary` rather than
+letting the stream hang.
+
+This proof is based on the option itself, not async provenance, so it also
+catches a synchronous client-only compute. A named server-rendering or hydrate
+entry proves the error. When the entry may live outside the analyzed project,
+the finding is uncertifiable. Spread/computed options remain silent because a
+first-paint declaration cannot be ruled out.
+
+```tsx
+const widget = createMemo(() => measureBrowserThing(), {
+  ssrSource: "client",
+});
+
+function Dashboard() {
+  return (
+    <Loading fallback={<WidgetSkeleton />}>
+      <div>{widget().label}</div>
+    </Loading>
+  );
+}
+```
+
+Alternatively, provide `loadingValue` (or `seedLoadingValue: true`) so the
+server has a provisional value to render.
+
 ## Related
 
-- [ssr-client-source-outside-loading-boundary](ssr-client-source-outside-loading-boundary.md) — the same missing boundary over a bare `ssrSource: "client"` source, which is a hard server error rather than informational (it subsumes this warning on the same read)
-- [pending-async-untracked-read](pending-async-untracked-read.md) — untracked pending reads, which do throw
-- [no-owner-boundary](no-owner-boundary.md) — boundaries need owners
+- [pending-async-unsuspendable-read](pending-async-unsuspendable-read.md) — untracked pending reads, which do throw
+- [missing-owner](missing-owner.md) — boundaries need owners

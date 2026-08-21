@@ -2,7 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -12,13 +12,13 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
-      "start": 997,
-      "end": 1011,
+      "start": 999,
+      "end": 1013,
       "fixes": 0
     },
     {
@@ -27,12 +27,12 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/namespace-import-v2/App.tsx",
-      "start": 1362,
-      "end": 1369,
+      "start": 1364,
+      "end": 1371,
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -42,8 +42,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/namespace-import-v2/direct.tsx",

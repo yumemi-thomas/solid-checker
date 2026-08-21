@@ -1,5 +1,25 @@
 import type { ESLint, Linter, Rule } from "eslint";
 
+export interface SolidCheckerRuntimeSettings {
+  /** Explicit browser/client or node/server runtime target. */
+  target?: "browser" | "node" | (string & {});
+  /** Explicit development or production build mode. */
+  build?: "development" | "production" | (string & {});
+  /** Explicit CSR, string SSR, or streaming SSR rendering mode. */
+  rendering?: "csr" | "string-ssr" | "streaming-ssr" | (string & {});
+  /**
+   * Whether code outside this project may import from it. `"closed"` asserts
+   * the analyzed files are the whole program, which lets an exported symbol's
+   * caller set be enumerated. It never licenses guessing one: every reference
+   * must still resolve to a use the analyzer understands.
+   */
+  programBoundary?: "open" | "closed" | (string & {});
+  /** Exact package/framework conditions selected for this analysis. */
+  conditions?: string[];
+  /** Explicit framework/compiler transforms, such as `use-server`. */
+  frameworkTransforms?: string[];
+}
+
 export interface SolidCheckerSettings {
   /** Path to the tsconfig analyzed by solid-checker. Auto-discovered by default. */
   project?: string;
@@ -13,6 +33,8 @@ export interface SolidCheckerSettings {
   contracts?: string[];
   /** Force a dialect instead of detecting it from the project. */
   dialect?: "solid-v1" | "solid-v2" | (string & {});
+  /** Explicit runtime conditions used for contract variants and rendering proofs. */
+  runtime?: SolidCheckerRuntimeSettings;
   /** Read a canonical JSON snapshot instead of starting an analysis process. */
   snapshotPath?: string;
 }

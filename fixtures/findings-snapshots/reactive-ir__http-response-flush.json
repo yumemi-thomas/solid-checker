@@ -1,10 +1,10 @@
 {
-  "status": "violation",
+  "status": "uncertifiable",
   "findings": [
     {
       "rule": "http-response-after-flush",
       "code": "SC7005",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
       "start": 735,
@@ -14,7 +14,7 @@
     {
       "rule": "http-response-after-flush",
       "code": "SC7005",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
       "start": 754,
@@ -24,7 +24,7 @@
     {
       "rule": "http-response-after-flush",
       "code": "SC7005",
-      "kind": "violation",
+      "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/http-response-flush/App.tsx",
       "start": 1780,

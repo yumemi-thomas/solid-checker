@@ -14,13 +14,11 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
     for (rule, count) in [
         ("reactive-write-in-owned-scope", 9),
         ("action-called-in-owned-scope", 2),
-        ("strict-read-untracked", 25),
+        ("strict-read-untracked", 22),
         ("reactive-read-after-await", 20),
-        ("component-props-destructure", 1),
-        ("component-returns-conditionally", 3),
-        ("cleanup-in-forbidden-scope", 2),
-        ("flush-in-forbidden-scope", 2),
-        ("primitive-in-leaf-owner", 3),
+        ("no-destructure", 1),
+        ("components-return-once", 3),
+        ("leaf-owner-forbidden-call", 7),
     ] {
         assert_rule_findings(&findings, rule, count);
     }
@@ -56,11 +54,7 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "props-invalid.tsx",
-            [
-                ("strict-read-untracked", 3),
-                ("component-props-destructure", 1),
-            ]
-            .as_slice(),
+            [("strict-read-untracked", 3), ("no-destructure", 1)].as_slice(),
         ),
         (
             "control-flow-invalid.tsx",
@@ -72,28 +66,18 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "component-return-invalid.tsx",
-            [
-                ("strict-read-untracked", 3),
-                ("component-returns-conditionally", 3),
-            ]
-            .as_slice(),
+            [("components-return-once", 3)].as_slice(),
         ),
         (
             "leaf-invalid.tsx",
-            [
-                ("cleanup-in-forbidden-scope", 1),
-                ("flush-in-forbidden-scope", 1),
-                ("primitive-in-leaf-owner", 3),
-            ]
-            .as_slice(),
+            [("leaf-owner-forbidden-call", 5)].as_slice(),
         ),
         (
             "owned-leaf-extended-invalid.tsx",
             [
                 ("reactive-write-in-owned-scope", 4),
                 ("action-called-in-owned-scope", 1),
-                ("cleanup-in-forbidden-scope", 1),
-                ("flush-in-forbidden-scope", 1),
+                ("leaf-owner-forbidden-call", 2),
             ]
             .as_slice(),
         ),
@@ -142,26 +126,25 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "effect-apply-valid.tsx",
-            [("no-owner-effect", 3), ("cleanup-return-unresolved", 0)].as_slice(),
+            [("missing-owner", 3), ("cleanup-return-unresolved", 0)].as_slice(),
         ),
         (
             "effect-apply-extended-valid.tsx",
-            [("no-owner-effect", 4), ("cleanup-return-unresolved", 0)].as_slice(),
+            [("missing-owner", 4), ("cleanup-return-unresolved", 0)].as_slice(),
         ),
-        ("leaf-valid.tsx", [("no-owner-effect", 2)].as_slice()),
+        ("leaf-valid.tsx", [("missing-owner", 2)].as_slice()),
         (
             "owned-leaf-extended-valid.tsx",
             [
-                ("no-owner-settled-cleanup", 1),
-                // The module-scope createTrackedEffect that pins leaf-scope
-                // write legality is itself an undisposed effect.
-                ("no-owner-effect", 1),
+                // One unowned settled cleanup plus the module-scope
+                // createTrackedEffect that pins leaf-scope write legality.
+                ("missing-owner", 2),
             ]
             .as_slice(),
         ),
         (
             "owned-scope-valid.tsx",
-            [("no-owner-effect", 1), ("cleanup-return-unresolved", 0)].as_slice(),
+            [("missing-owner", 1), ("cleanup-return-unresolved", 0)].as_slice(),
         ),
     ]);
     for (file, rules) in incidental {
@@ -202,26 +185,26 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
         ),
         (
             "props-valid.tsx",
-            &["strict-read-untracked", "component-props-destructure"][..],
+            &["strict-read-untracked", "no-destructure"][..],
         ),
         (
             "control-flow-valid.tsx",
-            &["strict-read-untracked", "component-props-destructure"][..],
+            &["strict-read-untracked", "no-destructure"][..],
         ),
         (
             "props-extended-valid.tsx",
-            &["strict-read-untracked", "component-props-destructure"][..],
+            &["strict-read-untracked", "no-destructure"][..],
         ),
         (
             "component-return-valid.tsx",
-            &["component-returns-conditionally"][..],
+            &["components-return-once"][..],
         ),
         (
             "leaf-valid.tsx",
             &[
-                "cleanup-in-forbidden-scope",
-                "flush-in-forbidden-scope",
-                "primitive-in-leaf-owner",
+                "leaf-owner-forbidden-call",
+                "leaf-owner-forbidden-call",
+                "leaf-owner-forbidden-call",
             ][..],
         ),
         (
@@ -229,9 +212,9 @@ fn eslint_plugin_solid_two_corpus_matches_native_rule_semantics() {
             &[
                 "reactive-write-in-owned-scope",
                 "action-called-in-owned-scope",
-                "cleanup-in-forbidden-scope",
-                "flush-in-forbidden-scope",
-                "primitive-in-leaf-owner",
+                "leaf-owner-forbidden-call",
+                "leaf-owner-forbidden-call",
+                "leaf-owner-forbidden-call",
             ][..],
         ),
         (

@@ -78,6 +78,7 @@ fn normalize(contract: &PackageContract) -> Result<ContractDocument, BackendErro
             && summary.reactive_reads.is_empty()
             && summary.returns.is_none()
             && summary.callbacks.is_empty()
+            && summary.owner_requirements.is_empty()
             && summary.variants.is_empty()
             && summary.async_behavior.is_empty();
         let id = if plain {
@@ -375,7 +376,9 @@ mod tests {
             "kind":"function",
             "evidence":{"kind":"inferred"},
             "callbacks":[{"parameter":0,"execution":"tracked",
-              "evidence":{"kind":"probed","modes":["client","server"],"calls":2}}]
+              "evidence":{"kind":"probed","modes":["client","server"],"calls":2}}],
+            "ownerRequirements":[{"operation":"effect",
+              "evidence":{"kind":"reviewed"}}]
           }},
           "entrypoints":{".":{"exports":{"function-1":["observe"]}}},
           "evidence":{"kind":"verified"}
@@ -387,6 +390,7 @@ mod tests {
         assert_eq!(evidence.kind, "probed");
         assert_eq!(evidence.modes, ["client", "server"]);
         assert_eq!(evidence.calls, Some(2));
+        assert_eq!(summary.owner_requirements.len(), 1);
 
         let legacy = contract();
         assert!(

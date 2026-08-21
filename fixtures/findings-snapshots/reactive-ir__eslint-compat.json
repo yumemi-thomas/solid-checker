@@ -2,16 +2,6 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/event-handlers",
-      "code": "SC8001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 1618,
-      "end": 1625,
-      "fixes": 1
-    },
-    {
       "rule": "v1/jsx-no-duplicate-props",
       "code": "SC8003",
       "kind": "violation",
@@ -37,108 +27,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 2500,
-      "end": 2502,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/event-handlers",
-      "code": "SC8001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 3377,
-      "end": 3384,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/event-handlers",
-      "code": "SC8001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 3410,
-      "end": 3420,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/event-handlers",
-      "code": "SC8001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 3729,
-      "end": 3738,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/event-handlers",
-      "code": "SC8001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 3759,
-      "end": 3766,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/event-handlers",
-      "code": "SC8001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4176,
-      "end": 4189,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/event-handlers",
-      "code": "SC8001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4190,
-      "end": 4203,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-unknown-namespaces",
-      "code": "SC8012",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4557,
-      "end": 4565,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/no-unknown-namespaces",
-      "code": "SC8012",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4577,
-      "end": 4585,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/jsx-no-script-url",
-      "code": "SC8004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4667,
-      "end": 4687,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/jsx-no-script-url",
-      "code": "SC8004",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 4850,
-      "end": 4875,
+      "start": 4872,
+      "end": 4900,
       "fixes": 0
     },
     {
@@ -147,68 +37,8 @@
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 5132,
-      "end": 5160,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-innerhtml",
-      "code": "SC8008",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 5132,
-      "end": 5177,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/jsx-no-duplicate-props",
-      "code": "SC8003",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 5250,
-      "end": 5287,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-innerhtml",
-      "code": "SC8008",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 5255,
-      "end": 5268,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/no-unknown-namespaces",
-      "code": "SC8012",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 7013,
-      "end": 7024,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-unknown-namespaces",
-      "code": "SC8012",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 7046,
-      "end": 7057,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/event-handlers",
-      "code": "SC8001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 7261,
-      "end": 7274,
+      "start": 4990,
+      "end": 5027,
       "fixes": 0
     },
     {
@@ -217,48 +47,28 @@
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 7494,
-      "end": 7498,
+      "start": 7203,
+      "end": 7207,
       "fixes": 0
     },
     {
-      "rule": "v1/self-closing-comp",
-      "code": "SC8016",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 7582,
-      "end": 7603,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/self-closing-comp",
-      "code": "SC8016",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 7617,
-      "end": 7623,
-      "fixes": 1
-    },
-    {
-      "rule": "v1/expected-function-got-expression",
+      "rule": "v1/reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 8936,
-      "end": 8938,
+      "start": 8645,
+      "end": 8647,
       "fixes": 0
     },
     {
-      "rule": "v1/expected-function-got-expression",
+      "rule": "v1/reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-compat/App.tsx",
-      "start": 8948,
-      "end": 8950,
+      "start": 8657,
+      "end": 8659,
       "fixes": 0
     }
   ]

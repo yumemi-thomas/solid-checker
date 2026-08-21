@@ -2,6 +2,10 @@
 
 `SC8013` · **warning** · violation
 
+This preference is disabled by default. Enable it with
+`--preset preferences`, `--enable-rule v1/prefer-classlist`, or ESLint's
+`solidChecker.configs["preferences-v1"]` config.
+
 Suggests `classList` for conditional class expressions.
 
 ## Options

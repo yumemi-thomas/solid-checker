@@ -2,8 +2,8 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid-1x-leftovers/App.tsx",
@@ -14,8 +14,8 @@
       "hint": "batch was removed in Solid 2.0; see the migration guide — updates batch by default on the microtask queue; call flush() where you need the old synchronous application."
     },
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid-1x-leftovers/App.tsx",
@@ -26,8 +26,8 @@
       "hint": "createComputed was removed in Solid 2.0; see the migration guide — use createEffect(compute, apply), a function-form createSignal/createStore, or createMemo."
     },
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid-1x-leftovers/App.tsx",
@@ -38,8 +38,8 @@
       "hint": "createResource was removed in Solid 2.0; see the migration guide — use an async computation (createMemo(async ...) or createStore(fn)) read under a <Loading> boundary."
     },
     {
-      "rule": "package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/solid-1x-leftovers/App.tsx",

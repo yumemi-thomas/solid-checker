@@ -12,16 +12,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/after-await-both-branches.tsx",
-      "start": 118,
-      "end": 237,
-      "fixes": 0
-    },
-    {
       "rule": "v1/reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -32,16 +22,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/after-await-callback-before-read.tsx",
-      "start": 121,
-      "end": 220,
-      "fixes": 0
-    },
-    {
       "rule": "v1/reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -49,26 +29,6 @@
       "path": "fixtures/engine/eslint-reactivity-v1/after-await-callback-before-read.tsx",
       "start": 206,
       "end": 211,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/after-await-local-accessor.tsx",
-      "start": 131,
-      "end": 196,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/after-await-member.tsx",
-      "start": 129,
-      "end": 200,
       "fixes": 0
     },
     {
@@ -92,16 +52,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/after-await-namespace.tsx",
-      "start": 112,
-      "end": 171,
-      "fixes": 0
-    },
-    {
       "rule": "v1/reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -109,16 +59,6 @@
       "path": "fixtures/engine/eslint-reactivity-v1/after-await-namespace.tsx",
       "start": 162,
       "end": 166,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/after-await-parameter.tsx",
-      "start": 118,
-      "end": 213,
       "fixes": 0
     },
     {
@@ -132,26 +72,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/after-await-plain-function.tsx",
-      "start": 99,
-      "end": 164,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/after-await-same-expression.tsx",
-      "start": 118,
-      "end": 164,
-      "fixes": 0
-    },
-    {
       "rule": "v1/reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -162,16 +82,6 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/after-await-try-finally.tsx",
-      "start": 118,
-      "end": 222,
-      "fixes": 0
-    },
-    {
       "rule": "v1/reactive-read-after-await",
       "code": "SC1002",
       "kind": "violation",
@@ -179,16 +89,6 @@
       "path": "fixtures/engine/eslint-reactivity-v1/after-await-try-finally.tsx",
       "start": 212,
       "end": 217,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/before-await-accessor.tsx",
-      "start": 118,
-      "end": 212,
       "fixes": 0
     },
     {
@@ -209,16 +109,6 @@
       "path": "fixtures/engine/eslint-reactivity-v1/component-props-body-destructure.tsx",
       "start": 50,
       "end": 59,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-proxy-apis",
-      "code": "SC8009",
-      "kind": "uncertifiable",
-      "severity": "error",
-      "path": "fixtures/engine/eslint-reactivity-v1/component-props-merge-alias.tsx",
-      "start": 134,
-      "end": 139,
       "fixes": 0
     },
     {
@@ -272,8 +162,8 @@
       "fixes": 0
     },
     {
-      "rule": "v1/strict-read-untracked",
-      "code": "SC1001",
+      "rule": "v1/components-return-once",
+      "code": "SC1004",
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-conditional-return.tsx",
@@ -286,39 +176,9 @@
       "code": "SC1004",
       "kind": "uncertifiable",
       "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-conditional-return.tsx",
-      "start": 53,
-      "end": 65,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
       "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-early-return.tsx",
       "start": 50,
       "end": 62,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/components-return-once",
-      "code": "SC1004",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/component-reactive-early-return.tsx",
-      "start": 50,
-      "end": 62,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/conditional-await-accessor.tsx",
-      "start": 139,
-      "end": 220,
       "fixes": 0
     },
     {
@@ -339,26 +199,6 @@
       "path": "fixtures/engine/eslint-reactivity-v1/imported-after-await-definition.ts",
       "start": 144,
       "end": 149,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/loop-await-accessor.tsx",
-      "start": 118,
-      "end": 206,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/engine/eslint-reactivity-v1/nested-after-await-accessor.tsx",
-      "start": 118,
-      "end": 189,
       "fixes": 0
     },
     {

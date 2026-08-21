@@ -1,7 +1,7 @@
-//! Solid 1.x `v1/prefer-for`, `v1/prefer-show`, `v1/no-react-deps`, and
-//! `v1/no-proxy-apis` —
-//! four of eslint-plugin-solid's structural-preference rules, each judging a
-//! JavaScript-legal but Solid-unidiomatic shape.
+//! Shared `prefer-for` and `prefer-show` control-flow preferences, narrowed
+//! from eslint-plugin-solid's Solid 1.x structural rules. Each judges a
+//! JavaScript-legal but Solid-unidiomatic shape only when its governing input
+//! has a proven reactive dependency at the rendered JSX position.
 //!
 //! `prefer-for` and `prefer-show` are intent judgements, not correctness
 //! checks: Solid's compiler already handles a plain `.map()` or `&&`/ternary
@@ -12,349 +12,37 @@
 //! rules fire only when the judged expression is itself rendered as JSX
 //! children, and `prefer-show` additionally only for the "expensive" branch
 //! shapes upstream defines (a JSX element/fragment, or a bare identifier).
-//!
-//! `no-react-deps` and `no-proxy-apis` resolve their callees through the
-//! dialect's own primitive table (`context.lookup.primitives`) instead of
-//! matching the callee's source spelling. Upstream's ESLint rules track
-//! import aliases by hand (`trackImports`); asking the same resolution the
-//! rest of this checker already asks means `import { createEffect as fx }
-//! from "solid-js"; fx(fn, [a])` is caught too, while a same-named function
-//! from an unrelated module is not.
 
-use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, IdentifierRole, LogicalOperatorKind, RuntimeValueKind};
+use solid_facts::ast::{ArgumentValueKind, IdentifierRole, ImportKind, LogicalOperatorKind};
 use solid_facts::core::Span;
-use typefacts::{CallKind, ResolvedCall, ResolvedCallValidity};
 
-use super::{UpstreamCompatContext, binding_initializer, deletion_with_leading_comma, text};
-use crate::{Fix, StaticViolation, TextEdit, known_primitive, location};
+use super::{UpstreamCompatContext, text};
+use crate::{Fix, StaticViolation, TextEdit, location};
 
 pub(super) fn check_file(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
-    no_react_deps(file, context, violations);
-    no_proxy_apis(file, context, violations);
-    prefer_for(file, context, violations);
-    prefer_show(file, violations);
-}
-
-// ---------------------------------------------------------------------
-// SC8010 v1/no-react-deps
-// ---------------------------------------------------------------------
-
-/// `createEffect`/`createMemo` do not take a dependency array; Solid finds
-/// their dependencies automatically by tracking what the tracked callback
-/// reads. A second argument shaped like one is a habit carried over from
-/// React and does nothing in Solid except get silently ignored — or, for
-/// `createMemo`, get mistaken for the equality comparator it actually is.
-///
-/// Requires exactly two arguments, matching upstream: a third argument is
-/// Solid's own options parameter (`{ equals, name }`), not a dependency
-/// array, so a deliberate three-argument call is left alone rather than
-/// flagged for looking React-shaped by coincidence.
-fn no_react_deps(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
-) {
-    let primitives = context.lookup.primitives(file);
-    for (index, call) in file.ast.calls.iter().enumerate() {
-        if call.arguments.len() != 2
-            || !matches!(
-                known_primitive(&primitives.calls[index]),
-                Some(Primitive::CreateEffect | Primitive::CreateMemo)
-            )
-        {
-            continue;
-        }
-        let argument = &call.arguments[1];
-        let source = text(file, argument.span).trim();
-        let looks_like_deps = source.starts_with('[')
-            || binding_initializer(context, file, argument.span)
-                .is_some_and(|(_, _, initializer, _)| initializer.trim_start().starts_with('['));
-        if !looks_like_deps {
-            continue;
-        }
-        violations.push(StaticViolation {
-            id: "SC8010".into(),
-            rule: "no-react-deps".into(),
-            message: "Solid's reactive primitives do not use a dependency array.".into(),
-            hint: "Solid tracks dependencies automatically by reading them; if you really need to override what is tracked, use `on`.".into(),
-            location: location(file.path.shared(), argument.span),
-            analysis_context: String::new(),
-            fixes: vec![Fix {
-                message: "Remove the dependency array.".into(),
-                applicability: "safe".into(),
-                edits: vec![TextEdit {
-                    // The deletion swallows the `,` separating the two
-                    // arguments too — removing only the argument's own span
-                    // would leave `createEffect(fn, )` behind.
-                    location: location(
-                        file.path.shared(),
-                        deletion_with_leading_comma(&file.source, argument.span),
-                    ),
-                    new_text: String::new(),
-                }],
-            }],
-            uncertain: false,
-        });
+    if context.prefer_for_enabled {
+        prefer_for(file, context, violations);
     }
-}
-
-// ---------------------------------------------------------------------
-// SC8009 v1/no-proxy-apis
-// ---------------------------------------------------------------------
-
-fn no_proxy_apis(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
-) {
-    no_proxy_imports(file, violations);
-    no_proxy_calls(file, context, violations);
-}
-
-fn proxy_violation(
-    file: &FileFacts,
-    message: &str,
-    hint: &str,
-    span: Span,
-    uncertain: bool,
-) -> StaticViolation {
-    StaticViolation {
-        uncertain,
-        ..super::violation(file, "SC8009", "no-proxy-apis", message, hint, span, vec![])
+    if context.prefer_show_enabled {
+        prefer_show(file, context, violations);
     }
-}
-
-/// `solid-js/store` builds its stores on ES2015 `Proxy`, unavailable on the
-/// resource-constrained or legacy engines this rule exists for.
-fn no_proxy_imports(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
-    for import in &file.ast.imports {
-        if import.module.as_str() != "solid-js/store" {
-            continue;
-        }
-        let execution = import_execution(import);
-        if execution != ImportExecution::Erased {
-            violations.push(proxy_violation(
-                file,
-                "The store package relies on JavaScript Proxies.",
-                if execution == ImportExecution::Unknown {
-                    "The binding is not used at runtime, but whether TypeScript preserves this import depends on effective compiler emit options that are unavailable to this analysis."
-                } else {
-                    "Proxies are unavailable on engines without ES2015 Proxy support."
-                },
-                import.span,
-                execution == ImportExecution::Unknown,
-            ));
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum ImportExecution {
-    Erased,
-    Executes,
-    Unknown,
-}
-
-fn import_execution(import: &solid_facts::ast::ImportFact) -> ImportExecution {
-    if import.type_only {
-        ImportExecution::Erased
-    } else if import
-        .bindings
-        .iter()
-        .any(|binding| binding.runtime_referenced)
-    {
-        ImportExecution::Executes
-    } else {
-        // Default TypeScript emit erases this declaration; verbatim module
-        // syntax preserves it. No current fact domain carries that effective
-        // project option, so neither runtime execution nor erasure is proven.
-        ImportExecution::Unknown
-    }
-}
-
-/// The remaining Proxy sources: constructing one directly, passing a
-/// non-object-literal to `mergeProps` (which falls back to a Proxy for
-/// anything it cannot merge eagerly), and spreading a call or member
-/// expression into JSX (Solid cannot tell how many props that produces
-/// without evaluating it, so it wraps the result in a Proxy too).
-fn no_proxy_calls(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
-) {
-    let primitives = context.lookup.primitives(file);
-    for (index, call) in file.ast.calls.iter().enumerate() {
-        let callee = call.static_callee(&file.source).unwrap_or_default();
-        let call_source = text(file, call.span).trim_start();
-        let proxy_spelling =
-            callee == "Proxy.revocable" || (callee == "Proxy" && call_source.starts_with("new "));
-        if proxy_spelling {
-            match context.lookup.resolved_callee_call(file, call.callee) {
-                Some(resolved) if is_standard_proxy_call(resolved) => {
-                    violations.push(proxy_violation(
-                        file,
-                        "The Proxy API is unavailable in resource-constrained environments.",
-                        "Proxies are unavailable on engines without ES2015 Proxy support.",
-                        call.span,
-                        false,
-                    ));
-                }
-                None => violations.push(proxy_violation(
-                    file,
-                    "The call is spelled like the Proxy API, but its exact declaration could not be resolved.",
-                    "Resolve the call target before certifying whether this code requires ES2015 Proxy support.",
-                    call.span,
-                    true,
-                )),
-                Some(_) => {
-                    // An exact project declaration shadows the standard
-                    // builtin. Its spelling cannot transfer Proxy semantics.
-                }
-            }
-        }
-        if known_primitive(&primitives.calls[index]) == Some(Primitive::MergeProps) {
-            // The 1.9 runtime enables its Proxy path only when a source is a
-            // function or carries Solid's private `$PROXY` marker. Source
-            // spelling and names such as `props` prove neither condition.
-            for argument in &call.arguments {
-                let spread = file
-                    .ast
-                    .spreads
-                    .iter()
-                    .any(|spread| spread.span == argument.span);
-                let (reported, uncertain) = if spread {
-                    (true, true)
-                } else {
-                    match argument.value {
-                        ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction => {
-                            (true, false)
-                        }
-                        ArgumentValueKind::Identifier => {
-                            match binding_initializer(context, file, argument.span) {
-                                Some((binding_file, initializer_span, _, _))
-                                    if binding_file
-                                        .ast
-                                        .functions
-                                        .iter()
-                                        .any(|function| function.span == initializer_span) =>
-                                {
-                                    (true, false)
-                                }
-                                // A local non-function initializer, an
-                                // import, and an unresolvable parameter may
-                                // each be a plain object or a marked proxy.
-                                // No identifier name certifies which one.
-                                Some(_) | None => (true, true),
-                            }
-                        }
-                        _ => match argument.runtime_value_kind {
-                            RuntimeValueKind::Function => (true, false),
-                            RuntimeValueKind::Object if argument.closed_object_literal => {
-                                // Accessors do not make an object callable and
-                                // cannot introduce hidden spread/computed keys.
-                                // The closed key set is enough for this
-                                // eager-merge decision even though it does not
-                                // prove accessor values.
-                                (false, false)
-                            }
-                            RuntimeValueKind::Nullish
-                            | RuntimeValueKind::Primitive
-                            | RuntimeValueKind::Array => (false, false),
-                            RuntimeValueKind::Object | RuntimeValueKind::Unknown => (true, true),
-                        },
-                    }
-                };
-                if reported {
-                    violations.push(proxy_violation(
-                        file,
-                        if uncertain {
-                            "This mergeProps source may be a function or a Solid proxy, but its runtime shape is unresolved."
-                        } else {
-                            "Passing a function to mergeProps makes Solid use a Proxy."
-                        },
-                        if uncertain {
-                            "Pass an exact plain object, or resolve the source to prove whether it is callable or carries Solid's proxy marker."
-                        } else {
-                            "Pass a plain object instead of a function when targeting an environment without ES2015 Proxy support."
-                        },
-                        argument.span,
-                        uncertain,
-                    ));
-                }
-            }
-        }
-    }
-    for element in &file.ast.jsx_elements {
-        for spread in &element.spreads {
-            // Upstream's selectors are `JSXSpreadAttribute MemberExpression`
-            // and `JSXSpreadAttribute CallExpression`: every descendant
-            // counts, not just the argument's own node. `{...foo.bar}`,
-            // `{...{ a: foo.bar }}`, and `{...make({ a: b() })}` are all
-            // Proxy sources, and a call whose callee is a member read
-            // reports both nodes, exactly as two selector matches do.
-            for member in file
-                .ast
-                .members
-                .iter()
-                .filter(|member| spread.argument.contains(member.span))
-            {
-                violations.push(proxy_violation(
-                    file,
-                    "Spreading a member expression may require a Proxy.",
-                    "Using a property access in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
-                    member.span,
-                    false,
-                ));
-            }
-            for call in file
-                .ast
-                .calls
-                .iter()
-                .filter(|call| spread.argument.contains(call.span))
-            {
-                violations.push(proxy_violation(
-                    file,
-                    "Spreading a call expression may require a Proxy.",
-                    "Using a function call in JSX spread makes Solid use Proxies, which are incompatible with your target environment.",
-                    call.span,
-                    false,
-                ));
-            }
-        }
-    }
-}
-
-fn is_standard_proxy_call(call: &ResolvedCall) -> bool {
-    if call.validity != ResolvedCallValidity::Valid {
-        return false;
-    }
-    call.declaration.as_ref().is_some_and(|declaration| {
-        declaration.standard_library
-            && declaration
-                .owners
-                .iter()
-                .any(|owner| owner.name.as_ref() == "ProxyConstructor")
-            && ((call.kind == CallKind::Construct && declaration.name.as_ref() == "construct")
-                || (call.kind == CallKind::Call && declaration.name.as_ref() == "revocable"))
-    })
 }
 
 // ---------------------------------------------------------------------
 // SC8014 v1/prefer-for
 // ---------------------------------------------------------------------
 
-/// `Array#map` rendered as JSX children recreates every DOM node on each
+/// A reactive `Array#map` rendered as JSX children recreates every DOM node on each
 /// update; `<For>` keys elements by array identity instead so unchanged
 /// items keep their nodes. Position carries the whole judgement, exactly as
 /// upstream's `JSXExpressionContainer` parent checks do: the `.map()` call
 /// must itself be the expression a JSX element or fragment renders. The
-/// callback does not have to build JSX — `<ol>{items.map(x => x.name)}</ol>`
+/// callback does not have to build JSX — `<ol>{items().map(x => x.name)}</ol>`
 /// still renders a list — and a `.map()` anywhere else (assigned to a
 /// variable, inside an attribute) is not rendered as a list and is left
 /// alone.
@@ -363,6 +51,7 @@ fn prefer_for(
     context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
+    let mut may_add_import = true;
     for call in &file.ast.calls {
         if direct_container_position(file, call.span) != Some(JsxExpressionPosition::Child) {
             continue;
@@ -378,50 +67,87 @@ fn prefer_for(
         if text(file, member.property) != "map" || call.arguments.len() != 1 {
             continue;
         }
+        let standard_array_map = context
+            .lookup
+            .resolved_callee_call(file, call.callee)
+            .filter(|resolved| resolved.validity == typefacts::ResolvedCallValidity::Valid)
+            .and_then(|resolved| resolved.declaration.as_ref())
+            .is_some_and(|declaration| {
+                declaration.standard_library && declaration.name.as_ref() == "map"
+            });
+        if !standard_array_map {
+            continue;
+        }
+        if !context
+            .reactive_reads
+            .has_proven_read(context, file, member.object)
+        {
+            continue;
+        }
         let argument = &call.arguments[0];
+        let solid_one = context.dialect.carries_eslint_era_rules();
         if !matches!(
             argument.value,
             ArgumentValueKind::Function | ArgumentValueKind::AsyncFunction
-        ) {
+        ) || solid_one && argument.value == ArgumentValueKind::AsyncFunction
+        {
             continue;
         }
-        // Upstream's autofix applies only when the callback takes exactly
-        // one non-rest parameter (`(item) => ...`); an index parameter, no
-        // parameter, or a rest parameter leaves too many candidate
+        // The autofix applies only to an arrow with exactly one non-rest
+        // parameter (`(item) => ...`). A regular function can observe
+        // Array#map's three callback arguments through `arguments`, while
+        // `<For>` supplies only its declared parameter. An index parameter,
+        // no parameter, or a rest parameter also leaves too many candidate
         // rewrites (`<For>` with its own index callback, or `<Index>`) to
         // pick between. `FunctionFact::parameters` already excludes rest
         // parameters, so a rest-only callback also reads as zero
         // parameters here, which correctly falls through to "no fix".
         //
-        // The rewrite additionally requires the receiver to be a *proven*
-        // array. `.map` is matched by name, as upstream matches it, and the
-        // report is safe on a name alone — but `<For each>` iterates arrays,
-        // so rewriting an Immutable.js collection or any other `.map`-bearing
-        // type would change behaviour. The checker's array/tuple classification
-        // of the receiver is that proof; anything short of it — `Mixed`,
-        // `Unknown`, or no fact — leaves the report standing and withholds the
-        // fix.
+        // The judgement itself requires a proven array/tuple. A reactive
+        // collection can expose a completely unrelated `.map`; recommending
+        // `<For each>` for it would be a type and runtime error, not merely an
+        // unsafe autofix. Async callbacks are also left to TypeScript because
+        // the published Solid 1.x types reject their Promise-valued children.
         let receiver_is_array = super::expression_array_shape(context, file, member.object)
             .is_some_and(typefacts::ArrayShape::is_array_or_tuple);
-        let one_parameter = file
-            .ast
-            .functions
-            .iter()
-            .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
-            .is_some_and(|function| function.parameters.len() == 1);
-        let (message, fixes) = if one_parameter {
-            let fixes = if receiver_is_array {
+        if !receiver_is_array {
+            continue;
+        }
+        let one_parameter_arrow = argument.value == ArgumentValueKind::Function
+            && file
+                .ast
+                .functions
+                .iter()
+                .find(|function| function.span == file.ast.peel_ts_sugar_span(argument.span))
+                .is_some_and(|function| {
+                    function.kind == solid_facts::ast::FunctionKind::Arrow
+                        && function.parameters.len() == 1
+                });
+        let fix_target = one_parameter_arrow
+            .then(|| solid_component_fix_target(file, "For", call.span, may_add_import))
+            .flatten();
+        if fix_target
+            .as_ref()
+            .is_some_and(|target| target.added_import)
+        {
+            may_add_import = false;
+        }
+        let (message, fixes) = if one_parameter_arrow {
+            let fixes = if let Some(target) = fix_target {
+                let mut edits = target.import_edit.into_iter().collect::<Vec<_>>();
+                edits.push(TextEdit {
+                    location: location(file.path.shared(), call.span),
+                    new_text: format!(
+                        "<{name} each={{{receiver}}}>{{{callback}}}</{name}>",
+                        name = target.name,
+                        receiver = text(file, member.object),
+                        callback = text(file, argument.span),
+                    ),
+                });
                 vec![Fix {
                     message: "Replace Array#map with <For>.".into(),
                     applicability: "safe".into(),
-                    edits: vec![TextEdit {
-                        location: location(file.path.shared(), call.span),
-                        new_text: format!(
-                            "<For each={{{}}}>{{{}}}</For>",
-                            text(file, member.object),
-                            text(file, argument.span)
-                        ),
-                    }],
+                    edits,
                 }]
             } else {
                 vec![]
@@ -440,13 +166,123 @@ fn prefer_for(
             id: "SC8014".into(),
             rule: "prefer-for".into(),
             message: message.into(),
-            hint: "Pick `<For>` when the callback needs the item value reactively, `<Index>` when it needs the index reactively.".into(),
+            hint: if solid_one {
+                "Pick `<For>` when the callback needs the item value reactively, `<Index>` when it needs the index reactively.".into()
+            } else {
+                "Solid 2.0's default `<For>` preserves item identity; `keyed={false}` instead passes an accessor and is not a semantics-preserving rewrite of an Array#map callback.".into()
+            },
             location: location(file.path.shared(), call.span),
             analysis_context: String::new(),
             fixes,
             uncertain: false,
         });
     }
+}
+
+struct SolidComponentFixTarget {
+    name: String,
+    import_edit: Option<TextEdit>,
+    added_import: bool,
+}
+
+/// Names a runtime Solid control-flow component without guessing that a JSX
+/// identifier exists. Existing named/namespace imports are used only when no
+/// second binding can shadow them anywhere in the file. Otherwise the first
+/// fix of that component kind adds a collision-free named import; later
+/// findings wait for the normal lint fix pass to rerun, avoiding overlapping
+/// import edits when a client applies every safe fix in one batch.
+fn solid_component_fix_target(
+    file: &FileFacts,
+    imported: &str,
+    candidate: Span,
+    may_add_import: bool,
+) -> Option<SolidComponentFixTarget> {
+    for import in &file.ast.imports {
+        if import.module.as_str() != "solid-js" || import.type_only {
+            continue;
+        }
+        for binding in &import.bindings {
+            if binding.type_only {
+                continue;
+            }
+            let matches = match binding.kind {
+                ImportKind::Named => binding.imported.as_deref() == Some(imported),
+                ImportKind::Namespace => true,
+                ImportKind::SideEffect | ImportKind::Default => false,
+            };
+            if !matches {
+                continue;
+            }
+            let local = text(file, binding.local.span);
+            let binding_count = file
+                .ast
+                .identifiers
+                .iter()
+                .filter(|identifier| {
+                    identifier.role == IdentifierRole::Binding
+                        && text(file, identifier.span) == local
+                })
+                .count();
+            if binding_count == 1 {
+                return Some(SolidComponentFixTarget {
+                    name: if binding.kind == ImportKind::Namespace {
+                        format!("{local}.{imported}")
+                    } else {
+                        local.to_string()
+                    },
+                    import_edit: None,
+                    added_import: false,
+                });
+            }
+        }
+    }
+    if !may_add_import {
+        return None;
+    }
+
+    let stem = format!("__SolidChecker{imported}{}", candidate.start);
+    let mut name = stem.clone();
+    let mut suffix = 2;
+    while file
+        .ast
+        .identifiers
+        .iter()
+        .any(|identifier| text(file, identifier.span) == name)
+    {
+        name = format!("{stem}_{suffix}");
+        suffix += 1;
+    }
+    let insertion = file
+        .ast
+        .imports
+        .last()
+        .map(|import| import.span.end)
+        .or_else(|| {
+            file.ast
+                .module_directives
+                .last()
+                .map(|directive| directive.span.end)
+        })
+        .or_else(|| {
+            file.source
+                .starts_with("#!")
+                .then(|| file.source.find('\n').unwrap_or(file.source.len()))
+                .and_then(|offset| u32::try_from(offset).ok())
+        });
+    let (offset, prefix, suffix_text) = match insertion {
+        Some(offset) => (offset, "\n", ""),
+        None => (0, "", "\n"),
+    };
+    Some(SolidComponentFixTarget {
+        name: name.clone(),
+        import_edit: Some(TextEdit {
+            location: location(file.path.shared(), Span::new(offset, offset)),
+            new_text: format!(
+                "{prefix}import {{ {imported} as {name} }} from \"solid-js\";{suffix_text}"
+            ),
+        }),
+        added_import: true,
+    })
 }
 
 // ---------------------------------------------------------------------
@@ -650,15 +486,30 @@ fn show_replacement_span(source: &str, span: Span) -> Span {
     }
 }
 
+#[cfg(test)]
 fn show_conditional_replacement(test: &str, consequent: &str, alternate: &str) -> String {
+    show_conditional_replacement_with_name("Show", test, consequent, alternate)
+}
+
+fn show_conditional_replacement_with_name(
+    name: &str,
+    test: &str,
+    consequent: &str,
+    alternate: &str,
+) -> String {
     format!(
-        "<Show when={{{test}}} fallback={}>{}</Show>",
+        "<{name} when={{{test}}} fallback={}>{}</{name}>",
         as_jsx_attribute_expression(alternate),
         as_jsx_child(consequent)
     )
 }
 
-fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
+fn prefer_show(
+    file: &FileFacts,
+    context: &UpstreamCompatContext<'_>,
+    violations: &mut Vec<StaticViolation>,
+) {
+    let mut may_add_import = true;
     for logical in &file.ast.logical_expressions {
         if logical.operator != LogicalOperatorKind::And || !expensive_branch(file, logical.right) {
             continue;
@@ -670,21 +521,12 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
         if jsx_expression_position(file, logical.span) != Some(JsxExpressionPosition::Child) {
             continue;
         }
-        let fixes = vec![Fix {
-            message: "Replace with <Show>.".into(),
-            applicability: "safe".into(),
-            edits: vec![TextEdit {
-                location: location(
-                    file.path.shared(),
-                    show_replacement_span(&file.source, logical.span),
-                ),
-                new_text: format!(
-                    "<Show when={{{}}}>{}</Show>",
-                    text(file, logical.left),
-                    as_jsx_child(text(file, logical.right))
-                ),
-            }],
-        }];
+        if !context
+            .reactive_reads
+            .has_proven_read(context, file, logical.left)
+        {
+            continue;
+        }
         violations.push(StaticViolation {
             id: "SC8015".into(),
             rule: "prefer-show".into(),
@@ -693,7 +535,10 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
                 .into(),
             location: location(file.path.shared(), logical.span),
             analysis_context: String::new(),
-            fixes,
+            // `0 && child` renders the text `0`, while `<Show when={0}>`
+            // renders nothing. Type Facts do not currently prove a Boolean
+            // value domain, so this rewrite cannot honestly be called safe.
+            fixes: vec![],
             uncertain: false,
         });
     }
@@ -706,21 +551,37 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
         if jsx_expression_position(file, conditional.span) != Some(JsxExpressionPosition::Child) {
             continue;
         }
-        let fixes = vec![Fix {
-            message: "Replace with <Show fallback>.".into(),
-            applicability: "safe".into(),
-            edits: vec![TextEdit {
-                location: location(
-                    file.path.shared(),
-                    show_replacement_span(&file.source, conditional.span),
-                ),
-                new_text: show_conditional_replacement(
-                    text(file, conditional.test),
-                    text(file, conditional.consequent),
-                    text(file, conditional.alternate),
-                ),
-            }],
-        }];
+        if !context
+            .reactive_reads
+            .has_proven_read(context, file, conditional.test)
+        {
+            continue;
+        }
+        let fixes = solid_component_fix_target(file, "Show", conditional.span, may_add_import)
+            .map(|target| {
+                if target.added_import {
+                    may_add_import = false;
+                }
+                let mut edits = target.import_edit.into_iter().collect::<Vec<_>>();
+                edits.push(TextEdit {
+                    location: location(
+                        file.path.shared(),
+                        show_replacement_span(&file.source, conditional.span),
+                    ),
+                    new_text: show_conditional_replacement_with_name(
+                        &target.name,
+                        text(file, conditional.test),
+                        text(file, conditional.consequent),
+                        text(file, conditional.alternate),
+                    ),
+                });
+                vec![Fix {
+                    message: "Replace with <Show fallback>.".into(),
+                    applicability: "safe".into(),
+                    edits,
+                }]
+            })
+            .unwrap_or_default();
         violations.push(StaticViolation {
             id: "SC8015".into(),
             rule: "prefer-show".into(),
@@ -737,10 +598,9 @@ fn prefer_show(file: &FileFacts, violations: &mut Vec<StaticViolation>) {
 #[cfg(test)]
 mod tests {
     use super::{
-        ImportExecution, as_jsx_attribute_expression, as_jsx_child, braces_wrap, import_execution,
-        show_conditional_replacement, show_replacement_span,
+        as_jsx_attribute_expression, as_jsx_child, braces_wrap, show_conditional_replacement,
+        show_replacement_span,
     };
-    use solid_facts::ast::extract;
     use solid_facts::core::Span;
 
     /// The substring [`show_replacement_span`] chose, given the span of the
@@ -836,28 +696,5 @@ mod tests {
             show_conditional_replacement("ready", "content", "<Fallback />"),
             "<Show when={ready} fallback={<Fallback />}>{content}</Show>"
         );
-    }
-
-    #[test]
-    fn store_imports_distinguish_erased_executing_and_config_dependent() {
-        let facts = extract(
-            "imports.ts",
-            r#"import { Store } from "solid-js/store";
-import { createStore } from "solid-js/store";
-import type { SetStoreFunction } from "solid-js/store";
-type State = Store<{ count: number }>;
-type Setter = SetStoreFunction<{ count: number }>;
-createStore({ count: 0 });"#,
-        )
-        .unwrap();
-        assert_eq!(
-            import_execution(&facts.imports[0]),
-            ImportExecution::Unknown
-        );
-        assert_eq!(
-            import_execution(&facts.imports[1]),
-            ImportExecution::Executes
-        );
-        assert_eq!(import_execution(&facts.imports[2]), ImportExecution::Erased);
     }
 }

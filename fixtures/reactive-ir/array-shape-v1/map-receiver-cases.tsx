@@ -1,11 +1,10 @@
-// The second `arrayShape` consumer: `v1/prefer-for` (SC8012) reports every
-// single-callback `.map()` in JSX by name, as upstream does, but offers the
-// `<For each>` rewrite only when the receiver is a *proven* array. Rewriting an
-// Immutable.js collection — or anything else that has a `.map` but is not an
-// array — would change behaviour.
+// `v1/prefer-for` (SC8014) consults `arrayShape` only after its receiver is
+// proven reactive. These declared receivers are static/unproven and therefore
+// stay clean before the fix gate; the shapes remain here as negative controls.
 //
-// So these cases are about the *fix*, not the report: all four report, and only
-// the array-receiver ones carry an autofix.
+// Rewriting an Immutable.js collection — or anything else that has `.map` but
+// is not an array — would change behaviour, so future reactive variants must
+// still require a proven array before offering a fix.
 type Rows = string[];
 type RowTuple = [string, string];
 

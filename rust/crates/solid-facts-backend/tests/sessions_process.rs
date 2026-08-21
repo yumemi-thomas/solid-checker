@@ -158,8 +158,8 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
     );
     let findings = decode_findings(&output.stdout);
     let expected = [
-        ("leaf-reexport-flush.tsx", "flush-in-forbidden-scope"),
-        ("leaf-reexport-cleanup.tsx", "cleanup-in-forbidden-scope"),
+        ("leaf-reexport-flush.tsx", "leaf-owner-forbidden-call"),
+        ("leaf-reexport-cleanup.tsx", "leaf-owner-forbidden-call"),
         ("owned-reexport-memo.tsx", "reactive-write-in-owned-scope"),
         (
             "owned-reexport-refresh.tsx",
@@ -197,21 +197,10 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         ("component-props-alias.tsx", "strict-read-untracked"),
         ("component-props-merge-alias.tsx", "strict-read-untracked"),
         (
-            "component-reactive-early-return.tsx",
-            "strict-read-untracked",
-        ),
-        (
-            "component-reactive-conditional-return.tsx",
-            "strict-read-untracked",
-        ),
-        (
             "component-props-parameter-destructure.tsx",
-            "component-props-destructure",
+            "no-destructure",
         ),
-        (
-            "component-props-body-destructure.tsx",
-            "component-props-destructure",
-        ),
+        ("component-props-body-destructure.tsx", "no-destructure"),
         (
             "derived-signal-in-effect.tsx",
             "reactive-write-in-owned-scope",
@@ -250,15 +239,9 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         ),
         ("loop-await-accessor.tsx", "reactive-read-after-await"),
         ("component-props-tracked.tsx", "strict-read-untracked"),
-        (
-            "component-props-tracked-destructure.tsx",
-            "component-props-destructure",
-        ),
+        ("component-props-tracked-destructure.tsx", "no-destructure"),
         ("noncomponent-object-read.ts", "strict-read-untracked"),
-        (
-            "noncomponent-object-destructure.ts",
-            "component-props-destructure",
-        ),
+        ("noncomponent-object-destructure.ts", "no-destructure"),
         ("component-props-passthrough.tsx", "strict-read-untracked"),
         ("component-props-local-merge.tsx", "strict-read-untracked"),
         (
@@ -286,7 +269,7 @@ fn rust_cli_covers_reactivity_v2_semantic_migration_matrix() {
         findings
             .iter()
             .filter(|finding| {
-                finding["rule"] == "component-props-destructure"
+                finding["rule"] == "no-destructure"
                     && finding["primaryLocation"]["path"]
                         .as_str()
                         .is_some_and(|path| {
@@ -810,7 +793,7 @@ declare namespace JSX {
         selected
             .solve(&initial)
             .iter()
-            .all(|finding| finding.rule != "no-owner-effect"),
+            .all(|finding| finding.rule != "missing-owner"),
         "the JSX use should prove Card is an owned component"
     );
 
@@ -834,7 +817,7 @@ void Card;
     let fresh_findings = selected.solve(&fresh);
     assert!(
         fresh_findings.iter().any(|finding| {
-            finding.rule == "no-owner-effect" && finding.primary_location.path.ends_with("Card.tsx")
+            finding.rule == "missing-owner" && finding.primary_location.path.ends_with("Card.tsx")
         }),
         "without a JSX use, the exported untyped factory has no proven owner: {fresh_findings:#?}"
     );

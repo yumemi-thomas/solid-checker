@@ -28,10 +28,19 @@ the package directory the default output is `solid-reactivity.json`.
 When conditional builds invoke the same callback parameter with different
 timing, every observed timing mode is preserved. Consumers analyze each mode;
 the merge does not discard one branch or treat the modes as contradictory.
-When a conditional build changes a complete export summary (including removing
-reactive behavior on the server), schema-v1 adds `variants`: each variant names
-the conditions and the complete summary proven for that target. A consumer without
-an explicit runtime-condition selector fails closed with an uncertifiable
+Evidence-only differences do not create runtime variants: for example, equal
+development and production semantics collapse to one summary whose probe modes
+are unioned when both claims were independently probed. Evidence from a
+narrower branch never promotes an inferred broader claim. A more-specific equal branch such as
+`browser,development,import` also collapses into its broader
+`browser,import` branch, preventing two variants from matching the same runtime.
+When disjoint targets such as browser and node change a complete export summary
+(including removing reactive behavior on the server), schema-v1 adds
+`variants`: each variant names the conditions and the complete summary proven
+for that target. Schema v1 cannot encode negative conditions or export-map
+fallback ordering, so generation refuses semantically different overlapping
+branches instead of emitting an ambiguous contract. A consumer without an
+explicit runtime-condition selector fails closed with an uncertifiable
 environment-dependent contract result; it never applies the merged union.
 
 Bundled conformance probes each applicable claim in client, server,
@@ -69,11 +78,26 @@ of receiving an inferred empty summary.
 
 `contract generate` also writes a sibling `<contract>.review.md` checklist. It
 calls out runtime entrypoints with no generated summary, function exports with
-no callback execution row, inherited claim rows, and entrypoints whose
+no callback execution row, callback rows with no owner row, generated owner
+requirements requiring caller review, inherited claim rows, and entrypoints whose
 conditional environment selection needs review. The checklist is intentionally
 separate from `solid-reactivity.json`: generation never promotes inferred
 claims or auto-resolves the items it lists. Stdout remains one line and names
 both output paths.
+
+For a repeatable source-vs-boundary parity check, provision the audited Solid
+typings and run:
+
+```sh
+make contract-differential
+```
+
+The harness analyzes a package implementation as project source, generates its
+contract, promotes the generated rows only inside the test to an explicitly
+reviewed fixture, and analyzes the equivalent declaration/runtime consumer.
+It compares semantic findings while separately asserting callback-path and
+owner-requirement rows. This catches behavior lost at the contract boundary;
+it does not turn inferred generator output into production evidence.
 
 The lower-level single-project workflow remains useful for packages without a
 `package.json#exports` map:
@@ -104,7 +128,12 @@ including contracts for package subpaths. Schema v1 records an `entrypoints`
 map keyed exactly like `package.json#exports` (`"."`, `"./state"`,
 `"./server-functions"`, and so on). Explicit contracts override discovered and
 bundled contracts. The loader binds an import to its exact entrypoint and
-export through Type Facts; it does not fall back to the root entrypoint.
+export through Type Facts; it does not fall back to the root entrypoint. When a
+package export is followed through a relative project barrel, the loader joins
+the binding by the canonical Type Facts `runtimeIdentity`, not by spelling or
+filesystem guesses. Conflicting exact summaries produce an explicit
+uncertifiable contract result; an empty or unresolved identity remains
+fail-closed.
 
 The on-disk format stores each distinct effect summary once. Entrypoints group
 export names by summary identifier, and an identical subpath surface can use
@@ -216,7 +245,7 @@ that audits the installed one.
 Analysis fails closed on the contract without failing the run. The stale
 contract is refused — a contract for another version is not weaker evidence, it
 is evidence about a different artifact — and the package is reported exactly as
-an uncontracted one: an uncertifiable `SC9005 package-contract-missing` finding
+an uncontracted one: an uncertifiable `SC9005 package-contract-incomplete` finding
 at the package import, snapshot status `uncertifiable`, and `--certify` exiting
 1. The message states which case applies, naming both versions rather than
 claiming no contract exists, and the hint carries the same remedy the report
@@ -280,9 +309,11 @@ checked-in expected outputs are reviewed like snapshots: an unexplained drift
 fails the engine-change gate, and the runner never updates those pins.
 
 Evidence is enforced, not decorative. Contracts emitted by this CLI use
-`inferred`; consumers report them as `unverified` and cannot certify through
-them. Certification accepts `verified`, `reviewed`, `trusted`, and `attested`
-contracts. Legacy `generated` remains parseable but is also unverified.
+`inferred`; consumers report them as `unverified`, and their summaries are not
+inserted into Reactive IR at all. They therefore cannot prove a violation,
+suppress an obligation, or certify a consumer. Certification accepts
+`verified`, `reviewed`, `trusted`, and `attested` contracts. Legacy `generated`
+remains parseable but is also unverified.
 
 Schema-v1 contracts may also put `evidence` on an export summary, reactive-read
 row, callback row, or recursive return row. Row evidence is one of `inferred`,
@@ -316,6 +347,13 @@ aliases, and subpath imports. Consumers support named imports and local aliases.
 Calls in compiler-tracked JSX retain their tracked status; calls in ordinary
 function bodies produce `strict-read-untracked` findings.
 
+Generated `ownerRequirements` use the compiler's canonical symbol identity for
+aliases and re-exports, plus exact AST function identity for anonymous default
+exports that have no name symbol. An operation is assigned only to its
+immediate containing function body. A same-named declaration or a nested
+closure inside an exported factory cannot lend its owner requirement to that
+export.
+
 Structured returns are an additive part of `schemaVersion: 1`. A tuple uses an
 `elements` array (with `null` for an uncontracted slot), while an object uses a
 `properties` map. Leaves retain the existing `accessor` or `store-path` shape.
@@ -347,13 +385,27 @@ Local calls are summarized transitively, and forwarding into known Solid
 callback slots records the corresponding tracked, deferred, or inline
 execution.
 
-Schema-v1 callback entries describe execution timing, not the callback's owner
-capability. When an exported function invokes a caller-supplied callback from a
-Solid leaf owner such as `onSettled`, recording only `"execution": "deferred"`
-would lose the fact that cleanup, flush, and nested primitive creation are
-forbidden there. Generation therefore emits SC9012 and refuses to certify that
-surface until an exact in-project callback discharges it or a future
-backward-compatible contract field can represent the leaf-owner constraint.
+Schema-v1 callback entries may additionally carry an exact `owner` value:
+`inherited`, `created`, `unowned`, `conditional`, or `leaf`. This lets a
+reviewed package contract preserve the owner capability needed by consumer
+owner, cleanup, and leaf-operation analysis. The field is optional for
+backward compatibility: a missing owner row describes timing only and never
+becomes inherited-owner proof. Generators therefore put callback owner rows on
+their review checklist rather than guessing them. A reviewed leaf row can
+preserve the fact that cleanup, flush, and nested primitive creation are
+forbidden in a Solid leaf owner such as `onSettled`; an unreviewed or missing
+row remains SC9012 and fail-closed.
+
+Runtime selection is explicit at the native CLI (`--runtime-target`,
+`--runtime-build`, `--rendering`, repeated `--runtime-condition`, and
+`--framework-transform`) and in the ESLint adapter's
+`settings.solidChecker.runtime`. The selected target, build, rendering mode,
+conditions, and transforms participate in one-shot, daemon, and adapter cache
+identity. A conditional entrypoint or variant is consumed only when exactly
+one compatible summary is selected; incomplete, contradictory, or ambiguous
+conditions remain uncertifiable. Contradictory target, build, or rendering
+conditions are rejected at configuration validation. Explicit CSR/SSR selects the
+rendering premise but does not prove request-dependent post-flush timing.
 
 Local deferred-flow proofs are structural rather than name-based. A function
 installed on an object is considered deferred only when that object is

@@ -52,11 +52,18 @@ observation is a conformance failure. The worker never edits a contract. A
 human promotion or a reviewed generator change is required before an
 observation becomes a claim.
 
-When conditional runtime leaves disagree, the generator preserves the complete
-per-leaf summaries in additive export `variants` entries instead of merging an
-environment-specific claim into an unconditional one. Until analysis has an
-explicit runtime-condition selector, the Rust reader refuses that export as an
-uncertifiable environment-dependent boundary. This keeps SSR/client skew
+When disjoint conditional runtime leaves disagree, the generator preserves the
+complete per-leaf summaries in additive export `variants` entries instead of
+merging an environment-specific claim into an unconditional one. Equal
+semantics collapse and independently probed rows merge their observed modes;
+evidence on a narrower branch never promotes an inferred broader claim. A
+redundant specific branch is removed when a broader branch proves the same
+summary. Because schema v1 has
+positive conditions but no negative predicates or export-map fallback order,
+semantically different overlapping branches are refused and require an
+explicit reviewed contract or a split entrypoint. Until analysis has an exact
+runtime-condition selector, the Rust reader refuses a remaining variant export
+as an uncertifiable environment-dependent boundary. This keeps SSR/client skew
 visible and prevents a browser summary from certifying server code.
 
 ## Migration

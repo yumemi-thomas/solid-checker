@@ -131,6 +131,7 @@ pub(crate) struct AnalysisContext<'a> {
     pub(crate) reachable_calls: &'a HashMap<Location, usize>,
     pub(crate) symbols_by_root: &'a HashMap<SymbolId, Vec<SymbolId>>,
     pub(crate) contracted: &'a HashMap<SymbolId, ResolvedContractBinding>,
+    pub(crate) rule_options: &'a RuleOptions,
     pub(crate) solid1x_rule_options: &'a Solid1xRuleOptions,
 }
 
@@ -283,7 +284,8 @@ pub(crate) fn build_with_contracts_measured_incremental(
     add_solid_import_names(facts, entities, dialect, &mut symbol_names);
     build_timings.symbol_name_indexes = substage_started.elapsed();
     let substage_started = Instant::now();
-    let mut resolved_contracts = resolve_contract_imports(facts, contracts, entities, dialect);
+    let mut resolved_contracts =
+        resolve_contract_imports(facts, contracts, entities, dialect, &rule_options.runtime);
     build_timings.contract_resolution = substage_started.elapsed();
     let missing_contract_exports = std::mem::take(&mut resolved_contracts.missing_exports);
     let semantic_lookup = SemanticLookup::new(
@@ -293,6 +295,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         &symbol_names,
         dialect,
         &resolved_contracts,
+        rule_options.runtime.program_is_closed(),
     );
     let semantic_lookup = &semantic_lookup;
     let reuse = ReusePlan::prepare(
@@ -320,6 +323,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         semantic_lookup,
         resolved_contracts: &resolved_contracts,
         contracts,
+        runtime: &rule_options.runtime,
     };
     let discover = move || {
         let mut timings = BuildTimings::default();
@@ -412,6 +416,7 @@ pub(crate) fn build_with_contracts_measured_incremental(
         reachable_calls,
         symbols_by_root: &typescript_indexes.symbols_by_root,
         contracted: &resolved_contracts.by_symbol,
+        rule_options,
         solid1x_rule_options: &rule_options.solid1x,
     };
     static_rules::static_prepass(&analysis, &mut draft);

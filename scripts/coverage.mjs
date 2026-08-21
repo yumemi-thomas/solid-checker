@@ -18,7 +18,7 @@
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
 
 const root = resolve(import.meta.dirname, "..");
@@ -63,6 +63,69 @@ function fixtureProjects() {
   }
   return found.sort((a, b) => a.id.localeCompare(b.id));
 }
+
+/**
+ * Holds every fixture dialect stub to being present, parseable, and tracked.
+ *
+ * Dialect selection follows the nearest `node_modules/solid-js/package.json`
+ * above the project, and a stub that is missing, empty, or unparseable falls
+ * back silently to the 2.0 default. Two ways that happens leave no other
+ * trace: an empty `node_modules/solid-js/` directory (git cannot record an
+ * empty directory, so the stub never arrives), and a stub with no
+ * `.gitignore` exception under the repository-wide `**\/node_modules/` rule
+ * (present locally, absent in CI). Either one turns a 1.x fixture into a 2.0
+ * fixture whose snapshot then records the wrong catalog as if intended.
+ *
+ * `eslint-plugin-corpus-v1` shipped the first shape and `solid-reexport` the
+ * second, so this is a check, not a hypothetical.
+ */
+function checkDialectStubs() {
+  const tracked = new Set(
+    execFileSync("git", ["ls-files", "-z", "fixtures"], { cwd: root, encoding: "utf8" })
+      .split("\0")
+      .filter(Boolean)
+  );
+  const problems = [];
+  const groups = ["reactive-ir", "engine", "package-contracts", "ownership-cases", "partial-audit"];
+  for (const group of groups) {
+    const base = join(root, "fixtures", group);
+    if (!existsSync(base)) continue;
+    for (const entry of readdirSync(base, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const stubDirectory = join(base, entry.name, "node_modules", "solid-js");
+      if (!existsSync(stubDirectory)) continue;
+      const manifest = join(stubDirectory, "package.json");
+      const id = relative(root, manifest);
+      if (!existsSync(manifest)) {
+        problems.push(`${id}: missing -- the fixture falls back to the 2.0 default dialect`);
+        continue;
+      }
+      let version;
+      try {
+        version = JSON.parse(readFileSync(manifest, "utf8")).version;
+      } catch (error) {
+        problems.push(`${id}: unparseable (${error.message})`);
+        continue;
+      }
+      if (typeof version !== "string" || version === "") {
+        problems.push(`${id}: no "version" -- dialect selection cannot resolve it`);
+      }
+      if (!tracked.has(id)) {
+        problems.push(
+          `${id}: not tracked by git -- add '!${relative(root, join(base, entry.name))}/node_modules/'` +
+            ` and its '/**' twin to .gitignore, or the stub is absent in CI`
+        );
+      }
+    }
+  }
+  if (problems.length > 0) {
+    console.error("fixture dialect stubs are not usable:");
+    for (const problem of problems) console.error(`  ${problem}`);
+    process.exit(2);
+  }
+}
+
+checkDialectStubs();
 
 /**
  * Projects whose snapshots keep the message and hint text.
@@ -140,16 +203,43 @@ function driftedSources() {
   return drifted;
 }
 
+function runtimeArguments(tsconfig) {
+  const metadata = join(dirname(tsconfig), ".solid-checker", "runtime.json");
+  if (!existsSync(metadata)) return [];
+  const runtime = JSON.parse(readFileSync(metadata, "utf8"));
+  if (runtime == null || typeof runtime !== "object" || Array.isArray(runtime)) {
+    throw new Error(`${metadata}: runtime metadata must be an object`);
+  }
+  const args = [];
+  for (const [key, flag] of [
+    ["target", "--runtime-target"],
+    ["build", "--runtime-build"],
+    ["rendering", "--rendering"],
+    ["programBoundary", "--program-boundary"]
+  ]) {
+    if (runtime[key] !== undefined) args.push(flag, runtime[key]);
+  }
+  for (const condition of runtime.conditions ?? []) args.push("--runtime-condition", condition);
+  for (const transform of runtime.frameworkTransforms ?? []) {
+    args.push("--framework-transform", transform);
+  }
+  return args;
+}
+
 function analyze(tsconfig, keepWording) {
-  const output = execFileSync(checker, ["--format", "json", "--project", tsconfig], {
-    cwd: root,
-    encoding: "utf8",
-    maxBuffer: 256 * 1024 * 1024,
-    env: {
-      ...process.env,
-      SOLID_TYPEFACTS_BIN: typefacts
+  const output = execFileSync(
+    checker,
+    ["--format", "json", "--project", tsconfig, ...runtimeArguments(tsconfig)],
+    {
+      cwd: root,
+      encoding: "utf8",
+      maxBuffer: 256 * 1024 * 1024,
+      env: {
+        ...process.env,
+        SOLID_TYPEFACTS_BIN: typefacts
+      }
     }
-  });
+  );
   const snapshot = JSON.parse(output);
   const findings = (snapshot.findings ?? []).map((finding) => comparable(finding, keepWording));
   findings.sort(

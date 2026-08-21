@@ -41,7 +41,7 @@ use crate::cache::{
 use crate::execution_role::direct_callback_contains;
 use crate::owners::{
     containing_ast_function, enclosing_function_label, enclosing_render_function,
-    function_binding_name, inside_effect_apply, solid_accessor_declaration,
+    function_binding_name, read_escapes_synchronous_extent, solid_accessor_declaration,
     source_function_exported,
 };
 use crate::pipeline::{parallel_file_results, parallel_slice_results};
@@ -144,10 +144,16 @@ fn equivalent_summary_reads(left: &SummaryReads, right: &SummaryReads) -> bool {
 /// [`equivalent_summary_reads`]: repeating one parameter's timing is not a
 /// different effect, but a parameter only one candidate defers is.
 fn equivalent_callbacks(left: &[ContractCallback], right: &[ContractCallback]) -> bool {
-    fn effect(callbacks: &[ContractCallback]) -> HashSet<(usize, &str)> {
+    fn effect(callbacks: &[ContractCallback]) -> HashSet<(usize, &str, Option<&str>)> {
         callbacks
             .iter()
-            .map(|callback| (callback.parameter, callback.execution.as_str()))
+            .map(|callback| {
+                (
+                    callback.parameter,
+                    callback.execution.as_str(),
+                    callback.owner.as_deref(),
+                )
+            })
             .collect()
     }
     effect(left) == effect(right)
@@ -251,7 +257,7 @@ fn discover_typed_accessors(
         ) else {
             continue;
         };
-        if inside_effect_apply(file, call.callee, entities, symbol_names, dialect)
+        if read_escapes_synchronous_extent(file, call.callee, entities, symbol_names, dialect)
             || enclosing_render_function(file, call.callee, lookup)
         {
             continue;
@@ -738,6 +744,7 @@ fn discover_interprocedural_graph(
                     ContractCallback {
                         parameter,
                         execution: execution.into(),
+                        owner: None,
                         evidence: None,
                     },
                 ));
@@ -788,6 +795,7 @@ fn discover_interprocedural_graph(
                             ContractCallback {
                                 parameter,
                                 execution: callback.execution.clone(),
+                                owner: None,
                                 evidence: None,
                             },
                         ));
@@ -860,6 +868,7 @@ fn discover_interprocedural_graph(
                     ContractCallback {
                         parameter,
                         execution: execution.into(),
+                        owner: None,
                         evidence: None,
                     },
                 ));
@@ -918,6 +927,7 @@ fn discover_interprocedural_graph(
                                     RuntimeArgumentBehavior::ValueOnly => unreachable!(),
                                 }
                                 .into(),
+                                owner: None,
                                 evidence: None,
                             },
                         ));
@@ -1673,21 +1683,31 @@ impl StructuredReturnDiscovery<'_, '_> {
         ) {
             return None;
         }
-        if !module.starts_with("./") && !module.starts_with("../") {
-            return Some(format!(
-                "{module:?} is a bare or path-mapped specifier with no exact project-local target"
-            ));
+        // A reviewed package contract is the exact runtime owner for this
+        // binding. This covers both a direct package import and a relative
+        // project barrel whose TypeFacts runtime identity was joined to that
+        // package export. Do not require a project declaration in this case:
+        // doing so would turn a contracted external function back into
+        // SC9012 merely because it crossed a local re-export.
+        if let Some(symbol) = self.entities.at(file.path.as_str(), declaration)
+            && self.lookup.has_contract_binding(symbol)
+        {
+            return None;
         }
-        if self.relative_module_file(file, module).is_none() {
-            return Some(format!(
-                "relative specifier {module:?} has no single project-local target"
-            ));
+        // TypeScript already resolved the import, including tsconfig paths,
+        // extension priority, and re-export cycles. Follow its exact symbol
+        // chain and require a declaration in an analyzed project source file;
+        // merely seeing the identity at a project re-export is insufficient,
+        // because that export may forward an external package value. Local
+        // accessor/source maps decide reactivity from there. External package
+        // declarations therefore remain fail-closed even behind a relative
+        // project re-export.
+        if self.imported_binding_has_project_source_declaration(file, declaration) {
+            return None;
         }
-        // The module target itself is exact, which closes the question. A
-        // missing or cyclic export past that point is a TypeScript resolution
-        // diagnostic (for example TS2303), not an independent checker
-        // obligation, so it is deliberately not walked here.
-        None
+        Some(format!(
+            "{module:?} resolves to no runtime declaration in the analyzed project"
+        ))
     }
 
     fn parameter_return(
@@ -2180,6 +2200,9 @@ impl StructuredReturnDiscovery<'_, '_> {
         file: &solid_facts::FileFacts,
         declaration: Span,
     ) -> Option<&SymbolId> {
+        if let Some(accessor) = self.accessor_with_same_runtime_identity(file, declaration) {
+            return Some(accessor);
+        }
         let (module, imported) = file.ast.imports.iter().find_map(|import| {
             if import.type_only {
                 return None;
@@ -2209,6 +2232,86 @@ impl StructuredReturnDiscovery<'_, '_> {
                 && u32::try_from(location.end_byte).ok()? == target.end)
                 .then_some(symbol)
         })
+    }
+
+    fn accessor_with_same_runtime_identity(
+        &self,
+        file: &solid_facts::FileFacts,
+        declaration: Span,
+    ) -> Option<&SymbolId> {
+        let identity = self
+            .lookup
+            .entity_at(file.path.as_str(), declaration)?
+            .runtime_identity
+            .as_ref();
+        if identity.is_empty() {
+            return None;
+        }
+        self.accessors.iter().find_map(|(symbol, (_, location))| {
+            self.entity_at_location(location)
+                .is_some_and(|entity| entity.runtime_identity.as_ref() == identity)
+                .then_some(symbol)
+        })
+    }
+
+    fn imported_binding_has_project_source_declaration(
+        &self,
+        file: &solid_facts::FileFacts,
+        declaration: Span,
+    ) -> bool {
+        let Some(entity) = self.lookup.entity_at(file.path.as_str(), declaration) else {
+            return false;
+        };
+        if entity.runtime_identity.is_empty() || entity.symbol.is_empty() {
+            return false;
+        }
+        let mut symbol_id = entity.symbol.as_ref();
+        let mut seen = HashSet::new();
+        while seen.insert(symbol_id) {
+            let Some(symbol) = self.facts.typescript.symbol(symbol_id) else {
+                return false;
+            };
+            if symbol.declarations().iter().any(|declaration| {
+                !declaration.location.path.ends_with(".d.ts")
+                    && self
+                        .lookup
+                        .file_by_path(declaration.location.path.as_ref())
+                        .is_some_and(|target_file| {
+                            let is_binding = target_file.ast.identifiers.iter().any(|identifier| {
+                                identifier.role == solid_facts::ast::IdentifierRole::Binding
+                                    && u64::from(identifier.span.start)
+                                        == declaration.location.start_byte
+                                    && u64::from(identifier.span.end)
+                                        == declaration.location.end_byte
+                            });
+                            let is_import = target_file.ast.imports.iter().any(|import| {
+                                import.bindings.iter().any(|binding| {
+                                    u64::from(binding.local.span.start)
+                                        == declaration.location.start_byte
+                                        && u64::from(binding.local.span.end)
+                                            == declaration.location.end_byte
+                                })
+                            });
+                            is_binding && !is_import
+                        })
+            }) {
+                return true;
+            }
+            let alias = symbol.alias_target();
+            if alias.is_empty() {
+                return false;
+            }
+            symbol_id = alias;
+        }
+        false
+    }
+
+    fn entity_at_location(&self, location: &Location) -> Option<&typefacts::EntityFact> {
+        self.facts
+            .typescript
+            .entities_for_path(location.path.as_ref())
+            .iter()
+            .find(|entity| entity.location == *location)
     }
 
     /// The project file a plain relative import specifier resolves to, by
@@ -2973,6 +3076,24 @@ fn interprocedural_result_reads_for_file(
         let valid_call = lookup
             .resolved_callee_call(file, call.callee)
             .is_some_and(|resolved| resolved.validity == ResolvedCallValidity::Valid);
+        // A member invoked on the innermost function's parameter is not a
+        // local runtime-dispatch choice. The graph records it in
+        // `invoked_parameter_members`, and each caller either selects an
+        // exact implementation or receives one call-site obligation. Also
+        // reporting the unresolved member here duplicates that same proof
+        // obligation at the helper definition.
+        let parameter_member_call = lookup
+            .member_callee_receiver(file, call.callee)
+            .is_some_and(|(receiver, _)| {
+                nodes
+                    .iter()
+                    .filter(|node| node.path == file.path.as_str() && node.body.contains(call.span))
+                    .min_by_key(|node| node.body.end - node.body.start)
+                    .is_some_and(|owner| owner.parameters.contains(&receiver))
+            });
+        if parameter_member_call {
+            continue;
+        }
         let candidate_symbols = lookup.callee_symbols(file, call.callee);
         if candidate_symbols.is_empty()
             && file
@@ -3362,7 +3483,13 @@ fn direct_reference_contributions(
         ) else {
             continue;
         };
-        if inside_effect_apply(file, reference_span, entities, symbol_names, lookup.dialect) {
+        if read_escapes_synchronous_extent(
+            file,
+            reference_span,
+            entities,
+            symbol_names,
+            lookup.dialect,
+        ) {
             continue;
         }
         if let Some(call) = project_indexes
@@ -3718,7 +3845,8 @@ fn interprocedural_reads(
                     } else {
                         callback.execution
                     },
-                    evidence: None,
+                    owner: callback.owner.clone(),
+                    evidence: callback.evidence.clone(),
                 };
                 if !callback_summaries[*owner].contains(&forwarded) {
                     callback_summaries[*owner].push(forwarded);
@@ -4617,6 +4745,7 @@ mod tests {
         let callback = |parameter, execution: &str| ContractCallback {
             parameter,
             execution: execution.to_owned(),
+            owner: None,
             evidence: None,
         };
         let repeated = [callback(0, "deferred"), callback(0, "deferred")];
@@ -4626,6 +4755,21 @@ mod tests {
         // The same timing set in a different order stays equivalent.
         let reordered = [callback(1, "inline"), callback(0, "deferred")];
         assert!(equivalent_callbacks(&distinct, &reordered));
+    }
+
+    #[test]
+    fn callback_equivalence_rejects_different_owner_contexts() {
+        let inherited = ContractCallback {
+            parameter: 0,
+            execution: "deferred".into(),
+            owner: Some("inherited".into()),
+            evidence: None,
+        };
+        let leaf = ContractCallback {
+            owner: Some("leaf".into()),
+            ..inherited.clone()
+        };
+        assert!(!equivalent_callbacks(&[inherited], &[leaf]));
     }
 
     #[test]

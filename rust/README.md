@@ -23,7 +23,7 @@ Fact ownership is deliberately split:
 - `crates/solid-reactive-ir`: native analysis, producing the reactive program
   IR and the dialect-neutral `Finding` model;
 - `dialects/solid-v2/rules` and `dialects/solid-v1/rules`: each version's
-  rule catalog and finding construction (37 rules for 2.0, 41 for 1.x);
+  rule catalog and finding construction (32 rules for 2.0, 22 for 1.x);
 - `dialects/solid-v2/compiler` and `dialects/solid-v1/compiler`: the
   dom-expressions compiler and its Solid 1.x fork, each adapted to the
   `CompilerFactsProvider` seam.
@@ -80,7 +80,7 @@ Implemented rule slices are:
 - `primitive-in-leaf-owner`;
 - `flush-in-forbidden-scope`;
 - `missing-effect-function`;
-- `sync-node-received-async`;
+- `sync-computation-received-async`;
 - `refresh` writes flowing through the owned-scope rule (the refresh/affects
   *target* rules were removed: `Refreshable<T>` is the brand as a type, so
   every invalid target is already a TypeScript error);
@@ -96,13 +96,13 @@ Implemented rule slices are:
 - `reactive-read-after-await`, using TS-Go's dominance-proven
   `callsAfterAwait` facts rather than source-order guesses;
 - component props reads, aliases, Solid `merge`, and
-  `component-props-destructure`, plus `component-returns-conditionally` for
+  `no-destructure`, plus `components-return-once` for
   reactive return-shape guards, with Oxc binding/member shapes and checker
   identities.
 
 The slices above are the engine's analyses under Solid 2.0 vocabulary and
 the `solid-v2-rules` catalog. The Solid 1.x dialect projects the same IR
-onto its own 38-rule catalog (`v1/<rule>` names): the engine slices under
+onto its own 22-rule catalog (`v1/<rule>` names): the engine slices under
 1.x vocabulary plus the eslint-plugin-solid file-local surface (imports, JSX
 hygiene, structural preferences, and the decomposed `reactivity` rules). The
 dialect is auto-detected from the project's resolved `solid-js` version;

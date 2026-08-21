@@ -17,8 +17,8 @@ use typefacts::{Callability, Location, ReferenceSpace};
 
 use super::{
     ContractCallback, ContractExport, ContractReactiveRead, ContractReturn, EntitySymbols,
-    PackageContract, ReactiveSourceKind, StaticDefect, StaticDefectKind, SummaryNode, SummaryRead,
-    SummaryReads, SymbolId, location, location_order,
+    PackageContract, ReactiveSourceKind, RuntimeEnvironment, StaticDefect, StaticDefectKind,
+    SummaryNode, SummaryRead, SummaryReads, SymbolId, location, location_order,
 };
 use crate::cache::{CachedContractExports, ContractExportFragment, ContractNodeKey};
 use crate::pipeline::parallel_slice_results;
@@ -28,6 +28,7 @@ pub(super) struct ResolvedContractBinding {
     pub(super) imported_name: String,
     pub(super) package_name: String,
     pub(super) symbol: SymbolId,
+    pub(super) runtime_identity: String,
     pub(super) contract_location: Location,
     pub(super) summary: ContractExport,
 }
@@ -36,6 +37,141 @@ pub(super) struct ResolvedContracts {
     pub(super) bindings: Vec<ResolvedContractBinding>,
     pub(super) by_symbol: HashMap<SymbolId, ResolvedContractBinding>,
     pub(super) missing_exports: Vec<StaticDefect>,
+}
+
+fn runtime_identity_at(facts: &ProjectFacts, location: &Location) -> String {
+    facts
+        .typescript
+        .entities()
+        .find(|entity| entity.location == *location)
+        .map_or_else(String::new, |entity| entity.runtime_identity.to_string())
+}
+
+fn source_name_at(facts: &ProjectFacts, location: &Location) -> String {
+    facts
+        .files
+        .iter()
+        .find(|file| file.path.as_str() == location.path.as_ref())
+        .and_then(|file| {
+            file.source_text(solid_facts::core::Span::new(
+                u32::try_from(location.start_byte).ok()?,
+                u32::try_from(location.end_byte).ok()?,
+            ))
+        })
+        .unwrap_or_default()
+        .to_owned()
+}
+
+fn push_runtime_identity_conflict(
+    missing_exports: &mut Vec<StaticDefect>,
+    location: &Location,
+    seen_locations: &mut HashSet<(String, u64, u64)>,
+) {
+    let key = (
+        location.path.to_string(),
+        location.start_byte,
+        location.end_byte,
+    );
+    if !seen_locations.insert(key) {
+        return;
+    }
+    missing_exports.push(StaticDefect {
+        kind: StaticDefectKind::PackageContractExportMissing {
+            module: "<runtime-identity-conflict>".into(),
+            export: "<conflicting-contract-summaries>".into(),
+            reexported: true,
+        },
+        location: location.clone(),
+        analysis_context:
+            "multiple exact package contracts describe the same runtime export differently".into(),
+        fixes: vec![],
+        uncertain: false,
+    });
+}
+
+/// Joins package summaries through exact runtime identity after direct import
+/// and explicit re-export discovery.
+///
+/// This is deliberately an O(entities + contracted-bindings) pass. It does
+/// not resolve by spelling, scan every entity for every shorthand, or turn an
+/// empty identity into project ownership. Export-star chains can participate
+/// when TypeFacts exposes the same identity at a concrete binding; a missing
+/// identity remains fail-closed.
+fn join_runtime_identity_aliases(
+    facts: &ProjectFacts,
+    entities: &EntitySymbols,
+    bindings: &mut Vec<ResolvedContractBinding>,
+    by_symbol: &mut HashMap<SymbolId, ResolvedContractBinding>,
+    missing_exports: &mut Vec<StaticDefect>,
+) {
+    let mut candidates = HashMap::<String, Vec<ResolvedContractBinding>>::new();
+    for binding in bindings
+        .iter()
+        .filter(|binding| !binding.runtime_identity.is_empty())
+    {
+        let entries = candidates
+            .entry(binding.runtime_identity.clone())
+            .or_default();
+        if !entries.iter().any(|existing| {
+            existing.package_name == binding.package_name
+                && existing.contract_location == binding.contract_location
+                && existing.summary == binding.summary
+        }) {
+            entries.push(binding.clone());
+        }
+    }
+
+    let mut index = HashMap::new();
+    let mut conflicts = HashSet::new();
+    for (identity, entries) in candidates {
+        let Some(first) = entries.first().cloned() else {
+            continue;
+        };
+        if entries
+            .iter()
+            .skip(1)
+            .any(|entry| entry.package_name != first.package_name || entry.summary != first.summary)
+        {
+            conflicts.insert(identity);
+            continue;
+        }
+        index.insert(identity, first);
+    }
+
+    let mut bound_symbols = by_symbol.keys().cloned().collect::<HashSet<_>>();
+    let mut seen_locations = HashSet::new();
+    for entity in facts
+        .typescript
+        .entities()
+        .filter(|entity| !entity.runtime_identity.is_empty())
+    {
+        let Some(symbol) = entities.get(&entity.location).cloned() else {
+            continue;
+        };
+        if conflicts.contains(entity.runtime_identity.as_ref()) {
+            push_runtime_identity_conflict(missing_exports, &entity.location, &mut seen_locations);
+            continue;
+        }
+        let Some(template) = index.get(entity.runtime_identity.as_ref()).cloned() else {
+            continue;
+        };
+        if let Some(existing) = by_symbol.get(&symbol)
+            && (existing.package_name != template.package_name
+                || existing.summary != template.summary)
+        {
+            push_runtime_identity_conflict(missing_exports, &entity.location, &mut seen_locations);
+            continue;
+        }
+        if !bound_symbols.insert(symbol.clone()) {
+            continue;
+        }
+        let mut binding = template;
+        binding.local_name = source_name_at(facts, &entity.location);
+        binding.symbol = symbol.clone();
+        binding.runtime_identity = entity.runtime_identity.to_string();
+        by_symbol.insert(symbol, binding.clone());
+        bindings.push(binding);
+    }
 }
 
 /// Whether the dialect's own vocabulary outranks a package contract for a name
@@ -81,11 +217,43 @@ fn push_environment_dependent_export(
     });
 }
 
+fn selected_contract_export(
+    contract: &PackageContract,
+    module: &str,
+    summary: ContractExport,
+    environment: &RuntimeEnvironment,
+) -> Option<ContractExport> {
+    let suffix = module.strip_prefix(&contract.package.name)?;
+    let entrypoint_name = if suffix.is_empty() {
+        ".".to_owned()
+    } else if suffix.starts_with('/') {
+        format!(".{suffix}")
+    } else {
+        return None;
+    };
+    let entrypoint = contract.entrypoints.get(&entrypoint_name)?;
+    if !entrypoint.conditions.is_empty()
+        && !environment.matches_entrypoint_conditions(&entrypoint.conditions)
+    {
+        return None;
+    }
+    if summary.variants.is_empty() {
+        return Some(summary);
+    }
+    let matching = summary
+        .variants
+        .iter()
+        .filter(|variant| environment.matches_conditions(&variant.conditions))
+        .collect::<Vec<_>>();
+    (matching.len() == 1).then(|| *matching[0].summary.clone())
+}
+
 pub(super) fn resolve_contract_imports(
     facts: &ProjectFacts,
     contracts: &[PackageContract],
     entities: &EntitySymbols,
     dialect: &dyn Dialect,
+    environment: &RuntimeEnvironment,
 ) -> ResolvedContracts {
     let mut bindings = Vec::new();
     let mut by_symbol = HashMap::new();
@@ -144,7 +312,12 @@ pub(super) fn resolve_contract_imports(
                         if native_vocabulary_outranks_contract(dialect, &import.module, &imported) {
                             continue;
                         }
-                        if !summary.variants.is_empty() {
+                        let Some(summary) = selected_contract_export(
+                            contract,
+                            &import.module,
+                            summary,
+                            environment,
+                        ) else {
                             push_environment_dependent_export(
                                 &mut missing_exports,
                                 &import.module,
@@ -153,12 +326,13 @@ pub(super) fn resolve_contract_imports(
                                 member_location,
                             );
                             continue;
-                        }
+                        };
                         let resolved = ResolvedContractBinding {
                             local_name: imported.clone(),
                             imported_name: imported.clone(),
                             package_name: contract.package.name.clone(),
                             symbol: symbol.clone(),
+                            runtime_identity: runtime_identity_at(facts, &member_location),
                             contract_location: Location {
                                 path: format!("{}#{imported}", contract.source_path).into(),
                                 start_byte: 0,
@@ -223,7 +397,9 @@ pub(super) fn resolve_contract_imports(
                 if native_vocabulary_outranks_contract(dialect, &import.module, imported) {
                     continue;
                 }
-                if !summary.variants.is_empty() {
+                let Some(summary) =
+                    selected_contract_export(contract, &import.module, summary, environment)
+                else {
                     push_environment_dependent_export(
                         &mut missing_exports,
                         &import.module,
@@ -232,7 +408,7 @@ pub(super) fn resolve_contract_imports(
                         binding_location,
                     );
                     continue;
-                }
+                };
                 let resolved = ResolvedContractBinding {
                     local_name: file
                         .source_text(binding.local.span)
@@ -241,6 +417,7 @@ pub(super) fn resolve_contract_imports(
                     imported_name: imported.into(),
                     package_name: contract.package.name.clone(),
                     symbol: symbol.clone(),
+                    runtime_identity: runtime_identity_at(facts, &binding_location),
                     contract_location: Location {
                         path: format!("{}#{imported}", contract.source_path).into(),
                         start_byte: 0,
@@ -297,7 +474,9 @@ pub(super) fn resolve_contract_imports(
                 if native_vocabulary_outranks_contract(dialect, module, imported) {
                     continue;
                 }
-                if !summary.variants.is_empty() {
+                let Some(summary) =
+                    selected_contract_export(contract, module, summary, environment)
+                else {
                     push_environment_dependent_export(
                         &mut missing_exports,
                         module,
@@ -306,12 +485,13 @@ pub(super) fn resolve_contract_imports(
                         specifier_location,
                     );
                     continue;
-                }
+                };
                 let resolved = ResolvedContractBinding {
                     local_name: specifier.exported.to_string(),
                     imported_name: imported.to_owned(),
                     package_name: contract.package.name.clone(),
                     symbol: symbol.clone(),
+                    runtime_identity: runtime_identity_at(facts, &specifier_location),
                     contract_location: Location {
                         path: format!("{}#{imported}", contract.source_path).into(),
                         start_byte: 0,
@@ -324,6 +504,13 @@ pub(super) fn resolve_contract_imports(
             }
         }
     }
+    join_runtime_identity_aliases(
+        facts,
+        entities,
+        &mut bindings,
+        &mut by_symbol,
+        &mut missing_exports,
+    );
     ResolvedContracts {
         bindings,
         by_symbol,
@@ -420,6 +607,7 @@ fn contract_export_function(
         variants: Vec::new(),
         reactive_reads,
         callbacks: callback_summary,
+        owner_requirements: Vec::new(),
         returns,
         async_behavior: if node.r#async {
             "promise".into()

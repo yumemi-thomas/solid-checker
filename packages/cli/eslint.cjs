@@ -89,6 +89,36 @@ function configuredProject(context, config) {
   return discovered;
 }
 
+function runtimeConfiguration(config) {
+  const runtime = config.runtime;
+  if (runtime == null) return null;
+  if (typeof runtime !== "object" || Array.isArray(runtime)) {
+    throw new Error("settings.solidChecker.runtime must be an object");
+  }
+  const list = (value, name) => {
+    if (value == null) return [];
+    if (!Array.isArray(value) || !value.every(item => typeof item === "string" && item.length > 0)) {
+      throw new Error(`settings.solidChecker.runtime.${name} must be a non-empty string array`);
+    }
+    return [...new Set(value)].sort();
+  };
+  const allowed = (value, name) => {
+    if (value == null) return null;
+    if (typeof value !== "string" || value.length === 0) {
+      throw new Error(`settings.solidChecker.runtime.${name} must be a non-empty string`);
+    }
+    return value;
+  };
+  return {
+    target: allowed(runtime.target, "target"),
+    build: allowed(runtime.build, "build"),
+    rendering: allowed(runtime.rendering, "rendering"),
+    programBoundary: allowed(runtime.programBoundary, "programBoundary"),
+    conditions: list(runtime.conditions, "conditions"),
+    frameworkTransforms: list(runtime.frameworkTransforms, "frameworkTransforms")
+  };
+}
+
 function loadSnapshot(context) {
   const config = configuration(context);
   if (config.snapshot != null) return config.snapshot;
@@ -108,7 +138,22 @@ function loadSnapshot(context) {
     : [join(__dirname, "bin", "solid-checker.mjs")];
   const contracts = Array.isArray(config.contracts) ? config.contracts : [];
   const dialect = config.dialect ?? null;
-  const key = JSON.stringify({ command, commandArgs, project, contracts, dialect });
+  const presets = [...new Set(Array.isArray(config.preset) ? config.preset : [])].sort();
+  const runtime = runtimeConfiguration(config);
+  const configuredRules = Array.isArray(config.enableRule) ? config.enableRule : [];
+  const activeDefaultDisabled = [...(ownedRules.get(contextFilename(context)) ?? [])]
+    .filter(rule => manifestEntriesByRule.get(rule)?.defaultEnabled === false);
+  const enableRules = [...new Set([...configuredRules, ...activeDefaultDisabled])].sort();
+  const key = JSON.stringify({
+    command,
+    commandArgs,
+    project,
+    contracts,
+    dialect,
+    presets,
+    enableRules,
+    runtime
+  });
   if (snapshotCache.has(key)) {
     const cached = snapshotCache.get(key);
     if (cached instanceof Error) throw cached;
@@ -133,6 +178,20 @@ function loadSnapshot(context) {
   ];
   if (dialect) args.push("--dialect", dialect);
   for (const contract of contracts) args.push("--contract", contract);
+  for (const preset of presets) args.push("--preset", preset);
+  for (const rule of enableRules) args.push("--enable-rule", rule);
+  if (runtime?.target) args.push("--runtime-target", runtime.target);
+  if (runtime?.build) args.push("--runtime-build", runtime.build);
+  if (runtime?.rendering) args.push("--rendering", runtime.rendering);
+  if (runtime?.programBoundary) {
+    args.push("--program-boundary", runtime.programBoundary);
+  }
+  for (const condition of runtime?.conditions ?? []) {
+    args.push("--runtime-condition", condition);
+  }
+  for (const transform of runtime?.frameworkTransforms ?? []) {
+    args.push("--framework-transform", transform);
+  }
   const result = spawnSync(command, args, {
     cwd: dirname(project),
     encoding: "utf8",
@@ -212,6 +271,8 @@ const adapterSchema = [{
     cwd: { type: "string" },
     contracts: { type: "array", items: { type: "string" } },
     dialect: { type: "string" },
+    preset: { type: "array", items: { type: "string" } },
+    enableRule: { type: "array", items: { type: "string" } },
     snapshotPath: { type: "string" }
   }
 }];
@@ -293,7 +354,7 @@ function reportingRule(entry, catalog) {
       type: "problem",
       docs: {
         description: `solid-checker ${entry.code} ${entry.name}`,
-        recommended: !entry.uncertifiable,
+        recommended: entry.defaultEnabled && !entry.uncertifiable,
         url: `${catalog.docsBaseUrl}/${entry.name}.md`
       },
       fixable: "code",
@@ -344,7 +405,10 @@ const discoveredCatalogs = readdirSync(join(__dirname, "lib"))
       typeof catalog.dialect !== "string" ||
       typeof catalog.config !== "string" ||
       typeof catalog.namespace !== "string" ||
-      !Array.isArray(catalog.rules)
+      !Array.isArray(catalog.rules) ||
+      !catalog.rules.every(entry =>
+        typeof entry.defaultEnabled === "boolean" && Array.isArray(entry.presets)
+      )
     ) {
       throw new Error(`invalid solid-checker rule manifest ${file}`);
     }
@@ -361,6 +425,9 @@ const docsUrlsByRule = new Map(
     catalog.rules.map(entry => [entry.name, `${catalog.docsBaseUrl}/${entry.name}.md`])
   )
 );
+const manifestEntriesByRule = new Map(
+  discoveredCatalogs.flatMap(catalog => catalog.rules.map(entry => [entry.name, entry]))
+);
 
 const plugin = {
   meta: { name: "solid-checker", version: packageVersion },
@@ -368,10 +435,39 @@ const plugin = {
   configs: {}
 };
 
+// Old explicit ESLint keys retained for one minor release. These entries do
+// not appear in generated catalogs or presets; they delegate to the current
+// identity and carry ESLint's deprecation metadata.
+const DEPRECATED_RULE_KEYS = [
+  ["component-props-destructure", "no-destructure"],
+  ["component-returns-conditionally", "components-return-once"],
+  ["expected-function-got-expression", "reactive-handler-frozen"],
+  ["v1/expected-function-got-expression", "v1/reactive-handler-frozen"],
+  ["resolve-in-reactive-scope", "resolve-in-tracked-scope"],
+  ["sync-node-received-async", "sync-computation-received-async"]
+];
+
 for (const catalog of Object.values(manifests)) {
   for (const entry of catalog.rules) {
     plugin.rules[entry.name] = reportingRule(entry, catalog);
   }
+}
+
+for (const [oldName, currentName] of DEPRECATED_RULE_KEYS) {
+  const catalog = Object.values(manifests).find(candidate =>
+    candidate.rules.some(entry => entry.name === currentName)
+  );
+  if (!catalog) throw new Error(`deprecated rule target ${currentName} is absent`);
+  const entry = catalog.rules.find(candidate => candidate.name === currentName);
+  const delegated = reportingRule(entry, catalog);
+  plugin.rules[oldName] = {
+    ...delegated,
+    meta: {
+      ...delegated.meta,
+      deprecated: true,
+      replacedBy: [currentName]
+    }
+  };
 }
 
 plugin.configs.recommended = {
@@ -388,12 +484,25 @@ for (const catalog of Object.values(manifests)) {
       // per-rule rule owns, so both orders report each finding exactly once.
       "solid-checker/certification": "off",
       ...Object.fromEntries(
-        catalog.rules.map(entry => [
+        catalog.rules.filter(entry => entry.defaultEnabled).map(entry => [
           `solid-checker/${entry.name}`,
           entry.severity === "error" ? "error" : "warn"
         ])
       )
     }
+  };
+  const preferenceRules = catalog.rules.filter(entry =>
+    entry.presets.includes("preferences")
+  );
+  plugin.configs[`preferences-${catalog.config}`] = {
+    plugins: { "solid-checker": plugin },
+    settings: { solidChecker: { preset: ["preferences"] } },
+    rules: Object.fromEntries(
+      preferenceRules.map(entry => [
+        `solid-checker/${entry.name}`,
+        entry.severity === "error" ? "error" : "warn"
+      ])
+    )
   };
 }
 
@@ -405,6 +514,8 @@ module.exports._testing = {
   findingMessage,
   loadSnapshot,
   manifests,
+  manifestEntriesByRule,
+  deprecatedRuleKeys: DEPRECATED_RULE_KEYS,
   ownedRules,
   snapshotCache
 };

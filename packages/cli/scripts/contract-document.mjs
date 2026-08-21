@@ -1,3 +1,91 @@
+function semanticValue(value) {
+  if (Array.isArray(value)) return value.map(semanticValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(([key]) => key !== "evidence" && key !== "variants")
+      .map(([key, child]) => [key, semanticValue(child)])
+  );
+}
+
+function mergeEvidence(left, right) {
+  // Evidence for a narrower condition cannot promote the broader summary it
+  // collapses into. Preserve the representative's trust level and only union
+  // observations when both sides are already independently probed.
+  if (!left || !right || JSON.stringify(left) === JSON.stringify(right)) return left;
+  if (left.kind === "probed" && right.kind === "probed") {
+    return {
+      kind: "probed",
+      modes: [...new Set([...(left.modes ?? []), ...(right.modes ?? [])])].sort(),
+      calls: Math.max(left.calls ?? 1, right.calls ?? 1)
+    };
+  }
+  return left;
+}
+
+function mergeEquivalentEvidence(left, right) {
+  if (Array.isArray(left) && Array.isArray(right)) {
+    return left.map((value, index) => mergeEquivalentEvidence(value, right[index]));
+  }
+  if (left && right && typeof left === "object" && typeof right === "object") {
+    const merged = { ...left };
+    for (const [key, value] of Object.entries(right)) {
+      if (key === "evidence") merged.evidence = mergeEvidence(merged.evidence, value);
+      else if (key !== "variants" && key in merged) {
+        merged[key] = mergeEquivalentEvidence(merged[key], value);
+      } else if (key !== "variants") merged[key] = value;
+    }
+    return merged;
+  }
+  return left;
+}
+
+function conditionsContain(container, contained) {
+  return contained.every(condition => container.includes(condition));
+}
+
+function removeRedundantVariants(variants) {
+  const kept = [];
+  for (const variant of [...variants].sort(
+    (left, right) =>
+      left.conditions.length - right.conditions.length ||
+      JSON.stringify(left.conditions).localeCompare(JSON.stringify(right.conditions))
+  )) {
+    const covering = kept.find(
+      candidate =>
+        JSON.stringify(semanticValue(candidate.summary)) ===
+          JSON.stringify(semanticValue(variant.summary)) &&
+        conditionsContain(variant.conditions, candidate.conditions)
+    );
+    if (covering) {
+      covering.summary = mergeEquivalentEvidence(covering.summary, variant.summary);
+    } else {
+      kept.push(variant);
+    }
+  }
+  return kept;
+}
+
+function collapseEvidenceOnlyVariants(summary) {
+  const variants = removeRedundantVariants(
+    (summary.variants ?? []).map(variant => ({
+      ...variant,
+      summary: collapseEvidenceOnlyVariants(variant.summary)
+    }))
+  );
+  if (!variants.length) return summary;
+  const base = { ...summary };
+  delete base.variants;
+  const semantic = JSON.stringify(semanticValue(base));
+  if (variants.every(variant => JSON.stringify(semanticValue(variant.summary)) === semantic)) {
+    return variants.reduce(
+      (merged, variant) => mergeEquivalentEvidence(merged, variant.summary),
+      base
+    );
+  }
+  return { ...summary, variants };
+}
+
 function canonicalSummary(summary) {
   return JSON.stringify(summary);
 }
@@ -8,6 +96,7 @@ function plainSummary(summary) {
     !summary.reactiveReads?.length &&
     !summary.returns &&
     !summary.callbacks?.length &&
+    !summary.ownerRequirements?.length &&
     !summary.variants?.length &&
     !summary.asyncBehavior
   );
@@ -16,8 +105,10 @@ function plainSummary(summary) {
 export function normalizeContract(contract) {
   const unique = new Map();
   for (const entrypoint of Object.values(contract.entrypoints)) {
-    for (const summary of Object.values(entrypoint.exports)) {
-      unique.set(canonicalSummary(summary), summary);
+    for (const [name, summary] of Object.entries(entrypoint.exports)) {
+      const collapsed = collapseEvidenceOnlyVariants(summary);
+      entrypoint.exports[name] = collapsed;
+      unique.set(canonicalSummary(collapsed), collapsed);
     }
   }
 

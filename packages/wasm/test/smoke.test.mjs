@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createRequire } from "node:module";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 const require = createRequire(import.meta.url);
@@ -44,4 +45,11 @@ test("checks an in-memory project through WASI", () => {
 
   assert.equal(snapshot.status, "certified");
   assert.deepEqual(snapshot.findings, []);
+});
+
+test("documents the intentionally absent preference enablement channel", () => {
+  const readme = readFileSync(new URL("../README.md", import.meta.url), "utf8");
+  const declarations = readFileSync(new URL("../index.d.ts", import.meta.url), "utf8");
+  assert.match(readme, /cannot read `.solid-checker\/rule-options\.json`/);
+  assert.doesNotMatch(declarations, /presets|enableRules/);
 });

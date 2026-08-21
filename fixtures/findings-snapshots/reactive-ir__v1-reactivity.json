@@ -2,18 +2,8 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/no-proxy-apis",
-      "code": "SC8009",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 67,
-      "end": 112,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/package-contract-export-missing",
-      "code": "SC9001",
+      "rule": "v1/package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
@@ -62,23 +52,13 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
       "start": 1922,
       "end": 1934,
-      "fixes": 0
-    },
-    {
-      "rule": "v1/no-async-tracked-scope",
-      "code": "SC5004",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 1935,
-      "end": 1990,
       "fixes": 0
     },
     {
@@ -92,7 +72,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -112,7 +92,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/expected-function-got-expression",
+      "rule": "v1/reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",
       "severity": "warning",
@@ -122,7 +102,7 @@
       "fixes": 0
     },
     {
-      "rule": "v1/expected-function-got-expression",
+      "rule": "v1/reactive-handler-frozen",
       "code": "SC1007",
       "kind": "uncertifiable",
       "severity": "warning",
@@ -142,17 +122,17 @@
       "fixes": 0
     },
     {
-      "rule": "v1/untracked-derived-function",
-      "code": "SC1006",
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 4094,
-      "end": 4101,
+      "start": 4137,
+      "end": 4146,
       "fixes": 0
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -177,8 +157,8 @@
       "kind": "uncertifiable",
       "severity": "warning",
       "path": "fixtures/reactive-ir/v1-reactivity/App.tsx",
-      "start": 6462,
-      "end": 6473,
+      "start": 6500,
+      "end": 6538,
       "fixes": 0
     }
   ]

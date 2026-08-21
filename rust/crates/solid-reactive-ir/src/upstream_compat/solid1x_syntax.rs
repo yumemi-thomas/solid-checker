@@ -1,21 +1,8 @@
-//! `v1/jsx-no-duplicate-props`, `v1/jsx-no-script-url`,
-//! `v1/no-unknown-namespaces`, `v1/self-closing-comp` — eslint-plugin-solid's
-//! purely structural JSX rules, ported from the 1.x reactive solver's
-//! `solid_1_rules.rs` onto this checker's fact tables.
+//! `jsx-no-duplicate-props` — intrinsic content competition in both dialects,
+//! plus eslint-plugin-solid's Solid 1.x DOM-slot folding.
 //!
 //! Every rule here reads `file.ast.jsx_elements` and its nested attribute /
-//! spread / object-property tables. The context is consulted twice, both
-//! times for vocabulary rather than syntax: `jsx-no-script-url` recovers a
-//! URL from a literal string *type* when the value's text lives in another
-//! file, and `no-unknown-namespaces` asks the dialect which namespace
-//! prefixes its compiler recognizes.
-//!
-//! # Options
-//!
-//! `no-unknown-namespaces { allowedNamespaces }` and `self-closing-comp
-//! { component, html }` are read from the project's
-//! `.solid-checker/rule-options.json` (see [`super::solid1x_options`]),
-//! defaulting to upstream's defaults. `jsx-no-duplicate-props { ignoreCase }`
+//! spread / object-property tables. `jsx-no-duplicate-props { ignoreCase }`
 //! is the one option upstream ships here that the checker does not carry: no
 //! upstream corpus case exercises a behaviour difference for it, and an option
 //! nothing proves is a knob that can silently rot.
@@ -26,10 +13,7 @@ use solid_facts::FileFacts;
 use solid_facts::ast::{JsxAttributeValueKind, JsxElementFact};
 use solid_facts::core::Span;
 
-use super::{
-    UpstreamCompatContext, deletion_with_leading_whitespace, fix_replace, is_lowercase_led,
-    jsx_name_is_type_checked, static_string_expression, text, violation,
-};
+use super::{UpstreamCompatContext, is_lowercase_led, text, violation};
 use crate::StaticViolation;
 
 pub(super) fn check_file(
@@ -38,10 +22,7 @@ pub(super) fn check_file(
     violations: &mut Vec<StaticViolation>,
 ) {
     for element in &file.ast.jsx_elements {
-        jsx_no_duplicate_props(file, element, violations);
-        jsx_no_script_url(file, context, element, violations);
-        no_unknown_namespaces(file, context, element, violations);
-        self_closing_comp(file, context, element, violations);
+        jsx_no_duplicate_props(file, element, context, violations);
     }
 }
 
@@ -52,6 +33,7 @@ pub(super) fn check_file(
 fn jsx_no_duplicate_props(
     file: &FileFacts,
     element: &JsxElementFact,
+    context: &UpstreamCompatContext<'_>,
     violations: &mut Vec<StaticViolation>,
 ) {
     // Attributes and spread-carried object properties compete for the same
@@ -70,10 +52,8 @@ fn jsx_no_duplicate_props(
     // a later `onSave` overwrites an earlier one no matter how either is
     // spelled. Applying the DOM model there would silence real duplicates.
     let intrinsic = is_lowercase_led(text(file, element.name.span));
-    // Where the duplicate came from, so the narrowing below can tell which
-    // combinations TypeScript already reports. `None` is a direct attribute;
-    // `Some(index)` is a property of the index'th JSX spread.
-    let mut candidates: Vec<(Span, Option<String>, &str, Option<usize>)> = element
+    let folds_dom_slots = intrinsic && context.dialect.carries_eslint_era_rules();
+    let mut candidates: Vec<(Span, Option<String>, &str)> = element
         .attributes
         .iter()
         .map(|attribute| {
@@ -89,13 +69,12 @@ fn jsx_no_duplicate_props(
             let name = text(file, attribute.name);
             (
                 attribute.name,
-                duplicate_slot(name, static_literal, intrinsic),
+                duplicate_slot(name, static_literal, folds_dom_slots),
                 name,
-                None,
             )
         })
         .collect::<Vec<_>>();
-    for (index, spread) in element.spreads.iter().enumerate() {
+    for spread in &element.spreads {
         candidates.extend(
             super::direct_object_literal_properties(file, spread.argument)
                 .unwrap_or_default()
@@ -108,26 +87,23 @@ fn jsx_no_duplicate_props(
                         duplicate_slot(
                             name,
                             expression_is_static_literal(file, property.value),
-                            intrinsic,
+                            folds_dom_slots,
                         ),
                         name,
-                        Some(index),
                     )
                 }),
         );
     }
     candidates.sort_by_key(|(span, ..)| (span.start, span.end));
 
-    let mut names: HashMap<String, (&str, Option<usize>)> = HashMap::new();
+    let mut names: HashMap<String, &str> = HashMap::new();
     let mut seen_slots = HashSet::new();
-    for (name_span, slot, written, origin) in candidates {
+    for (name_span, slot, written) in candidates {
         let Some(normalized) = slot else {
             continue;
         };
         seen_slots.insert(normalized.clone());
-        if let Some((first_written, first_origin)) =
-            names.insert(normalized.clone(), (written, origin))
-        {
+        if let Some(first_written) = names.insert(normalized.clone(), written) {
             // Narrowed 2026-08-17 under AGENTS.md's absolute rule. When both
             // occurrences are spelled *identically*, TypeScript already makes
             // this exact claim, and which diagnostic it makes depends on where
@@ -141,23 +117,19 @@ fn jsx_no_duplicate_props(
             //   one spread object      TS1117 "An object literal cannot have
             //                         multiple properties with the same name"
             //
-            // Two combinations are *not* covered and keep reporting: a spread
-            // followed by an attribute (the later attribute legitimately wins,
-            // so TypeScript says nothing) and two different spread objects.
-            //
-            // What survives regardless of origin is the case this rule exists
+            // Spread overrides are deliberate and no longer report.
+            // What survives is the case this rule exists
             // for: two *differently spelled* props that the DOM lowering folds
             // into one slot -- `onClick`/`onclick` both become the delegated
             // `el.$$click` write, and `attr:title`/`title` share the template
             // attribute slot. TypeScript sees two distinct, legal properties
             // and is silent.
-            let typed_duplicate = written == first_written
-                && match (first_origin, origin) {
-                    (None, None) | (None, Some(_)) => true,
-                    (Some(first), Some(current)) => first == current,
-                    (Some(_), None) => false,
-                };
-            if typed_duplicate {
+            // Exact spellings are either TypeScript-owned (two direct
+            // attributes or one object literal) or an intentional JSX spread
+            // override. Only differently spelled keys that the DOM compiler
+            // folds into one slot remain in this rule, and components never
+            // enter that lowering.
+            if written == first_written || !folds_dom_slots {
                 continue;
             }
             let message = if normalized == "class" {
@@ -194,18 +166,19 @@ fn jsx_no_duplicate_props(
     // TS2710: "'children' are specified twice. The attribute named 'children'
     // will be overwritten." -- word for word this arm's claim, in both passes and
     // on components as well as intrinsic elements. Narrowed 2026-08-17 after
-    // `scripts/parity-tsc-ownership.mjs` matched the two spans.
+    // the TypeScript ownership audit matched the two spans.
     //
-    // Any set that also includes `innerHTML` or `textContent` still reports: those
+    // Any intrinsic set that also includes `innerHTML` or `textContent` still reports: those
     // conflicts draw no diagnostic at all, so the finding asserts more than
     // TS2710 does even where TS2710 also fires. Verified: `innerHTML` with
-    // `textContent`, and `innerHTML` with JSX children, are both silent.
+    // `textContent`, and `innerHTML` with JSX children, are both silent. On a
+    // component these are ordinary props that its implementation may combine.
     let only_the_children_pair = used.len() == 2
         && has_children_prop
         && has_children
         && !has_inner_html
         && !has_text_content;
-    if used.len() > 1 && !only_the_children_pair {
+    if intrinsic && used.len() > 1 && !only_the_children_pair {
         violations.push(violation(
             file,
             "SC8003",
@@ -401,342 +374,9 @@ fn is_numeric_literal(text: &str) -> bool {
     }
 }
 
-/// `v1/jsx-no-script-url` (SC8004) — a `javascript:` URL written as a static
-/// attribute value. Solid never executes these (nor do modern browsers, in
-/// most contexts), so the value is either dead or a mistaken stand-in for a
-/// real event handler.
-fn jsx_no_script_url(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    element: &JsxElementFact,
-    violations: &mut Vec<StaticViolation>,
-) {
-    for attribute in &element.attributes {
-        // The text folder recovers this file's literal shapes; the
-        // literal-string *type* recovers the same value when the binding
-        // lives elsewhere (an import, an inferred const in another file).
-        let value = attribute.expression.map_or_else(
-            || {
-                attribute
-                    .value
-                    .and_then(|span| super::static_string(file, span))
-            },
-            |span| {
-                static_string_expression(context, file, span)
-                    .or_else(|| super::literal_string_type(context, file, span))
-            },
-        );
-        let Some(value) = value else {
-            continue;
-        };
-        if is_javascript_protocol(&value) {
-            violations.push(violation(
-                file,
-                "SC8004",
-                "jsx-no-script-url",
-                "For security, don't use javascript: URLs. Use event handlers instead if you can.",
-                "Replace the javascript: URL with a real event handler prop (onClick, onSubmit, ...). Solid does not execute javascript: URLs, so the value only ever looked like it worked.",
-                attribute.value.unwrap_or(attribute.span),
-                vec![],
-            ));
-        }
-    }
-}
-
-/// Whether `value` is a `javascript:` URL, tolerating the leading control
-/// characters and interspersed tab/newline that a browser's URL parser
-/// ignores (and that an attacker can use to slip the literal string past a
-/// naive `.startsWith("javascript:")`).
-///
-/// The value is seen as source text, but a browser decodes character
-/// references in attribute values before URL parsing, so `java&#9;script:`
-/// and `javascript&colon;` are live URLs at runtime. Upstream's regex misses
-/// these; decoding first closes that gap.
-fn is_javascript_protocol(value: &str) -> bool {
-    let compact = decode_character_references(value)
-        .trim_start_matches(|character: char| character <= ' ')
-        .chars()
-        .filter(|character| !matches!(character, '\r' | '\n' | '\t'))
-        .collect::<String>();
-    compact
-        .get(..11)
-        .is_some_and(|prefix| prefix.eq_ignore_ascii_case("javascript:"))
-}
-
-/// Decodes the character references a `javascript:` URL can hide behind:
-/// numeric forms (`&#9;`, `&#x0A;`) and the named spellings of the
-/// characters the URL parser strips or the protocol needs (`&Tab;`,
-/// `&NewLine;`, `&colon;`). Everything else passes through unchanged.
-fn decode_character_references(value: &str) -> std::borrow::Cow<'_, str> {
-    if !value.contains('&') {
-        return std::borrow::Cow::Borrowed(value);
-    }
-    let mut decoded = String::with_capacity(value.len());
-    let mut rest = value;
-    while let Some(ampersand) = rest.find('&') {
-        decoded.push_str(&rest[..ampersand]);
-        rest = &rest[ampersand..];
-        let Some(semicolon) = rest.find(';') else {
-            break;
-        };
-        let reference = &rest[1..semicolon];
-        let replacement = match reference {
-            "Tab" => Some('\t'),
-            "NewLine" => Some('\n'),
-            "colon" => Some(':'),
-            _ => reference
-                .strip_prefix('#')
-                .and_then(|digits| {
-                    digits.strip_prefix(['x', 'X']).map_or_else(
-                        || digits.parse().ok(),
-                        |hex| u32::from_str_radix(hex, 16).ok(),
-                    )
-                })
-                .and_then(char::from_u32),
-        };
-        if let Some(replacement) = replacement {
-            decoded.push(replacement);
-            rest = &rest[semicolon + 1..];
-        } else {
-            decoded.push('&');
-            rest = &rest[1..];
-        }
-    }
-    decoded.push_str(rest);
-    std::borrow::Cow::Owned(decoded)
-}
-
-/// `v1/no-unknown-namespaces` (SC8012) — a JSX attribute using the
-/// `namespace:name` form with a namespace that is not one of Solid's
-/// compiler-recognized prefixes, is a namespace on a component (which the
-/// compiler never sees, since components receive props as a plain object),
-/// or is `style:`/`class:` (valid, but a prop already says the same thing
-/// more plainly).
-fn no_unknown_namespaces(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    element: &JsxElementFact,
-    violations: &mut Vec<StaticViolation>,
-) {
-    // Which prefixes the compiler recognizes is dialect vocabulary, asked of
-    // the dialect rather than baked into the rule: the 2.0 compiler dropped
-    // every 1.x namespace except `prop:`. Upstream's `allowedNamespaces`
-    // option accepts extra prefixes on top.
-    let known = context.dialect.jsx_attribute_namespaces();
-    let allowed = &context
-        .solid1x_options
-        .no_unknown_namespaces
-        .allowed_namespaces;
-    let component = !is_lowercase_led(text(file, element.name.span));
-    // Narrowed 2026-08-17 under AGENTS.md's absolute rule: on an intrinsic
-    // element every namespaced prop this rule objects to is already TS2322
-    // against the real solid-js@1.9.14 typings. Solid resolves its namespaces
-    // through mapped types over user-augmentable interfaces (`Directives`,
-    // `ExplicitProperties`, `ExplicitAttributes`, `ExplicitBoolAttributes`,
-    // `CustomEvents`) plus individually declared `on:*` events, so an
-    // unrecognised prefix has nothing to land on:
-    //
-    //   TS2322: Property 'model:value' does not exist on type
-    //           'HTMLAttributes<HTMLDivElement>'.
-    //
-    // That covers the `style:`/`class:` steer as well: neither prefix is
-    // declared at all, so `<div class:active={true} />` is a type error
-    // regardless of the style preference this rule was expressing. (A genuine
-    // gap in Solid's published typings, since the 1.x compiler does support
-    // both — but the type error is already speaking at that exact span, and
-    // compensating for the typings is not this checker's job.)
-    //
-    // A component keeps the rule: its props are a plain object, TypeScript is
-    // silent, and the claim — the compiler special-cases namespaces only on
-    // DOM elements it lowers directly, so the prop arrives inert — is one no
-    // type makes.
-    //
-    // And so does an intrinsic element whose attribute name TypeScript declines
-    // to check at all: a *hyphenated* local name such as `class:mt-10` escapes
-    // the excess-property check entirely (upstream's cases 04 and 05), so the
-    // narrowing must ask per attribute rather than bail on the element.
-    for attribute in element
-        .attributes
-        .iter()
-        .filter(|attribute| attribute.namespace.is_some())
-        .filter(|attribute| component || !jsx_name_is_type_checked(text(file, attribute.name)))
-    {
-        let namespace = text(file, attribute.namespace.expect("filtered to Some above"));
-        let local = text(file, attribute.local_name);
-        let mut result = if component {
-            let mut result = violation(
-                file,
-                "SC8012",
-                "no-unknown-namespaces",
-                "Namespaced props have no effect on components.",
-                format!(
-                    "Drop the `{namespace}:` prefix: components receive `{local}` as a plain prop, and Solid's compiler only special-cases namespaces on DOM elements it compiles directly."
-                ),
-                attribute.name,
-                vec![],
-            );
-            result.fixes.push(fix_replace(
-                file,
-                attribute.name,
-                format!("rename to `{local}`"),
-                local,
-            ));
-            result
-        } else if matches!(namespace, "style" | "class") && known.contains(&namespace) {
-            // Recognized by the 1.x compiler (the dialect's namespace table
-            // lists both), but upstream still steers authors to the plain
-            // prop with this exact message — the namespaced form exists for
-            // per-name toggling the plain prop usually expresses better.
-            violation(
-                file,
-                "SC8012",
-                "no-unknown-namespaces",
-                format!(
-                    "Using the '{namespace}:' special prefix is potentially confusing, prefer the '{namespace}' prop instead."
-                ),
-                format!(
-                    "Replace `{namespace}:{local}` with the plain `{namespace}` prop; the namespaced form exists for edge cases the plain prop cannot express, which this usage is not."
-                ),
-                attribute.name,
-                vec![],
-            )
-        } else if !known.contains(&namespace) && !allowed.iter().any(|extra| extra == namespace) {
-            violation(
-                file,
-                "SC8012",
-                "no-unknown-namespaces",
-                format!(
-                    "'{namespace}:' is not one of Solid's special prefixes for JSX attributes ('on:', 'oncapture:', 'use:', 'prop:', 'attr:', 'bool:')."
-                ),
-                "Use one of Solid's namespaces (on:, oncapture:, use:, prop:, attr:, bool:), or drop the prefix if a plain prop was intended; an unrecognized namespace compiles to nothing.",
-                attribute.name,
-                vec![],
-            )
-        } else {
-            continue;
-        };
-        result.analysis_context = format!("JSX namespace {namespace}");
-        violations.push(result);
-    }
-}
-
-/// The HTML elements with no closing tag; the only ones upstream's
-/// `html: "void"` policy wants self-closed.
-fn is_void_element(name: &str) -> bool {
-    matches!(
-        name,
-        "area"
-            | "base"
-            | "br"
-            | "col"
-            | "embed"
-            | "hr"
-            | "img"
-            | "input"
-            | "link"
-            | "meta"
-            | "param"
-            | "source"
-            | "track"
-            | "wbr"
-    )
-}
-
-/// `v1/self-closing-comp` (SC8016) — an element whose self-closing form
-/// disagrees with the configured policy for its category. Under upstream's
-/// defaults (`component: "all"`, `html: "all"`) only one direction is
-/// reachable — a childless element that fails to self-close — and that is
-/// all this rule reported before options existed. A `"none"` (or, for HTML,
-/// `"void"`) policy makes the inverse reachable: an element that self-closes
-/// where the policy says it must not.
-fn self_closing_comp(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    element: &JsxElementFact,
-    violations: &mut Vec<StaticViolation>,
-) {
-    use crate::upstream_compat::solid1x_options::SelfClosePolicy;
-    let options = &context.solid1x_options.self_closing_comp;
-    let name = text(file, element.name.span);
-    let component = !is_lowercase_led(name);
-    let policy = if component {
-        // `void` is not a meaningful component policy (upstream's schema
-        // forbids it); treat it as the default.
-        match options.component {
-            SelfClosePolicy::Void => SelfClosePolicy::All,
-            policy => policy,
-        }
-    } else {
-        options.html
-    };
-    let wanted = match policy {
-        SelfClosePolicy::All => true,
-        SelfClosePolicy::Void => is_void_element(name),
-        SelfClosePolicy::None => false,
-    };
-    if wanted {
-        if element.self_closing || !children_are_insignificant(file, element) {
-            return;
-        }
-        violations.push(violation(
-            file,
-            "SC8016",
-            "self-closing-comp",
-            "Empty components are self-closing.",
-            "Self-close this tag: it has no meaningful children, so the separate closing tag is unnecessary.",
-            element.opening,
-            vec![fix_replace(
-                file,
-                Span::new(element.opening.end.saturating_sub(1), element.span.end),
-                "self-close the tag",
-                " />",
-            )],
-        ));
-    } else if element.self_closing {
-        violations.push(violation(
-            file,
-            "SC8016",
-            "self-closing-comp",
-            "This element should not be self-closing.",
-            "Write the closing tag out: this project's rule options ask for explicit closing tags here.",
-            element.opening,
-            // The `/>` is replaced by `></name>`, and the whitespace that
-            // separated it from the tag name or last attribute goes with it:
-            // `<div />` becomes `<div></div>`, not `<div ></div>`. The
-            // replacement text opens with `>`, so nothing that was holding
-            // tokens apart is lost.
-            vec![fix_replace(
-                file,
-                deletion_with_leading_whitespace(
-                    &file.source,
-                    Span::new(element.span.end.saturating_sub(2), element.span.end),
-                ),
-                "write the closing tag",
-                format!("></{name}>"),
-            )],
-        ));
-    }
-}
-
-/// Whether an opening tag has nothing between it and its closing tag worth
-/// keeping the closing tag for: no children at all, or a single whitespace
-/// text child that contains a newline (formatting-only, the same test
-/// upstream uses — a non-breaking space is deliberately excluded, since that
-/// is content, not layout whitespace).
-fn children_are_insignificant(file: &FileFacts, element: &JsxElementFact) -> bool {
-    element.children.is_empty()
-        || (element.children.len() == 1 && {
-            let content = text(file, element.children[0]);
-            content.contains('\n')
-                && content
-                    .chars()
-                    .all(|character| character != '\u{a0}' && character.is_whitespace())
-        })
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{duplicate_slot, is_javascript_protocol, is_lowercase_led, is_numeric_literal};
+    use super::{duplicate_slot, is_lowercase_led, is_numeric_literal};
 
     /// The compiler lowers delegated events to `el.$$event = handler`, a
     /// property write where a later occurrence overwrites an earlier one —
@@ -882,41 +522,6 @@ mod tests {
             );
         }
     }
-
-    #[test]
-    fn detects_javascript_urls_case_insensitively() {
-        assert!(is_javascript_protocol("javascript:alert(1)"));
-        assert!(is_javascript_protocol("JavaScript:alert(1)"));
-        assert!(is_javascript_protocol("  javascript:alert(1)"));
-    }
-
-    #[test]
-    fn detects_javascript_urls_with_interspersed_control_characters() {
-        assert!(is_javascript_protocol("java\nscript:alert(1)"));
-        assert!(is_javascript_protocol("j\ta\tv\ta\ts\tc\tr\ti\tp\tt:x"));
-    }
-
-    /// Browsers decode character references in attribute values before URL
-    /// parsing, so these spellings are live `javascript:` URLs at runtime
-    /// even though upstream's source-text regex misses them.
-    #[test]
-    fn detects_javascript_urls_hidden_behind_character_references() {
-        assert!(is_javascript_protocol("java&#9;script:alert(1)"));
-        assert!(is_javascript_protocol("java&#x0A;script:alert(1)"));
-        assert!(is_javascript_protocol("java&Tab;script:alert(1)"));
-        assert!(is_javascript_protocol("java&NewLine;script:alert(1)"));
-        assert!(is_javascript_protocol("javascript&colon;alert(1)"));
-    }
-
-    #[test]
-    fn does_not_flag_ordinary_urls() {
-        assert!(!is_javascript_protocol("https://example.com"));
-        assert!(!is_javascript_protocol("/relative/path"));
-        assert!(!is_javascript_protocol(""));
-        assert!(!is_javascript_protocol("https://example.com/?q=a&b=c"));
-        assert!(!is_javascript_protocol("/path?fish&chips"));
-    }
-
     #[test]
     fn classifies_element_names_by_leading_case() {
         assert!(is_lowercase_led("div"));

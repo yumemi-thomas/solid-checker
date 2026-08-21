@@ -9,16 +9,18 @@ use typefacts::v3::EntityDemand;
 
 use crate::dialect::Dialect;
 use crate::{
-    BackendError, callee_property_location, structural_accessor_spans, typefacts_location,
+    BackendError, SemanticDemandOptions, callee_property_location, structural_accessor_spans,
+    typefacts_location,
 };
 
 pub(crate) fn plan(
     dialect: &'static Dialect,
     files: &[FileFacts],
+    options: SemanticDemandOptions,
 ) -> Result<Vec<EntityDemand>, BackendError> {
     let mut demands = Vec::new();
     for file in files {
-        plan_file(dialect, file, &mut demands)?;
+        plan_file(dialect, file, options, &mut demands)?;
     }
     stable_deduplicate(&mut demands);
     Ok(demands)
@@ -27,6 +29,7 @@ pub(crate) fn plan(
 fn plan_file(
     dialect: &'static Dialect,
     file: &FileFacts,
+    options: SemanticDemandOptions,
     demands: &mut Vec<EntityDemand>,
 ) -> Result<(), BackendError> {
     let path = file.path.to_string();
@@ -34,6 +37,7 @@ fn plan_file(
     let mut symbol_spans = HashMap::new();
     let mut type_descriptor_spans = HashSet::new();
     let mut runtime_value_domain_spans = HashSet::new();
+    let mut primitive_value_domain_spans = HashSet::new();
     let mut constant_value_spans = HashSet::new();
     let mut array_shape_spans = HashSet::new();
     let mut tuple_shape_spans = HashSet::new();
@@ -131,26 +135,6 @@ fn plan_file(
     }
     for element in &file.ast.jsx_elements {
         add_symbol(element.name.span, false);
-        // Some catalogs judge a dotted tag by its root identifier
-        // alone (`Foo` in `<Foo.Bar/>`), so the root span needs its own
-        // resolution — the combined span above answers a different
-        // question. Demanded only when the catalog carries the rule that
-        // reads the answer.
-        if dialect.semantic_demands.jsx_member_root_symbols
-            && let Some(name) = file.source_text(element.name.span)
-            && let Some(dot) = name.find('.')
-        {
-            let root_length = name[..dot].trim_end().len();
-            if root_length > 0 {
-                add_symbol(
-                    solid_facts::core::Span::new(
-                        element.name.span.start,
-                        element.name.span.start + u32::try_from(root_length).unwrap_or_default(),
-                    ),
-                    false,
-                );
-            }
-        }
         // This is intrinsic-element syntax, not component identity. The case
         // check only decides whether DOM event-handler type facts are useful;
         // component classification remains semantic in the reactive IR.
@@ -175,40 +159,17 @@ fn plan_file(
                 add_symbol(expression, false);
             }
             // A native event-handler value is judged by its resolved type:
-            // `expected-function-got-expression` (both catalogs) proves the
-            // value non-callable, `event-handlers` and `no-array-handlers`
-            // (1.x) prove it statically string/number or array-shaped. The
+            // `reactive-handler-frozen` (both catalogs) proves the
+            // value non-callable. The
             // `on:` namespace form is a handler too.
             let handler = native
                 && ((attribute.namespace.is_none() && name.starts_with("on"))
                     || attribute
                         .namespace
                         .is_some_and(|namespace| file.source_text(namespace) == Some("on")));
-            // The 1.x catalog also recovers static string *values*:
-            // `no-innerhtml`'s allowStatic acceptance, and `jsx-no-script-url`
-            // for URL-carrying attributes. That is the constant-value fact, not
-            // the rendered type: a literal type is only incidentally a value,
-            // and it is absent for a folded constant such as `"a" + "b"`, whose
-            // type widens to `string`.
-            let static_value_type_required = dialect.semantic_demands.jsx_static_value_types
-                && matches!(
-                    name,
-                    "innerHTML"
-                        | "innerhtml"
-                        | "href"
-                        | "src"
-                        | "action"
-                        | "formaction"
-                        | "formAction"
-                        | "data"
-                        | "to"
-                        | "xlink:href"
-                );
-            if handler || static_value_type_required {
+            if handler {
                 add_symbol(expression, false);
                 type_descriptor_spans.insert(expression);
-            }
-            if handler {
                 runtime_value_domain_spans.insert(expression);
                 array_shape_spans.insert(expression);
                 if attribute.runtime_type_escape {
@@ -219,39 +180,6 @@ fn plan_file(
                         runtime_value_domain_spans.insert(runtime_expression);
                         array_shape_spans.insert(runtime_expression);
                     }
-                }
-            }
-            if static_value_type_required {
-                constant_value_spans.insert(expression);
-            }
-            // `no-array-handlers` (1.x) asks whether the handler value is an
-            // array or tuple. That is `arrayShape`, not the rendered type: an
-            // aliased tuple renders as its alias, and a trailing `[]` reads the
-            // same on an array of functions and on a function returning an
-            // array. The span already carries a demand, so this adds a field to
-            // an existing entity rather than a new entity that could outrank
-            // another rule's `smallest_contained_*` lookup.
-            if handler && dialect.semantic_demands.jsx_handler_array_shapes {
-                array_shape_spans.insert(expression);
-                runtime_value_domain_spans.insert(expression);
-                // Solid's handler prop accepts a `[handler, data]` pair through
-                // an interface with members `0` and `1`. Deciding whether a
-                // value satisfies *that* needs the slot count and the first
-                // slot's callability, which `arrayShape` collapses: it reports
-                // `array` for a plain array too, and a plain array has no
-                // numbered members, so TypeScript already rejects it.
-                tuple_shape_spans.insert(expression);
-                // Assertions and `satisfies` change the apparent type without
-                // changing the runtime value. Demand the peeled expression as
-                // a separate subject so the rule can distinguish an asserted
-                // array from an asserted function instead of treating the
-                // wrapper as a safety proof.
-                let runtime_expression = file.ast.peel_ts_sugar_span(expression);
-                if runtime_expression != expression {
-                    add_symbol(runtime_expression, false);
-                    array_shape_spans.insert(runtime_expression);
-                    tuple_shape_spans.insert(runtime_expression);
-                    runtime_value_domain_spans.insert(runtime_expression);
                 }
             }
             // A non-literal `keyed` value on a control-flow component picks
@@ -313,20 +241,23 @@ fn plan_file(
             add_symbol(member.property, false);
         }
     }
-    // `prefer-for` (1.x) rewrites `.map()` to `<For>` only when the
-    // receiver's type proves an actual array; demand it at exactly the call
-    // shape the rule fires on.
-    if dialect.semantic_demands.array_map_receiver_types {
+    // Both dialects offer a `prefer-for` rewrite only when the receiver's type
+    // proves an actual array; demand it at exactly the call shape the rule
+    // fires on.
+    if dialect.semantic_demands.array_map_receiver_types && options.array_map_receiver_types {
         for call in &file.ast.calls {
-            let is_single_function_map = call.arguments.len() == 1
-                && matches!(
-                    call.arguments[0].value,
-                    solid_facts::ast::ArgumentValueKind::Function
-                        | solid_facts::ast::ArgumentValueKind::AsyncFunction
-                )
-                && file.ast.members.iter().any(|member| {
-                    member.span == call.callee && file.source_text(member.property) == Some("map")
-                });
+            let is_single_function_map =
+                file.compiler.jsx_operations.iter().any(|operation| {
+                    operation.kind == "jsx-expression" && operation.span == call.span
+                }) && call.arguments.len() == 1
+                    && (call.arguments[0].value == solid_facts::ast::ArgumentValueKind::Function
+                        || (dialect.semantic_demands.async_array_map_callbacks
+                            && call.arguments[0].value
+                                == solid_facts::ast::ArgumentValueKind::AsyncFunction))
+                    && file.ast.members.iter().any(|member| {
+                        member.span == call.callee
+                            && file.source_text(member.property) == Some("map")
+                    });
             if is_single_function_map {
                 let member = file
                     .ast
@@ -463,6 +394,16 @@ fn plan_file(
                 add_symbol(value_span, true);
                 type_descriptor_spans.insert(value_span);
                 runtime_value_domain_spans.insert(value_span);
+                // Assertions change the apparent type at the argument span,
+                // not the runtime value. SC7007 therefore needs the same
+                // primitive/library proof fields on the peeled expression;
+                // consulting the asserted span would certify `1n as string`
+                // and reject `1 as bigint` backwards.
+                if dialect.semantic_demands.server_argument_library_types {
+                    library_type_spans.insert(value_span);
+                    primitive_value_domain_spans.insert(value_span);
+                    constant_value_spans.insert(value_span);
+                }
             }
             // SC7007 must classify inline values such as `new Date()` as
             // well as identifiers. Demand the compiler's library identities
@@ -470,19 +411,77 @@ fn plan_file(
             // dialect; an empty identity set proves the value is outside the
             // rich transport set, while an absent fact remains explicit.
             //
-            // Library identities are the same for every inhabitant of a type,
-            // so this demand is insensitive to the *value* written. The
-            // remaining three are not: a type descriptor and a constant value
-            // both spell the literal out, so demanding them at every argument
-            // made `createSignal(0)` -> `createSignal(1)` a project-wide
-            // TypeScript-table change that invalidated every late-stage cache.
-            // A primitive or nullish literal is already classified by the AST
-            // and cannot be a rich transport value except as a regexp, which
-            // its library identity still reports -- so those shapes are left
-            // out of the value-carrying demands.
+            // Library identities and primitive domains are stable for every
+            // inhabitant of a type, so these demands are insensitive to the
+            // exact value written. Type descriptors and constant values are
+            // not: both can spell the literal out, so demanding them at every
+            // argument made `createSignal(0)` -> `createSignal(1)` a
+            // project-wide TypeScript-table change that invalidated every
+            // late-stage cache. A primitive or nullish literal is already
+            // classified without those value-carrying facts; regexp remains
+            // distinguishable through its library identity.
             if dialect.semantic_demands.server_argument_library_types && !argument.spread {
                 add_symbol(argument.span, false);
                 library_type_spans.insert(argument.span);
+                primitive_value_domain_spans.insert(argument.span);
+                // `JSON.stringify` reaches nested values, so a Date sealed
+                // inside an object literal argument is flattened exactly as a
+                // top-level one is. Demand the same library identity at each
+                // of that literal's property values so the nested case has a
+                // fact to stand on instead of an obligation.
+                //
+                // The spans all come from *inside* this argument, so the cost
+                // is bounded by the argument rather than by the project. And
+                // like the identities above -- unlike a type descriptor or a
+                // constant value -- a library identity is stable for every
+                // inhabitant of a type, so this cannot turn `{ n: 0 }` into
+                // `{ n: 1 }` as a table-invalidating edit.
+                //
+                // The same object written through a binding is reached by
+                // following the binder's own resolution for this exact
+                // reference — never by matching the spelling, and never by
+                // sweeping every binding in the file. One reference, one
+                // declaration, one literal.
+                let literals = [
+                    matches!(
+                        argument.runtime_value_kind,
+                        solid_facts::ast::RuntimeValueKind::Object
+                    )
+                    .then(|| argument.value_span.unwrap_or(argument.span)),
+                    argument
+                        .binding_declaration
+                        .and_then(|declaration| {
+                            file.ast.bindings.iter().find(|binding| {
+                                binding.immutable
+                                    && binding
+                                        .names
+                                        .first()
+                                        .is_some_and(|name| name.span == declaration)
+                            })
+                        })
+                        .and_then(|binding| binding.initializer),
+                ];
+                for literal in literals.into_iter().flatten() {
+                    for property in file
+                        .ast
+                        .object_properties
+                        .iter()
+                        .filter(|property| literal.contains(property.span))
+                    {
+                        for span in [Some(property.value), property.shorthand_binding]
+                            .into_iter()
+                            .flatten()
+                        {
+                            add_symbol(span, false);
+                            library_type_spans.insert(span);
+                            // The safety half of the proof needs each leaf's
+                            // primitive domain as well. Both fields are stable
+                            // for every inhabitant of a type, so neither makes
+                            // a value edit invalidate the table.
+                            primitive_value_domain_spans.insert(span);
+                        }
+                    }
+                }
                 if !matches!(
                     argument.runtime_value_kind,
                     solid_facts::ast::RuntimeValueKind::Primitive
@@ -491,6 +490,20 @@ fn plan_file(
                     type_descriptor_spans.insert(argument.span);
                     constant_value_spans.insert(argument.span);
                 }
+            }
+            if argument.spread {
+                let span = file
+                    .ast
+                    .spreads
+                    .iter()
+                    .find(|spread| spread.span == argument.span)
+                    .map_or(argument.span, |spread| spread.argument);
+                add_symbol(span, false);
+                // A spread call's visible argument count is not its expanded
+                // arity. Type Facts reports exactLength only for required-only
+                // tuple types whose union constituents agree; optional, rest,
+                // and array shapes stay absent and therefore fail closed.
+                tuple_shape_spans.insert(span);
             }
             // Solid 2 effect bundles accept a callable `effect` property. An
             // asserted or nullable identifier in that slot cannot be judged
@@ -534,6 +547,7 @@ fn plan_file(
         planned.type_descriptor = type_descriptor_spans.contains(&span);
         planned.callability = type_descriptor_spans.contains(&span);
         planned.runtime_value_domain = runtime_value_domain_spans.contains(&span);
+        planned.primitive_value_domain = primitive_value_domain_spans.contains(&span);
         planned.constant_value = constant_value_spans.contains(&span);
         planned.array_shape = array_shape_spans.contains(&span);
         planned.tuple_shape = tuple_shape_spans.contains(&span);
@@ -606,6 +620,7 @@ fn demand(location: typefacts::Location) -> EntityDemand {
         structural_accessor: false,
         callability: false,
         runtime_value_domain: false,
+        primitive_value_domain: false,
         call_result_domain: false,
         constant_value: false,
         array_shape: false,
@@ -668,6 +683,7 @@ fn stable_deduplicate(demands: &mut Vec<EntityDemand>) {
             current.structural_accessor |= demand.structural_accessor;
             current.callability |= demand.callability;
             current.runtime_value_domain |= demand.runtime_value_domain;
+            current.primitive_value_domain |= demand.primitive_value_domain;
             current.call_result_domain |= demand.call_result_domain;
             current.constant_value |= demand.constant_value;
             current.array_shape |= demand.array_shape;

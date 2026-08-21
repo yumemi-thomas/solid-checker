@@ -12,7 +12,7 @@
       "fixes": 0
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "code": "SC1007",
       "kind": "violation",
       "severity": "warning",
@@ -22,7 +22,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "violation",
       "severity": "error",
@@ -32,17 +32,7 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/props-callers/App.tsx",
-      "start": 3254,
-      "end": 3260,
-      "fixes": 0
-    },
-    {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "code": "SC1004",
       "kind": "violation",
       "severity": "error",
@@ -52,17 +42,7 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/props-callers/App.tsx",
-      "start": 3532,
-      "end": 3541,
-      "fixes": 0
-    },
-    {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "code": "SC1004",
       "kind": "violation",
       "severity": "error",
@@ -72,17 +52,7 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/props-callers/App.tsx",
-      "start": 3723,
-      "end": 3729,
-      "fixes": 0
-    },
-    {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "code": "SC1004",
       "kind": "violation",
       "severity": "error",

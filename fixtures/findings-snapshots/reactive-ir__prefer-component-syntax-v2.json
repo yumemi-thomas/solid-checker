@@ -1,15 +1,4 @@
 {
-  "status": "violation",
-  "findings": [
-    {
-      "rule": "prefer-component-syntax",
-      "code": "SC8018",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/prefer-component-syntax-v2/App.tsx",
-      "start": 110,
-      "end": 120,
-      "fixes": 0
-    }
-  ]
+  "status": "certified",
+  "findings": []
 }

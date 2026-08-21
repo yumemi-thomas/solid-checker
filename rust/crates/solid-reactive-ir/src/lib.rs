@@ -25,7 +25,7 @@ mod upstream_compat;
 
 pub use pipeline::{build, build_with_contracts, build_with_contracts_measured};
 
-pub use upstream_compat::solid1x_options::{RuleOptions, Solid1xRuleOptions};
+pub use upstream_compat::solid1x_options::{RuleOptions, RuleOverride, Solid1xRuleOptions};
 
 pub use findings::{
     DOCS_BASE_URL, EvidenceStep, Finding, RuleManifestIdentity, RuleMetadata, SolveTimings,
@@ -35,14 +35,14 @@ pub use findings::{
 pub use projection::{
     CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, PackageContractIssue,
     PackageContractIssueKind, StaticDefectTerms, StaticDefectText, project_finding,
-    project_findings, static_defect_text,
+    project_findings, static_defect_text, suppress_findings_owned_by_enabled_rules,
 };
 
 use cache::{BuildIdentity, IncrementalCacheState, RetainedBuild};
 use pipeline::build_with_contracts_measured_incremental;
 
 use std::{
-    collections::{BTreeMap, HashMap, HashSet, VecDeque},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque},
     sync::Arc,
     time::{Duration, Instant},
 };
@@ -83,6 +83,199 @@ pub enum ExecutionRole {
     EventCallback,
     DirectiveApply,
     UntrackedRendering,
+}
+
+/// Explicit runtime evidence supplied by the host integration. An empty
+/// value means that the project has not selected a runtime; source heuristics
+/// may still contribute facts, but they cannot discharge a condition-specific
+/// package summary or prove CSR/SSR.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RuntimeEnvironment {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<RuntimeTarget>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub build: Option<RuntimeBuild>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rendering: Option<RuntimeRendering>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub conditions: BTreeSet<String>,
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub framework_transforms: BTreeSet<String>,
+    /// Whether the analyzed project is the whole program.
+    ///
+    /// This is evidence the analyzer cannot derive, in the same class as
+    /// [`Self::rendering`]: nothing inside a tsconfig proves that nothing
+    /// outside it imports from the tsconfig. Left unset, every exported symbol
+    /// is assumed reachable by callers this build cannot see, which is why an
+    /// exported component's props and an exported helper's owner stay proof
+    /// obligations however completely the project itself is analyzed.
+    ///
+    /// Selecting [`ProgramBoundary::Closed`] asserts that the analyzed files
+    /// are the entire program. It does **not** license guessing: the caller
+    /// set must still be enumerated exactly, every reference must still
+    /// resolve to a use the analyzer understands, and a missing reference list
+    /// is still the absence of a fact. All it removes is the assumption that
+    /// an *additional*, unseen caller exists.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub program_boundary: Option<ProgramBoundary>,
+}
+
+/// Whether callers outside the analyzed project may exist.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ProgramBoundary {
+    /// The default. An exported symbol may be imported by code this build
+    /// cannot see.
+    Open,
+    /// The analyzed files are the whole program; an export reaches no caller
+    /// outside them.
+    Closed,
+}
+
+impl RuntimeEnvironment {
+    /// Whether the user has asserted that the analyzed project is the whole
+    /// program. Absent selection is [`ProgramBoundary::Open`], never closed:
+    /// a build that was never told stays fail-closed.
+    #[must_use]
+    pub const fn program_is_closed(&self) -> bool {
+        matches!(self.program_boundary, Some(ProgramBoundary::Closed))
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeTarget {
+    Browser,
+    Node,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeBuild {
+    Development,
+    Production,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum RuntimeRendering {
+    Csr,
+    StringSsr,
+    StreamingSsr,
+}
+
+impl RuntimeEnvironment {
+    pub fn validate(&self) -> Result<(), String> {
+        if self
+            .conditions
+            .iter()
+            .chain(self.framework_transforms.iter())
+            .any(String::is_empty)
+        {
+            return Err("runtime conditions and framework transforms must be nonempty".into());
+        }
+        if matches!(self.rendering, Some(RuntimeRendering::Csr))
+            && self.target == Some(RuntimeTarget::Node)
+        {
+            return Err("CSR cannot be selected with the node runtime".into());
+        }
+        if matches!(
+            self.rendering,
+            Some(RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr)
+        ) && self.target == Some(RuntimeTarget::Browser)
+        {
+            return Err("SSR cannot be selected with the browser runtime".into());
+        }
+        let selected = self.selected_conditions();
+        for (label, alternatives) in [
+            ("runtime target", &["browser", "node", "deno", "worker"][..]),
+            ("build mode", &["development", "production"][..]),
+            (
+                "rendering mode",
+                &["csr", "string-ssr", "streaming-ssr"][..],
+            ),
+        ] {
+            let present = alternatives
+                .iter()
+                .filter(|condition| selected.contains(**condition))
+                .copied()
+                .collect::<Vec<_>>();
+            if present.len() > 1 {
+                return Err(format!(
+                    "runtime selection contains contradictory {label} conditions: {}",
+                    present.join(", ")
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    /// Conditions used to select an exact package-contract variant. The
+    /// explicit free-form set carries export-map conditions such as `import`;
+    /// the structured fields cover the host/runtime vocabulary used by rules.
+    #[must_use]
+    pub fn selected_conditions(&self) -> BTreeSet<String> {
+        let mut conditions = self.conditions.clone();
+        if let Some(target) = self.target {
+            conditions.insert(
+                match target {
+                    RuntimeTarget::Browser => "browser",
+                    RuntimeTarget::Node => "node",
+                }
+                .into(),
+            );
+        }
+        if let Some(build) = self.build {
+            conditions.insert(
+                match build {
+                    RuntimeBuild::Development => "development",
+                    RuntimeBuild::Production => "production",
+                }
+                .into(),
+            );
+        }
+        if let Some(rendering) = self.rendering {
+            conditions.insert(
+                match rendering {
+                    RuntimeRendering::Csr => "csr",
+                    RuntimeRendering::StringSsr => "string-ssr",
+                    RuntimeRendering::StreamingSsr => "streaming-ssr",
+                }
+                .into(),
+            );
+        }
+        conditions.extend(self.framework_transforms.iter().cloned());
+        conditions
+    }
+
+    #[must_use]
+    pub fn matches_conditions(&self, required: &[String]) -> bool {
+        let selected = self.selected_conditions();
+        !required.is_empty()
+            && required
+                .iter()
+                .all(|condition| selected.contains(condition))
+    }
+
+    pub fn matches_entrypoint_conditions(&self, supported: &[String]) -> bool {
+        let selected = self.selected_conditions();
+        if supported.is_empty() {
+            return false;
+        }
+        if selected.is_empty() {
+            // TypeScript's ESM resolver already selects the ordinary import
+            // path without a host selector. `default`/`import` describe that
+            // resolver choice, not an unknown browser-vs-node runtime. Host
+            // conditions remain blocked until the caller selects one.
+            return supported
+                .iter()
+                .all(|condition| matches!(condition.as_str(), "default" | "import" | "require"));
+        }
+        supported
+            .iter()
+            .any(|condition| selected.contains(condition))
+    }
 }
 
 impl ExecutionRole {
@@ -268,26 +461,9 @@ pub struct StaticDefect {
     pub uncertain: bool,
 }
 
-/// The boolean spelling written on a `draggable` attribute. Each selects a
-/// different wrong runtime state under the reporting dialect; the wording
-/// arms in `projection` name the exact spelling and consequence.
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "kebab-case")]
-pub enum DraggableSpelling {
-    /// The bare `draggable` shorthand — an empty attribute value, whose
-    /// enumerated state is the invalid-value default `auto`.
-    #[default]
-    Shorthand,
-    /// `draggable={false}` on a draggable-by-default element (`img`,
-    /// `a[href]`) under a runtime that removes the attribute on `false` —
-    /// removal selects `auto`, which re-enables dragging there.
-    LiteralFalseOnDraggableDefault,
-}
-
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case", tag = "kind")]
 pub enum StaticDefectKind {
-    ExecutionMapIncomplete,
     ReactiveObjectDestructure {
         source: String,
         component_props: bool,
@@ -296,21 +472,6 @@ pub enum StaticDefectKind {
         accessor: String,
     },
     ComponentReturnsConditionally,
-    PreferComponentSyntax {
-        name: String,
-    },
-    ImplicitDraggableBoolean {
-        /// Which boolean spelling was written; the wording names it. The
-        /// literal spellings are only emitted for dialects whose runtime
-        /// treats boolean literals as attribute presence (Solid 2.0).
-        #[serde(default)]
-        spelling: DraggableSpelling,
-    },
-    InvalidJsxNesting {
-        parent: String,
-        child: String,
-        ancestor: bool,
-    },
     PackageContractExportMissing {
         module: String,
         export: String,
@@ -339,9 +500,6 @@ pub enum StaticDefectKind {
         contract_stub: String,
     },
     MissingEffectFunction,
-    UntrackedDerivedFunction {
-        name: String,
-    },
     ReactiveSourceUncaptured {
         source: String,
         callee: String,
@@ -400,8 +558,7 @@ impl StaticDefectKind {
     pub fn is_unresolved_obligation(&self) -> bool {
         matches!(
             self,
-            Self::ExecutionMapIncomplete
-                | Self::PackageContractExportMissing { .. }
+            Self::PackageContractExportMissing { .. }
                 | Self::PackageContractEnvironmentDependent { .. }
                 | Self::UnknownCallbackExecution { .. }
                 | Self::ReactiveSourceUncaptured { .. }
@@ -717,6 +874,8 @@ pub struct ContractExport {
     pub returns: Option<ContractReturn>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub callbacks: Vec<ContractCallback>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub owner_requirements: Vec<ContractOwnerRequirement>,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub async_behavior: String,
 }
@@ -744,6 +903,19 @@ pub struct ContractReactiveRead {
 pub struct ContractCallback {
     pub parameter: usize,
     pub execution: String,
+    /// The owner context in which the runtime invokes this callback. Missing
+    /// means the package contract describes timing only; consumers must keep
+    /// the existing fail-closed owner behavior for that callback.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub evidence: Option<ContractClaimEvidence>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContractOwnerRequirement {
+    pub operation: OwnerRequirementOperation,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub evidence: Option<ContractClaimEvidence>,
 }
@@ -901,6 +1073,10 @@ impl PackageContract {
                     .callbacks
                     .iter()
                     .all(|callback| evidence_is_certifiable(callback.evidence.as_ref()))
+                && summary
+                    .owner_requirements
+                    .iter()
+                    .all(|requirement| evidence_is_certifiable(requirement.evidence.as_ref()))
                 && summary.returns.as_ref().is_none_or(returned_is_certifiable)
                 && summary
                     .variants
@@ -954,6 +1130,7 @@ impl PackageContract {
             && (!summary.reactive_reads.is_empty()
                 || summary.returns.is_some()
                 || !summary.callbacks.is_empty()
+                || !summary.owner_requirements.is_empty()
                 || !summary.async_behavior.is_empty())
         {
             return Err(format!(
@@ -990,9 +1167,26 @@ impl PackageContract {
             ));
         }
         for callback in &summary.callbacks {
+            if callback.owner.as_deref().is_some_and(|owner| {
+                !matches!(
+                    owner,
+                    "inherited" | "created" | "unowned" | "conditional" | "leaf"
+                )
+            }) {
+                return Err(format!(
+                    "package contract export {entrypoint}:{name} has an invalid callback owner"
+                ));
+            }
             validate_claim_evidence(callback.evidence.as_ref()).map_err(|reason| {
                 format!(
                     "package contract export {entrypoint}:{name} has invalid callback evidence: {reason}"
+                )
+            })?;
+        }
+        for requirement in &summary.owner_requirements {
+            validate_claim_evidence(requirement.evidence.as_ref()).map_err(|reason| {
+                format!(
+                    "package contract export {entrypoint}:{name} has invalid owner requirement evidence: {reason}"
                 )
             })?;
         }
@@ -1503,9 +1697,7 @@ fn containing_summary_function_indexed(
     path: &str,
     span: Span,
 ) -> Option<usize> {
-    functions_for_path(functions, by_path, path)
-        .find(|(_, function)| function.body.contains(span))
-        .map(|(index, _)| index)
+    containing_function_indexed(functions, by_path, path, span)
 }
 
 trait FunctionBoundary {
@@ -1760,6 +1952,59 @@ mod tests {
     }
 
     #[test]
+    fn runtime_environment_requires_exact_noncontradictory_selection() {
+        let mut environment = RuntimeEnvironment {
+            target: Some(RuntimeTarget::Browser),
+            build: Some(RuntimeBuild::Production),
+            rendering: Some(RuntimeRendering::Csr),
+            conditions: BTreeSet::from(["import".into()]),
+            framework_transforms: BTreeSet::from(["use-server".into()]),
+            program_boundary: None,
+        };
+        assert!(environment.validate().is_ok());
+        assert_eq!(
+            environment.selected_conditions(),
+            BTreeSet::from([
+                "browser".into(),
+                "import".into(),
+                "production".into(),
+                "csr".into(),
+                "use-server".into()
+            ])
+        );
+        assert!(environment.matches_conditions(&["browser".into(), "import".into()]));
+        assert!(environment.matches_entrypoint_conditions(&["node".into(), "browser".into()]));
+        assert!(!environment.matches_conditions(&["node".into()]));
+        // The program boundary is a build-wide premise, not a package export
+        // condition. It must never reach contract variant selection, or
+        // asserting a closed program would silently pick a different
+        // entrypoint.
+        environment.program_boundary = Some(ProgramBoundary::Closed);
+        assert!(environment.validate().is_ok());
+        assert!(!environment.selected_conditions().contains("closed"));
+        assert!(environment.program_is_closed());
+        environment.program_boundary = Some(ProgramBoundary::Open);
+        assert!(!environment.program_is_closed());
+        environment.program_boundary = None;
+        assert!(!environment.program_is_closed());
+        let unselected = RuntimeEnvironment::default();
+        assert!(unselected.matches_entrypoint_conditions(&["default".into(), "import".into()]));
+        assert!(!unselected.matches_entrypoint_conditions(&["browser".into(), "import".into()]));
+
+        environment.target = Some(RuntimeTarget::Node);
+        assert!(environment.validate().is_err());
+        environment.target = Some(RuntimeTarget::Browser);
+        environment.conditions.insert(String::new());
+        assert!(environment.validate().is_err());
+        environment.conditions.remove("");
+        environment.conditions.insert("node".into());
+        assert!(environment.validate().is_err());
+        environment.conditions.remove("node");
+        environment.conditions.insert("development".into());
+        assert!(environment.validate().is_err());
+    }
+
+    #[test]
     fn package_contract_validation_enforces_release_identity_and_surface() {
         let valid = PackageContract {
             schema_version: 1,
@@ -1829,6 +2074,7 @@ mod tests {
                             callbacks: vec![ContractCallback {
                                 parameter: 0,
                                 execution: "tracked".into(),
+                                owner: None,
                                 evidence: Some(ContractClaimEvidence {
                                     kind: "inferred".into(),
                                     ..ContractClaimEvidence::default()
@@ -1898,6 +2144,7 @@ mod tests {
                 callbacks: vec![ContractCallback {
                     parameter: 0,
                     execution: "tracked".into(),
+                    owner: None,
                     evidence: Some(ContractClaimEvidence {
                         kind: "probed".into(),
                         modes: vec!["client".into()],
@@ -1918,10 +2165,85 @@ mod tests {
             .exports
             .get_mut("createValue")
             .unwrap()
+            .callbacks[0]
+            .owner = Some("leaf".into());
+        assert!(conditional.validate().is_ok());
+
+        conditional
+            .entrypoints
+            .get_mut(".")
+            .unwrap()
+            .exports
+            .get_mut("createValue")
+            .unwrap()
             .variants[0]
             .conditions
             .clear();
         assert!(conditional.validate().is_err());
+
+        let mut owner_claim = PackageContract {
+            schema_version: 1,
+            package: ContractPackage {
+                name: "reactive-package".into(),
+                version: "1.0.0".into(),
+                integrity: String::new(),
+            },
+            compiler_facts_protocol: 1,
+            artifacts: ContractArtifacts::default(),
+            entrypoints: BTreeMap::from([(
+                ".".into(),
+                ContractEntrypoint {
+                    exports: BTreeMap::from([(
+                        "requiresOwner".into(),
+                        ContractExport {
+                            kind: "function".into(),
+                            owner_requirements: vec![ContractOwnerRequirement {
+                                operation: OwnerRequirementOperation::Effect,
+                                evidence: Some(ContractClaimEvidence {
+                                    kind: "inferred".into(),
+                                    ..ContractClaimEvidence::default()
+                                }),
+                            }],
+                            ..ContractExport::default()
+                        },
+                    )]),
+                    conditions: Vec::new(),
+                },
+            )]),
+            evidence: ContractEvidence {
+                kind: "reviewed".into(),
+                generator: String::new(),
+            },
+            contract_hash: String::new(),
+            source_path: String::new(),
+        };
+        assert!(owner_claim.validate().is_ok());
+        assert!(!owner_claim.claims_are_certifiable());
+        owner_claim
+            .entrypoints
+            .get_mut(".")
+            .unwrap()
+            .exports
+            .get_mut("requiresOwner")
+            .unwrap()
+            .owner_requirements[0]
+            .evidence
+            .as_mut()
+            .unwrap()
+            .kind = "reviewed".into();
+        assert!(owner_claim.claims_are_certifiable());
+
+        let mut invalid_owner = contract;
+        invalid_owner
+            .entrypoints
+            .get_mut(".")
+            .unwrap()
+            .exports
+            .get_mut("createValue")
+            .unwrap()
+            .callbacks[0]
+            .owner = Some("unknown".into());
+        assert!(invalid_owner.validate().is_err());
     }
 
     #[test]
@@ -2280,6 +2602,7 @@ mod tests {
             resolved_call: None,
             callability: None,
             runtime_value_domain: None,
+            primitive_value_domain: typefacts::PrimitiveValueDomain::default(),
             call_result_domain: None,
             constant_value: None,
             array_shape: None,
@@ -2685,7 +3008,7 @@ mod tests {
     }
 
     #[test]
-    fn summary_containment_preserves_first_node_order() {
+    fn summary_containment_selects_innermost_function() {
         let nodes = vec![
             summary_node(
                 "fixture.tsx",
@@ -2707,7 +3030,7 @@ mod tests {
                 "fixture.tsx",
                 Span { start: 35, end: 40 },
             ),
-            Some(0)
+            Some(1)
         );
     }
 

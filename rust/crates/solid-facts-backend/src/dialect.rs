@@ -12,7 +12,9 @@
 use std::path::Path;
 
 use solid_facts::compiler::CompilerFactsProvider;
-use solid_reactive_ir::{Finding, PackageContract, PackageContractIssue, Program, SolveTimings};
+use solid_reactive_ir::{
+    Finding, PackageContract, PackageContractIssue, Program, RuleMetadata, SolveTimings,
+};
 
 use crate::BackendError;
 
@@ -59,6 +61,181 @@ pub const RETIRED_RULES: &[(&str, &str)] = &[
         "v1/imports",
         "removed 2026-08-17: its one condition — the named module does not export the name — is exactly TS2305's",
     ),
+    (
+        "v1/untracked-derived-function",
+        "removed 2026-08-20: SC1001 follows helper-call chains and owns the same untracked reactive-read failure",
+    ),
+    (
+        "untracked-derived-function",
+        "removed 2026-08-20: SC1001 follows helper-call chains and owns the same runtime STRICT_READ_UNTRACKED failure",
+    ),
+    (
+        "v1/cleanup-in-forbidden-scope",
+        "removed 2026-08-20: Solid 1.x createReaction callbacks run under the reaction's own disposing computation",
+    ),
+    (
+        "v1/primitive-in-leaf-owner",
+        "removed 2026-08-20: Solid 1.x createReaction owns and disposes primitives created by its invalidation callback",
+    ),
+    (
+        "v1/primitive-in-directive-application",
+        "removed 2026-08-20: Solid 1.x directive and ref application preserve the surrounding owner",
+    ),
+    (
+        "v1/no-implicit-draggable",
+        "removed 2026-08-20: its inverted shorthand check was generic HTML attribute-state validation, outside the checker domain",
+    ),
+    (
+        "no-implicit-draggable",
+        "removed 2026-08-20: the remaining claim was generic HTML draggable-state validation, outside the checker domain",
+    ),
+    (
+        "v1/no-array-handlers",
+        "removed 2026-08-20: Solid 1.x intentionally supports [handler, data] pairs, and the available facts cannot prove that a matched pair is defective",
+    ),
+    (
+        "v1/no-react-deps",
+        "removed 2026-08-20: Solid 1.x intentionally accepts an array seed and passes it to the reactive callback",
+    ),
+    (
+        "v1/event-handlers",
+        "removed 2026-08-20: its surviving arms enforced spelling and intent conventions rather than proven runtime defects",
+    ),
+    (
+        "v1/no-react-specific-props",
+        "removed 2026-08-20: intrinsic uses are TypeScript errors and component props are passed through without React-specific lowering",
+    ),
+    (
+        "v1/no-unknown-namespaces",
+        "removed 2026-08-20: namespaced component props are delivered verbatim and intrinsic invalid names are TypeScript-owned",
+    ),
+    (
+        "v1/no-innerhtml",
+        "removed 2026-08-20: its component and injection-policy arms were unproven; content competition remains SC8003",
+    ),
+    (
+        "v1/style-prop",
+        "removed 2026-08-20: its component arm was false and its intrinsic residue was CSS style policy or TypeScript-owned",
+    ),
+    (
+        "v1/no-async-tracked-scope",
+        "removed 2026-08-20: an async tracked callback is not itself defective; SC1002 reports only proven reactive reads after await",
+    ),
+    (
+        "v1/jsx-no-script-url",
+        "removed 2026-08-20: generic injection-sink policy is outside the checker domain",
+    ),
+    (
+        "v1/jsx-uses-vars",
+        "removed 2026-08-20: it never emitted a diagnostic because semantic reference facts already model JSX uses",
+    ),
+    (
+        "v1/no-proxy-apis",
+        "removed 2026-08-20: runtime target compatibility is project policy and cannot be proven from source",
+    ),
+    (
+        "v1/self-closing-comp",
+        "removed 2026-08-20: self-closing syntax is formatting, not a runtime defect",
+    ),
+    (
+        "v1/prefer-component-syntax",
+        "removed 2026-08-20: imperative calls of JSX-returning functions are runtime-valid and the rule enforced a naming convention",
+    ),
+    (
+        "prefer-component-syntax",
+        "removed 2026-08-20: imperative calls of JSX-returning functions are runtime-valid and the rule enforced a naming convention",
+    ),
+    (
+        "v1/execution-map-incomplete",
+        "removed 2026-08-20: compiler-fact completeness is a producer-integrity invariant, not a project diagnostic",
+    ),
+    (
+        "execution-map-incomplete",
+        "removed 2026-08-20: compiler-fact completeness is a producer-integrity invariant, not a project diagnostic",
+    ),
+    (
+        "v1/valid-jsx-nesting",
+        "removed 2026-08-20: generic HTML parser conformance is outside the Solid semantic checker domain",
+    ),
+    (
+        "valid-jsx-nesting",
+        "removed 2026-08-20: generic HTML parser conformance is outside the Solid semantic checker domain",
+    ),
+    (
+        "cleanup-in-forbidden-scope",
+        "merged 2026-08-20 into leaf-owner-forbidden-call; existing disables intentionally do not transfer to the wider family",
+    ),
+    (
+        "primitive-in-leaf-owner",
+        "merged 2026-08-20 into leaf-owner-forbidden-call; existing disables intentionally do not transfer to the wider family",
+    ),
+    (
+        "flush-in-forbidden-scope",
+        "merged 2026-08-20 into leaf-owner-forbidden-call; existing disables intentionally do not transfer to the wider family",
+    ),
+    (
+        "pending-async-untracked-read",
+        "merged 2026-08-20 into pending-async-unsuspendable-read; existing disables intentionally do not transfer to the wider family",
+    ),
+    (
+        "pending-async-forbidden-scope",
+        "merged 2026-08-20 into pending-async-unsuspendable-read; existing disables intentionally do not transfer to the wider family",
+    ),
+    (
+        "ssr-client-source-outside-loading-boundary",
+        "merged 2026-08-20 into async-outside-loading-boundary; existing disables intentionally do not transfer to the wider rule",
+    ),
+];
+
+/// Former external rule identities that canonicalize onto a current rule.
+///
+/// Unlike [`RETIRED_RULES`], an alias transfers configuration: disabling its
+/// old name disables the current target. Each entry landed atomically with
+/// the identity change that created its target.
+pub const RULE_ALIASES: &[(&str, &str)] = &[
+    ("v1/no-owner-effect", "v1/missing-owner"),
+    ("v1/no-owner-cleanup", "v1/missing-owner"),
+    ("v1/no-owner-boundary", "v1/missing-owner"),
+    ("no-owner-effect", "missing-owner"),
+    ("no-owner-cleanup", "missing-owner"),
+    ("no-owner-boundary", "missing-owner"),
+    ("no-owner-settled-cleanup", "missing-owner"),
+    (
+        "v1/package-contract-export-missing",
+        "v1/package-contract-incomplete",
+    ),
+    (
+        "v1/package-contract-missing",
+        "v1/package-contract-incomplete",
+    ),
+    (
+        "v1/package-contract-callback-missing",
+        "v1/package-contract-incomplete",
+    ),
+    (
+        "package-contract-export-missing",
+        "package-contract-incomplete",
+    ),
+    ("package-contract-missing", "package-contract-incomplete"),
+    (
+        "package-contract-callback-missing",
+        "package-contract-incomplete",
+    ),
+    ("component-props-destructure", "no-destructure"),
+    ("component-returns-conditionally", "components-return-once"),
+    (
+        "expected-function-got-expression",
+        "reactive-handler-frozen",
+    ),
+    (
+        "v1/expected-function-got-expression",
+        "v1/reactive-handler-frozen",
+    ),
+    ("resolve-in-reactive-scope", "resolve-in-tracked-scope"),
+    (
+        "sync-node-received-async",
+        "sync-computation-received-async",
+    ),
 ];
 
 /// The removal note for a retired rule identity, or `None` if the checker never
@@ -71,43 +248,44 @@ pub fn retired_rule(name: &str) -> Option<&'static str> {
         .map(|(_, reason)| *reason)
 }
 
+/// The current catalog identity for a former external name.
+#[must_use]
+pub fn rule_alias(name: &str) -> Option<&'static str> {
+    RULE_ALIASES
+        .iter()
+        .find(|(old, _)| *old == name)
+        .map(|(_, current)| *current)
+}
+
 /// Semantic evidence a dialect's catalog needs Type Facts to acquire.
 ///
 /// These are analysis capabilities, not external rule identities. Renaming a
 /// rule therefore cannot silently change the fact plan.
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub struct SemanticDemandCapabilities {
-    pub jsx_member_root_symbols: bool,
-    pub jsx_static_value_types: bool,
-    pub jsx_handler_array_shapes: bool,
     pub array_map_receiver_types: bool,
+    pub async_array_map_callbacks: bool,
     pub server_argument_library_types: bool,
 }
 
 impl SemanticDemandCapabilities {
     pub const NONE: Self = Self {
-        jsx_member_root_symbols: false,
-        jsx_static_value_types: false,
-        jsx_handler_array_shapes: false,
         array_map_receiver_types: false,
+        async_array_map_callbacks: false,
         server_argument_library_types: false,
     };
     /// Only the 2.0 catalog carries `server-function-rich-argument`, so only it
     /// pays for the library-type identities that rule reads.
     #[cfg(feature = "dialect-v2")]
     const SOLID_2: Self = Self {
-        jsx_member_root_symbols: false,
-        jsx_static_value_types: false,
-        jsx_handler_array_shapes: false,
-        array_map_receiver_types: false,
+        array_map_receiver_types: true,
+        async_array_map_callbacks: true,
         server_argument_library_types: true,
     };
     #[cfg(feature = "dialect-v1")]
     const SOLID_1: Self = Self {
-        jsx_member_root_symbols: true,
-        jsx_static_value_types: true,
-        jsx_handler_array_shapes: true,
         array_map_receiver_types: true,
+        async_array_map_callbacks: false,
         server_argument_library_types: false,
     };
 }
@@ -134,8 +312,12 @@ pub struct Dialect {
     /// (for example, which type facts to demand) instead of naming a
     /// version.
     pub has_rule: fn(&str) -> bool,
+    /// Catalog metadata for one exact external rule identity.
+    pub rule_metadata: fn(&str) -> Option<RuleMetadata>,
     /// Typed fact-acquisition requirements of the catalog.
     pub semantic_demands: SemanticDemandCapabilities,
+    /// Dialect-owned projection policy used after rule enablement filtering.
+    pub catalog_capabilities: solid_reactive_ir::CatalogCapabilities,
     /// Projects a package-contract issue through this dialect's catalog so
     /// SC9005 identity and every sentence remain catalog-owned.
     pub package_contract_finding: fn(&PackageContractIssue) -> Finding,
@@ -254,9 +436,16 @@ static SOLID_V2: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
+    rule_metadata: |name| {
+        solid_v2_rules::Rule::ALL
+            .into_iter()
+            .find(|rule| rule.metadata().name == name)
+            .map(solid_v2_rules::Rule::metadata)
+    },
     semantic_demands: SemanticDemandCapabilities::SOLID_2,
+    catalog_capabilities: solid_v2_rules::CATALOG_CAPABILITIES,
     package_contract_finding: solid_v2_rules::package_contract_finding,
-    bundled_packages: &["solid-js", "@solidjs/web"],
+    bundled_packages: &["solid-js", "@solidjs/web", "@solidjs/signals"],
     bundled_contract: crate::diagnostics::bundled_contract_v2,
 };
 
@@ -273,7 +462,14 @@ static SOLID_V1: Dialect = Dialect {
             .into_iter()
             .any(|rule| rule.metadata().name == name)
     },
+    rule_metadata: |name| {
+        solid_v1_rules::Rule::ALL
+            .into_iter()
+            .find(|rule| rule.metadata().name == name)
+            .map(solid_v1_rules::Rule::metadata)
+    },
     semantic_demands: SemanticDemandCapabilities::SOLID_1,
+    catalog_capabilities: solid_v1_rules::CATALOG_CAPABILITIES,
     package_contract_finding: solid_v1_rules::package_contract_finding,
     bundled_packages: &["solid-js", "@solid-primitives/scheduled"],
     bundled_contract: crate::diagnostics::bundled_contract_v1,
@@ -390,7 +586,6 @@ mod tests {
     /// finding from catalog-owned advice.
     fn catalog_prose_program() -> Program {
         let defect_kinds = [
-            StaticDefectKind::ExecutionMapIncomplete,
             StaticDefectKind::ReactiveObjectDestructure {
                 source: "props".into(),
                 component_props: true,
@@ -405,9 +600,6 @@ mod tests {
                 reexported: false,
             },
             StaticDefectKind::MissingEffectFunction,
-            StaticDefectKind::UntrackedDerivedFunction {
-                name: "sampleFunction".into(),
-            },
             StaticDefectKind::ReactiveSourceUncaptured {
                 source: "sampleAccessor".into(),
                 callee: "sampleCallee".into(),
@@ -529,6 +721,79 @@ mod tests {
         assert!(by_id("solid-v3").is_none());
     }
 
+    #[test]
+    fn compatibility_registry_counts_match_the_catalog_migration() {
+        assert_eq!(
+            RULE_ALIASES.len(),
+            19,
+            "the migration note must list every transferred configuration key"
+        );
+        assert_eq!(
+            RETIRED_RULES.len(),
+            39,
+            "eight pre-existing TypeScript redundancies plus 31 catalog-reduction identities"
+        );
+    }
+
+    #[test]
+    fn every_catalog_identity_resolves_to_its_metadata() {
+        for dialect in ALL {
+            #[cfg(feature = "dialect-v1")]
+            if dialect.id == "solid-v1" {
+                for rule in solid_v1_rules::Rule::ALL {
+                    assert_eq!(
+                        (dialect.rule_metadata)(rule.metadata().name),
+                        Some(rule.metadata())
+                    );
+                }
+            }
+            #[cfg(feature = "dialect-v2")]
+            if dialect.id == "solid-v2" {
+                for rule in solid_v2_rules::Rule::ALL {
+                    assert_eq!(
+                        (dialect.rule_metadata)(rule.metadata().name),
+                        Some(rule.metadata())
+                    );
+                }
+            }
+        }
+    }
+
+    #[cfg(all(feature = "dialect-v1", feature = "dialect-v2"))]
+    #[test]
+    fn all_style_preferences_are_default_disabled_preset_members() {
+        let expected = HashSet::from([
+            "v1/prefer-classlist",
+            "v1/prefer-for",
+            "v1/prefer-show",
+            "prefer-for",
+            "prefer-show",
+        ]);
+        let observed = solid_v1_rules::Rule::ALL
+            .into_iter()
+            .map(|rule| rule.metadata())
+            .chain(
+                solid_v2_rules::Rule::ALL
+                    .into_iter()
+                    .map(|rule| rule.metadata()),
+            )
+            .filter_map(|metadata| {
+                if metadata.default_enabled {
+                    assert!(
+                        metadata.presets.is_empty(),
+                        "default-enabled {} unexpectedly belongs to a preset",
+                        metadata.name
+                    );
+                    None
+                } else {
+                    assert_eq!(metadata.presets, ["preferences"]);
+                    Some(metadata.name)
+                }
+            })
+            .collect::<HashSet<_>>();
+        assert_eq!(observed, expected);
+    }
+
     /// The documentation and suppression model both depend on this exact
     /// ownership split. Keep it derived from the two catalogs rather than
     /// maintaining an unaudited second list in prose. The one test that must
@@ -547,10 +812,8 @@ mod tests {
             .collect::<HashSet<_>>();
         let shared = v1.intersection(&v2).copied().collect::<HashSet<_>>();
         let expected = HashSet::from([
-            "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1006", "SC1007", "SC2001",
-            "SC2003", "SC3001", "SC3002", "SC4001", "SC4002", "SC4003", "SC6001", "SC7001",
-            "SC8018", "SC8019", "SC8020", "SC9001", "SC9004", "SC9005", "SC9006", "SC9011",
-            "SC9012",
+            "SC1001", "SC1002", "SC1003", "SC1004", "SC1005", "SC1007", "SC2001", "SC2003",
+            "SC4001", "SC7001", "SC8003", "SC8014", "SC8015", "SC9005", "SC9011", "SC9012",
         ]);
         assert_eq!(shared, expected);
         assert_eq!(
@@ -558,23 +821,23 @@ mod tests {
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            25
+            16
         );
         assert_eq!(
             solid_v2_rules::Rule::ALL
                 .into_iter()
                 .filter(|rule| shared.contains(rule.metadata().code))
                 .count(),
-            25
+            16
         );
         assert_eq!(
-            solid_v1_rules::Rule::ALL.len() - 25,
-            17,
+            solid_v1_rules::Rule::ALL.len() - 16,
+            2,
             "the 1.x catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
         assert_eq!(
-            solid_v2_rules::Rule::ALL.len() - 25,
-            12,
+            solid_v2_rules::Rule::ALL.len() - 16,
+            10,
             "the 2.0 catalog size moved; update the counts in docs/rules/README.md and rust/ARCHITECTURE.md alongside this test"
         );
     }

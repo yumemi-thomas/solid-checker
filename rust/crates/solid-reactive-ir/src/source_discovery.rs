@@ -11,7 +11,8 @@ use crate::owners::{
 use crate::pipeline::{parallel_file_chunk_results, parallel_file_results, parallel_slice_results};
 use crate::{
     BuildTimings, ContractCallback, ContractReturn, PackageContract, PrimitiveName,
-    ReactiveSourceKind, jsx_primitive_name, known_primitive, location, primitive_name,
+    ReactiveSourceKind, RuntimeEnvironment, RuntimeRendering, jsx_primitive_name, known_primitive,
+    location, primitive_name,
 };
 
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -370,10 +371,68 @@ const SERVER_RENDER_IMPORTS: [&str; 6] = [
     "hydrate",
 ];
 
-/// Whether any analyzed file imports a server rendering entry point from
-/// `@solidjs/web` (or one of its subpaths).
-pub(crate) fn project_server_renders(facts: &ProjectFacts) -> bool {
-    facts.files.iter().any(|file| {
+/// Whether the analyzed application server-renders.
+///
+/// The three outcomes are not two: a project with no visible server entry is
+/// not the same fact as a project the user has explicitly selected a
+/// client-only rendering mode for. The first is an absence of evidence -- the
+/// server entry may live in another tsconfig or package -- and rules must
+/// report a proof obligation. The second is evidence, and a rule whose whole
+/// premise is "if this application server-renders" has had that premise
+/// disproven and must stay silent rather than report an obligation the user
+/// has already discharged.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum ServerRenderingPremise {
+    /// An explicit rendering selector, or a visible server-rendering entry
+    /// import, proves the application server-renders.
+    Renders,
+    /// An explicit rendering selector proves it does not.
+    ProvenClientOnly,
+    /// No selector, and no server-rendering entry point is visible in the
+    /// analyzed project -- which does not prove the application is CSR-only.
+    Unresolved,
+}
+
+impl ServerRenderingPremise {
+    /// The premise from the two inputs that decide it: the explicit rendering
+    /// selector when the user set one, and otherwise whether a
+    /// server-rendering entry point is visible in the analyzed project.
+    ///
+    /// A selector answers the question outright in both directions. Only
+    /// without one does the import survey matter, and then only one way: a
+    /// visible entry proves server rendering, while no visible entry proves
+    /// nothing at all.
+    pub(crate) const fn select(
+        rendering: Option<RuntimeRendering>,
+        imports_server_entry: bool,
+    ) -> Self {
+        match rendering {
+            Some(RuntimeRendering::StringSsr | RuntimeRendering::StreamingSsr) => Self::Renders,
+            Some(RuntimeRendering::Csr) => Self::ProvenClientOnly,
+            None if imports_server_entry => Self::Renders,
+            None => Self::Unresolved,
+        }
+    }
+
+    /// Whether server rendering is proven to happen. `ProvenClientOnly` and
+    /// `Unresolved` are both "not proven", and callers that need to tell them
+    /// apart must match on the enum instead.
+    pub(crate) const fn renders(self) -> bool {
+        matches!(self, Self::Renders)
+    }
+}
+
+/// Whether the analyzed project server-renders: an explicit rendering
+/// selector when there is one, otherwise whether any analyzed file imports a
+/// server rendering entry point from `@solidjs/web` (or one of its subpaths).
+pub(crate) fn project_server_rendering(
+    facts: &ProjectFacts,
+    environment: &RuntimeEnvironment,
+) -> ServerRenderingPremise {
+    if let Some(rendering) = environment.rendering {
+        return ServerRenderingPremise::select(Some(rendering), false);
+    }
+    let imports_server_entry = facts.files.iter().any(|file| {
         file.ast.imports.iter().any(|import| {
             (import.module == "@solidjs/web" || import.module.starts_with("@solidjs/web/"))
                 && !import.type_only
@@ -385,7 +444,53 @@ pub(crate) fn project_server_renders(facts: &ProjectFacts) -> bool {
                             .is_some_and(|imported| SERVER_RENDER_IMPORTS.contains(&imported))
                 })
         })
-    })
+    });
+    ServerRenderingPremise::select(None, imports_server_entry)
+}
+
+#[cfg(test)]
+mod server_rendering_premise_tests {
+    use super::ServerRenderingPremise;
+    use crate::RuntimeRendering;
+
+    /// The three states must stay three. Folding `ProvenClientOnly` into
+    /// `Unresolved` is what made an explicitly CSR project report an
+    /// uncertifiable result whose own message said the premise could not be
+    /// proven, and folding it into `Renders` would invent an SSR violation
+    /// for an application that has no server.
+    #[test]
+    fn an_explicit_rendering_selector_decides_the_premise_in_both_directions() {
+        for rendering in [RuntimeRendering::StringSsr, RuntimeRendering::StreamingSsr] {
+            for imports in [false, true] {
+                let premise = ServerRenderingPremise::select(Some(rendering), imports);
+                assert_eq!(premise, ServerRenderingPremise::Renders);
+                assert!(premise.renders());
+            }
+        }
+        // The selector outranks the survey in the other direction too: an
+        // unused `renderToStream` import in a project the user has declared
+        // client-only does not resurrect the server.
+        for imports in [false, true] {
+            let premise = ServerRenderingPremise::select(Some(RuntimeRendering::Csr), imports);
+            assert_eq!(premise, ServerRenderingPremise::ProvenClientOnly);
+            assert!(!premise.renders());
+        }
+    }
+
+    /// Without a selector the survey decides one way only. A visible server
+    /// entry proves server rendering; no visible entry is an absence of
+    /// evidence, not evidence of absence, because the entry may live in
+    /// another tsconfig or package.
+    #[test]
+    fn without_a_selector_a_visible_entry_proves_and_its_absence_does_not() {
+        assert_eq!(
+            ServerRenderingPremise::select(None, true),
+            ServerRenderingPremise::Renders
+        );
+        let unresolved = ServerRenderingPremise::select(None, false);
+        assert_eq!(unresolved, ServerRenderingPremise::Unresolved);
+        assert!(!unresolved.renders());
+    }
 }
 
 /// Whether a store-family creation is provably the value form
@@ -1094,6 +1199,7 @@ pub(crate) struct StageContext<'a> {
     pub(crate) semantic_lookup: &'a SemanticLookup<'a>,
     pub(crate) resolved_contracts: &'a ResolvedContracts,
     pub(crate) contracts: &'a [PackageContract],
+    pub(crate) runtime: &'a crate::RuntimeEnvironment,
 }
 
 /// Classifies a non-literal `keyed` attribute value.
@@ -1168,6 +1274,7 @@ pub(crate) fn discover_sources(
         semantic_lookup,
         resolved_contracts,
         contracts,
+        runtime,
     } = *ctx;
     let mut clock = StageClock::new(emit_timings);
     let mut accessors = HashMap::<SymbolId, (SymbolId, Location)>::new();
@@ -1835,6 +1942,7 @@ pub(crate) fn discover_sources(
         }
     }
     let props_reactivity = classify_component_props(
+        runtime,
         facts,
         semantic_lookup,
         entities,
@@ -1916,11 +2024,31 @@ pub(crate) enum PropsReactivity {
     Enumerated {
         reactive: BTreeSet<String>,
         unresolved: BTreeSet<String>,
+        /// Prop names for which at least one exact JSX call site passes a
+        /// proven accessor value. Reading the property is static, but calling
+        /// that value performs a reactive read and must stay distinguishable
+        /// from ordinary prop backing.
+        accessor_values: BTreeSet<String>,
     },
     /// The component escapes enumeration — exported, referenced outside JSX,
-    /// or spread into at a call site — so nothing about its props is provable
-    /// and every use is a proof obligation.
-    Unknown,
+    /// or spread into at a call site — so no prop can be proven *static*.
+    ///
+    /// The JSX call sites that are visible still prove what they pass, and
+    /// that direction of the proof survives the escape. "Some caller passes a
+    /// reactive expression" is monotone under adding callers: a consumer
+    /// outside the project can add a call site, never remove the one written
+    /// here, so an untracked read of a witnessed prop is a proven defect on
+    /// that path. "Every caller passes a static value" is the opposite — one
+    /// unseen caller falsifies it — which is why it needs complete
+    /// enumeration and is never concluded here.
+    ///
+    /// `reactive` holds the witnessed prop names and `accessor_values` the
+    /// names some visible call site passes a proven accessor for. Every other
+    /// prop is a proof obligation.
+    Escaping {
+        reactive: BTreeSet<String>,
+        accessor_values: BTreeSet<String>,
+    },
 }
 
 /// The per-declaration classification map, keyed by the props parameter's
@@ -1943,10 +2071,19 @@ impl PropsReactivityIndex {
             return PropUse::Reactive;
         }
         match self.by_declaration.get(declaration) {
-            None | Some(PropsReactivity::Unknown) => PropUse::Unknown,
+            None => PropUse::Unknown,
+            // Witnessed reactive survives the escape; nothing else does.
+            Some(PropsReactivity::Escaping { reactive, .. }) => {
+                if reactive.contains(name) {
+                    PropUse::Reactive
+                } else {
+                    PropUse::Unknown
+                }
+            }
             Some(PropsReactivity::Enumerated {
                 reactive,
                 unresolved,
+                ..
             }) => {
                 if reactive.contains(name) {
                     PropUse::Reactive
@@ -1967,10 +2104,18 @@ impl PropsReactivityIndex {
             return PropUse::Reactive;
         }
         match self.by_declaration.get(declaration) {
-            None | Some(PropsReactivity::Unknown) => PropUse::Unknown,
+            None => PropUse::Unknown,
+            Some(PropsReactivity::Escaping { reactive, .. }) => {
+                if reactive.is_empty() {
+                    PropUse::Unknown
+                } else {
+                    PropUse::Reactive
+                }
+            }
             Some(PropsReactivity::Enumerated {
                 reactive,
                 unresolved,
+                ..
             }) => {
                 if !reactive.is_empty() {
                     PropUse::Reactive
@@ -1980,6 +2125,30 @@ impl PropsReactivityIndex {
                     PropUse::Static
                 }
             }
+        }
+    }
+
+    /// Whether invoking this prop value is proven to invoke an accessor at
+    /// any enumerated JSX call site. This is separate from [`Self::prop_use`]:
+    /// passing `items` as `<List items={items}>` stores a stable function in
+    /// the prop, while `props.items()` still subscribes when evaluated.
+    pub(crate) fn accessor_value_use(&self, declaration: &Location, name: &str) -> PropUse {
+        if !self.caller_proof {
+            return PropUse::Unknown;
+        }
+        match self.by_declaration.get(declaration) {
+            Some(
+                PropsReactivity::Enumerated {
+                    accessor_values, ..
+                }
+                | PropsReactivity::Escaping {
+                    accessor_values, ..
+                },
+            ) if accessor_values.contains(name) => PropUse::Reactive,
+            // Only a complete caller set can prove the value is *not* an
+            // accessor; an escaping component keeps the obligation.
+            Some(PropsReactivity::Enumerated { .. }) => PropUse::Static,
+            None | Some(PropsReactivity::Escaping { .. }) => PropUse::Unknown,
         }
     }
 
@@ -2011,6 +2180,7 @@ impl PropsReactivityIndex {
 /// sites. Empty (answering [`PropUse::Reactive`] everywhere) when the dialect
 /// keeps the upstream over-approximation.
 fn classify_component_props(
+    runtime: &crate::RuntimeEnvironment,
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
@@ -2044,6 +2214,7 @@ fn classify_component_props(
                 continue;
             }
             let classification = classify_one_component(
+                runtime,
                 facts,
                 lookup,
                 entities,
@@ -2071,6 +2242,7 @@ fn classify_component_props(
 
 #[allow(clippy::too_many_arguments)]
 fn classify_one_component(
+    runtime: &crate::RuntimeEnvironment,
     facts: &ProjectFacts,
     lookup: &SemanticLookup<'_>,
     entities: &EntitySymbols,
@@ -2086,12 +2258,24 @@ fn classify_one_component(
     let Some(symbol) = name.and_then(|name| entities.get(&location(file.path.shared(), name.span)))
     else {
         // An anonymous component value (a HOC argument, say) has no symbol to
-        // enumerate references through.
-        return PropsReactivity::Unknown;
+        // enumerate references through, so there are no call sites to witness
+        // either way.
+        return PropsReactivity::Escaping {
+            reactive: BTreeSet::new(),
+            accessor_values: BTreeSet::new(),
+        };
     };
-    // Exported: callers outside the project can pass anything.
-    if component_symbol_is_exported(facts, entities, symbol) {
-        return PropsReactivity::Unknown;
+    // Escape hatches below only forfeit the *static* half of the proof. Each
+    // one sets this flag and keeps scanning, because the JSX call sites that
+    // are visible still witness what they pass.
+    let mut escapes = false;
+    // Exported: callers outside the project can pass anything as well --
+    // unless the user has asserted that there is no outside. That assertion
+    // removes only the assumption of an *unseen* caller; every reference below
+    // must still resolve to a use this analysis understands.
+    let closed = runtime.program_is_closed();
+    if !closed && component_symbol_is_exported(facts, entities, symbol) {
+        escapes = true;
     }
     let empty = Vec::new();
     let component_uses = uses
@@ -2103,7 +2287,7 @@ fn classify_one_component(
     // the absence of the fact, not proof of no references.
     let references = lookup.symbol_references(symbol.as_str());
     if references.is_empty() {
-        return PropsReactivity::Unknown;
+        escapes = true;
     }
     let name_text = name
         .and_then(|name| file.source_text(name.span))
@@ -2113,7 +2297,8 @@ fn classify_one_component(
             u32::try_from(reference.start_byte),
             u32::try_from(reference.end_byte),
         ) else {
-            return PropsReactivity::Unknown;
+            escapes = true;
+            continue;
         };
         let span = Span::new(start, end);
         let own_declaration = *reference.path == *file.path.as_str()
@@ -2130,22 +2315,41 @@ fn classify_one_component(
                         && use_file.source_text(span) == Some(name_text)))
         });
         if !jsx_use {
-            return PropsReactivity::Unknown;
+            // Passed as a value, aliased, or re-exported: this hands the
+            // component to callers that cannot be seen. It does not unwrite
+            // the JSX call sites that can.
+            //
+            // An export specifier is the one reference a closed program
+            // disposes of: `export { Card }` reaches an importer only if an
+            // importer exists, and a closed program says none does outside the
+            // files analyzed here -- where every importer's use is itself a
+            // reference in this list. Aliasing and passing as a value still
+            // escape under a closed program, because the analyzer still does
+            // not know what the receiver does with the component.
+            if !(closed && reference_is_export_specifier(facts, span, reference.path.as_ref())) {
+                escapes = true;
+            }
         }
     }
     let mut reactive = BTreeSet::new();
     let mut unresolved = BTreeSet::new();
+    let mut accessor_values = BTreeSet::new();
     for (file_index, element_index) in component_uses {
         let use_file = &facts.files[*file_index];
         let element = &use_file.ast.jsx_elements[*element_index];
         // A spread hands over an object whose properties this cannot
-        // enumerate.
+        // enumerate — and, because a later spread wins over an earlier
+        // explicit attribute, it can also overwrite one of this element's own
+        // attributes with a static value. So this element witnesses nothing
+        // in either direction; other elements still do.
         if !element.spreads.is_empty() {
-            return PropsReactivity::Unknown;
+            escapes = true;
+            continue;
         }
         for attribute in &element.attributes {
             let Some(attribute_name) = use_file.source_text(attribute.local_name) else {
-                return PropsReactivity::Unknown;
+                escapes = true;
+                continue;
             };
             let value_use = if attribute.namespace.is_some() {
                 PropUse::Unknown
@@ -2171,6 +2375,14 @@ fn classify_one_component(
                     }
                 }
             };
+            if attribute.namespace.is_none()
+                && attribute.value_kind == solid_facts::ast::JsxAttributeValueKind::Expression
+                && attribute.expression.is_some_and(|expression| {
+                    passed_expression_is_accessor(lookup, entities, accessors, use_file, expression)
+                })
+            {
+                accessor_values.insert(attribute_name.to_owned());
+            }
             match value_use {
                 PropUse::Static => {}
                 PropUse::Reactive => {
@@ -2201,10 +2413,64 @@ fn classify_one_component(
             }
         }
     }
+    if escapes {
+        // `unresolved` is dropped on purpose: without a complete caller set
+        // every prop that is not a proven reactive witness is unresolved
+        // anyway, so recording the distinction would only invite a reader to
+        // treat the complement as static.
+        return PropsReactivity::Escaping {
+            reactive,
+            accessor_values,
+        };
+    }
     PropsReactivity::Enumerated {
         reactive,
         unresolved,
+        accessor_values,
     }
+}
+
+fn passed_expression_is_accessor(
+    lookup: &SemanticLookup<'_>,
+    entities: &EntitySymbols,
+    accessors: &HashMap<SymbolId, (SymbolId, Location)>,
+    file: &FileFacts,
+    expression: solid_facts::core::Span,
+) -> bool {
+    let expression = file.ast.peel_ts_sugar_span(expression);
+    entities
+        .get(&location(file.path.shared(), expression))
+        .cloned()
+        .or_else(|| {
+            lookup
+                .binding_at_reference(file.path.as_str(), expression)
+                .map(|(_, _, symbol)| symbol)
+        })
+        .is_some_and(|symbol| accessors.contains_key(&symbol))
+}
+
+/// Whether a reference span is an export specifier's local name in the file it
+/// appears in. Only an exact specifier span counts; a re-export with a module
+/// clause is a different fact and is not one of these.
+fn reference_is_export_specifier(
+    facts: &ProjectFacts,
+    span: solid_facts::core::Span,
+    path: &str,
+) -> bool {
+    facts
+        .files
+        .iter()
+        .filter(|file| file.path.as_str() == path)
+        .any(|file| {
+            file.ast.exports.iter().any(|export| {
+                export.module.is_none()
+                    && export
+                        .specifiers
+                        .iter()
+                        .chain(export.declarations.iter())
+                        .any(|specifier| specifier.local.span == span)
+            })
+        })
 }
 
 /// Whether the component's canonical symbol is exported from any analyzed

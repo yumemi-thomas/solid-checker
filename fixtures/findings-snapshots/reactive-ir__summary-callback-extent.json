@@ -1,0 +1,35 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/summary-callback-extent/App.tsx",
+      "start": 3261,
+      "end": 3275,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/summary-callback-extent/App.tsx",
+      "start": 3279,
+      "end": 3294,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/summary-callback-extent/App.tsx",
+      "start": 3298,
+      "end": 3313,
+      "fixes": 0
+    }
+  ]
+}

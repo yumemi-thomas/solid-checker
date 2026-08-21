@@ -21,6 +21,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/array-shape-v1/node_modules/**
 !fixtures/reactive-ir/v1-reactivity/node_modules/
 !fixtures/reactive-ir/v1-reactivity/node_modules/**
+!fixtures/reactive-ir/v1-write-scope/node_modules/
+!fixtures/reactive-ir/v1-write-scope/node_modules/**
 !fixtures/package-contracts/external-reexport/node_modules/
 !fixtures/package-contracts/external-reexport/node_modules/**
 !fixtures/package-contracts/dialect-detection/node_modules/
@@ -47,6 +49,8 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/namespace-import-v2/node_modules/**
 !fixtures/reactive-ir/solid2-precision/node_modules/
 !fixtures/reactive-ir/solid2-precision/node_modules/**
+!fixtures/reactive-ir/ported-structure-v2/node_modules/
+!fixtures/reactive-ir/ported-structure-v2/node_modules/**
 # solid-1x-sources selects the 1.x catalog from this stub. Without the
 # exception the stub is untracked, the fixture falls back to the 2.0 default in
 # CI, and its 1.x-only source factories stop being exercised at all.
@@ -56,6 +60,12 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/import-location/node_modules/**
 !fixtures/engine/eslint-reactivity-v1/node_modules/
 !fixtures/engine/eslint-reactivity-v1/node_modules/**
+!fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/
+!fixtures/reactive-ir/eslint-plugin-corpus-v1/node_modules/**
+!fixtures/reactive-ir/summary-callback-extent/node_modules/
+!fixtures/reactive-ir/summary-callback-extent/node_modules/**
+!fixtures/package-contracts/solid-reexport/node_modules/
+!fixtures/package-contracts/solid-reexport/node_modules/**
 packages/wasm/browser.js
 packages/wasm/generated.d.ts
 packages/wasm/index.js

@@ -1,0 +1,26 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "@solidjs/signals",
+    "version": "2.0.0-rc.0",
+    "integrity": "sha512-oKZSfvsCcKw1uJjOGbUkJ+OqlhXLHtZ+rShSyu9KH0lUH7UUwfMfsKeh81JPiQxDDg4YLhEwI38hg0JkwzTdvA=="
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "isEqual": {
+      "kind": "function"
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "isEqual": ["isEqual"]
+      },
+      "conditions": ["import"]
+    }
+  },
+  "evidence": {
+    "kind": "reviewed",
+    "generator": "solid-checker ecosystem audit"
+  }
+}

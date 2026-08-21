@@ -14,42 +14,31 @@ pub enum Rule {
     // are version-independent, so both catalogs carry them under the same SC
     // codes and suppressions survive a migration. `no-async-tracked-scope`
     // stays 1.x-only: 2.0 models async computations as a feature
-    // (SC5001–SC5003 and SC5005 own that surface).
+    // (SC5001 and SC5003 own that surface).
     UncalledAccessor,
-    UntrackedDerivedFunction,
     ExpectedFunctionGotExpression,
     NoDirectMutation,
     ReactiveSourceUncaptured,
     ReactiveDispatchUnresolved,
     ComponentPropsDestructure,
     ComponentReturnsConditionally,
-    PreferComponentSyntax,
-    NoImplicitDraggable,
-    ValidJsxNesting,
     ReactiveWriteInOwnedScope,
     ActionCalledInOwnedScope,
     ResolveInReactiveScope,
-    CleanupInForbiddenScope,
-    PrimitiveInLeafOwner,
-    FlushInForbiddenScope,
-    NoOwnerEffect,
-    NoOwnerCleanup,
-    NoOwnerBoundary,
-    NoOwnerSettledCleanup,
-    PendingAsyncUntrackedRead,
-    PendingAsyncForbiddenScope,
+    LeafOwnerForbiddenCall,
+    MissingOwner,
+    PendingAsyncUnsuspendableRead,
     AsyncOutsideLoadingBoundary,
-    SsrClientSourceOutsideLoadingBoundary,
     PrimitiveInDirectiveApplication,
     MissingEffectFunction,
     SyncNodeReceivedAsync,
     HttpResponseAfterFlush,
     ServerFunctionModuleDirective,
     ServerFunctionRichArgument,
-    PackageContractExportMissing,
-    PackageContractMissing,
-    ExecutionMapIncomplete,
-    PackageContractCallbackMissing,
+    PackageContractIncomplete,
+    JsxNoDuplicateProps,
+    PreferFor,
+    PreferShow,
 }
 
 /// Base URL of the per-rule documentation pages in `docs/rules/`.
@@ -64,44 +53,33 @@ pub fn docs_url(rule_name: &str) -> String {
 }
 
 impl Rule {
-    pub const ALL: [Self; 37] = [
+    pub const ALL: [Self; 26] = [
         Self::StrictReadUntracked,
         Self::ReactiveReadAfterAwait,
         Self::UncalledAccessor,
-        Self::UntrackedDerivedFunction,
         Self::ExpectedFunctionGotExpression,
         Self::NoDirectMutation,
         Self::ReactiveSourceUncaptured,
         Self::ReactiveDispatchUnresolved,
         Self::ComponentPropsDestructure,
         Self::ComponentReturnsConditionally,
-        Self::PreferComponentSyntax,
-        Self::NoImplicitDraggable,
-        Self::ValidJsxNesting,
         Self::ReactiveWriteInOwnedScope,
         Self::ActionCalledInOwnedScope,
         Self::ResolveInReactiveScope,
-        Self::CleanupInForbiddenScope,
-        Self::PrimitiveInLeafOwner,
-        Self::FlushInForbiddenScope,
-        Self::NoOwnerEffect,
-        Self::NoOwnerCleanup,
-        Self::NoOwnerBoundary,
-        Self::NoOwnerSettledCleanup,
-        Self::PendingAsyncUntrackedRead,
-        Self::PendingAsyncForbiddenScope,
+        Self::LeafOwnerForbiddenCall,
+        Self::MissingOwner,
+        Self::PendingAsyncUnsuspendableRead,
         Self::AsyncOutsideLoadingBoundary,
-        Self::SsrClientSourceOutsideLoadingBoundary,
         Self::PrimitiveInDirectiveApplication,
         Self::MissingEffectFunction,
         Self::SyncNodeReceivedAsync,
         Self::HttpResponseAfterFlush,
         Self::ServerFunctionModuleDirective,
         Self::ServerFunctionRichArgument,
-        Self::PackageContractExportMissing,
-        Self::PackageContractMissing,
-        Self::ExecutionMapIncomplete,
-        Self::PackageContractCallbackMissing,
+        Self::PackageContractIncomplete,
+        Self::JsxNoDuplicateProps,
+        Self::PreferFor,
+        Self::PreferShow,
     ];
 
     #[must_use]
@@ -110,15 +88,9 @@ impl Rule {
             Self::StrictReadUntracked => ("SC1001", "strict-read-untracked", "warning", false),
             Self::ReactiveReadAfterAwait => ("SC1002", "reactive-read-after-await", "error", false),
             Self::UncalledAccessor => ("SC1005", "uncalled-accessor", "warning", false),
-            Self::UntrackedDerivedFunction => {
-                ("SC1006", "untracked-derived-function", "warning", false)
+            Self::ExpectedFunctionGotExpression => {
+                ("SC1007", "reactive-handler-frozen", "warning", false)
             }
-            Self::ExpectedFunctionGotExpression => (
-                "SC1007",
-                "expected-function-got-expression",
-                "warning",
-                false,
-            ),
             Self::NoDirectMutation => ("SC2003", "no-direct-mutation", "warning", false),
             Self::ReactiveSourceUncaptured => {
                 ("SC9011", "reactive-source-uncaptured", "warning", true)
@@ -126,15 +98,10 @@ impl Rule {
             Self::ReactiveDispatchUnresolved => {
                 ("SC9012", "reactive-dispatch-unresolved", "warning", true)
             }
-            Self::ComponentPropsDestructure => {
-                ("SC1003", "component-props-destructure", "error", false)
-            }
+            Self::ComponentPropsDestructure => ("SC1003", "no-destructure", "error", false),
             Self::ComponentReturnsConditionally => {
-                ("SC1004", "component-returns-conditionally", "error", false)
+                ("SC1004", "components-return-once", "error", false)
             }
-            Self::PreferComponentSyntax => ("SC8018", "prefer-component-syntax", "warning", false),
-            Self::NoImplicitDraggable => ("SC8019", "no-implicit-draggable", "error", false),
-            Self::ValidJsxNesting => ("SC8020", "valid-jsx-nesting", "error", false),
             Self::ReactiveWriteInOwnedScope => {
                 ("SC2001", "reactive-write-in-owned-scope", "error", false)
             }
@@ -147,39 +114,20 @@ impl Rule {
             // (probed), so the proven tracked-scope form mirrors it as an
             // error; production has no guard and silently takes a one-shot
             // snapshot.
-            Self::ResolveInReactiveScope => ("SC2004", "resolve-in-reactive-scope", "error", false),
-            Self::CleanupInForbiddenScope => {
-                ("SC3001", "cleanup-in-forbidden-scope", "error", false)
-            }
-            Self::PrimitiveInLeafOwner => ("SC3002", "primitive-in-leaf-owner", "error", false),
-            Self::FlushInForbiddenScope => ("SC3003", "flush-in-forbidden-scope", "error", false),
-            Self::NoOwnerEffect => ("SC4001", "no-owner-effect", "warning", false),
-            Self::NoOwnerCleanup => ("SC4002", "no-owner-cleanup", "warning", false),
-            Self::NoOwnerBoundary => ("SC4003", "no-owner-boundary", "warning", false),
-            // Unlike the other owner rules (whose runtime consequence is a
-            // silent leak), the runtime enforces this one: an onSettled
-            // callback returning a cleanup with no owner throws
-            // SETTLED_CLEANUP_UNOWNED in dev (rc.0), so the proven form
-            // mirrors that as an error.
-            Self::NoOwnerSettledCleanup => ("SC4004", "no-owner-settled-cleanup", "error", false),
-            Self::PendingAsyncUntrackedRead => {
-                ("SC5001", "pending-async-untracked-read", "error", false)
-            }
-            Self::PendingAsyncForbiddenScope => {
-                ("SC5002", "pending-async-forbidden-scope", "warning", false)
+            Self::ResolveInReactiveScope => ("SC2004", "resolve-in-tracked-scope", "error", false),
+            Self::LeafOwnerForbiddenCall => ("SC3001", "leaf-owner-forbidden-call", "error", false),
+            // Settled-cleanup findings override this family default to error:
+            // the rc.0 dev runtime throws SETTLED_CLEANUP_UNOWNED, while the
+            // other missing-owner operations leak silently.
+            Self::MissingOwner => ("SC4001", "missing-owner", "warning", false),
+            // Leaf-owner reads override this family default to warning so the
+            // merged rule preserves the runtime-mirroring severity split.
+            Self::PendingAsyncUnsuspendableRead => {
+                ("SC5001", "pending-async-unsuspendable-read", "error", false)
             }
             Self::AsyncOutsideLoadingBoundary => {
                 ("SC5003", "async-outside-loading-boundary", "warning", false)
             }
-            // SC5004 belongs to v1/no-async-tracked-scope, a different defect
-            // concept; per the shared-code-by-concept policy this new 2.0-only
-            // rule takes the next free code in the async family.
-            Self::SsrClientSourceOutsideLoadingBoundary => (
-                "SC5005",
-                "ssr-client-source-outside-loading-boundary",
-                "error",
-                false,
-            ),
             // The apply callback runs with no owner (`@solidjs/web` rc.0's
             // `ref()` is `runWithOwner(null, ...)`), so an owner-attaching
             // primitive created there is the SC4001-family defect: a real,
@@ -193,17 +141,17 @@ impl Rule {
                 false,
             ),
             Self::MissingEffectFunction => ("SC7001", "missing-effect-function", "error", false),
-            Self::SyncNodeReceivedAsync => ("SC7002", "sync-node-received-async", "error", false),
+            Self::SyncNodeReceivedAsync => {
+                ("SC7002", "sync-computation-received-async", "error", false)
+            }
             // SC7003 and SC9003 each carry two rule names on purpose: the
             // code identifies the defect (an invalid or unresolved target),
             // while the name identifies the surface it was found on
             // (`refresh` versus `affects`).
-            // The post-flush drop is real but conditional: a Loading
-            // boundary that settles *before* the shell flush (fast data,
-            // renderToString, deferStream) still applies its writes, so the
-            // static form is a warning, not a proven-unconditional error.
+            // The post-flush drop is real but request-time ordering decides
+            // whether it occurs, so this is an uncertifiable hazard.
             Self::HttpResponseAfterFlush => {
-                ("SC7005", "http-response-after-flush", "warning", false)
+                ("SC7005", "http-response-after-flush", "warning", true)
             }
             // The client build silently loses the export (RFC 10 §Compiler
             // implications — "Minimum: a diagnostic"), so this is an error.
@@ -215,20 +163,25 @@ impl Rule {
             Self::ServerFunctionRichArgument => {
                 ("SC7007", "server-function-rich-argument", "error", false)
             }
-            Self::PackageContractExportMissing => {
-                ("SC9001", "package-contract-export-missing", "error", true)
+            Self::PackageContractIncomplete => {
+                ("SC9005", "package-contract-incomplete", "error", true)
             }
-            Self::PackageContractMissing => ("SC9005", "package-contract-missing", "error", true),
-            Self::ExecutionMapIncomplete => ("SC9004", "execution-map-incomplete", "error", true),
-            Self::PackageContractCallbackMissing => {
-                ("SC9006", "package-contract-callback-missing", "error", true)
-            }
+            Self::JsxNoDuplicateProps => ("SC8003", "jsx-no-duplicate-props", "error", false),
+            Self::PreferFor => ("SC8014", "prefer-for", "error", false),
+            Self::PreferShow => ("SC8015", "prefer-show", "warning", false),
         };
+        let opt_in_preference = matches!(self, Self::PreferFor | Self::PreferShow);
         RuleMetadata {
             code,
             name,
             severity,
             uncertifiable,
+            default_enabled: !opt_in_preference,
+            presets: if opt_in_preference {
+                &["preferences"]
+            } else {
+                &[]
+            },
         }
     }
 
@@ -312,11 +265,14 @@ mod tests {
     #[test]
     fn every_v2_static_violation_identity_resolves() {
         for (code, name) in [
-            ("SC2004", "resolve-in-reactive-scope"),
-            ("SC7002", "sync-node-received-async"),
+            ("SC2004", "resolve-in-tracked-scope"),
+            ("SC7002", "sync-computation-received-async"),
             ("SC7005", "http-response-after-flush"),
             ("SC7006", "server-function-module-directive"),
             ("SC7007", "server-function-rich-argument"),
+            ("SC8003", "jsx-no-duplicate-props"),
+            ("SC8014", "prefer-for"),
+            ("SC8015", "prefer-show"),
         ] {
             assert!(
                 Rule::from_identity(code, name).is_some(),
@@ -348,25 +304,18 @@ mod tests {
             Rule::AsyncOutsideLoadingBoundary.metadata().severity,
             "warning"
         );
-        assert_eq!(Rule::PendingAsyncUntrackedRead.metadata().severity, "error");
         assert_eq!(
-            Rule::PendingAsyncForbiddenScope.metadata().severity,
-            "warning"
+            Rule::PendingAsyncUnsuspendableRead.metadata().severity,
+            "error"
         );
         // The server throw for a bare ssrSource: "client" read outside a
         // Loading boundary is unconditional (rc.0 dist/server.js), so the
         // static rule mirrors it as an error.
-        assert_eq!(
-            Rule::SsrClientSourceOutsideLoadingBoundary
-                .metadata()
-                .severity,
-            "error"
-        );
         // SETTLED_CLEANUP_UNOWNED is a dev *throw* (rc.0 dev bundle emits an
         // error diagnostic and throws), not a warning: an onSettled callback
         // returning a cleanup in an unowned scope halts in dev and drops the
         // cleanup in production. The catalog mirrors the throw as an error.
-        assert_eq!(Rule::NoOwnerSettledCleanup.metadata().severity, "error");
+        assert_eq!(Rule::MissingOwner.metadata().severity, "warning");
         // resolve() under an active observer is a dev *throw* ("Cannot call
         // resolve inside a reactive scope", probed on the rc.0 signals dev
         // bundle), mirrored as an error like the other owned/tracked-scope
@@ -380,5 +329,6 @@ mod tests {
             "error"
         );
         assert_eq!(Rule::HttpResponseAfterFlush.metadata().severity, "warning");
+        assert!(Rule::HttpResponseAfterFlush.metadata().uncertifiable);
     }
 }

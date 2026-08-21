@@ -1,0 +1,45 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "v1/reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-write-scope/App.tsx",
+      "start": 625,
+      "end": 636,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-write-scope/App.tsx",
+      "start": 691,
+      "end": 702,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-write-scope/App.tsx",
+      "start": 756,
+      "end": 767,
+      "fixes": 0
+    },
+    {
+      "rule": "v1/reactive-write-in-owned-scope",
+      "code": "SC2001",
+      "kind": "violation",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/v1-write-scope/App.tsx",
+      "start": 848,
+      "end": 859,
+      "fixes": 0
+    }
+  ]
+}

@@ -2,6 +2,10 @@ import { affects, createEffect, createMemo, createOptimistic, createOptimisticSt
 
 createEffect(() => 1);
 createEffect(() => 1, undefined);
+// An exact required-only tuple proves the expanded apply slot is absent. The
+// call throws before allocating an owner-bound computation, so only SC7001.
+const sourceOnly: [() => number] = [() => 1];
+createEffect(...sourceOnly);
 // These raw values are rejected by the published overload, so the checker
 // stays silent even though they would crash if emitted.
 createEffect(() => 1, null);

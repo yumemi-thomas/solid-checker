@@ -6,6 +6,8 @@
 
 use std::{path::PathBuf, sync::Arc};
 
+use solid_reactive_ir::RuntimeEnvironment;
+
 pub(crate) type ContractFile = (PathBuf, [u8; 32]);
 pub(crate) type CachedSnapshot = (Arc<str>, Arc<[u8]>);
 
@@ -14,6 +16,9 @@ pub(crate) struct CachedAnswer {
     pub(crate) explicit: Vec<String>,
     pub(crate) modules: Vec<String>,
     pub(crate) contract_files: Vec<ContractFile>,
+    pub(crate) presets: Vec<String>,
+    pub(crate) enable_rules: Vec<String>,
+    pub(crate) runtime: RuntimeEnvironment,
     pub(crate) status: Arc<str>,
     pub(crate) body: Arc<[u8]>,
 }
@@ -24,10 +29,16 @@ impl CachedAnswer {
         generation: u64,
         explicit: &[String],
         contract_files: &[ContractFile],
+        presets: &[String],
+        enable_rules: &[String],
+        runtime: &RuntimeEnvironment,
     ) -> Option<CachedSnapshot> {
         (self.generation == generation
             && self.explicit == explicit
-            && self.contract_files == contract_files)
+            && self.contract_files == contract_files
+            && self.presets == presets
+            && self.enable_rules == enable_rules
+            && self.runtime == *runtime)
             .then(|| (Arc::clone(&self.status), Arc::clone(&self.body)))
     }
 }
@@ -37,6 +48,7 @@ mod tests {
     use std::{path::PathBuf, sync::Arc};
 
     use super::CachedAnswer;
+    use solid_reactive_ir::{RuntimeEnvironment, RuntimeTarget};
 
     fn cached() -> CachedAnswer {
         CachedAnswer {
@@ -44,6 +56,9 @@ mod tests {
             explicit: vec!["explicit.json".into()],
             modules: vec!["solid-js".into()],
             contract_files: vec![(PathBuf::from("solid-reactivity.json"), [7; 32])],
+            presets: vec!["preferences".into()],
+            enable_rules: vec!["prefer-show".into()],
+            runtime: RuntimeEnvironment::default(),
             status: Arc::from("certified"),
             body: Arc::from(&b"snapshot"[..]),
         }
@@ -54,19 +69,69 @@ mod tests {
         let cached = cached();
         let contracts = cached.contract_files.clone();
         assert_eq!(
-            cached.snapshot_if_current(3, &cached.explicit, &contracts),
+            cached.snapshot_if_current(
+                3,
+                &cached.explicit,
+                &contracts,
+                &cached.presets,
+                &cached.enable_rules,
+                &cached.runtime,
+            ),
             Some((Arc::from("certified"), Arc::from(&b"snapshot"[..])))
         );
-        assert!(
-            cached
-                .snapshot_if_current(4, &cached.explicit, &contracts)
-                .is_none()
-        );
-        assert!(cached.snapshot_if_current(3, &[], &contracts).is_none());
-        assert!(
-            cached
-                .snapshot_if_current(3, &cached.explicit, &[])
-                .is_none()
-        );
+        let changed = [
+            cached.snapshot_if_current(
+                cached.generation + 1,
+                &cached.explicit,
+                &cached.contract_files,
+                &cached.presets,
+                &cached.enable_rules,
+                &cached.runtime,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &[],
+                &cached.contract_files,
+                &cached.presets,
+                &cached.enable_rules,
+                &cached.runtime,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.explicit,
+                &[],
+                &cached.presets,
+                &cached.enable_rules,
+                &cached.runtime,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.explicit,
+                &cached.contract_files,
+                &[],
+                &cached.enable_rules,
+                &cached.runtime,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.explicit,
+                &cached.contract_files,
+                &cached.presets,
+                &[],
+                &cached.runtime,
+            ),
+            cached.snapshot_if_current(
+                cached.generation,
+                &cached.explicit,
+                &cached.contract_files,
+                &cached.presets,
+                &cached.enable_rules,
+                &RuntimeEnvironment {
+                    target: Some(RuntimeTarget::Browser),
+                    ..RuntimeEnvironment::default()
+                },
+            ),
+        ];
+        assert!(changed.into_iter().all(|snapshot| snapshot.is_none()));
     }
 }

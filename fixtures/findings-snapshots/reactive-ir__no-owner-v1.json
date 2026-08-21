@@ -2,7 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "v1/package-contract-missing",
+      "rule": "v1/package-contract-incomplete",
       "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
@@ -14,7 +14,7 @@
       "hint": "Create a local contract at <ROOT>/fixtures/reactive-ir/no-owner-v1/.solid-checker/contracts/uncontracted-package/solid-reactivity.json, or pass one explicitly with --contract <PATH>. If you maintain uncontracted-package, ship solid-reactivity.json in the package root so every consumer gets it. See docs/package-contracts.md for the format."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -26,8 +26,8 @@
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle."
     },
     {
-      "rule": "v1/no-owner-boundary",
-      "code": "SC4003",
+      "rule": "v1/missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
@@ -38,7 +38,7 @@
       "hint": "Render boundaries inside a component tree rooted by render() or hydrate(), or under an explicit createRoot; a boundary created in a bare helper function has no owner to attach to."
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -48,18 +48,6 @@
       "fixes": 0,
       "message": "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app; the containing function may be a Solid component or an ordinary helper, so its owner context cannot be certified",
       "hint": "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle. Use the function through JSX or annotate it with Solid's Component type to establish component ownership; otherwise handle the helper's lifetime explicitly."
-    },
-    {
-      "rule": "v1/primitive-in-directive-application",
-      "code": "SC6001",
-      "kind": "violation",
-      "severity": "error",
-      "path": "fixtures/reactive-ir/no-owner-v1/App.tsx",
-      "start": 2086,
-      "end": 2098,
-      "fixes": 0,
-      "message": "reactive primitive createSignal is created in a directive application callback; the apply phase runs per element as an unowned leaf, so primitives created here are never tracked or disposed",
-      "hint": "Use the two-phase directive factory: create primitives and subscriptions in the setup phase (the factory body, which runs in an owned scope) and keep the returned ref callback to DOM work only."
     }
   ]
 }

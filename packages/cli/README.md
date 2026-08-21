@@ -92,6 +92,11 @@ or a solution-style root config that only references application configs.
 By default the analysis picks its dialect from the `solid-js` version the
 project resolves. Set `settings.solidChecker.dialect` to `"solid-v1"` or
 `"solid-v2"` to override detection for every rule the adapter runs.
+When package contracts or rendering proofs depend on deployment conditions,
+set `settings.solidChecker.runtime` with explicit `target`, `build`,
+`rendering`, `conditions`, and `frameworkTransforms` fields. Incomplete or
+contradictory selections remain uncertifiable; the adapter includes the full
+selection in its analysis cache identity.
 
 Every catalog rule is also its own ESLint rule, so a project can disable one
 finding without losing the rest: unprefixed names
@@ -118,7 +123,7 @@ id, compatibility `config` key, and optional rule `namespace`; adding a catalog
 does not require a JavaScript registry or version branch.
 
 Project-wide rule enablement and per-rule options (for example
-`v1/no-innerhtml`'s `allowStatic`) live in the project's
+`v1/prefer-classlist`'s `classnames`) live in the project's
 `.solid-checker/rule-options.json`, which the native analysis
 discovers itself — not in ESLint rule configuration. The adapter runs one
 analysis per project, so a single discovered file is what keeps ESLint, the

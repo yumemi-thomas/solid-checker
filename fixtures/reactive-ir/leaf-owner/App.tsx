@@ -45,7 +45,7 @@ export function App() {
 
 // Out-of-band onSettled: called from an event handler, the callback is
 // enqueued as a plain function, not a leaf owner (rc.0 dev.js:4855-4893) —
-// onCleanup only warns no-owner-cleanup, primitives attach nowhere without
+// onCleanup only warns missing-owner,    primitives attach nowhere without
 // throwing, and flush() is a silent no-op, so no SC3xxx fires here.
 export function OutOfBand() {
   const [count] = createSignal(0);
@@ -121,7 +121,7 @@ export function DynamicExtent() {
     <button
       onClick={() => {
         // Not a leaf scope: an event handler runs out-of-band, where
-        // onCleanup at worst warns no-owner-cleanup — the leaf rules stay
+        // onCleanup at worst warns missing-owner    — the leaf rules stay
         // silent on this call.
         registerTeardown();
       }}
@@ -145,15 +145,13 @@ function wrapCallback(callback: () => void) {
 }
 
 export function ArgumentPosition() {
-  // `makeTeardownCallback()` is evaluated here, at argument-evaluation time,
-  // under the enclosing owner — before any leaf scope exists. The callback
-  // the owner ends up with is opaque. No SC3xxx is proven, but SC9012 keeps
-  // the unresolved leaf behavior explicit.
+  // The exact local factory has one unconditional function return. Its body
+  // is the callback createTrackedEffect receives, so registerTeardown() is
+  // proven to run in the leaf scope.
   createTrackedEffect(makeTeardownCallback());
-  // The arrow is `wrapCallback`'s argument, not the owner's callback:
-  // `wrapCallback` decides whether and where it runs. Calls written inside
-  // it are not proven to execute in the leaf scope, so SC9012 is emitted
-  // instead of guessing at SC3001 or silently certifying the callback.
+  // The exact local wrapper returns its callback parameter unchanged. The
+  // returned arrow is therefore the callback the owner receives, and its
+  // registerTeardown() call is also a proven leaf violation.
   createTrackedEffect(
     wrapCallback(() => {
       registerTeardown();

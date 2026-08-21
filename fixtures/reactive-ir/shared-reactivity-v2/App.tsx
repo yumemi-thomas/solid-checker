@@ -66,7 +66,7 @@ export function MutatesInsideOtherSetter() {
   return <button onClick={() => setOther(() => { store.open = true; })}>{String(store.open)}{other.count}</button>;
 }
 
-// expected-function-got-expression (SC1007): count() runs during setup and
+// reactive-handler-frozen          (SC1007): count() runs during setup and
 // its result -- a number, not a function -- is bound as the listener.
 export function CalledHandler() {
   const [count] = createSignal(0);
@@ -108,9 +108,9 @@ export function ReactiveMemberHandler(props: { onSave: () => void }) {
   return <button onClick={props.onSave}>save</button>;
 }
 
-// untracked-derived-function (SC1006): doubled derives from count, and the
-// only call to it is a plain statement in the component body, so the
-// derivation reads once and subscribes to nothing.
+// strict-read-untracked (SC1001): the untracked call reaches count through
+// doubled, so the diagnostic anchors on the helper call that triggers the
+// runtime's strict-read warning at call time.
 export function DerivedButDiscarded() {
   const [count] = createSignal(0);
   const doubled = () => count() * 2;
@@ -119,7 +119,7 @@ export function DerivedButDiscarded() {
 }
 
 // Derivation is transitive: labelled reads doubled, which reads count. Only
-// labelled is invoked in the untracked component body, so SC1006 must follow
+// labelled is invoked in the untracked component body, so SC1001 must follow
 // the dependency chain rather than relying on a direct signal read.
 export function TransitivelyDerivedButDiscarded() {
   const [count] = createSignal(0);

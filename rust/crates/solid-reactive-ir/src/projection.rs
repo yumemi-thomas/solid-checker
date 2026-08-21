@@ -9,9 +9,9 @@ use std::time::Instant;
 use typefacts::Location;
 
 use crate::{
-    ActionInvocation, AsyncRead, DraggableSpelling, EvidenceStep, Finding, LeafOwnerOperation,
-    OwnerRequirement, PrimitiveCreation, Program, ReactiveRead, ReactiveWrite, RuleMetadata,
-    SolveTimings, StaticDefect, StaticDefectKind, StaticViolation, finish_findings,
+    ActionInvocation, AsyncRead, EvidenceStep, Finding, LeafOwnerOperation, OwnerRequirement,
+    PrimitiveCreation, Program, ReactiveRead, ReactiveWrite, RuleMetadata, SolveTimings,
+    StaticDefect, StaticDefectKind, StaticViolation, finish_findings,
 };
 
 /// The few phrases where shared static-defect concepts use dialect APIs.
@@ -20,7 +20,6 @@ pub struct StaticDefectTerms {
     pub reactive_object_destructure_hint: &'static str,
     pub missing_effect_message: &'static str,
     pub missing_effect_hint: &'static str,
-    pub tracked_derived_scope: &'static str,
     pub store_mutation_hint: fn(&str) -> String,
     /// A dialect-owned override for the missing-contract-export hint: when
     /// the dialect knows the export was removed or renamed upstream (the
@@ -42,10 +41,6 @@ pub struct StaticDefectText {
 #[must_use]
 pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> StaticDefectText {
     let (message, hint) = match &defect.kind {
-        StaticDefectKind::ExecutionMapIncomplete => (
-            "the Solid compiler did not classify this JSX expression as tracked, untracked, or a callback; without an execution role, solid-checker cannot certify any reactive read inside it".into(),
-            "Simplify the expression: hoist complex logic into a createMemo and interpolate the accessor. If this persists on plain JSX, re-run with fresh compiler facts and report the pattern as a solid-checker issue.".into(),
-        ),
         StaticDefectKind::ReactiveObjectDestructure {
             source,
             component_props,
@@ -73,53 +68,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ComponentReturnsConditionally => (
             "this component's return value depends on a reactive condition, but a component body runs once; whichever branch is taken at setup renders forever, and the condition is never re-evaluated".into(),
             "Return a single JSX tree and move the branch into it: wrap the alternatives in <Show when={...} fallback={...}> (or <Switch>/<Match> for multiple cases), or use a ternary inside JSX where it stays tracked.".into(),
-        ),
-        StaticDefectKind::PreferComponentSyntax { name } => (
-            format!(
-                "JSX-returning function {name:?} is called imperatively inside JSX; this hides component identity and can evaluate setup logic in the caller's reactive expression"
-            ),
-            format!(
-                "Rename it with an uppercase component name and render it as <{} />. If this is intentionally a value helper, return data rather than JSX.",
-                uppercase_first(name)
-            ),
-        ),
-        StaticDefectKind::ImplicitDraggableBoolean { spelling } => (
-            match spelling {
-                DraggableSpelling::Shorthand => {
-                    "the draggable attribute uses JSX boolean shorthand, which emits an empty attribute value; HTML treats that as the invalid/default state rather than draggable=\"true\"".into()
-                }
-                // The removal half of the same probe: `false` removes the
-                // attribute, and removal selects `auto` — which is draggable
-                // on this element.
-                DraggableSpelling::LiteralFalseOnDraggableDefault => {
-                    if defect.uncertain {
-                        "the draggable attribute is given boolean false, which the runtime removes; a dynamic or spread-carried href may leave this anchor either draggable or non-draggable in the resulting auto state, so neither the defect nor safety is proven".into()
-                    } else {
-                        "the draggable attribute is given the boolean false, which the runtime serializes by removing the attribute; this element is draggable by default, so the removed attribute's auto state silently re-enables dragging rather than selecting draggable=\"false\"".into()
-                    }
-                }
-            },
-            match spelling {
-                DraggableSpelling::LiteralFalseOnDraggableDefault => {
-                    "Write draggable=\"false\"; draggable is enumerated, so only the string \"false\" disables dragging on images and links, whose auto state is draggable.".into()
-                }
-                DraggableSpelling::Shorthand => {
-                    "Write draggable=\"true\" for a static attribute, or draggable={condition ? \"true\" : \"false\"} for a dynamic one; draggable is enumerated, so only the strings \"true\" and \"false\" select a state.".into()
-                }
-            },
-        ),
-        StaticDefectKind::InvalidJsxNesting {
-            parent,
-            child,
-            ancestor,
-        } => (
-            format!(
-                "HTML parsing changes <{child}> nested {} <{parent}>, so the browser DOM differs from the authored JSX and can fail hydration",
-                if *ancestor { "inside" } else { "directly under" }
-            ),
-            format!(
-                "Move <{child}> outside <{parent}> or add the HTML-required wrapper so the server and browser construct the same tree."
-            ),
         ),
         StaticDefectKind::PackageContractExportMissing {
             module,
@@ -198,15 +146,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
             }
             (message, hint)
         }
-        StaticDefectKind::UntrackedDerivedFunction { name } => (
-            format!(
-                "{name} derives from reactive state but every call to it is untracked, so its reads subscribe to nothing and the derivation never updates"
-            ),
-            format!(
-                "Call {name} from a tracking scope — {} — or inline the value if a one-off read at setup is what was meant.",
-                terms.tracked_derived_scope
-            ),
-        ),
         StaticDefectKind::ReactiveSourceUncaptured { source, callee } => (
             format!(
                 "the reactive source {source:?} is passed to {callee}, whose reactive behaviour is not described anywhere: it has no body in this project, no package contract entry, and is not a Solid primitive; whether reads through it stay tracked cannot be certified"
@@ -304,25 +243,6 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
         StaticDefectKind::ComponentReturnsConditionally => {
             "a proven reactive read controls the component's return shape"
         }
-        StaticDefectKind::PreferComponentSyntax { .. } => {
-            "the resolved local function directly returns JSX and this call is inside JSX"
-        }
-        StaticDefectKind::ImplicitDraggableBoolean {
-            spelling: DraggableSpelling::Shorthand,
-        } => "the intrinsic draggable attribute has no explicit value",
-        StaticDefectKind::ImplicitDraggableBoolean {
-            spelling: DraggableSpelling::LiteralFalseOnDraggableDefault,
-        } if defect.uncertain => {
-            "the runtime removes draggable={false}, while the final presence of this anchor's href depends on a dynamic value or spread"
-        }
-        StaticDefectKind::ImplicitDraggableBoolean {
-            spelling: DraggableSpelling::LiteralFalseOnDraggableDefault,
-        } => {
-            "the intrinsic draggable attribute is a literal boolean false on a draggable-by-default element, and the runtime removes the attribute on false"
-        }
-        StaticDefectKind::InvalidJsxNesting { .. } => {
-            "the intrinsic JSX ancestor chain is statically known and HTML parsing changes this nesting"
-        }
         StaticDefectKind::PackageContractExportMissing { .. } => {
             "the imported package has a contract, but this export has no effect summary"
         }
@@ -357,10 +277,8 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
                 }
             }
         }
-        StaticDefectKind::ExecutionMapIncomplete
-        | StaticDefectKind::ReactiveReadAfterAwait { .. }
+        StaticDefectKind::ReactiveReadAfterAwait { .. }
         | StaticDefectKind::MissingEffectFunction
-        | StaticDefectKind::UntrackedDerivedFunction { .. }
         | StaticDefectKind::ReactiveSourceUncaptured { .. }
         | StaticDefectKind::ReactiveHandlerRead { .. }
         | StaticDefectKind::HandlerValueUnresolved { .. }
@@ -376,18 +294,17 @@ pub fn static_defect_text(defect: &StaticDefect, terms: &StaticDefectTerms) -> S
     }
 }
 
-fn uppercase_first(value: &str) -> String {
-    let mut characters = value.chars();
-    characters.next().map_or_else(String::new, |first| {
-        first.to_uppercase().chain(characters).collect()
-    })
-}
-
 /// The program tables a dialect catalog intentionally projects.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct CatalogCapabilities {
     pub actions: bool,
     pub async_reads: bool,
+    pub leaf_operations: bool,
+    pub directive_creations: bool,
+    /// Whether one-shot rendering/component bodies are included in the
+    /// owned-write rule. Solid 2.0's runtime guard rejects them; Solid 1.x
+    /// only has the feedback-loop hazard inside genuinely tracked scopes.
+    pub untracked_rendering_writes: bool,
     /// Whether module-scope reads are reported by the strict-read rule.
     /// The rc.0 runtime installs strict-read contexts only inside component
     /// and effect bodies (probed: a module-scope signal or memo read emits no
@@ -395,7 +312,7 @@ pub struct CatalogCapabilities {
     /// 1.x catalog keeps upstream `reactivity` semantics, which report
     /// module-scope-adjacent reads.
     pub module_scope_strict_reads: bool,
-    /// Whether an `expected-function-got-expression` finding owns the
+    /// Whether a `reactive-handler-frozen` finding owns the
     /// handler expression it claims, suppressing the strict-read finding on
     /// the identical span (the README's one-defect-class-one-rule policy).
     /// The 1.x catalog keeps both, pinned by the upstream parity ledger's
@@ -407,6 +324,9 @@ impl CatalogCapabilities {
     pub const SOLID_1: Self = Self {
         actions: false,
         async_reads: false,
+        leaf_operations: false,
+        directive_creations: false,
+        untracked_rendering_writes: false,
         module_scope_strict_reads: true,
         handler_expression_owns_strict_read: false,
     };
@@ -414,6 +334,9 @@ impl CatalogCapabilities {
     pub const SOLID_2: Self = Self {
         actions: true,
         async_reads: true,
+        leaf_operations: true,
+        directive_creations: true,
+        untracked_rendering_writes: true,
         module_scope_strict_reads: false,
         handler_expression_owns_strict_read: true,
     };
@@ -528,15 +451,22 @@ pub fn project_findings(
         program
             .writes
             .iter()
-            .filter(|write| !write.allowed_by_option && write.execution.reports_disallowed_write())
+            .filter(|write| {
+                !write.allowed_by_option
+                    && write.execution.reports_disallowed_write()
+                    && (capabilities.untracked_rendering_writes
+                        || write.execution != crate::ExecutionRole::UntrackedRendering)
+            })
             .map(|write| project_finding(FindingSeed::OwnedWrite(write), catalog)),
     );
-    findings.extend(
-        program
-            .leaf_operations
-            .iter()
-            .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
-    );
+    if capabilities.leaf_operations {
+        findings.extend(
+            program
+                .leaf_operations
+                .iter()
+                .map(|operation| project_finding(FindingSeed::LeafOperation(operation), catalog)),
+        );
+    }
     findings.extend(
         program
             .static_defects
@@ -549,12 +479,14 @@ pub fn project_findings(
             .iter()
             .map(|violation| project_finding(FindingSeed::StaticViolation(violation), catalog)),
     );
-    findings.extend(
-        program
-            .directive_creations
-            .iter()
-            .map(|creation| project_finding(FindingSeed::DirectiveCreation(creation), catalog)),
-    );
+    if capabilities.directive_creations {
+        findings.extend(
+            program
+                .directive_creations
+                .iter()
+                .map(|creation| project_finding(FindingSeed::DirectiveCreation(creation), catalog)),
+        );
+    }
     findings.extend(
         program
             .missing_owners
@@ -607,38 +539,67 @@ pub fn project_findings(
         );
     }
 
-    // One defect class, one rule: when expected-function-got-expression
-    // claims a handler expression, the strict-read finding on the identical
-    // span is the same defect worded twice — the handler rule carries the
-    // more specific consequence, so it wins and the strict read is dropped.
-    if capabilities.handler_expression_owns_strict_read {
-        let handler_spans: std::collections::HashSet<_> = program
-            .static_defects
+    finish_findings(findings, total_started, construction_started)
+}
+
+/// Removes SC1001 findings already owned by a more specific finding that
+/// survived rule enablement. SC5001 names the same pending async read, SC1004
+/// owns reads inside its return-shape condition, and Solid 2 lets SC1007 own
+/// the exact handler expression it reports. Calling this before enablement
+/// filtering would let a disabled owner erase an enabled strict-read finding.
+pub fn suppress_findings_owned_by_enabled_rules(
+    findings: &mut Vec<Finding>,
+    capabilities: CatalogCapabilities,
+) {
+    let pending_reads = findings
+        .iter()
+        .filter(|finding| finding.id == "SC5001")
+        .map(|finding| {
+            (
+                finding.primary_location.path.clone(),
+                finding.primary_location.start_byte,
+                finding.primary_location.end_byte,
+            )
+        })
+        .collect::<std::collections::HashSet<_>>();
+    let component_conditions = findings
+        .iter()
+        .filter(|finding| finding.id == "SC1004")
+        .map(|finding| finding.primary_location.clone())
+        .collect::<Vec<_>>();
+    let handler_reads = if capabilities.handler_expression_owns_strict_read {
+        findings
             .iter()
-            .filter(|defect| matches!(defect.kind, StaticDefectKind::ReactiveHandlerRead { .. }))
-            .map(|defect| {
+            .filter(|finding| finding.id == "SC1007")
+            .map(|finding| {
                 (
-                    defect.location.path.clone(),
-                    defect.location.start_byte,
-                    defect.location.end_byte,
+                    finding.primary_location.path.clone(),
+                    finding.primary_location.start_byte,
+                    finding.primary_location.end_byte,
                 )
             })
-            .collect();
-        if !handler_spans.is_empty() {
-            // SC1001 is the strict-read rule's stable diagnostic code in
-            // every catalog; the external rule name differs per dialect.
-            findings.retain(|finding| {
-                finding.id != "SC1001"
-                    || !handler_spans.contains(&(
-                        finding.primary_location.path.clone(),
-                        finding.primary_location.start_byte,
-                        finding.primary_location.end_byte,
-                    ))
-            });
+            .collect::<std::collections::HashSet<_>>()
+    } else {
+        std::collections::HashSet::new()
+    };
+    findings.retain(|finding| {
+        if finding.id != "SC1001" {
+            return true;
         }
-    }
-
-    finish_findings(findings, total_started, construction_started)
+        let location = &finding.primary_location;
+        let exact = (
+            location.path.clone(),
+            location.start_byte,
+            location.end_byte,
+        );
+        !pending_reads.contains(&exact)
+            && !handler_reads.contains(&exact)
+            && !component_conditions.iter().any(|condition| {
+                condition.path == location.path
+                    && condition.start_byte <= location.start_byte
+                    && location.end_byte <= condition.end_byte
+            })
+    });
 }
 
 /// Projects one seed. Used by the backend for package-contract issues that
@@ -714,12 +675,13 @@ pub fn project_finding(seed: FindingSeed<'_>, catalog: &impl CatalogWording) -> 
             // declare a loadingValue, and a declared first flight cannot
             // throw — so the untracked-read error is no longer a *proven*
             // runtime throw and becomes a proof obligation instead. The
-            // boundary rules keep their reporting: SC5003 is informational
-            // either way, and SC5002's throw is timing-dependent by nature.
+            // boundary rules keep their reporting: ordinary SC5003 is
+            // informational either way, and the leaf-owner SC5001 variant's
+            // throw is timing-dependent by nature.
             if read.options_opaque && finding.id == "SC5001" {
                 finding.kind = "uncertifiable".into();
             }
-            if read.server_rendering_unresolved && finding.id == "SC5005" {
+            if read.server_rendering_unresolved {
                 finding.kind = "uncertifiable".into();
             }
         }
@@ -782,6 +744,8 @@ mod tests {
                     name: "test",
                     severity: "warning",
                     uncertifiable: false,
+                    default_enabled: true,
+                    presets: &[],
                 },
                 message,
                 "",
@@ -795,6 +759,62 @@ mod tests {
             start_byte: index,
             end_byte: index + 1,
         }
+    }
+
+    fn finding(code: &'static str, start: u64, end: u64) -> Finding {
+        Finding::new(
+            RuleMetadata {
+                code,
+                name: "test",
+                severity: "warning",
+                uncertifiable: false,
+                default_enabled: true,
+                presets: &[],
+            },
+            "test".into(),
+            Location {
+                path: "projection.tsx".into(),
+                start_byte: start,
+                end_byte: end,
+            },
+        )
+    }
+
+    #[test]
+    fn enabled_specific_defects_own_their_strict_reads() {
+        let mut findings = vec![
+            finding("SC1001", 10, 11),
+            finding("SC5001", 10, 11),
+            finding("SC1001", 21, 22),
+            finding("SC1004", 20, 25),
+            finding("SC1001", 27, 28),
+            finding("SC1007", 27, 28),
+            finding("SC1001", 30, 31),
+        ];
+
+        suppress_findings_owned_by_enabled_rules(&mut findings, CatalogCapabilities::SOLID_2);
+
+        assert_eq!(
+            findings
+                .iter()
+                .map(|finding| (finding.id.as_str(), finding.primary_location.start_byte))
+                .collect::<Vec<_>>(),
+            [
+                ("SC5001", 10),
+                ("SC1004", 20),
+                ("SC1007", 27),
+                ("SC1001", 30),
+            ]
+        );
+    }
+
+    #[test]
+    fn solid_one_keeps_the_handler_rule_split() {
+        let mut findings = vec![finding("SC1001", 10, 11), finding("SC1007", 10, 11)];
+
+        suppress_findings_owned_by_enabled_rules(&mut findings, CatalogCapabilities::SOLID_1);
+
+        assert_eq!(findings.len(), 2);
     }
 
     #[test]

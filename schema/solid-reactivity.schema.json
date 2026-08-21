@@ -112,6 +112,24 @@
             "properties": {
               "parameter": { "type": "integer", "minimum": 0 },
               "execution": { "enum": ["inline", "tracked", "deferred"] },
+              "owner": {
+                "enum": ["inherited", "created", "unowned", "conditional", "leaf"]
+              },
+              "evidence": { "$ref": "#/$defs/claimEvidence" }
+            }
+          }
+        },
+        "ownerRequirements": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["operation"],
+            "properties": {
+              "operation": {
+                "enum": ["effect", "cleanup", "boundary", "settled-cleanup"]
+              },
               "evidence": { "$ref": "#/$defs/claimEvidence" }
             }
           }

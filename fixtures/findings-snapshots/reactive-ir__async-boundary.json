@@ -2,17 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 944,
-      "end": 950,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-untracked-read",
+      "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
       "severity": "error",
@@ -22,17 +12,7 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 1173,
-      "end": 1185,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-untracked-read",
+      "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
       "severity": "error",
@@ -42,8 +22,8 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-forbidden-scope",
-      "code": "SC5002",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
@@ -52,8 +32,8 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-forbidden-scope",
-      "code": "SC5002",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
@@ -172,17 +152,7 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 4311,
-      "end": 4325,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-untracked-read",
+      "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "violation",
       "severity": "error",
@@ -192,8 +162,8 @@
       "fixes": 0
     },
     {
-      "rule": "pending-async-forbidden-scope",
-      "code": "SC5002",
+      "rule": "pending-async-unsuspendable-read",
+      "code": "SC5001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/async-boundary/App.tsx",
@@ -212,17 +182,7 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/async-boundary/App.tsx",
-      "start": 4958,
-      "end": 4970,
-      "fixes": 0
-    },
-    {
-      "rule": "pending-async-untracked-read",
+      "rule": "pending-async-unsuspendable-read",
       "code": "SC5001",
       "kind": "uncertifiable",
       "severity": "error",

@@ -1,7 +1,6 @@
-// v1/prefer-for and v1/prefer-show fire on JSX *child* position, exactly as
-// upstream's container checks do: a `.map()` rendered as children reports
-// whether or not the callback builds JSX, a `.map()` assigned to a variable
-// does not, and a conditional inside an attribute value stays silent.
+// The shared preferences retain upstream's JSX-child and expensive-branch
+// structural gates, but these static inputs stay clean after the checker adds
+// its stricter reactive-governing-input requirement.
 const items = ["a", "b"];
 
 function Up() {

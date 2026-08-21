@@ -14,7 +14,7 @@
 //! a value, a proxy written through, a listener bound to a call's result —
 //! so both dialects' catalogs carry them (1.x as `v1/<rule>`, 2.0 under the
 //! checker's plain names, same SC codes so suppressions survive a
-//! migration). The one exception is `no-async-tracked-scope`; see its doc.
+//! migration).
 //!
 //! # Proven sources, not named ones
 //!
@@ -32,254 +32,30 @@
 //! arrives through three wrappers still is.
 
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, FunctionFact, IdentifierRole};
+use solid_facts::ast::{ArgumentValueKind, IdentifierRole};
 use solid_facts::core::Span;
 use typefacts::{ArrayShape, Callability, ResolvedCallValidity};
 
 use super::{
     UpstreamCompatContext, expression_array_shape, expression_runtime_value_domain,
-    is_lowercase_led, jsx_name_is_type_checked, static_string_expression, text,
+    is_lowercase_led, jsx_name_is_type_checked, member_root, source_symbol_at,
+    static_string_expression, text,
 };
-use crate::owners::containing_ast_function;
 use crate::runtime_semantics::{RuntimeArgumentBehavior, argument_behavior};
 use crate::{
-    DirectMutationTarget, ReactiveSourceKind, StaticDefect, StaticDefectKind, StaticViolation,
-    known_primitive, location,
+    DirectMutationTarget, ReactiveSourceKind, StaticDefect, StaticDefectKind, known_primitive,
+    location,
 };
 
 pub(super) fn check_file(
     file: &FileFacts,
     context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
     defects: &mut Vec<StaticDefect>,
 ) {
     uncalled_accessor(file, context, defects);
     no_direct_mutation(file, context, defects);
-    // The one rule in this module whose defect is version-specific: Solid
-    // 2.0 models async computations as a feature (see the rule's doc), so
-    // only the 1.x catalog carries it.
-    if context.dialect.reports_async_tracked_scope() {
-        no_async_tracked_scope(file, context, violations);
-    }
     expected_function_got_expression(file, context, defects);
     reactive_source_uncaptured(file, context, defects);
-    untracked_derived_function(file, context, defects);
-}
-
-/// `v1/untracked-derived-function` — upstream's `untrackedReactive`.
-///
-/// A function that derives from reactive state and is only ever called where
-/// nothing tracks. Wrapping reads in a function defers them, but deferral only
-/// pays off if something eventually calls it in a tracking scope; otherwise
-/// the derivation reads its inputs once per call and subscribes to nothing.
-///
-/// # Why this one is narrow
-///
-/// Every other rule here proves something local and positive. This one has to
-/// prove a *negative* — that no tracking scope anywhere ever calls the
-/// function — and a wrong negative reports the single most common shape in
-/// Solid code. So it fires only when every use is enumerable and every one of
-/// them is untracked:
-///
-/// - the function is bound inside another function, so no reference to it can
-///   exist outside this file;
-/// - every reference is the callee of a direct call, never an argument, never
-///   a return value, never a JSX child — anything else could hand it to a
-///   tracking scope this cannot see;
-/// - every call sits directly in the declaring function's own body, not in a
-///   nested one, since a nested function may itself be a callback somewhere
-///   tracked;
-/// - and none is inside JSX, which tracks.
-///
-/// A single reference that fails any of those abandons the function rather
-/// than guessing. That leaves the textbook case and little else, which is the
-/// right trade for a rule whose false positives would land on correct code.
-///
-/// # Why the abandonments are not classified further
-///
-/// Two stronger fact domains were weighed here and deliberately not consulted:
-///
-/// - **Dialect callback slots / compiler tracked regions.** A call inside
-///   `createMemo(() => derived())` could be *proven* tracked instead of
-///   abandoned — but a tracked call already means the derivation works, so
-///   "proven tracked" and "abandoned" both end in silence. Classifying
-///   changes no outcome.
-/// - **Counting deferred positions as untracked evidence.** A call inside an
-///   event handler, `onMount`, or `untrack` is provably outside tracking,
-///   but reading current values there is idiomatic — upstream exempts those
-///   positions too — so counting them as defect evidence would flag correct
-///   code.
-fn untracked_derived_function(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    defects: &mut Vec<StaticDefect>,
-) {
-    let candidates = file
-        .ast
-        .bindings
-        .iter()
-        .filter_map(|binding| {
-            if !binding.initializer_function {
-                return None;
-            }
-            let (Some(initializer), [declared]) = (binding.initializer, binding.names.as_slice())
-            else {
-                return None;
-            };
-            let function = function_at(file, initializer)?;
-            // Bound inside another function: references cannot escape the
-            // file except by being passed or returned, both refused below.
-            let enclosing = containing_ast_function(&file.ast, binding.declaration)?;
-            let symbol = context
-                .entities
-                .at(file.path.as_str(), declared.span)?
-                .clone();
-            Some((binding, declared, function, enclosing, symbol))
-        })
-        .collect::<Vec<_>>();
-
-    // Derivation is transitive: `bar = () => foo()` derives whenever `foo`
-    // does. Only reads/calls directly owned by the candidate function count;
-    // a dormant nested function is code the outer function never executes.
-    let mut derived = std::collections::HashSet::new();
-    loop {
-        let mut changed = false;
-        for (_, _, function, _, symbol) in &candidates {
-            if derived.contains(symbol) {
-                continue;
-            }
-            let direct_source = file.ast.identifiers.iter().any(|identifier| {
-                identifier.role == IdentifierRole::Reference
-                    && function.body.contains(identifier.span)
-                    && containing_ast_function(&file.ast, identifier.span)
-                        .is_some_and(|owner| owner.span == function.span)
-                    && context
-                        .entities
-                        .at(file.path.as_str(), identifier.span)
-                        .is_some_and(|read| {
-                            read != symbol
-                                && (context.accessors.contains_key(read)
-                                    || context.prop_sources.get(read).is_some_and(
-                                        |(_, declaration)| {
-                                            // Proven-static props are not
-                                            // reactive state to derive from.
-                                            context.props_reactivity.object_use(declaration)
-                                                != crate::source_discovery::PropUse::Static
-                                        },
-                                    ))
-                        })
-            });
-            let derived_call = file.ast.calls.iter().any(|call| {
-                function.body.contains(call.span)
-                    && containing_ast_function(&file.ast, call.span)
-                        .is_some_and(|owner| owner.span == function.span)
-                    && context
-                        .entities
-                        .at(file.path.as_str(), call.callee)
-                        .is_some_and(|callee| derived.contains(callee))
-            });
-            if direct_source || derived_call {
-                changed |= derived.insert(symbol.clone());
-            }
-        }
-        if !changed {
-            break;
-        }
-    }
-
-    // Execution-role gate (2.0 catalog): a call in a tracked compute tracks
-    // its reads, and a call in an event handler, deferred/leaf callback,
-    // effect apply, untrack, or directive application reads legitimately
-    // fresh values at call time. Neither is untracked-read evidence.
-    let role_exemptions = context.dialect.derived_function_role_exemptions();
-    let allowed = if role_exemptions {
-        crate::execution_role::allowed_callback_spans(file, context.lookup)
-    } else {
-        Vec::new()
-    };
-    for (_, declared, _, enclosing, symbol) in candidates {
-        if !derived.contains(&symbol) {
-            continue;
-        }
-        let mut calls = 0usize;
-        let enumerable = file
-            .ast
-            .identifiers
-            .iter()
-            .filter(|identifier| {
-                identifier.role == IdentifierRole::Reference
-                    && context.entities.at(file.path.as_str(), identifier.span) == Some(&symbol)
-            })
-            .all(|identifier| {
-                let Some(call) = file
-                    .ast
-                    .calls
-                    .iter()
-                    .find(|call| call.callee == identifier.span)
-                else {
-                    return false; // referenced without being called
-                };
-                let directly_enclosed = containing_ast_function(&file.ast, call.span)
-                    .is_some_and(|owner| owner.span == enclosing.span);
-                if !directly_enclosed || within_jsx(file, call.span) {
-                    return false;
-                }
-                if role_exemptions
-                    && matches!(
-                        crate::execution_role::semantic_execution_role(
-                            file,
-                            call.span,
-                            &allowed,
-                            context.entities,
-                            context.lookup.symbol_names(),
-                            context.lookup,
-                        ),
-                        crate::ExecutionRole::TrackedJsx
-                            | crate::ExecutionRole::EventCallback
-                            | crate::ExecutionRole::DeferredCallback
-                            | crate::ExecutionRole::UntrackedCallback
-                            | crate::ExecutionRole::EffectApply
-                            | crate::ExecutionRole::DirectiveApply
-                    )
-                {
-                    // Tracked or fresh-at-call-time: this call misbehaves in
-                    // no way and contributes no untracked evidence.
-                    return true;
-                }
-                calls += 1;
-                true
-            });
-        if !enumerable || calls == 0 {
-            continue;
-        }
-        let name = text(file, declared.span);
-        defects.push(StaticDefect {
-            kind: StaticDefectKind::UntrackedDerivedFunction {
-                name: name.to_owned(),
-            },
-            location: location(file.path.shared(), declared.span),
-            analysis_context: String::new(),
-            fixes: vec![],
-            uncertain: false,
-        });
-    }
-}
-
-/// Whether a span sits anywhere inside JSX, which is a tracking scope.
-///
-/// Fragments track their children exactly as elements do and live in their
-/// own table, so both are consulted; checking only elements reported a
-/// derived function rendered through `<>{…}</>` as never tracked.
-fn within_jsx(file: &FileFacts, span: Span) -> bool {
-    file.ast
-        .jsx_elements
-        .iter()
-        .any(|element| element.span.contains(span))
-        || file
-            .ast
-            .jsx_fragments
-            .iter()
-            .any(|fragment| fragment.contains(span))
 }
 
 /// `v1/reactive-source-uncaptured` — the uncertifiable half of upstream's
@@ -293,7 +69,7 @@ fn within_jsx(file: &FileFacts, span: Span) -> bool {
 ///
 /// This reports the *gap*, not a defect, which is why it is uncertifiable
 /// rather than a violation. It is the call-site companion to
-/// `v1/package-contract-export-missing`: that rule fires once at an
+/// `v1/package-contract-incomplete`: that rule fires once at an
 /// undescribed import, this one fires where the missing description actually
 /// costs certification.
 ///
@@ -417,94 +193,7 @@ fn reactive_source_uncaptured(
     }
 }
 
-/// `v1/no-async-tracked-scope` — upstream's `noAsyncTrackedScope`.
-///
-/// An `async` function handed to a position the dialect tracks. A computation
-/// collects dependencies only until its first suspension point, so every read
-/// after an `await` subscribes to nothing and the scope silently stops
-/// responding.
-///
-/// Which slot tracks is asked of the dialect rather than assumed, and that is
-/// the whole reason this is a per-dialect rule: `createEffect`'s callback is
-/// argument 0 in 1.x and argument 1 in 2.0, so a table baked for one version
-/// reports the other's seed value as a tracked scope.
-///
-/// Scoped to functions written at the call. An identifier naming an `async`
-/// function declared elsewhere is the same defect, but proving the binding
-/// reaches this slot is interprocedural work the engine already does for
-/// reads — [`crate::StaticViolation`]s for those surface as
-/// `v1/reactive-read-after-await` instead, per-read and with the offending
-/// read located.
-///
-/// # Why this asks only the dialect, not contracts or async type facts
-///
-/// - **Package contracts.** A contract's `ContractCallback` carries an
-///   `execution` of `"tracked"`, but that means "the graph schedules it" —
-///   an `onSettled`-style callback is contract-tracked while its reads do
-///   not subscribe (see `Dialect::callback_semantics_at`). Flagging every
-///   async literal handed to a contract-tracked slot would therefore report
-///   correct code. The engine already threads contract callbacks through its
-///   interprocedural graph, so an actual read-after-await inside one still
-///   surfaces, per-read, as SC1001/SC1002.
-/// - **`can_return_async` type facts.** A non-`async` function that returns
-///   a Promise has no `await`, so every read in it runs before any
-///   suspension and subscribes normally — the defect this rule reports
-///   cannot occur in it.
-///
-/// # Why the 2.0 catalog does not carry this rule
-///
-/// Solid 2.0 models async computations as a feature: an async compute
-/// produces an async accessor the engine tracks through `async_reads` and
-/// the `Loading`-boundary rules (SC5001–SC5003). A blanket "no async in a
-/// tracked slot" would contradict the dialect's own model there; 2.0's
-/// after-await reads are still covered per-read by SC1002.
-fn no_async_tracked_scope(
-    file: &FileFacts,
-    context: &UpstreamCompatContext<'_>,
-    violations: &mut Vec<StaticViolation>,
-) {
-    let primitives = context.lookup.primitives(file);
-    for (index, call) in file.ast.calls.iter().enumerate() {
-        let Some(primitive) = known_primitive(&primitives.calls[index]) else {
-            continue;
-        };
-        let name = primitives.calls[index]
-            .as_ref()
-            .map_or("", crate::PrimitiveName::as_str);
-        for slot in 0..call.arguments.len() {
-            if !context
-                .dialect
-                .callback_semantics_at(primitive, slot, call.arguments.len())
-                .tracks_reads
-            {
-                continue;
-            }
-            let argument = &call.arguments[slot];
-            let Some(function) = function_at(file, argument.span) else {
-                continue;
-            };
-            if !function.r#async {
-                continue;
-            }
-            violations.push(StaticViolation {
-                id: "SC5004".into(),
-                rule: "no-async-tracked-scope".into(),
-                message: format!(
-                    "this {name} scope is an async function; Solid tracks dependencies only up to the first await, so every reactive read after it subscribes to nothing"
-                ),
-                hint: format!(
-                    "Keep the {name} scope synchronous and move the async work into createResource, whose source function stays tracked; read the resulting accessor from here."
-                ),
-                location: location(file.path.shared(), argument.span),
-                analysis_context: String::new(),
-                fixes: vec![],
-                uncertain: false,
-            });
-        }
-    }
-}
-
-/// `v1/expected-function-got-expression` — upstream's
+/// `v1/reactive-handler-frozen` — upstream's
 /// `expectedFunctionGotExpression`.
 ///
 /// A native element's event-handler binding receiving an already-evaluated
@@ -547,9 +236,8 @@ fn expected_function_got_expression(
                     || super::solid1x_syntax::expression_is_static_literal(file, expression))
             {
                 // Solid 1.x freezes this value into a plain attribute instead
-                // of installing it as a listener. SC8001 owns that exact
-                // compiler consequence; describing it here as a non-callable
-                // runtime listener would be both duplicate and false.
+                // of installing it as a listener. It is therefore not a
+                // non-callable runtime listener, so this rule stays silent.
                 continue;
             }
             // TypeScript deliberately skips every JSX attribute whose name
@@ -687,24 +375,24 @@ fn unchecked_handler_value_proof(
     let Some(domain) = expression_runtime_value_domain(context, file, runtime) else {
         return HandlerValueProof::Unresolved;
     };
-    if domain.unknown {
+    if domain.unknown() {
         return HandlerValueProof::Unresolved;
     }
     // `never` cannot reach the listener. A callable (optionally absent) is a
     // valid handler, while absence sentinels disable the handler harmlessly.
-    if (!domain.may_be_callable && !domain.may_be_undefined && !domain.may_be_other)
-        || (domain.may_be_callable && !domain.may_be_other)
-        || (!domain.may_be_callable && domain.may_be_undefined && !domain.may_be_other)
+    if (!domain.may_be_callable() && !domain.may_be_undefined() && !domain.may_be_other())
+        || (domain.may_be_callable() && !domain.may_be_other())
+        || (!domain.may_be_callable() && domain.may_be_undefined() && !domain.may_be_other())
     {
         return HandlerValueProof::Safe;
     }
-    if !domain.may_be_callable
-        && !domain.may_be_undefined
+    if !domain.may_be_callable()
+        && !domain.may_be_undefined()
         && handler_value_is_absent_sentinel(context, file, runtime)
     {
         return HandlerValueProof::Safe;
     }
-    if domain.may_be_callable || domain.may_be_undefined {
+    if domain.may_be_callable() || domain.may_be_undefined() {
         return HandlerValueProof::Unresolved;
     }
     match expression_array_shape(context, file, runtime) {
@@ -751,16 +439,6 @@ fn handler_value_is_absent_sentinel(
                     .initializer
                     .is_some_and(|initializer| is_sentinel_literal(binding_file, initializer))
         })
-}
-
-/// The function written at exactly this span, if the argument is a literal
-/// function rather than a reference to one.
-fn function_at(file: &FileFacts, span: Span) -> Option<&FunctionFact> {
-    let span = file.ast.peel_ts_sugar_span(span);
-    file.ast
-        .functions
-        .iter()
-        .find(|function| function.span == span)
 }
 
 /// `v1/uncalled-accessor` — upstream's `badSignal`.
@@ -821,19 +499,6 @@ fn uncalled_accessor(
             uncertain: false,
         });
     }
-}
-
-fn source_symbol_at<'a>(
-    context: &'a UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> Option<&'a crate::SymbolId> {
-    context.entities.at(file.path.as_str(), span).or_else(|| {
-        context
-            .source_reference_index
-            .get(file.path.as_str())
-            .and_then(|by_range| by_range.get(&(u64::from(span.start), u64::from(span.end))))
-    })
 }
 
 /// `v1/no-direct-mutation` — upstream's `noWrite`.
@@ -1091,20 +756,4 @@ fn value_position(file: &FileFacts, span: Span) -> Option<&'static str> {
     // TS2538 ("Type 'Accessor<string>' cannot be used as an index type") in
     // both dialects, so it never reaches this function's callers any more.
     None
-}
-
-/// The object a member chain is rooted at: `store.a.b` → `store`.
-fn member_root(file: &FileFacts, span: Span) -> Option<Span> {
-    let mut current = file.ast.members.iter().find(|member| member.span == span)?;
-    loop {
-        match file
-            .ast
-            .members
-            .iter()
-            .find(|member| member.span == current.object)
-        {
-            Some(outer) => current = outer,
-            None => return Some(current.object),
-        }
-    }
 }

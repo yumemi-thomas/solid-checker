@@ -436,16 +436,6 @@ pub trait Dialect: Sync {
     /// so a 1.x diagnostic must not cite the 2.0 file.
     fn bundled_contract_label(&self) -> &'static str;
 
-    /// The JSX attribute namespace prefixes this dialect's compiler gives
-    /// meaning to — the reserved compiler namespaces plus the XML namespaces
-    /// it maps. Anything else compiles to nothing, which is what
-    /// `no-unknown-namespaces` reports.
-    ///
-    /// The two versions differ sharply: dom-expressions 0.50 dropped the
-    /// `class:`/`style:`/`on:`/`oncapture:`/`use:`/`attr:`/`bool:` special
-    /// namespaces, leaving `prop:` as 2.0's only reserved prefix.
-    fn jsx_attribute_namespaces(&self) -> &'static [&'static str];
-
     /// Resolves an exported name to a primitive, or `None` when this dialect
     /// does not export it.
     fn primitive(&self, name: &str) -> Option<Primitive>;
@@ -936,18 +926,11 @@ pub trait Dialect: Sync {
         false
     }
 
-    /// Whether this dialect reports an async function handed to a tracked
-    /// scope (`no-async-tracked-scope`). 1.x does; Solid 2.0 models async
-    /// computations as a feature, so its catalog omits the rule.
-    fn reports_async_tracked_scope(&self) -> bool {
-        false
-    }
-
     /// Whether a statically known string/number in a native `on*` JSX
     /// position is emitted as an attribute instead of installed as a listener.
     /// Solid 1.x's compiler makes that node/value distinction; the shared
-    /// handler-value rule must therefore leave those expressions to the v1
-    /// `event-handlers` rule rather than describe them as runtime listeners.
+    /// handler-value rule must therefore leave those expressions alone rather
+    /// than describe them as runtime listeners.
     fn static_event_values_are_attributes(&self) -> bool {
         false
     }
@@ -985,16 +968,6 @@ pub trait Dialect: Sync {
     /// catalog. Solid 1.x has no core server functions, so the default is
     /// `false`.
     fn models_server_functions(&self) -> bool {
-        false
-    }
-
-    /// Whether `untracked-derived-function` exempts a derived helper whose
-    /// every call runs in a tracked compute or a fresh-at-call-time imperative
-    /// scope (event handler, deferred/leaf callback, effect apply, untrack).
-    /// Reads there either track or are legitimately fresh, so nothing
-    /// misbehaves. The 1.x catalog keeps upstream's expectations for parity,
-    /// so the default is `false`.
-    fn derived_function_role_exemptions(&self) -> bool {
         false
     }
 

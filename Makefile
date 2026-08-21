@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-conformance contracts contracts-check coverage coverage-update parity parity-update tsc-oracle tsc-oracle-provision tsc-ownership tsc-ownership-report clean
+.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean
 
 build: build-rust
 
@@ -51,15 +51,24 @@ tsc-oracle: tsc-oracle-provision build-checker-debug
 	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
 	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
 
-# Needs parity's run artifact (the spans the checker actually reported), so it
-# runs after parity rather than beside it.
-tsc-ownership: tsc-oracle-provision parity
-	node scripts/parity-tsc-ownership.mjs
+# The other half of the precision contract. The oracle holds a *reported*
+# finding to being this checker's claim; this holds an *unreported* one to
+# being a missing fact rather than an over-conservatism, by supplying the
+# evidence and asking what changed.
+obligation-audit: tsc-oracle-provision build-checker-debug
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/obligation-audit.mjs
 
-# Which upstream cases are not valid TypeScript, and which findings look like
-# duplicates. A discovery report, not a gate.
-tsc-ownership-report: tsc-oracle-provision parity
-	node scripts/parity-tsc-ownership.mjs --report
+# Compatibility target. Product ownership moved to ownership-gate after every
+# retained upstream case was migrated into the product-owned manifest.
+tsc-ownership: ownership-gate
+
+# Product-owned semantic cases. Unlike upstream parity, every expected finding
+# carries its TypeScript-ownership disposition and exact source-relative span.
+ownership-gate: tsc-oracle-provision build-checker-debug
+	SOLID_CHECKER_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/ownership-gate.mjs \
+	  --require-retained --require-complete
 
 # Fixture-findings snapshots: "no finding moved" as a checkable claim.
 coverage: build-rust
@@ -67,13 +76,6 @@ coverage: build-rust
 
 coverage-update: build-rust
 	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/coverage.mjs --update
-
-# eslint-plugin-solid's own 465 test cases, with every deviation declared.
-parity: build-rust
-	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/parity.mjs
-
-parity-update: build-rust
-	SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/parity.mjs --update
 
 verify-performance: build-typefacts
 	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) -p solid-facts-backend --bin solid-checker-session-bench
@@ -84,6 +86,11 @@ corpus: build-rust
 
 contract-corpus: build-rust
 	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/bin/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/contract-corpus.mjs
+
+# Source-vs-contract parity requires the exact audited Solid typings used by
+# the consumer side of the probe; provisioning is intentionally explicit.
+contract-differential: build-checker-debug tsc-oracle-provision
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" node scripts/contract-differential.mjs
 
 contract-conformance:
 	node scripts/check-bundled-contracts.mjs

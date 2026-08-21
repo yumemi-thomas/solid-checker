@@ -11,11 +11,12 @@ use sha2::{Digest, Sha256};
 use solid_facts::ProjectFacts;
 use solid_reactive_ir::{
     CacheRetention, Finding, IncrementalBuilder, PackageContract, PackageContractIssue,
-    PackageContractIssueKind, Program, RuleOptions,
+    PackageContractIssueKind, Program, RuleOptions, RuntimeEnvironment,
+    suppress_findings_owned_by_enabled_rules,
 };
 
 use crate::dialect::{self, Dialect};
-use crate::{BackendError, SourceFile};
+use crate::{BackendError, SemanticDemandOptions, SourceFile};
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -117,6 +118,13 @@ pub struct DiagnosticTimings {
     pub reused: bool,
 }
 
+#[derive(Clone, Debug, Default)]
+pub struct RequestedRuleEnablement<'a> {
+    pub presets: &'a [String],
+    pub rules: &'a [String],
+    pub runtime: RuntimeEnvironment,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 struct DiagnosticIdentity {
     /// Which dialect's catalog and compiler produced the retained analysis;
@@ -177,6 +185,30 @@ impl DiagnosticSession {
             .map(|(analysis, _)| analysis)
     }
 
+    pub fn analyze_with_enablement(
+        &mut self,
+        project: &Path,
+        sources: &[SourceFile],
+        facts: &ProjectFacts,
+        explicit_contract_paths: &[String],
+        presets: &[String],
+        enable_rules: &[String],
+    ) -> Result<Arc<DiagnosticAnalysis>, BackendError> {
+        self.analyze_measured_with_enablement(
+            project,
+            sources,
+            facts,
+            explicit_contract_paths,
+            None,
+            RequestedRuleEnablement {
+                presets,
+                rules: enable_rules,
+                runtime: RuntimeEnvironment::default(),
+            },
+        )
+        .map(|(analysis, _)| analysis)
+    }
+
     pub fn analyze_measured(
         &mut self,
         project: &Path,
@@ -184,6 +216,25 @@ impl DiagnosticSession {
         facts: &ProjectFacts,
         explicit_contract_paths: &[String],
         bundled_solid_js: Option<PackageContract>,
+    ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+        self.analyze_measured_with_enablement(
+            project,
+            sources,
+            facts,
+            explicit_contract_paths,
+            bundled_solid_js,
+            RequestedRuleEnablement::default(),
+        )
+    }
+
+    pub fn analyze_measured_with_enablement(
+        &mut self,
+        project: &Path,
+        sources: &[SourceFile],
+        facts: &ProjectFacts,
+        explicit_contract_paths: &[String],
+        bundled_solid_js: Option<PackageContract>,
+        enablement: RequestedRuleEnablement<'_>,
     ) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
         let ir_started = Instant::now();
         let loaded = load_package_contracts_reporting(
@@ -193,7 +244,14 @@ impl DiagnosticSession {
             explicit_contract_paths,
             bundled_solid_js,
         )?;
-        let rule_options = discover_rule_options(project)?;
+        let mut rule_options = discover_rule_options(project)?;
+        rule_options.request_presets(enablement.presets.iter().cloned());
+        rule_options.request_rules(enablement.rules.iter().cloned());
+        enablement
+            .runtime
+            .validate()
+            .map_err(BackendError::Contract)?;
+        rule_options.runtime = enablement.runtime.clone();
         let identity = DiagnosticIdentity {
             dialect: self.dialect.id,
             project_id: facts.project_id.clone(),
@@ -220,10 +278,21 @@ impl DiagnosticSession {
             ));
         }
 
+        // Contract discovery and contract proof are deliberately separate.
+        // Keep every discovered document for the status report, but only let
+        // reviewed/verified claims cross the semantic trust boundary. An
+        // inferred row may explain what the generator observed; it cannot
+        // prove a violation or suppress an obligation in the consumer.
+        let certifiable_contracts = loaded
+            .contracts
+            .iter()
+            .filter(|contract| contract_evidence_is_certifiable(contract))
+            .cloned()
+            .collect::<Vec<_>>();
         let (program, _) = self.builder.build_with_contracts_shared(
             facts,
             self.dialect.vocabulary,
-            &loaded.contracts,
+            &certifiable_contracts,
             &rule_options,
         )?;
         let reactive_ir = ir_started.elapsed();
@@ -314,6 +383,25 @@ pub fn analyze_project_measured_with(
     )
 }
 
+pub fn analyze_project_measured_with_enablement(
+    dialect: &'static Dialect,
+    project: &Path,
+    sources: &[SourceFile],
+    facts: &ProjectFacts,
+    explicit_contract_paths: &[String],
+    bundled_solid_js: Option<PackageContract>,
+    enablement: RequestedRuleEnablement<'_>,
+) -> Result<(Arc<DiagnosticAnalysis>, DiagnosticTimings), BackendError> {
+    DiagnosticSession::new(dialect).analyze_measured_with_enablement(
+        project,
+        sources,
+        facts,
+        explicit_contract_paths,
+        bundled_solid_js,
+        enablement,
+    )
+}
+
 fn finish_analysis(
     dialect: &'static Dialect,
     project: &Path,
@@ -391,12 +479,39 @@ fn finish_analysis(
             location,
         })
     }));
-    findings.retain(|finding| identity.rule_options.is_enabled(&finding.rule));
+    retain_enabled(dialect, &identity.rule_options, &mut findings)?;
+    suppress_findings_owned_by_enabled_rules(&mut findings, dialect.catalog_capabilities);
     let snapshot = snapshot(sources, &contracts, metrics, findings);
     Ok(DiagnosticAnalysis {
         program,
         contracts,
         snapshot,
+    })
+}
+
+fn retain_enabled(
+    dialect: &Dialect,
+    options: &RuleOptions,
+    findings: &mut Vec<Finding>,
+) -> Result<(), BackendError> {
+    let mut unknown = Vec::new();
+    findings.retain(|finding| match (dialect.rule_metadata)(&finding.rule) {
+        Some(metadata) => {
+            options.is_enabled(&finding.rule, metadata.default_enabled, metadata.presets)
+        }
+        None => {
+            unknown.push(finding.rule.clone());
+            false
+        }
+    });
+    if unknown.is_empty() {
+        return Ok(());
+    }
+    unknown.sort_unstable();
+    unknown.dedup();
+    Err(BackendError::UnknownRuleIdentity {
+        dialect: dialect.id,
+        rules: unknown,
     })
 }
 
@@ -672,12 +787,22 @@ fn bundled_solidjs_web_contract() -> Result<PackageContract, BackendError> {
     Ok(bundled)
 }
 
+#[cfg(feature = "dialect-v2")]
+fn bundled_solidjs_signals_contract() -> Result<PackageContract, BackendError> {
+    let mut bundled = decode_package_contract(include_bytes!(
+        "../../../../pkg/contracts/bundled/solid-v2/solidjs-signals.json"
+    ))?;
+    bundled.source_path = "bundled://solid-v2/solidjs-signals.json".into();
+    Ok(bundled)
+}
+
 /// The Solid 2.0 dialect's bundled contract set, keyed by package root.
 #[cfg(feature = "dialect-v2")]
 pub(crate) fn bundled_contract_v2(package: &str) -> Result<Option<PackageContract>, BackendError> {
     Ok(match package {
         "solid-js" => Some(bundled_solid_js_contract()?),
         "@solidjs/web" => Some(bundled_solidjs_web_contract()?),
+        "@solidjs/signals" => Some(bundled_solidjs_signals_contract()?),
         _ => None,
     })
 }
@@ -744,16 +869,18 @@ pub fn load_package_contracts_with(
     explicit_paths: &[String],
     bundled_solid_js: Option<PackageContract>,
 ) -> Result<Vec<PackageContract>, BackendError> {
-    Ok(
-        load_package_contracts_reporting(
-            dialect,
-            project,
-            facts,
-            explicit_paths,
-            bundled_solid_js,
-        )?
-        .contracts,
-    )
+    let loaded = load_package_contracts_reporting(
+        dialect,
+        project,
+        facts,
+        explicit_paths,
+        bundled_solid_js,
+    )?;
+    Ok(loaded
+        .contracts
+        .into_iter()
+        .filter(contract_evidence_is_certifiable)
+        .collect())
 }
 
 /// As [`load_package_contracts_with`], but also returns the contracts that were
@@ -1253,7 +1380,13 @@ pub fn package_contract_statuses_with(
             .map(package_uses_solid)
             .transpose()?
             .unwrap_or(false);
-        if !bundled && !uses_solid {
+        // A package-published/local contract is itself a declaration that the
+        // package participates in this semantic protocol. Report its evidence
+        // even when package.json does not list Solid directly (peer wrappers
+        // and framework adapters frequently keep that edge outside their own
+        // manifest). Otherwise an inferred contract can enter analysis without
+        // any unverified status at all.
+        if !bundled && !uses_solid && !by_name.contains_key(module.as_str()) {
             continue;
         }
         // A refusal recorded during loading wins: the package has a contract
@@ -1411,6 +1544,29 @@ pub fn discover_rule_options(project: &Path) -> Result<RuleOptions, BackendError
     )
 }
 
+/// Facts needed before diagnostic rule execution, derived from the same
+/// project options and request enablement that the diagnostic identity uses.
+pub fn semantic_demand_options_for_enablement(
+    dialect: &Dialect,
+    project: &Path,
+    enablement: RequestedRuleEnablement<'_>,
+) -> Result<SemanticDemandOptions, BackendError> {
+    let mut options = discover_rule_options(project)?;
+    options.request_presets(enablement.presets.iter().cloned());
+    options.request_rules(enablement.rules.iter().cloned());
+    let rule = if dialect.id == "solid-v1" {
+        "v1/prefer-for"
+    } else {
+        "prefer-for"
+    };
+    let metadata = (dialect.rule_metadata)(rule);
+    Ok(SemanticDemandOptions {
+        array_map_receiver_types: metadata.is_some_and(|metadata| {
+            options.is_enabled(rule, metadata.default_enabled, metadata.presets)
+        }),
+    })
+}
+
 fn discover_rule_options_with(
     project: &Path,
     has_rule: impl Fn(&str) -> bool,
@@ -1425,9 +1581,15 @@ fn discover_rule_options_with(
         let candidate = ancestor.join(".solid-checker").join("rule-options.json");
         match fs::read_to_string(&candidate) {
             Ok(encoded) => {
-                return RuleOptions::parse(&encoded, &has_rule, &owns_solid1x_options).map_err(
-                    |error| BackendError::RuleOptions(format!("{}: {error}", candidate.display())),
-                );
+                return RuleOptions::parse_with_aliases(
+                    &encoded,
+                    &has_rule,
+                    &owns_solid1x_options,
+                    dialect::rule_alias,
+                )
+                .map_err(|error| {
+                    BackendError::RuleOptions(format!("{}: {error}", candidate.display()))
+                });
             }
             Err(error) if error.kind() == io::ErrorKind::NotFound => {}
             Err(error) => return Err(error.into()),
@@ -1541,8 +1703,41 @@ mod tests {
 
     use solid_facts::core::Generation;
     use solid_facts::{ProjectFacts, TypeScriptTable};
+    use solid_reactive_ir::RuntimeEnvironment;
 
-    use super::DiagnosticSession;
+    use super::{DiagnosticSession, retain_enabled};
+
+    #[test]
+    fn unknown_finding_identities_fail_closed() {
+        let mut findings = vec![solid_reactive_ir::Finding::new(
+            solid_reactive_ir::RuleMetadata {
+                code: "TEST00",
+                name: "not-in-the-catalog",
+                severity: "error",
+                uncertifiable: false,
+                default_enabled: true,
+                presets: &[],
+            },
+            "synthetic".into(),
+            typefacts::Location {
+                path: "synthetic.tsx".into(),
+                start_byte: 0,
+                end_byte: 1,
+            },
+        )];
+        let error = retain_enabled(
+            crate::dialect::default_dialect(),
+            &solid_reactive_ir::RuleOptions::default(),
+            &mut findings,
+        )
+        .unwrap_err();
+        assert!(findings.is_empty());
+        assert!(matches!(
+            error,
+            crate::BackendError::UnknownRuleIdentity { rules, .. }
+                if rules == ["not-in-the-catalog"]
+        ));
+    }
 
     #[test]
     fn diagnostic_session_reuses_the_complete_result() {
@@ -1574,13 +1769,94 @@ mod tests {
         assert!(!initial_timings.reused);
         assert!(reused_timings.reused);
     }
+
+    #[test]
+    fn diagnostic_session_keys_retention_on_requested_enablement() {
+        let facts = ProjectFacts {
+            generation: Generation::new(1).unwrap(),
+            project_id: "/virtual/tsconfig.json".into(),
+            files: Vec::new(),
+            typescript: TypeScriptTable::from_parts(
+                3,
+                1,
+                "/virtual/tsconfig.json",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            typescript_changes: None,
+        };
+        let mut session = DiagnosticSession::default();
+
+        let (_, baseline) = session
+            .analyze_measured(Path::new(&facts.project_id), &[], &facts, &[], None)
+            .unwrap();
+        let (preset_analysis, preset_miss) = session
+            .analyze_measured_with_enablement(
+                Path::new(&facts.project_id),
+                &[],
+                &facts,
+                &[],
+                None,
+                super::RequestedRuleEnablement {
+                    presets: &["preferences".into()],
+                    rules: &[],
+                    runtime: RuntimeEnvironment::default(),
+                },
+            )
+            .unwrap();
+        let (preset_reused, preset_hit) = session
+            .analyze_measured_with_enablement(
+                Path::new(&facts.project_id),
+                &[],
+                &facts,
+                &[],
+                None,
+                super::RequestedRuleEnablement {
+                    presets: &["preferences".into(), "preferences".into()],
+                    rules: &[],
+                    runtime: RuntimeEnvironment::default(),
+                },
+            )
+            .unwrap();
+        let (_, rule_miss) = session
+            .analyze_measured_with_enablement(
+                Path::new(&facts.project_id),
+                &[],
+                &facts,
+                &[],
+                None,
+                super::RequestedRuleEnablement {
+                    presets: &[],
+                    rules: &["prefer-show".into()],
+                    runtime: RuntimeEnvironment::default(),
+                },
+            )
+            .unwrap();
+
+        assert!(!baseline.reused);
+        assert!(
+            !preset_miss.reused,
+            "a preset change must miss retained analysis"
+        );
+        assert!(
+            preset_hit.reused,
+            "duplicate preset values must normalize to one identity"
+        );
+        assert!(Arc::ptr_eq(&preset_analysis, &preset_reused));
+        assert!(
+            !rule_miss.reused,
+            "an enabled-rule change must miss retained analysis"
+        );
+    }
     /// A rule-options document naming a *removed* rule must load, and one
     /// naming a rule that never existed must still fail. The first half is the
     /// migration path for a project that had disabled a rule this checker went
     /// on to delete; the second is what keeps a typo from silently changing
     /// policy, which is the reason the validation exists.
     #[test]
-    fn retired_rule_identities_are_tolerated_and_typos_are_not() {
+    fn compatibility_rule_identities_are_tolerated_and_typos_are_not() {
         let directory = std::env::temp_dir().join(format!(
             "solid-checker-retired-rules-{}",
             std::process::id()
@@ -1612,6 +1888,34 @@ mod tests {
                     .any(|dialect| (dialect.has_rule)(retired.0)),
                 "{:?} is retired but still declared by a catalog",
                 retired.0
+            );
+        }
+
+        for (old, current) in crate::dialect::RULE_ALIASES {
+            std::fs::write(
+                &document,
+                format!(
+                    r#"{{ "schemaVersion": 1, "rules": {{ {old:?}: {{ "enabled": false }} }} }}"#
+                ),
+            )
+            .unwrap();
+            let loaded = super::discover_rule_options(&directory)
+                .unwrap_or_else(|error| panic!("alias {old:?} must load: {error}"));
+            assert!(
+                !loaded.is_enabled(current, true, &[]),
+                "disabling alias {old:?} did not disable {current:?}"
+            );
+            assert!(
+                crate::dialect::ALL
+                    .iter()
+                    .any(|dialect| (dialect.has_rule)(current)),
+                "alias target {current:?} is absent from every catalog"
+            );
+            assert!(
+                !crate::dialect::ALL
+                    .iter()
+                    .any(|dialect| (dialect.has_rule)(old)),
+                "alias source {old:?} is still declared by a catalog"
             );
         }
 

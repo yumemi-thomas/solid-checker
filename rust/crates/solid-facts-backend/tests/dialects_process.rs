@@ -29,6 +29,14 @@ fn dialect_snapshot_findings(fixture: &str) -> Vec<serde_json::Value> {
 }
 
 fn project_snapshot_findings(project: PathBuf, dialect: Option<&str>) -> Vec<serde_json::Value> {
+    project_snapshot_findings_with(project, dialect, &[])
+}
+
+fn project_snapshot_findings_with(
+    project: PathBuf,
+    dialect: Option<&str>,
+    extra_args: &[&str],
+) -> Vec<serde_json::Value> {
     // Callers skip when the harness is unarmed; reaching this helper without
     // the producer is a test bug, and an empty result here would let every
     // `all(...)`-shaped assertion pass vacuously.
@@ -43,6 +51,7 @@ fn project_snapshot_findings(project: PathBuf, dialect: Option<&str>) -> Vec<ser
     if let Some(dialect) = dialect {
         command.arg("--dialect").arg(dialect);
     }
+    command.args(extra_args);
     let output = command
         .arg("--project")
         .arg(&project)
@@ -63,6 +72,256 @@ fn project_snapshot_findings(project: PathBuf, dialect: Option<&str>) -> Vec<ser
 }
 
 #[test]
+fn control_flow_preferences_are_opt_in_with_explicit_disables_winning() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    let v2 = fixture_root.join("preferences-v2/tsconfig.json");
+    let preference_findings = |findings: Vec<serde_json::Value>| {
+        findings
+            .into_iter()
+            .filter(|finding| matches!(finding["id"].as_str(), Some("SC8014" | "SC8015")))
+            .collect::<Vec<_>>()
+    };
+
+    let defaults = preference_findings(project_snapshot_findings_with(
+        v2.clone(),
+        Some("solid-v2"),
+        &[],
+    ));
+    assert!(
+        defaults.is_empty(),
+        "stylistic preferences must not block default certification: {defaults:#?}"
+    );
+
+    let preset = preference_findings(project_snapshot_findings_with(
+        v2.clone(),
+        Some("solid-v2"),
+        &["--preset", "preferences"],
+    ));
+    assert_eq!(
+        preset
+            .iter()
+            .filter(|finding| finding["id"] == "SC8014")
+            .count(),
+        5,
+        "array Type Facts plus direct, prop-accessor, interprocedural, and v2 async facts select five lists: {preset:#?}"
+    );
+    assert_eq!(
+        preset
+            .iter()
+            .filter(|finding| finding["id"] == "SC8015")
+            .count(),
+        5,
+        "per-prop caller facts must keep the static sibling clean: {preset:#?}"
+    );
+    assert!(preset.iter().all(|finding| finding["kind"] == "violation"));
+    let v2_source = std::fs::read_to_string(fixture_root.join("preferences-v2/App.tsx"))
+        .expect("read v2 preference fixture");
+    let starts = preset
+        .iter()
+        .map(|finding| finding["primaryLocation"]["startByte"].as_u64().unwrap())
+        .collect::<Vec<_>>();
+    let marker = |source: &str| {
+        u64::try_from(v2_source.find(source).expect("fixture marker")).expect("offset fits u64")
+    };
+    let accessor_component = v2_source
+        .find("function AccessorProps")
+        .expect("fixture anchor");
+    let accessor_map = accessor_component
+        + v2_source[accessor_component..]
+            .find("props.items().map")
+            .expect("accessor prop marker");
+    assert!(starts.contains(&u64::try_from(accessor_map).expect("offset fits u64")));
+    assert!(starts.contains(&marker("derivedItems().map")));
+    assert!(!starts.contains(&marker("props.staticReady &&")));
+    assert!(!starts.contains(&marker("customCollection().map")));
+    let async_map = marker("items().map(async");
+    assert!(starts.contains(&async_map));
+    assert!(preset.iter().any(|finding| {
+        finding["primaryLocation"]["startByte"].as_u64() == Some(async_map)
+            && finding["fixes"].as_array().is_none_or(Vec::is_empty)
+    }));
+    let v2_for_fix_texts = preset
+        .iter()
+        .filter(|finding| finding["rule"] == "prefer-for")
+        .flat_map(|finding| finding["fixes"].as_array().into_iter().flatten())
+        .flat_map(|fix| fix["edits"].as_array().into_iter().flatten())
+        .filter_map(|edit| edit["newText"].as_str())
+        .collect::<Vec<_>>();
+    assert!(!v2_for_fix_texts.is_empty());
+    assert!(
+        v2_for_fix_texts
+            .iter()
+            .all(|text| !text.contains("keyed={false}"))
+    );
+    assert!(
+        v2_for_fix_texts
+            .iter()
+            .any(|text| text.contains("import { For as __SolidCheckerFor"))
+    );
+
+    let explicit_enable = preference_findings(project_snapshot_findings_with(
+        v2,
+        Some("solid-v2"),
+        &["--enable-rule", "prefer-show"],
+    ));
+    assert_eq!(explicit_enable.len(), 5);
+    assert!(
+        explicit_enable
+            .iter()
+            .all(|finding| finding["rule"] == "prefer-show")
+    );
+
+    let v2_disabled = preference_findings(project_snapshot_findings_with(
+        fixture_root.join("preferences-v2-disabled/tsconfig.json"),
+        Some("solid-v2"),
+        &["--preset", "preferences"],
+    ));
+    assert!(
+        v2_disabled.is_empty(),
+        "explicit v2 disables must win over defaults and presets: {v2_disabled:#?}"
+    );
+
+    let enabled = preference_findings(project_snapshot_findings_with(
+        fixture_root.join("preferences-v1-enabled/tsconfig.json"),
+        Some("solid-v1"),
+        &[],
+    ));
+    assert_eq!(
+        enabled
+            .iter()
+            .filter(|finding| finding["id"] == "SC8014")
+            .count(),
+        2,
+        "v1 reports only receivers Type Facts prove are arrays: {enabled:#?}"
+    );
+    assert_eq!(
+        enabled
+            .iter()
+            .filter(|finding| finding["id"] == "SC8015")
+            .count(),
+        3,
+        "v1 preferences must not promote uncertain prop backing into proof: {enabled:#?}"
+    );
+    assert!(enabled.iter().all(|finding| finding["kind"] == "violation"));
+    let v1_for_fix_texts = enabled
+        .iter()
+        .filter(|finding| finding["rule"] == "v1/prefer-for")
+        .flat_map(|finding| finding["fixes"].as_array().into_iter().flatten())
+        .flat_map(|fix| fix["edits"].as_array().into_iter().flatten())
+        .filter_map(|edit| edit["newText"].as_str())
+        .collect::<Vec<_>>();
+    assert!(!v1_for_fix_texts.is_empty());
+    assert!(
+        v1_for_fix_texts
+            .iter()
+            .all(|text| !text.contains("keyed={false}"))
+    );
+    assert!(
+        v1_for_fix_texts
+            .iter()
+            .any(|text| text.contains("import { For as __SolidCheckerFor"))
+    );
+
+    let v1_disabled = preference_findings(project_snapshot_findings_with(
+        fixture_root.join("preferences-v1-disabled/tsconfig.json"),
+        Some("solid-v1"),
+        &["--preset", "preferences"],
+    ));
+    assert!(
+        v1_disabled.is_empty(),
+        "explicit v1 disables must win over defaults and presets: {v1_disabled:#?}"
+    );
+}
+
+#[test]
+fn disabling_a_specific_owner_restores_its_strict_read_findings() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let fixture_root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    type FindingMarker<'a> = (&'a str, &'a str);
+    type DisabledOwnerCase<'a> = (&'a str, &'a str, &'a [FindingMarker<'a>]);
+    let cases: [DisabledOwnerCase<'_>; 3] = [
+        (
+            "disabled-component-owner-restores-strict",
+            "SC1004",
+            &[
+                ("function NestedAttrTernary", "cond()"),
+                ("function LogicalReturn", "visible()"),
+                ("function SwitchReturn", "mode()"),
+            ],
+        ),
+        (
+            "disabled-handler-owner-restores-strict",
+            "SC1007",
+            &[("function ReactiveCard", "props.onSave")],
+        ),
+        (
+            "disabled-pending-owner-restores-strict",
+            "SC5001",
+            &[
+                ("export function BadDirect", "user().name"),
+                ("export function BadSignalDirect", "signalUser().name"),
+                (
+                    "export function BadDeclaredUntracked",
+                    "declaredFeed().name",
+                ),
+                (
+                    "export function OpaqueOptionsUntracked",
+                    "opaqueUser().name",
+                ),
+            ],
+        ),
+    ];
+
+    for (fixture, disabled_owner, markers) in cases {
+        let source_path = if disabled_owner == "SC5001" {
+            fixture_root.join("../../../../../fixtures/reactive-ir/async-boundary/App.tsx")
+        } else {
+            fixture_root.join("../../../../../fixtures/reactive-ir/props-callers/App.tsx")
+        };
+        let source = std::fs::read_to_string(&source_path)
+            .unwrap_or_else(|error| panic!("read {}: {error}", source_path.display()));
+        let expected_starts = markers.iter().map(|(anchor, marker)| {
+            let anchor_start = source.find(anchor).unwrap_or_else(|| {
+                panic!("missing anchor {anchor:?} in {}", source_path.display())
+            });
+            let relative = source[anchor_start..].find(marker).unwrap_or_else(|| {
+                panic!(
+                    "missing marker {marker:?} after {anchor:?} in {}",
+                    source_path.display()
+                )
+            });
+            u64::try_from(anchor_start + relative).expect("source offset fits u64")
+        });
+        let findings = project_snapshot_findings(
+            fixture_root.join(fixture).join("tsconfig.json"),
+            Some("solid-v2"),
+        );
+        assert!(
+            findings
+                .iter()
+                .all(|finding| finding["id"] != disabled_owner),
+            "disabled owner {disabled_owner} still reported in {fixture}: {findings:#?}"
+        );
+        let strict_starts = findings
+            .iter()
+            .filter(|finding| finding["id"] == "SC1001")
+            .map(|finding| finding["primaryLocation"]["startByte"].as_u64().unwrap())
+            .collect::<Vec<_>>();
+        for expected in expected_starts {
+            assert!(
+                strict_starts.contains(&expected),
+                "disabling {disabled_owner} did not restore SC1001 at {expected} in {fixture}: {findings:#?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn project_rule_options_disable_one_exact_catalog_rule() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
@@ -75,7 +334,7 @@ fn project_rule_options_disable_one_exact_catalog_rule() {
     assert!(
         findings
             .iter()
-            .any(|finding| finding["rule"] == "v1/no-owner-effect"),
+            .any(|finding| finding["rule"] == "v1/missing-owner"),
         "the enabled control rule should still report: {findings:#?}"
     );
     assert!(
@@ -98,10 +357,7 @@ fn solid_one_merge_props_function_sources_are_tracked() {
     );
     assert!(
         findings.iter().all(|finding| {
-            !matches!(
-                finding["rule"].as_str(),
-                Some("v1/strict-read-untracked" | "v1/untracked-derived-function")
-            )
+            !matches!(finding["rule"].as_str(), Some("v1/strict-read-untracked"))
         }),
         "mergeProps wraps every function source in a tracked createMemo: {findings:#?}"
     );
@@ -122,93 +378,6 @@ fn component_ref_callbacks_are_setup_time_outputs_in_both_dialects() {
                 .all(|finding| finding["rule"] != "strict-read-untracked"
                     && finding["rule"] != "v1/strict-read-untracked"),
             "calling a component ref installs an imperative handle in {dialect}: {findings:#?}"
-        );
-    }
-}
-
-#[test]
-fn shared_jsx_correctness_rules_are_precise_in_both_dialects() {
-    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
-        return;
-    }
-    let project = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/jsx-correctness/tsconfig.json");
-    // The 1.x runtime stringifies attribute values (`draggable={true}` renders
-    // draggable="true", `draggable={false}` renders draggable="false", and
-    // both behave), so only the shorthand is a defect there. The 2.0 runtime
-    // treats boolean literals as attribute presence (probed on
-    // @solidjs/web@2.0.0-rc.0), but its published JSX types reject the
-    // shorthand and literal `true`, so the checker leaves those to TypeScript.
-    // A literal `false` is well typed and removes the
-    // attribute, which on the draggable-by-default elements (`img`,
-    // `a[href]`) selects the auto state and silently re-enables dragging.
-    // The href-less `a` and the `div` are not draggable by default, so their
-    // `draggable={false}` removal matches intent and stays clean, as does
-    // the enumerated string spelling `draggable="false"`. The `a` whose
-    // `href` is a dynamic expression is explicitly uncertifiable in v2: a
-    // nullish value removes the href and makes the anchor non-draggable, while
-    // a string keeps it draggable. Neither outcome may be guessed.
-    for (dialect, expected) in [
-        (
-            "solid-v1",
-            &[
-                ("v1/prefer-component-syntax", 1),
-                ("v1/no-implicit-draggable", 1),
-            ][..],
-        ),
-        (
-            "solid-v2",
-            &[("prefer-component-syntax", 1), ("no-implicit-draggable", 3)][..],
-        ),
-    ] {
-        let findings = project_snapshot_findings(project.clone(), Some(dialect));
-        let rules = findings
-            .iter()
-            .map(|finding| finding["rule"].as_str().unwrap())
-            .collect::<Vec<_>>();
-        for (rule, count) in expected {
-            assert_eq!(
-                rules
-                    .iter()
-                    .filter(|candidate| **candidate == *rule)
-                    .count(),
-                *count,
-                "{dialect} should report exactly {count} {rule}: {findings:#?}"
-            );
-        }
-        assert_eq!(
-            rules.len(),
-            expected.iter().map(|(_, count)| count).sum::<usize>(),
-            "unexpected {dialect} findings: {findings:#?}"
-        );
-        if dialect == "solid-v2" {
-            assert!(findings.iter().any(|finding| {
-                finding["rule"] == "no-implicit-draggable" && finding["kind"] == "uncertifiable"
-            }));
-        }
-    }
-}
-
-#[test]
-fn valid_jsx_nesting_reports_only_parser_tree_changes() {
-    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
-        return;
-    }
-    let project =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/jsx-nesting/tsconfig.json");
-    for (dialect, rule) in [
-        ("solid-v1", "v1/valid-jsx-nesting"),
-        ("solid-v2", "valid-jsx-nesting"),
-    ] {
-        let findings = project_snapshot_findings(project.clone(), Some(dialect));
-        let nesting = findings
-            .iter()
-            .filter(|finding| finding["rule"] == rule)
-            .collect::<Vec<_>>();
-        assert_eq!(
-            nesting.len(),
-            6,
-            "{dialect} should report each parser-changing nesting once (the standalone <tr><div> has two), cross no component boundary, and stop at WHATWG scope boundaries (nested lists, p behind button scope, button behind td): {findings:#?}"
         );
     }
 }
@@ -238,15 +407,11 @@ fn component_identity_combines_type_facts_with_dialect_compatibility() {
         .join("tests/fixtures/semantic-component-identity");
     let source = std::fs::read_to_string(fixture.join("App.tsx")).unwrap();
     let typed_offset = u64::try_from(source.find("setCount(1)").unwrap()).unwrap();
-    let compat_offset = u64::try_from(source.find("setCount(2)").unwrap()).unwrap();
     let mut component_prop_patterns = ["{ homeName }", "{ nestedName }", "{ spreadName }"]
         .map(|pattern| u64::try_from(source.find(pattern).unwrap()).unwrap())
         .to_vec();
     component_prop_patterns.sort_unstable();
-    for (dialect, expected) in [
-        ("solid-v2", vec![typed_offset]),
-        ("solid-v1", vec![typed_offset, compat_offset]),
-    ] {
+    for (dialect, expected) in [("solid-v2", vec![typed_offset]), ("solid-v1", vec![])] {
         let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some(dialect));
         let mut writes = findings
             .iter()
@@ -289,6 +454,28 @@ fn package_contract_async_behavior_reaches_async_sensitive_rules() {
     assert!(
         findings.iter().any(|finding| finding["id"] == "SC7002"),
         "the dependency contract's asyncBehavior did not classify the computation: {findings:#?}"
+    );
+}
+
+#[test]
+fn package_contract_reactive_reads_reach_control_flow_preferences() {
+    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
+        return;
+    }
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let findings = project_snapshot_findings_with(
+        root.join("fixtures/reactive-ir/package-consumer/tsconfig.json"),
+        Some("solid-v2"),
+        &["--preset", "preferences"],
+    );
+    assert!(
+        findings.iter().any(|finding| {
+            finding["id"] == "SC8014"
+                && finding["primaryLocation"]["path"]
+                    .as_str()
+                    .is_some_and(|path| path.ends_with("package-consumer/App.tsx"))
+        }),
+        "the package contract's reactiveReads summary did not reach prefer-for: {findings:#?}"
     );
 }
 
@@ -439,7 +626,7 @@ fn solid_one_array_callbacks_track_lists_but_not_mappers() {
 }
 
 #[test]
-fn solid_one_reaction_leaf_owner_requires_invoking_returned_tracker() {
+fn solid_one_reaction_callback_uses_its_disposing_computation_owner() {
     if env::var("SOLID_TYPEFACTS_BIN").is_err() {
         return;
     }
@@ -448,14 +635,15 @@ fn solid_one_reaction_leaf_owner_requires_invoking_returned_tracker() {
             .join("tests/fixtures/solid-1x-resource-overloads/tsconfig.json"),
         Some("solid-v1"),
     );
-    let leaf_owner_findings = one
-        .iter()
-        .filter(|finding| finding["id"] == "SC3001")
-        .collect::<Vec<_>>();
-    assert_eq!(
-        leaf_owner_findings.len(),
-        1,
-        "only the invoked reaction tracker can reach its invalidation callback: {one:#?}"
+    assert!(
+        one.iter().all(|finding| finding["id"] != "SC3001"),
+        "createReaction installs its own owner and disposes callback cleanups and children: {one:#?}"
+    );
+    assert!(
+        one.iter().any(|finding| {
+            finding["id"] == "SC2001" && finding["analysisContext"] == "namedTrackingCallback"
+        }),
+        "the callback passed through the returned reaction tracker must still be analyzed as a tracked computation: {one:#?}"
     );
 }
 
@@ -501,7 +689,7 @@ fn solid_one_reaction_tracker_argument_is_a_tracked_computation() {
         .unwrap() as u64;
     assert!(
         one.iter().all(|finding| {
-            finding["id"] != "SC4002" || finding["primaryLocation"]["startByte"] != cleanup_start
+            finding["id"] != "SC4001" || finding["primaryLocation"]["startByte"] != cleanup_start
         }),
         "the returned reaction tracker creates the computation owner for its tracking callback: {one:#?}"
     );
@@ -779,7 +967,12 @@ fn solid_one_transition_starter_restores_the_callers_tracking_and_owner() {
         .unwrap() as u64;
     let cleanup_findings = findings
         .iter()
-        .filter(|finding| finding["id"] == "SC4002")
+        .filter(|finding| finding["id"] == "SC4001")
+        .filter(|finding| {
+            finding["message"]
+                .as_str()
+                .is_some_and(|message| message.starts_with("onCleanup"))
+        })
         .filter(|finding| {
             finding["primaryLocation"]["startByte"]
                 .as_u64()
@@ -809,7 +1002,7 @@ fn solid_one_web_mount_callbacks_run_under_their_disposal_root() {
     let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some("solid-v1"));
     let impossible = findings
         .iter()
-        .filter(|finding| matches!(finding["id"].as_str(), Some("SC4001" | "SC4002")))
+        .filter(|finding| finding["id"] == "SC4001")
         .filter(|finding| {
             finding["primaryLocation"]["startByte"]
                 .as_u64()
@@ -849,7 +1042,7 @@ fn solid_one_from_producer_inherits_its_callers_owner() {
     let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some("solid-v1"));
     let top_level_findings = findings
         .iter()
-        .filter(|finding| finding["id"] == "SC4002")
+        .filter(|finding| finding["id"] == "SC4001")
         .filter(|finding| finding["primaryLocation"]["startByte"] == invalid_cleanup)
         .collect::<Vec<_>>();
     assert_eq!(
@@ -859,7 +1052,7 @@ fn solid_one_from_producer_inherits_its_callers_owner() {
     );
     assert!(
         findings.iter().any(|finding| {
-            finding["id"] == "SC4002"
+            finding["id"] == "SC4001"
                 && finding["primaryLocation"]["startByte"] == valid_cleanup
                 && finding["kind"] == "uncertifiable"
                 && finding["message"]
@@ -894,7 +1087,7 @@ fn solid_one_web_effect_alias_retains_render_effect_ownership() {
     );
     assert!(
         findings.iter().all(|finding| {
-            finding["id"] != "SC4002" || finding["primaryLocation"]["startByte"] != cleanup_start
+            finding["id"] != "SC4001" || finding["primaryLocation"]["startByte"] != cleanup_start
         }),
         "the effect computation owns cleanup registered inside its callback: {findings:#?}"
     );
@@ -928,7 +1121,10 @@ fn solid_one_web_derived_helpers_retain_their_computation_contracts() {
     }
     assert!(
         findings.iter().all(|finding| {
-            finding["id"] != "SC4002"
+            finding["id"] != "SC4001"
+                || finding["message"]
+                    .as_str()
+                    .is_none_or(|message| !message.starts_with("onCleanup"))
                 || finding["primaryLocation"]["startByte"]
                     .as_u64()
                     .is_none_or(|start| start < region_start || start >= region_end)
@@ -1014,7 +1210,7 @@ fn solid_one_higher_order_helpers_compose_tracking_reachability_and_owner() {
     };
     let cleanup_findings = findings
         .iter()
-        .filter(|finding| finding["id"] == "SC4002")
+        .filter(|finding| finding["id"] == "SC4001")
         .filter_map(|finding| finding["primaryLocation"]["startByte"].as_u64())
         .collect::<Vec<_>>();
     for owned in ["childrenSource", "onBodySource"] {
@@ -1132,7 +1328,10 @@ fn solid_one_catch_error_body_preserves_tracking_under_its_created_owner() {
     let region_end = source.find("const [childrenSource").unwrap() as u64;
     assert!(
         findings.iter().all(|finding| {
-            finding["id"] != "SC4002"
+            finding["id"] != "SC4001"
+                || finding["message"]
+                    .as_str()
+                    .is_none_or(|message| !message.starts_with("onCleanup"))
                 || finding["primaryLocation"]["startByte"]
                     .as_u64()
                     .is_none_or(|start| start < region_start || start >= region_end)
@@ -1185,7 +1384,7 @@ fn solid_one_lazy_loader_requires_a_proven_component_or_preload_invocation() {
     };
     let cleanup_findings = findings
         .iter()
-        .filter(|finding| finding["id"] == "SC4002")
+        .filter(|finding| finding["id"] == "SC4001")
         .collect::<Vec<_>>();
     let cleanup_finding_at = |start: u64| {
         cleanup_findings
@@ -1218,7 +1417,7 @@ fn solid_one_lazy_loader_requires_a_proven_component_or_preload_invocation() {
         .expect("cross-file cleanup") as u64;
     assert!(
         findings.iter().any(|finding| {
-            finding["id"] == "SC4002"
+            finding["id"] == "SC4001"
                 && finding["primaryLocation"]["path"]
                     .as_str()
                     .is_some_and(|path| path.ends_with("lazy-component.tsx"))
@@ -1264,74 +1463,6 @@ fn solid_one_cyclic_adapter_invocations_terminate_and_classify() {
             .iter()
             .all(|message| !message.contains("mutualAdapterSource")),
         "the mutual adapters' only acyclic execution context is a tracked effect: {findings:#?}"
-    );
-}
-
-#[test]
-fn solid_one_upstream_helpers_respect_runtime_values_and_ast_structure() {
-    if env::var("SOLID_TYPEFACTS_BIN").is_err() {
-        return;
-    }
-    let fixture = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .join("tests/fixtures/solid-1x-upstream-regressions");
-    let source = std::fs::read_to_string(fixture.join("App.tsx")).expect("read fixture");
-    let findings = project_snapshot_findings(fixture.join("tsconfig.json"), Some("solid-v1"));
-
-    let in_function = |finding: &&serde_json::Value, name: &str| {
-        let start = source.find(&format!("function {name}")).unwrap() as u64;
-        let next = source[usize::try_from(start).unwrap() + 1..]
-            .find("export function ")
-            .map_or(source.len() as u64, |offset| start + 1 + offset as u64);
-        finding["primaryLocation"]["startByte"]
-            .as_u64()
-            .is_some_and(|position| position >= start && position < next)
-    };
-
-    assert!(
-        findings
-            .iter()
-            .filter(|finding| in_function(finding, "ShadowedHandler"))
-            .all(|finding| finding["id"] != "SC8001"),
-        "a shadowed function parameter was resolved to the unrelated string binding: {findings:#?}"
-    );
-    assert!(
-        findings.iter().any(|finding| {
-            finding["id"] == "SC8004" && in_function(&finding, "EscapedScriptUrl")
-        }),
-        "the decoded unicode escape must expose the javascript: URL: {findings:#?}"
-    );
-    assert!(
-        findings
-            .iter()
-            .filter(|finding| in_function(finding, "JsxBackslashIsLiteral"))
-            .all(|finding| finding["id"] != "SC8004"),
-        "JSX attribute text must keep its backslash literal: {findings:#?}"
-    );
-    assert!(
-        findings
-            .iter()
-            .filter(|finding| in_function(finding, "CyclicUrl"))
-            .all(|finding| finding["id"] != "SC8004"),
-        "a cyclic initializer must terminate without manufacturing a URL value: {findings:#?}"
-    );
-
-    let inner_html = findings
-        .iter()
-        .filter(|finding| finding["id"] == "SC8008" && in_function(finding, "InnerHtmlFixes"))
-        .collect::<Vec<_>>();
-    // Two of the three: the arm is narrowed to components, so the intrinsic
-    // spelling is TS2322's and stays silent. The two fix shapes are what this
-    // case exists for and both live on the component now.
-    assert_eq!(
-        inner_html.len(),
-        2,
-        "both component-borne unsupported props must report, and the intrinsic one must not"
-    );
-    assert_eq!(inner_html[0]["fixes"].as_array().unwrap().len(), 1);
-    assert_eq!(
-        inner_html[1]["fixes"].as_array().map_or(0, Vec::len),
-        0,
-        "a binary expression must not receive the object-literal rewrite"
     );
 }
 
@@ -1520,9 +1651,10 @@ fn the_dialect_pair_reports_different_findings_from_identical_sources() {
         .concat()
     );
 
-    // createReaction is a leaf owner only in 1.x: onCleanup inside its
-    // callback is a 1.x finding and 2.0 silence.
-    assert!(one.iter().any(|(code, _, _, _)| code == "SC3001"));
+    // Neither dialect projects this as a forbidden leaf cleanup: 1.x runs the
+    // callback under the reaction's disposing computation, while 2.0's
+    // genuinely unowned callback belongs to the missing-owner family.
+    assert!(!one.iter().any(|(code, _, _, _)| code == "SC3001"));
     assert!(!two.iter().any(|(code, _, _, _)| code == "SC3001"));
 }
 

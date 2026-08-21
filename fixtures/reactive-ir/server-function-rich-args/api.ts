@@ -31,6 +31,25 @@ export async function savePlain(payload: { title: string }) {
   return payload.title;
 }
 
+export type SafeScalar = string | boolean | null | 0 | 1.5;
+
+export async function saveScalar(value: SafeScalar) {
+  "use server";
+  return value;
+}
+
+export type UnsafeScalar = bigint | symbol | undefined;
+
+export async function saveUnsafeScalar(value: UnsafeScalar) {
+  "use server";
+  return typeof value;
+}
+
+export async function saveNumber(value: number) {
+  "use server";
+  return value;
+}
+
 // The alias cases. Each parameter's type renders as its own name, so the text
 // walk this rule used to do matched nothing on any of them.
 export async function saveStamps(stamps: Stamps) {

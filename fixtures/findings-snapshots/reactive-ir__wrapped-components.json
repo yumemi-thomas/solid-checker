@@ -2,7 +2,7 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
       "severity": "error",
@@ -12,7 +12,7 @@
       "fixes": 1
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
       "severity": "error",

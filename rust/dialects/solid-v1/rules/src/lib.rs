@@ -10,16 +10,18 @@
 mod rules;
 
 use solid_reactive_ir::{
-    CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, LeafOwnerOperationKind,
-    OwnerRequirementOperation, PackageContractIssue, PackageContractIssueKind, Program,
-    ReactiveSourceKind, ReactiveWriteOperation, StaticDefect, StaticDefectKind, project_finding,
-    project_findings, strict_read_evidence, strict_read_message,
+    CatalogCapabilities, CatalogWording, FindingSeed, FindingWording, OwnerRequirementOperation,
+    PackageContractIssue, PackageContractIssueKind, Program, ReactiveSourceKind,
+    ReactiveWriteOperation, StaticDefect, StaticDefectKind, project_finding, project_findings,
+    strict_read_evidence, strict_read_message,
 };
 
 pub use rules::{Rule, docs_url, manifest_json};
 pub use solid_reactive_ir::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
 
 struct Catalog;
+
+pub const CATALOG_CAPABILITIES: CatalogCapabilities = CatalogCapabilities::SOLID_1;
 
 #[must_use]
 pub fn solve_measured(program: &Program) -> (Vec<Finding>, SolveTimings) {
@@ -41,125 +43,45 @@ fn strict_read_hint(kind: &str) -> &'static str {
 
 impl CatalogWording for Catalog {
     fn capabilities(&self) -> CatalogCapabilities {
-        CatalogCapabilities::SOLID_1
+        CATALOG_CAPABILITIES
     }
 
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
         match seed {
-            FindingSeed::StrictRead(read) => {
-                FindingWording::new(
-                    Rule::StrictReadUntracked.metadata(),
-                    strict_read_message(read),
-                    strict_read_hint(&read.kind),
-                )
-                .with_evidence(strict_read_evidence(read))
-            }
+            FindingSeed::StrictRead(read) => FindingWording::new(
+                Rule::StrictReadUntracked.metadata(),
+                strict_read_message(read),
+                strict_read_hint(&read.kind),
+            )
+            .with_evidence(strict_read_evidence(read)),
             FindingSeed::OwnedWrite(write) => owned_write_wording(write),
-            FindingSeed::LeafOperation(operation) => {
-                let (rule, message, hint) = match &operation.kind {
-                    LeafOwnerOperationKind::Cleanup => (
-                        Rule::CleanupInForbiddenScope,
-                        format!(
-                            "onCleanup is called inside {}, whose callback runs as a leaf with no owner to register cleanup on; the cleanup function will never run",
-                            operation.owner
-                        ),
-                        format!(
-                            "Register the cleanup in the computation that owns the {} instead, or create the surrounding scope with createRoot so disposal exists.",
-                            operation.owner
-                        ),
-                    ),
-                    LeafOwnerOperationKind::Primitive(primitive) => (
-                        Rule::PrimitiveInLeafOwner,
-                        format!(
-                            "reactive primitive {primitive} is created inside {}; {} runs its callback as a leaf owner with no children, so nested primitives are never tracked or disposed",
-                            operation.owner, operation.owner
-                        ),
-                        format!(
-                            "Create the primitive in the component body (or another owning scope) and read its accessor inside {}.",
-                            operation.owner
-                        ),
-                    ),
-                    LeafOwnerOperationKind::Flush => {
-                        panic!("Solid 1.x analysis emitted a 2.0-only flush leaf operation")
-                    }
-                    LeafOwnerOperationKind::UnresolvedCallback => (
-                        Rule::ReactiveDispatchUnresolved,
-                        format!(
-                            "{} receives a type-correct callback whose exact synchronous body cannot be resolved; whether it performs cleanup or creates a nested primitive in this leaf scope cannot be certified",
-                            operation.owner
-                        ),
-                        "Pass an exact in-project function or a function literal directly, so solid-checker can inspect the callback body and certify or report its leaf-scope operations.".into(),
-                    ),
-                };
-                let message = match &operation.via {
-                    _ if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) => {
-                        message
-                    }
-                    Some(via) => format!(
-                        "{message} — reached through {via}(), which performs the operation in its synchronous extent and is called from this scope"
-                    ),
-                    None => message,
-                };
-                FindingWording::new(rule.metadata(), message, hint).with_evidence(vec![
-                    EvidenceStep {
-                        message: if matches!(operation.kind, LeafOwnerOperationKind::UnresolvedCallback) {
-                            "the leaf callback's exact synchronous target is not available in the project and is not a resolved standard-library operation".into()
-                        } else {
-                            match &operation.via {
-                            Some(via) => format!(
-                                "the exactly resolved helper {via}() runs the operation synchronously, and this call site is inside the {} callback",
-                                operation.owner
-                            ),
-                            None => format!(
-                                "the call is lexically contained by the {} callback",
-                                operation.owner
-                            ),
-                            }
-                        },
-                        location: Some(operation.location.clone()),
-                    },
-                ])
+            FindingSeed::LeafOperation(_) => {
+                panic!("the Solid 1.x catalog does not project leaf-owner operations")
             }
             FindingSeed::StaticDefect(defect) => static_defect_wording(defect),
             FindingSeed::StaticViolation(violation) => static_violation_wording(violation),
-            FindingSeed::DirectiveCreation(creation) => FindingWording::new(
-                Rule::PrimitiveInDirectiveApplication.metadata(),
-                format!(
-                    "reactive primitive {} is created in a directive application callback; the apply phase runs per element as an unowned leaf, so primitives created here are never tracked or disposed",
-                    creation.primitive
-                ),
-                "Use the two-phase directive factory: create primitives and subscriptions in the setup phase (the factory body, which runs in an owned scope) and keep the returned ref callback to DOM work only.",
-            )
-            .with_evidence(vec![EvidenceStep {
-                message: if creation.returned_closure {
-                    "the primitive is created inside the callback returned to a compiler-recognized ref application".into()
-                } else {
-                    "the primitive is created inside a compiler-recognized ref application callback".into()
-                },
-                location: Some(creation.location.clone()),
-            }]),
+            FindingSeed::DirectiveCreation(_) => {
+                panic!("the Solid 1.x catalog does not project directive creations")
+            }
             FindingSeed::OwnerRequirement(requirement) => {
-                let (rule, message, hint) = match requirement.operation {
+                let (message, hint) = match requirement.operation {
                     OwnerRequirementOperation::Cleanup => (
-                        Rule::NoOwnerCleanup,
                         "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
                         "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists.",
                     ),
                     OwnerRequirementOperation::Boundary => (
-                        Rule::NoOwnerBoundary,
                         "boundary is created without a reactive owner; it can never be disposed, and the subtree it manages will leak",
                         "Render boundaries inside a component tree rooted by render() or hydrate(), or under an explicit createRoot; a boundary created in a bare helper function has no owner to attach to.",
                     ),
                     OwnerRequirementOperation::Effect => (
-                        Rule::NoOwnerEffect,
                         "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
                         "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle.",
                     ),
-                    OwnerRequirementOperation::SettledCleanup => panic!(
-                        "Solid 1.x analysis emitted a 2.0-only settled-cleanup requirement"
-                    ),
+                    OwnerRequirementOperation::SettledCleanup => {
+                        panic!("Solid 1.x analysis emitted a 2.0-only settled-cleanup requirement")
+                    }
                 };
-                FindingWording::new(rule.metadata(), message, hint)
+                FindingWording::new(Rule::MissingOwner.metadata(), message, hint)
             }
             FindingSeed::PackageContractIssue(issue) => {
                 let (condition, hint) = match &issue.status {
@@ -200,7 +122,7 @@ impl CatalogWording for Catalog {
                     ),
                 };
                 FindingWording::new(
-                    Rule::PackageContractMissing.metadata(),
+                    Rule::PackageContractIncomplete.metadata(),
                     format!(
                         "imported Solid package {:?} {condition}; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
                         issue.package
@@ -262,57 +184,24 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
         )
     });
     let evidence = match rule {
-        Rule::EventHandlers => {
-            "the native JSX attribute spelling does not match Solid's event-handler contract"
-        }
         Rule::JsxNoDuplicateProps => "the same JSX property is assigned more than once",
-        Rule::JsxNoScriptUrl => "the statically resolved URL uses the javascript: scheme",
         Rule::JsxNoUndef => "the JSX name has no value-space binding in lexical scope",
-        Rule::NoArrayHandlers if violation.uncertain => {
-            "the native event attribute's value may be a plain function or a bound-handler array"
-        }
-        Rule::NoArrayHandlers => "the native event attribute receives an array-valued handler",
-        Rule::NoInnerhtml => "the JSX attribute writes markup through an HTML injection sink",
-        Rule::NoProxyApis => "the import or call requires Proxy-backed Solid APIs",
-        Rule::NoReactDeps => "a Solid reactive primitive received a React-style dependency array",
-        Rule::NoReactSpecificProps => "the JSX attribute uses a React-specific property spelling",
-        Rule::NoUnknownNamespaces => "the JSX namespace is outside Solid's known vocabulary",
         Rule::PreferClasslist => "a class helper call matches the configured classList preference",
         Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
         Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
-        Rule::SelfClosingComp => {
-            "the element's child and closing-tag shape conflicts with the configured policy"
-        }
-        Rule::StyleProp => "the style attribute shape conflicts with Solid's style contract",
-        Rule::NoAsyncTrackedScope => {
-            "the tracked callback is syntactically async and can continue after an await"
-        }
         Rule::StrictReadUntracked
         | Rule::ReactiveReadAfterAwait
         | Rule::NoDestructure
         | Rule::ComponentsReturnOnce
         | Rule::ReactiveWriteInOwnedScope
-        | Rule::CleanupInForbiddenScope
-        | Rule::PrimitiveInLeafOwner
-        | Rule::NoOwnerEffect
-        | Rule::NoOwnerCleanup
-        | Rule::NoOwnerBoundary
-        | Rule::PrimitiveInDirectiveApplication
+        | Rule::MissingOwner
         | Rule::MissingEffectFunction
         | Rule::UncalledAccessor
-        | Rule::UntrackedDerivedFunction
         | Rule::ExpectedFunctionGotExpression
         | Rule::NoDirectMutation
         | Rule::ReactiveSourceUncaptured
         | Rule::ReactiveDispatchUnresolved
-        | Rule::PreferComponentSyntax
-        | Rule::NoImplicitDraggable
-        | Rule::ValidJsxNesting
-        | Rule::JsxUsesVars
-        | Rule::PackageContractExportMissing
-        | Rule::PackageContractCallbackMissing
-        | Rule::PackageContractMissing
-        | Rule::ExecutionMapIncomplete => panic!(
+        | Rule::PackageContractIncomplete => panic!(
             "v1 rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
@@ -330,20 +219,13 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
 
 fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
     let rule = match &defect.kind {
-        StaticDefectKind::ExecutionMapIncomplete => Rule::ExecutionMapIncomplete,
         StaticDefectKind::ReactiveObjectDestructure { .. } => Rule::NoDestructure,
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentsReturnOnce,
-        StaticDefectKind::PreferComponentSyntax { .. } => Rule::PreferComponentSyntax,
-        StaticDefectKind::ImplicitDraggableBoolean { .. } => Rule::NoImplicitDraggable,
-        StaticDefectKind::InvalidJsxNesting { .. } => Rule::ValidJsxNesting,
-        StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
-        StaticDefectKind::PackageContractEnvironmentDependent { .. } => {
-            Rule::PackageContractExportMissing
-        }
-        StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,
+        StaticDefectKind::PackageContractExportMissing { .. }
+        | StaticDefectKind::PackageContractEnvironmentDependent { .. }
+        | StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractIncomplete,
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
-        StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
         StaticDefectKind::ReactiveDispatchUnresolved { .. }
         | StaticDefectKind::ReactiveCallbackUnresolved { .. }
@@ -368,7 +250,6 @@ const V1_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
         reactive_object_destructure_hint: "Keep the reactive object intact and read object.<name> inside JSX or a tracked computation. A property access made there remains subscribed; a setup-time destructuring binding does not.",
         missing_effect_message: "createEffect is called without an effect function; the signature is createEffect(fn, value?), where fn tracks dependencies and runs the side effect, and the optional value seeds the previous value passed to fn on its first run",
         missing_effect_hint: "Pass the effect function as the first argument. Reads inside it are tracked, and cleanup is registered with onCleanup rather than returned.",
-        tracked_derived_scope: "JSX, a createMemo, or a createEffect callback",
         store_mutation_hint: v1_store_mutation_hint,
         // The removed-API migration map is a 2.0 concept: nothing has been
         // removed *from* the 1.x surface this catalog describes.

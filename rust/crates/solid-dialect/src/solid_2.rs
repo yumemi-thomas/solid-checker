@@ -133,12 +133,6 @@ impl Dialect for Solid2 {
         "solid-v2/solid-js.json"
     }
 
-    /// dom-expressions 0.50 (`shared/constants.rs`): `reserved_namespace`
-    /// keeps only `prop`, and `namespaces` maps the four XML prefixes.
-    fn jsx_attribute_namespaces(&self) -> &'static [&'static str] {
-        &["prop", "svg", "mathml", "xlink", "xml"]
-    }
-
     fn primitive(&self, name: &str) -> Option<Primitive> {
         static INDEX: crate::NameIndex = crate::NameIndex::new();
         lookup(&INDEX, &[TABLE], name)
@@ -295,15 +289,6 @@ impl Dialect for Solid2 {
     /// for those exactly as for accessor calls (`@solidjs/signals` tracks via
     /// the ambient listener, which the resumed continuation no longer has).
     fn reports_member_reads_after_await(&self) -> bool {
-        true
-    }
-
-    /// A derived helper bound and called entirely inside a tracked compute
-    /// tracks its reads there; one called from an event handler, `onSettled`,
-    /// `untrack`, or an effect's apply callback reads legitimately fresh
-    /// values at call time. Neither misbehaves at runtime, so the 2.0 catalog
-    /// exempts those call roles.
-    fn derived_function_role_exemptions(&self) -> bool {
         true
     }
 

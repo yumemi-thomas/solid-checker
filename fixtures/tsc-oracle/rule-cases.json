@@ -19,7 +19,7 @@
       "checker": "silent",
       "distinctFindings": [
         {
-          "rule": "no-owner-effect",
+          "rule": "missing-owner",
           "why": "The owner finding asserts that allocated computations at module scope are never disposed; TS2345 only rejects each apply callback's return value."
         }
       ],
@@ -45,7 +45,7 @@
       "checker": "silent",
       "distinctFindings": [
         {
-          "rule": "no-owner-effect",
+          "rule": "missing-owner",
           "why": "The owner finding asserts that an allocated module-scope computation is never disposed; the type diagnostics concern callback return and argument assignability."
         }
       ],
@@ -160,8 +160,17 @@
       "checker": "reports",
       "checkerKind": "uncertifiable",
       "sourceExtension": "ts",
-      "why": "A spread hides arity from the current fact domain. TypeScript accepts this tuple, but without resolving the spread contents the checker cannot prove either a missing apply function or a safe callable one, so it retains an uncertifiable obligation instead of silently certifying the call.",
+      "why": "The compiler proves this tuple has two elements, but exact arity does not describe the hidden apply value. The value may be callable or may trigger MISSING_EFFECT_FN, so the checker retains an uncertifiable obligation instead of silently certifying the call.",
       "code": "import { createEffect } from \"solid-js\";\nconst operands: [() => number, (value: number) => void] = [() => 1, value => { void value; }];\nexport function inOwner() {\n  createEffect(...operands);\n}\n"
+    },
+    {
+      "rule": "missing-effect-function",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "sourceExtension": "ts",
+      "why": "The compiler proves this required-only tuple has exactly one element. After expansion the Solid 2 apply slot is therefore absent, so the runtime MISSING_EFFECT_FN failure is a violation even though TypeScript accepts the deprecated one-argument overload.",
+      "code": "import { createEffect } from \"solid-js\";\nconst operands: [() => number] = [() => 1];\nexport function inOwner() {\n  createEffect(...operands);\n}\n"
     },
     {
       "rule": "missing-effect-function",
@@ -183,7 +192,7 @@
       "code": "import { createEffect } from \"solid-js\";\nconst apply = (value: number) => { void value; };\nexport function inOwner() {\n  createEffect(() => 1, apply);\n}\n"
     },
     {
-      "rule": "no-owner-settled-cleanup",
+      "rule": "missing-owner",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -191,7 +200,7 @@
       "code": "import { onSettled } from \"solid-js\";\nonSettled(() => {\n  const timer = setInterval(() => {}, 1000);\n  return () => clearInterval(timer);\n});\n"
     },
     {
-      "rule": "no-owner-settled-cleanup",
+      "rule": "missing-owner",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -200,7 +209,7 @@
       "code": "import { onSettled } from \"solid-js\";\ndeclare function maybeCleanup(): (() => void) | undefined;\nonSettled(() => maybeCleanup());\n"
     },
     {
-      "rule": "no-owner-settled-cleanup",
+      "rule": "missing-owner",
       "dialect": "v2",
       "expect": "removed-because-redundant",
       "checker": "silent",
@@ -211,7 +220,7 @@
       "code": "import { onSettled } from \"solid-js\";\nonSettled(() => 1);\n"
     },
     {
-      "rule": "no-owner-cleanup",
+      "rule": "missing-owner",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -227,49 +236,7 @@
       "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\ncreateEffect(\n  async () => {\n    await Promise.resolve();\n    return count();\n  },\n  () => {},\n);\n"
     },
     {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "SC8007 is independent, and this is the case that shows the JSX family is not uniformly redundant: `EventHandlerUnion` includes `BoundEventHandler`, so the `[handler, data]` tuple is *legal* per Solid's own types. The claim is that the bound form defeats handler identity comparison, which no type expresses.",
-      "code": "const handler = (data: number, event: MouseEvent) => {};\nexport const Case = () => <button onClick={[handler, 1]} />;\n"
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "why": "A value that may be either a legal bound-handler tuple or a plain function is accepted by Solid's real 1.x typings. Neither a violation nor safety holds for every runtime value, so the checker must retain the ambiguity explicitly.",
-      "code": "type Pair = [(data: number, event: MouseEvent) => void, number];\ndeclare const handler: Pair | ((event: MouseEvent) => void);\nexport const Case = () => <button onClick={handler} />;\n"
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "why": "An optional bound-handler tuple has a common tuple shape, but undefined is also a real runtime outcome. Presence is therefore an obligation rather than a proven array defect.",
-      "code": "type Pair = [(data: number, event: MouseEvent) => void, number];\ndeclare const handler: Pair | undefined;\nexport const Case = () => <button onClick={handler} />;\n"
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "A TypeScript assertion can make the attribute acceptable but cannot change the array passed to Solid. The runtime value is a proven array, so this remains a checker-owned violation.",
-      "code": "const handler = (event: MouseEvent) => {};\nexport const Case = () => <button onClick={([handler, 1] as unknown as (event: MouseEvent) => void)} />;\n"
-    },
-    {
-      "rule": "v1/no-array-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "silent",
-      "why": "Peeling a TypeScript assertion around an actual function must preserve the proven-safe runtime shape and must not turn every asserted handler into an obligation.",
-      "code": "const handler = (event: MouseEvent) => {};\nexport const Case = () => <button onClick={(handler as unknown as (event: MouseEvent) => void)} />;\n"
-    },
-    {
-      "rule": "v1/no-innerhtml",
+      "rule": "v1/jsx-no-duplicate-props",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -280,7 +247,7 @@
       "rule": "v1/jsx-no-script-url",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "SC8004 is independent. `href` is declared `string`; the claim is about the URL scheme the string carries.",
       "code": "export const Case = () => <a href=\"javascript:void(0)\">dismiss</a>;\n"
     },
@@ -304,21 +271,10 @@
       "rule": "v1/no-unknown-namespaces",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "checkerCount": 3,
       "why": "SC8012's surviving arms. On a component, props are a plain object and TypeScript is silent. On an *intrinsic* element a hyphenated local name is silent too -- TypeScript does not type-check a JSX attribute name containing a hyphen, a deliberate exemption for HTML's own hyphenated attributes -- which is upstream's cases 04 and 05 and the hole a first, coarser narrowing opened.",
       "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const Component = () => <Panel model:value={1} />;\n// A hyphenated local name escapes the excess-property check entirely, so\n// TypeScript declines to look even on an intrinsic element.\nexport const Hyphenated = () => <div class:mt-10={true} />;\nexport const Shorthand = () => <div class:mt-10 />;\n"
-    },
-    {
-      "rule": "v1/event-handlers",
-      "dialect": "v1",
-      "expect": "removed-because-redundant",
-      "checker": "silent",
-      "why": "SC8001's unknown-`on*`-name arm, audited 2026-08-17 and recorded redundant in docs/precision-backlog.md (narrowing not yet landed). An unknown name does not exist on the element's attribute type, and Solid 1.x's only JSX index signature is `[key: `-${string}`]`, so nothing absorbs it. The rule SURVIVES on its declared-spelling arms -- see the sibling `silent` case.",
-      "allow": [
-        2322
-      ],
-      "code": "export const Unknown = () => <div onFoo=\"a\" />;\n"
     },
     {
       "rule": "v1/no-react-specific-props",
@@ -344,19 +300,10 @@
       "code": "export const Camel = () => <div style={{ maxWidth: 3 }} />;\n"
     },
     {
-      "rule": "v1/event-handlers",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "checkerCount": 5,
-      "why": "SC8001's surviving arms, and the reason the rule was not deleted. `onclick` and `ondblclick` are *declared* props in Solid 1.x, so TypeScript accepts them and the canonical-casing advice is the rule's own. A hyphenated tag is TS2339 against stock typings, so a project using one has declared it -- the augmentation here is the permissive shape such declarations commonly take -- after which TypeScript is silent about its attributes and the static-value and ambiguous-name arms are the only claims available. A hyphen anywhere in the attribute name has the same effect as a hyphenated tag. The ordinary object spread is an explicit negative control: Solid's runtime spread handles event keys, so it must not inherit a direct-attribute finding.",
-      "code": "import type {} from \"solid-js\";\nconst handleClick = () => 42;\n// Solid 1.x exports its JSX namespace from the module, so a custom element\n// is declared by augmenting that module -- not the global scope.\ndeclare module \"solid-js\" {\n  namespace JSX {\n    interface IntrinsicElements {\n      \"my-widget\": { [key: string]: unknown };\n    }\n  }\n}\nexport const Casing = () => <div onclick={handleClick} />;\nexport const Ambiguous = () => <div ondblclick={handleClick} />;\nexport const Spread = () => <div {...{ onClick: handleClick }} />;\nexport const Widget = () => <my-widget onFoo=\"a\" />;\nexport const WidgetAmbiguous = () => <my-widget onlynow={handleClick} />;\n// A hyphenated attribute name is exempt from the excess-property check on a\n// standard element too, so these are the rule's as well.\nexport const HyphenName = () => <div onFoo-bar=\"a\" />;\n"
-    },
-    {
       "rule": "v1/no-react-specific-props",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "checkerCount": 2,
       "why": "SC8011's surviving component arms, upstream's own className/htmlFor cases. A component's props are whatever it declares, so those React spellings on a permissive component are ordinary permitted keys and `tsc` is silent. `key` is an explicit negative control: that intrinsic-only upstream arm was removed because the real typings own it, and it must not be resurrected on components.",
       "code": "const Pascal = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const A = () => <Pascal className=\"greeting\" />;\nexport const B = () => <Pascal htmlFor=\"id\" />;\nexport const C = () => <Pascal key={1} />;\n"
@@ -365,7 +312,7 @@
       "rule": "v1/style-prop",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "checkerCount": 3,
       "why": "SC8017's surviving arms. Static string `style` values are legal in Solid 1.x, so the object-form advice and malformed-declaration claim are the rule's own; a `-`-prefixed camelCase key is absorbed by the `[key: `-${string}`]` index signature. The interpolated template and unitless-legal flex-grow number are negative controls for shapes this syntax rule does not claim.",
       "code": "const themeColor = \"red\";\nexport const A = () => <div style=\"font-size: 10px;\" />;\nexport const B = () => <div style=\"font-size: 10px; missing-value: ;\" />;\nexport const C = () => <div style={`color: ${themeColor};`} />;\nexport const D = () => <div style={{ \"-webkitAlignContent\": \"center\" }} />;\nexport const E = () => <div style={{ \"flex-grow\": 1 }} />;\n"
@@ -438,7 +385,7 @@
       "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nexport const Case = () => <div>{-count}{~count}</div>;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v1",
       "expect": "removed-because-redundant",
       "checker": "silent",
@@ -455,7 +402,7 @@
       "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst size = 12;\nconst Comp = () => (\n  <div>\n    <button onClick={count()} />\n    <button onClick={size} />\n  </div>\n);\nexport default Comp;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -463,7 +410,7 @@
       "code": "import { createSignal } from \"solid-js\";\nconst [handler] = createSignal(() => {});\nconst Comp = (props: { onSave: () => void }) => (\n  <div>\n    <button onClick={props.onSave} />\n    <button onClick={handler()} />\n  </div>\n);\nexport const Use = () => <Comp onSave={handler()} />;\nexport default Comp;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v1",
       "expect": "distinct-claim",
       "checker": "reports",
@@ -515,7 +462,7 @@
       "code": "import { createSignal } from \"solid-js\";\nexport function Comp() {\n  const [count] = createSignal(0);\n  const value = count();\n  return <div>{value}</div>;\n}\n"
     },
     {
-      "rule": "untracked-derived-function",
+      "rule": "strict-read-untracked",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
@@ -523,7 +470,7 @@
       "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nconst doubled = () => count() * 2;\nexport const value = doubled();\n"
     },
     {
-      "rule": "untracked-derived-function",
+      "rule": "strict-read-untracked",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -543,14 +490,21 @@
       "rule": "reactive-source-uncaptured",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "checkerCount": 2,
-      "why": "A proven reactive source handed, uncalled, to a package export nothing describes -- the gap this rule reports. `@solidjs/signals` is installed but not a bundled package, so `isEqual` carries no contract summary, is not a dialect primitive, and has no body in the project. Its signature accepts the accessor, so TypeScript is silent, and the claim is the analyzability one no type expresses: whether the callee calls the source in a tracking scope, reads it once and severs the reactivity, or stores it for later decides whether the surrounding code is correct. Both arguments are the source, so the rule reports once per argument. The previous snippet here returned a signal tuple, which no spelling of this rule can reach -- it pinned TypeScript's silence over code the rule never spoke about.",
+      "checker": "silent",
+      "why": "The exact reviewed `@solidjs/signals@2.0.0-rc.0` contract proves `isEqual` is an inert function that compares its arguments without invoking them. The prior uncertifiable result was a package-contract gap; the v2 bundled contract now closes it while the v1 case below remains open because the package is audited only for the v2 runtime.",
       "code": "import { createSignal } from \"solid-js\";\nimport { isEqual } from \"@solidjs/signals\";\n\nexport function Widget() {\n  const [count] = createSignal(0);\n  const same = isEqual(count, count);\n  return <div>{same ? count() : 0}</div>;\n}\n"
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "reactive-source-uncaptured",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "The function is declared through the real published `@solidjs/web` type surface but its implementation is deliberately outside this project and no package contract is attached to the ambient binding. Passing a proven Solid accessor to that opaque boundary remains a correct uncertifiable obligation; this preserves a positive keystone without treating the partially audited `@solidjs/signals` package as if its unmodeled exports were known.",
+      "code": "import { createSignal } from \"solid-js\";\n\ntype ExternalScope = typeof import(\"@solidjs/web\").scope;\ndeclare const externalScope: ExternalScope;\n\nexport function Widget() {\n  const [count] = createSignal(0);\n  externalScope(count);\n}\n"
+    },
+    {
+      "rule": "no-destructure",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -559,7 +513,7 @@
       "code": "export function Row(props: { name: string }) {\n  const { name } = props;\n  return <div>{name}</div>;\n}\n"
     },
     {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -578,23 +532,15 @@
       "rule": "prefer-component-syntax",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "SC8018's keystone. Calling a JSX-returning function with the right argument types checks exactly as written. The claim is that the imperative call hides component identity and can evaluate setup logic in the caller's reactive expression instead of under a component owner of its own. The callee here is lowercase, which is the rule's documented subject: SC8018 asks that a lowercase JSX-returning function be renamed and called as a component. A capitalized callee is already component-named and out of scope, which is what the sibling case records.",
       "code": "function renderCard(show: boolean) {\n  return show ? <span /> : <strong />;\n}\nexport const View = () => <section>{renderCard(true)}</section>;\n"
-    },
-    {
-      "rule": "valid-jsx-nesting",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "JSX children are typed as `Element`, so nesting is unconstrained; the claim is that HTML parsing reshapes the tree and can break hydration.",
-      "code": "export const Case = () => <p><div /></p>;\n"
     },
     {
       "rule": "no-implicit-draggable",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "The boolean shorthand is a declared, correctly typed spelling; the claim is what the runtime emits for it and which enumerated-attribute state that selects.",
       "code": "export const Case = () => <img draggable src=\"/a.png\" />;\n"
     },
@@ -615,7 +561,7 @@
       "code": "import { createSignal, createMemo } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\nexport const doubled = createMemo(() => {\n  setCount(1);\n  return count();\n});\n"
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
@@ -623,7 +569,7 @@
       "code": "import { onSettled, onCleanup } from \"solid-js\";\nonSettled(() => {\n  onCleanup(() => {});\n});\n"
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -631,7 +577,7 @@
       "code": "import { createTrackedEffect, onCleanup } from \"solid-js\";\ncreateTrackedEffect(() => onCleanup(() => {}));\n"
     },
     {
-      "rule": "primitive-in-leaf-owner",
+      "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
@@ -639,7 +585,7 @@
       "code": "import { onSettled, createMemo } from \"solid-js\";\nonSettled(() => {\n  createMemo(() => 1);\n});\n"
     },
     {
-      "rule": "primitive-in-leaf-owner",
+      "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -647,7 +593,7 @@
       "code": "import { createTrackedEffect, createMemo } from \"solid-js\";\ncreateTrackedEffect(() => createMemo(() => 1));\n"
     },
     {
-      "rule": "flush-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
@@ -655,7 +601,7 @@
       "code": "import { onSettled, flush } from \"solid-js\";\nonSettled(() => {\n  flush();\n});\n"
     },
     {
-      "rule": "flush-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -663,7 +609,7 @@
       "code": "import { createTrackedEffect, flush } from \"solid-js\";\ncreateTrackedEffect(() => flush());\n"
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -671,7 +617,7 @@
       "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\nconst apply = (value: number) => { void value; };\ncreateEffect(() => count(), apply);\n"
     },
     {
-      "rule": "no-owner-boundary",
+      "rule": "missing-owner",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
@@ -679,7 +625,7 @@
       "code": "import { onSettled } from \"solid-js\";\nexport function detached() {\n  onSettled(() => {});\n}\n"
     },
     {
-      "rule": "no-owner-boundary",
+      "rule": "missing-owner",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -698,7 +644,7 @@
       "rule": "primitive-in-directive-application",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "SC6001's keystone. A directive factory returning an element callback matches `ref`'s declared type, so TypeScript is silent. The claim is about the phase that callback runs in: the apply phase runs per element as an unowned leaf, so a primitive created there is never tracked or disposed. The `ref`-applied form is the spelling the rule reports; the sibling case's `use:` attribute is a different application path.",
       "code": "import { createSignal, createMemo } from \"solid-js\";\nconst [count, setCount] = createSignal(0);\nfunction directive() {\n  setCount(1);\n  return (element: HTMLElement) => {\n    createMemo(() => count() + 1);\n  };\n}\nexport function App() {\n  return <button ref={directive()}>{count()}</button>;\n}\n"
     },
@@ -706,7 +652,7 @@
       "rule": "no-async-tracked-scope",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "1.x's `EffectFunction` returns `Next` with no constraint, so an async callback returning a Promise type-checks; the claim is that tracking ends at the first await.",
       "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateEffect(async () => {\n  await Promise.resolve();\n  return count();\n});\n"
     },
@@ -730,7 +676,7 @@
       "rule": "no-proxy-apis",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "A legal import of a real export; the claim is that the API is Proxy-based and unavailable on the configured target runtime.",
       "code": "import { createMutable } from \"solid-js/store\";\nexport const state = createMutable({ a: 1 });\n"
     },
@@ -738,7 +684,7 @@
       "rule": "no-proxy-apis",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "checkerKind": "uncertifiable",
       "compilerOptions": {
         "verbatimModuleSyntax": true
@@ -750,7 +696,7 @@
       "rule": "no-proxy-apis",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "Solid 1.9's client mergeProps implementation unconditionally enables its Proxy path for a function source. The published generic signature accepts the callback, so this runtime compatibility claim is independent of TypeScript.",
       "code": "import { mergeProps } from \"solid-js\";\nconst source = () => ({ value: 1 });\nexport const merged = mergeProps(source);\n"
     },
@@ -758,7 +704,7 @@
       "rule": "no-proxy-apis",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "checkerKind": "uncertifiable",
       "checkerCount": 2,
       "why": "A parameter named `props` and one with any other name can each be a plain object, a callable source, or a Solid proxy at runtime. Names do not prove mergeProps behavior, so both unresolved sources must receive the same uncertifiable result.",
@@ -781,18 +727,11 @@
       "code": "class Proxy { constructor(_target: object, _handler: object) {} }\nexport const value = new Proxy({}, {});\n"
     },
     {
-      "rule": "no-react-deps",
-      "dialect": "v1",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "1.x's `createEffect(fn, value?)` takes a second *value* argument, so an array type-checks as that value; the claim is that it reads like a React dependency list and does nothing of the kind.",
-      "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateEffect(() => {\n  count();\n}, [count]);\n"
-    },
-    {
       "rule": "prefer-classlist",
       "dialect": "v1",
       "expect": "silent",
       "checker": "silent",
+      "presets": ["preferences"],
       "why": "A string `class` is the declared type; the claim is a stylistic preference for `classList`, which no type expresses.",
       "code": "import { createSignal } from \"solid-js\";\nconst [active] = createSignal(false);\nexport const Case = () => <div class={active() ? \"a b\" : \"a\"} />;\n"
     },
@@ -801,6 +740,7 @@
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
+      "presets": ["preferences"],
       "why": "SC8014's reporting spelling, and the reason the rule survives. An object-literal call to a `classnames`-style helper -- `cn`/`clsx`/`classnames`, upstream's own `classnames` option -- returns a string, so `class` accepts it and TypeScript is silent. The claim is the stylistic one no type expresses: Solid's `classList` takes that same object directly, so the helper is doing work the framework already does. The sibling case is the negative -- a conditional string is not a helper call and stays clean -- and on the `className` spelling the diagnostic is TS2322 and SC8011's, which is why this case uses `class`.",
       "code": "const cn = (classes: Record<string, boolean>) =>\n  Object.keys(classes).filter((key) => classes[key]).join(\" \");\nexport const Case = () => <div class={cn({ red: true })}>Hello</div>;\n"
     },
@@ -824,7 +764,7 @@
       "rule": "self-closing-comp",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "A childless element with an explicit closing tag is valid syntax; the claim is a formatting preference.",
       "code": "export const Case = () => <div class=\"spacer\"></div>;\n"
     },
@@ -880,7 +820,7 @@
       "code": "import { action, createMemo } from \"solid-js\";\nconst save = action(function* () {});\ncreateMemo(() => save());\n"
     },
     {
-      "rule": "resolve-in-reactive-scope",
+      "rule": "resolve-in-tracked-scope",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -888,7 +828,7 @@
       "code": "import { createMemo, resolve } from \"solid-js\";\nexport const value = createMemo(() => resolve(() => 1));\n"
     },
     {
-      "rule": "sync-node-received-async",
+      "rule": "sync-computation-received-async",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
@@ -896,7 +836,7 @@
       "code": "import { createMemo } from \"solid-js\";\nexport const value = createMemo(async () => {\n  await Promise.resolve();\n  return 1;\n});\n"
     },
     {
-      "rule": "sync-node-received-async",
+      "rule": "sync-computation-received-async",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -904,7 +844,7 @@
       "code": "import { createMemo } from \"solid-js\";\nexport function SyncAsync() {\n  return createMemo(async () => 1, { sync: true });\n}\n"
     },
     {
-      "rule": "pending-async-untracked-read",
+      "rule": "pending-async-unsuspendable-read",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
@@ -912,7 +852,7 @@
       "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateEffect(async () => {\n  await Promise.resolve();\n  return count();\n}, () => {});\n"
     },
     {
-      "rule": "pending-async-untracked-read",
+      "rule": "pending-async-unsuspendable-read",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -972,7 +912,7 @@
       "rule": "v1/no-innerhtml",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "The surviving component half. A component's props are whatever it declares, so the React spelling is a permitted key and TypeScript is silent, while Solid's renderer has no special handling for it. The native element with a proven static HTML string is a negative control for the default `allowStatic: true` policy.",
       "code": "const Panel = (props: Record<string, unknown>) => <div>{String(props.id)}</div>;\nexport const Native = () => <div innerHTML={\"<p>x</p>\"} />;\nexport const Component = () => <Panel dangerouslySetInnerHTML={{ __html: \"<p>x</p>\" }} />;\n"
     },
@@ -1024,7 +964,7 @@
       "rule": "v1/cleanup-in-forbidden-scope",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "Registering a cleanup in createReaction's invalidation callback satisfies every Solid 1.x signature; the defect is that this leaf callback does not preserve an owner for the cleanup.",
       "code": "import { createReaction, onCleanup } from \"solid-js\";\nconst track = createReaction(() => onCleanup(() => {}));\ntrack(() => {});\n"
     },
@@ -1032,12 +972,12 @@
       "rule": "v1/primitive-in-leaf-owner",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "Creating a memo inside a createReaction invalidation callback is type-correct; the finding is the Solid 1.x ownership fact that the leaf callback cannot retain the nested primitive.",
       "code": "import { createReaction, createMemo } from \"solid-js\";\nconst track = createReaction(() => createMemo(() => 1));\ntrack(() => {});\n"
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -1045,7 +985,7 @@
       "code": "import { createSignal, createEffect } from \"solid-js\";\nconst [count] = createSignal(0);\ncreateEffect(() => count());\n"
     },
     {
-      "rule": "v1/no-owner-cleanup",
+      "rule": "v1/missing-owner",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -1053,7 +993,7 @@
       "code": "import { onCleanup } from \"solid-js\";\nonCleanup(() => {});\n"
     },
     {
-      "rule": "v1/no-owner-boundary",
+      "rule": "v1/missing-owner",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -1096,7 +1036,7 @@
       "code": "import { createSignal } from \"solid-js\";\nconst [count] = createSignal(0);\nexport const Case = () => <div>{`count is ${count}`}</div>;\n"
     },
     {
-      "rule": "v1/untracked-derived-function",
+      "rule": "v1/strict-read-untracked",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -1117,12 +1057,12 @@
       "rule": "v1/prefer-component-syntax",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "Invoking a JSX-returning helper as an ordinary function is type-correct in Solid 1.x; the finding preserves component ownership and lifecycle semantics that function types cannot express.",
       "code": "function renderCard(show: boolean) {\n  return show ? <span /> : <strong />;\n}\nexport const View = () => <section>{renderCard(true)}</section>;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -1145,7 +1085,7 @@
       "rule": "no-implicit-draggable",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "Solid 2 types accept draggable={false}, but the renderer removes the attribute; on an image that selects HTML's auto state and silently re-enables default dragging.",
       "code": "export const Case = () => <img draggable={false} src=\"/a.png\" />;\n"
     },
@@ -1153,7 +1093,7 @@
       "rule": "no-implicit-draggable",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "checkerKind": "uncertifiable",
       "checkerCount": 2,
       "why": "For an anchor, auto-dragging depends on whether href remains present. A dynamic href may be removed when nullish, and a later spread may overwrite a static href; both outcomes are possible, so the checker must preserve an obligation without claiming a violation.",
@@ -1163,7 +1103,7 @@
       "rule": "no-implicit-draggable",
       "dialect": "v2",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "why": "A spread before a later static href cannot remove that final href. The anchor is therefore proven draggable in auto state after Solid removes draggable={false}.",
       "code": "declare const earlier: { href?: string };\nexport const Case = () => <a {...earlier} href=\"/safe\" draggable={false}>open</a>;\n"
     },
@@ -1174,14 +1114,6 @@
       "checker": "silent",
       "why": "An anchor with neither an href attribute nor a spread is proven non-draggable in the HTML auto state, so removing draggable={false} preserves the requested behavior.",
       "code": "export const Case = () => <a draggable={false}>label</a>;\n"
-    },
-    {
-      "rule": "valid-jsx-nesting",
-      "dialect": "v2",
-      "expect": "silent",
-      "checker": "reports",
-      "why": "TypeScript accepts structurally well-typed JSX even when the browser reparses the HTML tree; the finding is about browser nesting semantics rather than JSX types.",
-      "code": "export const Case = () => <p><div /></p>;\n"
     },
     {
       "rule": "primitive-in-directive-application",
@@ -1202,7 +1134,7 @@
       "code": "import { createEffect } from \"solid-js\";\nexport function serverOnly() {\n  \"use server\";\n  createEffect(() => 1);\n  createEffect(() => 1, () => {});\n}\n"
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -1212,7 +1144,7 @@
       "code": "import { createEffect, createRenderEffect, createTrackedEffect } from \"solid-js\";\nexport function serverOnly() {\n  \"use server\";\n  createEffect(() => 1);\n  createEffect(() => 1, () => {});\n  createRenderEffect(() => 1, () => {});\n  createTrackedEffect(() => {});\n}\n"
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "dialect": "v2",
       "sourceExtension": "ts",
       "expect": "silent",
@@ -1223,7 +1155,7 @@
       "code": "import { createEffect } from \"solid-js\";\ntype Operands = [() => number, (value: number) => void];\nconst operands = (Math.random() ? [() => 1] : [() => 1, () => {}]) as unknown as Operands;\ncreateEffect(...operands);\n"
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "dialect": "v2",
       "sourceExtension": "ts",
       "expect": "silent",
@@ -1234,7 +1166,7 @@
       "code": "import { createEffect } from \"solid-js\";\ndeclare const anyApply: any;\ndeclare const maybeApply: ((value: number) => void) | undefined;\ncreateEffect(() => 1, anyApply);\ncreateEffect(() => 1, maybeApply!);\n"
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -1254,7 +1186,7 @@
       "code": "\"use server\";\nimport { createEffect } from \"solid-js\";\ncreateEffect(() => 1);\ncreateEffect(123 as unknown as () => number);\n"
     },
     {
-      "rule": "v1/no-owner-effect",
+      "rule": "v1/missing-owner",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -1264,7 +1196,7 @@
       "code": "\"use server\";\nimport { createEffect } from \"solid-js\";\ncreateEffect(() => 1);\ncreateEffect(123 as unknown as () => number);\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -1352,7 +1284,7 @@
       "rule": "v1/reactive-dispatch-unresolved",
       "dialect": "v1",
       "expect": "silent",
-      "checker": "reports",
+      "checker": "silent",
       "checkerKind": "uncertifiable",
       "why": "Solid 1.x createReaction has the same type-correct opaque-callback boundary. The wrapper may preserve, replace, defer, or eagerly run the arrow, so neither a leaf violation nor leaf safety is provable.",
       "code": "import { createReaction, onCleanup } from \"solid-js\";\ndeclare function wrap(callback: () => void): () => void;\nconst track = createReaction(wrap(() => onCleanup(() => {})));\ntrack(() => 1);\n"
@@ -1381,9 +1313,48 @@
       "sourceExtension": "ts",
       "expect": "silent",
       "checker": "reports",
-      "checkerKind": "uncertifiable",
-      "why": "The object argument is well typed, but its nested Date makes the default transport reject it. Top-level library identity cannot prove the complete object graph, so the checker must expose the unresolved transport obligation rather than silently miss it.",
+      "checkerKind": "violation",
+      "why": "The object argument is well typed, but its nested Date makes the default transport reject it. JSON.stringify reaches nested values, and this literal is closed -- no spread, no computed key, distinct keys -- so the nested library identity proves the flattening rather than leaving an obligation. TypeScript stays silent because the declared parameter type is satisfied; the defect is transport behavior the signature does not express.",
       "code": "type Payload = { title: string; when: Date };\nexport async function save(payload: Payload) {\n  \"use server\";\n  return payload.title;\n}\nvoid save({ title: \"event\", when: new Date() });\n"
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "silent",
+      "why": "The compiler proves the alias contains only strings, booleans, null, and finite numeric literals. Those values are all faithfully JSON-serializable, so no transport obligation remains.",
+      "code": "type Safe = string | boolean | null | 0 | 1.5;\ndeclare const safe: Safe;\nexport async function save(value: Safe) {\n  \"use server\";\n  return value;\n}\nvoid save(safe);\n"
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 3,
+      "why": "Bigint, symbol, and undefined are accepted by the declared parameter type, but the compiler proves that each call passes a primitive the default JSON transport cannot encode faithfully. These are transport violations, not TypeScript diagnostics.",
+      "code": "type Unsafe = bigint | symbol | undefined;\nexport async function save(value: Unsafe) {\n  \"use server\";\n  return typeof value;\n}\nvoid save(1n);\nvoid save(Symbol(\"id\"));\nvoid save(undefined);\n"
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerCount": 1,
+      "why": "Type assertions change only TypeScript's apparent type. The runtime bigint still fails the default JSON transport and must report, while the runtime number asserted to bigint remains JSON-safe and must stay silent.",
+      "code": "type Safe = string | boolean | null;\ntype Unsafe = bigint | symbol | undefined;\nexport async function saveSafe(value: Safe) {\n  \"use server\";\n  return value;\n}\nexport async function saveUnsafe(value: Unsafe) {\n  \"use server\";\n  return typeof value;\n}\nvoid saveSafe(1n as unknown as Safe);\nvoid saveUnsafe(1 as unknown as Unsafe);\n"
+    },
+    {
+      "rule": "server-function-rich-argument",
+      "dialect": "v2",
+      "sourceExtension": "ts",
+      "expect": "silent",
+      "checker": "reports",
+      "checkerKind": "uncertifiable",
+      "why": "A broad number type may contain finite JSON numbers or non-finite values such as NaN and Infinity. Without an exact finite-value guarantee, the checker must retain the transport obligation.",
+      "code": "declare const value: number;\nexport async function save(input: number) {\n  \"use server\";\n  return input;\n}\nvoid save(value);\n"
     },
     {
       "rule": "server-function-rich-argument",
@@ -1398,7 +1369,7 @@
       "code": "export async function save(when: Date) {\n  \"use server\";\n  return when.toISOString();\n}\nvoid save(new Date(), new Set([1]));\n"
     },
     {
-      "rule": "ssr-client-source-outside-loading-boundary",
+      "rule": "async-outside-loading-boundary",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -1406,7 +1377,7 @@
       "code": "import { createMemo } from \"solid-js\";\nimport { renderToString } from \"@solidjs/web\";\nconst width = createMemo(() => 1, { ssrSource: \"client\" });\nexport const Case = () => <div>{width()}</div>;\nvoid renderToString;\n"
     },
     {
-      "rule": "ssr-client-source-outside-loading-boundary",
+      "rule": "async-outside-loading-boundary",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -1420,7 +1391,8 @@
       "expect": "silent",
       "checker": "reports",
       "why": "SC7005's keystone. Calling httpStatus is well typed; the finding is about render-tree dominance and whether a streaming shell may commit before the Loading child settles.",
-      "code": "import { Loading } from \"solid-js\";\nimport { httpStatus, renderToStream } from \"@solidjs/web\";\nfunction Details() {\n  httpStatus(410);\n  return <div>gone</div>;\n}\nexport const Page = () => <Loading fallback={<div>loading</div>}><Details /></Loading>;\nvoid renderToStream;\n"
+      "code": "import { Loading } from \"solid-js\";\nimport { httpStatus, renderToStream } from \"@solidjs/web\";\nfunction Details() {\n  httpStatus(410);\n  return <div>gone</div>;\n}\nexport const Page = () => <Loading fallback={<div>loading</div>}><Details /></Loading>;\nvoid renderToStream;\n",
+      "checkerKind": "uncertifiable"
     },
     {
       "rule": "http-response-after-flush",
@@ -1432,7 +1404,7 @@
       "code": "import { Loading } from \"solid-js\";\nimport { httpStatus } from \"@solidjs/web\";\nfunction Details() {\n  httpStatus(410);\n  return <div>gone</div>;\n}\nexport const Page = () => <Loading fallback={<div>loading</div>}><Details /></Loading>;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -1440,7 +1412,7 @@
       "code": "const handler = 1;\nexport const Case = () => <button on-event={handler}>save</button>;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v1",
       "expect": "silent",
       "checker": "reports",
@@ -1449,7 +1421,7 @@
       "code": "declare const handler: (() => void) | number;\nexport const Case = () => <button on-event={handler}>save</button>;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -1457,7 +1429,7 @@
       "code": "const handler = 1;\nexport const Case = () => <button on-event={handler}>save</button>;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v2",
       "expect": "silent",
       "checker": "reports",
@@ -1466,7 +1438,7 @@
       "code": "declare const handler: (() => void) | number;\nexport const Case = () => <button on-event={handler}>save</button>;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v1",
       "expect": "silent",
       "checker": "silent",
@@ -1474,12 +1446,53 @@
       "code": "const handler = () => {};\nexport const Case = () => <button on-event={handler}>save</button>;\n"
     },
     {
-      "rule": "expected-function-got-expression",
+      "rule": "reactive-handler-frozen",
       "dialect": "v2",
       "expect": "silent",
       "checker": "silent",
       "why": "Solid 2 likewise certifies a directly callable handler on the unchecked custom event spelling; only invalid or unresolved runtime shapes are reported.",
       "code": "const handler = () => {};\nexport const Case = () => <button on-event={handler}>save</button>;\n"
+    },
+    {
+      "rule": "prefer-for",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "A directly rendered Array#map is valid TypeScript; the finding recommends Solid 2 list identity semantics that the type system cannot express.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [items] = createSignal([\"a\", \"b\"]);\nexport const Case = () => <ul>{items().map((item, index) => item + index)}</ul>;\n"
+    },
+    {
+      "rule": "prefer-show",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "A logical JSX branch is valid TypeScript; the finding is an opt-in control-flow preference and does not claim a type defect.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [ready] = createSignal(false);\nexport const Case = () => <main>{ready() && <span />}</main>;\n"
+    },
+    {
+      "rule": "prefer-for",
+      "dialect": "v1",
+      "expect": "removed-because-redundant",
+      "checker": "silent",
+      "allow": [2322],
+      "why": "An async Array#map callback produces Promise<Element>[], which the real Solid 1.x JSX Element type rejects. The checker must leave this spelling to TypeScript rather than restating the return-type error as a list preference.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [items] = createSignal([1, 2]);\nexport const Case = () => <ul>{items().map(async (item) => <li>{item}</li>)}</ul>;\n"
+    },
+    {
+      "rule": "prefer-for",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "Solid 2.0's published JSX child types accept this async mapped array. The opt-in finding still expresses list identity rather than a type defect, but withholds its synchronous-callback autofix.",
+      "code": "import { createSignal } from \"solid-js\";\nconst [items] = createSignal([1, 2]);\nexport const Case = () => <ul>{items().map(async (item) => <li>{item}</li>)}</ul>;\n"
+    },
+    {
+      "rule": "jsx-no-duplicate-props",
+      "dialect": "v2",
+      "expect": "silent",
+      "checker": "reports",
+      "why": "The published Solid 2 typings type innerHTML and children independently, while the DOM runtime gives them one competing content slot.",
+      "code": "export const Case = (props: { html: string }) => <div innerHTML={props.html}>fallback</div>;\n"
     }
   ]
 }

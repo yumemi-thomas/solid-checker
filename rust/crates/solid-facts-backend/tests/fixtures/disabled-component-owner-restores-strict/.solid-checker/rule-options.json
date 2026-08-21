@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "rules": {
+    "components-return-once": { "enabled": false }
+  }
+}

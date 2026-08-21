@@ -1,10 +1,11 @@
-//! `napi-build` 2.3.2 with one host-independent compiler guard.
+//! A `napi-build` 2.4.1-compatible shim for this workspace's WASI toolchain.
 //!
 //! The pinned Solid 1.x compiler correctly makes its Node adapter optional,
 //! but its build script still calls `napi_build::setup()` unconditionally.
 //! On WASI that asks the linker to export a Node registration symbol which the
-//! feature-disabled crate does not define. Every other branch below is the
-//! upstream 2.3.2 implementation verbatim.
+//! feature-disabled crate does not define. The crate advertises 2.4.1 to meet
+//! the Solid 2 compiler's resolver constraint, while its WASI module retains
+//! the link behavior audited with this package's emnapi 1.x runtime.
 
 use std::env;
 

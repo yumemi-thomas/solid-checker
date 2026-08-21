@@ -37,7 +37,7 @@ spellings of the bug, so the rule keeps them:
 Both directions are pinned by `fixtures/tsc-oracle/rule-cases.json` and
 `fixtures/reactive-ir/uncalled-accessor-v2`. The upstream cases this narrowing
 stops firing for are declared `status: "policy"` in
-`fixtures/upstream-parity/deviations.json`.
+the product-owned cases in `fixtures/ownership-cases/cases.json`.
 
 A signal or memo accessor is used as a value without being called.
 
@@ -68,7 +68,7 @@ Two positions are decided per dialect against the pinned
   calls it (`dist/dev.js`), and the spread path normalizes through
   `flatten()`, which unwraps by calling. `<div children={count} />` is
   therefore live, called usage — the same contract as function JSX children —
-  and is not flagged. The 1.x catalog keeps its upstream-parity behavior in
+  and is not flagged. The 1.x catalog keeps that behavior in
   both positions.
 
 ## Why is this bad?
@@ -132,4 +132,4 @@ JSX child insertion—leave it uncalled.
 ## Related
 
 - [strict-read-untracked](strict-read-untracked.md) — reads that happen outside tracking
-- [expected-function-got-expression](expected-function-got-expression.md) — the inverse defect
+- [reactive-handler-frozen](reactive-handler-frozen.md) — the inverse defect

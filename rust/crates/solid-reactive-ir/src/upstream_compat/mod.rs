@@ -12,8 +12,10 @@
 //!
 //! [`check_file`] gates each submodule on the dialect version, mirroring what
 //! the two catalogs declare. The module names make that ownership explicit:
-//! every `solid1x_*` group implements the 1.x ESLint-era surface, while
-//! `shared_reactivity` contains defect classes carried by both catalogs
+//! the `solid1x_*` modules retain their historical implementation names, but
+//! their entry points are gated per rule: structural preferences and intrinsic
+//! content competition are shared, while attributes, directives, and DOM-slot
+//! folding remain 1.x-only. `shared_reactivity` contains defect classes carried by both catalogs
 //! (minus the one 1.x-only rule its own gate documents). The version match
 //! here and the catalogs above cannot drift silently: each dialect's solver
 //! panics on an emitted identity its catalog does not resolve, and both rule
@@ -25,7 +27,6 @@ pub mod solid1x_options;
 mod solid1x_structure;
 mod solid1x_syntax;
 mod solid1x_undef;
-mod solid1x_upstream_data;
 
 use std::collections::{HashMap, HashSet};
 
@@ -37,7 +38,155 @@ use crate::{
 };
 use solid_facts::FileFacts;
 use solid_facts::core::Span;
-use typefacts::{ArrayShape, Location, RuntimeValueDomain, TupleShape};
+use typefacts::{ArrayShape, Location, RuntimeValueDomain};
+
+#[derive(Clone, Copy)]
+struct IndexedReactiveRead {
+    span: Span,
+    proven: bool,
+}
+
+/// Exact reactive reads already proven by local and interprocedural analysis,
+/// grouped once by file for the preference rules that ask whether evaluating a
+/// governing expression subscribes. This is deliberately downstream of the
+/// engine's read analysis: aliases, caller-classified props, derived helpers,
+/// and package-contract reads must all receive the same answer here that they
+/// receive everywhere else.
+#[derive(Default)]
+pub(super) struct ReactiveReadIndex {
+    by_path: HashMap<String, Vec<IndexedReactiveRead>>,
+}
+
+impl ReactiveReadIndex {
+    fn new(reads: &[crate::ReactiveRead]) -> Self {
+        let mut by_path = HashMap::<String, Vec<IndexedReactiveRead>>::new();
+        for read in reads {
+            let (Ok(start), Ok(end)) = (
+                u32::try_from(read.location.start_byte),
+                u32::try_from(read.location.end_byte),
+            ) else {
+                continue;
+            };
+            by_path
+                .entry(read.location.path.to_string())
+                .or_default()
+                .push(IndexedReactiveRead {
+                    span: Span::new(start, end),
+                    // `uncertain` specifically means that a component prop's
+                    // reactive backing is not established. Accessor, store,
+                    // and contract identities remain proven reactive even
+                    // when their surrounding function is only a possible
+                    // component. A style preference cannot promote the 1.x
+                    // catalog's historical all-props heuristic into proof.
+                    proven: !read.uncertain || read.kind.as_ref() != "component-props",
+                });
+        }
+        for reads in by_path.values_mut() {
+            reads.sort_by_key(|read| (read.span.start, read.span.end, read.proven));
+        }
+        Self { by_path }
+    }
+
+    /// Whether evaluating exactly `expression` performs a proven reactive
+    /// read outside a nested function. A read summarized onto an enclosing
+    /// call remains eligible: that is the interprocedural proof that invoking
+    /// the helper executes the dependency. An unresolved read never qualifies.
+    pub(super) fn has_proven_read(
+        &self,
+        context: &UpstreamCompatContext<'_>,
+        file: &FileFacts,
+        expression: Span,
+    ) -> bool {
+        let expression = file.ast.peel_ts_sugar_span(expression);
+        let nested_functions = file
+            .ast
+            .functions_within(expression)
+            .map(|function| function.span)
+            .collect::<Vec<_>>();
+        let inside_nested = |span: Span| {
+            nested_functions
+                .iter()
+                .any(|function| function.contains(span))
+        };
+        let indexed_read = self.by_path.get(file.path.as_str()).is_some_and(|reads| {
+            let start = reads.partition_point(|read| read.span.start < expression.start);
+            reads[start..]
+                .iter()
+                .take_while(|read| read.span.start <= expression.end)
+                .filter(|read| read.proven && expression.contains(read.span))
+                .any(|read| !inside_nested(read.span))
+        });
+        if indexed_read {
+            return true;
+        }
+
+        // A caller can pass an accessor function as a static prop value:
+        // `<List items={items}>`. The property read itself is correctly absent
+        // from `ReactiveRead`, but invoking `props.items()` subscribes. Caller
+        // enumeration owns that fact, so consult its exact per-prop value
+        // classification rather than guessing from the function type.
+        file.ast.calls_within(expression).any(|call| {
+            if inside_nested(call.span) {
+                return false;
+            }
+            let callee = file.ast.peel_ts_sugar_span(call.callee);
+            let Some(root) = member_root(file, callee) else {
+                return false;
+            };
+            let Some(symbol) = source_symbol_at(context, file, root) else {
+                return false;
+            };
+            let Some((_, declaration)) = context.prop_sources.get(symbol) else {
+                return false;
+            };
+            let Some(first_member) = file
+                .ast
+                .members
+                .iter()
+                .find(|member| member.object == root && callee.contains(member.span))
+            else {
+                return false;
+            };
+            file.ast
+                .computed_members
+                .binary_search(&first_member.span)
+                .is_err()
+                && context
+                    .props_reactivity
+                    .accessor_value_use(declaration, text(file, first_member.property))
+                    == crate::source_discovery::PropUse::Reactive
+        })
+    }
+}
+
+pub(super) fn source_symbol_at<'a>(
+    context: &'a UpstreamCompatContext<'_>,
+    file: &FileFacts,
+    span: Span,
+) -> Option<&'a crate::SymbolId> {
+    context.entities.at(file.path.as_str(), span).or_else(|| {
+        context
+            .source_reference_index
+            .get(file.path.as_str())
+            .and_then(|by_range| by_range.get(&(u64::from(span.start), u64::from(span.end))))
+    })
+}
+
+/// The object a member chain is rooted at: `store.a.b` -> `store`.
+pub(super) fn member_root(file: &FileFacts, span: Span) -> Option<Span> {
+    let mut current = file.ast.members.iter().find(|member| member.span == span)?;
+    loop {
+        match file
+            .ast
+            .members
+            .iter()
+            .find(|member| member.span == current.object)
+        {
+            Some(outer) => current = outer,
+            None => return Some(current.object),
+        }
+    }
+}
 
 /// The source text a span covers, or `""` when the span is not readable.
 ///
@@ -62,8 +211,8 @@ pub(super) fn text(file: &FileFacts, span: Span) -> &str {
 /// TypeScript rejects is TypeScript's to report. This is the boundary of that
 /// argument: where TypeScript declines to look, the rule is the only thing that
 /// can speak, so the narrowings ask this before staying silent. The hole it
-/// closes was found by `scripts/parity-tsc-ownership.mjs`, which held a declared
-/// `status: "policy"` deviation to its own claim and caught two upstream
+/// closes was found by the predecessor span audit and is now pinned by the
+/// product-owned TypeScript ownership cases, including the two former upstream
 /// `class:mt-10` cases where the claim was false.
 pub(super) fn jsx_name_is_type_checked(name: &str) -> bool {
     !name.contains('-')
@@ -111,25 +260,6 @@ pub(super) fn expression_array_shape(
         .and_then(|entity| entity.array_shape)
 }
 
-/// [`expression_array_shape`]'s structural twin: the tuple at exactly this
-/// span, when the demand plan asked for it there.
-///
-/// Present only when the type is *itself* a tuple, so absence is "not proven a
-/// tuple" — for a union, for a plain array, and for anything unresolved alike.
-/// The distinction matters wherever a value has to satisfy numbered members: an
-/// array has no `0` or `1` property, so it is not interchangeable with a
-/// two-slot tuple even though [`ArrayShape::Array`] covers both.
-pub(super) fn expression_tuple_shape(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> Option<TupleShape> {
-    context
-        .lookup
-        .entity_at(file.path.as_str(), span)
-        .and_then(|entity| entity.tuple_shape)
-}
-
 /// The complete runtime value domain for exactly this expression span.
 ///
 /// Unlike a binary callability fact, this preserves a union whose
@@ -145,45 +275,6 @@ pub(super) fn expression_runtime_value_domain(
         .lookup
         .entity_at(file.path.as_str(), span)
         .and_then(|entity| entity.runtime_value_domain)
-}
-
-pub(super) fn expression_symbol_is_unresolved(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> bool {
-    context
-        .lookup
-        .entity_at(file.path.as_str(), span)
-        .is_some_and(|entity| entity.symbol_unresolved)
-}
-
-/// Whether this exact reference names an import whose relative module is not
-/// part of the analyzed project. The import binding itself still has a local
-/// symbol, so `symbol_unresolved` alone cannot detect TS2307 at the declaration.
-pub(super) fn expression_import_is_unresolved(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> bool {
-    let Some(symbol) = context.lookup.entities().at(file.path.as_str(), span) else {
-        return false;
-    };
-    file.ast.imports.iter().any(|import| {
-        import.bindings.iter().any(|binding| {
-            context
-                .lookup
-                .entities()
-                .at(file.path.as_str(), binding.local.span)
-                == Some(symbol)
-        }) && import.module.starts_with('.')
-            && solid_facts::resolve_relative_module_path(
-                file.path.as_str(),
-                import.module.as_str(),
-                context.lookup.files().iter().map(|file| file.path.as_str()),
-            )
-            .is_none()
-    })
 }
 
 // --- helpers shared by the rule modules ------------------------------------
@@ -305,9 +396,8 @@ pub(super) fn binding_initializer<'a>(
 /// compiler-resolved local variable indirection and one level of `+`
 /// concatenation. Not a general constant-folder: it is exactly the shape
 /// upstream's own scope-based `getStaticValue` recovers for the common
-/// patterns (a literal, a `const url = "..."`, or `"javascript:" +
-/// something`), no more. [`literal_string_type`] complements it with the
-/// values TypeScript proves.
+/// patterns (a literal, a `const value = "..."`, or literal concatenation),
+/// no more.
 pub(super) fn static_string_expression(
     context: &UpstreamCompatContext<'_>,
     file: &FileFacts,
@@ -389,14 +479,6 @@ fn quoted_literal_end(source: &str) -> Option<usize> {
         }
     }
     None
-}
-
-/// The literal text of a quoted string span, unwrapping one optional
-/// surrounding `{ ... }` JSX expression-container layer first (an
-/// attribute's `value` span includes the braces when it came from
-/// `attr={"literal"}` rather than `attr="literal"`).
-pub(super) fn static_string(file: &FileFacts, span: Span) -> Option<String> {
-    strip_string_literal(text(file, span))
 }
 
 pub(super) fn strip_string_literal(source: &str) -> Option<String> {
@@ -511,48 +593,6 @@ fn read_hex_escape(
     Some(value)
 }
 
-/// Widens a deletion span leftward over the whitespace that separated the
-/// deleted text from what precedes it, so removing a JSX attribute leaves
-/// `<div id="a"/>` rather than `<div  id="a"/>`. Purely byte-wise and ASCII:
-/// a multi-byte character can never end in an ASCII whitespace byte, so the
-/// walk cannot stop inside one.
-pub(super) fn deletion_with_leading_whitespace(source: &str, span: Span) -> Span {
-    let bytes = source.as_bytes();
-    let mut start = span.start as usize;
-    if start > bytes.len() {
-        return span;
-    }
-    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
-        start -= 1;
-    }
-    Span::new(u32::try_from(start).unwrap_or(span.start), span.end)
-}
-
-/// Widens a deletion span leftward over the `,` separator (and the
-/// whitespace on either side of it) that joined the deleted text to the
-/// previous list item, so removing a call's last argument leaves `f(a)`
-/// rather than `f(a, )`. When what precedes is not a comma — a comment, an
-/// opening parenthesis — the span is returned unchanged rather than guess at
-/// a byte that is not the separator.
-pub(super) fn deletion_with_leading_comma(source: &str, span: Span) -> Span {
-    let bytes = source.as_bytes();
-    let mut start = span.start as usize;
-    if start > bytes.len() {
-        return span;
-    }
-    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
-        start -= 1;
-    }
-    if start == 0 || bytes[start - 1] != b',' {
-        return span;
-    }
-    start -= 1;
-    while start > 0 && bytes[start - 1].is_ascii_whitespace() {
-        start -= 1;
-    }
-    Span::new(u32::try_from(start).unwrap_or(span.start), span.end)
-}
-
 pub(super) fn fix_replace(
     file: &FileFacts,
     span: Span,
@@ -593,32 +633,6 @@ pub(super) fn violation(
     }
 }
 
-/// The string value the compiler proves an expression to hold, wherever the
-/// value was written — another file, an inferred `const`, an enum member —
-/// which a same-file text trace cannot follow.
-///
-/// This is the `constantValue` fact, not the rendered type. A literal type is
-/// only incidentally a value: it is absent the moment a constant is *folded*
-/// rather than written, so `innerHTML={"a" + "b"}` widens to `string` and
-/// reads as non-static even though upstream's own static evaluation accepts
-/// it. The producer folds literals, substitution-free templates, transparent
-/// wrappers, unary signs, same-kind binary `+`, and immutable declarations,
-/// and answers only for a complete expression occupying exactly this span — a
-/// constant *operand* of a larger expression still proves nothing about the
-/// whole. Absence is "not proven constant", so every caller stays fail-closed.
-pub(super) fn literal_string_type(
-    context: &UpstreamCompatContext<'_>,
-    file: &FileFacts,
-    span: Span,
-) -> Option<String> {
-    let constant = context
-        .lookup
-        .entity_at(file.path.as_str(), span)
-        .and_then(|entity| entity.constant_value.as_ref())?;
-    (constant.kind == typefacts::ConstantValueKind::String)
-        .then(|| constant.string.as_ref().to_owned())
-}
-
 /// Everything one file's upstream-compat checks may consult.
 ///
 /// The reactive maps are the reason the decomposed `reactivity` rules can be
@@ -650,6 +664,9 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// `Reactive` everywhere for dialects that keep the upstream
     /// over-approximation.
     pub(super) props_reactivity: &'a crate::source_discovery::PropsReactivityIndex,
+    /// Local, interprocedural, alias-propagated, and contract-derived reads,
+    /// indexed once for exact governing-expression queries.
+    pub(super) reactive_reads: ReactiveReadIndex,
     /// The proven-source symbol at each exact TypeScript reference location,
     /// indexed path → byte range. Entity facts intentionally cover only
     /// semantically interesting expression shapes; ordinary operator operands
@@ -670,6 +687,8 @@ pub(super) struct UpstreamCompatContext<'a> {
     /// carries no `.solid-checker/rule-options.json`. See
     /// [`solid1x_options`].
     pub(super) solid1x_options: &'a solid1x_options::Solid1xRuleOptions,
+    pub(super) prefer_for_enabled: bool,
+    pub(super) prefer_show_enabled: bool,
 }
 
 /// Runs every upstream-compat rule the dialect's catalog declares over one
@@ -677,13 +696,15 @@ pub(super) struct UpstreamCompatContext<'a> {
 fn check_file(file: &FileFacts, context: &UpstreamCompatContext<'_>) -> FileDiagnostics {
     let mut violations = Vec::new();
     let mut defects = Vec::new();
-    if context.dialect.carries_eslint_era_rules() {
-        solid1x_syntax::check_file(file, context, &mut violations);
-        solid1x_attributes::check_file(file, context, &mut violations);
+    solid1x_syntax::check_file(file, context, &mut violations);
+    if context.prefer_for_enabled || context.prefer_show_enabled {
         solid1x_structure::check_file(file, context, &mut violations);
+    }
+    if context.dialect.carries_eslint_era_rules() {
+        solid1x_attributes::check_file(file, context, &mut violations);
         solid1x_undef::check_file(file, context, &mut violations);
     }
-    shared_reactivity::check_file(file, context, &mut violations, &mut defects);
+    shared_reactivity::check_file(file, context, &mut defects);
     FileDiagnostics {
         violations,
         defects,
@@ -712,6 +733,22 @@ pub(crate) fn check_project(
     reusable: bool,
     draft: &mut ProgramDraft,
 ) {
+    let (prefer_for_name, prefer_show_name) = if ctx.dialect.carries_eslint_era_rules() {
+        ("v1/prefer-for", "v1/prefer-show")
+    } else {
+        ("prefer-for", "prefer-show")
+    };
+    let prefer_for_enabled = ctx
+        .rule_options
+        .is_enabled(prefer_for_name, false, &["preferences"]);
+    let prefer_show_enabled =
+        ctx.rule_options
+            .is_enabled(prefer_show_name, false, &["preferences"]);
+    let reactive_reads = if prefer_for_enabled || prefer_show_enabled {
+        ReactiveReadIndex::new(&draft.reads)
+    } else {
+        ReactiveReadIndex::default()
+    };
     let retained = reference_slot.as_deref_mut().and_then(|slot| {
         if reusable {
             slot.take()
@@ -730,6 +767,7 @@ pub(crate) fn check_project(
         prop_sources: ctx.prop_sources,
         uncertain_prop_sources: ctx.uncertain_prop_sources,
         props_reactivity: ctx.props_reactivity,
+        reactive_reads,
         source_reference_index: retained.unwrap_or_else(|| {
             crate::symbols::source_reference_locations(
                 &ctx.facts.typescript,
@@ -739,6 +777,8 @@ pub(crate) fn check_project(
         }),
         contracted: ctx.contracted,
         solid1x_options: ctx.solid1x_rule_options,
+        prefer_for_enabled,
+        prefer_show_enabled,
     };
     for diagnostics in parallel_file_results(&ctx.facts.files, |file| check_file(file, &context)) {
         draft.static_violations.extend(diagnostics.violations);
@@ -752,19 +792,8 @@ pub(crate) fn check_project(
 #[cfg(test)]
 mod tests {
     use super::{
-        concat_plus_joined_literal, decode_string_literal, deletion_with_leading_comma,
-        deletion_with_leading_whitespace, entire_delimited, strip_string_literal,
+        concat_plus_joined_literal, decode_string_literal, entire_delimited, strip_string_literal,
     };
-    use solid_facts::core::Span;
-
-    /// What a deletion fix's output would be: the span's text removed.
-    fn delete(source: &str, span: Span) -> String {
-        format!(
-            "{}{}",
-            &source[..span.start as usize],
-            &source[span.end as usize..]
-        )
-    }
 
     #[test]
     fn strips_quotes_from_string_literals() {
@@ -815,48 +844,6 @@ mod tests {
         assert_eq!(concat_plus_joined_literal("'a' 'b'"), None);
         assert_eq!(concat_plus_joined_literal("'a' + 'b' +"), None);
         assert_eq!(concat_plus_joined_literal("'a' === x ? f : 'b'"), None);
-    }
-
-    #[test]
-    fn argument_deletion_swallows_the_separating_comma() {
-        let source = "createEffect(fn, [a])";
-        let span = Span::new(17, 20); // `[a]`
-        assert_eq!(
-            delete(source, deletion_with_leading_comma(source, span)),
-            "createEffect(fn)"
-        );
-        let spaced = "createEffect(fn ,  [a])";
-        let span = Span::new(19, 22); // `[a]`
-        assert_eq!(
-            delete(spaced, deletion_with_leading_comma(spaced, span)),
-            "createEffect(fn)"
-        );
-    }
-
-    #[test]
-    fn comma_swallowing_declines_when_no_comma_precedes() {
-        // A comment (or anything else) between the comma and the deleted
-        // text: the span comes back unchanged rather than eat a byte that
-        // is not the separator.
-        let source = "createEffect(fn, /* deps */ [a])";
-        let span = Span::new(28, 31); // `[a]`
-        assert_eq!(deletion_with_leading_comma(source, span), span);
-    }
-
-    #[test]
-    fn attribute_deletion_swallows_the_separating_whitespace() {
-        let source = "<div key={x} />";
-        let span = Span::new(5, 12); // `key={x}`
-        assert_eq!(
-            delete(source, deletion_with_leading_whitespace(source, span)),
-            "<div />"
-        );
-        let multiline = "<div\n  key={x}\n/>";
-        let span = Span::new(7, 14); // `key={x}`
-        assert_eq!(
-            delete(multiline, deletion_with_leading_whitespace(multiline, span)),
-            "<div\n/>"
-        );
     }
 
     #[test]

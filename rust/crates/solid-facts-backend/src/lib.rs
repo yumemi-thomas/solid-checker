@@ -17,12 +17,13 @@ pub use contract_document::encode as encode_package_contract;
 pub use diagnostics::bundled_solid_js_contract;
 pub use diagnostics::{
     DiagnosticAnalysis, DiagnosticSession, DiagnosticTimings, Metrics, PackageContractStatus,
-    PackageSummary, Snapshot, SnapshotEvidence, SnapshotFinding, SnapshotFix, SnapshotTextEdit,
-    SourceLocation, analysis_metrics, analyze_project, analyze_project_measured,
-    analyze_project_measured_with, discovered_contract_paths, discovered_rule_options_path,
-    imported_package_roots, load_package_contracts, load_package_contracts_with,
-    package_contract_statuses, package_contract_statuses_with, read_package_contract, snapshot,
-    source_location,
+    PackageSummary, RequestedRuleEnablement, Snapshot, SnapshotEvidence, SnapshotFinding,
+    SnapshotFix, SnapshotTextEdit, SourceLocation, analysis_metrics, analyze_project,
+    analyze_project_measured, analyze_project_measured_with,
+    analyze_project_measured_with_enablement, discovered_contract_paths,
+    discovered_rule_options_path, imported_package_roots, load_package_contracts,
+    load_package_contracts_with, package_contract_statuses, package_contract_statuses_with,
+    read_package_contract, semantic_demand_options_for_enablement, snapshot, source_location,
 };
 pub use wire::{
     SemanticDemandGroup, SourceChange, SourceFile, TypeFactsExchangeTimings, TypeFactsProvider,
@@ -49,6 +50,23 @@ pub fn default_typefacts_executable() -> String {
         }
     }
     name.into()
+}
+
+/// Optional semantic facts needed only by explicitly enabled rule families.
+/// Default certification and WASM analysis request none of these facts.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct SemanticDemandOptions {
+    pub array_map_receiver_types: bool,
+}
+
+impl SemanticDemandOptions {
+    pub const NONE: Self = Self {
+        array_map_receiver_types: false,
+    };
+
+    pub const PREFERENCES: Self = Self {
+        array_map_receiver_types: true,
+    };
 }
 
 use std::{
@@ -100,6 +118,11 @@ pub enum BackendError {
     Handshake(String),
     #[error("rule options error: {0}")]
     RuleOptions(String),
+    #[error("dialect {dialect:?} produced unknown rule identities: {rules:?}")]
+    UnknownRuleIdentity {
+        dialect: &'static str,
+        rules: Vec<String>,
+    },
     #[error("analysis cancelled")]
     Cancelled,
 }
@@ -265,6 +288,7 @@ pub struct NativeIncrementalSession {
     typescript: TypeFactsSession,
     known_paths: HashSet<String>,
     last_build_timings: NativeBuildTimings,
+    semantic_demand_options: SemanticDemandOptions,
 }
 
 impl NativeIncrementalSession {
@@ -309,7 +333,21 @@ impl NativeIncrementalSession {
             last_facts: None,
             typescript,
             last_build_timings: NativeBuildTimings::default(),
+            semantic_demand_options: SemanticDemandOptions::NONE,
         }
+    }
+
+    /// Select facts needed by explicitly enabled preferences. Enabling a
+    /// demand after a same-generation default analysis invalidates only the
+    /// joined facts; AST/compiler caches remain reusable. Disabling can reuse
+    /// an existing superset until the next source edit.
+    pub fn set_semantic_demand_options(&mut self, options: SemanticDemandOptions) {
+        if options.array_map_receiver_types
+            && !self.semantic_demand_options.array_map_receiver_types
+        {
+            self.last_facts = None;
+        }
+        self.semantic_demand_options = options;
     }
 
     /// One edit exchange: the update that advances the generation always
@@ -453,6 +491,7 @@ impl NativeIncrementalSession {
             &mut self.cache,
             cancelled,
             retained,
+            self.semantic_demand_options,
         );
         result.map(|(facts, timings)| {
             self.last_build_timings = timings;
@@ -513,13 +552,14 @@ impl NativeIncrementalSession {
         }
         let mut sources = self.sources.values().cloned().collect::<Vec<_>>();
         sources.sort_by(|left, right| left.path.cmp(&right.path));
-        let (facts, timings) = build_project_native_cached_measured(
+        let (facts, timings) = build_project_native_cached_measured_with_demands(
             self.dialect,
             self.project_id.clone(),
             self.generation,
             sources,
             &mut self.typescript,
             &mut self.cache,
+            self.semantic_demand_options,
         )?;
         self.last_build_timings = timings;
         let facts = Arc::new(facts);
@@ -551,6 +591,7 @@ impl NativeIncrementalSession {
             &mut self.cache,
             Some(cancelled),
             None,
+            self.semantic_demand_options,
         )?;
         self.last_build_timings = timings;
         let facts = Arc::new(facts);
@@ -692,6 +733,24 @@ pub fn build_project_native_measured(
     sources: Vec<SourceFile>,
     typescript: &mut impl TypeFactsProvider,
 ) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
+    build_project_native_measured_with_demands(
+        dialect,
+        project_id,
+        generation,
+        sources,
+        typescript,
+        SemanticDemandOptions::NONE,
+    )
+}
+
+pub fn build_project_native_measured_with_demands(
+    dialect: &'static Dialect,
+    project_id: impl Into<String>,
+    generation: u64,
+    sources: Vec<SourceFile>,
+    typescript: &mut impl TypeFactsProvider,
+    semantic_demand_options: SemanticDemandOptions,
+) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
     let project_id = project_id.into();
     let generation = Generation::new(generation).map_err(|_| BackendError::Generation)?;
     let source_files_recomputed = u64::try_from(sources.len()).unwrap_or(u64::MAX);
@@ -731,7 +790,7 @@ pub fn build_project_native_measured(
     let request_started = Instant::now();
     let request_assembly = request_started.elapsed();
     let semantic_demand_started = Instant::now();
-    let demands = semantic_demands(dialect, &files)?;
+    let demands = semantic_demands(dialect, &files, semantic_demand_options)?;
     let semantic_demand_assembly = semantic_demand_started.elapsed();
     let demand_assembly = demand_started.elapsed();
     let table = typescript.semantic(demands)?;
@@ -790,8 +849,36 @@ pub fn build_project_native_cached_measured(
     typescript: &mut impl TypeFactsProvider,
     cache: &mut FactsCache,
 ) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
+    build_project_native_cached_measured_with_demands(
+        dialect,
+        project_id,
+        generation,
+        sources,
+        typescript,
+        cache,
+        SemanticDemandOptions::NONE,
+    )
+}
+
+pub fn build_project_native_cached_measured_with_demands(
+    dialect: &'static Dialect,
+    project_id: impl Into<String>,
+    generation: u64,
+    sources: Vec<SourceFile>,
+    typescript: &mut impl TypeFactsProvider,
+    cache: &mut FactsCache,
+    semantic_demand_options: SemanticDemandOptions,
+) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
     build_project_native_cached_measured_inner(
-        dialect, project_id, generation, sources, typescript, cache, None, None,
+        dialect,
+        project_id,
+        generation,
+        sources,
+        typescript,
+        cache,
+        None,
+        None,
+        semantic_demand_options,
     )
 }
 
@@ -813,6 +900,7 @@ pub fn build_project_native_cached_cancellable(
         cache,
         Some(cancelled),
         None,
+        SemanticDemandOptions::NONE,
     )
     .map(|(facts, _)| facts)
 }
@@ -834,6 +922,7 @@ fn build_project_native_cached_measured_inner(
     cache: &mut FactsCache,
     cancelled: Option<&std::sync::atomic::AtomicBool>,
     retained: Option<RetainedFileFacts<'_>>,
+    semantic_demand_options: SemanticDemandOptions,
 ) -> Result<(ProjectFacts, NativeBuildTimings), BackendError> {
     let project_id = project_id.into();
     let generation = Generation::new(generation).map_err(|_| BackendError::Generation)?;
@@ -904,7 +993,8 @@ fn build_project_native_cached_measured_inner(
     let request_started = Instant::now();
     let request_assembly = request_started.elapsed();
     let semantic_demand_started = Instant::now();
-    let demand_groups = semantic_demand_groups_cached(dialect, &files, cache)?;
+    let demand_groups =
+        semantic_demand_groups_cached(dialect, &files, cache, semantic_demand_options)?;
     let semantic_demand_assembly = semantic_demand_started.elapsed();
     let demand_assembly = demand_started.elapsed();
     let table = typescript.semantic_grouped(&demand_groups)?;
@@ -1026,7 +1116,12 @@ pub fn build_project_cached(
         seeds.extend(facts.structural_seed_locations());
         files.push(facts);
     }
-    let table = typescript.semantic(semantic_demands_cached(dialect, &files, cache)?)?;
+    let table = typescript.semantic(semantic_demands_cached(
+        dialect,
+        &files,
+        cache,
+        SemanticDemandOptions::NONE,
+    )?)?;
     let table = hydrate_structural_file_facts_cached(table, &files, cache);
     ProjectFacts::join(generation, project_id, files, table).map_err(Into::into)
 }
@@ -1034,8 +1129,9 @@ pub fn build_project_cached(
 fn semantic_demands(
     dialect: &'static Dialect,
     files: &[FileFacts],
+    options: SemanticDemandOptions,
 ) -> Result<Vec<typefacts::v3::EntityDemand>, BackendError> {
-    demand_plan::plan(dialect, files)
+    demand_plan::plan(dialect, files, options)
 }
 
 fn structural_accessor_spans(dialect: &'static Dialect, file: &FileFacts) -> HashSet<Span> {
@@ -1116,18 +1212,22 @@ fn semantic_demands_cached(
     dialect: &'static Dialect,
     files: &[FileFacts],
     cache: &mut FactsCache,
+    options: SemanticDemandOptions,
 ) -> Result<Vec<typefacts::v3::EntityDemand>, BackendError> {
     let mut demands = Vec::new();
     let mut ordered_files = files.iter().collect::<Vec<_>>();
     ordered_files.sort_by(|left, right| left.path.cmp(&right.path));
     for file in ordered_files {
         // The plan is dialect-specific, so the dialect is part of the key.
-        let key = format!("{}\0{}\0{}", dialect.id, file.path, file.source_hash);
+        let key = format!(
+            "{}\0{}\0{}\0{}",
+            dialect.id, options.array_map_receiver_types, file.path, file.source_hash
+        );
         let per_file = if let Some(cached) = cache.semantic_demands.get(&key) {
             cached
         } else {
             let generated: Arc<[typefacts::v3::EntityDemand]> =
-                semantic_demands(dialect, std::slice::from_ref(file))?.into();
+                semantic_demands(dialect, std::slice::from_ref(file), options)?.into();
             cache.semantic_demands.insert(key.clone(), generated);
             cache
                 .semantic_demands
@@ -1143,18 +1243,24 @@ fn semantic_demand_groups_cached<'a>(
     dialect: &'static Dialect,
     files: &'a [FileFacts],
     cache: &'a mut FactsCache,
+    options: SemanticDemandOptions,
 ) -> Result<Vec<SemanticDemandGroup<'a>>, BackendError> {
     let mut ordered_files = files.iter().collect::<Vec<_>>();
     ordered_files.sort_by(|left, right| left.path.cmp(&right.path));
     let keys = ordered_files
         .iter()
-        .map(|file| format!("{}\0{}\0{}", dialect.id, file.path, file.source_hash))
+        .map(|file| {
+            format!(
+                "{}\0{}\0{}\0{}",
+                dialect.id, options.array_map_receiver_types, file.path, file.source_hash
+            )
+        })
         .collect::<Vec<_>>();
     for (file, key) in ordered_files.iter().zip(&keys) {
         if !cache.semantic_demands.contains_key(key) {
             cache.semantic_demands.insert(
                 key.clone(),
-                semantic_demands(dialect, std::slice::from_ref(*file))?.into(),
+                semantic_demands(dialect, std::slice::from_ref(*file), options)?.into(),
             );
         }
     }
@@ -1487,9 +1593,11 @@ mod tests {
             ),
         ];
         let dialect = dialect::default_dialect();
-        let fresh_demands = semantic_demands(dialect, &files).unwrap();
+        let fresh_demands = semantic_demands(dialect, &files, SemanticDemandOptions::NONE).unwrap();
         let mut cache = FactsCache::default();
-        let retained_demands = semantic_demands_cached(dialect, &files, &mut cache).unwrap();
+        let retained_demands =
+            semantic_demands_cached(dialect, &files, &mut cache, SemanticDemandOptions::NONE)
+                .unwrap();
         assert_eq!(retained_demands, fresh_demands);
 
         let fresh_table = TypeScriptTable::from_parts(
@@ -1525,10 +1633,14 @@ mod tests {
     fn semantic_demand_plan_is_complete_for_downstream_consumers() {
         let file = test_file_facts(
             "src/component.tsx",
-            "const value = createMemo(async () => 1); export function Card(props: { title: string }) { const key = 'title'; const copy = { ...props }; return <div>{props[key]}{copy.title}{value()}</div>; }",
+            "const value = createMemo(async () => 1); const effectArgs: [() => number] = [() => 1]; createEffect(...effectArgs); export function Card(props: { title: string }) { const key = 'title'; const copy = { ...props }; return <div>{props[key]}{copy.title}{value()}</div>; }",
         );
-        let demands =
-            semantic_demands(dialect::default_dialect(), std::slice::from_ref(&file)).unwrap();
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
 
         for member in &file.ast.members {
             let location = typefacts_location(file.path.as_str(), member.object);
@@ -1576,6 +1688,28 @@ mod tests {
                     "identifier call arguments need compiler callability for runtime semantics"
                 );
             }
+            for argument in call.arguments.iter().filter(|argument| !argument.spread) {
+                let argument_location = typefacts_location(file.path.as_str(), argument.span);
+                assert!(demands.iter().any(|demand| {
+                    demand.location == argument_location && demand.primitive_value_domain
+                }));
+            }
+            for argument in call.arguments.iter().filter(|argument| argument.spread) {
+                let argument_location = typefacts_location(
+                    file.path.as_str(),
+                    file.ast
+                        .spreads
+                        .iter()
+                        .find(|spread| spread.span == argument.span)
+                        .map_or(argument.span, |spread| spread.argument),
+                );
+                assert!(
+                    demands.iter().any(|demand| demand.symbol
+                        && demand.tuple_shape
+                        && demand.location == argument_location),
+                    "call spread {argument_location:?} must retain symbol provenance and exact tuple shape"
+                );
+            }
         }
         for import in &file.ast.imports {
             for binding in &import.bindings {
@@ -1610,13 +1744,94 @@ mod tests {
             file.clone(),
             test_file_facts("src/a.ts", "export const a = 1;"),
         ];
-        let planned = semantic_demands(dialect::default_dialect(), &reversed).unwrap();
+        let planned = semantic_demands(
+            dialect::default_dialect(),
+            &reversed,
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
         reversed.reverse();
         assert_eq!(
             planned,
-            semantic_demands(dialect::default_dialect(), &reversed).unwrap(),
+            semantic_demands(
+                dialect::default_dialect(),
+                &reversed,
+                SemanticDemandOptions::NONE,
+            )
+            .unwrap(),
             "query order must not depend on source traversal order"
         );
+    }
+
+    #[test]
+    fn array_shape_demands_are_limited_to_compiler_proven_jsx_maps() {
+        let mut file = test_file_facts(
+            "src/lists.tsx",
+            "const rendered = <ul>{items().map(item => item)}</ul>; const computed = items().map(item => item);",
+        );
+        let map_calls = file
+            .ast
+            .calls
+            .iter()
+            .filter(|call| {
+                file.ast.members.iter().any(|member| {
+                    member.span == call.callee && file.source_text(member.property) == Some("map")
+                })
+            })
+            .map(|call| call.span)
+            .collect::<Vec<_>>();
+        assert_eq!(map_calls.len(), 2);
+        Arc::make_mut(&mut file.compiler).jsx_operations.push(
+            solid_facts::compiler::JsxOperation {
+                span: map_calls[0],
+                kind: "jsx-expression".into(),
+            },
+        );
+
+        let default_demands = semantic_demands(
+            dialect::default_dialect(),
+            &[file.clone()],
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
+        assert!(
+            default_demands.iter().all(|demand| !demand.array_shape),
+            "default-disabled preferences must not request map receiver shapes"
+        );
+
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            &[file.clone()],
+            SemanticDemandOptions::PREFERENCES,
+        )
+        .unwrap();
+        for (index, call_span) in map_calls.into_iter().enumerate() {
+            let member = file
+                .ast
+                .members
+                .iter()
+                .find(|member| {
+                    member.span
+                        == file
+                            .ast
+                            .calls
+                            .iter()
+                            .find(|call| call.span == call_span)
+                            .unwrap()
+                            .callee
+                })
+                .unwrap();
+            let location = typefacts_location(file.path.as_str(), member.object);
+            let array_shape = demands
+                .iter()
+                .find(|demand| demand.location == location)
+                .is_some_and(|demand| demand.array_shape);
+            assert_eq!(
+                array_shape,
+                index == 0,
+                "only the compiler-proven JSX child map should request an array-shape query"
+            );
+        }
     }
 
     #[test]
@@ -1667,8 +1882,12 @@ mod tests {
             .find_map(|returned| returned.callee)
             .expect("returned call");
         let location = typefacts_location(file.path.as_str(), returned);
-        let demands =
-            semantic_demands(dialect::default_dialect(), std::slice::from_ref(&file)).unwrap();
+        let demands = semantic_demands(
+            dialect::default_dialect(),
+            std::slice::from_ref(&file),
+            SemanticDemandOptions::NONE,
+        )
+        .unwrap();
         let matching = demands
             .iter()
             .filter(|demand| demand.location == location)
@@ -1733,6 +1952,8 @@ mod tests {
         name: "stub-dialect-ran",
         severity: "warning",
         uncertifiable: false,
+        default_enabled: true,
+        presets: &[],
     };
 
     const STUB_CONTRACT_RULE: solid_reactive_ir::RuleMetadata = solid_reactive_ir::RuleMetadata {
@@ -1740,6 +1961,8 @@ mod tests {
         name: "stub-contract-missing",
         severity: "error",
         uncertifiable: true,
+        default_enabled: true,
+        presets: &[],
     };
 
     fn stub_solve(
@@ -1780,7 +2003,9 @@ mod tests {
         solve_measured: stub_solve,
         docs_url: |rule| format!("stub://docs/{rule}"),
         has_rule: |_| false,
+        rule_metadata: |rule| (rule == STUB_RULE.name).then_some(STUB_RULE),
         semantic_demands: dialect::SemanticDemandCapabilities::NONE,
+        catalog_capabilities: solid_reactive_ir::CatalogCapabilities::SOLID_2,
         package_contract_finding: stub_package_contract_finding,
         bundled_packages: &[],
         bundled_contract: |_| Ok(None),

@@ -114,6 +114,24 @@ the requested 20% allocation-reduction target is not claimed. The absolute
 retained measurements above are the certification baseline for future dense
 identity/index work.
 
+## Follow-up measurement — 2026-08-21
+
+The runtime-identity, contract, owner, and environment work was measured again
+on the same Apple Silicon host against the deterministic 5,000-file corpus,
+using the release checker and the pinned Type Facts producer. The repository
+performance certification also passed for the smaller 500/1,000-file corpus:
+2.01x contract-export scaling, 879 Type Facts bytes/source, 104,357 ns/source
+best first Reactive IR, 3,250 ns cached Reactive IR, and 48.6 ms one-file
+incremental analysis.
+
+The retained 5,000-file process measured 1,052.2 MiB RSS and a 654.0 MiB
+combined physical footprint (checker 378.5 MiB, Type Facts 275.5 MiB). Against
+the July certification baseline above, combined physical footprint is down from
+846.2 MiB and RSS from 1,104.9 MiB. This is an observational improvement, not
+a new allocation-reduction claim: the corpus, release build, and measurement
+tooling are held constant, but no structural allocation experiment was isolated
+in this slice.
+
 ## Verification
 
 The final checkout passed:

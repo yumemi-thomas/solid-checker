@@ -8,11 +8,10 @@ lowers them — or an element uses multiple competing sources of child content.
 
 ## What it does
 
-Compares direct attributes with properties from inline object-literal spreads.
-`attr:`/`prop:` aliases share the plain spelling's slot, so an alias cannot
-evade the check. It also rejects combinations of JSX children, a `children`
-prop, `innerHTML`, and `textContent`, because each writes the element's
-content.
+On intrinsic elements, compares effective compiler slots: differently spelled
+direct or spread-carried props such as `attr:title`/`title` can still collide.
+It also rejects combinations of JSX children, a `children` prop, `innerHTML`,
+and `textContent`, because each writes the DOM element's content.
 
 ## Scope: identical spellings are TypeScript's
 
@@ -33,12 +32,11 @@ components alike:
 TS2783 appears only in the `strict` pass, which the absolute rule explicitly
 does not accept as an exception.
 
-Two identical-name orders are **not** covered, and both keep reporting: a
-spread followed by an attribute (the later attribute legitimately wins, so
-TypeScript says nothing — upstream's own case 02) and two *different* spread
-objects.
+Identical names across spread boundaries do not report. A spread followed by
+an explicit attribute is the canonical override idiom, and two spreads have
+the same deliberate later-wins semantics.
 
-What survives regardless of origin is the case this rule exists for: two
+What survives on intrinsic elements is the case this rule exists for: two
 **differently spelled** props that the compiler folds into one slot.
 `onClick`/`onclick` both become the delegated `el.$$click` write, and
 `attr:title`/`title` share the static template attribute slot. TypeScript sees
@@ -50,7 +48,7 @@ The attribute named 'children' will be overwritten."* — the same sentence this
 rule writes, in both passes and on components too. That exact pair was narrowed
 away on 2026-08-17.
 
-Every other combination stays, because no type relates those props to each other:
+Every other intrinsic-element combination stays, because no type relates those props to each other:
 `innerHTML` with `textContent`, and `innerHTML` with JSX children, draw no
 diagnostic at all. A set that includes one of them still reports even when TS2710
 also fires, because the finding then asserts a conflict the type error does not.
@@ -58,7 +56,7 @@ also fires, because the finding then asserts a conflict the type error does not.
 Both directions are pinned by `fixtures/tsc-oracle/rule-cases.json` and
 `fixtures/reactive-ir/eslint-compat`. The upstream cases this narrowing stops
 firing for are declared `status: "policy"` in
-`fixtures/upstream-parity/deviations.json`, each naming its diagnostic.
+`fixtures/ownership-cases/cases.json`, each naming its diagnostic.
 
 ### Intrinsic elements: the compiler's slot model
 
@@ -82,8 +80,8 @@ separate `addEventListener` calls; a non-delegated plain `on*` event attaches
 one listener per occurrence; a delegated `onClick` and an `on:click` on the
 same element both fire. eslint-plugin-solid folds all of these onto one
 lowercase name and reports them — runtime-legal code — so this is a
-deliberate, compiler-evidenced divergence from upstream (no upstream corpus
-case pins the folding; the parity ledger is unaffected).
+deliberate, compiler-evidenced divergence from upstream, pinned directly in the
+product-owned ownership cases.
 
 The static-value half of the model is a *node-kind* test, matching the
 compiler's inline branch: `Expression::StringLiteral` and
@@ -93,21 +91,19 @@ numeric value), while `{-1}`, `{+1}`, `{NaN}`, and `{Infinity}` are unary
 expressions and identifiers that are not — a distinction a "does this text
 parse as a number" test gets wrong in both directions.
 
-### Components: key identity
+### Components: ordinary props
 
-A **component** tag never reaches that lowering. Its props are collected into
-a plain object, so the only slot is the key exactly as written, and a repeated
-key is a plain later-wins overwrite:
+A **component** tag never reaches DOM lowering. Its props are collected into a
+plain object and the component may intentionally combine `children`,
+`innerHTML`, `textContent`, or differently spelled keys. SC8003 therefore has
+no component-only arm:
 
 - `<MyComp onSave={a} onSave={b} />` and `<MyComp on:click={a} on:click={b} />`
-  are duplicates — the DOM slot model would wrongly excuse both;
+  are already TS17001;
 - `<MyComp onClick={a} onclick={b} />` and `<MyComp attr:title={a} title={b} />`
   are *not* — those are distinct object keys, with no DOM aliasing to merge
   them.
 
-(A namespaced prop on a component is separately reported by
-[no-unknown-namespaces](no-unknown-namespaces.md), which is about the prefix
-having no effect there at all.)
 
 ## Why is this bad?
 
@@ -122,9 +118,7 @@ conditional classes belong in `classList`.
 Incorrect:
 
 ```tsx
-<button class="base" {...{ class: active() ? "active" : "" }} />
-<button onClick={save} onClick={audit} />   {/* delegated: only audit runs */}
-<MyComp onSave={save} onSave={audit} />     {/* one props key: audit wins */}
+<button attr:title="first" title="second" />
 <div innerHTML={markup}>{fallback}</div>
 ```
 
@@ -132,6 +126,7 @@ Correct:
 
 ```tsx
 <button class="base" classList={{ active: active() }} />
+<button {...defaults} class="override" />  {/* deliberate override */}
 <button on:click={save} oncapture:click={audit} />  {/* both listeners fire */}
 <button onClick={save} on:click={audit} />          {/* both listeners fire */}
 <MyComp onClick={save} onclick={audit} />           {/* two distinct keys */}
@@ -154,6 +149,4 @@ not one of them, matching the compiler, which does no folding either.
 
 ## Related
 
-- [event-handlers](event-handlers.md) — statically-valued `on*` props
 - [prefer-classlist](prefer-classlist.md) — conditional class composition
-- [no-innerhtml](no-innerhtml.md) — unsafe markup injection

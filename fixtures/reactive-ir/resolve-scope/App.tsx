@@ -1,4 +1,4 @@
-// SC2004 resolve-in-reactive-scope: the rc.0 dev guard is `getObserver()`
+// SC2004 resolve-in-tracked-scope:  the rc.0 dev guard is `getObserver()`
 // (probed) — resolve() throws inside tracked computes and tracked JSX, and is
 // legal in untrack, component bodies, event handlers, apply callbacks, and
 // module scope. Every positive and negative here pins one probed cell.

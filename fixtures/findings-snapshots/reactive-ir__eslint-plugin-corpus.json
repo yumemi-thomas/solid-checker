@@ -2,7 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -212,17 +212,7 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-invalid.tsx",
-      "start": 126,
-      "end": 135,
-      "fixes": 0
-    },
-    {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "code": "SC1004",
       "kind": "violation",
       "severity": "error",
@@ -232,17 +222,7 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "uncertifiable",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-invalid.tsx",
-      "start": 249,
-      "end": 260,
-      "fixes": 0
-    },
-    {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "code": "SC1004",
       "kind": "violation",
       "severity": "error",
@@ -252,17 +232,7 @@
       "fixes": 0
     },
     {
-      "rule": "strict-read-untracked",
-      "code": "SC1001",
-      "kind": "violation",
-      "severity": "warning",
-      "path": "fixtures/reactive-ir/eslint-plugin-corpus/component-return-invalid.tsx",
-      "start": 410,
-      "end": 418,
-      "fixes": 0
-    },
-    {
-      "rule": "component-returns-conditionally",
+      "rule": "components-return-once",
       "code": "SC1004",
       "kind": "violation",
       "severity": "error",
@@ -382,7 +352,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -392,7 +362,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "uncertifiable",
       "severity": "error",
@@ -412,7 +382,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -452,7 +422,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -462,7 +432,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -472,7 +442,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -482,7 +452,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -492,7 +462,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -502,7 +472,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -522,7 +492,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -552,7 +522,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -562,7 +532,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -572,7 +542,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -582,7 +552,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -592,7 +562,7 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",
@@ -602,8 +572,8 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
@@ -612,7 +582,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -622,8 +592,8 @@
       "fixes": 0
     },
     {
-      "rule": "flush-in-forbidden-scope",
-      "code": "SC3003",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
@@ -632,7 +602,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -642,8 +612,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
@@ -652,7 +622,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -662,8 +632,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
@@ -672,7 +642,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -682,8 +652,8 @@
       "fixes": 0
     },
     {
-      "rule": "primitive-in-leaf-owner",
-      "code": "SC3002",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/leaf-invalid.tsx",
@@ -692,7 +662,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -702,7 +672,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -742,7 +712,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -752,7 +722,7 @@
       "fixes": 0
     },
     {
-      "rule": "cleanup-in-forbidden-scope",
+      "rule": "leaf-owner-forbidden-call",
       "code": "SC3001",
       "kind": "violation",
       "severity": "error",
@@ -762,8 +732,8 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-cleanup",
-      "code": "SC4002",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
@@ -772,8 +742,8 @@
       "fixes": 0
     },
     {
-      "rule": "flush-in-forbidden-scope",
-      "code": "SC3003",
+      "rule": "leaf-owner-forbidden-call",
+      "code": "SC3001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-invalid.tsx",
@@ -802,8 +772,8 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-settled-cleanup",
-      "code": "SC4004",
+      "rule": "missing-owner",
+      "code": "SC4001",
       "kind": "violation",
       "severity": "error",
       "path": "fixtures/reactive-ir/eslint-plugin-corpus/owned-leaf-extended-valid.tsx",
@@ -812,7 +782,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -862,7 +832,7 @@
       "fixes": 0
     },
     {
-      "rule": "no-owner-effect",
+      "rule": "missing-owner",
       "code": "SC4001",
       "kind": "violation",
       "severity": "warning",
@@ -932,7 +902,7 @@
       "fixes": 0
     },
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "uncertifiable",
       "severity": "error",

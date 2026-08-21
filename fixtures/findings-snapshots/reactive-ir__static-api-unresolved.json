@@ -2,8 +2,8 @@
   "status": "uncertifiable",
   "findings": [
     {
-      "rule": "package-contract-callback-missing",
-      "code": "SC9006",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",
@@ -12,8 +12,8 @@
       "fixes": 0
     },
     {
-      "rule": "package-contract-callback-missing",
-      "code": "SC9006",
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
       "kind": "uncertifiable",
       "severity": "error",
       "path": "fixtures/reactive-ir/static-api-unresolved/App.tsx",

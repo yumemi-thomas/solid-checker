@@ -10,10 +10,13 @@ import {
   saveEvent,
   saveIds,
   savePlain,
+  saveNumber,
+  saveScalar,
   saveStamps,
+  saveUnsafeScalar,
   uploadChunk,
 } from "./api";
-import type { Boxed, Ids, Stamps } from "./api";
+import type { Boxed, Ids, SafeScalar, Stamps, UnsafeScalar } from "./api";
 import { recordPattern } from "./server-module";
 
 // Same spelling and same property shape as the real configuration API, but a
@@ -22,6 +25,9 @@ function configureServerFunctionsClient(_options: {
   serializeArgs: (args: unknown[]) => string;
 }) {}
 configureServerFunctionsClient({ serializeArgs: JSON.stringify });
+
+declare const safeScalar: SafeScalar;
+declare const broadNumber: number;
 
 export function Toolbar() {
   const when = new Date();
@@ -37,6 +43,18 @@ export function Toolbar() {
   const stamps: Stamps = [when];
   const ids: Ids = tags;
   const boxed: Boxed = { title: "hello", when };
+  // A separate binding for the spread case below: the nested proof requires
+  // the binding be referenced exactly once, so reusing `boxed` there would
+  // withdraw its own proof rather than test the spread.
+  const spreadable: Boxed = { title: "hello", when };
+  // The case the `data` property fact exists for. There is no literal Date
+  // anywhere in this literal, so the presence half witnesses nothing -- and
+  // the safety half must still refuse it, because the getter's body runs on
+  // access and yields one.
+  const getterBoxed: Boxed = { title: "hello", get when() { return new Date(); } };
+  const nested = { title: "hello", inner: { count: 1, flag: true } };
+  // Referenced twice, so nothing proves the graph still holds at the call.
+  const mutable = { title: "hello" };
   return (
     <button
       onClick={async () => {
@@ -46,10 +64,24 @@ export function Toolbar() {
         await analyze(samples, label()); // violation for Float64Array; label result uncertifiable
         await uploadChunk(bytes); // silent: lone Uint8Array is a request body
         await appendChunk("chunk", bytes); // silent: trailing Uint8Array after JSON-safe leading
-        await savePlain(payload); // uncertifiable: the available fact cannot close the object graph
+        await savePlain(payload); // silent: a closed literal of JSON-safe leaves
+        await saveScalar(safeScalar); // silent: compiler-proven JSON-safe primitive domain
+        await saveUnsafeScalar(1n); // violation: JSON cannot encode bigint
+        await saveUnsafeScalar(Symbol("id")); // violation: JSON cannot encode symbol
+        await saveUnsafeScalar(undefined); // violation: JSON cannot encode undefined faithfully
+        await saveScalar(1n as unknown as SafeScalar); // violation: the assertion does not change the runtime bigint
+        await saveUnsafeScalar(1 as unknown as UnsafeScalar); // silent: the runtime number is JSON-safe despite the asserted type
+        await saveNumber(broadNumber); // uncertifiable: number may be non-finite
         await saveStamps(stamps); // finding: Date behind an imported alias
         await saveIds(ids); // finding: Set behind an imported alias
-        await saveBoxed(boxed); // uncertifiable: nested Date is outside the top-level fact
+        await saveBoxed(boxed); // violation: nested Date reached through the binder's own resolution
+        await saveBoxed({ title: "hello", when }); // violation: JSON reaches the nested Date
+        await savePlain({ title: "hello" }); // silent: the same proof on an inline literal
+        await savePlain(nested); // silent: a nested container of JSON-safe leaves
+        await saveBoxed(getterBoxed); // uncertifiable: a getter's body runs on access, so no written value proves what the property yields
+        await savePlain(mutable); // uncertifiable: a second reference could mutate a property before the call
+        mutable.title = "changed";
+        await saveBoxed({ ...spreadable }); // uncertifiable: a spread could overwrite the witness
         await saveEvent(new Date(), tags); // two findings: inline Date, Set
       }}
     >

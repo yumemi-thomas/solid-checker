@@ -103,6 +103,11 @@ const CHECKER = locate(
   join(ROOT, "rust/target/debug/solid-checker-rust"),
 );
 const TYPEFACTS = locate("SOLID_TYPEFACTS_BIN", join(ROOT, "bin/solid-typefacts"));
+const catalogEntries = [
+  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v1.json"), "utf8")).rules,
+  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v2.json"), "utf8")).rules,
+];
+const catalogByName = new Map(catalogEntries.map((rule) => [rule.name, rule]));
 
 // One directory per dialect, holding a symlink to that dialect's audited
 // install. A symlink rather than a copy because the checker picks its dialect
@@ -157,9 +162,20 @@ const runChecker = (testCase, index, strict) => {
     join(dir, caseSourceName),
     code,
   );
+  const enablementArgs = [
+    ...(testCase.presets ?? []).flatMap((preset) => ["--preset", preset]),
+    ...(testCase.enableRules ?? []).flatMap((rule) => ["--enable-rule", rule]),
+  ];
+  const testedRule = canonicalRule(testCase);
+  if (
+    catalogByName.get(testedRule)?.defaultEnabled === false &&
+    !(testCase.enableRules ?? []).includes(testedRule)
+  ) {
+    enablementArgs.push("--enable-rule", testedRule);
+  }
   const output = execFileSync(
     CHECKER,
-    ["--format", "json", "--project", join(dir, `tsconfig.${pass}.json`)],
+    ["--format", "json", "--project", join(dir, `tsconfig.${pass}.json`), ...enablementArgs],
     {
       encoding: "utf8",
       maxBuffer: 256 * 1024 * 1024,
@@ -225,6 +241,15 @@ for (const [index, testCase] of ledger.cases.entries()) {
       typeof testCase.compilerOptions.verbatimModuleSyntax !== "boolean"
     ) {
       failures.push(`${label}: compilerOptions.verbatimModuleSyntax must be boolean`);
+      continue;
+    }
+  }
+  for (const field of ["presets", "enableRules"]) {
+    if (
+      testCase[field] !== undefined &&
+      (!Array.isArray(testCase[field]) || testCase[field].some((value) => typeof value !== "string"))
+    ) {
+      failures.push(`${label}: ${field} must be an array of strings`);
       continue;
     }
   }
@@ -387,23 +412,12 @@ for (const [index, testCase] of ledger.cases.entries()) {
 // silently. A new rule must arrive with its positive spelling and the oracle's
 // verdict on it.
 const EXEMPT = {
-  "package-contract-export-missing": "asks whether a package ships a usable reactivity contract, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
-  "package-contract-callback-missing": "same -- the subject is a third-party package's contract, not Solid's types",
-  "package-contract-missing": "same",
-  "v1/package-contract-export-missing": "same",
-  "v1/package-contract-callback-missing": "same",
-  "v1/package-contract-missing": "same",
-  "execution-map-incomplete": "unreachable from real source by construction (docs/precision-backlog.md): it defends against externally produced or partial compiler facts, so no snippet can trigger it",
-  "v1/execution-map-incomplete": "same",
+  "package-contract-incomplete": "asks whether a package ships a usable reactivity contract, which is an analyzability fact about an external artifact; no snippet against real Solid typings can express it",
+  "v1/package-contract-incomplete": "same -- the subject is a third-party package's contract, not Solid's types",
   "server-function-module-directive": "needs a module-level \"use server\" prologue and the project's server surface",
-  "pending-async-forbidden-scope": "needs a pending-state observer in a project with a Loading boundary above it",
-  "v1/jsx-uses-vars": "no diagnostic of its own: it marks a JSX-referenced binding used so an unused-variable pass does not flag it",
 };
 
-const catalogRules = [
-  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v1.json"), "utf8")).rules,
-  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v2.json"), "utf8")).rules,
-].map((rule) => rule.name);
+const catalogRules = catalogEntries.map((rule) => rule.name);
 
 const declared = new Set(ledger.cases.map(canonicalRule));
 const uncovered = [...new Set(catalogRules)].filter(

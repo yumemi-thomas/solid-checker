@@ -130,7 +130,7 @@ test("projects safe same-file fixes and UTF-8 byte ranges", () => {
   const reports = run({
     findings: [{
       id: "SC1003",
-      rule: "component-props-destructure",
+      rule: "no-destructure",
       kind: "violation",
       severity: "error",
       message: "do not destructure props",
@@ -256,12 +256,176 @@ test("per-rule surface: every discovered catalog identity is an ESLint rule", ()
   }
   assert.equal(v1.namespace, "v1");
   assert.equal(v2.namespace, "");
-  // The two dialect configs enable exactly their own catalog, plus the
+  // The two dialect configs enable exactly their default-enabled catalog, plus the
   // certification switch-off that keeps them composable with `recommended`.
-  assert.equal(Object.keys(plugin.configs.v1.rules).length, v1.rules.length + 1);
-  assert.equal(Object.keys(plugin.configs.v2.rules).length, v2.rules.length + 1);
+  assert.equal(
+    Object.keys(plugin.configs.v1.rules).length,
+    v1.rules.filter(entry => entry.defaultEnabled).length + 1
+  );
+  assert.equal(
+    Object.keys(plugin.configs.v2.rules).length,
+    v2.rules.filter(entry => entry.defaultEnabled).length + 1
+  );
   assert.equal(plugin.configs.v1.rules["solid-checker/certification"], "off");
   assert.equal(plugin.configs.v2.rules["solid-checker/certification"], "off");
+});
+
+test("preference configs and recommendation metadata follow generated catalogs", () => {
+  for (const catalog of Object.values(plugin._testing.manifests)) {
+    const preferences = catalog.rules.filter(entry => entry.presets.includes("preferences"));
+    const config = plugin.configs[`preferences-${catalog.config}`];
+    assert.deepEqual(config.settings.solidChecker.preset, ["preferences"]);
+    assert.deepEqual(
+      Object.keys(config.rules).sort(),
+      preferences.map(entry => `solid-checker/${entry.name}`).sort()
+    );
+    for (const entry of catalog.rules) {
+      assert.equal(
+        plugin.rules[entry.name].meta.docs.recommended,
+        entry.defaultEnabled && !entry.uncertifiable
+      );
+      assert.equal(
+        `solid-checker/${entry.name}` in plugin.configs[catalog.config].rules,
+        entry.defaultEnabled
+      );
+    }
+  }
+  assert.equal(plugin.configs["preferences-v2"].settings.solidChecker.dialect, undefined);
+});
+
+test("adapter presets and enabled rules are normalized into argv and cache identity", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-preferences-"));
+  const project = join(root, "tsconfig.json");
+  const calls = join(root, "calls.txt");
+  const analyzer = join(root, "analyzer.mjs");
+  writeFileSync(project, "{}\n");
+  writeFileSync(analyzer, `import { appendFileSync } from "node:fs";
+appendFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)) + "\\n");
+process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
+`);
+  const context = (preset, enableRule) => ({
+    filename: join(root, "App.tsx"),
+    physicalFilename: join(root, "App.tsx"),
+    settings: { solidChecker: {
+      command: process.execPath,
+      commandArgs: [analyzer, calls],
+      project,
+      preset,
+      enableRule
+    } },
+    options: []
+  });
+  plugin._testing.snapshotCache.clear();
+  plugin._testing.loadSnapshot(context(["b", "a", "a"], ["prefer-show", "prefer-show"]));
+  plugin._testing.loadSnapshot(context(["a", "b"], ["prefer-show"]));
+  plugin._testing.loadSnapshot(context(["preferences"], ["prefer-show"]));
+  const invocations = readFileSync(calls, "utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(invocations.length, 2);
+  assert.deepEqual(invocations[0].slice(-6), [
+    "--preset", "a", "--preset", "b", "--enable-rule", "prefer-show"
+  ]);
+  assert.deepEqual(invocations[1].slice(-4), [
+    "--preset", "preferences", "--enable-rule", "prefer-show"
+  ]);
+  plugin._testing.snapshotCache.clear();
+});
+
+test("adapter forwards explicit runtime conditions and includes them in cache identity", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-runtime-"));
+  const project = join(root, "tsconfig.json");
+  const calls = join(root, "calls.txt");
+  const analyzer = join(root, "analyzer.mjs");
+  writeFileSync(project, "{}\n");
+  writeFileSync(analyzer, `import { appendFileSync } from "node:fs";
+appendFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)) + "\\n");
+process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
+`);
+  const context = runtime => ({
+    filename: join(root, "App.tsx"),
+    physicalFilename: join(root, "App.tsx"),
+    settings: { solidChecker: {
+      command: process.execPath,
+      commandArgs: [analyzer, calls],
+      project,
+      runtime
+    } },
+    options: []
+  });
+  plugin._testing.snapshotCache.clear();
+  plugin._testing.loadSnapshot(context({
+    target: "browser",
+    rendering: "csr",
+    conditions: ["import", "browser", "import"],
+    frameworkTransforms: ["use-server"]
+  }));
+  plugin._testing.loadSnapshot(context({
+    target: "browser",
+    rendering: "csr",
+    conditions: ["browser", "import"],
+    frameworkTransforms: ["use-server"]
+  }));
+  plugin._testing.loadSnapshot(context({ target: "node", rendering: "string-ssr" }));
+  const invocations = readFileSync(calls, "utf8").trim().split("\n").map(JSON.parse);
+  assert.equal(invocations.length, 2);
+  assert.deepEqual(invocations[0].slice(-12), [
+    "--format", "json",
+    "--runtime-target", "browser",
+    "--rendering", "csr",
+    "--runtime-condition", "browser",
+    "--runtime-condition", "import",
+    "--framework-transform", "use-server"
+  ]);
+  assert.deepEqual(invocations[1].slice(-4), [
+    "--runtime-target", "node",
+    "--rendering", "string-ssr"
+  ]);
+  plugin._testing.snapshotCache.clear();
+});
+
+test("an explicitly configured default-disabled ESLint rule enables native analysis", () => {
+  const root = mkdtempSync(join(tmpdir(), "solid-checker-adapter-explicit-"));
+  const project = join(root, "tsconfig.json");
+  const calls = join(root, "calls.txt");
+  const analyzer = join(root, "analyzer.mjs");
+  const filename = join(root, "App.tsx");
+  writeFileSync(project, "{}\n");
+  writeFileSync(filename, "export {};\n");
+  writeFileSync(analyzer, `import { writeFileSync } from "node:fs";
+writeFileSync(process.argv[2], JSON.stringify(process.argv.slice(3)));
+process.stdout.write(JSON.stringify({ status: "certified", findings: [] }));
+`);
+  const context = {
+    filename,
+    physicalFilename: filename,
+    settings: { solidChecker: {
+      command: process.execPath,
+      commandArgs: [analyzer, calls],
+      project
+    } },
+    options: [],
+    sourceCode: sourceCode("export {};\n"),
+    report() {}
+  };
+  plugin._testing.snapshotCache.clear();
+  const listeners = plugin.rules["v1/prefer-classlist"].create(context);
+  listeners.Program({ type: "Program" });
+  listeners["Program:exit"]();
+  const args = JSON.parse(readFileSync(calls, "utf8"));
+  assert.deepEqual(args.slice(-2), ["--enable-rule", "v1/prefer-classlist"]);
+  plugin._testing.snapshotCache.clear();
+});
+
+test("deprecated rule keys delegate without entering dialect presets", () => {
+  for (const [oldName, currentName] of plugin._testing.deprecatedRuleKeys) {
+    const rule = plugin.rules[oldName];
+    assert.ok(rule, `missing deprecated rule ${oldName}`);
+    assert.equal(rule.meta.deprecated, true);
+    assert.deepEqual(rule.meta.replacedBy, [currentName]);
+    assert.ok(plugin.rules[currentName], `missing replacement ${currentName}`);
+    for (const config of [plugin.configs.v1, plugin.configs.v2]) {
+      assert.ok(!(`solid-checker/${oldName}` in config.rules));
+    }
+  }
 });
 
 test("recommended followed by a dialect config reports each finding once", () => {

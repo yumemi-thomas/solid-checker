@@ -9,7 +9,7 @@ import { createMutable } from "solid-js/store";
 // version -- dialect selection reads it (see solid-facts-backend's dialect.rs).
 // That file was an *empty directory* until 2026-08-17, so the fixture had been
 // running the 2.0 catalog the whole time and every claim below was vacuous:
-// the 1.x-only names came back as six `package-contract-export-missing`
+// the 1.x-only names produced six `package-contract-incomplete` findings
 // obligations and the single-argument `createEffect` drew a spurious
 // `missing-effect-function`. The `.gitignore` exception lines for that
 // directory are part of the fixture -- without them the stub is untracked and

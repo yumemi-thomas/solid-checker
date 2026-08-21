@@ -37,7 +37,7 @@ spellings of the bug, so the rule keeps them:
 Both directions are pinned by `fixtures/tsc-oracle/rule-cases.json` and
 `fixtures/reactive-ir/uncalled-accessor-v2`. The upstream cases this narrowing
 stops firing for are declared `status: "policy"` in
-`fixtures/upstream-parity/deviations.json`.
+the product-owned cases in `fixtures/ownership-cases/cases.json`.
 
 A signal or memo accessor is used as a value without being called.
 
@@ -102,4 +102,4 @@ JSX child insertion—leave it uncalled.
 ## Related
 
 - [v1/strict-read-untracked](./strict-read-untracked.md) — reads that happen outside tracking
-- [v1/expected-function-got-expression](./expected-function-got-expression.md) — the inverse defect
+- [v1/reactive-handler-frozen](./reactive-handler-frozen.md) — the inverse defect

@@ -2,7 +2,7 @@
   "status": "violation",
   "findings": [
     {
-      "rule": "component-props-destructure",
+      "rule": "no-destructure",
       "code": "SC1003",
       "kind": "violation",
       "severity": "error",

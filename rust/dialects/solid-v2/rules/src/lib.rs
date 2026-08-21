@@ -22,6 +22,8 @@ pub use solid_reactive_ir::{EvidenceStep, Finding, RuleMetadata, SolveTimings};
 
 struct Catalog;
 
+pub const CATALOG_CAPABILITIES: CatalogCapabilities = CatalogCapabilities::SOLID_2;
+
 #[must_use]
 pub fn solve(program: &Program) -> Vec<Finding> {
     solve_measured(program).0
@@ -47,7 +49,7 @@ fn strict_read_hint(kind: &str) -> &'static str {
 
 impl CatalogWording for Catalog {
     fn capabilities(&self) -> CatalogCapabilities {
-        CatalogCapabilities::SOLID_2
+        CATALOG_CAPABILITIES
     }
 
     fn wording(&self, seed: FindingSeed<'_>) -> FindingWording {
@@ -104,29 +106,29 @@ impl CatalogWording for Catalog {
                 location: Some(creation.location.clone()),
             }]),
             FindingSeed::OwnerRequirement(requirement) => {
-                let (rule, message, hint) = match requirement.operation {
+                let (message, hint) = match requirement.operation {
                     OwnerRequirementOperation::Cleanup => (
-                        Rule::NoOwnerCleanup,
                         "onCleanup is called without a reactive owner; no scope's disposal can trigger it, so this cleanup function will never run",
                         "Call onCleanup inside a component or computation, or create the surrounding scope with createRoot so disposal exists. For one-time setup with teardown, use onSettled with a returned cleanup in a component.",
                     ),
                     OwnerRequirementOperation::Boundary => (
-                        Rule::NoOwnerBoundary,
                         "boundary is created without a reactive owner; it can never be disposed, and the subtree it manages will leak",
                         "Render boundaries inside a component tree rooted by render() or hydrate(), or under an explicit createRoot; a boundary created in a bare helper function has no owner to attach to.",
                     ),
                     OwnerRequirementOperation::SettledCleanup => (
-                        Rule::NoOwnerSettledCleanup,
                         "onSettled returns a cleanup function in a scope with no owner to register it on; Solid throws SETTLED_CLEANUP_UNOWNED here in dev, and in production the cleanup is silently dropped and will never run",
                         "Call onSettled where an owner is active (a component body or computation), or wrap the scope in createRoot. Inside event handlers a returned cleanup is not supported; do the teardown explicitly instead.",
                     ),
                     OwnerRequirementOperation::Effect => (
-                        Rule::NoOwnerEffect,
                         "effect is created without a reactive owner; nothing will ever dispose it, so it keeps running and holding its subscriptions for the lifetime of the app",
                         "Create effects inside a component or computation so their owner disposes them. For deliberate module-scope reactivity, wrap the setup in createRoot(dispose => ...) and keep the dispose handle.",
                     ),
                 };
-                FindingWording::new(rule.metadata(), message, hint)
+                let mut metadata = Rule::MissingOwner.metadata();
+                if requirement.operation == OwnerRequirementOperation::SettledCleanup {
+                    metadata.severity = "error";
+                }
+                FindingWording::new(metadata, message, hint)
             }
             FindingSeed::AsyncRead(read) => async_read_wording(read),
             FindingSeed::PackageContractIssue(issue) => {
@@ -168,7 +170,7 @@ impl CatalogWording for Catalog {
                     ),
                 };
                 FindingWording::new(
-                    Rule::PackageContractMissing.metadata(),
+                    Rule::PackageContractIncomplete.metadata(),
                     format!(
                         "imported Solid package {:?} {condition}; solid-checker cannot rely on its export summaries, so every use of them is uncertifiable",
                         issue.package
@@ -232,7 +234,7 @@ fn owned_write_wording(write: &solid_reactive_ir::ReactiveWrite) -> FindingWordi
 fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> FindingWording {
     let (rule, mut message, hint) = match &operation.kind {
         LeafOwnerOperationKind::Cleanup => (
-            Rule::CleanupInForbiddenScope,
+            Rule::LeafOwnerForbiddenCall,
             format!(
                 "onCleanup is called inside {}, a leaf owner that manages cleanup through its return value; Solid throws CLEANUP_IN_FORBIDDEN_SCOPE here in dev",
                 operation.owner
@@ -243,7 +245,7 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
         ),
         LeafOwnerOperationKind::Flush => (
-            Rule::FlushInForbiddenScope,
+            Rule::LeafOwnerForbiddenCall,
             format!(
                 "flush() is called inside {}, which runs as part of the flush cycle itself; the call would re-enter the scheduler, and Solid throws here in dev",
                 operation.owner
@@ -254,7 +256,7 @@ fn leaf_operation_wording(operation: &solid_reactive_ir::LeafOwnerOperation) -> 
             ),
         ),
         LeafOwnerOperationKind::Primitive(primitive) => (
-            Rule::PrimitiveInLeafOwner,
+            Rule::LeafOwnerForbiddenCall,
             format!(
                 "reactive primitive {primitive} is created inside {}; {} is a leaf owner with no children, so nested primitives are never tracked or disposed, and Solid throws in dev",
                 operation.owner, operation.owner
@@ -320,13 +322,16 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     // seedLoadingValue node is born committed, so its *first flight* cannot
     // throw anywhere — but once the first real answer lands, a pending
     // re-ask (input change or refresh) throws for untracked and leaf reads
-    // exactly like an undeclared node. SC5001/SC5002 therefore stay
+    // exactly like an undeclared node. SC5001 therefore stays
     // reported on declared sources with this conditional wording, while
     // SC5003 never reaches this function for them (suppressed in selection).
     let declared = read.declared_loading;
+    let ssr_client_variant = matches!(read.execution, ExecutionRole::TrackedJsx)
+        && (read.ssr_client_hole || read.server_rendering_unresolved)
+        && !read.under_loading;
     let (rule, message, hint) = if let Some(owner) = &read.leaf_owner {
         (
-            Rule::PendingAsyncForbiddenScope,
+            Rule::PendingAsyncUnsuspendableRead,
             if declared {
                 format!(
                     "async accessor {:?} declares a loadingValue, so its first flight serves the declared value here, but after the first real answer lands any pending re-ask read inside {} throws at runtime ({} runs after the graph settles and cannot suspend)",
@@ -345,7 +350,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     } else {
         match read.execution {
             ExecutionRole::ModuleInitialization | ExecutionRole::UntrackedRendering => (
-                Rule::PendingAsyncUntrackedRead,
+                Rule::PendingAsyncUnsuspendableRead,
                 if declared {
                     format!(
                         "async accessor {:?} declares a loadingValue, so this untracked read serves the declared value during the first flight, but after the first real answer lands a pending re-ask (input change or refresh) makes it throw PENDING_ASYNC_UNTRACKED_READ in dev",
@@ -369,7 +374,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
                     && !read.under_loading => {
                 let unresolved = read.server_rendering_unresolved;
                 (
-                    Rule::SsrClientSourceOutsideLoadingBoundary,
+                    Rule::AsyncOutsideLoadingBoundary,
                     if unresolved {
                         format!(
                             "source {:?} declares ssrSource: \"client\" with no loadingValue/seedLoadingValue and is read outside a Loading boundary, but the analyzed project cannot prove whether a server-rendering entry exists; if this application server-renders, the read throws during SSR even when the compute is fully synchronous",
@@ -403,7 +408,7 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
             }
         }
     };
-    let mut provenance = if rule == Rule::SsrClientSourceOutsideLoadingBoundary {
+    let mut provenance = if ssr_client_variant {
         if read.server_rendering_unresolved {
             "the source declares ssrSource: \"client\" and no loadingValue/seedLoadingValue; no server rendering entry point is visible in the analyzed project, which does not prove the application is CSR-only".to_owned()
         } else {
@@ -412,12 +417,21 @@ fn async_read_wording(read: &solid_reactive_ir::AsyncRead) -> FindingWording {
     } else {
         "the accessor is returned by an async computation".to_owned()
     };
-    if read.options_opaque && rule == Rule::PendingAsyncUntrackedRead {
+    if read.options_opaque
+        && rule == Rule::PendingAsyncUnsuspendableRead
+        && read.leaf_owner.is_none()
+    {
         provenance.push_str(
             "; the source's options argument cannot be read statically, so a loadingValue declaration (which would make the first flight safe) can be neither proven nor ruled out — this finding is a proof obligation, not a proven throw",
         );
     }
-    FindingWording::new(rule.metadata(), message.clone(), hint).with_evidence(vec![
+    let mut metadata = rule.metadata();
+    if read.leaf_owner.is_some() {
+        metadata.severity = "warning";
+    } else if ssr_client_variant {
+        metadata.severity = "error";
+    }
+    FindingWording::new(metadata, message.clone(), hint).with_evidence(vec![
         EvidenceStep {
             message: provenance,
             location: Some(read.declaration.clone()),
@@ -444,46 +458,45 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
             "the resolve() call runs directly in a tracked scope, where the runtime's observer guard throws in dev"
         }
         Rule::HttpResponseAfterFlush => {
-            "the call's scope renders below a Loading boundary in a project that server-renders, and the response head admits no writes after the shell flush"
+            "the call's scope renders below a Loading boundary, but request-time ordering does not prove whether the boundary settles before or after the response head commits"
         }
         Rule::ServerFunctionModuleDirective => {
             "the module's directive prologue contains \"use server\" and this export is provably not a direct function declaration"
         }
+        // The nested claim is about a value the argument *holds*, not the
+        // argument's own resolved type, so it cannot borrow the top-level
+        // sentence: that one would assert a fact the analysis never proved.
+        Rule::ServerFunctionRichArgument
+            if violation.analysis_context == "nested-rich-argument" =>
+        {
+            "the callee carries a \"use server\" directive, a closed object literal reaching it holds a value in the JSON-unsafe set, and nothing in the project installs an argument serializer"
+        }
         Rule::ServerFunctionRichArgument => {
             "the callee carries a \"use server\" directive, the argument's resolved type is in the JSON-unsafe set, and nothing in the project installs an argument serializer"
         }
+        Rule::JsxNoDuplicateProps => {
+            "the intrinsic element uses more than one competing source of DOM child content"
+        }
+        Rule::PreferFor => "an array map call is used directly in a JSX rendering position",
+        Rule::PreferShow => "a conditional JSX expression matches the configured Show preference",
         Rule::StrictReadUntracked
         | Rule::ReactiveReadAfterAwait
         | Rule::UncalledAccessor
-        | Rule::UntrackedDerivedFunction
         | Rule::ExpectedFunctionGotExpression
         | Rule::NoDirectMutation
         | Rule::ReactiveSourceUncaptured
         | Rule::ReactiveDispatchUnresolved
         | Rule::ComponentPropsDestructure
         | Rule::ComponentReturnsConditionally
-        | Rule::PreferComponentSyntax
-        | Rule::NoImplicitDraggable
-        | Rule::ValidJsxNesting
         | Rule::ReactiveWriteInOwnedScope
         | Rule::ActionCalledInOwnedScope
-        | Rule::CleanupInForbiddenScope
-        | Rule::PrimitiveInLeafOwner
-        | Rule::FlushInForbiddenScope
-        | Rule::NoOwnerEffect
-        | Rule::NoOwnerCleanup
-        | Rule::NoOwnerBoundary
-        | Rule::NoOwnerSettledCleanup
-        | Rule::PendingAsyncUntrackedRead
-        | Rule::PendingAsyncForbiddenScope
+        | Rule::LeafOwnerForbiddenCall
+        | Rule::MissingOwner
+        | Rule::PendingAsyncUnsuspendableRead
         | Rule::AsyncOutsideLoadingBoundary
-        | Rule::SsrClientSourceOutsideLoadingBoundary
         | Rule::PrimitiveInDirectiveApplication
         | Rule::MissingEffectFunction
-        | Rule::PackageContractExportMissing
-        | Rule::PackageContractCallbackMissing
-        | Rule::PackageContractMissing
-        | Rule::ExecutionMapIncomplete => panic!(
+        | Rule::PackageContractIncomplete => panic!(
             "rule {} is not emitted through the static-violation channel",
             rule.metadata().name
         ),
@@ -501,20 +514,13 @@ fn static_violation_wording(violation: &solid_reactive_ir::StaticViolation) -> F
 
 fn static_defect_wording(defect: &StaticDefect) -> FindingWording {
     let rule = match &defect.kind {
-        StaticDefectKind::ExecutionMapIncomplete => Rule::ExecutionMapIncomplete,
         StaticDefectKind::ReactiveObjectDestructure { .. } => Rule::ComponentPropsDestructure,
         StaticDefectKind::ReactiveReadAfterAwait { .. } => Rule::ReactiveReadAfterAwait,
         StaticDefectKind::ComponentReturnsConditionally => Rule::ComponentReturnsConditionally,
-        StaticDefectKind::PreferComponentSyntax { .. } => Rule::PreferComponentSyntax,
-        StaticDefectKind::ImplicitDraggableBoolean { .. } => Rule::NoImplicitDraggable,
-        StaticDefectKind::InvalidJsxNesting { .. } => Rule::ValidJsxNesting,
-        StaticDefectKind::PackageContractExportMissing { .. } => Rule::PackageContractExportMissing,
-        StaticDefectKind::PackageContractEnvironmentDependent { .. } => {
-            Rule::PackageContractExportMissing
-        }
-        StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractCallbackMissing,
+        StaticDefectKind::PackageContractExportMissing { .. }
+        | StaticDefectKind::PackageContractEnvironmentDependent { .. }
+        | StaticDefectKind::UnknownCallbackExecution { .. } => Rule::PackageContractIncomplete,
         StaticDefectKind::MissingEffectFunction => Rule::MissingEffectFunction,
-        StaticDefectKind::UntrackedDerivedFunction { .. } => Rule::UntrackedDerivedFunction,
         StaticDefectKind::ReactiveSourceUncaptured { .. } => Rule::ReactiveSourceUncaptured,
         StaticDefectKind::ReactiveDispatchUnresolved { .. }
         | StaticDefectKind::ReactiveCallbackUnresolved { .. }
@@ -564,7 +570,6 @@ const V2_STATIC_TERMS: solid_reactive_ir::StaticDefectTerms =
         reactive_object_destructure_hint: "Keep the reactive object intact and read object.<name> inside JSX or a tracked computation. A property access made there remains subscribed; a setup-time destructuring binding does not.",
         missing_effect_message: "createEffect is called without an effect function; the signature is createEffect(compute, apply), where compute tracks dependencies and returns a value, and apply receives that value and performs the side effect",
         missing_effect_hint: "Split the callback: reactive reads go in the compute function, the side effect in the apply function, and cleanup is returned from apply. For error handling, pass { effect, error } as the second argument.",
-        tracked_derived_scope: "JSX, a createMemo, or the compute function of createEffect(compute, apply)",
         store_mutation_hint: v2_store_mutation_hint,
         removed_export_hint: v2_removed_export_hint,
     };
@@ -663,7 +668,7 @@ const V2_REMOVED_EXPORTS: &[(&str, &str)] = &[
     ("writeSignal", "removed; it was an internal API"),
 ];
 
-/// Migration-oriented SC9001 hint for the removed 1.x APIs: telling the user
+/// Migration-oriented SC9005 hint for the removed 1.x APIs: telling the user
 /// to write a contract entry for `batch` would send them to document an
 /// export that no longer exists. Applies to the packages the v2 dialect
 /// itself contracts (`solid-js`, `@solidjs/web`); a same-named export of a
@@ -685,7 +690,7 @@ mod removed_export_tests {
     use super::{V2_REMOVED_EXPORTS, v2_removed_export_hint};
 
     /// A name the bundled 2.0 contract still exports is not removed: hinting
-    /// "migrate away" for it would be wrong, and SC9001 for it is a genuine
+    /// "migrate away" for it would be wrong, and SC9005 for it is a genuine
     /// contract gap. This holds the map to the shipped export list.
     #[test]
     fn removed_exports_are_absent_from_the_bundled_contract() {

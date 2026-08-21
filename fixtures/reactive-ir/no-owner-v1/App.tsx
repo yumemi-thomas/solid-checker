@@ -1,4 +1,4 @@
-// v1/no-owner-effect (SC4001): the 1.x exit of the owner-presence rule. The
+// v1/missing-owner   (SC4001): the 1.x exit of the owner-presence rule. The
 // unprefixed 2.0 twin is pinned by fixtures/reactive-ir/owner-presence; this
 // project resolves solid-js 1.9.14, so the v1 catalog runs and the finding
 // must come out under the v1/ name. Note the 1.x signature: the callback is
@@ -24,7 +24,7 @@ createRoot(dispose => {
   return dispose;
 });
 
-// v1/no-owner-boundary (SC4003): Suspense creates an ownership boundary in
+// v1/missing-owner     (SC4001): Suspense creates an ownership boundary in
 // Solid 1.x. At module scope there is no parent owner to dispose it, so the
 // boundary and the work retained below it leak for the lifetime of the app.
 export const OrphanBoundary = (
@@ -41,10 +41,10 @@ export function App() {
     console.log(ticks());
   });
 
-  // v1/primitive-in-directive-application (SC6001): ref callbacks run in the
-  // compiler's directive-application phase. A primitive created directly in
-  // that phase is not attached to the component's normal owner lifetime.
+  // Solid 1.x ref callbacks preserve the component owner through untrack(), so
+  // creating state or computations here participates in normal disposal and
+  // does not emit the 2.0-only directive-application rule as expected.
   // readCount() also makes the uncontracted Solid-aware package observable,
-  // pinning v1/package-contract-missing (SC9005) at its import above.
+  // pins v1/package-contract-incomplete (SC9005) at its import above.
   return <div ref={element => createSignal(element)}>{readCount()}</div>;
 }

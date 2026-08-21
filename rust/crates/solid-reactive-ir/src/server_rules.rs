@@ -10,7 +10,7 @@ use std::collections::HashSet;
 
 use solid_dialect::Primitive;
 use solid_facts::FileFacts;
-use solid_facts::ast::{ArgumentValueKind, ExportKind, FunctionKind, RuntimeValueKind};
+use solid_facts::ast::{ArgumentValueKind, ExportKind, FunctionKind};
 use solid_facts::core::Span;
 use typefacts::{ConstantValueKind, EntityFact, ResolvedCallValidity};
 
@@ -37,15 +37,11 @@ pub(crate) fn check_project(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft)
 /// `dist/server.js:2901-2975`), and `createSSRResponse` commits the stub at
 /// the shell flush — so a call made by boundary content that settles after
 /// the shell went out is a silent no-op by contract (RFC 12: "there is no
-/// queue"). The finding is conditional — a boundary that settles *before*
-/// the flush still applies its writes — hence warning severity.
-///
-/// A proven server-rendering entry yields a violation. When no such entry is
-/// visible, the rendering mode remains unresolved (the entry may live in a
-/// separate tsconfig/package), so the same shape is uncertifiable rather than
-/// silently treated as CSR-only.
+/// queue"). The finding is uncertifiable because a boundary that settles
+/// *before* the flush still applies its writes; source analysis cannot prove
+/// which side of that request-time race any invocation reaches.
 fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft) {
-    let mut server_renders = None;
+    let mut server_rendering = None;
     let mut loading_hosts: Option<HashSet<(&str, Span)>> = None;
     for file in &ctx.facts.files {
         let mut allowed = None;
@@ -62,8 +58,22 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             .and_then(crate::PrimitiveName::primitive) else {
                 continue;
             };
-            let server_renders = *server_renders
-                .get_or_insert_with(|| crate::source_discovery::project_server_renders(ctx.facts));
+            let server_rendering = *server_rendering.get_or_insert_with(|| {
+                crate::source_discovery::project_server_rendering(
+                    ctx.facts,
+                    &ctx.rule_options.runtime,
+                )
+            });
+            // The whole claim is about the SSR shell flush. Where an explicit
+            // rendering selector proves the application is client-only there
+            // is no shell, no committed response head, and nothing to drop —
+            // so the obligation is discharged rather than reported. An
+            // unresolved premise still reports, because a server entry in
+            // another tsconfig or package would make the drop real.
+            if server_rendering == crate::source_discovery::ServerRenderingPremise::ProvenClientOnly
+            {
+                continue;
+            }
             // Render-time scopes only. An event handler or deferred callback
             // is a client-time (or post-render) call and is a no-op for a
             // different reason than the post-flush drop; unknown scopes stay
@@ -104,7 +114,7 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
             draft.static_violations.push(StaticViolation {
                 id: "SC7005".into(),
                 rule: "http-response-after-flush".into(),
-                message: if server_renders {
+                message: if server_rendering.renders() {
                     format!(
                         "{name}() is called by content below a <Loading> boundary; under streaming SSR the response head commits at the shell flush, and when this boundary settles after the shell has flushed the call is a committed no-op — the {} is silently dropped, with no queue holding it for later",
                         if kind == Primitive::HttpStatus { "status" } else { "header" }
@@ -116,12 +126,12 @@ fn http_response_after_flush(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                     )
                 },
                 hint: format!(
-                    "Decide the response head in shell content — above every <Loading> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. If the boundary settles before the flush (fast data, renderToString) the write still applies, which is why this is a warning."
+                    "Decide the response head in shell content — above every <Loading> boundary — or mark the async source this {name}() depends on with deferStream: true so the shell flush waits for it. A boundary may settle before or after the flush, so move the decision to make the response certifiable."
                 ),
                 location: location(file.path.shared(), call.callee),
                 analysis_context: String::new(),
                 fixes: vec![],
-                uncertain: !server_renders,
+                uncertain: true,
             });
         }
     }
@@ -429,15 +439,24 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     }
                     continue;
                 }
+                let proof_span = if argument.runtime_type_escape {
+                    argument.value_span.unwrap_or(argument.span)
+                } else {
+                    argument.span
+                };
                 let Some(entity) = ctx
                     .semantic_lookup
-                    .entity_at(file.path.as_str(), argument.span)
+                    .entity_at(file.path.as_str(), proof_span)
                 else {
                     push_rich_argument_uncertainty(
                         draft,
                         file,
                         argument.span,
-                        "the compiler did not return the demanded argument facts",
+                        if argument.runtime_type_escape {
+                            "the compiler did not return the demanded runtime-value facts hidden by this type assertion"
+                        } else {
+                            "the compiler did not return the demanded argument facts"
+                        },
                     );
                     continue;
                 };
@@ -449,18 +468,56 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
                     if argument_is_proven_json_safe(argument, entity) {
                         continue;
                     }
-                    if *serializer_proof
-                        .get_or_insert_with(|| project_rich_argument_serializer(ctx))
-                        != SerializerProof::Enabled
-                    {
+                    let serializer = *serializer_proof
+                        .get_or_insert_with(|| project_rich_argument_serializer(ctx));
+                    if serializer == SerializerProof::Enabled {
+                        return;
+                    }
+                    // JSON.stringify reaches nested values, so a Date sealed
+                    // one level down is lost exactly as a top-level Date is —
+                    // and a graph closed against spreads, computed and
+                    // duplicate keys, and accessors is JSON-safe for the same
+                    // reason. A graph that proves neither falls through to the
+                    // obligation below.
+                    if serializer == SerializerProof::Disabled {
+                        match object_argument_graph_proof(ctx, file, argument, proof_span) {
+                            ObjectGraphProof::RichLeaf => {
+                                push_nested_rich_argument_violation(
+                                    draft,
+                                    file,
+                                    argument.span,
+                                    function,
+                                    declaration_file,
+                                );
+                                continue;
+                            }
+                            ObjectGraphProof::JsonSafe => continue,
+                            ObjectGraphProof::Open => {}
+                        }
+                    }
+                    if argument_is_proven_json_unsafe_primitive(entity) {
+                        if serializer == SerializerProof::Unresolved {
+                            push_rich_argument_uncertainty(
+                                draft,
+                                file,
+                                argument.span,
+                                "the argument is outside JSON's primitive domain, but the project's serializer configuration cannot be resolved exactly",
+                            );
+                        } else {
+                            push_non_json_primitive_violation(
+                                draft,
+                                file,
+                                argument.span,
+                                function,
+                                declaration_file,
+                            );
+                        }
+                    } else {
                         push_rich_argument_uncertainty(
                             draft,
                             file,
                             argument.span,
-                            if *serializer_proof
-                                .get_or_insert_with(|| project_rich_argument_serializer(ctx))
-                                == SerializerProof::Unresolved
-                            {
+                            if serializer == SerializerProof::Unresolved {
                                 "neither the argument's JSON safety nor the project's serializer configuration can be resolved exactly"
                             } else {
                                 "the argument's complete JSON safety cannot be proven from the available type and literal facts"
@@ -523,20 +580,19 @@ fn server_function_rich_argument(ctx: &AnalysisContext<'_>, draft: &mut ProgramD
     }
 }
 
-/// A deliberately small safe set, proved from the value the call actually
-/// passes: `null`, a constant string, a finite constant number, and a written
-/// primitive or nullish literal. Objects, arrays, aliases, unions, `any`, and
-/// `unknown` are not guessed -- nested rich values, cycles, non-finite
-/// numbers, and runtime type escapes remain possible, so their branch is
-/// explicit `uncertifiable` unless a serializer is proven.
+/// A deliberately small safe set, proved from the value and compiler type the
+/// call actually passes: null, strings, booleans, and number domains whose
+/// every constituent is a finite literal. Objects, arrays, bigint, symbol,
+/// undefined, broad numbers, `any`, and `unknown` are not guessed -- nested
+/// rich values, cycles, and runtime type escapes remain possible, so their
+/// branch is explicit `uncertifiable` unless a serializer is proven.
 ///
 /// This deliberately does *not* consult `TypeDescriptor.text`. A rendered name
 /// is not a fact about the value: `type Name = string` renders as `Name`, so a
 /// text test certified `save(plain)` and raised an obligation on the identical
-/// `save(aliased)`. Type Facts exposes no structural primitive-kind fact to
-/// replace it with, so an unresolved declared type is now uniformly an
-/// obligation rather than a spelling-dependent one. See
-/// docs/precision-backlog.md for the ledger entry.
+/// `save(aliased)`. `primitiveValueDomain` is alias-transparent and carries a
+/// separate all-numbers-finite guarantee, so this decision never parses a
+/// rendered name or retains an exact numeric value.
 fn argument_is_proven_json_safe(
     argument: &solid_facts::ast::ArgumentFact,
     entity: &EntityFact,
@@ -544,20 +600,93 @@ fn argument_is_proven_json_safe(
     if argument.value == ArgumentValueKind::Null {
         return true;
     }
+    value_is_proven_json_safe(entity)
+}
+
+/// Whether one runtime value is proven to be inside JSON's domain, from the
+/// compiler's constant value or its primitive domain. Shared by the argument
+/// check and the object-graph walk so the two cannot drift.
+fn value_is_proven_json_safe(entity: &EntityFact) -> bool {
     if let Some(value) = entity.constant_value.as_ref() {
         return match value.kind {
             ConstantValueKind::String => true,
             ConstantValueKind::Number => value.number.is_finite(),
         };
     }
-    // A written primitive or nullish literal is JSON-safe, and the AST proves
-    // the shape without any compiler fact. This is only reached once the
-    // library identities have already ruled the value out of the rich
-    // transport set, so a regexp literal never lands here.
-    matches!(
-        argument.runtime_value_kind,
-        RuntimeValueKind::Primitive | RuntimeValueKind::Nullish
-    )
+    let Some(domain) = entity.primitive_value_domain.present() else {
+        return false;
+    };
+    !domain.unknown()
+        && !domain.may_be_big_int()
+        && !domain.may_be_symbol()
+        && !domain.may_be_undefined()
+        && !domain.may_be_object()
+        && (!domain.may_be_number() || domain.numbers_are_finite())
+}
+
+fn argument_is_proven_json_unsafe_primitive(entity: &EntityFact) -> bool {
+    let Some(domain) = entity.primitive_value_domain.present() else {
+        return false;
+    };
+    !domain.unknown()
+        && (domain.may_be_big_int() || domain.may_be_symbol() || domain.may_be_undefined())
+        && !domain.may_be_string()
+        && !domain.may_be_number()
+        && !domain.may_be_boolean()
+        && !domain.may_be_null()
+        && !domain.may_be_object()
+}
+
+fn push_nested_rich_argument_violation(
+    draft: &mut ProgramDraft,
+    file: &solid_facts::FileFacts,
+    span: Span,
+    function: &solid_facts::ast::FunctionFact,
+    declaration_file: &solid_facts::FileFacts,
+) {
+    let name = function
+        .name
+        .as_ref()
+        .and_then(|name| declaration_file.source_text(name.span))
+        .unwrap_or("this server function");
+    draft.static_violations.push(StaticViolation {
+        id: "SC7007".into(),
+        rule: "server-function-rich-argument".into(),
+        message: format!(
+            "server function {name} receives an object holding a Date, Map, Set, RegExp, or typed array; the default server-function transport is plain JSON, which reaches nested values, so the nested one is silently flattened rather than sent"
+        ),
+        hint: "Convert the nested value to a JSON-safe shape where the object is built (date.toISOString(), Array.from(set)), or call enableRichArguments() from \"@solidjs/web/server-functions/rich-args\" once at client startup.".into(),
+        location: location(file.path.shared(), span),
+        analysis_context: "nested-rich-argument".into(),
+        fixes: vec![],
+        uncertain: false,
+    });
+}
+
+fn push_non_json_primitive_violation(
+    draft: &mut ProgramDraft,
+    file: &solid_facts::FileFacts,
+    span: Span,
+    function: &solid_facts::ast::FunctionFact,
+    declaration_file: &solid_facts::FileFacts,
+) {
+    let name = function
+        .name
+        .as_ref()
+        .and_then(|name| declaration_file.source_text(name.span))
+        .unwrap_or("this server function");
+    draft.static_violations.push(StaticViolation {
+        id: "SC7007".into(),
+        rule: "server-function-rich-argument".into(),
+        message: format!(
+            "server function {name} receives a bigint, symbol, or undefined value; the default server-function transport is plain JSON and cannot encode that primitive faithfully"
+        ),
+        hint: "Convert the argument to a JSON value at the call site, or install the rich-argument serializer once at client startup.".into(),
+        location: location(file.path.shared(), span),
+        analysis_context: String::new(),
+        fixes: vec![],
+        uncertain: false,
+    });
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -615,6 +744,186 @@ struct RichMember {
 /// the global. The name list stays here because which types are interesting —
 /// and that a lone `Uint8Array` has a natural HTTP encoding — is this rule's
 /// knowledge, not the compiler's.
+/// A rich transport value proven to sit *inside* an object literal handed to
+/// a server function, at any depth.
+///
+/// `JSON.stringify` reaches nested values, so `{ when: new Date() }` loses the
+/// Date exactly as a top-level Date does; only the top-level check existed, so
+/// the nested case shrugged. This is the presence half of the proof, and the
+/// presence half alone: it witnesses that a rich value *is* in the graph and
+/// never concludes that a graph is JSON-safe. Proving safety needs the whole
+/// property set closed against getters, which the AST facts cannot express
+/// today (see docs/precision-backlog.md).
+///
+/// Every condition below is a soundness requirement, not a convenience:
+///
+/// - the argument resolves to an **immutable** binding whose initializer is
+///   the literal, so the binding cannot be reassigned to something else;
+/// - the binding is referenced exactly once outside its declaration — here —
+///   so nothing can mutate a property, spread the object elsewhere, or hand it
+///   to a function that does, between construction and this call;
+/// - the literal contains **no spread** at any depth, because a later spread
+///   overwrites an earlier explicit property and could replace the witness;
+/// - it contains **no computed key** at any depth, because a computed key may
+///   collide with the witness's name;
+/// - its static keys are **distinct**, because a duplicate key later in the
+///   literal wins.
+///
+/// Any of them missing returns `None` and the caller keeps its obligation.
+fn object_argument_graph_proof<'a>(
+    ctx: &AnalysisContext<'a>,
+    file: &'a solid_facts::FileFacts,
+    argument: &solid_facts::ast::ArgumentFact,
+    argument_span: Span,
+) -> ObjectGraphProof {
+    // An inline literal is constructed at the call, so there is no window in
+    // which anything could have mutated it and none of the binding conditions
+    // below apply.
+    if argument.closed_object_literal {
+        return object_graph_proof(ctx, file, argument.value_span.unwrap_or(argument.span));
+    }
+    let Some(symbol) = ctx.entities.at(file.path.as_str(), argument_span) else {
+        return ObjectGraphProof::Open;
+    };
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.immutable
+            && binding.names.len() == 1
+            && binding
+                .names
+                .first()
+                .is_some_and(|name| ctx.entities.at(file.path.as_str(), name.span) == Some(symbol))
+    });
+    let Some(literal) = binding.and_then(|binding| binding.initializer.map(|l| (binding, l)))
+    else {
+        return ObjectGraphProof::Open;
+    };
+    let (binding, literal) = literal;
+    // Exactly one reference outside the declaration, and it is this argument.
+    // A second reference could mutate a property, spread the object elsewhere,
+    // or hand it to a function that does, between construction and this call.
+    let references = ctx.semantic_lookup.symbol_references(symbol.as_str());
+    let mut outside = references.iter().filter(|reference| {
+        *reference.path != *file.path.as_str()
+            || !binding.declaration.contains(Span::new(
+                u32::try_from(reference.start_byte).unwrap_or(u32::MAX),
+                u32::try_from(reference.end_byte).unwrap_or(u32::MAX),
+            ))
+    });
+    let Some(only) = outside.next() else {
+        return ObjectGraphProof::Open;
+    };
+    if outside.next().is_some()
+        || *only.path != *file.path.as_str()
+        || u32::try_from(only.start_byte).ok() != Some(argument_span.start)
+    {
+        return ObjectGraphProof::Open;
+    }
+    object_graph_proof(ctx, file, literal)
+}
+
+/// What one object literal's graph proves about the default JSON transport.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum ObjectGraphProof {
+    /// Some leaf is proven to be a rich transport value. `JSON.stringify`
+    /// reaches it, so the argument is a proven violation.
+    RichLeaf,
+    /// Every leaf is proven JSON-safe *and* every property on the way is a
+    /// plain data property in a closed literal — so there is no unseen
+    /// property and no getter that could yield something else.
+    JsonSafe,
+    /// Neither: some leaf is unclassifiable, or a literal is not closed.
+    Open,
+}
+
+/// Walks one object literal's graph.
+///
+/// The two conclusions need different amounts of closure, and conflating them
+/// is exactly how a getter would slip through. Witnessing that a rich value
+/// *is* present needs only that nothing can have displaced it: no spread (a
+/// later spread overwrites an earlier explicit property) and no duplicate or
+/// computed key (either can collide with the witness's name). An accessor
+/// elsewhere in the literal is irrelevant, because it cannot unwrite the
+/// property that is there. Concluding the graph is *safe* additionally needs
+/// every property to be a plain data property: `{ get when() { return new
+/// Date(); } }` contains no literal Date anywhere and is still not JSON-safe.
+fn object_graph_proof<'a>(
+    ctx: &AnalysisContext<'a>,
+    file: &'a solid_facts::FileFacts,
+    literal: Span,
+) -> ObjectGraphProof {
+    if file
+        .ast
+        .spreads
+        .iter()
+        .any(|spread| literal.contains(spread.span))
+    {
+        return ObjectGraphProof::Open;
+    }
+    let properties = file
+        .ast
+        .object_properties
+        .iter()
+        .filter(|property| literal.contains(property.span))
+        .collect::<Vec<_>>();
+    if properties.is_empty() || properties.iter().any(|property| property.computed) {
+        return ObjectGraphProof::Open;
+    }
+    let mut keys = Vec::with_capacity(properties.len());
+    for property in &properties {
+        let Some(key) = file.source_text(property.key) else {
+            return ObjectGraphProof::Open;
+        };
+        if keys.contains(&key) {
+            return ObjectGraphProof::Open;
+        }
+        keys.push(key);
+    }
+    let mut all_safe = true;
+    for property in &properties {
+        let value = property.value;
+        // A property whose value is itself a literal in this graph is a
+        // container, not a leaf: the flat scan already sees its own
+        // properties, so descending here would double-count them.
+        if properties
+            .iter()
+            .any(|nested| value.contains(nested.span) && nested.span != property.span)
+        {
+            all_safe &= property.data;
+            continue;
+        }
+        // A shorthand writes one identifier where a key and a value both
+        // stand, and TypeScript answers a symbol query there with the
+        // *property's* symbol rather than the value binding's. The binder
+        // recorded the declaration it resolved, so ask at that span too.
+        let mut leaf_safe = false;
+        for span in [Some(value), property.shorthand_binding]
+            .into_iter()
+            .flatten()
+        {
+            let Some(entity) = ctx.semantic_lookup.entity_at(file.path.as_str(), span) else {
+                continue;
+            };
+            if entity
+                .library_types
+                .as_deref()
+                .and_then(|types| rich_transport_member(types))
+                .is_some()
+            {
+                return ObjectGraphProof::RichLeaf;
+            }
+            leaf_safe |= value_is_proven_json_safe(entity);
+        }
+        // An accessor's written value is a function whose body runs on access,
+        // so it proves nothing about what the property yields.
+        all_safe &= leaf_safe && property.data;
+    }
+    if all_safe {
+        ObjectGraphProof::JsonSafe
+    } else {
+        ObjectGraphProof::Open
+    }
+}
+
 fn rich_transport_member(library_types: &[std::sync::Arc<str>]) -> Option<RichMember> {
     library_types.iter().find_map(|name| {
         let matched = match name.as_ref() {

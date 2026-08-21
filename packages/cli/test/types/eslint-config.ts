@@ -3,7 +3,12 @@ import solidChecker, { type SolidCheckerSettings } from "solid-checker/eslint";
 
 const settings: SolidCheckerSettings = {
   project: "./tsconfig.json",
-  dialect: "solid-v2"
+  dialect: "solid-v2",
+  runtime: {
+    target: "browser",
+    rendering: "csr",
+    conditions: ["browser", "import"]
+  }
 };
 
 const config: Linter.Config[] = [

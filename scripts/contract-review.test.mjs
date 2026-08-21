@@ -42,6 +42,8 @@ test("contract generate writes a one-line summary and sibling review plan", { sk
     for (const section of [
       "## exports with no summary",
       "## callbacks with no execution row",
+      "## callbacks with no owner row",
+      "## owner requirements requiring review",
       "## inherited rows",
       "## environment-branching exports"
     ]) {

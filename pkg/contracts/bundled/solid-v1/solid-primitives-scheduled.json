@@ -7,25 +7,64 @@
   },
   "compilerFactsProtocol": 1,
   "summaries": {
-    "scheduled": {
+    "function-1": {
       "kind": "function",
       "callbacks": [
         {
           "parameter": 0,
-          "execution": "deferred"
+          "execution": "deferred",
+          "evidence": {
+            "kind": "probed",
+            "modes": [
+              "client",
+              "development",
+              "production",
+              "server"
+            ],
+            "calls": 2
+          }
         }
-      ]
+      ],
+      "evidence": {
+        "kind": "probed",
+        "modes": [
+          "client",
+          "development",
+          "production",
+          "server"
+        ],
+        "calls": 2
+      }
     },
-    "leading": {
+    "function-2": {
       "kind": "function",
       "callbacks": [
         {
           "parameter": 0,
-          "execution": "inline"
+          "execution": "inline",
+          "evidence": {
+            "kind": "probed",
+            "modes": [
+              "client",
+              "development",
+              "production"
+            ],
+            "calls": 1
+          }
         },
         {
           "parameter": 1,
-          "execution": "deferred"
+          "execution": "deferred",
+          "evidence": {
+            "kind": "probed",
+            "modes": [
+              "client",
+              "development",
+              "production",
+              "server"
+            ],
+            "calls": 2
+          }
         }
       ],
       "variants": [
@@ -38,13 +77,40 @@
             "callbacks": [
               {
                 "parameter": 0,
-                "execution": "inline"
+                "execution": "inline",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 1
+                }
               },
               {
                 "parameter": 1,
-                "execution": "deferred"
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "client",
+                    "development",
+                    "production"
+                  ],
+                  "calls": 2
+                }
               }
-            ]
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "client",
+                "development",
+                "production"
+              ],
+              "calls": 2
+            }
           }
         },
         {
@@ -56,41 +122,95 @@
             "callbacks": [
               {
                 "parameter": 1,
-                "execution": "deferred"
+                "execution": "deferred",
+                "evidence": {
+                  "kind": "probed",
+                  "modes": [
+                    "server"
+                  ],
+                  "calls": 2
+                }
               }
-            ]
+            ],
+            "evidence": {
+              "kind": "probed",
+              "modes": [
+                "server"
+              ],
+              "calls": 2
+            }
           }
         }
-      ]
+      ],
+      "evidence": {
+        "kind": "probed",
+        "modes": [
+          "client",
+          "development",
+          "production",
+          "server"
+        ],
+        "calls": 2
+      }
     },
-    "create-scheduled": {
+    "function-3": {
       "kind": "function",
       "returns": {
         "kind": "accessor",
-        "label": "scheduled invalidation"
+        "label": "scheduled invalidation",
+        "evidence": {
+          "kind": "probed",
+          "modes": [
+            "client",
+            "development",
+            "production",
+            "server"
+          ],
+          "calls": 1
+        }
       },
       "callbacks": [
         {
           "parameter": 0,
-          "execution": "inline"
+          "execution": "inline",
+          "evidence": {
+            "kind": "probed",
+            "modes": [
+              "client",
+              "development",
+              "production",
+              "server"
+            ],
+            "calls": 1
+          }
         }
-      ]
+      ],
+      "evidence": {
+        "kind": "probed",
+        "modes": [
+          "client",
+          "development",
+          "production",
+          "server"
+        ],
+        "calls": 1
+      }
     }
   },
   "entrypoints": {
     ".": {
       "exports": {
-        "scheduled": [
+        "function-3": [
+          "createScheduled"
+        ],
+        "function-1": [
           "debounce",
           "scheduleIdle",
           "throttle"
         ],
-        "leading": [
+        "function-2": [
           "leading",
           "leadingAndTrailing"
-        ],
-        "create-scheduled": [
-          "createScheduled"
         ]
       },
       "conditions": [

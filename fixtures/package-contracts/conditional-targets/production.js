@@ -1,3 +1,3 @@
-export function maybeRead(_value) {
-  return 1;
+export function maybeRead(value) {
+  return value();
 }

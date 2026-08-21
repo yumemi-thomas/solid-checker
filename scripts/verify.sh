@@ -21,13 +21,12 @@ SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" \
 cargo +1.97 build --manifest-path "$rust_manifest" --workspace
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/coverage.mjs
+# The product-owned corpus carries exact checker expectations and per-finding
+# TypeScript ownership for every retained former parity case.
+node scripts/tsc-oracle.mjs provision --dialect all
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
-  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/parity.mjs
-# Holds the parity ledger to its own claims, using the run artifact parity just
-# wrote: a `typescript-owned` deviation must sit on a case TypeScript reports in
-# its own code, and no finding may share a span with a diagnostic unless the
-# difference in claims is written down.
-node scripts/parity-tsc-ownership.mjs
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/ownership-gate.mjs \
+  --require-retained --require-complete
 
 cargo +1.97 build --release --manifest-path "$rust_manifest" \
   -p solid-facts-backend --bin solid-checker-session-bench
@@ -42,16 +41,23 @@ npm test --prefix packages/cli
 # the audited package versions and verifies them, so a drifted install fails
 # here rather than changing the answer silently. The gate runs the checker over
 # every case as well, so it takes the same fresh debug build as coverage and
-# parity -- the packaged binary may lag rust/ source.
-node scripts/tsc-oracle.mjs provision --dialect all
+# ownership -- the packaged binary may lag rust/ source.
 node --test scripts/tsc-oracle.test.mjs
 SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
   SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/tsc-oracle-gate.mjs
 
+# The other half: an *unreported* finding is a claim too. This supplies the
+# evidence each obligation says is missing and asks whether the answer changes,
+# so an over-conservatism cannot pass as a missing fact. It shares the oracle's
+# provisioned installs for the same reason -- a loosened stub would invent the
+# obligation it is meant to test.
+SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust" \
+  SOLID_TYPEFACTS_BIN="$PWD/bin/solid-typefacts" node scripts/obligation-audit.mjs
+
 sh -n scripts/*.sh
 jq empty schema/*.json
 jq empty fixtures/tsc-oracle/*.json
-jq empty fixtures/upstream-parity/deviations.json
+jq empty fixtures/obligation-cases/*.json
 find pkg/contracts/bundled -type f -name '*.json' -exec jq empty {} +
 node scripts/dialect-manifests.mjs validate
 node scripts/check-bundled-contracts.mjs

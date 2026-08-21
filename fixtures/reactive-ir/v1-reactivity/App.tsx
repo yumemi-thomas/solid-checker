@@ -66,7 +66,7 @@ export function SyncEffect() {
   }, "light");
 }
 
-// v1/expected-function-got-expression: count() runs during setup and its
+// v1/reactive-handler-frozen:          count() runs during setup and its
 // result is bound as the listener.
 export function CalledHandler() {
   const [count] = createSignal(0);
@@ -105,8 +105,8 @@ export function Uncaptured() {
   observe(count);
 }
 
-// v1/untracked-derived-function: doubled derives from count, and the only
-// call to it is a plain statement, so the derivation subscribes to nothing.
+// v1/strict-read-untracked: the untracked call reaches count through doubled
+// so SC1001 follows the helper-call chain and anchors at the invocation.
 export function DerivedButDiscarded() {
   const [count] = createSignal(0);
   const doubled = () => count() * 2;
@@ -122,8 +122,8 @@ export function DerivedAndRendered() {
   return <div>{doubled()}</div>;
 }
 
-// Passed rather than called: the receiver may call it anywhere, so the set of
-// call sites is not enumerable and the rule declines to guess.
+// Passed rather than called: no read happens in this component body, so there
+// is no untracked-read finding to emit here in this component.
 export function DerivedAndPassed() {
   const [count] = createSignal(0);
   const doubled = () => count() * 2;
