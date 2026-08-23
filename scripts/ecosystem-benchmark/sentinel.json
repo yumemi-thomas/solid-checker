@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "probes": [
+    "@corvu-next/accordion@0.1.5|solid2|only",
+    "@corvu/accordion@0.2.5|solid1|only",
+    "@kobalte/core@0.13.13|solid1|only",
+    "@kobalte/core@2.0.0-alpha.0|solid2|only",
+    "@solid-devtools/babel-plugin@0.3.1|solid1|only",
+    "@solid-primitives/a11y@1.0.0-next.3|solid2|floor",
+    "@solid-primitives/active-element@2.1.6|solid1|only",
+    "@solid-primitives/active-element@3.0.0-next.2|solid2|floor",
+    "@solid-primitives/analytics@0.2.1|solid1|only",
+    "@solid-primitives/analytics@2.0.0-next.2|solid2|floor",
+    "@solid-primitives/audio@1.4.5|solid1|only",
+    "@solidjs/meta@0.29.4|solid1|only",
+    "@solidjs/meta@1.0.0-next.2|solid2|floor",
+    "@solidjs/router@1.0.0|solid1|only",
+    "@solidjs/router@2.0.0-next.17|solid2|only",
+    "@tanstack/ai-devtools-core@0.5.6|solid1|only",
+    "@tanstack/solid-query@6.0.0-rc.0|solid2|floor",
+    "motion-solidjs@0.6.0|solid1|only",
+    "motion-solidjs@0.7.0-beta.4|solid2|floor",
+    "solid-js@1.9.14|solid1|only",
+    "solid-js@2.0.0-rc.1|solid2|floor",
+    "solid-recharts@1.0.1|solid1|only",
+    "solid-recharts@2.0.0-beta.1|solid2|floor"
+  ]
+}

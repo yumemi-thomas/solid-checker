@@ -1,0 +1,156 @@
+name: Ecosystem benchmark
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "rust/crates/solid-reactive-ir/**"
+      - "rust/crates/solid-facts-backend/**"
+      - "packages/cli/scripts/generate-package-contract.mjs"
+      - "scripts/ecosystem-benchmark/**"
+      - ".github/workflows/ecosystem-benchmark.yml"
+  pull_request:
+    paths:
+      - "rust/crates/solid-reactive-ir/**"
+      - "rust/crates/solid-facts-backend/**"
+      - "packages/cli/scripts/generate-package-contract.mjs"
+      - "scripts/ecosystem-benchmark/**"
+      - ".github/workflows/ecosystem-benchmark.yml"
+  # Full-corpus installs and analyzes every discovered package against the
+  # real registry; it is a manual/scheduled infrastructure job, never a PR
+  # gate. The threshold-mode input lets someone opt in once a pinned
+  # baseline exists — it is not wired to fail this or any other PR check.
+  workflow_dispatch:
+    inputs:
+      thresholds_file:
+        description: >
+          Path to a --thresholds file for run.mjs. Leave empty to run the
+          full corpus in plain report mode (the default and current
+          baseline). Only set this once a pinned baseline is deliberately
+          being enforced.
+        required: false
+        default: ""
+  schedule:
+    # Weekly, not on every push: the full corpus installs and analyzes every
+    # discovered ecosystem package from the live registry, which is exactly
+    # the network-dependent, long-running work the sentinel job below exists
+    # to avoid on every PR.
+    - cron: "0 6 * * 1"
+
+permissions:
+  contents: read
+
+jobs:
+  # The small pinned regression job: a fixed sentinel subset of probes, sized
+  # to run on every pull request and every push to main that touches the
+  # analysis engine or the benchmark harness itself. It reads the pinned
+  # manifest rather than the registry, but it still installs each probe's
+  # exact package version, so it needs network access -- what it must never
+  # do is install or analyze the full discovered corpus.
+  sentinel:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # This job builds the same debug workspace the CI engine job does, on
+      # the same image and toolchain, so it restores that job's dependency
+      # cache instead of compiling the dependency graph from nothing. CI's
+      # engine job owns the entry; this one only reads it.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: engine-debug
+          save-if: false
+      - uses: ./.github/actions/typefacts
+      - name: Build the debug checker binary
+        run: cargo build --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
+      - run: npm ci --ignore-scripts --prefix packages/cli
+      - name: Run the ecosystem-benchmark unit tests
+        run: node --test scripts/ecosystem-benchmark/*.test.mjs
+      # SOLID_CHECKER_NATIVE_BIN points at the just-built debug binary, not
+      # the checked-in bin/solid-checker-rust, so this measures the engine at
+      # this commit rather than whatever a stale packaged binary happens to
+      # contain. SOLID_TYPEFACTS_BIN must also be set explicitly: run.mjs
+      # fails closed with exit 2 rather than silently skipping analysis when
+      # either binary is missing.
+      - name: Run the pinned sentinel subset
+        env:
+          SOLID_CHECKER_NATIVE_BIN: ${{ github.workspace }}/rust/target/debug/solid-checker-rust
+          SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
+        run: node scripts/ecosystem-benchmark/run.mjs --sentinel
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ecosystem-benchmark-sentinel-report
+          path: |
+            benchmarks/ecosystem/report-sentinel.json
+            benchmarks/ecosystem/report-sentinel.md
+
+  # The full discovered corpus: every family, every selected probe, installed
+  # from the live registry. Manual dispatch or a weekly schedule only — never
+  # a pull-request or push trigger — because it is network-dependent and
+  # long-running by design.
+  full-corpus:
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 240
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: rust
+          shared-key: engine-release
+          save-if: false
+      - uses: ./.github/actions/typefacts
+      - name: Build the release checker binary
+        run: cargo build --release --manifest-path rust/Cargo.toml -p solid-facts-backend --bin solid-checker-rust
+      - run: npm ci --ignore-scripts --prefix packages/cli
+      # discover.mjs is the only network-enabled entry point in this module;
+      # --check refuses to write and exits 1 when the checked-in manifest has
+      # drifted from what the registry would produce today, so a stale
+      # manifest is surfaced here instead of silently benchmarking against
+      # packages the manifest no longer describes. This step needs network
+      # access to npm's registry.
+      - name: Check the discovered manifest for drift
+        run: node scripts/ecosystem-benchmark/discover.mjs --check
+      # Per-probe installs against the live registry; the runner itself exits
+      # 0 on package-level failures by design (a package failing analysis is
+      # the thing being measured, not an infrastructure fault), so only a
+      # crash, a missing binary, an invalid manifest, or an unwritable report
+      # fails this job. --thresholds is opt-in via the workflow_dispatch
+      # input above and is never enabled on the schedule trigger.
+      - name: Run the full ecosystem benchmark
+        env:
+          SOLID_CHECKER_NATIVE_BIN: ${{ github.workspace }}/rust/target/release/solid-checker-rust
+          SOLID_TYPEFACTS_BIN: ${{ github.workspace }}/bin/solid-typefacts
+          # Passed through the environment rather than interpolated into the
+          # script: a dispatch input expanded inline is shell, not data.
+          THRESHOLDS_FILE: ${{ github.event.inputs.thresholds_file }}
+        run: |
+          args=()
+          if [ -n "$THRESHOLDS_FILE" ]; then
+            args+=(--thresholds "$THRESHOLDS_FILE")
+          fi
+          # --timeout 600 is a ceiling for future wide releases or temporary
+          # runner contention, not expected runtime. The full release-mode
+          # corpus analyzes every entrypoint; @tanstack/charts alone declares
+          # 113. The default remains 300s so the debug sentinel preserves its
+          # deliberately pinned timeout-class probe.
+          node scripts/ecosystem-benchmark/run.mjs --timeout 600 "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ecosystem-benchmark-full-report
+          path: |
+            benchmarks/ecosystem/report.json
+            benchmarks/ecosystem/report.md
