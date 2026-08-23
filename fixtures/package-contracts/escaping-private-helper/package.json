@@ -21,6 +21,38 @@
     "./rendered": {
       "types": "./rendered.d.ts",
       "default": "./rendered.jsx"
+    },
+    "./closed": {
+      "types": "./closed.d.ts",
+      "default": "./closed.jsx"
+    },
+    "./children": {
+      "types": "./children.d.ts",
+      "default": "./children.jsx"
+    },
+    "./prop-value": {
+      "types": "./prop-value.d.ts",
+      "default": "./prop-value.jsx"
+    },
+    "./member-tag": {
+      "types": "./member-tag.d.ts",
+      "default": "./member-tag.jsx"
+    },
+    "./member-tag-children": {
+      "types": "./member-tag-children.d.ts",
+      "default": "./member-tag-children.jsx"
+    },
+    "./shadowed": {
+      "types": "./shadowed.d.ts",
+      "default": "./shadowed.jsx"
+    },
+    "./builtin": {
+      "types": "./builtin.d.ts",
+      "default": "./builtin.jsx"
+    },
+    "./intrinsic": {
+      "types": "./intrinsic.d.ts",
+      "default": "./intrinsic.jsx"
     }
   }
 }

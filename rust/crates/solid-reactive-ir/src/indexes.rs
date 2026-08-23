@@ -275,6 +275,12 @@ struct BindingResolution {
 struct FunctionCallSite {
     file: usize,
     callee: Span,
+    /// A second reference to the same function that this one call site
+    /// accounts for, when the syntax of the site writes the callee's name
+    /// twice: a JSX element with a closing tag. It is not a call site of its
+    /// own — a render is one invocation — so only the escape test, which
+    /// enumerates *references*, ever reads it.
+    also_referenced: Option<Span>,
 }
 
 type BindingsByReference = HashMap<String, HashMap<(u64, u64), BindingResolution>>;
@@ -1911,8 +1917,11 @@ impl<'a> SemanticLookup<'a> {
             .unwrap_or_default()
     }
 
-    /// Direct call sites whose Type Facts resolve to one project function.
-    /// Aliases, imports, and same-named locals follow canonical symbols.
+    /// Call sites whose Type Facts resolve to one project function: call
+    /// expressions, and the JSX tags that render a component. Aliases,
+    /// imports, and same-named locals follow canonical symbols. One entry per
+    /// invocation — a closing tag is part of the render it closes, not a
+    /// second call.
     pub(super) fn function_call_sites(
         &self,
         path: &str,
@@ -1923,6 +1932,37 @@ impl<'a> SemanticLookup<'a> {
             .into_iter()
             .flatten()
             .map(|site| (&self.facts.files[site.file], site.callee))
+            .collect()
+    }
+
+    /// Every reference to a project function that one of its call sites
+    /// accounts for.
+    ///
+    /// The same sites as [`Self::function_call_sites`], plus the extra
+    /// occurrence of the callee's name a single site can spell:
+    /// `<Panel></Panel>` renders `Panel` once and writes its name twice, and
+    /// TypeScript reports both occurrences as references to the same symbol.
+    /// The escape test asks whether *every* reference to a function is
+    /// accounted for, so it asks here; every other consumer counts
+    /// invocations and asks above.
+    ///
+    /// A closing tag can never appear on its own: the extra span is stored on
+    /// the edge that the *opening* tag's resolution created, so if the opening
+    /// tag resolved to nothing there is no site to carry it.
+    pub(super) fn function_call_site_references(
+        &self,
+        path: &str,
+        function: Span,
+    ) -> Vec<(&'a FileFacts, Span)> {
+        self.all_function_call_sites()
+            .get(&(path, function))
+            .into_iter()
+            .flatten()
+            .flat_map(|site| {
+                let file = &self.facts.files[site.file];
+                std::iter::once((file, site.callee))
+                    .chain(site.also_referenced.map(|span| (file, span)))
+            })
             .collect()
     }
 
@@ -2040,40 +2080,102 @@ impl<'a> SemanticLookup<'a> {
         })
     }
 
+    /// Every JSX element whose tag name resolves, exactly, to one project
+    /// function, paired with the function it renders.
+    ///
+    /// The single authority on "this tag renders that function". Two indexes
+    /// need that answer — [`Self::jsx_call_sites`], which decides component
+    /// identity and Loading placement, and [`Self::all_function_call_sites`],
+    /// which puts the render edge in the call graph — and they must agree: the
+    /// render edges are invisible to component identity only because a
+    /// rendered function is already `jsx_call_site_loading(..).any`. Two copies
+    /// of the resolution could drift apart on the next filter added to either;
+    /// one iterator cannot.
+    fn jsx_rendered_functions(
+        &self,
+    ) -> impl Iterator<
+        Item = (
+            usize,
+            &'a FileFacts,
+            &'a solid_facts::ast::JsxElementFact,
+            &'a FileFacts,
+            &'a solid_facts::ast::FunctionFact,
+        ),
+    > + '_ {
+        self.facts
+            .files
+            .iter()
+            .enumerate()
+            .flat_map(move |(file_index, caller_file)| {
+                caller_file
+                    .ast
+                    .jsx_elements
+                    .iter()
+                    .filter_map(move |element| {
+                        let (target_file, target) =
+                            self.function_called_at(caller_file.path.as_str(), element.name.span)?;
+                        Some((file_index, caller_file, element, target_file, target))
+                    })
+            })
+    }
+
     fn jsx_call_sites(&self) -> &HashMap<(&'a str, Span), CallSiteLoading> {
         self.jsx_call_sites.get_or_init(|| {
             let mut map = HashMap::<(&'a str, Span), CallSiteLoading>::new();
-            for caller_file in &self.facts.files {
-                for element in &caller_file.ast.jsx_elements {
-                    let Some((target_file, target)) =
-                        self.function_called_at(caller_file.path.as_str(), element.name.span)
-                    else {
-                        continue;
-                    };
-                    let entry = map
-                        .entry((target_file.path.as_str(), target.span))
-                        .or_default();
-                    entry.any = true;
-                    if !entry.loading_wrapped {
-                        entry.loading_wrapped =
-                            caller_file.ast.jsx_elements.iter().any(|boundary| {
-                                boundary.span.contains(element.span)
-                                    && boundary.span != element.span
-                                    && jsx_element_is_loading(
-                                        caller_file,
-                                        boundary,
-                                        self.entities,
-                                        self.symbol_names,
-                                        self.dialect,
-                                    )
-                            });
-                    }
+            for (_, caller_file, element, target_file, target) in self.jsx_rendered_functions() {
+                let entry = map
+                    .entry((target_file.path.as_str(), target.span))
+                    .or_default();
+                entry.any = true;
+                if !entry.loading_wrapped {
+                    entry.loading_wrapped = caller_file.ast.jsx_elements.iter().any(|boundary| {
+                        boundary.span.contains(element.span)
+                            && boundary.span != element.span
+                            && jsx_element_is_loading(
+                                caller_file,
+                                boundary,
+                                self.entities,
+                                self.symbol_names,
+                                self.dialect,
+                            )
+                    });
                 }
             }
             map
         })
     }
 
+    /// Every entry the graph can name for each project function.
+    ///
+    /// Rendering `<Panel/>` invokes `Panel`: the tag is a call site, not a
+    /// value escape, and the same exact resolution that proves which function a
+    /// tag renders ([`Self::jsx_rendered_functions`], shared with
+    /// `jsx_call_sites` so component identity and the call graph cannot
+    /// disagree about which tags resolve) names the callee here. The edge's
+    /// callee is the tag *name* span only — the component's own reference — so
+    /// a component used as a value rather than rendered (`<Wrap
+    /// child={Panel}/>`, `return Panel`, `apply(Panel)`) is still an escape;
+    /// `component_value_operation` keeps that distinction. A tag whose exact
+    /// declaration is unresolved — an untyped import, an ambiguous computed
+    /// name — resolves to nothing and emits no edge, so consumers keep failing
+    /// closed on it rather than gaining a caller the runtime does not have.
+    ///
+    /// A dotted tag is not that case. `<ns.Panel/>` resolves: TypeScript
+    /// reports the symbol at the whole `ns.Panel` name span, so an edge is
+    /// emitted whose callee *is* that whole span — a member expression, not an
+    /// identifier. Consumers that expect an identifier there fail closed on
+    /// their own terms: `structural_parameter_member_symbols` finds no
+    /// `CallFact` and marks the site unresolved, and the escape test's
+    /// byte-exact span set does not match the `Panel` property reference it
+    /// walks, so a dotted render stays an escape.
+    ///
+    /// Call expressions come first, then render sites: a function that is both
+    /// called and rendered is asked about its call sites in that order, so a
+    /// consumer that takes the first answer it can use
+    /// (`semantic_write_execution_role_within` takes the first non-`Unknown`
+    /// execution role) resolves the tie by an argued rule rather than by which
+    /// file happens to hold the call. A call expression is the more direct
+    /// evidence of the two — its own syntax names the invocation — so it wins.
     fn all_function_call_sites(&self) -> &HashMap<(&'a str, Span), Vec<FunctionCallSite>> {
         self.function_call_sites.get_or_init(|| {
             let mut map = HashMap::<(&str, Span), Vec<FunctionCallSite>>::new();
@@ -2090,8 +2192,27 @@ impl<'a> SemanticLookup<'a> {
                         .push(FunctionCallSite {
                             file: file_index,
                             callee: call.callee,
+                            also_referenced: None,
                         });
                 }
+            }
+            for (file_index, _, element, target_file, target) in self.jsx_rendered_functions() {
+                map.entry((target_file.path.as_str(), target.span))
+                    .or_default()
+                    .push(FunctionCallSite {
+                        file: file_index,
+                        callee: element.name.span,
+                        // One render, one edge. `<Panel></Panel>` writes the
+                        // tag name twice and TypeScript reports both
+                        // occurrences as references to `Panel`, so the escape
+                        // test has to account for the closing one — but it is
+                        // the same invocation, so it rides on this edge
+                        // instead of minting a second one. Carried here rather
+                        // than re-derived by the consumer so it can only ever
+                        // be the closing name of the element whose opening tag
+                        // resolved to this function.
+                        also_referenced: element.closing_name,
+                    });
             }
             map
         })
@@ -2110,5 +2231,292 @@ impl<'a> SemanticLookup<'a> {
             }
             map
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
+    use solid_facts::core::{Generation, SourceHash, SourcePath};
+
+    const PATH: &str = "app.tsx";
+
+    /// The span of the `index`-th occurrence of `needle` in `source`.
+    fn span_of(source: &str, needle: &str, index: usize) -> Span {
+        let start = source
+            .match_indices(needle)
+            .nth(index)
+            .expect("needle occurs in source")
+            .0;
+        Span::new(
+            u32::try_from(start).unwrap(),
+            u32::try_from(start + needle.len()).unwrap(),
+        )
+    }
+
+    fn project(source: &str) -> ProjectFacts {
+        let generation = Generation::new(1).unwrap();
+        ProjectFacts {
+            generation,
+            project_id: "fixture".into(),
+            files: vec![FileFacts {
+                generation,
+                path: SourcePath::new(PATH).unwrap(),
+                source_hash: SourceHash::of(source),
+                source: Arc::from(source),
+                ast: Arc::new(solid_facts::ast::extract(PATH, source).unwrap()),
+                compiler: Arc::new(ExecutionMap {
+                    compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+                    source_hash: SourceHash::of(source),
+                    tracked_regions: Vec::new(),
+                    untracked_regions: Vec::new(),
+                    ownership_regions: Vec::new(),
+                    callback_roles: Vec::new(),
+                    jsx_operations: Vec::new(),
+                }),
+            }],
+            typescript: TypeScriptTable::from_parts(
+                3,
+                1,
+                "fixture",
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            typescript_changes: None,
+        }
+    }
+
+    fn entity_symbols(spans: &[(Span, &str)]) -> EntitySymbols {
+        EntitySymbols {
+            by_path: HashMap::from([(
+                PATH.to_string(),
+                spans
+                    .iter()
+                    .map(|(span, symbol)| {
+                        (
+                            (u64::from(span.start), u64::from(span.end)),
+                            SymbolId::from(*symbol),
+                        )
+                    })
+                    .collect(),
+            )]),
+        }
+    }
+
+    /// Builds a lookup over one synthetic file and runs `body` against it.
+    fn with_lookup<T>(
+        source: &str,
+        spans: &[(Span, &str)],
+        body: impl FnOnce(&SemanticLookup<'_>) -> T,
+    ) -> T {
+        let facts = project(source);
+        let entities = entity_symbols(spans);
+        let ast_indexes = HashMap::new();
+        let symbol_names = HashMap::new();
+        let dialect = solid_dialect::Solid2;
+        let contracts = crate::contracts::ResolvedContracts {
+            bindings: Vec::new(),
+            by_symbol: HashMap::new(),
+            missing_exports: Vec::new(),
+        };
+        let lookup = SemanticLookup::new(
+            &facts,
+            &ast_indexes,
+            &entities,
+            &symbol_names,
+            &dialect,
+            &contracts,
+            false,
+        );
+        body(&lookup)
+    }
+
+    /// Call sites keyed by target function span, as `(callee start, end)`.
+    /// One entry per invocation, which is what every consumer but the escape
+    /// test reads.
+    fn call_sites(source: &str, spans: &[(Span, &str)]) -> Vec<(Span, Vec<(u32, u32)>)> {
+        with_lookup(source, spans, |lookup| {
+            let mut sites = lookup
+                .all_function_call_sites()
+                .iter()
+                .map(|((_, function), sites)| {
+                    let mut callees = sites
+                        .iter()
+                        .map(|site| (site.callee.start, site.callee.end))
+                        .collect::<Vec<_>>();
+                    callees.sort_unstable();
+                    (*function, callees)
+                })
+                .collect::<Vec<_>>();
+            sites.sort_by_key(|(function, _)| (function.start, function.end));
+            sites
+        })
+    }
+
+    /// Every reference to `function` that its call sites account for — the set
+    /// the escape test in `attribution` tests membership in.
+    fn accounted_references(
+        source: &str,
+        spans: &[(Span, &str)],
+        function: Span,
+    ) -> Vec<(u32, u32)> {
+        with_lookup(source, spans, |lookup| {
+            let mut references = lookup
+                .function_call_site_references(PATH, function)
+                .into_iter()
+                .map(|(_, span)| (span.start, span.end))
+                .collect::<Vec<_>>();
+            references.sort_unstable();
+            references
+        })
+    }
+
+    #[test]
+    fn a_jsx_tag_resolving_to_a_project_function_is_a_call_site() {
+        let source =
+            "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <Panel />;\n}\n";
+        let declaration = span_of(source, "Panel", 0);
+        let tag = span_of(source, "Panel", 1);
+        let panel = span_of(source, "function Panel() {\n  return <p />;\n}", 0);
+
+        assert_eq!(
+            call_sites(source, &[(declaration, "panel"), (tag, "panel")]),
+            vec![(panel, vec![(tag.start, tag.end)])]
+        );
+    }
+
+    #[test]
+    fn a_component_used_as_a_value_is_not_a_call_site() {
+        // The rendered tag is `Wrap`, and only `Wrap` gains the edge: `Panel`
+        // appears as an attribute value, which renders nothing by itself.
+        let source = concat!(
+            "function Panel() {\n  return <p />;\n}\n",
+            "function Wrap(props) {\n  return <p />;\n}\n",
+            "function App() {\n  return <Wrap child={Panel} />;\n}\n",
+        );
+        let panel_declaration = span_of(source, "Panel", 0);
+        let panel_value = span_of(source, "Panel", 1);
+        let wrap_declaration = span_of(source, "Wrap", 0);
+        let wrap_tag = span_of(source, "Wrap", 1);
+        let wrap = span_of(source, "function Wrap(props) {\n  return <p />;\n}", 0);
+
+        assert_eq!(
+            call_sites(
+                source,
+                &[
+                    (panel_declaration, "panel"),
+                    (panel_value, "panel"),
+                    (wrap_declaration, "wrap"),
+                    (wrap_tag, "wrap"),
+                ]
+            ),
+            vec![(wrap, vec![(wrap_tag.start, wrap_tag.end)])]
+        );
+    }
+
+    #[test]
+    fn a_resolvable_dotted_tag_is_an_edge_whose_callee_is_the_whole_name() {
+        // TypeScript reports the component's symbol at both the whole
+        // `ns.Panel` name and the `Panel` property inside it, so the tag does
+        // resolve and the edge is emitted — with the whole name as its callee,
+        // because that is the span the tag names. The property reference is a
+        // *different* span, which is why the escape test in `attribution`
+        // still reports the enumeration incomplete for a dotted render: that
+        // test is byte-exact span membership, not a containment check.
+        let source =
+            "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <ns.Panel />;\n}\n";
+        let declaration = span_of(source, "Panel", 0);
+        let whole_name = span_of(source, "ns.Panel", 0);
+        let property = span_of(source, "Panel", 1);
+        let panel = span_of(source, "function Panel() {\n  return <p />;\n}", 0);
+
+        assert_eq!(
+            call_sites(
+                source,
+                &[
+                    (declaration, "panel"),
+                    (whole_name, "panel"),
+                    (property, "panel"),
+                ]
+            ),
+            vec![(panel, vec![(whole_name.start, whole_name.end)])]
+        );
+        assert_eq!(
+            accounted_references(
+                source,
+                &[
+                    (declaration, "panel"),
+                    (whole_name, "panel"),
+                    (property, "panel"),
+                ],
+                panel
+            ),
+            vec![(whole_name.start, whole_name.end)],
+            "the property reference the escape test walks is not accounted for"
+        );
+    }
+
+    #[test]
+    fn a_dotted_tag_without_an_exact_whole_name_entity_is_not_a_call_site() {
+        // The counterfactual to the test above: no entity at the whole name,
+        // as for a namespace object TypeScript could not resolve. The tag
+        // names no proven declaration, so the graph keeps failing closed
+        // instead of inventing a caller.
+        let source =
+            "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <ns.Panel />;\n}\n";
+        let declaration = span_of(source, "Panel", 0);
+        let property = span_of(source, "Panel", 1);
+
+        assert!(call_sites(source, &[(declaration, "panel"), (property, "panel")]).is_empty());
+    }
+
+    #[test]
+    fn a_closing_tag_is_accounted_for_by_the_opening_tags_edge() {
+        // `<Panel></Panel>` renders `Panel` once and writes its name twice.
+        // TypeScript reports both occurrences as references to the same
+        // symbol, so the escape test has to account for both — but the call
+        // graph must still hold exactly one edge, because there is one
+        // invocation.
+        let source = "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <Panel></Panel>;\n}\n";
+        let declaration = span_of(source, "Panel", 0);
+        let opening = span_of(source, "Panel", 1);
+        let closing = span_of(source, "Panel", 2);
+        let panel = span_of(source, "function Panel() {\n  return <p />;\n}", 0);
+        let entities = [
+            (declaration, "panel"),
+            (opening, "panel"),
+            (closing, "panel"),
+        ];
+
+        assert_eq!(
+            call_sites(source, &entities),
+            vec![(panel, vec![(opening.start, opening.end)])],
+            "one render is one edge"
+        );
+        assert_eq!(
+            accounted_references(source, &entities, panel),
+            vec![(opening.start, opening.end), (closing.start, closing.end)],
+            "both occurrences of the tag name are accounted for"
+        );
+    }
+
+    #[test]
+    fn a_closing_tag_cannot_account_for_a_reference_on_its_own() {
+        // The invariant behind the test above: the closing name rides on the
+        // edge the *opening* tag's resolution created. With no entity at the
+        // opening name there is no edge, so the closing name accounts for
+        // nothing — a closing tag can never be the thing that makes a
+        // reference look like a call.
+        let source = "function Panel() {\n  return <p />;\n}\nfunction App() {\n  return <Panel></Panel>;\n}\n";
+        let declaration = span_of(source, "Panel", 0);
+        let closing = span_of(source, "Panel", 2);
+        let panel = span_of(source, "function Panel() {\n  return <p />;\n}", 0);
+        let entities = [(declaration, "panel"), (closing, "panel")];
+
+        assert!(call_sites(source, &entities).is_empty());
+        assert!(accounted_references(source, &entities, panel).is_empty());
     }
 }

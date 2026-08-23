@@ -22,18 +22,29 @@ not otherwise recoverable from the contract.
 `import` in `index.js`, and the resolved call in `Reaches`. Nothing takes it as
 a value, so the caller set the graph enumerated is the whole entry set. A
 function that escaped into a callee the analysis cannot resolve -- passed as an
-argument, returned to the caller, rendered through JSX -- makes the enumeration
-incomplete, and attribution falls back to marking every export rather than
-trusting a partial answer.
+argument, returned to the caller, handed over as a prop value -- makes the
+enumeration incomplete, and attribution falls back to marking every export
+rather than trusting a partial answer.
 
 That last sentence was false when it was written. The escape test accepted any
 reference inside an `ExportFact.span`, and an `ExportNamedDeclaration`'s span
-covers the declaration's whole body -- so `apply(Panel, ...)`, `return Panel`
-and `<Panel/>` all read as export surface, the escape was never seen, and the
+covers the declaration's whole body -- so `apply(Panel, ...)` and
+`return Panel` read as export surface, the escape was never seen, and the
 partial answer was trusted. `fixtures/package-contracts/escaping-private-helper`
 is the fixture that makes the sentence true: one entrypoint per escape shape,
 each widening to every export, beside a `./called` control that keeps this
 fixture's exact behavior.
+
+A rendered tag is *not* on that list, though it was, for a different reason: the
+call graph enumerated only call expressions, so the tag named no call site. It
+does now (`all_function_call_sites`), because rendering a component invokes it —
+in both spellings, `<Panel/>` and `<Panel></Panel>`, since the closing tag's
+name span rides on the same edge. `escaping-private-helper`'s `./rendered`,
+`./closed`, `./children`, `./shadowed`, and `./builtin` arms pin the exact
+enumeration; `./member-tag` and `./member-tag-children` pin the dotted tag,
+which still fails closed in both spellings because the edge's callee is the
+whole dotted name while the reference the escape test walks is the property
+inside it.
 
 `Reaches` is a function declaration. The arrow form of the same shape --
 `export const Reaches = props => Panel(...)` -- has no `FunctionFact.name`, was
