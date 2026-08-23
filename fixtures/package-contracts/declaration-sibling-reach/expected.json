@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "declaration-sibling-reach",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "reactiveReads": [
+        {
+          "kind": "parameter-member",
+          "parameter": 0,
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "reactiveReads": {
+        "status": "unknown"
+      },
+      "returns": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-2": [
+          "forwarded",
+          "Isolated"
+        ]
+      }
+    },
+    "./direct": {
+      "exports": {
+        "function-1": [
+          "channelFor"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

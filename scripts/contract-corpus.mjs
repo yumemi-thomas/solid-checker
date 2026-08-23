@@ -21,7 +21,81 @@ const fixtures = [
   "torture-conditional-semantics",
   "torture-getter-exports",
   "torture-deep-barrel",
-  "torture-dts-disagreement"
+  "torture-dts-disagreement",
+  // Pins that the generator passes the analyzed target's export-map conditions
+  // to the native checker. Its dependency contract advertises host conditions,
+  // so it resolves only when a condition is selected -- suppress the
+  // propagation and this fixture fails with
+  // `PackageContractEnvironmentDependent` instead of generating.
+  "torture-environment-conditions",
+  // Pins that a callback forwarded into a callee with no resolvable identity
+  // becomes an explicit unknown claim. Silence here is a negative claim
+  // ("never invoked"), so a regression is invisible in the contract itself.
+  "unresolved-callee-callback",
+  // Pins that an export present in only one conditional branch keeps its
+  // variant instead of being republished as an unconditional summary.
+  "conditional-export-absence",
+  // Pins `mergeSummaries`, which was uncovered by the corpus and wrong in the
+  // one-sided direction: a branch that *proved* a return merged against a
+  // branch that proved none handed the base the proving branch's claim, which
+  // is false in the other environment. The pair pins both shapes -- one-sided
+  // presence and two branches proving different values -- because collapsing
+  // the merge rule back breaks exactly one of them.
+  "conditional-returns-divergence",
+  "conditional-returns-divergence-both",
+  // Pins legacy root resolution when `module` and `main` name different
+  // artifacts: the ESM build is analyzed and the review plan records which
+  // field it came from.
+  "legacy-dual-root",
+  // Pins the unknown-claim attribution ladder and the claim domains an
+  // unresolved dispatch actually invalidates. Both used to be wrong in the
+  // same direction: every export of the entrypoint, every domain.
+  "unresolved-dispatch-attribution",
+  "unresolved-dispatch-domains-control",
+  // Pins the call-graph rung: an obligation in a private helper belongs to the
+  // exports that reach it, and to no others.
+  "unresolved-dispatch-reachability",
+  // Pins the one obligation class that keeps every claim domain -- a contract
+  // with no summary for the export behind the call -- and the exact-symbol
+  // attribution that replaced a callee name-text scan.
+  "unresolved-contract-export-attribution",
+  // Pins that an arrow-bound export is nameable at every rung. Reading only
+  // `name`/`method_name` made `export const X = () => {}` unnameable, and the
+  // reachability rung read that as "not an export" and marked nothing.
+  "arrow-export-attribution",
+  // Pins the escape test. Accepting any reference inside an export
+  // declaration's span accepted `apply(Panel)`, `return Panel` and `<Panel/>`
+  // as export surface, so a value-escaped helper kept a "complete" caller
+  // enumeration and every export beside the caller published as certified.
+  "escaping-private-helper",
+  // Pins the identity join: a private helper never inherits an unrelated
+  // same-named export's claim, and an aliased pair is marked as one.
+  "export-identity-join",
+  // Pins where the `parameter-member` row does and does not discharge the
+  // exported-helper obligation -- the row is published by the helper, not by
+  // an export one hop above it.
+  "parameter-member-forwarded",
+  // Pins the declaration-file identity split. A `.d.ts` beside an internal
+  // runtime module makes every importer bind to the declaration, so the
+  // implementation's caller edges vanish while the graph still reported
+  // `complete` -- and every export that reaches the obligation was published
+  // certified. The enumeration now reports itself incomplete instead.
+  "declaration-sibling-reach",
+  // The same shape with identity intact: one entry file that both re-exports
+  // and calls the helper must resolve the obligation to both published names
+  // and leave the third export certified.
+  "entry-reexport-identity",
+  // Pins that `execution: "inline"` is written only for an invocation proven
+  // in the declaring function's own body; a callback reached through a closure
+  // handed elsewhere or returned opens the sentinel instead.
+  "callback-execution-boundary",
+  // Pins that an obligation the ladder resolves to no export leaves a
+  // review-plan note. The contract is identical either way, so a silent
+  // narrowing is invisible in the bytes.
+  "unreached-private-obligation",
+  // Pins the ReactiveSourceUncaptured arm's domains, and that they are today
+  // masked by the missing-contract-export obligation on the same call.
+  "uncaptured-source-return"
 ];
 
 const native = process.env.SOLID_CHECKER_NATIVE_BIN ?? defaultNative;
