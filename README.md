@@ -25,6 +25,21 @@ session.close()?;
 # Ok::<(), typefacts::SessionError>(())
 ```
 
+A session also answers for the resolved module graph of the open generation —
+the files the TypeScript program actually included, and where each module
+specifier resolved. It is a read of the retained program: it advances no
+generation and leaves a materialized analysis untouched.
+
+```rust
+use typefacts::ModuleGraphDemand;
+
+let graph = session.module_graph(&ModuleGraphDemand::with_all_imports().with_packages())?;
+for import in graph.imports_from("/project/src/index.ts") {
+    println!("{} -> {}", import.text, import.resolved_path);
+}
+# Ok::<(), typefacts::SessionError>(())
+```
+
 ## Development
 
 ```sh

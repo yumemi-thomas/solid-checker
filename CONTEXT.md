@@ -122,6 +122,16 @@ The record of exactly which rows of a fact table may differ from the
 immediately preceding one.
 _Avoid_: changeset, diff, dirty set
 
+**Resolved module graph**:
+The module inventory of one accepted program plus, on request, the provenance of
+its module specifiers. It is a property of the program, not of a demand set.
+_Avoid_: module map, import graph, dependency tree
+
+**Module inventory**:
+Every file a Producer's program actually resolved and included. Its authority is
+that the process reporting it is the process that resolved them.
+_Avoid_: file list, closure, module set
+
 **Resolved call**:
 The callable signature selected for one call or construction Demand. Its
 validity is `valid` when selection is proven, `recovery` when the compiler

@@ -70,6 +70,32 @@ new facts:
 - Synthetic or best-effort mapping for recovery, union-composite, and spread
   calls: honor the explicit unresolved mapping reason instead.
 
+- Enumerating an entrypoint's runtime-module closure by scanning source text for
+  import specifiers and resolving them in the Node process: issue `modules` and
+  record the inventory. The scan could disagree with the compiler in ways neither
+  side reported; the inventory is the analyzing program's own file list, so the
+  closure record becomes an attestation rather than a reconstruction. It names
+  realpaths, so a pnpm store entry is one module rather than one per link, and it
+  names the default library files the analysis opened.
+- Applying a package contract to an import because the specifier's package root
+  equals the contract's package name: demand `modules` with `packages` and
+  require the import's `resolvedPath` to sit under the contract's package, or its
+  `package.manifestPath` to be the contract's manifest. A `paths` alias that
+  shadows an installed package answers `resolution: "nonRelative"` with a
+  non-empty `pathsPattern` and an owning package that is not the one whose name
+  it borrows; that combination must refuse the contract rather than apply it.
+- Reasoning about a symlinked install from a path: read `resolvedPath` and
+  `symlinkPath`. Do not derive one from the other, and do not treat a
+  `.pnpm`-shaped path as evidence of anything.
+
+The module graph does **not** close the declaration-sibling identity split. A
+published `channel.d.ts` beside a `channel.js` is two unrelated modules to
+TypeScript, which records nothing joining them, so nothing is reported. A
+consumer seeing an import with a `.d.ts` extension, an empty `includedPath`, and
+the runtime file present in the inventory as its own root must fail closed on it.
+Pairing the two by matching file names is exactly the substitution the precision
+contract forbids, and no fact here authorizes it.
+
 `returnTypeText` remains presentation data. It must not be used to decide any
 of the facts above. The new facts also do not authorize a callback-timing
 contract: invocation timing is runtime behavior that TypeScript does not prove.

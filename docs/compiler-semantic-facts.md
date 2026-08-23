@@ -318,7 +318,45 @@ they do not duplicate symbol rows. Retained per-file contributions track
 declaration and parameter source dependencies, so an edit rematerializes only
 facts that could otherwise carry stale locations.
 
-The active lifecycle schema is V1 and the active Wire table model is v7. The
-packed transition framing remains version 1. Go and Rust pin the same schema
-digest, so mismatched producer/client versions fail during the startup
-handshake.
+## Resolved module graph
+
+The `modules` operation answers for the module graph of the accepted program,
+independently of any demand set. See
+[ADR 0019](adr/0019-v1-attested-resolved-module-graph.md) for the full decision;
+the shape is:
+
+- The **module inventory** is unconditional: every file the program included,
+  with its path, whether it is a declaration file, its emit module format, the
+  compiler's project-reference input/output pairing, and its duplicate-install
+  redirect targets. Paths are realpaths, and default library files are in it,
+  because it is the program's own file list.
+- **Import provenance** is requested per importing file: one fact per module
+  specifier occurrence, carrying its exact span and text, the resolved file, the
+  file the program parses in its place, the symlink path the resolver walked, the
+  extension, the matched `paths` key, and — when asked for — the owning
+  `package.json`'s name, version, and path.
+
+Three absences are load-bearing and must be read as fail-closed rather than as
+negatives:
+
+- **A `.d.ts` beside a `.js` has no reported pairing, because the compiler
+  records none.** Resolution selects the declaration file and never opens the
+  implementation. `includedPath` is populated only by a configured project
+  reference's redirect, which is the only such record TypeScript keeps.
+- **`pathsPattern` says a configured `paths` key matched the specifier**, not
+  that resolution came through it; `ResolvedModule` records no trace of the
+  latter. Read with `resolution` it still settles the case it serves — a bare
+  specifier a `paths` key matched that did not land in `node_modules` is not the
+  installed package of that name.
+- **An empty `symlinkPath` means the resolver saw no divergence**, not that none
+  was looked for. TypeScript takes a realpath only for a non-relative resolution
+  under `node_modules` with `preserveSymlinks` off.
+
+`unknownImportPaths` names requested files the program does not hold, so an empty
+import list is distinguishable from an unanalyzed file.
+
+The active lifecycle schema is V1 and the active Wire table model is v13. The
+`modules` operation carries no Wire table transition: the module graph belongs to
+the program rather than to a fact table. The packed transition framing remains
+version 1. Go and Rust pin the same handshake protocol number and schema digest,
+so mismatched producer/client versions fail during the startup handshake.
