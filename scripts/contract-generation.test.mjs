@@ -26,7 +26,7 @@ const cli = join(root, "packages/cli/bin/solid-checker.mjs");
 // "ok" writes a minimal normalized contract document, "refuse" reproduces a
 // native fail-closed contract-emission refusal, "crash" reproduces a panic.
 const STUB_NATIVE = `#!/usr/bin/env node
-import { writeFileSync } from "node:fs";
+import { appendFileSync, writeFileSync } from "node:fs";
 import { basename } from "node:path";
 
 const args = process.argv.slice(2);
@@ -34,6 +34,14 @@ const value = flag => {
   const index = args.indexOf(flag);
   return index === -1 ? undefined : args[index + 1];
 };
+
+// Every invocation's argv, one JSON line each, when a test asks for it. Which
+// *flag* carries a dependency contract is a semantic channel, not a spelling
+// (see \`--generated-contract\` below), and nothing else in a generation's
+// observable output records the choice.
+if (process.env.STUB_ARGV_LOG) {
+  appendFileSync(process.env.STUB_ARGV_LOG, \`\${JSON.stringify(args)}\\n\`);
+}
 
 if (args.includes("--validate-contract")) process.exit(0);
 
@@ -73,7 +81,16 @@ if (action === "crash") {
 // deliberately carries no module name, so only the marker can drive the
 // retry -- a fallback that happened to still match would not prove the
 // marker works.
-if (action === "needs-dependency" && !args.includes("--contract")) {
+// \`--generated-contract\` is \`--contract\` plus provenance the document cannot
+// carry: both spellings push onto \`Request::contract_paths\`, and only the
+// second also lands in \`generated_contract_paths\` (rust/crates/
+// solid-facts-backend/src/main.rs). So either channel satisfies the boundary
+// this refusal is about, and gating on one flag alone would refuse a retry the
+// real binary accepts.
+const carriesDependencyContract =
+  args.includes("--contract") || args.includes("--generated-contract");
+
+if (action === "needs-dependency" && !carriesDependencyContract) {
   process.stderr.write(
     \`solid-checker:unresolved-dependency-module=\${process.env.STUB_DEPENDENCY_MODULE}\\n\`
   );
@@ -142,17 +159,26 @@ function makeWorkspace(exports_, { dependency, files } = {}) {
   return { directory, packageRoot, stub };
 }
 
-function generate({ packageRoot, stub, plan = {}, args = [], dependencyModule }) {
+function generate({ packageRoot, stub, plan = {}, args = [], dependencyModule, argvLog }) {
   return spawnSync(process.execPath, [cli, "contract", "generate", ...args], {
     cwd: packageRoot,
     env: {
       ...process.env,
       SOLID_CHECKER_NATIVE_BIN: stub,
       STUB_NATIVE_PLAN: JSON.stringify(plan),
-      ...(dependencyModule ? { STUB_DEPENDENCY_MODULE: dependencyModule } : {})
+      ...(dependencyModule ? { STUB_DEPENDENCY_MODULE: dependencyModule } : {}),
+      ...(argvLog ? { STUB_ARGV_LOG: argvLog } : {})
     },
     encoding: "utf8"
   });
+}
+
+// Each native invocation's argv, in order, from a run given `argvLog`.
+function nativeInvocations(argvLog) {
+  return readFileSync(argvLog, "utf8")
+    .split("\n")
+    .filter(line => line.length)
+    .map(line => JSON.parse(line));
 }
 
 test("a deliberate refusal omits one entrypoint and generation continues", () => {
@@ -307,18 +333,37 @@ test("the native dependency marker drives recursive dependency generation", () =
     { ".": "./main.mjs" },
     { dependency: "boundary-package" }
   );
+  const argvLog = join(directory, "native-argv.log");
   try {
     const result = generate({
       packageRoot,
       stub,
       plan: { "main.mjs": "needs-dependency" },
-      dependencyModule: "boundary-package"
+      dependencyModule: "boundary-package",
+      argvLog
     });
     assert.equal(result.status, 0, result.stderr);
     assert.doesNotMatch(result.stdout, /refused and omitted/);
 
     const contract = JSON.parse(readFileSync(join(packageRoot, "solid-reactivity.json"), "utf8"));
     assert.deepEqual(Object.keys(contract.entrypoints), ["."]);
+
+    // The retried invocation must carry the dependency contract on the
+    // *trusted* channel. This run generated that contract from the
+    // dependency's own installed sources, so its `kind` claims were decided by
+    // this engine's rule; `--generated-contract` is the only thing that says
+    // so (`kind_claims_are_trusted`). Sending the same path as `--contract`
+    // would make the engine re-decide those claims as if the file had merely
+    // been discovered on disk -- and every assertion above would still pass.
+    const invocations = nativeInvocations(argvLog);
+    assert.ok(
+      invocations.some(args => args.includes("--generated-contract")),
+      "no invocation carried the generated dependency contract"
+    );
+    assert.ok(
+      invocations.every(args => !args.includes("--contract")),
+      "a generated dependency contract was passed on the untrusted channel"
+    );
 
     // The marker is addressed to this script. A reviewer reading the plan
     // must never see it, and the human sentence must survive intact when a
