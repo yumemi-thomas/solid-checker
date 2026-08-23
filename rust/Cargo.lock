@@ -194,7 +194,7 @@ dependencies = [
 [[package]]
 name = "dom-expressions-compiler"
 version = "0.1.0"
-source = "git+https://github.com/yumemi-thomas/solid-1x-compiler?rev=79b9b63721c59b0acfd72348438bbb6e090ec81c#79b9b63721c59b0acfd72348438bbb6e090ec81c"
+source = "git+https://github.com/yumemi-thomas/solid-1x-compiler?rev=ad2c9452041c757138bb972416d8abc4798ea6b9#ad2c9452041c757138bb972416d8abc4798ea6b9"
 dependencies = [
  "html5ever",
  "htmlize",
