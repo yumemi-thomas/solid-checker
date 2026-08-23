@@ -66,6 +66,54 @@ fixtures/upstream-parity/.staging/
 !fixtures/reactive-ir/summary-callback-extent/node_modules/**
 !fixtures/package-contracts/solid-reexport/node_modules/
 !fixtures/package-contracts/solid-reexport/node_modules/**
+!fixtures/package-contracts/callback-reactive-arguments/node_modules/
+!fixtures/package-contracts/callback-reactive-arguments/node_modules/**
+# The dependency contract in this stub is the whole point of the fixture: it
+# advertises host conditions, so it only resolves when the generator passes the
+# analyzed target's export-map conditions through. Without this exception the
+# stub is untracked and the fixture silently stops pinning that in CI.
+!fixtures/package-contracts/torture-environment-conditions/node_modules/
+!fixtures/package-contracts/torture-environment-conditions/node_modules/**
+# These three pin unknown-claim attribution, and the obligation they turn on
+# only fires under the 1.x catalog: a PascalCase export with no JSX is a
+# *possible* component in 1.x and nothing at all under the 2.0 default. Without
+# the stub the fixtures still generate, still pass, and pin nothing.
+!fixtures/package-contracts/unresolved-dispatch-attribution/node_modules/
+!fixtures/package-contracts/unresolved-dispatch-attribution/node_modules/**
+!fixtures/package-contracts/unresolved-dispatch-domains-control/node_modules/
+!fixtures/package-contracts/unresolved-dispatch-domains-control/node_modules/**
+!fixtures/package-contracts/unresolved-dispatch-reachability/node_modules/
+!fixtures/package-contracts/unresolved-dispatch-reachability/node_modules/**
+# The partial dependency contract in this stub is the fixture: without it the
+# consumer's import resolves to no contract at all and the obligation changes
+# kind.
+!fixtures/package-contracts/unresolved-contract-export-attribution/node_modules/
+!fixtures/package-contracts/unresolved-contract-export-attribution/node_modules/**
+# Attribution-soundness fixtures. Each needs the solid-js stub for dialect
+# selection; uncaptured-source-return additionally needs the partial
+# `uncharted-helpers` contract, which is what makes its callee uncontracted.
+!fixtures/package-contracts/arrow-export-attribution/node_modules/
+!fixtures/package-contracts/arrow-export-attribution/node_modules/**
+!fixtures/package-contracts/escaping-private-helper/node_modules/
+!fixtures/package-contracts/escaping-private-helper/node_modules/**
+!fixtures/package-contracts/export-identity-join/node_modules/
+!fixtures/package-contracts/export-identity-join/node_modules/**
+!fixtures/package-contracts/parameter-member-forwarded/node_modules/
+!fixtures/package-contracts/parameter-member-forwarded/node_modules/**
+!fixtures/package-contracts/callback-execution-boundary/node_modules/
+!fixtures/package-contracts/callback-execution-boundary/node_modules/**
+!fixtures/package-contracts/unreached-private-obligation/node_modules/
+!fixtures/package-contracts/unreached-private-obligation/node_modules/**
+!fixtures/package-contracts/uncaptured-source-return/node_modules/
+!fixtures/package-contracts/uncaptured-source-return/node_modules/**
+!fixtures/package-contracts/declaration-sibling-reach/node_modules/
+!fixtures/package-contracts/declaration-sibling-reach/node_modules/**
+!fixtures/package-contracts/entry-reexport-identity/node_modules/
+!fixtures/package-contracts/entry-reexport-identity/node_modules/**
+!fixtures/package-contracts/conditional-returns-divergence/node_modules/
+!fixtures/package-contracts/conditional-returns-divergence/node_modules/**
+!fixtures/package-contracts/conditional-returns-divergence-both/node_modules/
+!fixtures/package-contracts/conditional-returns-divergence-both/node_modules/**
 packages/wasm/browser.js
 packages/wasm/generated.d.ts
 packages/wasm/index.js

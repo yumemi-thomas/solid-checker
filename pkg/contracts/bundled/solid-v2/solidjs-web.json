@@ -12,7 +12,16 @@
       "callbacks": [
         {
           "parameter": 0,
-          "execution": "tracked"
+          "execution": "tracked",
+          "evidence": {
+            "kind": "probed",
+            "modes": [
+              "client",
+              "development",
+              "production"
+            ],
+            "calls": 2
+          }
         },
         {
           "parameter": 1,
@@ -86,7 +95,7 @@
             "callbacks": [
               {
                 "parameter": 1,
-                "execution": "deferred"
+                "execution": "inline"
               }
             ]
           }
@@ -101,13 +110,13 @@
             "callbacks": [
               {
                 "parameter": 1,
-                "execution": "deferred",
+                "execution": "inline",
                 "evidence": {
                   "kind": "probed",
                   "modes": [
                     "server"
                   ],
-                  "calls": 2
+                  "calls": 1
                 }
               }
             ],
@@ -116,7 +125,7 @@
               "modes": [
                 "server"
               ],
-              "calls": 2
+              "calls": 1
             }
           }
         },
@@ -130,12 +139,21 @@
             "callbacks": [
               {
                 "parameter": 1,
-                "execution": "deferred"
+                "execution": "inline"
               }
             ]
           }
         }
-      ]
+      ],
+      "evidence": {
+        "kind": "probed",
+        "modes": [
+          "client",
+          "development",
+          "production"
+        ],
+        "calls": 2
+      }
     },
     "function-2": {
       "kind": "function",

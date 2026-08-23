@@ -75,12 +75,12 @@ fn normalize(contract: &PackageContract) -> Result<ContractDocument, BackendErro
     let mut summaries = BTreeMap::new();
     for (canonical, summary) in unique {
         let plain = summary.evidence.is_none()
-            && summary.reactive_reads.is_empty()
-            && summary.returns.is_none()
-            && summary.callbacks.is_empty()
-            && summary.owner_requirements.is_empty()
+            && summary.reactive_reads.is_known_default()
+            && summary.returns.is_known_default()
+            && summary.callbacks.is_known_default()
+            && summary.owner_requirements.is_known_default()
             && summary.variants.is_empty()
-            && summary.async_behavior.is_empty();
+            && summary.async_behavior.is_known_default();
         let id = if plain {
             summary.kind.clone()
         } else {
@@ -386,11 +386,14 @@ mod tests {
         let decoded = decode(document).unwrap();
         let summary = &decoded.entrypoints["."].exports["observe"];
         assert_eq!(summary.evidence.as_ref().unwrap().kind, "inferred");
-        let evidence = summary.callbacks[0].evidence.as_ref().unwrap();
+        let evidence = summary.callbacks.known().unwrap()[0]
+            .evidence
+            .as_ref()
+            .unwrap();
         assert_eq!(evidence.kind, "probed");
         assert_eq!(evidence.modes, ["client", "server"]);
         assert_eq!(evidence.calls, Some(2));
-        assert_eq!(summary.owner_requirements.len(), 1);
+        assert_eq!(summary.owner_requirements.known().unwrap().len(), 1);
 
         let legacy = contract();
         assert!(

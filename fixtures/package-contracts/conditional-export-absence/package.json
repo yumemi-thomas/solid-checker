@@ -1,0 +1,11 @@
+{
+  "name": "conditional-export-absence-package",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "browser": "./browser.js",
+      "node": "./node.js"
+    }
+  }
+}

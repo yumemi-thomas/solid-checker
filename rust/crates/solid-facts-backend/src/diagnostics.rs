@@ -456,18 +456,20 @@ fn finish_analysis(
             "unverified" => PackageContractIssueKind::Unverified,
             "stale" => stale_by_package.get(status.name.as_str()).map_or(
                 PackageContractIssueKind::Missing,
-                |entry| {
-                    if entry.bundled {
-                        PackageContractIssueKind::StaleBundled {
-                            audited_version: entry.contract_version.clone(),
-                            installed_version: entry.installed_version.clone(),
-                        }
-                    } else {
-                        PackageContractIssueKind::Stale {
-                            contract_version: entry.contract_version.clone(),
-                            installed_version: entry.installed_version.clone(),
-                        }
-                    }
+                |entry| match (&entry.integrity, entry.bundled) {
+                    (Some(integrity), bundled) => PackageContractIssueKind::IntegrityMismatch {
+                        contract_integrity: integrity.contract.clone(),
+                        installed_integrity: integrity.installed.clone(),
+                        bundled,
+                    },
+                    (None, true) => PackageContractIssueKind::StaleBundled {
+                        audited_version: entry.contract_version.clone(),
+                        installed_version: entry.installed_version.clone(),
+                    },
+                    (None, false) => PackageContractIssueKind::Stale {
+                        contract_version: entry.contract_version.clone(),
+                        installed_version: entry.installed_version.clone(),
+                    },
                 },
             ),
             _ => PackageContractIssueKind::Missing,
@@ -658,9 +660,9 @@ pub fn analysis_metrics(
                 else {
                     continue;
                 };
-                if summary.reactive_reads.is_empty()
-                    && summary.returns.is_none()
-                    && summary.callbacks.is_empty()
+                if summary.reactive_reads.is_known_default()
+                    && summary.returns.is_known_default()
+                    && summary.callbacks.is_known_default()
                 {
                     continue;
                 }
@@ -675,7 +677,8 @@ pub fn analysis_metrics(
                     symbol.to_string(),
                     summary
                         .returns
-                        .as_ref()
+                        .known()
+                        .and_then(Option::as_ref)
                         .map(|returned| returned.kind.clone()),
                 );
             }
@@ -847,6 +850,25 @@ pub struct StaleContract {
     /// Whether the refused contract was this checker's own bundled artifact,
     /// which the consumer cannot regenerate.
     pub bundled: bool,
+    /// Set when the refusal is an npm-integrity disagreement rather than a
+    /// version one. The two versions *agree* in that case, so a message built
+    /// from them alone would read as a contradiction; the integrities are the
+    /// facts that disagree.
+    pub integrity: Option<IntegrityDisagreement>,
+}
+
+/// A contract's audited npm integrity against the integrity the project's
+/// lockfile records for the installed copy.
+///
+/// A version string is not a pin. A republished tarball, an `npm overrides`
+/// entry, or a locally patched install all keep the version the contract
+/// names while replacing the bytes the contract describes.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct IntegrityDisagreement {
+    /// `package.integrity` as recorded in the contract.
+    pub contract: String,
+    /// The integrity recovered from the project's npm lockfile.
+    pub installed: String,
 }
 
 pub fn load_package_contracts(
@@ -921,8 +943,21 @@ pub fn load_package_contracts_reporting(
         };
         if let Some(bundled) = bundled {
             let installed = installed_package_manifest(project_directory, module)?;
-            let installed = installed.as_ref().map(|(_, manifest)| manifest);
-            if contract_matches_manifest(installed, &bundled) {
+            let manifest = installed.as_ref().map(|(_, manifest)| manifest);
+            // A bundled contract carries the npm integrity of the exact tarball
+            // this checker audited, so it is the tier where the check has the
+            // most to say: an installed copy with the audited version but other
+            // bytes is precisely what a version comparison cannot see.
+            let disagreement = if contract_matches_manifest(manifest, &bundled) {
+                classify_integrity(
+                    project_directory,
+                    installed.as_ref().map(|(directory, _)| directory.as_path()),
+                    &bundled,
+                )?
+            } else {
+                None
+            };
+            if contract_matches_manifest(manifest, &bundled) && disagreement.is_none() {
                 contracts.insert(bundled.package.name.clone(), bundled);
             } else {
                 refuse(
@@ -931,8 +966,9 @@ pub fn load_package_contracts_reporting(
                         package: (*module).to_owned(),
                         contract_path: bundled.source_path.clone(),
                         contract_version: bundled.package.version.clone(),
-                        installed_version: installed_version(installed),
+                        installed_version: installed_version(manifest),
                         bundled: true,
+                        integrity: disagreement,
                     },
                 );
             }
@@ -962,12 +998,19 @@ pub fn load_package_contracts_reporting(
     }
     for path in explicit_paths {
         let contract = read_package_contract(Path::new(path))?;
-        if modules.contains(contract.package.name.as_str()) {
-            let module = contract.package.name.clone();
-            if let Some(entry) = classify_identity(project_directory, &module, &contract)? {
-                refuse(&mut stale, entry);
-                continue;
-            }
+        // Version classification must not depend on *how* the package is
+        // referenced. `modules` is derived from `import` statements only, but
+        // contract resolution also applies a contract to `export … from "pkg"`
+        // re-exports, so gating the check on membership let a
+        // version-mismatched explicit contract be applied to a package this
+        // project reaches only by re-export. `classify_identity` compares
+        // against the installed manifest and answers `None` when the package
+        // is not installed at all, so an explicit contract for an uninstalled
+        // package still applies exactly as before.
+        let module = contract.package.name.clone();
+        if let Some(entry) = classify_identity(project_directory, &module, &contract)? {
+            refuse(&mut stale, entry);
+            continue;
         }
         contracts.insert(contract.package.name.clone(), contract);
     }
@@ -1109,6 +1152,140 @@ fn installed_package_manifest(
     }
 }
 
+/// One entry of an npm lockfile's `packages` map.
+///
+/// Deliberately not `deny_unknown_fields`: a lockfile is written by npm, not
+/// by this project, and every field beyond these two is irrelevant here.
+#[derive(Deserialize)]
+struct NpmLockfileEntry {
+    /// Absent for a link, a workspace member, a `file:` dependency, and a git
+    /// dependency — none of which have a registry tarball to hash. The absent
+    /// case is not evidence of agreement; it is the absence of the fact.
+    #[serde(default)]
+    integrity: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct NpmLockfile {
+    #[serde(default)]
+    lockfile_version: u32,
+    /// The path-keyed installed tree, present from `lockfileVersion` 2 on.
+    /// Version 1 has only the `dependencies` tree, whose keys are package
+    /// names rather than install paths and therefore cannot identify *which*
+    /// installed copy an entry describes under hoisting.
+    #[serde(default)]
+    packages: HashMap<String, NpmLockfileEntry>,
+}
+
+/// The npm-lockfile integrity for one installed package directory, or `None`
+/// when no unambiguous integrity can be recovered.
+///
+/// The lockfile's `packages` map is keyed by install path relative to the
+/// lockfile's own directory (`node_modules/foo`,
+/// `node_modules/a/node_modules/foo`, `packages/app/node_modules/foo`), which
+/// is what makes it usable at all: it names the *copy*, so a hoisted and a
+/// nested install of the same package do not collide. That is also why
+/// `lockfileVersion` 1 is skipped — its tree is keyed by package name, and
+/// resolving a name to an install path would be the guess this must not make.
+///
+/// Every ambiguity resolves to `None` — no enforcement — rather than to a
+/// verdict:
+///
+/// - two lockfiles that disagree about the same installed directory (which one
+///   is authoritative is exactly the question this cannot answer);
+/// - an entry with no `integrity` (a link, workspace member, `file:`, or git
+///   dependency has no registry tarball);
+/// - a lockfile this checker cannot parse, or one npm has not written at all
+///   (pnpm and Yarn keep their own formats).
+///
+/// `None` therefore means "the installed integrity is not a fact this project
+/// makes available", never "the integrities agree".
+fn installed_package_integrity(
+    project_directory: &Path,
+    package_directory: &Path,
+) -> Result<Option<String>, BackendError> {
+    let mut found: Option<String> = None;
+    for ancestor in project_directory.ancestors() {
+        let Ok(relative) = package_directory.strip_prefix(ancestor) else {
+            continue;
+        };
+        let key = relative
+            .components()
+            .map(|component| component.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        // A lockfile key always descends through a `node_modules` directory.
+        // Anything else is not an installed copy and has no entry to find.
+        if !key.split('/').any(|segment| segment == "node_modules") {
+            continue;
+        }
+        for candidate in [
+            ancestor.join("package-lock.json"),
+            // npm's hidden lockfile: the same shape, written into the tree it
+            // describes, and keyed relative to that tree's parent.
+            ancestor.join("node_modules").join(".package-lock.json"),
+        ] {
+            let data = match fs::read(&candidate) {
+                Ok(data) => data,
+                Err(error) if error.kind() == io::ErrorKind::NotFound => continue,
+                Err(error) => return Err(error.into()),
+            };
+            // A lockfile this checker cannot read is not a malformed *contract*
+            // and must not fail the run over a file the project did not write
+            // for it.
+            let Ok(lockfile) = serde_json::from_slice::<NpmLockfile>(&data) else {
+                continue;
+            };
+            if !matches!(lockfile.lockfile_version, 2 | 3) {
+                continue;
+            }
+            let Some(entry) = lockfile.packages.get(&key) else {
+                continue;
+            };
+            if entry.integrity.is_empty() {
+                continue;
+            }
+            match &found {
+                None => found = Some(entry.integrity.clone()),
+                Some(existing) if *existing != entry.integrity => return Ok(None),
+                Some(_) => {}
+            }
+        }
+    }
+    Ok(found)
+}
+
+/// The integrity disagreement that refuses a contract, when one is provable.
+///
+/// Both halves are required: a contract that records the integrity of the
+/// tarball it was audited against, and an installed integrity this project
+/// makes recoverable. Where either is absent the contract keeps applying on
+/// version identity alone — the pre-existing behavior — and that residue is
+/// documented in docs/package-contracts.md rather than silently trusted.
+fn classify_integrity(
+    project_directory: &Path,
+    package_directory: Option<&Path>,
+    contract: &PackageContract,
+) -> Result<Option<IntegrityDisagreement>, BackendError> {
+    if contract.package.integrity.is_empty() {
+        return Ok(None);
+    }
+    let Some(package_directory) = package_directory else {
+        return Ok(None);
+    };
+    let Some(installed) = installed_package_integrity(project_directory, package_directory)? else {
+        return Ok(None);
+    };
+    if installed == contract.package.integrity {
+        return Ok(None);
+    }
+    Ok(Some(IntegrityDisagreement {
+        contract: contract.package.integrity.clone(),
+        installed,
+    }))
+}
+
 /// Whether a contract describes the version of the package that is actually
 /// installed. A contract that describes another version is stale: it was
 /// audited against an artifact this project no longer has.
@@ -1151,12 +1328,15 @@ pub fn contract_regeneration_command(
 }
 
 /// Validates a discovered contract's identity, returning the refusal when it
-/// describes a version other than the installed one.
+/// describes an artifact other than the installed one.
 ///
 /// A wrong *name* is still an error: a file claiming to be another package's
 /// contract is malformed, not merely out of date. A wrong *version* is drift,
 /// and drift is reported as an uncertifiable finding so one upgraded dependency
-/// does not take the whole run down with it.
+/// does not take the whole run down with it. A matching version whose lockfile
+/// integrity disagrees is the same drift reached through a stronger fact —
+/// republished or patched bytes under an unchanged version — and is refused
+/// identically.
 fn classify_identity(
     project_directory: &Path,
     module: &str,
@@ -1164,17 +1344,24 @@ fn classify_identity(
 ) -> Result<Option<StaleContract>, BackendError> {
     validate_discovered_contract_name(module, contract)?;
     let installed = installed_package_manifest(project_directory, module)?;
-    let installed = installed.as_ref().map(|(_, manifest)| manifest);
-    if contract_matches_manifest(installed, contract) {
-        return Ok(None);
-    }
-    Ok(Some(StaleContract {
+    let manifest = installed.as_ref().map(|(_, manifest)| manifest);
+    let refusal = |integrity| StaleContract {
         package: module.to_owned(),
         contract_path: contract.source_path.clone(),
         contract_version: contract.package.version.clone(),
-        installed_version: installed_version(installed),
+        installed_version: installed_version(manifest),
         bundled: false,
-    }))
+        integrity,
+    };
+    if !contract_matches_manifest(manifest, contract) {
+        return Ok(Some(refusal(None)));
+    }
+    let disagreement = classify_integrity(
+        project_directory,
+        installed.as_ref().map(|(directory, _)| directory.as_path()),
+        contract,
+    )?;
+    Ok(disagreement.map(|disagreement| refusal(Some(disagreement))))
 }
 
 /// Reports imported packages whose own manifest indicates that they integrate
@@ -1206,9 +1393,22 @@ pub fn package_contract_statuses(
         let package_directory = installed.as_ref().map(|(directory, _)| directory.clone());
         let bundled = (dialect.bundled_contract)(module.as_str())?;
         let is_bundled_package = bundled.is_some();
+        // Computed once here so the decision tree below can distinguish "the
+        // bundled contract applies" from "it names the installed version but
+        // not the installed bytes".
+        let bundled_integrity = match bundled
+            .as_ref()
+            .filter(|contract| contract_matches_manifest(installed_manifest, contract))
+        {
+            Some(contract) => {
+                classify_integrity(project_directory, package_directory.as_deref(), contract)?
+            }
+            None => None,
+        };
         let bundled_path = bundled
             .as_ref()
             .filter(|contract| contract_matches_manifest(installed_manifest, contract))
+            .filter(|_| bundled_integrity.is_none())
             .map(|contract| contract.source_path.as_str());
         let uses_solid = installed_manifest.is_some_and(manifest_uses_solid);
         if !is_bundled_package && !uses_solid {
@@ -1218,9 +1418,11 @@ pub fn package_contract_statuses(
         // `stale`, not raised as an error: this report exists to tell the user
         // which contracts need regenerating, so it must survive exactly the
         // drift that stops analysis.
-        let classify = |contract: &PackageContract, fresh: &'static str| {
+        let classify = |contract: &PackageContract,
+                        fresh: &'static str|
+         -> Result<(&'static str, Option<String>, bool), BackendError> {
             if !contract_matches_manifest(installed_manifest, contract) {
-                (
+                return Ok((
                     "stale",
                     Some(format!(
                         "the contract describes {} {}, but {} is installed",
@@ -1229,17 +1431,35 @@ pub fn package_contract_statuses(
                         installed_manifest
                             .map_or("another version", |manifest| manifest.version.as_str())
                     )),
-                )
-            } else if contract_evidence_is_certifiable(contract) {
-                (fresh, None)
+                    false,
+                ));
+            }
+            // The version agrees; the bytes behind it may not. Reported as the
+            // same `stale` status because it is the same fact about the
+            // contract -- it describes an artifact this project does not have.
+            if let Some(disagreement) =
+                classify_integrity(project_directory, package_directory.as_deref(), contract)?
+            {
+                return Ok((
+                    "stale",
+                    Some(format!(
+                        "the contract was audited against {} integrity {}, but the lockfile installs {}",
+                        contract.package.name, disagreement.contract, disagreement.installed
+                    )),
+                    true,
+                ));
+            }
+            if contract_evidence_is_certifiable(contract) {
+                Ok((fresh, None, false))
             } else {
-                (
+                Ok((
                     "unverified",
                     Some(format!(
                         "the contract's evidence is {:?}: its claims were generated, not reviewed",
                         contract.evidence.kind
                     )),
-                )
+                    false,
+                ))
             }
         };
         let local = discover_local_contract(project_directory, &module)?;
@@ -1247,55 +1467,78 @@ pub fn package_contract_statuses(
         // `audited` is set only when the winning tier is the checker's own
         // bundled artifact, which the consumer cannot regenerate. Every other
         // tier is a file the project owns.
-        let (status, detail, contract_path, audited) = if let Some(contract) = explicit.get(&module)
-        {
-            validate_discovered_contract_name(&module, contract)?;
-            let (status, detail) = classify(contract, "explicit");
-            (status, detail, contract.source_path.clone(), None)
-        } else if let Some(path) = local {
-            let contract = read_package_contract(&path)?;
-            validate_discovered_contract_name(&module, &contract)?;
-            let (status, detail) = classify(&contract, "local");
-            (status, detail, contract.source_path, None)
-        } else if let Some(path) = published {
-            let contract = read_package_contract(&path)?;
-            validate_discovered_contract_name(&module, &contract)?;
-            let (status, detail) = classify(&contract, "published");
-            (status, detail, contract.source_path, None)
-        } else if let Some(path) = bundled_path {
-            ("bundled", None, path.into(), None)
-        } else if let Some(contract) = bundled.as_ref() {
-            // The dialect ships a contract for this package, but audited
-            // another version. That is staleness, not absence: reporting it as
-            // a missing contract would point the user at a generation command
-            // for a package whose contract they do not own.
-            (
-                "stale",
-                Some(format!(
-                    "this checker audited {module} {}, but {} is installed",
-                    contract.package.version,
-                    installed_manifest
-                        .map_or("another version", |manifest| manifest.version.as_str())
-                )),
-                contract.source_path.clone(),
-                Some(contract.package.version.as_str()),
-            )
-        } else {
-            (
-                "missing",
-                None,
-                local_contract_path(project_directory, &module)
-                    .to_string_lossy()
-                    .into_owned(),
-                None,
-            )
-        };
+        let (status, detail, contract_path, audited, integrity_mismatch) =
+            if let Some(contract) = explicit.get(&module) {
+                validate_discovered_contract_name(&module, contract)?;
+                let (status, detail, integrity) = classify(contract, "explicit")?;
+                (
+                    status,
+                    detail,
+                    contract.source_path.clone(),
+                    None,
+                    integrity,
+                )
+            } else if let Some(path) = local {
+                let contract = read_package_contract(&path)?;
+                validate_discovered_contract_name(&module, &contract)?;
+                let (status, detail, integrity) = classify(&contract, "local")?;
+                (status, detail, contract.source_path, None, integrity)
+            } else if let Some(path) = published {
+                let contract = read_package_contract(&path)?;
+                validate_discovered_contract_name(&module, &contract)?;
+                let (status, detail, integrity) = classify(&contract, "published")?;
+                (status, detail, contract.source_path, None, integrity)
+            } else if let Some(path) = bundled_path {
+                ("bundled", None, path.into(), None, false)
+            } else if let (Some(contract), Some(disagreement)) =
+                (bundled.as_ref(), bundled_integrity.as_ref())
+            {
+                // The audited version *is* installed; the audited bytes are not.
+                (
+                    "stale",
+                    Some(format!(
+                        "this checker audited {module} integrity {}, but the lockfile installs {}",
+                        disagreement.contract, disagreement.installed
+                    )),
+                    contract.source_path.clone(),
+                    Some(contract.package.version.as_str()),
+                    true,
+                )
+            } else if let Some(contract) = bundled.as_ref() {
+                // The dialect ships a contract for this package, but audited
+                // another version. That is staleness, not absence: reporting it as
+                // a missing contract would point the user at a generation command
+                // for a package whose contract they do not own.
+                (
+                    "stale",
+                    Some(format!(
+                        "this checker audited {module} {}, but {} is installed",
+                        contract.package.version,
+                        installed_manifest
+                            .map_or("another version", |manifest| manifest.version.as_str())
+                    )),
+                    contract.source_path.clone(),
+                    Some(contract.package.version.as_str()),
+                    false,
+                )
+            } else {
+                (
+                    "missing",
+                    None,
+                    local_contract_path(project_directory, &module)
+                        .to_string_lossy()
+                        .into_owned(),
+                    None,
+                    false,
+                )
+            };
         let remedy = contract_remedy(
             project_directory,
             status,
             &module,
             package_directory.as_deref(),
             audited,
+            integrity_mismatch,
         );
         statuses.push(PackageContractStatus {
             name: module,
@@ -1320,11 +1563,19 @@ fn contract_remedy(
     module: &str,
     package_directory: Option<&Path>,
     audited_bundled_version: Option<&str>,
+    integrity_mismatch: bool,
 ) -> Option<String> {
     match status {
         // A bundled contract is the checker's own audited artifact. The
         // consumer cannot regenerate it, so the remedy names the two real
-        // options instead of a command they should not run.
+        // options instead of a command they should not run. An integrity
+        // disagreement gets its own sentence: the installed *version* is
+        // already the audited one, so "install the audited version" would name
+        // a state the project is in and read as a no-op.
+        "stale" if audited_bundled_version.is_some() && integrity_mismatch => Some(format!(
+            "install the exact {module} artifact this checker audited, or upgrade solid-checker \
+             to a release that audits the installed one"
+        )),
         "stale" if audited_bundled_version.is_some() => Some(format!(
             "install the audited version of {module}, or upgrade solid-checker to a release that \
              audits the installed one"
@@ -1392,49 +1643,53 @@ pub fn package_contract_statuses_with(
         // A refusal recorded during loading wins: the package has a contract
         // file, it just describes another release, and saying "missing" would
         // send the user looking for a file that is already there.
-        let (status, detail, contract_path) =
-            if let Some(entry) = stale_by_package.get(module.as_str()) {
-                (
-                    "stale",
-                    Some(if entry.bundled {
-                        format!(
-                            "this checker audited {module} {}, but {} is installed",
-                            entry.contract_version, entry.installed_version
-                        )
-                    } else {
-                        format!(
-                            "the contract describes {module} {}, but {} is installed",
-                            entry.contract_version, entry.installed_version
-                        )
-                    }),
-                    entry.contract_path.clone(),
-                )
-            } else {
-                let (status, contract_path) = match by_name.get(module.as_str()) {
-                    Some(contract) if !contract_evidence_is_certifiable(contract) => {
-                        ("unverified", contract.source_path.clone())
-                    }
-                    Some(contract) if explicit_sources.contains(contract.source_path.as_str()) => {
-                        ("explicit", contract.source_path.clone())
-                    }
-                    Some(contract) if contract.source_path.starts_with("bundled://") => {
-                        ("bundled", contract.source_path.clone())
-                    }
-                    Some(contract)
-                        if Path::new(&contract.source_path)
-                            == local_contract_path(project_directory, &module) =>
-                    {
-                        ("local", contract.source_path.clone())
-                    }
-                    Some(contract) => ("published", contract.source_path.clone()),
-                    None => (
-                        "missing",
-                        local_contract_path(project_directory, &module)
-                            .to_string_lossy()
-                            .into_owned(),
+        let (status, detail, contract_path) = if let Some(entry) =
+            stale_by_package.get(module.as_str())
+        {
+            (
+                "stale",
+                Some(match (&entry.integrity, entry.bundled) {
+                    (Some(integrity), _) => format!(
+                        "the contract was audited against {module} integrity {}, but the lockfile installs {}",
+                        integrity.contract, integrity.installed
                     ),
-                };
-                let detail = match status {
+                    (None, true) => format!(
+                        "this checker audited {module} {}, but {} is installed",
+                        entry.contract_version, entry.installed_version
+                    ),
+                    (None, false) => format!(
+                        "the contract describes {module} {}, but {} is installed",
+                        entry.contract_version, entry.installed_version
+                    ),
+                }),
+                entry.contract_path.clone(),
+            )
+        } else {
+            let (status, contract_path) = match by_name.get(module.as_str()) {
+                Some(contract) if !contract_evidence_is_certifiable(contract) => {
+                    ("unverified", contract.source_path.clone())
+                }
+                Some(contract) if explicit_sources.contains(contract.source_path.as_str()) => {
+                    ("explicit", contract.source_path.clone())
+                }
+                Some(contract) if contract.source_path.starts_with("bundled://") => {
+                    ("bundled", contract.source_path.clone())
+                }
+                Some(contract)
+                    if Path::new(&contract.source_path)
+                        == local_contract_path(project_directory, &module) =>
+                {
+                    ("local", contract.source_path.clone())
+                }
+                Some(contract) => ("published", contract.source_path.clone()),
+                None => (
+                    "missing",
+                    local_contract_path(project_directory, &module)
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+            };
+            let detail = match status {
                 "unverified" => by_name.get(module.as_str()).map(|contract| {
                     format!(
                         "the contract's evidence is {:?}: its claims were generated, not reviewed",
@@ -1443,8 +1698,8 @@ pub fn package_contract_statuses_with(
                 }),
                 _ => None,
             };
-                (status, detail, contract_path)
-            };
+            (status, detail, contract_path)
+        };
         let remedy = contract_remedy(
             project_directory,
             status,
@@ -1454,6 +1709,9 @@ pub fn package_contract_statuses_with(
                 .get(module.as_str())
                 .filter(|entry| entry.bundled)
                 .map(|entry| entry.contract_version.as_str()),
+            stale_by_package
+                .get(module.as_str())
+                .is_some_and(|entry| entry.integrity.is_some()),
         );
         statuses.push(PackageContractStatus {
             name: module,
@@ -1705,7 +1963,133 @@ mod tests {
     use solid_facts::{ProjectFacts, TypeScriptTable};
     use solid_reactive_ir::RuntimeEnvironment;
 
-    use super::{DiagnosticSession, retain_enabled};
+    use super::{DiagnosticSession, installed_package_integrity, retain_enabled};
+
+    fn scratch(label: &str) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!(
+            "solid-checker-diagnostics-{label}-{}-{:?}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&path).unwrap();
+        path
+    }
+
+    fn lockfile(version: u32, key: &str, integrity: Option<&str>) -> String {
+        let entry = integrity.map_or_else(
+            || "{ \"resolved\": \"packages/pkg\", \"link\": true }".to_owned(),
+            |value| format!("{{ \"version\": \"1.0.0\", \"integrity\": \"{value}\" }}"),
+        );
+        format!(
+            "{{ \"lockfileVersion\": {version}, \"packages\": {{ \"\": {{}}, {key:?}: {entry} }} }}"
+        )
+    }
+
+    /// The lockfile read is the whole basis of integrity enforcement, and every
+    /// way it can fail to produce a fact must produce *no* fact — never a
+    /// verdict. `None` here means the contract keeps applying on version
+    /// identity, so a wrong `Some` would refuse a good contract and a wrong
+    /// `None` would accept a bad one.
+    #[test]
+    fn lockfile_integrity_is_recovered_only_when_it_is_unambiguous() {
+        let root = scratch("lockfile-integrity");
+        let project = root.join("app");
+        let package = project.join("node_modules/pkg");
+        std::fs::create_dir_all(&package).unwrap();
+
+        // No lockfile at all: pnpm, Yarn, or a fresh checkout.
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // The plain lockfile, keyed by install path.
+        std::fs::write(
+            project.join("package-lock.json"),
+            lockfile(3, "node_modules/pkg", Some("sha512-one")),
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            Some("sha512-one".to_owned())
+        );
+
+        // The hidden lockfile agrees: still one fact.
+        std::fs::create_dir_all(project.join("node_modules")).unwrap();
+        std::fs::write(
+            project.join("node_modules/.package-lock.json"),
+            lockfile(3, "node_modules/pkg", Some("sha512-one")),
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            Some("sha512-one".to_owned())
+        );
+
+        // The hidden lockfile disagrees. Which one describes the bytes on disk
+        // is exactly the question this cannot answer, so it answers nothing.
+        std::fs::write(
+            project.join("node_modules/.package-lock.json"),
+            lockfile(3, "node_modules/pkg", Some("sha512-two")),
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+        std::fs::remove_file(project.join("node_modules/.package-lock.json")).unwrap();
+
+        // A workspace link has no registry tarball, so it has no integrity.
+        std::fs::write(
+            project.join("package-lock.json"),
+            lockfile(3, "node_modules/pkg", None),
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // lockfileVersion 1 keys its tree by package *name*, which cannot say
+        // which installed copy an entry describes under hoisting.
+        std::fs::write(
+            project.join("package-lock.json"),
+            lockfile(1, "node_modules/pkg", Some("sha512-one")),
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // A lockfile this checker cannot parse is the project's file, not a
+        // malformed contract: it yields no fact rather than failing the run.
+        std::fs::write(project.join("package-lock.json"), "{ not json").unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &package).unwrap(),
+            None
+        );
+
+        // A hoisted install: the package sits above the project, and the key is
+        // relative to the lockfile that owns that tree.
+        std::fs::remove_file(project.join("package-lock.json")).unwrap();
+        let hoisted = root.join("node_modules/pkg");
+        std::fs::create_dir_all(&hoisted).unwrap();
+        std::fs::write(
+            root.join("package-lock.json"),
+            lockfile(3, "node_modules/pkg", Some("sha512-hoisted")),
+        )
+        .unwrap();
+        assert_eq!(
+            installed_package_integrity(&project, &hoisted).unwrap(),
+            Some("sha512-hoisted".to_owned())
+        );
+
+        std::fs::remove_dir_all(&root).ok();
+    }
 
     #[test]
     fn unknown_finding_identities_fail_closed() {
@@ -1927,5 +2311,106 @@ mod tests {
         assert!(super::discover_rule_options(&directory).is_err());
 
         std::fs::remove_dir_all(&directory).ok();
+    }
+    /// An explicit `--contract` for an installed package is version-checked
+    /// however the project reaches that package. The check used to run only
+    /// when the package appeared in the import-derived module set, but
+    /// contract resolution also applies a contract to `export … from "pkg"`
+    /// re-exports, so a stale explicit contract could be applied to a package
+    /// this project only re-exports. A package that is not installed at all
+    /// still has nothing to be stale against.
+    #[test]
+    fn explicit_contracts_are_version_checked_without_an_import() {
+        let root = std::env::temp_dir().join(format!(
+            "solid-checker-explicit-contract-{}",
+            std::process::id()
+        ));
+        let project = root.join("tsconfig.json");
+        let installed = root.join("node_modules/reactive-package");
+        std::fs::create_dir_all(&installed).unwrap();
+        std::fs::write(
+            installed.join("package.json"),
+            r#"{ "name": "reactive-package", "version": "2.0.0" }"#,
+        )
+        .unwrap();
+        let contract = |version: &str| {
+            let path = root.join(format!("contract-{version}.json"));
+            std::fs::write(
+                &path,
+                format!(
+                    r#"{{
+                        "schemaVersion": 1,
+                        "package": {{ "name": "reactive-package", "version": "{version}" }},
+                        "compilerFactsProtocol": 1,
+                        "summaries": {{ "inert": {{ "kind": "function" }} }},
+                        "entrypoints": {{ ".": {{ "exports": {{ "inert": ["run"] }} }} }},
+                        "evidence": {{ "kind": "reviewed" }}
+                    }}"#
+                ),
+            )
+            .unwrap();
+            path.display().to_string()
+        };
+        // No file imports anything, so the import-derived module set is empty.
+        let facts = ProjectFacts {
+            generation: Generation::new(1).unwrap(),
+            project_id: project.display().to_string(),
+            files: Vec::new(),
+            typescript: TypeScriptTable::from_parts(
+                3,
+                1,
+                project.display().to_string(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ),
+            typescript_changes: None,
+        };
+
+        let stale_path = contract("1.0.0");
+        let loaded = super::load_package_contracts_reporting(
+            crate::dialect::default_dialect(),
+            &project,
+            &facts,
+            std::slice::from_ref(&stale_path),
+            None,
+        )
+        .unwrap();
+        assert!(
+            loaded.contracts.is_empty(),
+            "a contract for reactive-package 1.0.0 must not apply while 2.0.0 is installed"
+        );
+        assert_eq!(loaded.stale.len(), 1, "{:?}", loaded.stale);
+        assert_eq!(loaded.stale[0].package, "reactive-package");
+        assert_eq!(loaded.stale[0].installed_version, "2.0.0");
+
+        let current_path = contract("2.0.0");
+        let loaded = super::load_package_contracts_reporting(
+            crate::dialect::default_dialect(),
+            &project,
+            &facts,
+            std::slice::from_ref(&current_path),
+            None,
+        )
+        .unwrap();
+        assert_eq!(loaded.contracts.len(), 1);
+        assert!(loaded.stale.is_empty());
+
+        // The same contract for a package that is not installed keeps its
+        // pre-existing behavior: there is no manifest to disagree with.
+        std::fs::remove_dir_all(root.join("node_modules")).unwrap();
+        let loaded = super::load_package_contracts_reporting(
+            crate::dialect::default_dialect(),
+            &project,
+            &facts,
+            std::slice::from_ref(&stale_path),
+            None,
+        )
+        .unwrap();
+        assert_eq!(loaded.contracts.len(), 1);
+        assert!(loaded.stale.is_empty());
+
+        std::fs::remove_dir_all(&root).ok();
     }
 }

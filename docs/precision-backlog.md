@@ -364,8 +364,8 @@ and direct exported owner requirements (`effect`, `cleanup`, `boundary`, and
 certification.
 
 The following source/runtime behaviors remain explicit fail-closed obligations,
-not silent omissions: parameter-member invocation such as `reader.read(value)`;
-component identity and reactive-prop obligations; reactive-write/action
+not silent omissions: argument-dependent computed callback maps; component
+identity and reactive-prop obligations; reactive-write/action
 constraints inside owned or leaf scopes; returned adapters whose callback
 behavior appears only when the adapter is invoked; async/reactive-source
 settlement through an uncontracted package; and conditional behavior whose
@@ -1574,6 +1574,347 @@ obligation under the v1 identity. The real-typings oracle carries keystones for
 both dialects and TS2349 negative controls; invalid calls remain TypeScript's
 job and never receive SC9012.
 
+## Closed 2026-08-22: package contracts preserve parameter-member reads
+
+Schema version 1 now has the additive `reactiveReads` form
+`{ "kind": "parameter-member", "parameter": N }`. The producer already knew
+the exact parameter symbol behind a direct member receiver; it now exports that
+provenance instead of refusing every JavaScript runtime artifact at the open
+package boundary. Local and module-local receivers are unchanged and do not
+become public effects.
+
+Consumers instantiate the row per call site. Proven reactive store/path
+arguments contribute a read, inline primitive/array literals are clean, and an
+opaque argument is SC9012 rather than guessed plain. Local wrapper summaries preserve
+the same parameter provenance. The package generator fixture
+`fixtures/package-contracts/parameter-member-read/` pins the runtime-artifact
+claim and its negative local-receiver controls;
+`fixtures/reactive-ir/package-parameter-member-consumer/` pins the reactive,
+plain, and uncertifiable consumer outcomes.
+
+Argument-value/identity-dependent dispatch remains deliberately open. A
+contract variant keyed by an arbitrary runtime argument would export the
+callee's dispatch table, has no bounded exhaustiveness proof, and is not the
+same thing as environment `variants` with ordered export-map conditions.
+`solid-recharts`-style sentinel dispatch therefore remains correctly
+uncertifiable. Parameter-attributed writes are also not claimed: their
+operation and ownership semantics need a separate design rather than symmetry
+by spelling.
+
+## Closed 2026-08-22: legacy ESM roots reach contract generation
+
+The package generator no longer requires `package.json#exports` when the
+runtime artifact still has one exact legacy ESM root. It recognizes `module`,
+an ESM-safe `main`, and an unambiguous ESM index fallback, all through the same
+entrypoint-resolution module used before semantic analysis. The negative CJS
+fixture pins that a conventional `main: index.js` without ESM package semantics
+is refused rather than interpreted under the generator's TypeScript settings.
+Missing, absolute, escaping, declaration-only, and CJS targets remain
+unsupported. This changes package-shape reachability only; it does not add
+trust or weaken any reactive proof obligation.
+
+On the fixed 417-probe ecosystem manifest, 7 of the 11 former
+`unsupported-package-shape` probes now generate reviewable drafts. Two more
+reach semantic analysis and expose their real unresolved read/dispatch
+obligations; one is correctly classified CJS-only, and one declares a missing
+module artifact and remains no-ESM. Whole-corpus success moves from 336/417
+(80.58%) to 343/417 (82.25%) with zero timeouts.
+
+## Closed 2026-08-22: contracts distinguish proven none from unknown
+
+Schema version 1 now accepts `{ "status": "unknown" }` in each existing
+effect-claim field. Omission retains its previous reviewed meaning of proven
+none. The marker occupies the existing field rather than a new sibling, so an
+old loader rejects its incompatible type instead of ignoring a new property
+and failing open. The Rust contract module normalizes both wire forms behind a
+single `ContractClaim<T>` interface.
+
+An exact exported callback obligation emits a partial reviewable draft with
+`callbacks` unknown and keeps independently proven reads, returns, owner
+requirements, and async behavior.
+Consumers demand that uncertainty only when a call supplies a potentially
+callable value; a no-argument call remains clean. Read, return, owner, and async
+obligations now become unknown only in their affected domain. Exact containing
+function identity keeps clean sibling exports intact; an import-level or
+transitive obligation that cannot be joined to one export falls back to all
+applicable function exports, which is conservative but permits a reviewable
+entrypoint draft.
+
+Callback rows also carry bounded `arguments` descriptors. A producer records a
+fresh accessor passed to a callback parameter, and a consumer marks only the
+matching callback-function parameter reactive. The
+`callback-reactive-arguments` package fixture pins the producer behavior and
+ensures the handoff itself is not reported as an uncaptured read.
+
+`fixtures/reactive-ir/package-unknown-callback-consumer/` pins the demanded and
+non-demanded consumer cases, and
+`fixtures/reactive-ir/package-unknown-returns-consumer/` pins the other half:
+a non-callback domain, which is opened where the claim enters the project
+rather than where a call demands it, with a sibling export whose summary
+withholds nothing staying clean.
+`cli_reports_the_exact_unknown_claim_domain` holds the finding to naming the
+one domain left unknown, since a summary that states four domains and
+withholds one is not the same evidence as a summary that states nothing. The
+existing unknown-callback producer process
+fixtures pin partial emission, a known sibling callback summary, and cyclic
+forwarding termination. Unresolved dispatch, unknown package identity, and
+unreviewed evidence remain correctly uncertifiable at consumption even when
+generation can write a partial draft.
+
+The fixed 305-row/417-probe ecosystem manifest measures the result directly.
+All 21 probes previously classified as `unresolved-parameter-behavior` now
+generate contracts, so that class falls from 21 to zero. Across the complete
+worktree (including the companion parameter-member and runtime-identity
+slices and legacy ESM resolution), success rises from 291/417 (69.78%) to
+343/417 (82.25%), a gain of 52 probes or 12.47 percentage points. The corrected full-run target uses the
+documented 600-second budget and completed with zero timeouts; the generated
+JSON and Markdown reports live under `benchmarks/ecosystem/`.
+
+## Closed 2026-08-22: package generation reaches the artifact ceiling
+
+The remaining semantic generation classes on the pinned ecosystem corpus are
+now zero. The generator represents ordered conditional branches whose export
+`kind` differs, recursively generates and caches exact installed dependency
+contracts, scopes unresolved obligations to the affected export and claim
+domain, carries accessor-valued callback arguments, and treats exact
+standard-library declarations as platform behavior rather than an unresolved
+package dispatch. None of these inferred drafts become reviewed evidence.
+
+Generation projects now contain the exact static relative runtime-module
+closure of an entrypoint instead of every JavaScript file below its distribution
+directory. This keeps published `.js` barrels ahead of adjacent declarations
+without repeatedly loading unrelated bundles. Return facts are also assigned to
+their innermost summary and AST owners once, instead of rescanning every return
+for every function. Returned-factory lookup likewise indexes exact binding,
+factory, return-owner, symbol, and function-span relationships once per file,
+instead of rescanning the bundle for every direct call. On the former
+`@tanstack/ai-devtools-core` timeout, these changes reduce generation of both
+entrypoints from 128.32 to 10.37 seconds in the debug-binary reproducer. Release
+cold analysis falls from 4.03 seconds to 0.474 seconds; return-summary
+attribution itself falls from 3.13 seconds to 34 milliseconds, and
+interprocedural graph construction falls from 314 to 33 milliseconds after the
+return-attribution optimization.
+
+The measured result is **407/417 (97.60%)**, up from **343/417 (82.25%)**:
+64 additional successful probes and 15.35 percentage points. The remaining ten
+failures are six npm peer-resolution failures, three packages with no usable
+ESM runtime artifact, and one CJS-only tsup bundle. There are zero timeouts and
+zero semantic contract-generation failures. CJS stays fail-closed: the one
+remaining bundle exposes generated `__export`/`__toCommonJS` machinery rather
+than a statically auditable `module.exports` surface, and declarations are not
+runtime proof. The exact report is `benchmarks/ecosystem/report.json` with the
+human-readable companion `report.md`.
+
+The full-corpus target now measures the optimized product binary rather than a
+debug checker and schedules `min(available CPUs, 8)` probes concurrently. On
+the same 417-probe manifest, wall time is **104.394 seconds**, down from
+**238.502 seconds** for the four-worker debug run (56.23% less, 2.28x faster),
+with the same 407 successes and ten artifact/install failures. Reports now
+record installation and generation separately: this run spent 542.020 seconds
+of aggregate worker time installing, 211.963 seconds generating, and 0.879
+seconds in harness bookkeeping. The remaining full-run floor is therefore
+primarily isolated npm resolution rather than semantic contract analysis.
+
+**Superseded as the current figure, 2026-08-22.** The numbers above are the
+measurement of that change on the then-current 417-probe manifest and stay as
+history. The manifest is now 305 rows / 416 probes, and the regenerated
+reports read **403 complete contracts, 6 partial, 7 failures** in 94.286 s —
+not a regression from 407/417 but a stricter count, since `partial-success`
+had not yet been split out when 407 was measured. See "The ecosystem benchmark
+counted partial contracts as successes" below for the full old-versus-new
+accounting.
+
+## Closed 2026-08-22: contract review no longer certifies unobserved callbacks
+
+Five defects in the package-contract slice shared one shape: generation
+succeeded where it could only have said "unknown", and the review plan no
+longer surfaced the negative claim that resulted. They are recorded together
+because fixing any one of them alone leaves the same class open.
+
+**Callbacks forwarded into an unresolvable callee.** A call whose callee had
+neither a dispatch candidate nor a resolvable identity was dropped from the
+graph entirely. That is `list.map(fn)` where `list` is one of the exported
+function's own parameters -- `any` in every published JavaScript runtime
+artifact, since the generation project deliberately keeps the runtime `.js`
+ahead of its adjacent declarations. The forwarded callback escaped with no
+recorded behavior, and an omitted `callbacks` field is a *negative* claim, so
+silence certified "never invoked". `main` refused these packages outright; the
+parameter-member slice replaced that refusal without covering the callback
+path underneath it. Measured on the real registry:
+`@solid-primitives/utils@6.3.2` claimed `map`, `filter`, and `sort` invoke
+nothing and `tryOnCleanup` needs no owner, and
+`@solid-primitives/event-listener@2.4.4` claimed `makeEventListener` never runs
+its handler. A consumer of the promoted contract reported SC1001 on a signal
+read inside a DOM click handler -- a proven violation asserted from a claim the
+contract never had. Such calls now open the existing unknown-callback
+obligation, scoped to arguments that are parameters of the enclosing exported
+function and whose own syntax does not already prove them inert.
+
+Two consumer-side halves follow from it. A literal argument is now proof of
+non-callability in its own right (`slice(list, 0, 2)` demands nothing from an
+unknown callback claim, where every argument previously did, because the type
+system reports "potentially callable" whenever it has no type at all). And a
+read inside a callback whose contract timing is unknown is no longer reported
+as a proven untracked read: the call already carries an SC9005 obligation, and
+claiming the timing on top of it asserts exactly what the contract says it does
+not have.
+
+**`default` branches were unmatchable.** Generation encodes an export map's
+fallback as the literal condition `default`, but `selected_conditions()` never
+produces that string, so `matches_conditions` could never satisfy it. Every
+consumer with a real environment selected fell through to an
+environment-dependent uncertifiable result -- including the one the fallback was
+generated for. `default` is now satisfied by any selected environment and by no
+selection at all, and `precedence` decides among several matching branches.
+Handwritten contracts, which carry no `precedence`, resolve only the case that
+needs no invented order: a named branch beats the unconditional fallback, while
+two named branches stay fail-closed.
+
+**`--conditions` erased the environment it was scoped to.** A contract
+generated with an explicit selection recorded nothing about it, so a consumer
+in any other environment applied it. The selection is an assertion about the
+resolving environment rather than an observation of the export map, so a
+branching entrypoint now carries it and a differing consumer fails closed. An
+entrypoint with one unconditional target still records nothing.
+
+**Conditional export-name absence was silently unconditional.** A name observed
+in only some branches was published as a complete unconditional summary,
+handing a consumer in the other environment a claim about an export that does
+not exist there. The proven branches are now retained as `variants` even when
+they agree, and normalization no longer collapses a variant set that fails to
+cover its entrypoint's conditions.
+
+**Legacy `module`/`main` provenance was invisible.** A legacy dual package's
+contract describes only the analyzable ESM build. Refusing the package would
+reject every legacy dual package, including the common case where `main` is the
+CJS transpile of the same source, so the review plan now names the field the
+root came from and says when `main` points elsewhere.
+
+**The checklist section that would have caught all of this was removed.** The
+"callbacks with no execution row" section is restored; `docs/package-contracts.md`
+had continued to promise it.
+
+Regression pins: `fixtures/package-contracts/unresolved-callee-callback`,
+`conditional-export-absence`, and `legacy-dual-root` in the contract corpus;
+`selected_variant` and `RuntimeEnvironment::matches_conditions` unit tests; a
+review-plan test for legacy provenance; and
+`fixtures/reactive-ir/package-variant-precedence-consumer`, which carries the
+selection through to a consumer's proof. Its two exports declare the same two
+overlapping branches and differ only in `precedence`: the unique lowest one
+resolves the branch whose accessor return makes an untracked read provable,
+and the tie leaves the import binding uncertifiable with the identical read
+unreported. The unit tests alone could not distinguish a working selection
+function from one whose answer never reached a consumer.
+
+Remaining approximation, deliberately: an argument to a `parameter-member` read
+whose origin the project cannot see -- a parameter, a prop, an import, a bare
+`declare const` -- stays SC9012. A Solid store is a proxy typed as the object it
+wraps, so no declared type proves the negative; only inline literal syntax or an
+analyzed initializer with a standard-library origin does.
+
+Generation reachability did not move, which is the expected result: a contract
+carrying an explicit unknown marker is still a generated, reviewable draft. The
+run that first measured these fixes read 407/417 on the manifest they were
+reviewed against, matching the run before them exactly, with zero timeouts and
+zero semantic contract-generation failures.
+
+What moves is review surface, which is the point. On two pinned versions,
+holding the package release constant so the comparison is not confounded by a
+package update: `@solid-primitives/utils@6.3.2` goes from 23 to 73 checklist
+items (43 of them the restored "callbacks with no execution row" section, and
+unknown export claims rising from 2 to 9), and
+`@solid-primitives/event-listener@2.4.4` from 12 to 14 (unknown export claims 3
+to 7, including `makeEventListener`). A run that does not show that rise has
+not applied these fixes.
+
+The corpus denominator has since changed twice, so those two numbers are not
+directly comparable to the current report -- see the entry below.
+
+## Closed 2026-08-22: the ecosystem corpus measures a real environment
+
+Three selection and reporting defects made benchmark numbers describe the
+harness rather than the ecosystem. All three were found by reading the failure
+list rather than the success rate, which is the general lesson: 407/417 was
+stable across a run that shipped materially wrong contracts and a run that
+fixed them.
+
+**Solid 2 floors selected environments nobody supports.** The 2.x line spent a
+long time in `experimental` and `beta`, so a package published this month can
+still declare a range whose formal lower bound is an old beta while its own
+dependencies have moved on. Flooring at that bound produced peer conflicts that
+described nothing. The floor is now anchored at `2.0.0-rc.0`, and only ever
+raised: a range accepting no `rc` keeps its own oldest accepted beta, the same
+rule that keeps a beta-only package off a newer release candidate at the head.
+`compatibleSolidVersions` still records the complete accepted set, so the range
+fact is preserved and only the probe moves. Seventeen genuinely beta-only
+probes remain in the corpus.
+
+**Floor tuples were assembled per package and could not coexist.** Flooring
+`solid-js`, `@solidjs/web`, and `@solidjs/signals` independently can synthesize
+an environment that has never existed. `@tanstack/solid-router@2.0.0-rc.1` pins
+`@solidjs/web@^2.0.0-rc.1`, and that release peers `solid-js ^2.0.0-rc.1`, so a
+floor pairing `solid-js@2.0.0-rc.0` with web rc.1 was refused by npm before the
+checker ran. The selector now raises a floor to a fixed point until the runtime
+packages accept each other, collapsing the row to one `only` probe when floor
+and head coincide. The catalog carries each runtime release's declared ranges on
+its siblings to make that decidable.
+
+**Two failure classes were conflated.** `no-esm-runtime-target` meant both "the
+package declared a runtime target that does not exist" -- a publishing mistake --
+and "the ESM target resolved, parsed, and exports nothing", which is a
+well-formed side-effect-only module with no reactive surface to describe. The
+second is now `no-exported-surface`. It is still a failure rather than a
+success: promoting it would require the generator to emit an empty contract,
+which is a semantics change and not a reporting one.
+
+Two reporting defects travelled with them. A filtered run wrote the canonical
+`report.json`, so a 23-probe sentinel silently replaced the full-corpus
+artifact, and the report recorded no scope, so its header described the
+manifest's 417 probes while its body held 23 results -- a clobbered report was
+undetectable. Reports are now named for their scope, record it, and refuse a
+`--baseline` from a different one. Separately, `diffManifests` compared version
+and integrity but not probes, so a policy change printed "(no changes)" directly
+above `--check`'s "file is out of date" verdict. `--check` itself was never
+wrong: it compares the whole serialized document and correctly refused such a
+manifest. The diff now reports probe changes, on the rule the same file already
+states for exclusions and limitations.
+
+The measured result is **409/416**. The denominator fell by one because the
+incoherent `@tanstack/solid-router` floor collapsed into its head rather than
+being probed as an environment that cannot install. All seven remaining
+failures are outside this repository: two packages whose published manifest
+names a file absent from the tarball (`@kobalte/themes`,
+`@solid-primitives/composites`), two with self-contradictory peer ranges
+(`@kobalte/solidbase`, and `@tanstack/solid-router-ssr-query` on both probes,
+whose `@tanstack/solid-query >=5.90.0` peer cannot select any Solid 2 build
+because every such release is a prerelease and a non-prerelease range never
+matches one), one correct CJS refusal, and one side-effect-only module. Zero
+timeouts, zero `type-facts-failure`, zero semantic contract-generation failures.
+
+## Open: generation success is not contract correctness
+
+The ecosystem benchmark counts whether `contract generate` produced a document,
+not whether the document is true. That distinction is not academic: the run
+immediately before the unknown-callback fixes measured 407/417 while
+`@solid-primitives/utils` shipped a contract asserting that `map`, `filter`, and
+`sort` never invoke their callbacks, and `@solid-primitives/event-listener`
+asserting that `makeEventListener` never runs its handler. The metric was within
+a percent of its cap and materially wrong at the same time.
+
+The current run emits **14,309 checklist items across 409 invocations**, a mean
+of 34. Every one of those contracts is `inferred` evidence held below the SC9005
+trust ceiling, and none of those items has been reviewed against the packages'
+published sources. So the corpus establishes that the generator reaches
+essentially every installable package, and establishes nothing about whether
+what it writes is correct.
+
+Closing this needs a different measurement: review a sample of generated
+contracts by hand against the real sources and count how many checklist items
+resolve to "the generator was right" versus "the generator claimed something
+false". Until that exists, a high success rate should be read as reachability
+only, and the contract corpus under `scripts/contract-corpus.mjs` plus the
+fixture snapshots remain the only checked-in evidence about correctness.
+
 ## Design-change candidates (open)
 
 ### `execution-map-incomplete` (SC9004) moved to producer integrity
@@ -1730,3 +2071,1247 @@ answer when extension/index candidates are ambiguous.
   reruns emit typed owned regions without changing generated code. Custom
   wrappers make no claim; component and runtime-callback ownership still comes
   from exact TypeFacts identity and package contracts.
+
+## Closed 2026-08-22: two vendored Solid 1.x compiler census gaps
+
+Found by the ecosystem benchmark (`docs/ecosystem-benchmark.md`), which ran
+`contract generate` against 417 real package/Solid-version probes. Two probes
+failed with the `type-facts-failure` class, and both are **defects in the
+vendored Solid 1.x JSX compiler, not in this repository's `rust/` tree**. Both
+are recorded here rather than worked around: the checker is failing closed for
+a reason that is real, but the reason is a bookkeeping disagreement inside the
+compiler, not genuine ambiguity in the analyzed package.
+
+Both live in `packages/compiler/src/semantic_trace.rs` of
+`github.com/yumemi-thomas/solid-1x-compiler`, pinned at rev
+`79b9b63721c59b0acfd72348438bbb6e090ec81c` (`rust/Cargo.toml`'s
+`solid1-dom-expressions-compiler`). That file reconciles a **census** (every
+JSX site the compiler owes an answer about) against the **trace** (the answer
+lowering actually gave); `TraceRecorder::finish()` fails when the two disagree.
+`rust/dialects/solid-v1/compiler` only consumes the finished trace and has no
+seam to intervene, so neither is fixable from here. Fixing them means an
+upstream change plus a `rev` bump per `docs/monorepo.md` — not a floated
+branch.
+
+Both are **Solid 1.x only**; the identical constructs compile cleanly under the
+Solid 2.0 dialect, whose fork does not share either mechanism.
+
+- **Static `style`/`classList` object before a later spread, on a native
+  element.** Reported as `semantic trace has unresolved execution sites:
+  NativeAttribute@<span>`, where the span is the whole object literal.
+  Observed on `@kobalte/core@0.13.13`; reproduced in eight lines as
+  `<input tabIndex={-1} style={{ "font-size": "16px" }} name={props.name} {...props} />`.
+  The census decides whether to decompose the object using an element-wide
+  "does this element have any spread" flag, while lowering uses a
+  per-attribute, position-aware test (`!seen_spread && !dynamic`) that peels a
+  static pre-spread attribute back into the ordinary template planner. The
+  census records one opaque site that nothing then resolves. Removing the
+  spread, or making the style value dynamic, both avoid it.
+- **JSX fragment nested inside a callback passed as a control-flow built-in's
+  prop.** Reported as `semantic decision targets an uncensused JsxChild site at
+  <span>`. Observed on `@tanstack/ai-solid-ui@0.7.17`; reproduced with a
+  `<Show fallback={(() => { ... return cond ? <>{expr}</> : null })()}>`. The
+  census tracks "am I under a component" in a mutable `parent_component` flag
+  that survives the recursive walk into attribute-value expressions, so a
+  fragment created inside a separately scoped closure is censused as
+  `ComponentChild` while lowering correctly decides `JsxChild` for the same
+  span. Same span, different kind, so reconciliation fails. Solid 2.0 replaced
+  the flag with an explicit set of component-child fragment spans, which is why
+  it cannot occur there.
+
+Status: **fixed upstream and pinned**. `rust/Cargo.toml` moved
+`solid1-dom-expressions-compiler` from `79b9b63721c59b0acfd72348438bbb6e090ec81c`
+to `ad2c9452041c757138bb972416d8abc4798ea6b9`, which carries both fixes:
+`style`/`classList` decomposition now follows the same positional spread
+carve-out lowering uses, and fragment children are classified from a span set
+instead of a flag that leaked through attribute values. Both are census-only,
+so emitted output is byte-identical across the two revisions.
+
+The corpus confirms it: `@kobalte/core@0.13.13` and `@tanstack/ai-solid-ui`
+both generate cleanly, and the whole 416-probe run contains zero
+`type-facts-failure` results. Neither was a `tsc` concern in any form — this is
+JSX-lowering execution-fact bookkeeping, so the absolute rule in AGENTS.md was
+never implicated either way.
+
+## Generated contracts are byte-bound only in the single-artifact case (2026-08-22)
+
+`contract generate` used to write `artifacts: {}` unconditionally, so nothing
+tied a generated contract to the bytes it describes beyond a version string —
+and a version string is not a pin: republished or locally patched contents keep
+the version, and the contract would still claim to describe them. The consumer
+has always verified artifact hashes whenever present
+(`validate_contract_artifacts` in
+`rust/crates/solid-facts-backend/src/diagnostics.rs`), so the gap was entirely
+on the producer side.
+
+Generation now emits a real `artifacts.implementation` `{ path, hash }` pair —
+the `hash` value carries the `sha256:` prefix — whenever schema v1 can carry it:
+the contract's emitted entrypoints resolve to exactly one runtime artifact and
+that file is inside the contract's own directory (the in-package default
+output). Several residues remain, all recorded on the review plan as
+`contract artifact binding` items rather than papered over:
+
+- **Multi-artifact packages stay unbound.** Schema v1's `artifacts` object has
+  exactly one `implementation` slot, and a package whose entrypoints resolve to
+  several runtime files cannot be described by it. Hashing one of them would
+  claim byte identity for a contract whose other entrypoints describe files
+  nothing pins, so nothing is emitted. Closing this needs a per-entrypoint (or
+  list-valued) artifact claim, which is a new schema shape rather than an
+  additive field — an old schema-v1 reader must not be able to ignore a new
+  sibling and read the omission as "no artifacts to check". Owner: a future
+  schema revision, reviewed on its own.
+- **Even a bound contract is bound at its entry artifact only.** The hash covers
+  the export-map target file, while the analysis behind the summaries consumes
+  that target's whole relative runtime-module closure (`runtimeModuleClosure` in
+  `packages/cli/scripts/generate-package-contract.mjs`, seeded as the analysis
+  roots in `analyzeTarget`). A barrel entry —
+  `export { x } from "./internal.mjs"` — therefore gets a "bound" contract whose
+  semantics come from a file no hash pins: patch `internal.mjs` and the entry
+  bytes, and the hash with them, are unchanged. The hash is still real evidence
+  about the entry file and keeps being emitted; the review plan now states the
+  entry artifact is hashed and counts the closure modules that are not
+  byte-bound. Closing this needs the same new schema shape as the multi-artifact
+  residue — a list-valued or per-module artifact claim — so it is owned by that
+  future schema revision, not by the generator.
+- **Out-of-package outputs stay unbound.** A project-owned contract under
+  `.solid-checker/contracts/<package>/` sits outside the package, so its
+  artifact path could only be spelled with `..`, which the loader rejects by
+  design. Nothing to fix here on the producer side; the review plan says the
+  contract is not byte-bound, and the reviewer checks the artifact by hand.
+- **No declaration artifact is ever generated.** The package generator analyzes
+  runtime targets and never resolves the `types` condition, so it has read no
+  declaration file whose bytes it could claim. `artifacts.declaration` remains
+  available to the lower-level `--declaration-artifact` workflow, which is
+  handed the exact file.
+
+None of this is a `tsc` concern in any form: artifact identity is a trust-
+boundary fact about bytes on disk, which the type system says nothing about.
+
+## The runtime-module closure is walked, not attested (2026-08-22)
+
+The per-entrypoint closure in a review plan's `generation.entrypoints` block is
+what `contract review --transfer-from` treats as *the bytes this review was
+recorded against*: an entrypoint transfers only when its recorded module paths
+and sha256s are identical on both sides. That record is produced by
+`packages/cli/scripts/runtime-module-closure.mjs` — a scanner and resolver in
+the Node process, walking the same specifier forms TypeScript would. It is not
+the file list the analyzing program actually opened.
+
+The gap is real and was exploitable. Three shapes were silently omitted, each
+producing a closure record that named fewer files than the analysis read while
+claiming to name all of them:
+
+- an ESM-spelled `./impl.js` whose checkout ships `impl.ts` (TypeScript's
+  extension substitution);
+- a `#`-prefixed specifier resolved through the manifest's `imports` map;
+- every import below a string literal containing `/*`, because the comment
+  stripper was a regular expression that knew nothing about strings.
+
+A byte-identical barrel entry over a fully rewritten implementation therefore
+transferred an entire review and promoted to `reviewed` evidence with zero
+human decisions.
+
+The walker now handles all three, and — more importantly — is fail-closed
+instead of best-effort. Every static specifier form is resolved to a recorded
+file, classified as carrying no runtime semantics (a declaration file), or
+classified as external (a bare specifier, which the package-contract boundary
+owns and no closure hash could pin). Anything else adds a `notes` entry to that
+entrypoint's closure record, and a note makes the entrypoint non-transferable
+and surfaces on the review plan's `contract artifact binding` section. A dynamic
+`import()` with a non-literal specifier is noted for the same reason.
+
+**The residue**: a syntax walk can still disagree with the compiler in ways
+neither side reports — a `paths` mapping, a resolution the bundler condition
+resolves differently, a specifier form the scanner classifies as external that
+the analyzed program in fact opened. Nothing in this process can observe that,
+because the process that resolved the modules is the other one. The exact fix is
+a TypeFacts protocol addition: the analyzing program already knows its own file
+list, and emitting it would turn the closure from a reconstruction into an
+attestation. Until that exists, unresolvable specifiers fail closed via notes
+and the record stays a generator-side claim.
+
+Two adjacent facts belong with it. `contract generate --missing` writes
+project-owned contracts under `.solid-checker/contracts/<package>/`, which are
+outside the package by construction and therefore never byte-bound at the loader
+(see the out-of-package residue above) — so the artifact-binding residue is the
+*default* shape for project-owned contracts, not an edge case, and the review
+plan's binding section is the only thing standing in for a hash there. And the
+closure record is not evidence the loader reads: it lives in the review plan, and
+nothing outside `contract review` consults it.
+
+`tsc` has nothing to say about any of this. Which files a contract's summaries
+were derived from is a provenance fact about a generation run, not a typing
+question.
+
+## The ecosystem benchmark counted partial contracts as successes (2026-08-22)
+
+`scripts/ecosystem-benchmark/` classified any exit-0 generation as `success`,
+including a contract that refused entrypoints and said so on stdout. The
+checked-in `benchmarks/ecosystem/report.md` therefore reports the Official
+Solid family under Solid 1.x as "Declared entrypoints: 44 / Generated
+entrypoints: 28 / Success: 6/6 (100%)", with no field anywhere in the report
+that could attribute the gap. Classification now has a `partial-success` class
+and a matching probe outcome, so `success` means a complete contract, and the
+refused entrypoints are counted, summed per family, and listed by package.
+
+Adding the third outcome also left every *comparison* in the report still
+written as a two-valued test. `buildBaselineComparison` and `buildFloorHeadDiffs`
+in `scripts/ecosystem-benchmark/lib/report.mjs` asked "was it `success`, is it
+`success`", so a probe going `partial-success` → `failure` — the run where the
+contract disappeared entirely — matched neither regression nor fix, and the
+symmetric `failure` → `partial-success` gain matched neither either. Both now
+compare direction on the ordered scale `success > partial-success > failure`,
+carry both outcomes on each entry, and render the transition rather than a
+hardcoded destination. The floor/head headings are named for direction
+("Worse/Better at head than at floor") for the same reason.
+
+**Regenerated 2026-08-22.** The checked-in reports now carry the split. On the
+305-row/416-probe manifest with the release binary, the full corpus is
+**403 complete contracts, 6 partial, 7 failures**, against **409 successes and
+7 failures** on the same manifest before the split. The failure set is
+unchanged package-for-package and class-for-class, and all 6 partials are
+former successes (`@kobalte/core`, `@tanstack/charts`,
+`@tanstack/solid-pacer`, `@tanstack/solid-router`, and `solid-js@2.0.0-rc.1`
+on both floor and head): `409 = 403 + 6`. The typed generation-refusal change
+moved no probe into a failure class. The sentinel subset moves the same way —
+23 probes, 20 complete, 2 partial, 1 failure — and now runs against the same
+manifest as the full report instead of an older 417-probe one.
+
+The measurement also refutes half of the prediction above. The Official Solid
+"44 declared / 28 generated" gap is **not** refusals: that family records zero
+refused entrypoints while still generating 11 of `solid-js`'s 23 declared
+entrypoints and 2 of `@solidjs/image`'s 5, all classified `success`. Declared
+counts include export-map branches for which the generator emits no contract
+entrypoint at all, and no field attributes that. It is recorded as unmeasured
+in docs/ecosystem-benchmark.md rather than as closed by this class.
+
+## Closed 2026-08-22: schema-valid callback argument claims are never dropped
+
+Contract callback rows may carry `arguments` descriptors — "this helper hands
+your callback a reactive value at parameter N". Source discovery materializes
+one shape only: an inline function literal whose span *is* the call-site
+argument, carrying an `accessor` descriptor. Every other schema-valid shape —
+a callback passed by name, or a `store-path`/`tuple`/`object`/`argument`
+descriptor — was dropped in silence, so the callback body was analyzed as if
+the contract had said nothing about its arguments. Reads through the callback's
+parameters then looked like ordinary data: fail-open, and no gate could see it,
+because no checked-in contract uses `arguments` yet.
+
+The consumer now keeps those call sites demand-sensitive, through the same
+per-export SC9005 path the unknown-callback domains use
+(`rust/crates/solid-reactive-ir/src/interproc.rs`). Precision is unchanged
+where the claim binds: an inline literal carrying only `accessor` descriptors
+still materializes the accessor and reports nothing. A descriptor beyond the
+literal's declared parameters is not a gap either — but only when the literal is
+a *restless arrow*, the one shape that provably cannot name the argument. A
+non-arrow function expression reads the slot as `arguments[N]`, and a rest
+parameter — which `FunctionFact.parameters` deliberately excludes, because it
+has no single argument index — absorbs every argument from its index onward;
+`mapPath((...args) => args[0].value)` was silently clean before that fact was
+carried (`FunctionFact.rest_parameter`, added in
+`rust/crates/solid-facts/src/ast/mod.rs`).
+`fixtures/reactive-ir/package-callback-arguments-consumer/` pins all six
+outcomes.
+
+**Remaining approximation.** The non-`accessor` descriptor kinds are *reported*
+rather than *modeled*: a `store-path` argument handed to a callback is a real,
+expressible claim that the consumer could materialize as a store source. Until
+it does, such a contract makes the call uncertifiable instead of certified.
+That is fail-closed and honest, but it is a claim shape the schema allows and
+the consumer does not yet use.
+
+## Closed 2026-08-22: contract and dispatch obligations no longer suppress each other
+
+`PackageContractExportMissing` consumer obligations and genuine
+`ReactiveDispatchUnresolved` findings travel in one vector — they are found by
+the same interprocedural walk — and both were deduplicated under the single
+identity `reactive-dispatch-unresolved`. The dedup key is
+`(identity, path, start_byte)`, so an SC9005 and an SC9012 that merely started
+at the same byte silently suppressed one another, and which one survived
+depended on push order. The identity now follows the defect kind
+(`rust/crates/solid-reactive-ir/src/reactive_analysis.rs`), pinned by
+`reactive_analysis::tests::contract_and_dispatch_obligations_do_not_deduplicate_each_other`.
+No checked-in snapshot moved: no current fixture produces the colliding pair.
+
+## Closed 2026-08-22: explicit contracts cannot bypass version classification
+
+An explicit `--contract` file was version-classified only when its package
+appeared in the *import-derived* module set. Contract resolution also applies a
+contract to `export … from "pkg"` re-exports, which never contribute to that
+set, so a stale explicit contract could be applied to a package the project
+only re-exports. Classification is now unconditional
+(`rust/crates/solid-facts-backend/src/diagnostics.rs`); a package that is not
+installed has no manifest to disagree with, so an explicit contract for it
+still applies exactly as before. Pinned by
+`diagnostics::tests::explicit_contracts_are_version_checked_without_an_import`.
+
+**Remaining gap.** `package_contract_statuses_with` still enumerates
+`imported_package_roots`, so a re-export-only package with a refused contract
+is fail-closed in analysis but invisible in `--check-contracts`. Closing that
+means broadening the module set the report walks, which changes what the
+report claims about every tier, not just the explicit one.
+
+## Entrypoint conditions are alternatives; only the host target is scope (2026-08-22)
+
+`RuntimeEnvironment::matches_entrypoint_conditions` combines an entrypoint's
+recorded conditions with membership, not containment, and that is correct for
+how contracts are generated: the list is the union of the export-map branches
+the entrypoint resolves through. The bundled `solid-js` root entrypoint records
+`browser, deno, development, import, node, worker` — no environment satisfies
+all of it at once, and requiring containment would make the contract this
+checker ships unmatchable. Pinned by
+`entrypoint_conditions_are_alternatives_except_for_the_host_target`.
+
+`--conditions` generation writes the *asserted scope* into the same union
+field, where the list is not alternatives. The host target is the one dimension
+where the two are distinguishable — at most one of `browser`/`node`/`deno`/
+`worker` describes any environment — so an entrypoint naming host targets and
+not the consumer's now fails closed rather than matching through a shared
+resolver condition such as `import`. Recording `default` keeps it open, since
+the unconditional branch really is reachable everywhere.
+
+**Remaining approximation.** The other exclusive dimensions (`development` vs
+`production`, the rendering modes) cannot be tightened the same way: real
+export maps record only `development` as a branch, and a production consumer
+legitimately resolves such an entrypoint through its fallback. A
+`--conditions production` contract therefore still records its build scope into
+a field a development consumer can match. Closing this needs schema v1 to
+distinguish "branches observed" from "environment asserted" at the entrypoint
+level, which it cannot express today. A conservative alternative that also
+fails closed for the non-target case would produce false uncertifiable results
+against every checked-in contract, so it is not the smaller evil.
+
+## Spread arguments to parameter-member reads are reported at the spread (2026-08-22)
+
+`argument_proves_non_reactive` treats an array/object literal as proven plain
+data, spread included, and that was audited rather than assumed:
+`drop([...storeArray])` copies out of the proxy at the call site, so the callee
+really does receive snapshot data and its `parameter-member` claim proves
+nothing about reactivity. The read that exists is the spread, and the spread
+pass in `local_access.rs` already reports it in its own execution role —
+`fixtures/reactive-ir/package-parameter-member-consumer` `SpreadArgument`
+produces exactly one `SC1001` for `"state spread"` and no `SC9012`. Adding the
+obligation as well would report one dependency twice.
+
+**Remaining gap.** The copy is shallow, so a nested proxy surviving it
+(`drop({ ...store }).nested.value`) is a second dependency that neither the
+spread read nor the parameter-member claim describes. Closing it needs the
+consumer to track proxy identity through a literal's element/property
+positions, which no fact table carries today.
+
+## Closed 2026-08-22: contracts are enforced against the lockfile integrity, where one exists
+
+`package.integrity` — the npm sha512 of the tarball a contract was audited
+against — was format-validated on load
+(`rust/crates/solid-reactive-ir/src/lib.rs`) and then compared to nothing. A
+published or project-owned contract bound to nothing but a version string, and
+a version string is not a pin: a republished tarball, an `npm overrides` entry,
+and a locally patched install all keep the version while replacing the bytes
+the summaries describe. Every bundled contract carries an integrity, so this
+was the strongest available identity fact going unused.
+
+Loading now recovers the installed copy's integrity from the project's npm
+lockfile and refuses a disagreeing contract exactly as it refuses a stale one:
+status `stale`, an uncertifiable `SC9005` at the import, the run continues. The
+message and the report `detail` name **both integrities**, because the versions
+agree and naming them would read as a contradiction. Bundled and project-owned
+contracts get their existing, different remedies, reworded for the case where
+the audited version is already the installed one.
+
+The integrity comes from `package-lock.json` or `node_modules/.package-lock.json`
+at `lockfileVersion` 2 or 3, whose `packages` map is keyed by *install path* and
+so names the specific installed copy rather than a package name. Pinned by
+`cli_refuses_a_contract_whose_lockfile_integrity_moved_under_the_same_version`
+(process) and `lockfile_integrity_is_recovered_only_when_it_is_unambiguous`
+(unit).
+
+**Remaining approximation, deliberately fail-open on the fact and fail-closed
+on the verdict.** Enforcement needs both halves — an integrity in the contract
+and a recoverable one on disk — and every way the second half is unavailable
+yields *no fact*, which means the previous behavior (version matching alone),
+never a refusal:
+
+- **No npm lockfile.** pnpm and Yarn keep their own formats, and many projects
+  have no lock at all. Reading them is tractable but each is a separate format
+  with its own store layout and its own path-to-entry question; none of it can
+  be guessed from the npm shape. Owner: one format at a time, each with its own
+  fixture.
+- **`lockfileVersion` 1.** Its tree is keyed by package name, so resolving an
+  entry to *which* installed copy it describes under hoisting would be exactly
+  the guess this must not make.
+- **Link, workspace, `file:`, and git entries** have no registry tarball and so
+  no integrity. A linked workspace package's bytes are unpinnable by
+  construction; closing this needs a content hash of the linked directory,
+  which is a different mechanism from npm integrity.
+- **Two lockfiles disagreeing about the same installed directory.** Which one
+  describes the bytes on disk is not answerable from the files, so no
+  enforcement happens rather than a coin flip in either direction.
+- **An unparseable lockfile** is the project's own file, not a malformed
+  contract, so it never fails the run.
+
+A contract with no `package.integrity` is unaffected in every case.
+
+## Open: package contracts are bound to a module *name*, not a resolved module
+
+Contract discovery and contract application both key on the import specifier's
+package root and nothing else. `discover_package_directory`
+(`rust/crates/solid-facts-backend/src/diagnostics.rs`) walks ancestors for
+`node_modules/<name>`, and `PackageContract::for_module` — the only gate in
+`resolve_contract_imports` (`rust/crates/solid-reactive-ir/src/contracts.rs`) —
+compares `contract.package.name` against `import.module`'s root. Neither asks
+where the specifier actually resolves.
+
+**The failing scenario.** A tsconfig `paths` entry maps
+`"reactive-package": ["src/local-impl"]`, while `node_modules/reactive-package`
+is still installed (a common shape: a local reimplementation, a fork under
+development, a test double). The published or project-owned contract for the
+installed package is discovered by name, passes name and version
+classification, and is applied to imports that resolve to project source that
+the contract never described. Its summaries then drive reactive-read,
+callback-timing, and owner-requirement conclusions about code the contract's
+author never saw — a false certification, not merely a missed one. A workspace
+`link:` is *not* an instance of this: `discover_package_directory` follows the
+symlink and reads the linked package's own manifest, so name and version are
+classified against the package that is really there.
+
+**Investigated 2026-08-22: no narrow safe check exists with today's facts.**
+The obvious verification — the imported module's resolved declaration must sit
+inside the discovered package directory — fails on the facts the backend has:
+
+- **`ImportFact` carries only the specifier text** (`module: CompactString` in
+  `rust/crates/solid-facts/src/ast/mod.rs`). There is no resolved module path
+  anywhere in the fact tables.
+- **Declaration paths exist but are the wrong evidence.** `Declaration.location`
+  does carry a path, but `alias_roots_and_source_declarations`
+  (`rust/crates/solid-reactive-ir/src/symbols.rs`) deliberately *skips* `.d.ts`
+  declarations, which are exactly the ones that would locate an external
+  package. Reading them instead would then be wrong in three routine cases: a
+  package typed through `@types/<name>` declares into
+  `node_modules/@types/<name>` and would fail containment; a pnpm or
+  workspace-symlinked install can report the realpath
+  (`.pnpm/<name>@<version>/node_modules/<name>`) while discovery returns the
+  link path; and an untyped JavaScript package has no declaration inside the
+  package at all, which is precisely where a contract matters most. Each of
+  those would turn a correct contract into a false `SC9005`.
+- **The package directory is not on the IR side of the seam.** Only the backend
+  computes it; `PackageContract` carries `source_path`, which locates the
+  package directory for a *published* contract and not for a bundled, local, or
+  explicit one. Threading it through would be new data across the fact
+  interface, for all four tiers.
+- **`paths` itself is not read anywhere.** Detecting the alias directly would
+  mean parsing `compilerOptions.paths` with its `extends` chain, `baseUrl`, and
+  wildcard patterns — a new fact source — and would still be ambiguous, because
+  TypeScript falls back to `node_modules` resolution when a mapped path does
+  not exist.
+
+**What closing it needs.** One fact the producer already computes and does not
+forward: the resolved module file for each import specifier, from the same
+TypeScript resolution the checker's type facts come from. With that, contract
+application can require the resolved file to lie inside the package directory
+the contract was classified against, fail closed when it does not, and stay
+silent (no fact, current behavior) when resolution is unavailable. That is a
+Type Facts protocol addition and a `PackageContract` provenance field, and it
+should be designed as one change rather than approximated by a path heuristic.
+Half-implementing it — a containment check on declaration paths — would trade a
+rare false certification for a routine false uncertifiable result on every
+`@types`-typed and pnpm-installed package.
+
+## Open: contracts have no distribution mechanism beyond four local tiers
+
+A contract reaches a project through exactly four channels: this checker's own
+**bundled** artifacts, a **published** `solid-reactivity.json` inside the
+installed package, a **local** file under `.solid-checker/contracts/`, and an
+**explicit** `--contract` path. There is no fifth. There is no registry, no
+fetch, no shared corpus of reviewed contracts, and no way for one team's review
+work to reach another project.
+
+The consequence is the whole many-packages user story. A project importing a
+dozen Solid-aware packages that this checker does not bundle has one path
+available: generate a draft for each with `contract generate` and review each by
+hand. Generation never promotes `inferred` evidence, so until that review
+happens every one of those packages reports `unverified` and certifies nothing.
+The ecosystem benchmark measures the generator against real packages, but its
+output is not a corpus anyone can install — the reviewed contract for a popular
+package has nowhere to live except inside the package or inside one project.
+
+**A design now exists**: [rfcs/0001-contract-registry.md](rfcs/0001-contract-registry.md)
+specifies a signed, content-addressed registry of reviewed contracts and one new
+explicit command, `contract fetch`, that resolves against the installed artifact
+and materializes the contract into the existing local tier for the consumer to
+commit. It adds no discovery tier, no precedence rule, and no analysis-time
+network access.
+
+The two candidate directions recorded earlier — a registry, and shipping a
+reviewed ecosystem corpus as additional bundled contracts — turn out to
+**compose rather than compete**. The registry is where reviews live and are
+governed; bundling is a release-time snapshot of its most-imported entries, for
+zero-configuration coverage. The RFC's §8 covers the one hazard that creates: a
+fetched contract lands in the local tier and would otherwise shadow a bundled
+audited artifact.
+
+What remains open is the implementation — none of `contract fetch`,
+`contracts-lock.json`, the entry/index specification, signatures, or the
+revocation path exists — plus the RFC's own unresolved questions, of which the
+load-bearing ones are the trust-set bootstrap, reviewer key rotation and
+revocation, whether verifier identity can be recorded in a schema-v1 contract at
+all (the loader's unknown-field failure is the outright-malformed path, so the
+field would hard-fail older clients). The artifact-keyed review transfer the RFC
+named as a hard dependency is no longer open: `contract review --transfer-from`
+carries a previous review's resolutions onto a regenerated contract for every
+entrypoint whose runtime-module closure is byte-identical, so an upstream release
+costs a re-review of the diff rather than of the package.
+
+## How much of a real ecosystem contract is actually a claim (measured 2026-08-22)
+
+> **Superseded 2026-08-23 for the unknown-claim figures.** The all-five
+> whole-summary shape this section identifies as the dominant cause was a defect
+> in the emitter's attribution, not a limit of the analysis. It is fixed; the
+> re-measured numbers are in "[Closed 2026-08-23: the whole-summary unknown
+> collapse](#closed-2026-08-23-the-whole-summary-unknown-collapse)" below. The
+> per-family reasoning and the closure-note conclusions here still hold.
+
+The ecosystem benchmark measured generation *reachability* only — whether a
+contract was emitted — and "[Open: generation success is not contract
+correctness](#open-generation-success-is-not-contract-correctness)" already
+records that a 98% success rate says nothing about what the emitted documents
+contain. A machine-verification scheme asks the question in between those two:
+under a scheme where an unknown stays uncertifiable, **how clean is a typical
+package's generated draft before anyone reviews it?**
+
+That is now measured. `scripts/ecosystem-benchmark/lib/contract-content.mjs`
+opens every emitted `solid-reactivity.json` and its sibling `.review.json`
+before the probe's temporary directory is removed, and counts unknown claims by
+domain, refused entrypoints, closure notes, and positive behavioral rows. The
+outcome classes are untouched: the same 305-row/416-probe manifest, the same
+403 complete / 6 partial / 7 failures, class-for-class identical to the previous
+run (release binary, 600 s budget, 95.413 s wall). Full method and caveats in
+[ecosystem-benchmark.md](ecosystem-benchmark.md#contract-content-how-much-of-an-emitted-contract-is-actually-a-claim).
+
+**Headline, over the 409 probes that produced a contract (207 packages):**
+
+- **300 / 409 probes (73.35%) are fully proven** — no unknown claim, no refused
+  entrypoint, no closure note.
+- **126 / 207 packages (60.87%)** are fully proven across every one of their
+  probes.
+- **5,415 / 8,113 exports (66.74%) are proven.** 2,698 carry an unknown.
+- 11,013 unknown claims in total, but **2,077 of the 2,698 unknown exports are
+  unknown in all five domains at once** — most of each domain column is the same
+  exports counted five times.
+- 7 entrypoints refused across 6 probes; 32 closure notes across 7 probes.
+- Positive behavioral rows available to a future probe step: 1,636 callback
+  executions, 1,200 return trees, 990 reactive reads, 275 owner requirements,
+  98 async behaviors.
+
+**Per-family highlights:**
+
+- **Solid Primitives is genuinely clean, and it is most of the corpus.** 288 of
+  the 409 contracts; **230 fully proven (79.86%)**, 88.37% of exports proven,
+  zero refusals, zero closure notes. Corvu is comparable on a smaller base
+  (23/28, 82.14%). The small-single-purpose-package shape is what the generator
+  handles well, and it is also the shape most of the ecosystem actually is.
+- **The dominant unknown cause is one summary shape, not one claim domain.** A
+  function export the generator reaches but cannot analyze is emitted with all
+  five domains as `{"status":"unknown"}`, and that single summary is then shared
+  by every export matching it. `@kobalte/core@0.13.13` emits exactly one such
+  summary and attaches it to 452 of its 610 export names — 2,260 of the corpus's
+  11,013 unknown claims from one summary. `solid-recharts` (305 of 327 exports),
+  `motion-solidjs` (329), `@tanstack/solid-db`, `@tanstack/solid-table` and
+  `@solidjs/router` are the same shape. The one large exception is
+  `@solidjs/web@2.0.0-rc.1`: 188 unknowns, all `reactiveReads`, the other four
+  domains fully claimed.
+- **TanStack's unknowns are NOT its options-object callback pattern.** This was
+  the expected answer and the data refuses it: 318 of TanStack's 322 unknown
+  exports are the all-five whole-summary shape, and only 3 exports in the entire
+  family carry a `callbacks`-only unknown. Hand-checked against two real
+  contracts: `@tanstack/solid-query@5.101.4` on `solid-js@1.9.14` emits 57
+  exports with exactly 3 unknowns (`useQuery`, `useInfiniteQuery`,
+  `replaceEqualDeep`, all `callbacks`), while `@tanstack/solid-query@6.0.0-rc.0`
+  on `solid-js@2.0.0-rc.1` emits 57 exports of which 37 are unknown in all five.
+  Both declare the same non-standard `"@tanstack/custom-condition":
+  "./src/index.ts"` branch pointing at TypeScript source; in 5.x that branch
+  still yields real `reactiveReads` rows, in the 6.x prerelease it yields the
+  whole-summary sentinel. The family's own numbers are unremarkable once that
+  shape is set aside: 33/50 contracts fully proven, 84.84% of exports proven.
+- **Official Solid is the worst-looking family (6/23 fully proven) for a reason
+  that is not unknowns**: it owns 29 of the corpus's 32 closure notes. Its
+  contracts largely make claims; they just cannot be bound to the bytes they
+  describe.
+
+**What this implies for machine-verified contracts**
+([rfcs/0002-machine-verified-contracts.md](rfcs/0002-machine-verified-contracts.md),
+forthcoming):
+
+- A scheme that keeps unknowns uncertifiable does **not** start from a blank
+  page. Three quarters of generated contracts already carry no unknown at all,
+  and two thirds of all exports are claimed — the verification surface is real
+  work, not an empty set.
+- The work is extremely unevenly distributed. Roughly ten package/target pairs
+  produce most of the corpus's unknown claims, and each of them concentrates in
+  a single all-five summary. Closing that one shape — not five separate domain
+  analyses — is what would move the number.
+- **Closure notes, not unknowns, are the harder blocker.** An unknown is an
+  honest uncertifiable result a consumer can route around; a closure note means
+  the contract cannot be byte-attested at all, so no amount of verification
+  binds it to an artifact. 7 probes and 32 notes today, 29 of them in Official
+  Solid. See "[The runtime-module closure is walked, not
+  attested](#the-runtime-module-closure-is-walked-not-attested-2026-08-22)".
+- These figures are the **demand-insensitive upper bound on the work**, and
+  should never be quoted as a defect rate. An unknown becomes a finding only
+  when a consumer touches that surface; a package with 452 unknown exports costs
+  a project nothing if it imports two proven ones. The benchmark has no demand
+  model, so the number of unknowns a real project would actually hit is
+  unmeasured and is almost certainly far smaller.
+- **"Proven" here means "claimed", not "verified".** Every claim counted as
+  proven is still `inferred` evidence below the SC9005 trust ceiling. A contract
+  asserting that `map` never invokes its callback is counted fully proven by
+  this measurement and is false — which is exactly the gap RFC 0002 exists to
+  close, and exactly why this measurement is a floor on the verification work
+  rather than an estimate of it.
+- **Probe drivability is not measured.** The 4,199 positive behavioral rows are
+  what a probe step would have to drive; no attempt was made to drive any of
+  them, so how many are actually executable is the next open question.
+
+## Closed 2026-08-23: the whole-summary unknown collapse
+
+An unresolved proof obligation used to erase claims the analysis had already
+proven, on exports that could not reach it. Two independent defects in
+`emit_package_contract`
+(`rust/crates/solid-facts-backend/src/main.rs`) compounded:
+
+- **Every domain.** `ReactiveDispatchUnresolved` fell through
+  `unresolved_claim_domains`' catch-all to all five claim domains. The
+  obligation proves that the possible runtime implementations of a dispatch do
+  not share one *reactive-read* summary. It says nothing about the callbacks the
+  export invokes, its owner requirements, or its async behavior.
+- **Every export.** Attribution read only the *innermost* function containing
+  the obligation. An obligation inside an anonymous arrow, a named local helper,
+  or a private cross-file helper matched no export, and the fallback marked
+  every export of the entrypoint — including exports with no path to it at all.
+  A third rung scanned every call in the project whose callee *text* equalled a
+  missing contract export's name, or ended in `.` plus that name, which is the
+  name-only matching the precision contract forbids.
+
+**What replaced them.** `ReactiveDispatchUnresolved` now marks
+`reactiveReads` and `returns` only. Attribution is a ladder — `joined`,
+`enclosing-chain`, `identity-widening`, `reachability`, `fallback-all` — spelled
+out in
+[package-contracts.md](package-contracts.md#which-exports-an-unresolved-obligation-belongs-to).
+The name-text scan is gone; the reachability rung asks the call graph, in
+`rust/crates/solid-reactive-ir/src/attribution.rs`, and is used only when the
+enumeration is provably complete.
+
+**Why `returns` and not `reactiveReads` alone.** The returns description is
+derived from the same resolved callee summary the dispatch invalidates, and it
+does **not** fail closed on its own: a value produced by an unresolved dispatch
+and placed in a returned object is described from the local accessor index,
+which knows nothing about it, so a possibly-reactive property is published as a
+certified-negative omission. `StructuredReturnUnresolved` is not the guard — it
+fires only for a shorthand property bound to an import with no project
+declaration, an orthogonal condition. The
+`unresolved-dispatch-domains-control` fixture is the proof: with the dispatch
+resolved the generator claims `returns.properties.value` is an accessor, which
+is exactly the claim the unresolved variant cannot make. `callbacks`,
+`ownerRequirements` and `asyncBehavior` are proven by passes that never consult
+the dispatch and are kept.
+
+**A third defect the fix exposed.** With the collapse gone, two conditional
+branches that each *prove* a different `returns` stopped being merge-compatible,
+and `mergeSummaries` refused the whole entrypoint over it. solid-js 1.9.14's
+`Show` is that shape — it returns its `props` argument in the server build and a
+memo accessor in the client build — and refusing discarded the other 147 exports
+of its `.` entrypoint. The base now carries the unknown sentinel for the
+divergent domain and the exact per-branch behavior is emitted as `variants`,
+which is the same discipline the function already applied when either side was
+unknown.
+
+**Measured recovery** (full ecosystem benchmark, release binary, 600 s budget,
+same 305-row / 416-probe manifest; before = the 2026-08-22 run recorded above).
+
+> **The `after` column was measured before the soundness fixes below, and has
+> been re-measured.** The adversarial review recorded in "[Closed
+> 2026-08-23: under-marking in the attribution
+> ladder](#closed-2026-08-23-under-marking-in-the-attribution-ladder)" found
+> six ways an export whose behavior depends on an unresolved obligation was
+> published with the domain omitted — an arrow-bound export invisible to every
+> rung, an escape test that never saw an escape, a name-text join, a blanket
+> discharge, and two false callback rows. Every one of them *lowered* the
+> unknown-claim counts and *raised* the "exports proven" figure by certifying
+> something that was not proven. The improvement recorded here is real in
+> direction; part of its magnitude was that inflation. The `corrected` column
+> is the current state and the one to compare future work against.
+
+| | before | after (superseded) | corrected |
+| --- | --- | --- | --- |
+| Probes fully proven | 300/409 (73.35%) | 304/409 (74.33%) | **288/409 (70.42%)** |
+| Packages fully proven | 126/207 (60.87%) | 128/207 (61.84%) | **111/207 (53.62%)** |
+| Exports proven | 5,415/8,113 (66.74%) | 6,520/8,320 (78.37%) | **6,095/8,358 (72.92%)** |
+| Exports unknown in ALL five domains | 2,077 | 492 | **527** |
+| Unknown claims, total | 11,013 | 4,898 | **5,903** |
+| Probes with at least one unknown claim | 102 | 99 | **116** |
+| Entrypoints emitted / refused | 847 / 7 | 850 / 4 | **850 / 4** |
+| Positive behavioral rows | 4,199 | 5,545 | **5,005** |
+
+Outcome classes moved once and have not moved since: 403 success / 6 partial /
+7 failure became **406 / 3 / 7**, and the corrected run is package-for-package
+identical to that. The three probes that moved (`@kobalte/core@0.13.13`, both
+`solid-js@2.0.0-rc.1` probes) are entrypoints the conditional-merge refusal
+used to discard and now emits. No probe has regressed in any of the three runs.
+The export total grew from 8,113 to 8,320 because those three entrypoints now
+contribute exports, and to 8,358 when the declaration-sibling gate changed
+which modules an entrypoint enumerates.
+
+The `after` → `corrected` movement was attributed by re-running the full corpus
+twice against the current binary, once with and once without the
+conditional-merge one-sided fix: the engine soundness rounds account for 15
+fully-proven probes and 316 proven exports across 48 probes, and the merge fix
+for 1 probe and exactly 109 exports (108 `returns`, 1 `asyncBehavior`) across 8.
+The per-cause table is in
+[ecosystem-benchmark.md](ecosystem-benchmark.md#headline-numbers-2026-08-23-third-measurement-state-release-binary-416-probes).
+
+**Fixtures.** `fixtures/package-contracts/unresolved-dispatch-attribution` pins
+the `joined` and `enclosing-chain` rungs and the surviving `callbacks` claim,
+with a sibling export that must stay fully proven;
+`unresolved-dispatch-domains-control` pins the claim the unknown replaces;
+`unresolved-dispatch-reachability` pins the call-graph rung across files;
+`unresolved-contract-export-attribution` pins that a missing contract export
+still keeps all five domains, for that export only, through exact symbol
+identity rather than a name scan. All four are in the
+`scripts/contract-corpus.mjs` pin list.
+`unknown_claim_attribution_markers_reach_the_review_plan` in
+`rust/crates/solid-facts-backend/tests/contracts_process.rs` pins the stderr
+marker seam on real bytes from both processes.
+
+**Still fail-closed after this.**
+
+- The `fallback-all` rung survives. An obligation whose containing function
+  cannot be identified at all still marks every function export. It is now
+  observable — the review plan says `fallback-all` — rather than silent.
+- ~~The reachability rung is conservative in its escape test~~ — **false when
+  written; corrected below.** The test accepted any reference inside an
+  `ExportFact.span`, which for a declaration export covers the whole body, so
+  none of the three escapes it claimed to catch were caught.
+- ~~The `export_names_for_function` join reads `function.name` or
+  `method_name`~~ — **the consequence stated here was wrong, and in the unsound
+  direction.** An arrow export did not "reach a lower rung"; it made the
+  reachability enumeration return an empty set, and nothing was marked.
+  Corrected below.
+- `ownerRequirements` is kept claimed across an unresolved dispatch. An
+  implementation the analysis cannot select could call an owner-requiring
+  primitive. That is the same gap every uncontracted external call already has,
+  and narrowing it is a separate question from this one.
+
+## Closed 2026-08-23: under-marking in the attribution ladder
+
+An adversarial review of the entry above, driven by hand-written packages
+rather than by the fixture corpus, found that the ladder's *fail-closed*
+guarantees were not guarantees. Six shapes published an export whose behavior
+depends on an unresolved obligation with the affected domain simply **omitted**
+— a certified negative. Over-marking is imprecise; this direction is unsound,
+and every fix below moves toward failing closed.
+
+Each was reproduced against the debug binary before and after, and each has a
+regression fixture in `scripts/contract-corpus.mjs`'s pin list.
+
+| Shape | Before | After | Fixture |
+| --- | --- | --- | --- |
+| `export const X = props => Panel(props)` reaching a private helper | nothing marked | `X` marked | `arrow-export-attribution` |
+| Private helper handed to a callee (`apply(Panel, …)`) | only the *caller* marked; the escaping export certified | every export marked (`fallback-all`) | `escaping-private-helper` (`./argument`) |
+| Private helper returned (`return Panel`) | same | same | `escaping-private-helper` (`./returned`) |
+| Private component rendered (`<Panel/>`) | nothing marked at all | every export marked | `escaping-private-helper` (`./rendered`) |
+| Private `Render` beside an unrelated exported `Render` | the *unrelated* export marked; the reaching one certified | the reaching export marked, the unrelated one clean | `export-identity-join` |
+| `export { Panel, Panel as Root }` | `Panel` marked, `Root` certified | both marked | `export-identity-join` |
+| Export forwarding into an exported parameter-member helper | discharged wholesale; `reactiveReads` omitted | discharged only where the row is published | `parameter-member-forwarded` |
+| Callback invoked behind a closure handed to a helper, or behind a returned closure | `execution: "inline"` | no row; `callbacks` sentinel | `callback-execution-boundary` |
+
+**What replaced them.**
+
+- `export_names_for_function` names a declaration through
+  `solid_reactive_ir::function_binding_name`, the same helper the IR uses, so
+  arrow bindings resolve. It now distinguishes *undecidable* (`None`) from
+  *decided: private* (`Some(vec![])`), and the reachability rung propagates the
+  first instead of reading it as the second. `Some(vec![])` is itself claimed
+  only when every export of the entrypoint joined to an identity or a symbol.
+- The escape test accepts an export **specifier** span, never containment in an
+  `ExportNamedDeclaration`'s span.
+- The name-text branch is deleted. It survives only in the whole-project mode
+  with no entry file, where `exports` is keyed by the project-wide export name
+  and no identity channel exists.
+- The call graph answers for an obligation filed *at* a declaration span, not
+  only for one inside a body. Without that, every exported-helper obligation
+  went to `fallback-all`.
+- The `exported-parameter-member-dispatch` string comparison is replaced by
+  `parameter_member_row_covers`, which asks whether the exports the ladder
+  resolved the obligation to actually publish the `parameter-member` row. The
+  covering channel is real (`parameter-member-read` /
+  `package-parameter-member-consumer` pin it) but does not survive a hop.
+- A zero-export decision emits its marker, and
+  `generate-package-contract.mjs` renders it as a review-plan note. Silence was
+  how a truncated reach enumeration looked from the outside.
+
+**`ReactiveSourceUncaptured` now invalidates `returns` as well** (R7). The
+reads-only claim was never tested: every shape that reaches the arm during
+generation also raises the package's missing-contract-export obligation, which
+erases all five domains, so the narrower claim was masked rather than proven.
+`fixtures/package-contracts/uncaptured-source-return` records that, and the arm
+fails closed by construction rather than by proof. Reads-only can be restored
+only by a shape that fires the arm *alone*, which nobody has constructed.
+
+**Still fail-closed, or still wrong, after this.**
+
+- **A sibling `.d.ts` for an internal module truncates the reach enumeration
+  (under-marking).** *Closed as unsound; see the 2026-08-23 entry below — it is
+  now a widening, not a certified negative.* With `channel.d.ts` beside
+  `channel.js`, the caller edge from `index.js` into `channelFor` is lost: the
+  graph reports `complete` while having enumerated only the helper itself, and
+  the obligation attributed to no export. Repro:
+  `fixtures/package-contracts/parameter-member-forwarded` with a `channel.d.ts`
+  added — `forwarded` went from unknown to certified.
+- **A provably unused callback parameter still opens the sentinel instead of
+  emitting the honest negative** (the remainder of R6). In
+  `callback-execution-boundary`, `schedule` never uses its second parameter, so
+  the truthful answer for `Escaping` is *no callback row*. Proving it needs an
+  interprocedural "this parameter is never invoked" summary the generator does
+  not compute; the fail-closed sentinel is what is emitted instead.
+- ~~**A re-exported helper called from the same entry file joins to nothing.**~~
+  *Not reproducible against this entry's own code.* Re-tested 2026-08-23 in all
+  four spellings — `export { x } from "./m.js"` before or after
+  `import { x } from "./m.js"`, `import` then bare `export { x }`, and
+  `export * from "./m.js"` — and every one resolves the obligation to both
+  published names. The identity join in this entry closed it; the residual was
+  recorded from a run that predated it. It is pinned now by
+  `fixtures/package-contracts/entry-reexport-identity`, so it cannot silently
+  come back. The shape that *did* still fail was the same source with a
+  `channel.d.ts` sibling, which is the `.d.ts` class above and not a second one.
+- `fallback-all` survives, and the three escape shapes above now reach it. That
+  is deliberate: nothing in the package proves the escaped helper is
+  unreachable from a sibling export's caller.
+- The `runtime_execution` rung can still return `inline` for a call nested
+  inside a proven-inline scheduler that is itself inside an unproven closure.
+  The fold looks at the enclosing argument chain, not at the schedule of the
+  outermost call in it. Not observed in a repro; not narrowed here.
+
+## Open: nominal class-method dispatch could discharge these obligations (2026-08-23)
+
+The obligations the entry above learned to *attribute* precisely are mostly
+obligations that should not exist. The dominant real-world shape, from the
+ecosystem benchmark's own samples, is a parameter typed as a class or interface
+whose method is then invoked: `getQueryCache()` on a `QueryClient` parameter,
+`.toLowerCase()` on a `string`. `member_value_symbols_at` finds no *value*
+implementation for a nominal type's method, so the dispatch is unresolved and
+the enclosing export loses its reactive-read claim — even though the callee's
+own resolved declaration names exactly one method body.
+
+Resolving the method through the callee's declaration would discharge the
+obligation outright rather than re-attributing it, and it composes with the
+attribution ladder: fewer obligations reach the ladder at all, and the ones that
+do are the genuinely ambiguous ones.
+
+It is **not** implemented, because it needs a soundness argument this change did
+not attempt:
+
+- **Subclass existence reopens it.** A parameter typed `Base` can receive a
+  `Derived` that overrides the method. Selecting `Base`'s body then certifies an
+  implementation that does not run. The argument has to be closed over the
+  analyzed program — an override declared anywhere in the closure must reopen
+  the obligation — and "closure" here is the package plus its consumers, which
+  for a published package is open by construction. `--program-boundary closed`
+  is the existing lever, and whether it is enough is exactly the open question.
+- **The standard library is the easy half.** `.toLowerCase()` on a `string` has
+  no user-declarable override, and Type Facts already marks standard-library
+  declarations (`resolved_callee_call(..).declaration.standard_library`). That
+  subset may be dischargeable without the subclass argument at all.
+- **A Type Facts signal may be required.** Deciding "this method has exactly one
+  implementation reachable at this call site" is a type-system question, not an
+  AST one, and the current fact set does not answer it.
+
+## Open: probe discovery contradicts bundled Solid negative claims (2026-08-23)
+
+**`solid-v2/solid-js` is resolved (2026-08-23); `solid-v2/@solidjs/web` and
+`solid-v1/solid-js` are not.** The resolution is recorded at the end of this
+entry, together with the exact worklist the two remaining contracts still carry.
+
+The Stage-1 probe driver (`contract probe`, RFC 0002), run with discovery
+against the bundled `solid-js@2.0.0-rc.0` contract, reports 65 incompleteness
+findings: exports whose summaries state no `callbacks` row — which schema v1
+reads as the certified negative "never invokes a caller-supplied callback" —
+while the installed release observably invokes a function argument. A sample
+was verified by hand against the real package: `untrack`, `flush`,
+`createSignal`, `merge`, `latest`, `isPending`, `flatten`, and `children` all
+invoke a caller-supplied function. The declared behavioral probes themselves
+all pass (89/95 driven, 0 failed); only the negatives-by-omission are
+contradicted.
+
+The same run against the other bundled artifacts reports 97 incompleteness
+findings for `@solidjs/web@2.0.0-rc.0` (40 distinct
+`(entrypoint, export, parameter, execution)` rows over 13 export names), 33 for
+`solid-js@1.9.14` (13 rows over four entrypoints), and **none** for
+`@solid-primitives/scheduled@1.5.3`, whose exact-version review holds.
+
+**Determined (2026-08-23, by reading the consumption path; no experiment run).**
+Consumers are exposed. The dialect shadows a contract for exactly the pairs
+`(dialect-owned module, name in the dialect's primitive table)` and nothing
+else, so every other export of a `solid-js` contract is consumed normally —
+negatives included.
+
+- Loading applies no dialect filter at all. `load_package_contracts_reporting`
+  (`rust/crates/solid-facts-backend/src/diagnostics.rs:915`) fills one
+  `HashMap<package_name, PackageContract>` from four tiers — bundled
+  (`:938-976`, via the `include_bytes!` table at `:804-835`), package-published
+  (`:977-987`), project-local `.solid-checker/contracts/<pkg>/` (`:988-998`),
+  explicit `--contract` (`:999-1016`) — and hands the certifiable subset to the
+  IR at `:292-297`. The bundled `solid-js` contract is preloaded on the hot path
+  (`rust/crates/solid-facts-backend/src/main.rs:174`) and applies even with no
+  `node_modules`, because `contract_matches_manifest` is `is_none_or`
+  (`diagnostics.rs:1292`).
+- The evidence gate does not help here. `contract_evidence_is_certifiable`
+  (`diagnostics.rs:1116`) plus `claims_are_certifiable`
+  (`rust/crates/solid-reactive-ir/src/lib.rs:1297`) admit `verified`, and both
+  bundled `solid-js` documents declare `"kind": "verified"`.
+- The shadow is `native_vocabulary_outranks_contract`
+  (`rust/crates/solid-reactive-ir/src/contracts.rs:192`) —
+  `dialect.owns_module(module) && dialect.declares_primitive(imported)` —
+  applied at the namespace-member (`contracts.rs:413`), named/default
+  (`:506`) and re-export (`:591`) binding sites, each of which `continue`s
+  without creating a `ResolvedContractBinding` at all. `owns_module` and
+  `declares_primitive` are `rust/crates/solid-dialect/src/lib.rs:1054` and
+  `:1049`; `modules()` is four specifiers for v1
+  (`rust/crates/solid-dialect/src/solid_1x.rs:105`) and thirteen for v2
+  (`rust/crates/solid-dialect/src/solid_2.rs:110`), and the primitive tables are
+  the `primitive()` matches at `solid_1x.rs:122` and its v2 counterpart.
+- The suppression itself is `interproc.rs:1216-1218` — `if
+  contracts.callbacks.contains_key(symbol) { continue; }` — which skips the
+  `contract_generation_obligations` push at `:1230-1240`. The map is filled
+  with no emptiness guard (`source_discovery.rs:1365-1367`), and an omitted
+  `callbacks` field deserializes to `Known(vec![])`, not `Unknown`
+  (`lib.rs:1108` `#[serde(default)]` + `lib.rs:1022` `Default for
+  ContractClaim<T>`). An empty list is therefore `contains_key == true`, and the
+  obligation is skipped. That *is* the negative claim taking effect.
+- Reachable today: ~11 negative-callback exports in v1's `solid-js.json` that
+  the v1 table does not name (`enableExternalSource`, `requestCallback`,
+  `createComponent`, `observable`, `cancelCallback`, …), all 48 in
+  `solid-js/web`, `createRenderer` in `solid-js/universal`, and every export
+  under a subpath `modules()` omits — `solid-js/web/storage`
+  (`provideRequestEvent`), `solid-js/jsx-runtime`, `./jsx-dev-runtime` — plus
+  ~24 in v2's (`createComponent`, `flatten`, `runInServerComponentScope`,
+  `ssrScope`, `isWrappable`, `storePath`, …). Several of these demonstrably do
+  invoke a caller-supplied function.
+- A second channel bypasses the shadow entirely: `bundled_returns`
+  (`source_discovery.rs:1286-1305`, read at `:208`, `:706`, `:764`, `:907`) is
+  keyed on the **export name**, not a resolved symbol, so a `solid-js`
+  contract's `returns` claims reach dialect primitives. It reads only `returns`,
+  so it does not widen the negative-callback exposure, but "the dialect fully
+  shadows solid-js contracts" is false in general.
+
+Consequence for RFC 0002 Stage 2: the incompleteness blocker in `contract
+verify` is *not* the only impact. It does fail closed — a regenerated
+`solid-js` contract cannot be mechanically promoted while discovery contradicts
+it — but the already-shipped bundled artifacts are `verified` and live, so the
+wrong negatives are consumed now, independently of Stage 2. Resolution is
+unchanged in shape and now clearly not optional: add the missing callback rows
+to the bundled contracts (and their probes), or state the negative honestly as
+`{"status": "unknown"}` for the exports discovery contradicts. A carve-out for
+"dialect-owned modules" is not available as an answer, because the contradicted
+exports are precisely the ones the dialect does *not* own.
+
+### Resolved for `solid-v2/solid-js` (2026-08-23)
+
+Every one of the 65 findings is now either a row proven from the installed
+release's own implementation or the unknown sentinel. `contract probe` with
+discovery reports **0 incompleteness and 0 failures** against the artifact
+(124 claims, 113 passed, 11 undriven), and `make contract-conformance` is green
+with every new claim behaviourally probed in each mode it is stated for. The
+per-export audit — source citation to row — is in the commit that carries this
+change; the shape of the answer is:
+
+- **Identical in both builds, `callbacks[0]=inline`:** `untrack`, `latest`,
+  `isPending`, `flatten`, `createComponent`, `createRevealOrder`,
+  `runInServerComponentScope`.
+- **Browser-only callback:** `flush`. The server build is
+  `function flush() {}` — no declared parameter, empty body — so its variants
+  keep a *proven* negative rather than inheriting the browser row.
+- **Client tracks, server runs it once:** `children`, `createSignal`,
+  `createOptimistic` (`0=tracked` / `0=inline`), plus `callbacks[0]=inline`
+  added to the server variants of `createMemo`, `createEffect` and
+  `createRenderEffect`, whose browser rows were already there.
+- **Two slots:** `repeat` (`0=tracked` on the browser, `1=inline` in both — a
+  row callback runs with the listener cleared and a signal it reads never
+  re-runs it), `createLoadingBoundary` (`0=tracked, 1=tracked` on the browser;
+  `0=inline, 1=deferred` on the server), `createErrorBoundary`
+  (`0=tracked, 1=tracked` on the browser; both deferred on the server, where
+  neither argument is referenced outside the thunk the export returns).
+- **Sentinel:** `merge`. It is variadic and wraps *every* function argument in
+  a memo, so any finite `callbacks[]` certifies a false negative at the first
+  parameter past it. `{"status": "unknown"}` is the only honest schema-v1
+  encoding, and `scripts/check-bundled-contracts.mjs` now reads that value
+  instead of throwing on it.
+
+Two **stated** claims were falsified on the way, not merely incomplete, and are
+corrected with them: the server variants of `solid-js`'s `createRenderEffect`
+and of `@solidjs/web`'s `effect` said `callbacks[1]=deferred`, while
+`serverEffect` invokes `effectFn` synchronously inside the call
+(`solid-js` `dist/server.js:668-729`; `@solidjs/web`'s server `effect` is
+literally `(fn, effectFn, options) => createRenderEffect(fn, effectFn, options)`).
+Both now say `inline`. The old conformance body could not see the difference —
+it asserted only that the apply did not *re-run* — so the bodies for those two
+slots now assert that it ran inside the call.
+
+`fixtures/reactive-ir/bundled-contract-callback-consumer` settles the consumer
+half end to end, which reading the code could not: with the certified-negative
+contract, a `doubled()` read inside a callback passed to `flatten` produced no
+finding at the call site; with the row it produces `SC1001` there, and the same
+call from compiler-tracked JSX stays clean. `createEffect` beside it is the
+dialect-shadowed control and does not move. Only that fixture's snapshot
+changed — no existing finding moved, because every other contradicted export a
+fixture touches is in the dialect's primitive table.
+
+### Still open
+
+- **`solid-v2/@solidjs/web`.** 40 rows over `applyRef`, `createComponent`,
+  `dynamic`, `effect`, `getNextElement`, `memo`, `mergeProps` (parameters 0 and
+  1), `renderToString`, `ssrElement`, `untrack`, `frameTransformResult`,
+  `serverComponentResponse` and `provideRequestEvent`, most repeated across
+  `.`, `./jsx-runtime` and `./jsx-dev-runtime`, which re-export the same
+  functions.
+- **`solid-v1/solid-js`.** 13 rows: `createComponent 0=inline` and
+  `createResource 0=tracked` under `.`, `./jsx-runtime` and
+  `./jsx-dev-runtime`; `mergeProps 0=tracked, 1=tracked` under `.` and
+  `./web`; and `getNextElement 0=inline`, `use 0=inline` under `./web`.
+- **`requestCallback` (1.x) cannot be measured by discovery at all.** Its probe
+  schedules a task whose callback is not a function, and 1.x's `workLoop`
+  throws from a `MessagePort` handler *after* the worker has answered, killing
+  the process. `runSessionWithRestarts` treats a whole-process failure as a
+  mode-wide fact and records the remaining claims undriven rather than
+  retrying, so one export truncates the whole run: the 1.x worklist above had
+  to be rebuilt by probing the contract in eight-export chunks. It is a
+  callback taker by construction (`workLoop` invokes `task.fn`) and its
+  negative is wrong, but no automated observation of it exists.
+- **`scripts/check-bundled-contracts.mjs --write` cannot be used on the
+  composed 1.x contract.** The row evidence it writes is not something
+  `scripts/generate-bundled-solid1-contract.mjs` reproduces from its inputs, so
+  the write immediately makes `check-composed-contracts` report the artifact
+  stale. Recording probed evidence for 1.x needs the composer to carry it.
+- **The review contract's tables disagree with the runtime in two places.**
+  `rust/crates/solid-facts-backend/src/bin/solid-contract-gen.rs` states
+  `repeat` `Callback(1, "tracked")` and the boundary fallbacks as `deferred`;
+  the runtime observations above make the first `inline` and the second
+  `tracked` on the browser. Those tables feed
+  `every_callback_taking_export_is_modelled_or_excluded` and the dialect
+  vocabulary rather than any consumer, so nothing certifies from them today,
+  but they are the same claim written twice and only one of the two was
+  audited.
+
+## Closed 2026-08-23: a declaration sibling no longer certifies what it hid
+
+The `.d.ts` residual recorded under *Closed 2026-08-23: under-marking in the
+attribution ladder* was a certified negative, and it fired on the shape almost
+every published package has. It is closed in the only direction the facts
+allow: the enumeration now reports itself incomplete, and emission widens.
+
+**Mechanism.** `index.js` writes `import { channelFor } from "./channel.js"`.
+TypeScript resolves that specifier to `channel.d.ts` whenever one exists beside
+`channel.js` — a declaration file wins over an adjacent implementation in every
+resolution mode `analyzeTarget` configures, and `closureOf` still seeds the
+runtime `channel.js` as a root, so the program holds *both* files as unrelated
+modules. `runtimeIdentity` is minted from the symbol's `ValueDeclaration`
+(`durableRuntimeRefFor` → `runtimeID` in the pinned solid-ts-facts), so the
+call in `forwarded` carries `channel.d.ts`'s identity and `channel.js`'s
+`channelFor` has no reference outside its own file. Three lookups then fail in
+the same direction, all downstream of that one split:
+
+- `all_function_call_sites`
+  (rust/crates/solid-reactive-ir/src/indexes.rs:2077) resolves the callee symbol
+  to the declaration, `functions_by_symbol` has no function for it — a
+  `declare function` has no body and so no `FunctionFact` — and the caller edge
+  is dropped.
+- `compute_entered_only_through_calls`
+  (rust/crates/solid-reactive-ir/src/attribution.rs:190) walks the same symbol's
+  references, finds only the declaration name and the export specifier, and
+  reports the entry set fully enumerated.
+- `CallGraph::reach` therefore returned `complete: true` with `reaching` holding
+  the helper alone, and `export_names_from_reachability` mapped that to
+  `Some(vec![])` — *decided: no export reaches this* — so `forwarded` and
+  `Isolated` were both published certified with `complete=true`, no marker
+  degradation, and (before this) a zero-export review-plan note as the only
+  trace.
+
+**Why not an exact fix.** Nothing pairs a declaration file with the runtime
+module it describes. `ImportFact` carries only specifier text (the same finding
+as *Open: package contracts are bound to a module name*), and the compiler
+holds no link between the two files — they are separate modules that happen to
+share a name on disk. Recovering the edge would mean matching `channel.d.ts` to
+`channel.js` by path, which is exactly the substitution the precision contract
+forbids. The generator's own runtime resolver *does* know the pairing
+(`closureOf` resolved `./channel.js` to the runtime file), so an exact fix
+exists in principle: thread the resolved runtime module graph through
+`--emit-contract` and join a declaration-bound import to the runtime module's
+export by module identity plus ESM export name. That is new data across the
+backend/IR seam for all four tiers and is not attempted here.
+
+**The fix (fail closed).** `module_surface_is_unaccounted`
+(rust/crates/solid-facts-backend/src/main.rs) gates the reachability rung. A
+reaching function that is *decided: not an export of this entrypoint*, is
+published by its own module's export surface, and has no reference anywhere
+else in the project by exact runtime identity or canonical symbol, cannot have
+had its entry set enumerated: either its importers are outside the analyzed
+file set, or they are inside it and bound to a different declaration of the
+same module. `export_names_from_reachability` returns `None` for it, the ladder
+falls to `fallback-all`, and the marker records `mechanism: "fallback-all"`.
+
+The gate is deliberately not asked of an entrypoint export (its consumers are
+answered by marking its own name — this is what keeps `forwarded` exact in
+`parameter-member-forwarded` and `channelFor` exact on `./direct`) nor of a
+module-private function (its entries are exactly what the graph enumerates —
+this is what keeps `unreached-private-obligation`'s zero-export answer).
+
+**Before/after**, `fixtures/package-contracts/parameter-member-forwarded` with
+a `channel.d.ts` added:
+
+| | before | after |
+| --- | --- | --- |
+| mechanism | `reachability` | `fallback-all` |
+| `.:forwarded` | certified | `reactiveReads`, `returns` unknown |
+| `.:Isolated` | certified | `reactiveReads`, `returns` unknown |
+| `./direct:channelFor` | exact `parameter-member` row | unchanged |
+
+**The over-marking cost, honestly.** `Isolated` reaches nothing and is marked
+anyway; the widening is to *every* export of the entrypoint, because that is
+what `fallback-all` means. For a package that ships a `.d.ts` beside every
+runtime module — the normal published shape — every internal-module obligation
+now widens this way, so a generated contract's unknown surface grows by roughly
+the number of exports per affected entrypoint. Those exports were previously
+published as certified negatives about behavior the analyzer had not seen, so
+the trade is real precision lost for real soundness gained, not noise for
+nothing. Recovering the precision needs the exact fix above, not a narrower
+heuristic.
+
+Pinned by `fixtures/package-contracts/declaration-sibling-reach` (the split,
+including the `./direct` control that must stay exact) and
+`fixtures/package-contracts/entry-reexport-identity` (the same source with
+identity intact, which must keep its three-way answer). Both are in
+`scripts/contract-corpus.mjs`; the corpus is 24 packages.
+
+**Not closed by this.** A declaration sibling still costs the whole entrypoint
+its claims rather than just the reaching exports, and every other consumer of
+the split identity — anything that resolves a call through
+`functions_by_symbol` — still silently sees no edge. The gate protects the
+attribution ladder's answer; it does not restore the call graph.
+
+## Closed 2026-08-23: `contract verify` certified what no run had observed
+
+A second adversarial review, this time of the RFC 0002 pipeline rather than of
+the engine, found that `solid-checker contract verify` could reach
+`evidence.kind: "verified"` on a contract **none of whose claims any probe had
+observed**. Nine defects, in the Node commands under `packages/cli/scripts/`.
+Each is closed; the design decisions the closures required are recorded in
+[RFC 0002's Amendments section](rfcs/0002-machine-verified-contracts.md#amendments)
+rather than silently applied.
+
+**1. Stale `probed` markers (critical).** A `probed` row marker is a durable
+property of the *document*. `writeProbeEvidence` never refreshed or removed
+one, and `collectBlockers` never asked whether the *consumed* report witnessed
+it. So probe-healthy → probe-observes-nothing → verify certified every marker
+the healthy run had left behind. Closed on both sides: a `--write` now
+supersedes the marker of any claim it re-drove that did not pass (reported as
+`superseded`), and verification converts any marker its own report does not
+witness — a passing claim of the same identity covering at least the marker's
+modes — recording it under `staleProbedMarkers`. Conversion rather than a
+blocker, because an unwitnessed marker and an absent one are the same state
+from this run's point of view, and because blocking would make a legitimate
+`--modes` narrowing unable to verify anything rather than able to verify less.
+
+**2. `kind` certified from zero observations (critical).** `kind` is the one
+claim schema v1 has no sentinel for, so `convertUnconfirmedClaims` exempted it
+— relying on "a runtime kind that disagrees is a failed probe", which is
+vacuous when the probe observed nothing. An import that threw, a missing
+export, a crashed session, or a `--modes` narrowing all produced zero
+observations and a verified contract. A `kind` claim not probed-passed in every
+stated mode is now a **blocker**, with the deliberate consequence that a
+package this checker cannot import cannot be machine-verified at all. Also in
+this slice: discovery probes now run for `value` summaries, which are the
+maximal negative claim and were exempt from their own falsifier; and the probe
+report's family labels were realigned with what verification does — see 3.
+
+**3. `because` destroyed by the plan rewrite.** A contract document carries no
+generation-time attribution, so re-deriving the review plan from the verified
+bytes threw away the only record of why each claim is unknown. Items now
+inherit the prior plan's `because` by id, and every sentinel the verification
+created gets a `because.conversion` mirrored from the sidecar.
+
+**4. `--no-discovery` was invisible.** The probe report did not record it, so
+`<contract>.verify.json` listed the incompleteness blocker as checked when
+nothing had looked. The report records `discovery: {enabled, parameters}`, and
+verification refuses a report with discovery disabled — or with no discovery
+state at all.
+
+**5. `returns=accessor` was transitively satisfiable.** The observation plants
+its signal read inside the claimed callback, so `(cb) => () => cb()` passed.
+The observation now also measures caching within one tracked read; a
+forwarding closure is `undriven`, and a real `createMemo` accessor still passes
+(proven against an installed `solid-js@1.9.x`). **An uncached derived accessor
+— 1.x `mapArray`'s plain tracked function is the real example — now lands
+undriven too**, and its `returns` domain converts. That is the safe direction
+and it is a real precision loss: recovering it needs a distinguisher that
+separates "recomputes per read because it is a plain tracked function" from
+"recomputes per read because it is not an accessor at all", which no counter
+available to a generic driver does.
+
+**6. Fabricated call counts.** The worker stamped a per-probe-type constant, so
+`evidence.calls` was a table lookup and a `deferred` claim recorded two calls
+for one invocation. Counted now.
+
+**7. Inherited-summary variants dodged conversion.** The walk converted an
+inherited summary's five top-level domains and then descended into `variants`
+on their own evidence, so the exact per-environment claims — the ones a
+consumer selects — passed through certified. The inheritance travels with the
+walk now.
+
+**8. Summary-level markers outlived their claims.** An export summary's own
+`probed` marker is computed from its `callbacks[]` rows and top-level
+`returns`. Once those are converted (verify) or deleted (a review certifying
+them absent), the marker asserted an observation of claims the document no
+longer contained, and any row without evidence of its own inherited it. Both
+paths recompute it.
+
+**9. `mergeSummaries` one-sided divergence.** `left.returns ?? right.returns`
+handed the environment-unaware base one branch's proven claim when the other
+branch proved *none* — and in a proven summary an absence is a certified
+negative, not an absence of knowledge. One-sided presence is a divergence now,
+so the base is the sentinel and the exact per-branch claims stay in `variants`.
+Merge-produced sentinels also carry a `because.divergences` on their review-plan
+item, naming the branches and the shape of the disagreement; a merge was the
+second emitter of the sentinel and the silent one.
+
+**Fixtures.** `fixtures/package-contracts/conditional-returns-divergence` pins
+the one-sided shape and `conditional-returns-divergence-both` the
+both-present one, with a `Steady` negative control in each that must stay
+unconditional. Both are in `scripts/contract-corpus.mjs`, which closes the
+corpus-coverage gap the review flagged: `mergeSummaries` and `mergeClaimRows`
+were not executed by the corpus at all. Everything else in this list is pinned
+by unit cases in `scripts/contract-probe.test.mjs`,
+`scripts/contract-verify.test.mjs`, and
+`packages/cli/test/contract-attribution-notes.test.mjs`.
+
+**Still fail-closed or unresolved after this.**
+
+- **An inherited summary's *omitted* domains still pass through as certified
+  negatives.** Conversion covers every domain the summary carries; a domain it
+  omits is another package's proven negative, and schema v1 has no way to say
+  "this negative is inherited". The reviewed tier is the only answer today.
+- **An uncached derived accessor's `returns` claim is now unprovable** (5
+  above).
+- **A claim this run did not attempt keeps whatever marker it had** on
+  `--write`. That is deliberate — the command reports what it drove — and it is
+  safe only because verification independently refuses to certify an
+  unwitnessed marker. The two checks are load-bearing together.
+- **`--modes` narrowing can never verify.** Every stated mode must carry a
+  passing `kind` observation, so a narrowed run blocks rather than converting.
+  Deriving a package's genuinely applicable modes is RFC 0002 unresolved
+  question 8.
+- **`mergeClaimRows` still unions the multi-row domains** (`callbacks`,
+  `reactiveReads`, `ownerRequirements`) across branches, so a row proven in one
+  branch is published in the base even where the other branch proves the export
+  invokes nothing. Unlike `returns`, a union there is not obviously the
+  dangerous direction — it over-claims that a callback runs rather than that it
+  does not — but it is the same one-sided shape and has not been argued
+  through. Left open deliberately; fixing it without measuring the ecosystem
+  cost would be the same guess in the other direction.

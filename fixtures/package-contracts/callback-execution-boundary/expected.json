@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "callback-execution-boundary",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "callbacks": [
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "callbacks": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-3": {
+      "kind": "function",
+      "reactiveReads": {
+        "status": "unknown"
+      },
+      "returns": {
+        "status": "unknown"
+      },
+      "callbacks": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-3": [
+          "Escaping"
+        ],
+        "function-1": [
+          "Inline"
+        ],
+        "function-2": [
+          "Returned"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

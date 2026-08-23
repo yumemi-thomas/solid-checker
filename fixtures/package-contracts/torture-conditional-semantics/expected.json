@@ -16,42 +16,58 @@
             "kind": "inferred"
           }
         },
-      {
-        "parameter": 0,
-        "execution": "inline",
-        "evidence": {
-          "kind": "inferred"
+        {
+          "parameter": 0,
+          "execution": "inline",
+          "evidence": {
+            "kind": "inferred"
+          }
         }
-      }
       ],
       "variants": [
         {
-          "conditions": ["browser", "import"],
+          "conditions": [
+            "browser",
+            "import"
+          ],
           "summary": {
             "kind": "function",
             "callbacks": [
               {
                 "parameter": 0,
                 "execution": "inline",
-                "evidence": { "kind": "inferred" }
+                "evidence": {
+                  "kind": "inferred"
+                }
               }
             ],
-            "evidence": { "kind": "inferred" }
-          }
+            "evidence": {
+              "kind": "inferred"
+            }
+          },
+          "precedence": 0
         },
         {
-          "conditions": ["import", "node"],
+          "conditions": [
+            "import",
+            "node"
+          ],
           "summary": {
             "kind": "function",
             "callbacks": [
               {
                 "parameter": 0,
                 "execution": "deferred",
-                "evidence": { "kind": "inferred" }
+                "evidence": {
+                  "kind": "inferred"
+                }
               }
             ],
-            "evidence": { "kind": "inferred" }
-          }
+            "evidence": {
+              "kind": "inferred"
+            }
+          },
+          "precedence": 1
         }
       ],
       "evidence": {
@@ -68,10 +84,18 @@
   "entrypoints": {
     ".": {
       "exports": {
-        "value-1": ["mode"],
-        "function-1": ["schedule"]
+        "value-1": [
+          "mode"
+        ],
+        "function-1": [
+          "schedule"
+        ]
       },
-      "conditions": ["browser", "import", "node"]
+      "conditions": [
+        "browser",
+        "import",
+        "node"
+      ]
     }
   },
   "evidence": {

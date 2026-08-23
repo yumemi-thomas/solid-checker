@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "unresolved-dispatch-reachability",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "reactiveReads": {
+        "status": "unknown"
+      },
+      "returns": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-1": [
+          "Isolated"
+        ],
+        "function-2": [
+          "Reaches"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

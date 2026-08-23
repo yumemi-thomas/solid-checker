@@ -194,7 +194,7 @@ dependencies = [
 [[package]]
 name = "dom-expressions-compiler"
 version = "0.1.0"
-source = "git+https://github.com/yumemi-thomas/solid-1x-compiler?rev=79b9b63721c59b0acfd72348438bbb6e090ec81c#79b9b63721c59b0acfd72348438bbb6e090ec81c"
+source = "git+https://github.com/yumemi-thomas/solid-1x-compiler?rev=ad2c9452041c757138bb972416d8abc4798ea6b9#ad2c9452041c757138bb972416d8abc4798ea6b9"
 dependencies = [
  "html5ever",
  "htmlize",
@@ -1627,8 +1627,8 @@ dependencies = [
 
 [[package]]
 name = "typefacts"
-version = "0.9.0"
-source = "git+https://github.com/yumemi-thomas/solid-ts-facts?rev=479b74159f86e538cfecad327b508ff864d1d764#479b74159f86e538cfecad327b508ff864d1d764"
+version = "0.10.0"
+source = "git+https://github.com/yumemi-thomas/solid-ts-facts?rev=e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4#e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4"
 dependencies = [
  "ciborium",
  "serde",

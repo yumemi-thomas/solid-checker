@@ -2,7 +2,7 @@ RUST_TOOLCHAIN ?= 1.97
 SOLID_CHECKER_BUILD_ID ?= dev
 RUST_MANIFEST := rust/Cargo.toml
 
-.PHONY: build build-typefacts build-rust build-checker-debug package test test-rust test-cli verify verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean
+.PHONY: build build-typefacts build-rust build-checker-debug build-checker-release package test test-rust test-cli verify verify-performance corpus contract-corpus contract-differential contract-conformance contracts contracts-check coverage coverage-update tsc-oracle tsc-oracle-provision tsc-ownership ownership-gate obligation-audit clean
 
 build: build-rust
 
@@ -21,6 +21,12 @@ build-rust: build-typefacts
 # pinned TypeFacts producer or overwrite the packaged/check-in binary under bin/.
 build-checker-debug:
 	cargo +$(RUST_TOOLCHAIN) build --manifest-path $(RUST_MANIFEST) \
+	  -p solid-facts-backend --bin solid-checker-rust
+
+# A fresh optimized checker for performance measurements. Like the debug gate
+# build, this leaves the checked-in packaged binary under bin/ untouched.
+build-checker-release:
+	cargo +$(RUST_TOOLCHAIN) build --release --manifest-path $(RUST_MANIFEST) \
 	  -p solid-facts-backend --bin solid-checker-rust
 
 package: build-typefacts
@@ -113,3 +119,41 @@ contracts-check:
 
 clean:
 	rm -rf bin dist rust/target .typefacts
+
+# Ecosystem benchmark: discovery, an offline pinned sentinel run, and the
+# full-corpus run. See docs/ecosystem-benchmark.md for what these measure and
+# why the runner is kept separate from contract-corpus.
+
+# Enumerates every ecosystem family from the live npm registry and rewrites
+# the manifest. Needs network access; review the printed diff before trusting
+# a refreshed manifest, and never run this to silence a benchmark failure
+# without reading what changed.
+ecosystem-discover:
+	node scripts/ecosystem-benchmark/discover.mjs
+
+ecosystem-benchmark-test:
+	node --test scripts/ecosystem-benchmark/*.test.mjs
+
+# The pinned offline regression subset. Deliberately builds nothing: unlike
+# tsc-oracle and ownership-gate below, this target trusts a debug binary
+# already produced by `make build-checker-debug` (or CI's own build step)
+# rather than rebuilding on every invocation. It points at the fresh
+# rust/target/debug build rather than bin/solid-checker-rust, unlike
+# contract-corpus and corpus above, because bin/solid-checker-rust is a
+# checked-in artifact that can lag the source tree (AGENTS.md's "Stale
+# binaries hide source changes"); a benchmark run must measure this commit's
+# engine, not whatever was last packaged into bin/.
+ecosystem-sentinel:
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/debug/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	  node scripts/ecosystem-benchmark/run.mjs --sentinel
+
+# The full discovered corpus is also the product-speed measurement, so it uses
+# a fresh optimized binary. run.mjs chooses min(available CPUs, 8) workers;
+# pass --concurrency explicitly when comparing another scheduling policy.
+ecosystem-benchmark: build-checker-release
+	SOLID_CHECKER_NATIVE_BIN="$(CURDIR)/rust/target/release/solid-checker-rust" \
+	  SOLID_TYPEFACTS_BIN="$(CURDIR)/bin/solid-typefacts" \
+	  node scripts/ecosystem-benchmark/run.mjs --timeout 600
+
+.PHONY: ecosystem-discover ecosystem-benchmark-test ecosystem-sentinel ecosystem-benchmark

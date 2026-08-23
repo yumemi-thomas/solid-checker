@@ -953,7 +953,7 @@ fn incremental_contract_exports_refresh_cross_file_reexports() {
         initial
             .contract_exports
             .get("publicSource")
-            .map(|summary| summary.async_behavior.as_str()),
+            .and_then(|summary| summary.async_behavior.known().map(String::as_str)),
         Some("")
     );
 
@@ -980,7 +980,7 @@ fn incremental_contract_exports_refresh_cross_file_reexports() {
         retained
             .contract_exports
             .get("publicSource")
-            .map(|summary| summary.async_behavior.as_str()),
+            .and_then(|summary| summary.async_behavior.known().map(String::as_str)),
         Some("promise"),
         "an unchanged re-export fragment must follow its changed source contract"
     );

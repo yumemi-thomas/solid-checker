@@ -1861,7 +1861,8 @@ pub(crate) fn computation_is_async_with_contracts(
             .entities()
             .at(file.path.as_str(), span)
             .and_then(|symbol| contracted.get(symbol))
-            .is_some_and(|binding| !binding.summary.async_behavior.is_empty())
+            .and_then(|binding| binding.summary.async_behavior.known())
+            .is_some_and(|behavior| !behavior.is_empty())
     };
     if contracted_async_at(argument) {
         return true;
@@ -2430,7 +2431,16 @@ pub(crate) fn returned_binding_reference(
         ))
 }
 
-pub(crate) fn function_binding_name<'a>(
+/// The name that binds a function declaration, arrow bindings included.
+///
+/// `function.name` covers `function X() {}` and `method_name` covers a class
+/// or object method; neither exists for `const X = () => {}`, whose only name
+/// is the binding that initializes it. Exported to the backend because
+/// contract emission's attribution ladder must answer "which export is this
+/// function" for exactly the same set of declarations the IR does — reading
+/// only `name`/`method_name` there made every arrow-bound export unnameable,
+/// and an unnameable export silently became "not an export".
+pub fn function_binding_name<'a>(
     file: &'a solid_facts::FileFacts,
     function: &'a solid_facts::ast::FunctionFact,
 ) -> Option<&'a solid_facts::ast::NamedSpan> {

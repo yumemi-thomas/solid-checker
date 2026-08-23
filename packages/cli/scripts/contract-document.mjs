@@ -66,7 +66,7 @@ function removeRedundantVariants(variants) {
   return kept;
 }
 
-function collapseEvidenceOnlyVariants(summary) {
+function collapseEvidenceOnlyVariants(summary, entrypointConditions = []) {
   const variants = removeRedundantVariants(
     (summary.variants ?? []).map(variant => ({
       ...variant,
@@ -74,6 +74,18 @@ function collapseEvidenceOnlyVariants(summary) {
     }))
   );
   if (!variants.length) return summary;
+  // A variant set encodes one of two different facts. Usually it is branches
+  // that differ only in evidence, and collapsing them loses nothing. But it
+  // can also record *where the export exists at all*: when the set does not
+  // cover every condition its entrypoint resolves under, the uncovered
+  // environments are ones this export was never observed in. Collapsing then
+  // republishes one branch's summary as unconditional and hands a consumer in
+  // an uncovered environment a complete claim about an export that is absent
+  // there, so the gating has to survive.
+  const covered = new Set(variants.flatMap(variant => variant.conditions ?? []));
+  if (entrypointConditions.some(condition => !covered.has(condition))) {
+    return { ...summary, variants };
+  }
   const base = { ...summary };
   delete base.variants;
   const semantic = JSON.stringify(semanticValue(base));
@@ -93,11 +105,16 @@ function canonicalSummary(summary) {
 function plainSummary(summary) {
   return (
     !summary.evidence &&
+    summary.reactiveReads?.status !== "unknown" &&
     !summary.reactiveReads?.length &&
+    summary.returns?.status !== "unknown" &&
     !summary.returns &&
+    summary.callbacks?.status !== "unknown" &&
     !summary.callbacks?.length &&
+    summary.ownerRequirements?.status !== "unknown" &&
     !summary.ownerRequirements?.length &&
     !summary.variants?.length &&
+    summary.asyncBehavior?.status !== "unknown" &&
     !summary.asyncBehavior
   );
 }
@@ -106,7 +123,7 @@ export function normalizeContract(contract) {
   const unique = new Map();
   for (const entrypoint of Object.values(contract.entrypoints)) {
     for (const [name, summary] of Object.entries(entrypoint.exports)) {
-      const collapsed = collapseEvidenceOnlyVariants(summary);
+      const collapsed = collapseEvidenceOnlyVariants(summary, entrypoint.conditions ?? []);
       entrypoint.exports[name] = collapsed;
       unique.set(canonicalSummary(collapsed), collapsed);
     }

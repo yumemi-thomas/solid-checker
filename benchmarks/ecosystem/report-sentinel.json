@@ -1,0 +1,4696 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-08-22T18:35:02.872Z",
+  "finishedAt": "2026-08-22T18:36:48.141Z",
+  "durationMs": 105269,
+  "checker": {
+    "nativeBin": "/Users/thomas/Documents/Github/solid-checker/rust/target/debug/solid-checker-rust",
+    "typeFactsBin": "/Users/thomas/Documents/Github/solid-checker/bin/solid-typefacts"
+  },
+  "manifest": {
+    "generatedAt": "2026-08-22T07:44:17.857Z",
+    "rowCount": 305,
+    "probeCount": 416
+  },
+  "scope": {
+    "kind": "filtered",
+    "sentinel": true,
+    "families": [],
+    "solidTargets": [],
+    "includeSupplemental": false,
+    "probesRun": 23
+  },
+  "solid1": {
+    "families": [
+      {
+        "family": "official-solid",
+        "label": "Official Solid",
+        "compatiblePackageCount": 3,
+        "probeCount": 3,
+        "declaredEntrypoints": 25,
+        "generatedEntrypoints": 13,
+        "refusedEntrypoints": 0,
+        "successCount": 3,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 3,
+          "total": 3
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@solidjs/meta@0.29.4|solid1|only",
+            "family": "official-solid",
+            "status": "official",
+            "package": "@solidjs/meta",
+            "version": "0.29.4",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "@solidjs/meta": "0.29.4",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 14,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 9,
+              "exportsProven": 8,
+              "exportsWithUnknown": 1,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 1,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 1,
+              "behavioralRows": {
+                "callbackExecution": 2,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 14,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 1,
+                "no-callback-row": 7,
+                "callback-without-owner-row": 2,
+                "unknown-sentinel": 1,
+                "generated-summary": 2
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solidjs/meta@ contract with 1 entrypoints at ; review plan and (14 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 14
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 1148,
+            "installDurationMs": 945,
+            "generationDurationMs": 201,
+            "stdout": "generated @solidjs/meta@0.29.4 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-uJSocs/@solidjs__meta@0.29.4--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-uJSocs/@solidjs__meta@0.29.4--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-uJSocs/@solidjs__meta@0.29.4--solid1--only.review.json (14 checklist items)\n",
+            "stderr": ""
+          },
+          {
+            "probeId": "@solidjs/router@1.0.0|solid1|only",
+            "family": "official-solid",
+            "status": "official",
+            "package": "@solidjs/router",
+            "version": "1.0.0",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "@solidjs/router": "1.0.0",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 175,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 38,
+              "exportsProven": 1,
+              "exportsWithUnknown": 37,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 37,
+                "returns": 37,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 74,
+              "behavioralRows": {
+                "callbackExecution": 29,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 175,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 15,
+                "conditional-environment": 1,
+                "unknown-sentinel": 90,
+                "no-callback-row": 23,
+                "callback-without-owner-row": 29,
+                "generated-summary": 17
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solidjs/router@ contract with 1 entrypoints at ; review plan and (175 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 175
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 2425,
+            "installDurationMs": 952,
+            "generationDurationMs": 1472,
+            "stdout": "generated @solidjs/router@1.0.0 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-U3lrsK/@solidjs__router@1.0.0--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-U3lrsK/@solidjs__router@1.0.0--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-U3lrsK/@solidjs__router@1.0.0--solid1--only.review.json (175 checklist items)\n",
+            "stderr": ""
+          },
+          {
+            "probeId": "solid-js@1.9.14|solid1|only",
+            "family": "official-solid",
+            "status": "official",
+            "package": "solid-js",
+            "version": "1.9.14",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 23,
+            "generatedEntrypoints": 11,
+            "refusedEntrypoints": null,
+            "checklistItems": 1132,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 11,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 202,
+              "exportsProven": 161,
+              "exportsWithUnknown": 41,
+              "exportsAllDomainsUnknown": 3,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 3,
+                "reactiveReads": 11,
+                "returns": 41,
+                "ownerRequirements": 3,
+                "asyncBehavior": 3
+              },
+              "unknownTotal": 61,
+              "behavioralRows": {
+                "callbackExecution": 254,
+                "reactiveRead": 142,
+                "returnTree": 98,
+                "ownerRequirement": 14,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 1132,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 9,
+                "callback-without-owner-row": 339,
+                "no-callback-row": 455,
+                "unknown-sentinel": 130,
+                "generated-owner-requirement": 19,
+                "generated-summary": 179
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated solid-js@ contract with 11 entrypoints at ; review plan and (1132 checklist items)",
+            "detail": {
+              "entrypointCount": 11,
+              "checklistItems": 1132
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 5836,
+            "installDurationMs": 394,
+            "generationDurationMs": 5439,
+            "stdout": "generated solid-js@1.9.14 contract with 11 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-AjjcuJ/solid-js@1.9.14--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-AjjcuJ/solid-js@1.9.14--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-AjjcuJ/solid-js@1.9.14--solid1--only.review.json (1132 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "kobalte",
+        "label": "Kobalte",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 3,
+        "generatedEntrypoints": 69,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@kobalte/core@0.13.13|solid1|only",
+            "family": "kobalte",
+            "status": "official",
+            "package": "@kobalte/core",
+            "version": "0.13.13",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "@kobalte/core": "0.13.13",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 3,
+            "generatedEntrypoints": 69,
+            "refusedEntrypoints": null,
+            "checklistItems": 2072,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 69,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 611,
+              "exportsProven": 167,
+              "exportsWithUnknown": 444,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 432,
+                "returns": 444,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 876,
+              "behavioralRows": {
+                "callbackExecution": 141,
+                "reactiveRead": 51,
+                "returnTree": 31,
+                "ownerRequirement": 26,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 2072,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 3,
+                "conditional-environment": 69,
+                "unknown-sentinel": 1068,
+                "no-callback-row": 582,
+                "callback-without-owner-row": 141,
+                "generated-owner-requirement": 26,
+                "generated-summary": 183
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @kobalte/core@ contract with 69 entrypoints at ; review plan and (2072 checklist items)",
+            "detail": {
+              "entrypointCount": 69,
+              "checklistItems": 2072
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 40397,
+            "installDurationMs": 2896,
+            "generationDurationMs": 37493,
+            "stdout": "generated @kobalte/core@0.13.13 contract with 69 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-75Q4wg/@kobalte__core@0.13.13--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-75Q4wg/@kobalte__core@0.13.13--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-75Q4wg/@kobalte__core@0.13.13--solid1--only.review.json (2072 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "solid-primitives",
+        "label": "Solid Primitives",
+        "compatiblePackageCount": 3,
+        "probeCount": 3,
+        "declaredEntrypoints": 3,
+        "generatedEntrypoints": 3,
+        "refusedEntrypoints": 0,
+        "successCount": 3,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 3,
+          "total": 3
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@solid-primitives/active-element@2.1.6|solid1|only",
+            "family": "solid-primitives",
+            "status": "official",
+            "package": "@solid-primitives/active-element",
+            "version": "2.1.6",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "@solid-primitives/active-element": "2.1.6",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 12,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 5,
+              "exportsProven": 1,
+              "exportsWithUnknown": 4,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 2,
+                "reactiveReads": 2,
+                "returns": 2,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 6,
+              "behavioralRows": {
+                "callbackExecution": 1,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 12,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 1,
+                "no-callback-row": 2,
+                "unknown-sentinel": 6,
+                "callback-without-owner-row": 1,
+                "generated-summary": 1
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solid-primitives/active-element@ contract with 1 entrypoints at ; review plan and (12 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 12
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 880,
+            "installDurationMs": 774,
+            "generationDurationMs": 106,
+            "stdout": "generated @solid-primitives/active-element@2.1.6 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-z98X5B/@solid-primitives__active-element@2.1.6--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-z98X5B/@solid-primitives__active-element@2.1.6--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-z98X5B/@solid-primitives__active-element@2.1.6--solid1--only.review.json (12 checklist items)\n",
+            "stderr": ""
+          },
+          {
+            "probeId": "@solid-primitives/analytics@0.2.1|solid1|only",
+            "family": "solid-primitives",
+            "status": "official",
+            "package": "@solid-primitives/analytics",
+            "version": "0.2.1",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "@solid-primitives/analytics": "0.2.1",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 4,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": true,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 2,
+              "exportsProven": 2,
+              "exportsWithUnknown": 0,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 0,
+              "behavioralRows": {
+                "callbackExecution": 0,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 4,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 1,
+                "no-callback-row": 1,
+                "generated-summary": 1
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solid-primitives/analytics@ contract with 1 entrypoints at ; review plan and (4 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 4
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 1111,
+            "installDurationMs": 1023,
+            "generationDurationMs": 87,
+            "stdout": "generated @solid-primitives/analytics@0.2.1 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-rlXlN5/@solid-primitives__analytics@0.2.1--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-rlXlN5/@solid-primitives__analytics@0.2.1--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-rlXlN5/@solid-primitives__analytics@0.2.1--solid1--only.review.json (4 checklist items)\n",
+            "stderr": ""
+          },
+          {
+            "probeId": "@solid-primitives/audio@1.4.5|solid1|only",
+            "family": "solid-primitives",
+            "status": "official",
+            "package": "@solid-primitives/audio",
+            "version": "1.4.5",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "@solid-primitives/audio": "1.4.5",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 6,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 4,
+              "exportsProven": 3,
+              "exportsWithUnknown": 1,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 1,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 1,
+              "behavioralRows": {
+                "callbackExecution": 0,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 6,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 1,
+                "unknown-sentinel": 1,
+                "no-callback-row": 2,
+                "generated-summary": 1
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solid-primitives/audio@ contract with 1 entrypoints at ; review plan and (6 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 6
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 943,
+            "installDurationMs": 831,
+            "generationDurationMs": 111,
+            "stdout": "generated @solid-primitives/audio@1.4.5 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-CQ7wqZ/@solid-primitives__audio@1.4.5--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-CQ7wqZ/@solid-primitives__audio@1.4.5--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-CQ7wqZ/@solid-primitives__audio@1.4.5--solid1--only.review.json (6 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "corvu",
+        "label": "Corvu",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 1,
+        "generatedEntrypoints": 1,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@corvu/accordion@0.2.5|solid1|only",
+            "family": "corvu",
+            "status": "official",
+            "package": "@corvu/accordion",
+            "version": "0.2.5",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "@corvu/accordion": "0.2.5",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 18,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": true,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 8,
+              "exportsProven": 8,
+              "exportsWithUnknown": 0,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 0,
+              "behavioralRows": {
+                "callbackExecution": 4,
+                "reactiveRead": 4,
+                "returnTree": 2,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 18,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 1,
+                "callback-without-owner-row": 4,
+                "no-callback-row": 8,
+                "generated-summary": 4
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @corvu/accordion@ contract with 1 entrypoints at ; review plan and (18 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 18
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 640,
+            "installDurationMs": 322,
+            "generationDurationMs": 317,
+            "stdout": "generated @corvu/accordion@0.2.5 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cRUzBe/@corvu__accordion@0.2.5--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cRUzBe/@corvu__accordion@0.2.5--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cRUzBe/@corvu__accordion@0.2.5--solid1--only.review.json (18 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "tanstack",
+        "label": "TanStack",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 3,
+        "generatedEntrypoints": 2,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@tanstack/ai-devtools-core@0.5.6|solid1|only",
+            "family": "tanstack",
+            "status": "official",
+            "package": "@tanstack/ai-devtools-core",
+            "version": "0.5.6",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "@tanstack/ai-devtools-core": "0.5.6",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 3,
+            "generatedEntrypoints": 2,
+            "refusedEntrypoints": null,
+            "checklistItems": 509,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": true,
+              "entrypointsEmitted": 2,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 1,
+              "exportsProven": 1,
+              "exportsWithUnknown": 0,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 0,
+              "behavioralRows": {
+                "callbackExecution": 0,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 509,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 505,
+                "conditional-environment": 2,
+                "generated-summary": 2
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @tanstack/ai-devtools-core@ contract with 2 entrypoints at ; review plan and (509 checklist items)",
+            "detail": {
+              "entrypointCount": 2,
+              "checklistItems": 509
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 101610,
+            "installDurationMs": 892,
+            "generationDurationMs": 100718,
+            "stdout": "generated @tanstack/ai-devtools-core@0.5.6 contract with 2 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-Ml5OiP/@tanstack__ai-devtools-core@0.5.6--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-Ml5OiP/@tanstack__ai-devtools-core@0.5.6--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-Ml5OiP/@tanstack__ai-devtools-core@0.5.6--solid1--only.review.json (509 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "solid-devtools",
+        "label": "Solid Devtools",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 0,
+        "generatedEntrypoints": 0,
+        "refusedEntrypoints": 0,
+        "successCount": 0,
+        "partialCount": 0,
+        "failureCount": 1,
+        "successRate": {
+          "percentage": 0,
+          "successes": 0,
+          "total": 1
+        },
+        "failureGroups": [
+          {
+            "class": "cjs-only-entrypoint",
+            "signature": ". has only a CJS runtime target; CJS contract generation is unsupported",
+            "count": 1,
+            "packages": [
+              "@solid-devtools/babel-plugin"
+            ]
+          }
+        ],
+        "results": [
+          {
+            "probeId": "@solid-devtools/babel-plugin@0.3.1|solid1|only",
+            "family": "solid-devtools",
+            "status": "official",
+            "package": "@solid-devtools/babel-plugin",
+            "version": "0.3.1",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "@solid-devtools/babel-plugin": "0.3.1",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 0,
+            "generatedEntrypoints": null,
+            "refusedEntrypoints": null,
+            "checklistItems": null,
+            "contractContent": null,
+            "outcome": "failure",
+            "class": "cjs-only-entrypoint",
+            "signature": ". has only a CJS runtime target; CJS contract generation is unsupported",
+            "detail": {
+              "entrypoint": "solid-checker: ."
+            },
+            "exitStatus": 2,
+            "timedOut": false,
+            "durationMs": 1905,
+            "installDurationMs": 1871,
+            "generationDurationMs": 34,
+            "stdout": "",
+            "stderr": "solid-checker: . has only a CJS runtime target; CJS contract generation is unsupported\n"
+          }
+        ]
+      },
+      {
+        "family": "solid-recharts",
+        "label": "Solid Recharts",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 1,
+        "generatedEntrypoints": 1,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "solid-recharts@1.0.1|solid1|only",
+            "family": "solid-recharts",
+            "status": "official",
+            "package": "solid-recharts",
+            "version": "1.0.1",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "solid-recharts": "1.0.1",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 442,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 109,
+              "exportsProven": 8,
+              "exportsWithUnknown": 101,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 101,
+                "returns": 101,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 202,
+              "behavioralRows": {
+                "callbackExecution": 30,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 442,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 100,
+                "conditional-environment": 1,
+                "unknown-sentinel": 202,
+                "callback-without-owner-row": 30,
+                "no-callback-row": 71,
+                "generated-summary": 38
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated solid-recharts@ contract with 1 entrypoints at ; review plan and (442 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 442
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 21689,
+            "installDurationMs": 557,
+            "generationDurationMs": 21127,
+            "stdout": "generated solid-recharts@1.0.1 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-bh2bKq/solid-recharts@1.0.1--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-bh2bKq/solid-recharts@1.0.1--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-bh2bKq/solid-recharts@1.0.1--solid1--only.review.json (442 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "motion-solidjs",
+        "label": "Motion for Solid",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 2,
+        "generatedEntrypoints": 2,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "motion-solidjs@0.6.0|solid1|only",
+            "family": "motion-solidjs",
+            "status": "official",
+            "package": "motion-solidjs",
+            "version": "0.6.0",
+            "solidTarget": "solid1",
+            "probeKind": "only",
+            "channel": "stable",
+            "solid": {
+              "solid-js": "1.9.14"
+            },
+            "installedVersions": {
+              "motion-solidjs": "0.6.0",
+              "solid-js": "1.9.14"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 2,
+            "generatedEntrypoints": 2,
+            "refusedEntrypoints": null,
+            "checklistItems": 537,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 2,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 96,
+              "exportsProven": 15,
+              "exportsWithUnknown": 81,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 81,
+                "returns": 81,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 162,
+              "behavioralRows": {
+                "callbackExecution": 6,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 537,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 7,
+                "conditional-environment": 2,
+                "unknown-sentinel": 324,
+                "no-callback-row": 150,
+                "callback-without-owner-row": 12,
+                "generated-summary": 42
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated motion-solidjs@ contract with 2 entrypoints at ; review plan and (537 checklist items)",
+            "detail": {
+              "entrypointCount": 2,
+              "checklistItems": 537
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 3820,
+            "installDurationMs": 1652,
+            "generationDurationMs": 2165,
+            "stdout": "generated motion-solidjs@0.6.0 contract with 2 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-jJgqwF/motion-solidjs@0.6.0--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-jJgqwF/motion-solidjs@0.6.0--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-jJgqwF/motion-solidjs@0.6.0--solid1--only.review.json (537 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      }
+    ],
+    "totals": {
+      "compatiblePackageCount": 12,
+      "probeCount": 12,
+      "declaredEntrypoints": 38,
+      "generatedEntrypoints": 91,
+      "refusedEntrypoints": 0,
+      "successCount": 11,
+      "partialCount": 0,
+      "failureCount": 1,
+      "successRate": {
+        "percentage": 91.67,
+        "successes": 11,
+        "total": 12
+      },
+      "failureGroups": [
+        {
+          "class": "cjs-only-entrypoint",
+          "signature": ". has only a CJS runtime target; CJS contract generation is unsupported",
+          "count": 1,
+          "packages": [
+            "@solid-devtools/babel-plugin"
+          ]
+        }
+      ]
+    }
+  },
+  "solid2": {
+    "families": [
+      {
+        "family": "official-solid",
+        "label": "Official Solid",
+        "compatiblePackageCount": 3,
+        "probeCount": 3,
+        "declaredEntrypoints": 8,
+        "generatedEntrypoints": 6,
+        "refusedEntrypoints": 0,
+        "successCount": 3,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 3,
+          "total": 3
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@solidjs/meta@1.0.0-next.2|solid2|floor",
+            "family": "official-solid",
+            "status": "official",
+            "package": "@solidjs/meta",
+            "version": "1.0.0-next.2",
+            "solidTarget": "solid2",
+            "probeKind": "floor",
+            "channel": "rc",
+            "solid": {
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "installedVersions": {
+              "@solidjs/meta": "1.0.0-next.2",
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 9,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 8,
+              "exportsProven": 1,
+              "exportsWithUnknown": 7,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 7,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 7,
+              "behavioralRows": {
+                "callbackExecution": 0,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 9,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "unknown-sentinel": 7,
+                "no-callback-row": 1
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solidjs/meta@ contract with 1 entrypoints at ; review plan and (9 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 9
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 1543,
+            "installDurationMs": 1434,
+            "generationDurationMs": 107,
+            "stdout": "generated @solidjs/meta@1.0.0-next.2 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VIG9Z4/@solidjs__meta@1.0.0-next.2--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VIG9Z4/@solidjs__meta@1.0.0-next.2--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VIG9Z4/@solidjs__meta@1.0.0-next.2--solid2--floor.review.json (9 checklist items)\n",
+            "stderr": ""
+          },
+          {
+            "probeId": "@solidjs/router@2.0.0-next.17|solid2|only",
+            "family": "official-solid",
+            "status": "official",
+            "package": "@solidjs/router",
+            "version": "2.0.0-next.17",
+            "solidTarget": "solid2",
+            "probeKind": "only",
+            "channel": "rc",
+            "solid": {
+              "@solidjs/web": "2.0.0-rc.1",
+              "solid-js": "2.0.0-rc.1"
+            },
+            "installedVersions": {
+              "@solidjs/router": "2.0.0-next.17",
+              "@solidjs/web": "2.0.0-rc.1",
+              "solid-js": "2.0.0-rc.1"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 3,
+            "generatedEntrypoints": 3,
+            "refusedEntrypoints": null,
+            "checklistItems": 268,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 3,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 30,
+              "exportsProven": 2,
+              "exportsWithUnknown": 28,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 28,
+                "returns": 28,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 56,
+              "behavioralRows": {
+                "callbackExecution": 22,
+                "reactiveRead": 2,
+                "returnTree": 11,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 268,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 43,
+                "conditional-environment": 1,
+                "unknown-sentinel": 110,
+                "no-callback-row": 63,
+                "callback-without-owner-row": 22,
+                "generated-summary": 29
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solidjs/router@ contract with 3 entrypoints at ; review plan and (268 checklist items)",
+            "detail": {
+              "entrypointCount": 3,
+              "checklistItems": 268
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 3403,
+            "installDurationMs": 1438,
+            "generationDurationMs": 1964,
+            "stdout": "generated @solidjs/router@2.0.0-next.17 contract with 3 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-dFxODQ/@solidjs__router@2.0.0-next.17--solid2--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-dFxODQ/@solidjs__router@2.0.0-next.17--solid2--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-dFxODQ/@solidjs__router@2.0.0-next.17--solid2--only.review.json (268 checklist items)\n",
+            "stderr": ""
+          },
+          {
+            "probeId": "solid-js@2.0.0-rc.1|solid2|floor",
+            "family": "official-solid",
+            "status": "official",
+            "package": "solid-js",
+            "version": "2.0.0-rc.1",
+            "solidTarget": "solid2",
+            "probeKind": "floor",
+            "channel": "rc",
+            "solid": {
+              "@solidjs/signals": "2.0.0-rc.1",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "installedVersions": {
+              "solid-js": "2.0.0-rc.0",
+              "@solidjs/signals": "2.0.0-rc.1"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 4,
+            "generatedEntrypoints": 2,
+            "refusedEntrypoints": null,
+            "checklistItems": 294,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 2,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 81,
+              "exportsProven": 66,
+              "exportsWithUnknown": 15,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 0,
+                "returns": 15,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 15,
+              "behavioralRows": {
+                "callbackExecution": 103,
+                "reactiveRead": 7,
+                "returnTree": 59,
+                "ownerRequirement": 8,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 294,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 2,
+                "unknown-sentinel": 15,
+                "no-callback-row": 120,
+                "callback-without-owner-row": 103,
+                "generated-owner-requirement": 8,
+                "generated-summary": 45
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated solid-js@ contract with 2 entrypoints at ; review plan and (294 checklist items)",
+            "detail": {
+              "entrypointCount": 2,
+              "checklistItems": 294
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 4010,
+            "installDurationMs": 1084,
+            "generationDurationMs": 2925,
+            "stdout": "generated solid-js@2.0.0-rc.0 contract with 2 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ZjRmd1/solid-js@2.0.0-rc.1--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ZjRmd1/solid-js@2.0.0-rc.1--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ZjRmd1/solid-js@2.0.0-rc.1--solid2--floor.review.json (294 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "kobalte",
+        "label": "Kobalte",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 1,
+        "generatedEntrypoints": 61,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+            "family": "kobalte",
+            "status": "official",
+            "package": "@kobalte/core",
+            "version": "2.0.0-alpha.0",
+            "solidTarget": "solid2",
+            "probeKind": "only",
+            "channel": "rc",
+            "solid": {
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "installedVersions": {
+              "@kobalte/core": "2.0.0-alpha.0",
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 61,
+            "refusedEntrypoints": null,
+            "checklistItems": 4464,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 61,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 526,
+              "exportsProven": 131,
+              "exportsWithUnknown": 395,
+              "exportsAllDomainsUnknown": 199,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 199,
+                "reactiveReads": 395,
+                "returns": 395,
+                "ownerRequirements": 199,
+                "asyncBehavior": 199
+              },
+              "unknownTotal": 1387,
+              "behavioralRows": {
+                "callbackExecution": 4,
+                "reactiveRead": 43,
+                "returnTree": 29,
+                "ownerRequirement": 219,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 4464,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 2,
+                "conditional-environment": 61,
+                "unknown-sentinel": 3006,
+                "no-callback-row": 770,
+                "generated-owner-requirement": 219,
+                "callback-without-owner-row": 4,
+                "generated-summary": 402
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @kobalte/core@ contract with 61 entrypoints at ; review plan and (4464 checklist items)",
+            "detail": {
+              "entrypointCount": 61,
+              "checklistItems": 4464
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 29849,
+            "installDurationMs": 2839,
+            "generationDurationMs": 27005,
+            "stdout": "generated @kobalte/core@2.0.0-alpha.0 contract with 61 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-5qV8q1/@kobalte__core@2.0.0-alpha.0--solid2--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-5qV8q1/@kobalte__core@2.0.0-alpha.0--solid2--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-5qV8q1/@kobalte__core@2.0.0-alpha.0--solid2--only.review.json (4464 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "solid-primitives",
+        "label": "Solid Primitives",
+        "compatiblePackageCount": 3,
+        "probeCount": 3,
+        "declaredEntrypoints": 6,
+        "generatedEntrypoints": 6,
+        "refusedEntrypoints": 0,
+        "successCount": 3,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 3,
+          "total": 3
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@solid-primitives/a11y@1.0.0-next.3|solid2|floor",
+            "family": "solid-primitives",
+            "status": "official",
+            "package": "@solid-primitives/a11y",
+            "version": "1.0.0-next.3",
+            "solidTarget": "solid2",
+            "probeKind": "floor",
+            "channel": "rc",
+            "solid": {
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "installedVersions": {
+              "@solid-primitives/a11y": "1.0.0-next.3",
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 11,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": true,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 7,
+              "exportsProven": 7,
+              "exportsWithUnknown": 0,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 0,
+              "behavioralRows": {
+                "callbackExecution": 0,
+                "reactiveRead": 0,
+                "returnTree": 2,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 11,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 1,
+                "no-callback-row": 7,
+                "generated-summary": 2
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solid-primitives/a11y@ contract with 1 entrypoints at ; review plan and (11 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 11
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 982,
+            "installDurationMs": 863,
+            "generationDurationMs": 119,
+            "stdout": "generated @solid-primitives/a11y@1.0.0-next.3 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VHyfOj/@solid-primitives__a11y@1.0.0-next.3--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VHyfOj/@solid-primitives__a11y@1.0.0-next.3--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VHyfOj/@solid-primitives__a11y@1.0.0-next.3--solid2--floor.review.json (11 checklist items)\n",
+            "stderr": ""
+          },
+          {
+            "probeId": "@solid-primitives/active-element@3.0.0-next.2|solid2|floor",
+            "family": "solid-primitives",
+            "status": "official",
+            "package": "@solid-primitives/active-element",
+            "version": "3.0.0-next.2",
+            "solidTarget": "solid2",
+            "probeKind": "floor",
+            "channel": "rc",
+            "solid": {
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "installedVersions": {
+              "@solid-primitives/active-element": "3.0.0-next.2",
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 7,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": true,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 3,
+              "exportsProven": 3,
+              "exportsWithUnknown": 0,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 0,
+              "behavioralRows": {
+                "callbackExecution": 1,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 1,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 7,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 1,
+                "no-callback-row": 2,
+                "callback-without-owner-row": 1,
+                "generated-owner-requirement": 1,
+                "generated-summary": 1
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solid-primitives/active-element@ contract with 1 entrypoints at ; review plan and (7 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 7
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 398,
+            "installDurationMs": 286,
+            "generationDurationMs": 112,
+            "stdout": "generated @solid-primitives/active-element@3.0.0-next.2 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-I9cL7w/@solid-primitives__active-element@3.0.0-next.2--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-I9cL7w/@solid-primitives__active-element@3.0.0-next.2--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-I9cL7w/@solid-primitives__active-element@3.0.0-next.2--solid2--floor.review.json (7 checklist items)\n",
+            "stderr": ""
+          },
+          {
+            "probeId": "@solid-primitives/analytics@2.0.0-next.2|solid2|floor",
+            "family": "solid-primitives",
+            "status": "official",
+            "package": "@solid-primitives/analytics",
+            "version": "2.0.0-next.2",
+            "solidTarget": "solid2",
+            "probeKind": "floor",
+            "channel": "rc",
+            "solid": {
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "installedVersions": {
+              "@solid-primitives/analytics": "2.0.0-next.2",
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 4,
+            "generatedEntrypoints": 4,
+            "refusedEntrypoints": null,
+            "checklistItems": 16,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": true,
+              "entrypointsEmitted": 4,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 10,
+              "exportsProven": 10,
+              "exportsWithUnknown": 0,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 0,
+              "behavioralRows": {
+                "callbackExecution": 0,
+                "reactiveRead": 0,
+                "returnTree": 1,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 16,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 4,
+                "no-callback-row": 10,
+                "generated-summary": 1
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @solid-primitives/analytics@ contract with 4 entrypoints at ; review plan and (16 checklist items)",
+            "detail": {
+              "entrypointCount": 4,
+              "checklistItems": 16
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 2561,
+            "installDurationMs": 2237,
+            "generationDurationMs": 324,
+            "stdout": "generated @solid-primitives/analytics@2.0.0-next.2 contract with 4 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hQtLR2/@solid-primitives__analytics@2.0.0-next.2--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hQtLR2/@solid-primitives__analytics@2.0.0-next.2--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hQtLR2/@solid-primitives__analytics@2.0.0-next.2--solid2--floor.review.json (16 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "corvu",
+        "label": "Corvu",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 1,
+        "generatedEntrypoints": 1,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@corvu-next/accordion@0.1.5|solid2|only",
+            "family": "corvu",
+            "status": "official",
+            "package": "@corvu-next/accordion",
+            "version": "0.1.5",
+            "solidTarget": "solid2",
+            "probeKind": "only",
+            "channel": "beta",
+            "solid": {
+              "@solidjs/web": "2.0.0-beta.19",
+              "solid-js": "2.0.0-beta.19"
+            },
+            "installedVersions": {
+              "@corvu-next/accordion": "0.1.5",
+              "@solidjs/web": "2.0.0-beta.19",
+              "solid-js": "2.0.0-beta.19"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 10,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": true,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 8,
+              "exportsProven": 8,
+              "exportsWithUnknown": 0,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 0,
+                "reactiveReads": 0,
+                "returns": 0,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 0,
+              "behavioralRows": {
+                "callbackExecution": 0,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 10,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 1,
+                "no-callback-row": 8
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @corvu-next/accordion@ contract with 1 entrypoints at ; review plan and (10 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 10
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 661,
+            "installDurationMs": 328,
+            "generationDurationMs": 333,
+            "stdout": "generated @corvu-next/accordion@0.1.5 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-gi0Usb/@corvu-next__accordion@0.1.5--solid2--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-gi0Usb/@corvu-next__accordion@0.1.5--solid2--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-gi0Usb/@corvu-next__accordion@0.1.5--solid2--only.review.json (10 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "tanstack",
+        "label": "TanStack",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 1,
+        "generatedEntrypoints": 1,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "@tanstack/solid-query@6.0.0-rc.0|solid2|floor",
+            "family": "tanstack",
+            "status": "official",
+            "package": "@tanstack/solid-query",
+            "version": "6.0.0-rc.0",
+            "solidTarget": "solid2",
+            "probeKind": "floor",
+            "channel": "rc",
+            "solid": {
+              "solid-js": "2.0.0-rc.0"
+            },
+            "installedVersions": {
+              "@tanstack/solid-query": "6.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 307,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 57,
+              "exportsProven": 20,
+              "exportsWithUnknown": 37,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 3,
+                "reactiveReads": 37,
+                "returns": 37,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 77,
+              "behavioralRows": {
+                "callbackExecution": 90,
+                "reactiveRead": 1,
+                "returnTree": 14,
+                "ownerRequirement": 12,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 307,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 1,
+                "conditional-environment": 1,
+                "unknown-sentinel": 123,
+                "callback-without-owner-row": 90,
+                "no-callback-row": 34,
+                "generated-owner-requirement": 12,
+                "generated-summary": 46
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated @tanstack/solid-query@ contract with 1 entrypoints at ; review plan and (307 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 307
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 1906,
+            "installDurationMs": 410,
+            "generationDurationMs": 1496,
+            "stdout": "generated @tanstack/solid-query@6.0.0-rc.0 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-KMxVo4/@tanstack__solid-query@6.0.0-rc.0--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-KMxVo4/@tanstack__solid-query@6.0.0-rc.0--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-KMxVo4/@tanstack__solid-query@6.0.0-rc.0--solid2--floor.review.json (307 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "solid-devtools",
+        "label": "Solid Devtools",
+        "compatiblePackageCount": 0,
+        "probeCount": 0,
+        "declaredEntrypoints": 0,
+        "generatedEntrypoints": 0,
+        "refusedEntrypoints": 0,
+        "successCount": 0,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": null,
+          "successes": 0,
+          "total": 0
+        },
+        "failureGroups": [],
+        "results": []
+      },
+      {
+        "family": "solid-recharts",
+        "label": "Solid Recharts",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 1,
+        "generatedEntrypoints": 1,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "solid-recharts@2.0.0-beta.1|solid2|floor",
+            "family": "solid-recharts",
+            "status": "official",
+            "package": "solid-recharts",
+            "version": "2.0.0-beta.1",
+            "solidTarget": "solid2",
+            "probeKind": "floor",
+            "channel": "rc",
+            "solid": {
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "installedVersions": {
+              "solid-recharts": "2.0.0-beta.1",
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 1,
+            "generatedEntrypoints": 1,
+            "refusedEntrypoints": null,
+            "checklistItems": 347,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 1,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 109,
+              "exportsProven": 7,
+              "exportsWithUnknown": 102,
+              "exportsAllDomainsUnknown": 0,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 1,
+                "reactiveReads": 102,
+                "returns": 102,
+                "ownerRequirements": 0,
+                "asyncBehavior": 0
+              },
+              "unknownTotal": 205,
+              "behavioralRows": {
+                "callbackExecution": 0,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 4,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 347,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 26,
+                "unknown-sentinel": 205,
+                "no-callback-row": 101,
+                "generated-owner-requirement": 4,
+                "generated-summary": 11
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated solid-recharts@ contract with 1 entrypoints at ; review plan and (347 checklist items)",
+            "detail": {
+              "entrypointCount": 1,
+              "checklistItems": 347
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 6105,
+            "installDurationMs": 418,
+            "generationDurationMs": 5679,
+            "stdout": "generated solid-recharts@2.0.0-beta.1 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-iPLp62/solid-recharts@2.0.0-beta.1--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-iPLp62/solid-recharts@2.0.0-beta.1--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-iPLp62/solid-recharts@2.0.0-beta.1--solid2--floor.review.json (347 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      },
+      {
+        "family": "motion-solidjs",
+        "label": "Motion for Solid",
+        "compatiblePackageCount": 1,
+        "probeCount": 1,
+        "declaredEntrypoints": 3,
+        "generatedEntrypoints": 3,
+        "refusedEntrypoints": 0,
+        "successCount": 1,
+        "partialCount": 0,
+        "failureCount": 0,
+        "successRate": {
+          "percentage": 100,
+          "successes": 1,
+          "total": 1
+        },
+        "failureGroups": [],
+        "results": [
+          {
+            "probeId": "motion-solidjs@0.7.0-beta.4|solid2|floor",
+            "family": "motion-solidjs",
+            "status": "official",
+            "package": "motion-solidjs",
+            "version": "0.7.0-beta.4",
+            "solidTarget": "solid2",
+            "probeKind": "floor",
+            "channel": "rc",
+            "solid": {
+              "@solidjs/signals": "2.0.0-rc.0",
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "installedVersions": {
+              "motion-solidjs": "0.7.0-beta.4",
+              "@solidjs/signals": "2.0.0-rc.0",
+              "@solidjs/web": "2.0.0-rc.0",
+              "solid-js": "2.0.0-rc.0"
+            },
+            "integrityVerified": true,
+            "declaredEntrypoints": 3,
+            "generatedEntrypoints": 3,
+            "refusedEntrypoints": null,
+            "checklistItems": 1689,
+            "contractContent": {
+              "measured": true,
+              "fullyProven": false,
+              "entrypointsEmitted": 3,
+              "entrypointsRefused": 0,
+              "refusedEntrypointNames": [],
+              "exportsTotal": 261,
+              "exportsProven": 13,
+              "exportsWithUnknown": 248,
+              "exportsAllDomainsUnknown": 248,
+              "exportsUnknownOnlyInVariants": 0,
+              "exportsWithoutSummary": 0,
+              "unknownByDomain": {
+                "callbacks": 248,
+                "reactiveReads": 248,
+                "returns": 248,
+                "ownerRequirements": 248,
+                "asyncBehavior": 248
+              },
+              "unknownTotal": 1240,
+              "behavioralRows": {
+                "callbackExecution": 0,
+                "reactiveRead": 0,
+                "returnTree": 0,
+                "ownerRequirement": 0,
+                "asyncBehavior": 0
+              },
+              "closureNotes": 0,
+              "closureNoteSamples": [],
+              "reviewPlanItems": 1689,
+              "reviewPlanItemsByKind": {
+                "artifact-binding": 5,
+                "conditional-environment": 3,
+                "unknown-sentinel": 1655,
+                "generated-summary": 26
+              }
+            },
+            "outcome": "success",
+            "class": "success",
+            "signature": "generated motion-solidjs@ contract with 3 entrypoints at ; review plan and (1689 checklist items)",
+            "detail": {
+              "entrypointCount": 3,
+              "checklistItems": 1689
+            },
+            "exitStatus": 0,
+            "timedOut": false,
+            "durationMs": 4491,
+            "installDurationMs": 1549,
+            "generationDurationMs": 2937,
+            "stdout": "generated motion-solidjs@0.7.0-beta.4 contract with 3 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-zzBLCJ/motion-solidjs@0.7.0-beta.4--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-zzBLCJ/motion-solidjs@0.7.0-beta.4--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-zzBLCJ/motion-solidjs@0.7.0-beta.4--solid2--floor.review.json (1689 checklist items)\n",
+            "stderr": ""
+          }
+        ]
+      }
+    ],
+    "totals": {
+      "compatiblePackageCount": 11,
+      "probeCount": 11,
+      "declaredEntrypoints": 21,
+      "generatedEntrypoints": 79,
+      "refusedEntrypoints": 0,
+      "successCount": 11,
+      "partialCount": 0,
+      "failureCount": 0,
+      "successRate": {
+        "percentage": 100,
+        "successes": 11,
+        "total": 11
+      },
+      "failureGroups": []
+    },
+    "betaOnlyPackages": [
+      {
+        "package": "@corvu-next/accordion",
+        "family": "corvu",
+        "version": "0.1.5",
+        "channel": "beta"
+      }
+    ],
+    "rcOnlyPackages": [
+      {
+        "package": "@kobalte/core",
+        "family": "kobalte",
+        "version": "2.0.0-alpha.0",
+        "channel": "rc"
+      },
+      {
+        "package": "@solidjs/router",
+        "family": "official-solid",
+        "version": "2.0.0-next.17",
+        "channel": "rc"
+      }
+    ],
+    "worksOnFloorFailsAtHead": [],
+    "failsOnFloorWorksAtHead": []
+  },
+  "supplemental": {
+    "probeCount": 0,
+    "results": []
+  },
+  "combined": {
+    "topFailureSignatures": [
+      {
+        "class": "cjs-only-entrypoint",
+        "signature": ". has only a CJS runtime target; CJS contract generation is unsupported",
+        "count": 1,
+        "packages": [
+          "@solid-devtools/babel-plugin"
+        ]
+      }
+    ],
+    "partialContracts": [],
+    "contractContent": {
+      "probesMeasured": 22,
+      "probesFullyProven": 7,
+      "probesWithUnknowns": 15,
+      "probesWithRefusals": 0,
+      "probesWithClosureNotes": 0,
+      "entrypointsEmitted": 170,
+      "entrypointsRefused": 0,
+      "exportsTotal": 2185,
+      "exportsProven": 643,
+      "exportsWithUnknown": 1542,
+      "exportsAllDomainsUnknown": 450,
+      "exportsUnknownOnlyInVariants": 0,
+      "exportsWithoutSummary": 0,
+      "unknownTotal": 4370,
+      "unknownByDomain": {
+        "callbacks": 465,
+        "reactiveReads": 1474,
+        "returns": 1531,
+        "ownerRequirements": 450,
+        "asyncBehavior": 450
+      },
+      "behavioralRows": {
+        "callbackExecution": 687,
+        "reactiveRead": 250,
+        "returnTree": 247,
+        "ownerRequirement": 284,
+        "asyncBehavior": 0
+      },
+      "closureNotes": 0,
+      "packagesMeasured": 14,
+      "packagesFullyProven": 5,
+      "exportsProvenPercentage": 29.43,
+      "probesFullyProvenPercentage": 31.82,
+      "packagesFullyProvenPercentage": 35.71,
+      "unmeasuredProbes": [],
+      "families": [
+        {
+          "family": "official-solid",
+          "label": "Official Solid",
+          "probesMeasured": 6,
+          "probesFullyProven": 0,
+          "probesWithUnknowns": 6,
+          "probesWithRefusals": 0,
+          "probesWithClosureNotes": 0,
+          "entrypointsEmitted": 19,
+          "entrypointsRefused": 0,
+          "exportsTotal": 368,
+          "exportsProven": 239,
+          "exportsWithUnknown": 129,
+          "exportsAllDomainsUnknown": 3,
+          "exportsUnknownOnlyInVariants": 0,
+          "exportsWithoutSummary": 0,
+          "unknownTotal": 214,
+          "unknownByDomain": {
+            "callbacks": 11,
+            "reactiveReads": 76,
+            "returns": 121,
+            "ownerRequirements": 3,
+            "asyncBehavior": 3
+          },
+          "behavioralRows": {
+            "callbackExecution": 410,
+            "reactiveRead": 151,
+            "returnTree": 168,
+            "ownerRequirement": 22,
+            "asyncBehavior": 0
+          },
+          "closureNotes": 0,
+          "packagesMeasured": 3,
+          "packagesFullyProven": 0,
+          "exportsProvenPercentage": 64.95,
+          "probesFullyProvenPercentage": 0,
+          "packagesFullyProvenPercentage": 0
+        },
+        {
+          "family": "kobalte",
+          "label": "Kobalte",
+          "probesMeasured": 2,
+          "probesFullyProven": 0,
+          "probesWithUnknowns": 2,
+          "probesWithRefusals": 0,
+          "probesWithClosureNotes": 0,
+          "entrypointsEmitted": 130,
+          "entrypointsRefused": 0,
+          "exportsTotal": 1137,
+          "exportsProven": 298,
+          "exportsWithUnknown": 839,
+          "exportsAllDomainsUnknown": 199,
+          "exportsUnknownOnlyInVariants": 0,
+          "exportsWithoutSummary": 0,
+          "unknownTotal": 2263,
+          "unknownByDomain": {
+            "callbacks": 199,
+            "reactiveReads": 827,
+            "returns": 839,
+            "ownerRequirements": 199,
+            "asyncBehavior": 199
+          },
+          "behavioralRows": {
+            "callbackExecution": 145,
+            "reactiveRead": 94,
+            "returnTree": 60,
+            "ownerRequirement": 245,
+            "asyncBehavior": 0
+          },
+          "closureNotes": 0,
+          "packagesMeasured": 1,
+          "packagesFullyProven": 0,
+          "exportsProvenPercentage": 26.21,
+          "probesFullyProvenPercentage": 0,
+          "packagesFullyProvenPercentage": 0
+        },
+        {
+          "family": "solid-primitives",
+          "label": "Solid Primitives",
+          "probesMeasured": 6,
+          "probesFullyProven": 4,
+          "probesWithUnknowns": 2,
+          "probesWithRefusals": 0,
+          "probesWithClosureNotes": 0,
+          "entrypointsEmitted": 9,
+          "entrypointsRefused": 0,
+          "exportsTotal": 31,
+          "exportsProven": 26,
+          "exportsWithUnknown": 5,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "exportsWithoutSummary": 0,
+          "unknownTotal": 7,
+          "unknownByDomain": {
+            "callbacks": 3,
+            "reactiveReads": 2,
+            "returns": 2,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "behavioralRows": {
+            "callbackExecution": 2,
+            "reactiveRead": 0,
+            "returnTree": 3,
+            "ownerRequirement": 1,
+            "asyncBehavior": 0
+          },
+          "closureNotes": 0,
+          "packagesMeasured": 4,
+          "packagesFullyProven": 2,
+          "exportsProvenPercentage": 83.87,
+          "probesFullyProvenPercentage": 66.67,
+          "packagesFullyProvenPercentage": 50
+        },
+        {
+          "family": "corvu",
+          "label": "Corvu",
+          "probesMeasured": 2,
+          "probesFullyProven": 2,
+          "probesWithUnknowns": 0,
+          "probesWithRefusals": 0,
+          "probesWithClosureNotes": 0,
+          "entrypointsEmitted": 2,
+          "entrypointsRefused": 0,
+          "exportsTotal": 16,
+          "exportsProven": 16,
+          "exportsWithUnknown": 0,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "exportsWithoutSummary": 0,
+          "unknownTotal": 0,
+          "unknownByDomain": {
+            "callbacks": 0,
+            "reactiveReads": 0,
+            "returns": 0,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "behavioralRows": {
+            "callbackExecution": 4,
+            "reactiveRead": 4,
+            "returnTree": 2,
+            "ownerRequirement": 0,
+            "asyncBehavior": 0
+          },
+          "closureNotes": 0,
+          "packagesMeasured": 2,
+          "packagesFullyProven": 2,
+          "exportsProvenPercentage": 100,
+          "probesFullyProvenPercentage": 100,
+          "packagesFullyProvenPercentage": 100
+        },
+        {
+          "family": "tanstack",
+          "label": "TanStack",
+          "probesMeasured": 2,
+          "probesFullyProven": 1,
+          "probesWithUnknowns": 1,
+          "probesWithRefusals": 0,
+          "probesWithClosureNotes": 0,
+          "entrypointsEmitted": 3,
+          "entrypointsRefused": 0,
+          "exportsTotal": 58,
+          "exportsProven": 21,
+          "exportsWithUnknown": 37,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "exportsWithoutSummary": 0,
+          "unknownTotal": 77,
+          "unknownByDomain": {
+            "callbacks": 3,
+            "reactiveReads": 37,
+            "returns": 37,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "behavioralRows": {
+            "callbackExecution": 90,
+            "reactiveRead": 1,
+            "returnTree": 14,
+            "ownerRequirement": 12,
+            "asyncBehavior": 0
+          },
+          "closureNotes": 0,
+          "packagesMeasured": 2,
+          "packagesFullyProven": 1,
+          "exportsProvenPercentage": 36.21,
+          "probesFullyProvenPercentage": 50,
+          "packagesFullyProvenPercentage": 50
+        },
+        {
+          "family": "solid-devtools",
+          "label": "Solid Devtools",
+          "probesMeasured": 0,
+          "probesFullyProven": 0,
+          "probesWithUnknowns": 0,
+          "probesWithRefusals": 0,
+          "probesWithClosureNotes": 0,
+          "entrypointsEmitted": 0,
+          "entrypointsRefused": 0,
+          "exportsTotal": 0,
+          "exportsProven": 0,
+          "exportsWithUnknown": 0,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "exportsWithoutSummary": 0,
+          "unknownTotal": 0,
+          "unknownByDomain": {
+            "callbacks": 0,
+            "reactiveReads": 0,
+            "returns": 0,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "behavioralRows": {
+            "callbackExecution": 0,
+            "reactiveRead": 0,
+            "returnTree": 0,
+            "ownerRequirement": 0,
+            "asyncBehavior": 0
+          },
+          "closureNotes": 0,
+          "packagesMeasured": 0,
+          "packagesFullyProven": 0,
+          "exportsProvenPercentage": null,
+          "probesFullyProvenPercentage": null,
+          "packagesFullyProvenPercentage": null
+        },
+        {
+          "family": "solid-recharts",
+          "label": "Solid Recharts",
+          "probesMeasured": 2,
+          "probesFullyProven": 0,
+          "probesWithUnknowns": 2,
+          "probesWithRefusals": 0,
+          "probesWithClosureNotes": 0,
+          "entrypointsEmitted": 2,
+          "entrypointsRefused": 0,
+          "exportsTotal": 218,
+          "exportsProven": 15,
+          "exportsWithUnknown": 203,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "exportsWithoutSummary": 0,
+          "unknownTotal": 407,
+          "unknownByDomain": {
+            "callbacks": 1,
+            "reactiveReads": 203,
+            "returns": 203,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "behavioralRows": {
+            "callbackExecution": 30,
+            "reactiveRead": 0,
+            "returnTree": 0,
+            "ownerRequirement": 4,
+            "asyncBehavior": 0
+          },
+          "closureNotes": 0,
+          "packagesMeasured": 1,
+          "packagesFullyProven": 0,
+          "exportsProvenPercentage": 6.88,
+          "probesFullyProvenPercentage": 0,
+          "packagesFullyProvenPercentage": 0
+        },
+        {
+          "family": "motion-solidjs",
+          "label": "Motion for Solid",
+          "probesMeasured": 2,
+          "probesFullyProven": 0,
+          "probesWithUnknowns": 2,
+          "probesWithRefusals": 0,
+          "probesWithClosureNotes": 0,
+          "entrypointsEmitted": 5,
+          "entrypointsRefused": 0,
+          "exportsTotal": 357,
+          "exportsProven": 28,
+          "exportsWithUnknown": 329,
+          "exportsAllDomainsUnknown": 248,
+          "exportsUnknownOnlyInVariants": 0,
+          "exportsWithoutSummary": 0,
+          "unknownTotal": 1402,
+          "unknownByDomain": {
+            "callbacks": 248,
+            "reactiveReads": 329,
+            "returns": 329,
+            "ownerRequirements": 248,
+            "asyncBehavior": 248
+          },
+          "behavioralRows": {
+            "callbackExecution": 6,
+            "reactiveRead": 0,
+            "returnTree": 0,
+            "ownerRequirement": 0,
+            "asyncBehavior": 0
+          },
+          "closureNotes": 0,
+          "packagesMeasured": 1,
+          "packagesFullyProven": 0,
+          "exportsProvenPercentage": 7.84,
+          "probesFullyProvenPercentage": 0,
+          "packagesFullyProvenPercentage": 0
+        }
+      ],
+      "topUnknownProbes": [
+        {
+          "probeId": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+          "package": "@kobalte/core",
+          "version": "2.0.0-alpha.0",
+          "family": "kobalte",
+          "solidTarget": "solid2",
+          "exportsTotal": 526,
+          "exportsWithUnknown": 395,
+          "exportsAllDomainsUnknown": 199,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 1387,
+          "unknownByDomain": {
+            "callbacks": 199,
+            "reactiveReads": 395,
+            "returns": 395,
+            "ownerRequirements": 199,
+            "asyncBehavior": 199
+          },
+          "dominantDomain": "reactiveReads"
+        },
+        {
+          "probeId": "motion-solidjs@0.7.0-beta.4|solid2|floor",
+          "package": "motion-solidjs",
+          "version": "0.7.0-beta.4",
+          "family": "motion-solidjs",
+          "solidTarget": "solid2",
+          "exportsTotal": 261,
+          "exportsWithUnknown": 248,
+          "exportsAllDomainsUnknown": 248,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 1240,
+          "unknownByDomain": {
+            "callbacks": 248,
+            "reactiveReads": 248,
+            "returns": 248,
+            "ownerRequirements": 248,
+            "asyncBehavior": 248
+          },
+          "dominantDomain": "all-domains"
+        },
+        {
+          "probeId": "@kobalte/core@0.13.13|solid1|only",
+          "package": "@kobalte/core",
+          "version": "0.13.13",
+          "family": "kobalte",
+          "solidTarget": "solid1",
+          "exportsTotal": 611,
+          "exportsWithUnknown": 444,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 876,
+          "unknownByDomain": {
+            "callbacks": 0,
+            "reactiveReads": 432,
+            "returns": 444,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "returns"
+        },
+        {
+          "probeId": "solid-recharts@2.0.0-beta.1|solid2|floor",
+          "package": "solid-recharts",
+          "version": "2.0.0-beta.1",
+          "family": "solid-recharts",
+          "solidTarget": "solid2",
+          "exportsTotal": 109,
+          "exportsWithUnknown": 102,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 205,
+          "unknownByDomain": {
+            "callbacks": 1,
+            "reactiveReads": 102,
+            "returns": 102,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "reactiveReads"
+        },
+        {
+          "probeId": "solid-recharts@1.0.1|solid1|only",
+          "package": "solid-recharts",
+          "version": "1.0.1",
+          "family": "solid-recharts",
+          "solidTarget": "solid1",
+          "exportsTotal": 109,
+          "exportsWithUnknown": 101,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 202,
+          "unknownByDomain": {
+            "callbacks": 0,
+            "reactiveReads": 101,
+            "returns": 101,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "reactiveReads"
+        },
+        {
+          "probeId": "motion-solidjs@0.6.0|solid1|only",
+          "package": "motion-solidjs",
+          "version": "0.6.0",
+          "family": "motion-solidjs",
+          "solidTarget": "solid1",
+          "exportsTotal": 96,
+          "exportsWithUnknown": 81,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 162,
+          "unknownByDomain": {
+            "callbacks": 0,
+            "reactiveReads": 81,
+            "returns": 81,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "reactiveReads"
+        },
+        {
+          "probeId": "@tanstack/solid-query@6.0.0-rc.0|solid2|floor",
+          "package": "@tanstack/solid-query",
+          "version": "6.0.0-rc.0",
+          "family": "tanstack",
+          "solidTarget": "solid2",
+          "exportsTotal": 57,
+          "exportsWithUnknown": 37,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 77,
+          "unknownByDomain": {
+            "callbacks": 3,
+            "reactiveReads": 37,
+            "returns": 37,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "reactiveReads"
+        },
+        {
+          "probeId": "@solidjs/router@1.0.0|solid1|only",
+          "package": "@solidjs/router",
+          "version": "1.0.0",
+          "family": "official-solid",
+          "solidTarget": "solid1",
+          "exportsTotal": 38,
+          "exportsWithUnknown": 37,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 74,
+          "unknownByDomain": {
+            "callbacks": 0,
+            "reactiveReads": 37,
+            "returns": 37,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "reactiveReads"
+        },
+        {
+          "probeId": "solid-js@1.9.14|solid1|only",
+          "package": "solid-js",
+          "version": "1.9.14",
+          "family": "official-solid",
+          "solidTarget": "solid1",
+          "exportsTotal": 202,
+          "exportsWithUnknown": 41,
+          "exportsAllDomainsUnknown": 3,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 61,
+          "unknownByDomain": {
+            "callbacks": 3,
+            "reactiveReads": 11,
+            "returns": 41,
+            "ownerRequirements": 3,
+            "asyncBehavior": 3
+          },
+          "dominantDomain": "returns"
+        },
+        {
+          "probeId": "@solidjs/router@2.0.0-next.17|solid2|only",
+          "package": "@solidjs/router",
+          "version": "2.0.0-next.17",
+          "family": "official-solid",
+          "solidTarget": "solid2",
+          "exportsTotal": 30,
+          "exportsWithUnknown": 28,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 56,
+          "unknownByDomain": {
+            "callbacks": 0,
+            "reactiveReads": 28,
+            "returns": 28,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "reactiveReads"
+        },
+        {
+          "probeId": "solid-js@2.0.0-rc.1|solid2|floor",
+          "package": "solid-js",
+          "version": "2.0.0-rc.1",
+          "family": "official-solid",
+          "solidTarget": "solid2",
+          "exportsTotal": 81,
+          "exportsWithUnknown": 15,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 15,
+          "unknownByDomain": {
+            "callbacks": 0,
+            "reactiveReads": 0,
+            "returns": 15,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "returns"
+        },
+        {
+          "probeId": "@solidjs/meta@1.0.0-next.2|solid2|floor",
+          "package": "@solidjs/meta",
+          "version": "1.0.0-next.2",
+          "family": "official-solid",
+          "solidTarget": "solid2",
+          "exportsTotal": 8,
+          "exportsWithUnknown": 7,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 7,
+          "unknownByDomain": {
+            "callbacks": 7,
+            "reactiveReads": 0,
+            "returns": 0,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "callbacks"
+        },
+        {
+          "probeId": "@solid-primitives/active-element@2.1.6|solid1|only",
+          "package": "@solid-primitives/active-element",
+          "version": "2.1.6",
+          "family": "solid-primitives",
+          "solidTarget": "solid1",
+          "exportsTotal": 5,
+          "exportsWithUnknown": 4,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 6,
+          "unknownByDomain": {
+            "callbacks": 2,
+            "reactiveReads": 2,
+            "returns": 2,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "callbacks"
+        },
+        {
+          "probeId": "@solid-primitives/audio@1.4.5|solid1|only",
+          "package": "@solid-primitives/audio",
+          "version": "1.4.5",
+          "family": "solid-primitives",
+          "solidTarget": "solid1",
+          "exportsTotal": 4,
+          "exportsWithUnknown": 1,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 1,
+          "unknownByDomain": {
+            "callbacks": 1,
+            "reactiveReads": 0,
+            "returns": 0,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "callbacks"
+        },
+        {
+          "probeId": "@solidjs/meta@0.29.4|solid1|only",
+          "package": "@solidjs/meta",
+          "version": "0.29.4",
+          "family": "official-solid",
+          "solidTarget": "solid1",
+          "exportsTotal": 9,
+          "exportsWithUnknown": 1,
+          "exportsAllDomainsUnknown": 0,
+          "exportsUnknownOnlyInVariants": 0,
+          "unknownTotal": 1,
+          "unknownByDomain": {
+            "callbacks": 1,
+            "reactiveReads": 0,
+            "returns": 0,
+            "ownerRequirements": 0,
+            "asyncBehavior": 0
+          },
+          "dominantDomain": "callbacks"
+        }
+      ]
+    },
+    "sharedBlockers": [],
+    "multiBlockerPackages": [],
+    "familyComparison": [
+      {
+        "family": "official-solid",
+        "label": "Official Solid",
+        "solid1": {
+          "probeCount": 3,
+          "successCount": 3,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 3,
+            "total": 3
+          }
+        },
+        "solid2": {
+          "probeCount": 3,
+          "successCount": 3,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 3,
+            "total": 3
+          }
+        }
+      },
+      {
+        "family": "kobalte",
+        "label": "Kobalte",
+        "solid1": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        },
+        "solid2": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        }
+      },
+      {
+        "family": "solid-primitives",
+        "label": "Solid Primitives",
+        "solid1": {
+          "probeCount": 3,
+          "successCount": 3,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 3,
+            "total": 3
+          }
+        },
+        "solid2": {
+          "probeCount": 3,
+          "successCount": 3,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 3,
+            "total": 3
+          }
+        }
+      },
+      {
+        "family": "corvu",
+        "label": "Corvu",
+        "solid1": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        },
+        "solid2": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        }
+      },
+      {
+        "family": "tanstack",
+        "label": "TanStack",
+        "solid1": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        },
+        "solid2": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        }
+      },
+      {
+        "family": "solid-devtools",
+        "label": "Solid Devtools",
+        "solid1": {
+          "probeCount": 1,
+          "successCount": 0,
+          "partialCount": 0,
+          "failureCount": 1,
+          "successRate": {
+            "percentage": 0,
+            "successes": 0,
+            "total": 1
+          }
+        },
+        "solid2": {
+          "probeCount": 0,
+          "successCount": 0,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": null,
+            "successes": 0,
+            "total": 0
+          }
+        }
+      },
+      {
+        "family": "solid-recharts",
+        "label": "Solid Recharts",
+        "solid1": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        },
+        "solid2": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        }
+      },
+      {
+        "family": "motion-solidjs",
+        "label": "Motion for Solid",
+        "solid1": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        },
+        "solid2": {
+          "probeCount": 1,
+          "successCount": 1,
+          "partialCount": 0,
+          "failureCount": 0,
+          "successRate": {
+            "percentage": 100,
+            "successes": 1,
+            "total": 1
+          }
+        }
+      }
+    ],
+    "workerTimings": {
+      "totalDurationMs": 238313,
+      "installDurationMs": 25995,
+      "generationDurationMs": 212271,
+      "harnessDurationMs": 47
+    },
+    "durationMs": 105269,
+    "unavailableMetadata": [],
+    "discoveryLimitations": [
+      "packument for \"@tanstack/tests-adapters\" is unavailable (registry returned nothing for it)"
+    ],
+    "baseline": {
+      "provided": false
+    }
+  },
+  "results": [
+    {
+      "probeId": "@corvu-next/accordion@0.1.5|solid2|only",
+      "family": "corvu",
+      "status": "official",
+      "package": "@corvu-next/accordion",
+      "version": "0.1.5",
+      "solidTarget": "solid2",
+      "probeKind": "only",
+      "channel": "beta",
+      "solid": {
+        "@solidjs/web": "2.0.0-beta.19",
+        "solid-js": "2.0.0-beta.19"
+      },
+      "installedVersions": {
+        "@corvu-next/accordion": "0.1.5",
+        "@solidjs/web": "2.0.0-beta.19",
+        "solid-js": "2.0.0-beta.19"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 10,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": true,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 8,
+        "exportsProven": 8,
+        "exportsWithUnknown": 0,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 0,
+        "behavioralRows": {
+          "callbackExecution": 0,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 10,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 1,
+          "no-callback-row": 8
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @corvu-next/accordion@ contract with 1 entrypoints at ; review plan and (10 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 10
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 661,
+      "installDurationMs": 328,
+      "generationDurationMs": 333,
+      "stdout": "generated @corvu-next/accordion@0.1.5 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-gi0Usb/@corvu-next__accordion@0.1.5--solid2--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-gi0Usb/@corvu-next__accordion@0.1.5--solid2--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-gi0Usb/@corvu-next__accordion@0.1.5--solid2--only.review.json (10 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@corvu/accordion@0.2.5|solid1|only",
+      "family": "corvu",
+      "status": "official",
+      "package": "@corvu/accordion",
+      "version": "0.2.5",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "@corvu/accordion": "0.2.5",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 18,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": true,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 8,
+        "exportsProven": 8,
+        "exportsWithUnknown": 0,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 0,
+        "behavioralRows": {
+          "callbackExecution": 4,
+          "reactiveRead": 4,
+          "returnTree": 2,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 18,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 1,
+          "callback-without-owner-row": 4,
+          "no-callback-row": 8,
+          "generated-summary": 4
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @corvu/accordion@ contract with 1 entrypoints at ; review plan and (18 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 18
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 640,
+      "installDurationMs": 322,
+      "generationDurationMs": 317,
+      "stdout": "generated @corvu/accordion@0.2.5 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cRUzBe/@corvu__accordion@0.2.5--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cRUzBe/@corvu__accordion@0.2.5--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-cRUzBe/@corvu__accordion@0.2.5--solid1--only.review.json (18 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@kobalte/core@0.13.13|solid1|only",
+      "family": "kobalte",
+      "status": "official",
+      "package": "@kobalte/core",
+      "version": "0.13.13",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "@kobalte/core": "0.13.13",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 3,
+      "generatedEntrypoints": 69,
+      "refusedEntrypoints": null,
+      "checklistItems": 2072,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 69,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 611,
+        "exportsProven": 167,
+        "exportsWithUnknown": 444,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 432,
+          "returns": 444,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 876,
+        "behavioralRows": {
+          "callbackExecution": 141,
+          "reactiveRead": 51,
+          "returnTree": 31,
+          "ownerRequirement": 26,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 2072,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 3,
+          "conditional-environment": 69,
+          "unknown-sentinel": 1068,
+          "no-callback-row": 582,
+          "callback-without-owner-row": 141,
+          "generated-owner-requirement": 26,
+          "generated-summary": 183
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @kobalte/core@ contract with 69 entrypoints at ; review plan and (2072 checklist items)",
+      "detail": {
+        "entrypointCount": 69,
+        "checklistItems": 2072
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 40397,
+      "installDurationMs": 2896,
+      "generationDurationMs": 37493,
+      "stdout": "generated @kobalte/core@0.13.13 contract with 69 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-75Q4wg/@kobalte__core@0.13.13--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-75Q4wg/@kobalte__core@0.13.13--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-75Q4wg/@kobalte__core@0.13.13--solid1--only.review.json (2072 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@kobalte/core@2.0.0-alpha.0|solid2|only",
+      "family": "kobalte",
+      "status": "official",
+      "package": "@kobalte/core",
+      "version": "2.0.0-alpha.0",
+      "solidTarget": "solid2",
+      "probeKind": "only",
+      "channel": "rc",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "installedVersions": {
+        "@kobalte/core": "2.0.0-alpha.0",
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 61,
+      "refusedEntrypoints": null,
+      "checklistItems": 4464,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 61,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 526,
+        "exportsProven": 131,
+        "exportsWithUnknown": 395,
+        "exportsAllDomainsUnknown": 199,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 199,
+          "reactiveReads": 395,
+          "returns": 395,
+          "ownerRequirements": 199,
+          "asyncBehavior": 199
+        },
+        "unknownTotal": 1387,
+        "behavioralRows": {
+          "callbackExecution": 4,
+          "reactiveRead": 43,
+          "returnTree": 29,
+          "ownerRequirement": 219,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 4464,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 2,
+          "conditional-environment": 61,
+          "unknown-sentinel": 3006,
+          "no-callback-row": 770,
+          "generated-owner-requirement": 219,
+          "callback-without-owner-row": 4,
+          "generated-summary": 402
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @kobalte/core@ contract with 61 entrypoints at ; review plan and (4464 checklist items)",
+      "detail": {
+        "entrypointCount": 61,
+        "checklistItems": 4464
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 29849,
+      "installDurationMs": 2839,
+      "generationDurationMs": 27005,
+      "stdout": "generated @kobalte/core@2.0.0-alpha.0 contract with 61 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-5qV8q1/@kobalte__core@2.0.0-alpha.0--solid2--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-5qV8q1/@kobalte__core@2.0.0-alpha.0--solid2--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-5qV8q1/@kobalte__core@2.0.0-alpha.0--solid2--only.review.json (4464 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solid-devtools/babel-plugin@0.3.1|solid1|only",
+      "family": "solid-devtools",
+      "status": "official",
+      "package": "@solid-devtools/babel-plugin",
+      "version": "0.3.1",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "@solid-devtools/babel-plugin": "0.3.1",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 0,
+      "generatedEntrypoints": null,
+      "refusedEntrypoints": null,
+      "checklistItems": null,
+      "contractContent": null,
+      "outcome": "failure",
+      "class": "cjs-only-entrypoint",
+      "signature": ". has only a CJS runtime target; CJS contract generation is unsupported",
+      "detail": {
+        "entrypoint": "solid-checker: ."
+      },
+      "exitStatus": 2,
+      "timedOut": false,
+      "durationMs": 1905,
+      "installDurationMs": 1871,
+      "generationDurationMs": 34,
+      "stdout": "",
+      "stderr": "solid-checker: . has only a CJS runtime target; CJS contract generation is unsupported\n"
+    },
+    {
+      "probeId": "@solid-primitives/a11y@1.0.0-next.3|solid2|floor",
+      "family": "solid-primitives",
+      "status": "official",
+      "package": "@solid-primitives/a11y",
+      "version": "1.0.0-next.3",
+      "solidTarget": "solid2",
+      "probeKind": "floor",
+      "channel": "rc",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "installedVersions": {
+        "@solid-primitives/a11y": "1.0.0-next.3",
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 11,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": true,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 7,
+        "exportsProven": 7,
+        "exportsWithUnknown": 0,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 0,
+        "behavioralRows": {
+          "callbackExecution": 0,
+          "reactiveRead": 0,
+          "returnTree": 2,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 11,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 1,
+          "no-callback-row": 7,
+          "generated-summary": 2
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solid-primitives/a11y@ contract with 1 entrypoints at ; review plan and (11 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 11
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 982,
+      "installDurationMs": 863,
+      "generationDurationMs": 119,
+      "stdout": "generated @solid-primitives/a11y@1.0.0-next.3 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VHyfOj/@solid-primitives__a11y@1.0.0-next.3--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VHyfOj/@solid-primitives__a11y@1.0.0-next.3--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VHyfOj/@solid-primitives__a11y@1.0.0-next.3--solid2--floor.review.json (11 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solid-primitives/active-element@2.1.6|solid1|only",
+      "family": "solid-primitives",
+      "status": "official",
+      "package": "@solid-primitives/active-element",
+      "version": "2.1.6",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "@solid-primitives/active-element": "2.1.6",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 12,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 5,
+        "exportsProven": 1,
+        "exportsWithUnknown": 4,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 2,
+          "reactiveReads": 2,
+          "returns": 2,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 6,
+        "behavioralRows": {
+          "callbackExecution": 1,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 12,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 1,
+          "no-callback-row": 2,
+          "unknown-sentinel": 6,
+          "callback-without-owner-row": 1,
+          "generated-summary": 1
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solid-primitives/active-element@ contract with 1 entrypoints at ; review plan and (12 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 12
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 880,
+      "installDurationMs": 774,
+      "generationDurationMs": 106,
+      "stdout": "generated @solid-primitives/active-element@2.1.6 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-z98X5B/@solid-primitives__active-element@2.1.6--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-z98X5B/@solid-primitives__active-element@2.1.6--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-z98X5B/@solid-primitives__active-element@2.1.6--solid1--only.review.json (12 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solid-primitives/active-element@3.0.0-next.2|solid2|floor",
+      "family": "solid-primitives",
+      "status": "official",
+      "package": "@solid-primitives/active-element",
+      "version": "3.0.0-next.2",
+      "solidTarget": "solid2",
+      "probeKind": "floor",
+      "channel": "rc",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "installedVersions": {
+        "@solid-primitives/active-element": "3.0.0-next.2",
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 7,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": true,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 3,
+        "exportsProven": 3,
+        "exportsWithUnknown": 0,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 0,
+        "behavioralRows": {
+          "callbackExecution": 1,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 1,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 7,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 1,
+          "no-callback-row": 2,
+          "callback-without-owner-row": 1,
+          "generated-owner-requirement": 1,
+          "generated-summary": 1
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solid-primitives/active-element@ contract with 1 entrypoints at ; review plan and (7 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 7
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 398,
+      "installDurationMs": 286,
+      "generationDurationMs": 112,
+      "stdout": "generated @solid-primitives/active-element@3.0.0-next.2 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-I9cL7w/@solid-primitives__active-element@3.0.0-next.2--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-I9cL7w/@solid-primitives__active-element@3.0.0-next.2--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-I9cL7w/@solid-primitives__active-element@3.0.0-next.2--solid2--floor.review.json (7 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solid-primitives/analytics@0.2.1|solid1|only",
+      "family": "solid-primitives",
+      "status": "official",
+      "package": "@solid-primitives/analytics",
+      "version": "0.2.1",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "@solid-primitives/analytics": "0.2.1",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 4,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": true,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 2,
+        "exportsProven": 2,
+        "exportsWithUnknown": 0,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 0,
+        "behavioralRows": {
+          "callbackExecution": 0,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 4,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 1,
+          "no-callback-row": 1,
+          "generated-summary": 1
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solid-primitives/analytics@ contract with 1 entrypoints at ; review plan and (4 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 4
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 1111,
+      "installDurationMs": 1023,
+      "generationDurationMs": 87,
+      "stdout": "generated @solid-primitives/analytics@0.2.1 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-rlXlN5/@solid-primitives__analytics@0.2.1--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-rlXlN5/@solid-primitives__analytics@0.2.1--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-rlXlN5/@solid-primitives__analytics@0.2.1--solid1--only.review.json (4 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solid-primitives/analytics@2.0.0-next.2|solid2|floor",
+      "family": "solid-primitives",
+      "status": "official",
+      "package": "@solid-primitives/analytics",
+      "version": "2.0.0-next.2",
+      "solidTarget": "solid2",
+      "probeKind": "floor",
+      "channel": "rc",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "installedVersions": {
+        "@solid-primitives/analytics": "2.0.0-next.2",
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 4,
+      "generatedEntrypoints": 4,
+      "refusedEntrypoints": null,
+      "checklistItems": 16,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": true,
+        "entrypointsEmitted": 4,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 10,
+        "exportsProven": 10,
+        "exportsWithUnknown": 0,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 0,
+        "behavioralRows": {
+          "callbackExecution": 0,
+          "reactiveRead": 0,
+          "returnTree": 1,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 16,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 4,
+          "no-callback-row": 10,
+          "generated-summary": 1
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solid-primitives/analytics@ contract with 4 entrypoints at ; review plan and (16 checklist items)",
+      "detail": {
+        "entrypointCount": 4,
+        "checklistItems": 16
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 2561,
+      "installDurationMs": 2237,
+      "generationDurationMs": 324,
+      "stdout": "generated @solid-primitives/analytics@2.0.0-next.2 contract with 4 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hQtLR2/@solid-primitives__analytics@2.0.0-next.2--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hQtLR2/@solid-primitives__analytics@2.0.0-next.2--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-hQtLR2/@solid-primitives__analytics@2.0.0-next.2--solid2--floor.review.json (16 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solid-primitives/audio@1.4.5|solid1|only",
+      "family": "solid-primitives",
+      "status": "official",
+      "package": "@solid-primitives/audio",
+      "version": "1.4.5",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "@solid-primitives/audio": "1.4.5",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 6,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 4,
+        "exportsProven": 3,
+        "exportsWithUnknown": 1,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 1,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 1,
+        "behavioralRows": {
+          "callbackExecution": 0,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 6,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 1,
+          "unknown-sentinel": 1,
+          "no-callback-row": 2,
+          "generated-summary": 1
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solid-primitives/audio@ contract with 1 entrypoints at ; review plan and (6 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 6
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 943,
+      "installDurationMs": 831,
+      "generationDurationMs": 111,
+      "stdout": "generated @solid-primitives/audio@1.4.5 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-CQ7wqZ/@solid-primitives__audio@1.4.5--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-CQ7wqZ/@solid-primitives__audio@1.4.5--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-CQ7wqZ/@solid-primitives__audio@1.4.5--solid1--only.review.json (6 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solidjs/meta@0.29.4|solid1|only",
+      "family": "official-solid",
+      "status": "official",
+      "package": "@solidjs/meta",
+      "version": "0.29.4",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "@solidjs/meta": "0.29.4",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 14,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 9,
+        "exportsProven": 8,
+        "exportsWithUnknown": 1,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 1,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 1,
+        "behavioralRows": {
+          "callbackExecution": 2,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 14,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 1,
+          "no-callback-row": 7,
+          "callback-without-owner-row": 2,
+          "unknown-sentinel": 1,
+          "generated-summary": 2
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solidjs/meta@ contract with 1 entrypoints at ; review plan and (14 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 14
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 1148,
+      "installDurationMs": 945,
+      "generationDurationMs": 201,
+      "stdout": "generated @solidjs/meta@0.29.4 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-uJSocs/@solidjs__meta@0.29.4--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-uJSocs/@solidjs__meta@0.29.4--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-uJSocs/@solidjs__meta@0.29.4--solid1--only.review.json (14 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solidjs/meta@1.0.0-next.2|solid2|floor",
+      "family": "official-solid",
+      "status": "official",
+      "package": "@solidjs/meta",
+      "version": "1.0.0-next.2",
+      "solidTarget": "solid2",
+      "probeKind": "floor",
+      "channel": "rc",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "installedVersions": {
+        "@solidjs/meta": "1.0.0-next.2",
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 9,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 8,
+        "exportsProven": 1,
+        "exportsWithUnknown": 7,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 7,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 7,
+        "behavioralRows": {
+          "callbackExecution": 0,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 9,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "unknown-sentinel": 7,
+          "no-callback-row": 1
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solidjs/meta@ contract with 1 entrypoints at ; review plan and (9 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 9
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 1543,
+      "installDurationMs": 1434,
+      "generationDurationMs": 107,
+      "stdout": "generated @solidjs/meta@1.0.0-next.2 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VIG9Z4/@solidjs__meta@1.0.0-next.2--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VIG9Z4/@solidjs__meta@1.0.0-next.2--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-VIG9Z4/@solidjs__meta@1.0.0-next.2--solid2--floor.review.json (9 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solidjs/router@1.0.0|solid1|only",
+      "family": "official-solid",
+      "status": "official",
+      "package": "@solidjs/router",
+      "version": "1.0.0",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "@solidjs/router": "1.0.0",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 175,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 38,
+        "exportsProven": 1,
+        "exportsWithUnknown": 37,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 37,
+          "returns": 37,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 74,
+        "behavioralRows": {
+          "callbackExecution": 29,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 175,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 15,
+          "conditional-environment": 1,
+          "unknown-sentinel": 90,
+          "no-callback-row": 23,
+          "callback-without-owner-row": 29,
+          "generated-summary": 17
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solidjs/router@ contract with 1 entrypoints at ; review plan and (175 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 175
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 2425,
+      "installDurationMs": 952,
+      "generationDurationMs": 1472,
+      "stdout": "generated @solidjs/router@1.0.0 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-U3lrsK/@solidjs__router@1.0.0--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-U3lrsK/@solidjs__router@1.0.0--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-U3lrsK/@solidjs__router@1.0.0--solid1--only.review.json (175 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@solidjs/router@2.0.0-next.17|solid2|only",
+      "family": "official-solid",
+      "status": "official",
+      "package": "@solidjs/router",
+      "version": "2.0.0-next.17",
+      "solidTarget": "solid2",
+      "probeKind": "only",
+      "channel": "rc",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.1",
+        "solid-js": "2.0.0-rc.1"
+      },
+      "installedVersions": {
+        "@solidjs/router": "2.0.0-next.17",
+        "@solidjs/web": "2.0.0-rc.1",
+        "solid-js": "2.0.0-rc.1"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 3,
+      "generatedEntrypoints": 3,
+      "refusedEntrypoints": null,
+      "checklistItems": 268,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 3,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 30,
+        "exportsProven": 2,
+        "exportsWithUnknown": 28,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 28,
+          "returns": 28,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 56,
+        "behavioralRows": {
+          "callbackExecution": 22,
+          "reactiveRead": 2,
+          "returnTree": 11,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 268,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 43,
+          "conditional-environment": 1,
+          "unknown-sentinel": 110,
+          "no-callback-row": 63,
+          "callback-without-owner-row": 22,
+          "generated-summary": 29
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @solidjs/router@ contract with 3 entrypoints at ; review plan and (268 checklist items)",
+      "detail": {
+        "entrypointCount": 3,
+        "checklistItems": 268
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 3403,
+      "installDurationMs": 1438,
+      "generationDurationMs": 1964,
+      "stdout": "generated @solidjs/router@2.0.0-next.17 contract with 3 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-dFxODQ/@solidjs__router@2.0.0-next.17--solid2--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-dFxODQ/@solidjs__router@2.0.0-next.17--solid2--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-dFxODQ/@solidjs__router@2.0.0-next.17--solid2--only.review.json (268 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@tanstack/ai-devtools-core@0.5.6|solid1|only",
+      "family": "tanstack",
+      "status": "official",
+      "package": "@tanstack/ai-devtools-core",
+      "version": "0.5.6",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "@tanstack/ai-devtools-core": "0.5.6",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 3,
+      "generatedEntrypoints": 2,
+      "refusedEntrypoints": null,
+      "checklistItems": 509,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": true,
+        "entrypointsEmitted": 2,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 1,
+        "exportsProven": 1,
+        "exportsWithUnknown": 0,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 0,
+          "returns": 0,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 0,
+        "behavioralRows": {
+          "callbackExecution": 0,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 509,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 505,
+          "conditional-environment": 2,
+          "generated-summary": 2
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @tanstack/ai-devtools-core@ contract with 2 entrypoints at ; review plan and (509 checklist items)",
+      "detail": {
+        "entrypointCount": 2,
+        "checklistItems": 509
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 101610,
+      "installDurationMs": 892,
+      "generationDurationMs": 100718,
+      "stdout": "generated @tanstack/ai-devtools-core@0.5.6 contract with 2 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-Ml5OiP/@tanstack__ai-devtools-core@0.5.6--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-Ml5OiP/@tanstack__ai-devtools-core@0.5.6--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-Ml5OiP/@tanstack__ai-devtools-core@0.5.6--solid1--only.review.json (509 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "@tanstack/solid-query@6.0.0-rc.0|solid2|floor",
+      "family": "tanstack",
+      "status": "official",
+      "package": "@tanstack/solid-query",
+      "version": "6.0.0-rc.0",
+      "solidTarget": "solid2",
+      "probeKind": "floor",
+      "channel": "rc",
+      "solid": {
+        "solid-js": "2.0.0-rc.0"
+      },
+      "installedVersions": {
+        "@tanstack/solid-query": "6.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 307,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 57,
+        "exportsProven": 20,
+        "exportsWithUnknown": 37,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 3,
+          "reactiveReads": 37,
+          "returns": 37,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 77,
+        "behavioralRows": {
+          "callbackExecution": 90,
+          "reactiveRead": 1,
+          "returnTree": 14,
+          "ownerRequirement": 12,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 307,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 1,
+          "unknown-sentinel": 123,
+          "callback-without-owner-row": 90,
+          "no-callback-row": 34,
+          "generated-owner-requirement": 12,
+          "generated-summary": 46
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated @tanstack/solid-query@ contract with 1 entrypoints at ; review plan and (307 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 307
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 1906,
+      "installDurationMs": 410,
+      "generationDurationMs": 1496,
+      "stdout": "generated @tanstack/solid-query@6.0.0-rc.0 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-KMxVo4/@tanstack__solid-query@6.0.0-rc.0--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-KMxVo4/@tanstack__solid-query@6.0.0-rc.0--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-KMxVo4/@tanstack__solid-query@6.0.0-rc.0--solid2--floor.review.json (307 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "motion-solidjs@0.6.0|solid1|only",
+      "family": "motion-solidjs",
+      "status": "official",
+      "package": "motion-solidjs",
+      "version": "0.6.0",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "motion-solidjs": "0.6.0",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 2,
+      "generatedEntrypoints": 2,
+      "refusedEntrypoints": null,
+      "checklistItems": 537,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 2,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 96,
+        "exportsProven": 15,
+        "exportsWithUnknown": 81,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 81,
+          "returns": 81,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 162,
+        "behavioralRows": {
+          "callbackExecution": 6,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 537,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 7,
+          "conditional-environment": 2,
+          "unknown-sentinel": 324,
+          "no-callback-row": 150,
+          "callback-without-owner-row": 12,
+          "generated-summary": 42
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated motion-solidjs@ contract with 2 entrypoints at ; review plan and (537 checklist items)",
+      "detail": {
+        "entrypointCount": 2,
+        "checklistItems": 537
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 3820,
+      "installDurationMs": 1652,
+      "generationDurationMs": 2165,
+      "stdout": "generated motion-solidjs@0.6.0 contract with 2 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-jJgqwF/motion-solidjs@0.6.0--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-jJgqwF/motion-solidjs@0.6.0--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-jJgqwF/motion-solidjs@0.6.0--solid1--only.review.json (537 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "motion-solidjs@0.7.0-beta.4|solid2|floor",
+      "family": "motion-solidjs",
+      "status": "official",
+      "package": "motion-solidjs",
+      "version": "0.7.0-beta.4",
+      "solidTarget": "solid2",
+      "probeKind": "floor",
+      "channel": "rc",
+      "solid": {
+        "@solidjs/signals": "2.0.0-rc.0",
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "installedVersions": {
+        "motion-solidjs": "0.7.0-beta.4",
+        "@solidjs/signals": "2.0.0-rc.0",
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 3,
+      "generatedEntrypoints": 3,
+      "refusedEntrypoints": null,
+      "checklistItems": 1689,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 3,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 261,
+        "exportsProven": 13,
+        "exportsWithUnknown": 248,
+        "exportsAllDomainsUnknown": 248,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 248,
+          "reactiveReads": 248,
+          "returns": 248,
+          "ownerRequirements": 248,
+          "asyncBehavior": 248
+        },
+        "unknownTotal": 1240,
+        "behavioralRows": {
+          "callbackExecution": 0,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 1689,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 5,
+          "conditional-environment": 3,
+          "unknown-sentinel": 1655,
+          "generated-summary": 26
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated motion-solidjs@ contract with 3 entrypoints at ; review plan and (1689 checklist items)",
+      "detail": {
+        "entrypointCount": 3,
+        "checklistItems": 1689
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 4491,
+      "installDurationMs": 1549,
+      "generationDurationMs": 2937,
+      "stdout": "generated motion-solidjs@0.7.0-beta.4 contract with 3 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-zzBLCJ/motion-solidjs@0.7.0-beta.4--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-zzBLCJ/motion-solidjs@0.7.0-beta.4--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-zzBLCJ/motion-solidjs@0.7.0-beta.4--solid2--floor.review.json (1689 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "solid-js@1.9.14|solid1|only",
+      "family": "official-solid",
+      "status": "official",
+      "package": "solid-js",
+      "version": "1.9.14",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 23,
+      "generatedEntrypoints": 11,
+      "refusedEntrypoints": null,
+      "checklistItems": 1132,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 11,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 202,
+        "exportsProven": 161,
+        "exportsWithUnknown": 41,
+        "exportsAllDomainsUnknown": 3,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 3,
+          "reactiveReads": 11,
+          "returns": 41,
+          "ownerRequirements": 3,
+          "asyncBehavior": 3
+        },
+        "unknownTotal": 61,
+        "behavioralRows": {
+          "callbackExecution": 254,
+          "reactiveRead": 142,
+          "returnTree": 98,
+          "ownerRequirement": 14,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 1132,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 9,
+          "callback-without-owner-row": 339,
+          "no-callback-row": 455,
+          "unknown-sentinel": 130,
+          "generated-owner-requirement": 19,
+          "generated-summary": 179
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated solid-js@ contract with 11 entrypoints at ; review plan and (1132 checklist items)",
+      "detail": {
+        "entrypointCount": 11,
+        "checklistItems": 1132
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 5836,
+      "installDurationMs": 394,
+      "generationDurationMs": 5439,
+      "stdout": "generated solid-js@1.9.14 contract with 11 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-AjjcuJ/solid-js@1.9.14--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-AjjcuJ/solid-js@1.9.14--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-AjjcuJ/solid-js@1.9.14--solid1--only.review.json (1132 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "solid-js@2.0.0-rc.1|solid2|floor",
+      "family": "official-solid",
+      "status": "official",
+      "package": "solid-js",
+      "version": "2.0.0-rc.1",
+      "solidTarget": "solid2",
+      "probeKind": "floor",
+      "channel": "rc",
+      "solid": {
+        "@solidjs/signals": "2.0.0-rc.1",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "installedVersions": {
+        "solid-js": "2.0.0-rc.0",
+        "@solidjs/signals": "2.0.0-rc.1"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 4,
+      "generatedEntrypoints": 2,
+      "refusedEntrypoints": null,
+      "checklistItems": 294,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 2,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 81,
+        "exportsProven": 66,
+        "exportsWithUnknown": 15,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 0,
+          "returns": 15,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 15,
+        "behavioralRows": {
+          "callbackExecution": 103,
+          "reactiveRead": 7,
+          "returnTree": 59,
+          "ownerRequirement": 8,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 294,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 1,
+          "conditional-environment": 2,
+          "unknown-sentinel": 15,
+          "no-callback-row": 120,
+          "callback-without-owner-row": 103,
+          "generated-owner-requirement": 8,
+          "generated-summary": 45
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated solid-js@ contract with 2 entrypoints at ; review plan and (294 checklist items)",
+      "detail": {
+        "entrypointCount": 2,
+        "checklistItems": 294
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 4010,
+      "installDurationMs": 1084,
+      "generationDurationMs": 2925,
+      "stdout": "generated solid-js@2.0.0-rc.0 contract with 2 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ZjRmd1/solid-js@2.0.0-rc.1--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ZjRmd1/solid-js@2.0.0-rc.1--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-ZjRmd1/solid-js@2.0.0-rc.1--solid2--floor.review.json (294 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "solid-recharts@1.0.1|solid1|only",
+      "family": "solid-recharts",
+      "status": "official",
+      "package": "solid-recharts",
+      "version": "1.0.1",
+      "solidTarget": "solid1",
+      "probeKind": "only",
+      "channel": "stable",
+      "solid": {
+        "solid-js": "1.9.14"
+      },
+      "installedVersions": {
+        "solid-recharts": "1.0.1",
+        "solid-js": "1.9.14"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 442,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 109,
+        "exportsProven": 8,
+        "exportsWithUnknown": 101,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 0,
+          "reactiveReads": 101,
+          "returns": 101,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 202,
+        "behavioralRows": {
+          "callbackExecution": 30,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 0,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 442,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 100,
+          "conditional-environment": 1,
+          "unknown-sentinel": 202,
+          "callback-without-owner-row": 30,
+          "no-callback-row": 71,
+          "generated-summary": 38
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated solid-recharts@ contract with 1 entrypoints at ; review plan and (442 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 442
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 21689,
+      "installDurationMs": 557,
+      "generationDurationMs": 21127,
+      "stdout": "generated solid-recharts@1.0.1 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-bh2bKq/solid-recharts@1.0.1--solid1--only.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-bh2bKq/solid-recharts@1.0.1--solid1--only.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-bh2bKq/solid-recharts@1.0.1--solid1--only.review.json (442 checklist items)\n",
+      "stderr": ""
+    },
+    {
+      "probeId": "solid-recharts@2.0.0-beta.1|solid2|floor",
+      "family": "solid-recharts",
+      "status": "official",
+      "package": "solid-recharts",
+      "version": "2.0.0-beta.1",
+      "solidTarget": "solid2",
+      "probeKind": "floor",
+      "channel": "rc",
+      "solid": {
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "installedVersions": {
+        "solid-recharts": "2.0.0-beta.1",
+        "@solidjs/web": "2.0.0-rc.0",
+        "solid-js": "2.0.0-rc.0"
+      },
+      "integrityVerified": true,
+      "declaredEntrypoints": 1,
+      "generatedEntrypoints": 1,
+      "refusedEntrypoints": null,
+      "checklistItems": 347,
+      "contractContent": {
+        "measured": true,
+        "fullyProven": false,
+        "entrypointsEmitted": 1,
+        "entrypointsRefused": 0,
+        "refusedEntrypointNames": [],
+        "exportsTotal": 109,
+        "exportsProven": 7,
+        "exportsWithUnknown": 102,
+        "exportsAllDomainsUnknown": 0,
+        "exportsUnknownOnlyInVariants": 0,
+        "exportsWithoutSummary": 0,
+        "unknownByDomain": {
+          "callbacks": 1,
+          "reactiveReads": 102,
+          "returns": 102,
+          "ownerRequirements": 0,
+          "asyncBehavior": 0
+        },
+        "unknownTotal": 205,
+        "behavioralRows": {
+          "callbackExecution": 0,
+          "reactiveRead": 0,
+          "returnTree": 0,
+          "ownerRequirement": 4,
+          "asyncBehavior": 0
+        },
+        "closureNotes": 0,
+        "closureNoteSamples": [],
+        "reviewPlanItems": 347,
+        "reviewPlanItemsByKind": {
+          "artifact-binding": 26,
+          "unknown-sentinel": 205,
+          "no-callback-row": 101,
+          "generated-owner-requirement": 4,
+          "generated-summary": 11
+        }
+      },
+      "outcome": "success",
+      "class": "success",
+      "signature": "generated solid-recharts@ contract with 1 entrypoints at ; review plan and (347 checklist items)",
+      "detail": {
+        "entrypointCount": 1,
+        "checklistItems": 347
+      },
+      "exitStatus": 0,
+      "timedOut": false,
+      "durationMs": 6105,
+      "installDurationMs": 418,
+      "generationDurationMs": 5679,
+      "stdout": "generated solid-recharts@2.0.0-beta.1 contract with 1 entrypoints at /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-iPLp62/solid-recharts@2.0.0-beta.1--solid2--floor.json; review plan /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-iPLp62/solid-recharts@2.0.0-beta.1--solid2--floor.review.md and /var/folders/y3/kgy_4tp56z717bf03m_v9cc00000gn/T/solid-checker-ecosystem-out-iPLp62/solid-recharts@2.0.0-beta.1--solid2--floor.review.json (347 checklist items)\n",
+      "stderr": ""
+    }
+  ]
+}

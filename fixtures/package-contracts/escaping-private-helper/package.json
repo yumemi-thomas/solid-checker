@@ -1,0 +1,26 @@
+{
+  "name": "escaping-private-helper",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "solid-js": "1.9.14"
+  },
+  "exports": {
+    "./called": {
+      "types": "./called.d.ts",
+      "default": "./called.js"
+    },
+    "./argument": {
+      "types": "./argument.d.ts",
+      "default": "./argument.js"
+    },
+    "./returned": {
+      "types": "./returned.d.ts",
+      "default": "./returned.js"
+    },
+    "./rendered": {
+      "types": "./rendered.d.ts",
+      "default": "./rendered.jsx"
+    }
+  }
+}

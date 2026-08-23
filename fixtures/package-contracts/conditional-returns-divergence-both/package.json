@@ -1,0 +1,12 @@
+{
+  "name": "conditional-returns-divergence-both-package",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "browser": "./browser.js",
+      "node": "./node.js",
+      "default": "./node.js"
+    }
+  }
+}

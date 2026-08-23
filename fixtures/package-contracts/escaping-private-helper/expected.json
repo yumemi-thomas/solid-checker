@@ -1,0 +1,68 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "escaping-private-helper",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "reactiveReads": {
+        "status": "unknown"
+      },
+      "returns": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    "./argument": {
+      "exports": {
+        "function-2": [
+          "Escaped",
+          "Isolated"
+        ]
+      }
+    },
+    "./called": {
+      "exports": {
+        "function-2": [
+          "Direct"
+        ],
+        "function-1": [
+          "Isolated"
+        ]
+      }
+    },
+    "./rendered": {
+      "exports": {
+        "function-2": [
+          "App",
+          "Isolated"
+        ]
+      }
+    },
+    "./returned": {
+      "exports": {
+        "function-2": [
+          "Isolated",
+          "makePanel"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

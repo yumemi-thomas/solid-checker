@@ -1,0 +1,14 @@
+{
+  "name": "unresolved-contract-export-attribution",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "partial-contract-package": "1.0.0"
+  },
+  "exports": {
+    ".": {
+      "types": "./index.d.ts",
+      "default": "./index.js"
+    }
+  }
+}

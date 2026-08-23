@@ -1,0 +1,5 @@
+{
+  "name": "legacy-module-entrypoint-package",
+  "version": "1.0.0",
+  "module": "index.js"
+}

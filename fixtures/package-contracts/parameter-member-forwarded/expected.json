@@ -1,0 +1,66 @@
+{
+  "schemaVersion": 1,
+  "package": {
+    "name": "parameter-member-forwarded",
+    "version": "1.0.0"
+  },
+  "compilerFactsProtocol": 1,
+  "summaries": {
+    "function-1": {
+      "kind": "function",
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-2": {
+      "kind": "function",
+      "reactiveReads": [
+        {
+          "kind": "parameter-member",
+          "parameter": 0,
+          "evidence": {
+            "kind": "inferred"
+          }
+        }
+      ],
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-3": {
+      "kind": "function",
+      "reactiveReads": {
+        "status": "unknown"
+      },
+      "returns": {
+        "status": "unknown"
+      },
+      "evidence": {
+        "kind": "inferred"
+      }
+    }
+  },
+  "entrypoints": {
+    ".": {
+      "exports": {
+        "function-3": [
+          "forwarded"
+        ],
+        "function-1": [
+          "Isolated"
+        ]
+      }
+    },
+    "./direct": {
+      "exports": {
+        "function-2": [
+          "channelFor"
+        ]
+      }
+    }
+  },
+  "evidence": {
+    "kind": "inferred",
+    "generator": "solid-checker package generator"
+  }
+}

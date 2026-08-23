@@ -416,7 +416,37 @@ impl<'a> SemanticLookup<'a> {
         self.resolved_contracts
             .by_symbol
             .get(symbol)
-            .map(|binding| binding.summary.callbacks.as_slice())
+            .and_then(|binding| binding.summary.callbacks.known())
+            .map(Vec::as_slice)
+    }
+
+    /// The package and imported export name a symbol's contract binding
+    /// carries, whatever its claim status. Consumer-side obligations name the
+    /// export whose claim could not be applied, which is the same identity the
+    /// unknown-claim path reports.
+    pub(super) fn contract_export_identity(&self, symbol: &str) -> Option<(&str, &str)> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .map(|binding| {
+                (
+                    binding.package_name.as_str(),
+                    binding.imported_name.as_str(),
+                )
+            })
+    }
+
+    pub(super) fn unknown_contract_callback_export(&self, symbol: &str) -> Option<(&str, &str)> {
+        self.resolved_contracts
+            .by_symbol
+            .get(symbol)
+            .filter(|binding| binding.summary.callbacks.is_unknown())
+            .map(|binding| {
+                (
+                    binding.package_name.as_str(),
+                    binding.imported_name.as_str(),
+                )
+            })
     }
 
     pub(super) fn contract_owner_requirements(
@@ -426,7 +456,8 @@ impl<'a> SemanticLookup<'a> {
         self.resolved_contracts
             .by_symbol
             .get(symbol)
-            .map(|binding| binding.summary.owner_requirements.as_slice())
+            .and_then(|binding| binding.summary.owner_requirements.known())
+            .map(Vec::as_slice)
     }
 
     pub(super) fn has_contract_binding(&self, symbol: &SymbolId) -> bool {

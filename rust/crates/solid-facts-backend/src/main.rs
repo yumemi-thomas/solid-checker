@@ -293,7 +293,16 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         )?;
         if !request.emit_contract.is_empty() {
             emit_package_contract(dialect, &request, &analysis.program, &facts)?;
-            return Ok(0);
+            // Emission normally produces no stdout, and the generator depends
+            // on that. `--format json` is a caller explicitly asking for the
+            // diagnostics of the same analysis, which is otherwise only
+            // obtainable by running the whole project a second time -- and the
+            // second run is the one that cannot see which obligations the
+            // emitter attributed to which export. The default format is
+            // untouched, so the generator's process contract is unchanged.
+            if request.format != "json" {
+                return Ok(0);
+            }
         }
         let snapshot = &analysis.snapshot;
         let emission = snapshot_emission::emit(
@@ -637,7 +646,9 @@ fn print_help() {
                                         from it. `closed` lets an exported symbol's caller set\n\
                                         be enumerated; it never licenses guessing one\n\
            --validate-contract <PATH>   Validate a contract and artifact hashes\n\
-           --emit-contract <PATH>       Write a generated solid-reactivity.json contract\n\
+           --emit-contract <PATH>       Write a generated solid-reactivity.json contract.\n\
+                                        With --format json the same analysis also writes\n\
+                                        its diagnostics to stdout\n\
            --package-name <NAME>        Package name used by --emit-contract\n\
            --package-version <VERSION>  Exact package version used by --emit-contract\n\
            --declaration-artifact <PATH> Hash a declaration artifact into the contract\n\
@@ -648,6 +659,640 @@ fn print_help() {
                                         SOLID_CHECKER_DAEMON=0 for one-shot analysis.\n\
            -h, --help                   Print help"
     );
+}
+
+#[derive(Clone, Copy)]
+struct UnresolvedClaimDomains {
+    reactive_reads: bool,
+    returns: bool,
+    callbacks: bool,
+    owner_requirements: bool,
+    async_behavior: bool,
+}
+
+impl UnresolvedClaimDomains {
+    const fn all() -> Self {
+        Self {
+            reactive_reads: true,
+            returns: true,
+            callbacks: true,
+            owner_requirements: true,
+            async_behavior: true,
+        }
+    }
+
+    /// The contract field names these domains write, so the attribution note
+    /// and the review plan's `unknown-sentinel` items name the same fields.
+    fn names(self) -> Vec<&'static str> {
+        [
+            ("reactiveReads", self.reactive_reads),
+            ("returns", self.returns),
+            ("callbacks", self.callbacks),
+            ("ownerRequirements", self.owner_requirements),
+            ("asyncBehavior", self.async_behavior),
+        ]
+        .into_iter()
+        .filter_map(|(name, enabled)| enabled.then_some(name))
+        .collect()
+    }
+}
+
+fn unresolved_claim_domains(kind: &solid_reactive_ir::StaticDefectKind) -> UnresolvedClaimDomains {
+    use solid_reactive_ir::StaticDefectKind;
+    match kind {
+        // A proven reactive source was handed to a callee with no inspectable
+        // body and no contract row. `reactiveReads`, because whether the callee
+        // subscribes is exactly what is unproven. And `returns`, for the same
+        // reason `ReactiveDispatchUnresolved` needs it: what that callee hands
+        // back is described from the local accessor index, which knows nothing
+        // about it, so a possibly-reactive property placed in the returned
+        // object is emitted as a certified-negative omission
+        // (`const derived = observe(value); return { derived }`).
+        //
+        // Reads-only was not provable here. Every shape that reaches this arm
+        // in generation today also raises the package's missing-contract-export
+        // obligation, which already erases all five domains
+        // (fixtures/package-contracts/uncaptured-source-return pins that), so
+        // the reads-only claim was never *tested* -- it was masked. Being
+        // covered by another obligation in the shapes one can build is not a
+        // proof that no shape escapes it, and the escaping direction publishes
+        // a wrong `returns`.
+        StaticDefectKind::ReactiveSourceUncaptured { .. } => UnresolvedClaimDomains {
+            reactive_reads: true,
+            returns: true,
+            callbacks: false,
+            owner_requirements: false,
+            async_behavior: false,
+        },
+        StaticDefectKind::ReactiveCallbackUnresolved { .. }
+        | StaticDefectKind::UnknownCallbackExecution { .. } => UnresolvedClaimDomains {
+            reactive_reads: false,
+            returns: false,
+            callbacks: true,
+            owner_requirements: false,
+            async_behavior: false,
+        },
+        StaticDefectKind::StructuredReturnUnresolved { .. } => UnresolvedClaimDomains {
+            reactive_reads: false,
+            returns: true,
+            callbacks: false,
+            owner_requirements: false,
+            async_behavior: false,
+        },
+        // An unresolved dispatch proves exactly one thing: the possible runtime
+        // implementations do not share one reactive-read summary. Two domains
+        // depend on that and no more.
+        //
+        // `reactiveReads`, because that is the summary the obligation says is
+        // unproven. `returns`, because the return description is derived from
+        // the same resolved callee summary and does *not* fail closed on its
+        // own: a value produced by the unresolved dispatch and placed in a
+        // returned object is described from the local accessor index, which
+        // knows nothing about it, so a possibly-reactive property is emitted as
+        // a certified-negative omission. (`StructuredReturnUnresolved` looks
+        // like the guard for that, but it fires only for a shorthand property
+        // bound to an import with no project declaration -- an orthogonal
+        // condition that this shape does not meet. Pinned by the
+        // fixtures/package-contracts/unresolved-dispatch-attribution and
+        // unresolved-dispatch-domains-control pair: the control resolves the
+        // dispatch and the contract then claims `returns.properties.value` is
+        // an accessor, which is precisely the claim the unresolved variant
+        // cannot make.)
+        //
+        // `callbacks`, `ownerRequirements` and `asyncBehavior` are proven by
+        // passes that do not consult the dispatch, and erasing them here was
+        // discarding four independently established claims to record one.
+        StaticDefectKind::ReactiveDispatchUnresolved { .. } => UnresolvedClaimDomains {
+            reactive_reads: true,
+            returns: true,
+            callbacks: false,
+            owner_requirements: false,
+            async_behavior: false,
+        },
+        // A missing or environment-dependent contract export says nothing at
+        // all about the surface behind it, so every domain stays unknown.
+        _ => UnresolvedClaimDomains::all(),
+    }
+}
+
+/// Marks the requested domains unknown, reporting whether anything changed.
+///
+/// A value export has no claim to erase, and a caller that recorded it as
+/// marked would put an attribution note on the review plan for a decision the
+/// contract does not contain.
+fn mark_summary_claims_unknown(
+    summary: &mut solid_reactive_ir::ContractExport,
+    domains: UnresolvedClaimDomains,
+) -> bool {
+    let mut marked = false;
+    for variant in &mut summary.variants {
+        marked |= mark_summary_claims_unknown(&mut variant.summary, domains);
+    }
+    if summary.kind != "function" {
+        return marked;
+    }
+    if domains.reactive_reads {
+        summary.reactive_reads = unknown_contract_claim();
+        marked = true;
+    }
+    if domains.returns {
+        summary.returns = unknown_contract_claim();
+        marked = true;
+    }
+    if domains.callbacks {
+        summary.callbacks = unknown_contract_claim();
+        marked = true;
+    }
+    if domains.owner_requirements {
+        summary.owner_requirements = unknown_contract_claim();
+        marked = true;
+    }
+    if domains.async_behavior {
+        summary.async_behavior = unknown_contract_claim();
+        marked = true;
+    }
+    marked
+}
+
+fn unknown_contract_claim<T>() -> solid_reactive_ir::ContractClaim<T> {
+    solid_reactive_ir::ContractClaim::Unknown(solid_reactive_ir::ContractUnknownClaim::new())
+}
+
+#[derive(Clone, Copy)]
+struct UnresolvedExportIndex<'a> {
+    facts: &'a solid_facts::ProjectFacts,
+    aliases: &'a HashMap<String, String>,
+    names_by_identity: &'a HashMap<String, Vec<String>>,
+    names_by_symbol: &'a HashMap<String, Vec<String>>,
+    /// Whether `names_by_identity`/`names_by_symbol` were built at all, i.e.
+    /// whether the request named an entry file.
+    ///
+    /// Without one, `exports` is the whole project's export map keyed by the
+    /// exported name, and no identity channel exists to join a declaration to
+    /// it: the name *is* the key in that mode, and there is nothing more exact
+    /// to prefer over it.
+    entry_joined: bool,
+    /// Whether every name in `exports` was joined to an identity or a symbol.
+    ///
+    /// Only then does "this function's identity is in neither map" prove the
+    /// function is not an export. If one export never resolved to an entity,
+    /// the maps cannot distinguish a private helper from *that* export, and
+    /// the answer has to stay undecidable rather than certify a negative.
+    exports_fully_joined: bool,
+    /// The call graph's answer to "which functions can reach this obligation",
+    /// computed where the graph lives (`solid-reactive-ir`).
+    obligation_reach: &'a [solid_reactive_ir::ObligationReach],
+}
+
+/// How an unknown claim was attributed to the exports it was written onto.
+///
+/// The rungs are ordered by how directly they tie the obligation to a name,
+/// and every rung above the last is exact: a lexical containment or a Type
+/// Facts runtime identity, never a name-text match. The last one is the
+/// admission that nothing tied it to anything.
+#[derive(Clone, Copy, Eq, PartialEq)]
+enum AttributionMechanism {
+    /// The obligation's innermost enclosing function is itself an export.
+    Joined,
+    /// An outer function on the enclosing chain is an export -- the obligation
+    /// sits in an anonymous callback, a named local helper, or a method inside
+    /// it.
+    EnclosingChain,
+    /// The obligation's own location carries a Type Facts symbol whose other
+    /// references sit inside exported functions.
+    IdentityWidening,
+    /// No enclosing function is an export, and the call graph proves exactly
+    /// which exports can reach the one the obligation sits in.
+    Reachability,
+    /// A contract-generation obligation naming its exported function directly.
+    ObligationIdentity,
+    /// Nothing identified the obligation's function, so every export of the
+    /// entrypoint is marked. This is the surviving fail-closed rung.
+    FallbackAll,
+}
+
+impl AttributionMechanism {
+    const fn as_str(self) -> &'static str {
+        match self {
+            Self::Joined => "joined",
+            Self::EnclosingChain => "enclosing-chain",
+            Self::IdentityWidening => "identity-widening",
+            Self::Reachability => "reachability",
+            Self::ObligationIdentity => "obligation-identity",
+            Self::FallbackAll => "fallback-all",
+        }
+    }
+}
+
+/// The export names one function declaration resolves to, by exact identity.
+///
+/// The Type Facts runtime identity first, then the canonical symbol. An alias
+/// (`export { ProviderRoot as Root }`) and a cross-file re-export both resolve
+/// here, and both of an aliased pair (`export { Panel, Panel as Root }`) come
+/// back together. A same-named unrelated function does not resolve at all.
+///
+/// The two answers are different claims and callers depend on the difference:
+///
+/// - `None` — *undecidable*. Nothing names this declaration, or its name
+///   carries no Type Facts entity, or the export set itself is not fully
+///   joined to identities. Callers must widen.
+/// - `Some(vec![])` — *decided*: the declaration was named, its identity was
+///   resolved, and it is none of this entrypoint's exports. A private helper.
+///
+/// There is deliberately no name-text join. Matching a declaration to
+/// `exports[local_name]` attributes an obligation inside a private `Render` to
+/// an unrelated exported `Render`, and stops at the first name of an aliased
+/// pair — both are wrong in the direction that publishes a claim about the
+/// wrong export.
+fn export_names_for_function(
+    index: UnresolvedExportIndex<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> Option<Vec<String>> {
+    // Arrow bindings included: `export const X = () => {}` has neither
+    // `name` nor `method_name`, and reading only those made every arrow export
+    // unnameable at every rung of the ladder.
+    let name = solid_reactive_ir::function_binding_name(file, function)?;
+    if !index.entry_joined {
+        // No entry file: `exports` is keyed by the project-wide exported name
+        // and no identity channel exists, so the name is the only join there
+        // is. Absence is still undecidable here, not a proven negative.
+        let local_name = file.source_text(name.span)?;
+        return exports
+            .contains_key(local_name)
+            .then(|| vec![local_name.to_owned()]);
+    }
+    let entity_location = typefacts::Location {
+        path: file.path.to_string().into(),
+        start_byte: u64::from(name.span.start),
+        end_byte: u64::from(name.span.end),
+    };
+    let symbol = index.facts.typescript.entities().find(|entity| {
+        entity.location.path == entity_location.path
+            && entity.location.start_byte == entity_location.start_byte
+            && entity.location.end_byte == entity_location.end_byte
+    })?;
+    let names = (!symbol.runtime_identity.is_empty())
+        .then(|| {
+            index
+                .names_by_identity
+                .get(symbol.runtime_identity.as_ref())
+        })
+        .flatten()
+        .or_else(|| {
+            index
+                .names_by_symbol
+                .get(&canonical_symbol(&symbol.symbol, index.aliases))
+        })
+        .cloned();
+    match names {
+        Some(names) => Some(names),
+        // Nothing matched. That is a proven negative only when every export
+        // *is* in the maps; otherwise the unjoined export could be this one.
+        None => index.exports_fully_joined.then(Vec::new),
+    }
+}
+
+fn file_at<'a>(index: UnresolvedExportIndex<'a>, path: &str) -> Option<&'a solid_facts::FileFacts> {
+    index
+        .facts
+        .files
+        .iter()
+        .find(|file| file.path.as_str() == path)
+}
+
+fn span_of(location: &typefacts::Location) -> solid_facts::core::Span {
+    solid_facts::core::Span::new(
+        u32::try_from(location.start_byte).unwrap_or(u32::MAX),
+        u32::try_from(location.end_byte).unwrap_or(u32::MAX),
+    )
+}
+
+/// Walks the enclosing-function chain outward from `location` and stops at the
+/// first function that is an export.
+///
+/// Outward, not just the innermost: an obligation inside an anonymous arrow
+/// passed to `createSignal`, or inside a named local helper, belongs to the
+/// exported function that lexically contains it. Reading only the innermost
+/// function is what sent those obligations to the mark-everything fallback.
+///
+/// Returns the depth as well, so the caller can report whether the innermost
+/// function answered (`joined`) or an outer one did (`enclosing-chain`).
+fn export_names_along_enclosing_chain(
+    index: UnresolvedExportIndex<'_>,
+    location: &typefacts::Location,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> Option<(usize, Vec<String>)> {
+    let file = file_at(index, location.path.as_ref())?;
+    let mut chain = file
+        .ast
+        .functions_body_containing(span_of(location))
+        .collect::<Vec<_>>();
+    chain.sort_by_key(|function| function.body.end - function.body.start);
+    chain.iter().enumerate().find_map(|(depth, function)| {
+        export_names_for_function(index, file, function, exports)
+            .filter(|names| !names.is_empty())
+            .map(|names| (depth, names))
+    })
+}
+
+/// The export names every function the call graph says can reach the
+/// obligation resolves to.
+///
+/// `None` means the question was not answerable and the caller must fall back:
+/// either the IR could not enumerate the reaching set soundly, or one of the
+/// functions it named is no longer joinable to this entrypoint's facts. An
+/// empty `Some` is a different answer -- the enumeration succeeded and *no*
+/// export of this entrypoint can reach the obligation, so nothing is marked.
+///
+/// Which is why an unnameable reaching function propagates the `None` from
+/// [`export_names_for_function`] rather than contributing no names: "I cannot
+/// tell what this function is" read as "it is not an export" is exactly the
+/// substitution that turns the documented fail-closed answer into a certified
+/// negative.
+///
+/// The same substitution has a second entrance, which
+/// [`module_surface_is_unaccounted`] closes: a reaching function that is
+/// *decided: not an export of this entrypoint* but is published by its own
+/// module, with no reference to it anywhere else in the project, is entered by
+/// importers the call graph never saw.
+fn export_names_from_reachability(
+    index: UnresolvedExportIndex<'_>,
+    reach: &solid_reactive_ir::ObligationReach,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> Option<Vec<String>> {
+    if !reach.complete {
+        return None;
+    }
+    let mut names = Vec::new();
+    for body in &reach.reaching {
+        let file = file_at(index, body.path.as_ref())?;
+        let span = span_of(body);
+        let function = file
+            .ast
+            .functions
+            .iter()
+            .find(|function| function.body == span)?;
+        let resolved = export_names_for_function(index, file, function, exports)?;
+        if resolved.is_empty() && module_surface_is_unaccounted(index, file, function) {
+            return None;
+        }
+        for name in resolved {
+            if !names.contains(&name) {
+                names.push(name);
+            }
+        }
+    }
+    Some(names)
+}
+
+/// Whether a function published by its own module has no consumer anywhere in
+/// the analyzed project -- so the call graph's caller enumeration for it cannot
+/// be the whole entry set.
+///
+/// Asked only of a function the ladder decided is **not** an export of this
+/// entrypoint. An entrypoint export is entered by consumers of the package, and
+/// attribution answers for those by marking that export's own name; a
+/// module-private function is entered only from inside the project, which is
+/// exactly what the call graph enumerates. The gap is the third case: a
+/// function its module publishes, that this entrypoint does not, and that
+/// nothing in the project references. Either it exists for importers outside
+/// the analyzed file set, or -- the shape this closes -- the importers are
+/// inside it and bound to a *different* declaration of the same module.
+///
+/// That is what a sibling `channel.d.ts` beside `channel.js` does. TypeScript
+/// resolves `./channel.js` to the declaration file, so the call in `index.js`
+/// carries the declaration's runtime identity and the implementation's symbol
+/// has no reference outside `channel.js` at all. The graph then enumerated the
+/// helper alone, reported `complete`, and the obligation attributed to no
+/// export: every export that really does reach it was published certified.
+///
+/// There is no fact that pairs a declaration file with the runtime module it
+/// describes -- `ImportFact` carries only specifier text, and the compiler
+/// treats the two files as unrelated modules -- so this cannot be resolved
+/// exactly and reports itself incomplete instead. Emission then widens to
+/// `fallback-all` and the marker records the widening.
+///
+/// Accounting is by exact identity, never by name text: a reference counts when
+/// its Type Facts runtime identity or canonical symbol is the function's own.
+fn module_surface_is_unaccounted(
+    index: UnresolvedExportIndex<'_>,
+    file: &solid_facts::FileFacts,
+    function: &solid_facts::ast::FunctionFact,
+) -> bool {
+    let Some(name) = solid_reactive_ir::function_binding_name(file, function) else {
+        // Unnameable: `export_names_for_function` already answered `None` for
+        // it, so this decision is never reached with one.
+        return false;
+    };
+    let published = file.ast.exports.iter().any(|export| {
+        export
+            .specifiers
+            .iter()
+            .chain(export.declarations.iter())
+            .any(|specifier| specifier.local.span == name.span)
+    });
+    if !published {
+        return false;
+    }
+    let Some(declaration) = index.facts.typescript.entities().find(|entity| {
+        entity.location.path.as_ref() == file.path.as_str()
+            && entity.location.start_byte == u64::from(name.span.start)
+            && entity.location.end_byte == u64::from(name.span.end)
+    }) else {
+        return false;
+    };
+    let identity = declaration.runtime_identity.as_ref();
+    let symbol = canonical_symbol(&declaration.symbol, index.aliases);
+    let referenced_elsewhere = index.facts.typescript.entities().any(|entity| {
+        entity.location.path.as_ref() != file.path.as_str()
+            && ((!identity.is_empty() && entity.runtime_identity.as_ref() == identity)
+                || (!symbol.is_empty()
+                    && canonical_symbol(&entity.symbol, index.aliases) == symbol))
+    });
+    !referenced_elsewhere
+}
+
+/// The attribution ladder: which exports one unresolved obligation belongs to.
+fn attribute_unresolved_obligation(
+    index: UnresolvedExportIndex<'_>,
+    location: &typefacts::Location,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> (AttributionMechanism, Vec<String>) {
+    if let Some((depth, names)) = export_names_along_enclosing_chain(index, location, exports) {
+        let mechanism = if depth == 0 {
+            AttributionMechanism::Joined
+        } else {
+            AttributionMechanism::EnclosingChain
+        };
+        return (mechanism, names);
+    }
+    // The obligation's own location may *be* a declaration rather than sit in
+    // one -- an exported-helper obligation is filed at the function span, which
+    // no body contains. Widen through the exact symbol at that location.
+    if let Some(seed) = index.facts.typescript.entities().find(|entity| {
+        entity.location.path == location.path
+            && entity.location.start_byte == location.start_byte
+            && entity.location.end_byte == location.end_byte
+    }) {
+        let seed_symbol = canonical_symbol(&seed.symbol, index.aliases);
+        let seed_identity = seed.runtime_identity.as_ref();
+        let mut widened = Vec::new();
+        for reference in index.facts.typescript.entities().filter(|entity| {
+            (!seed_identity.is_empty() && entity.runtime_identity.as_ref() == seed_identity)
+                || (!seed_symbol.is_empty()
+                    && canonical_symbol(&entity.symbol, index.aliases) == seed_symbol)
+        }) {
+            let Some((_, names)) =
+                export_names_along_enclosing_chain(index, &reference.location, exports)
+            else {
+                continue;
+            };
+            for name in names {
+                if !widened.contains(&name) {
+                    widened.push(name);
+                }
+            }
+        }
+        if !widened.is_empty() {
+            return (AttributionMechanism::IdentityWidening, widened);
+        }
+    }
+    if let Some(reach) = index
+        .obligation_reach
+        .iter()
+        .find(|reach| &reach.location == location)
+        && let Some(names) = export_names_from_reachability(index, reach, exports)
+    {
+        return (AttributionMechanism::Reachability, names);
+    }
+    (
+        AttributionMechanism::FallbackAll,
+        exports.keys().cloned().collect(),
+    )
+}
+
+/// Whether the published `parameter-member` reactive-read row already carries
+/// this obligation's uncertainty, so the ladder has nothing to add.
+///
+/// An exported helper that invokes a member of one of its own parameters has
+/// callers outside the analyzed project, so project analysis keeps the
+/// obligation explicit (`EXPORTED_PARAMETER_MEMBER_DISPATCH`, raised in
+/// solid-reactive-ir/src/interproc.rs). Contract emission may discharge it,
+/// because `contract_export_function` serializes the same parameter provenance
+/// as a `parameter-member` reactive read and a consumer resolves that row
+/// against the argument it actually passes -- the pair
+/// fixtures/package-contracts/parameter-member-read and
+/// fixtures/reactive-ir/package-parameter-member-consumer pins exactly that.
+///
+/// The discharge holds only where the row is actually published, so the
+/// question is asked of the exports the ladder would mark -- not of the helper
+/// alone. The provenance does not survive a hop: a caller forwarding a member
+/// of its own parameter (`helper(props.client)`) re-establishes no parameter of
+/// its own, so an entrypoint export one or more frames above the helper
+/// publishes no row at all and a consumer of *that* export is told nothing. The
+/// blanket `analysis_context` filter this replaces discharged those exports
+/// too, and their `reactiveReads` was emitted as a certified negative -- pinned
+/// by fixtures/package-contracts/parameter-member-forwarded, whose `channelFor`
+/// export is the covered control and whose `forwarded` export is the hop.
+///
+/// All-or-nothing, deliberately: when one attributed export is uncovered the
+/// obligation is attributed to the whole set, including the helper whose own
+/// row was fine. Marking a subset would leave the note claiming a narrower
+/// attribution than the ladder computed, and the direction of the error here
+/// is the safe one.
+fn parameter_member_row_covers(
+    index: UnresolvedExportIndex<'_>,
+    defect: &solid_reactive_ir::StaticDefect,
+    exports: &BTreeMap<String, solid_reactive_ir::ContractExport>,
+) -> bool {
+    if defect.analysis_context != solid_reactive_ir::EXPORTED_PARAMETER_MEMBER_DISPATCH {
+        return false;
+    }
+    let (_, names) = attribute_unresolved_obligation(index, &defect.location, exports);
+    !names.is_empty()
+        && names.iter().all(|name| {
+            exports.get(name).is_some_and(|summary| {
+                summary.reactive_reads.is_unknown()
+                    || summary.reactive_reads.known().is_some_and(|reads| {
+                        reads.iter().any(|read| read.kind == "parameter-member")
+                    })
+            })
+        })
+}
+
+fn mark_unresolved_export_claims(
+    index: UnresolvedExportIndex<'_>,
+    defect: &solid_reactive_ir::StaticDefect,
+    domains: UnresolvedClaimDomains,
+    exports: &mut BTreeMap<String, solid_reactive_ir::ContractExport>,
+) {
+    let (mechanism, names) = attribute_unresolved_obligation(index, &defect.location, exports);
+    let marked = names
+        .into_iter()
+        .filter(|name| {
+            exports
+                .get_mut(name)
+                .is_some_and(|summary| mark_summary_claims_unknown(summary, domains))
+        })
+        .collect::<Vec<_>>();
+    report_unknown_claim_attribution(
+        defect.kind.variant_name(),
+        &defect.analysis_context,
+        &defect.location,
+        mechanism,
+        domains,
+        &marked,
+    );
+}
+
+/// The machine-readable half of an unknown-claim decision.
+///
+/// Schema v1's `unknownClaim` is `additionalProperties: false`, and a loader
+/// that predates a new field hard-fails on the document rather than ignoring
+/// it -- which is why RFC 0002 rejected recording attribution in the contract.
+/// So the reason travels the same way the dependency-boundary refusal does: one
+/// stable line of this process's stderr, addressed to
+/// `generate-package-contract.mjs`, which records it on the matching
+/// `unknown-sentinel` item of `<contract>.review.json` and strips the line from
+/// anything a human reads.
+///
+/// One line per decision, JSON so the fields can grow without a parser change.
+/// Both sides pin the pairing:
+/// `unknown_claim_attribution_markers_reach_the_review_plan` in
+/// rust/crates/solid-facts-backend/tests/contracts_process.rs feeds this
+/// binary's real stderr to the generator's real parser.
+const UNKNOWN_CLAIM_ATTRIBUTION_MARKER: &str = "solid-checker:unknown-claim-attribution=";
+
+fn report_unknown_claim_attribution(
+    obligation: &str,
+    analysis_context: &str,
+    location: &typefacts::Location,
+    mechanism: AttributionMechanism,
+    domains: UnresolvedClaimDomains,
+    exports: &[String],
+) {
+    // An empty `exports` is still reported. Nothing was marked, so no
+    // `unknown-sentinel` item will carry it -- but "the ladder resolved this
+    // obligation to no export at all" is a narrowing decision, and the review
+    // plan is where a narrowing decision has to be visible. Leaving it silent
+    // made the interesting case (reachability proving no export reaches the
+    // obligation) indistinguishable from the analyzer never having seen the
+    // obligation, and the reviewer had nothing to check the narrowing against.
+    // `generate-package-contract.mjs` turns the empty-export notes into their
+    // own review-plan notes rather than attaching them to an item.
+    let note = serde_json::json!({
+        "obligation": obligation,
+        "analysisContext": analysis_context,
+        "path": location.path.as_ref(),
+        "startByte": location.start_byte,
+        "endByte": location.end_byte,
+        "mechanism": mechanism.as_str(),
+        "domains": domains.names(),
+        "exports": exports,
+    });
+    eprintln!("{UNKNOWN_CLAIM_ATTRIBUTION_MARKER}{note}");
 }
 
 fn emit_package_contract(
@@ -662,37 +1307,12 @@ fn emit_package_contract(
     if request.package_version.is_empty() {
         return Err("--package-version is required with --emit-contract".into());
     }
-    if let Some(unresolved) = program
-        .static_violations
-        .iter()
-        .find(|violation| violation.id.starts_with("SC9"))
-    {
-        return Err(format!(
-            "emit package contract: unresolved effect at {}:{}: {}",
-            unresolved.location.path, unresolved.location.start_byte, unresolved.message
-        )
-        .into());
-    }
-    // The same SC9 class arrives as structured defects (missing contract
-    // exports, uncovered execution maps, uncaptured sources); a contract
-    // must not be emitted over those either. Unknown callback execution is
-    // excluded: it is refused below, from the obligation list that knows the
-    // requested entrypoint's exported surface.
-    if let Some(unresolved) = program.static_defects.iter().find(|defect| {
-        defect.kind.is_unresolved_obligation()
-            && !defect.kind.refused_through_generation_obligations()
-    }) {
-        return Err(format!(
-            "emit package contract: unresolved obligation at {}:{}: {:?}",
-            unresolved.location.path, unresolved.location.start_byte, unresolved.kind
-        )
-        .into());
-    }
-    // An unresolved cleanup value remains a project diagnostic, but it does
-    // not change the exported reactive dependency/callback/return summary.
-    // Contract generation must only fail on obligations that affect that
-    // summary; otherwise untyped implementation details make valid library
-    // surfaces impossible to describe.
+    // SC9 findings are proof obligations, not permission to discard every
+    // independently known export. After resolving the requested entrypoint we
+    // attribute each one to the narrowest claim domain it can invalidate and
+    // emit that claim as explicitly unknown. Consumers then fail closed only
+    // when they demand that claim. Proven violations remain diagnostics, but
+    // they do not alter the package's descriptive runtime contract.
     let output = Path::new(&request.emit_contract);
     let artifacts = solid_reactive_ir::ContractArtifacts {
         declaration: (!request.declaration_artifact.is_empty())
@@ -718,7 +1338,7 @@ fn emit_package_contract(
             dependency_contracts.push(contract);
         }
     }
-    let exports = if request.contract_entry_file.is_empty() {
+    let mut exports = if request.contract_entry_file.is_empty() {
         (*program.contract_exports).clone()
     } else {
         contract_exports_for_entry_file(
@@ -728,41 +1348,120 @@ fn emit_package_contract(
             &dependency_contracts,
         )?
     };
-    let exported_identities = if request.contract_entry_file.is_empty() {
-        HashSet::new()
+    let exported_names_by_identity = if request.contract_entry_file.is_empty() {
+        HashMap::new()
     } else {
         let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
-        exports
-            .keys()
-            .filter_map(|name| entry_export_entity(facts, &entry_file, name))
-            .filter(|entity| !entity.runtime_identity.is_empty())
-            .map(|entity| entity.runtime_identity.to_string())
-            .collect()
+        let mut names = HashMap::<String, Vec<String>>::new();
+        for name in exports.keys() {
+            let Some(identity) = entry_export_entity(facts, &entry_file, name)
+                .map(|entity| entity.runtime_identity.as_ref())
+                .filter(|identity| !identity.is_empty())
+            else {
+                continue;
+            };
+            names
+                .entry(identity.to_owned())
+                .or_default()
+                .push(name.clone());
+        }
+        names
     };
-    if let Some(unresolved) = program
-        .contract_generation_obligations
-        .iter()
-        .find(|unresolved| {
-            request.contract_entry_file.is_empty()
-                || if unresolved.function_identity.is_empty() {
-                    exports.contains_key(&unresolved.function)
+    let symbol_aliases = canonical_symbol_aliases(facts);
+    let exported_names_by_symbol = if request.contract_entry_file.is_empty() {
+        HashMap::new()
+    } else {
+        let entry_file = Path::new(&request.contract_entry_file).canonicalize()?;
+        let mut names = HashMap::<String, Vec<String>>::new();
+        for name in exports.keys() {
+            let Some(symbol) = entry_export_entity(facts, &entry_file, name)
+                .map(|entity| canonical_symbol(&entity.symbol, &symbol_aliases))
+                .filter(|symbol| !symbol.is_empty())
+            else {
+                continue;
+            };
+            names.entry(symbol).or_default().push(name.clone());
+        }
+        names
+    };
+    let joined_export_names = exported_names_by_identity
+        .values()
+        .chain(exported_names_by_symbol.values())
+        .flatten()
+        .collect::<HashSet<_>>();
+    let unresolved_export_index = UnresolvedExportIndex {
+        facts,
+        aliases: &symbol_aliases,
+        names_by_identity: &exported_names_by_identity,
+        names_by_symbol: &exported_names_by_symbol,
+        entry_joined: !request.contract_entry_file.is_empty(),
+        exports_fully_joined: exports
+            .keys()
+            .all(|name| joined_export_names.contains(name)),
+        obligation_reach: &program.obligation_reach,
+    };
+    for unresolved in &program.contract_generation_obligations {
+        let target_names =
+            if request.contract_entry_file.is_empty() || unresolved.function_identity.is_empty() {
+                if exports.contains_key(&unresolved.function) {
+                    vec![unresolved.function.clone()]
                 } else {
-                    exported_identities.contains(&unresolved.function_identity)
+                    Vec::new()
                 }
+            } else {
+                exported_names_by_identity
+                    .get(&unresolved.function_identity)
+                    .cloned()
+                    .unwrap_or_default()
+            };
+        let mut marked = Vec::new();
+        for name in target_names {
+            let Some(summary) = exports.get_mut(&name) else {
+                continue;
+            };
+            // The obligation proves only that the callback list is
+            // incomplete. Preserve every independently known claim and make
+            // the uncertainty explicit instead of refusing the whole export.
+            summary.callbacks = solid_reactive_ir::ContractClaim::Unknown(
+                solid_reactive_ir::ContractUnknownClaim::new(),
+            );
+            marked.push(name);
+        }
+        report_unknown_claim_attribution(
+            "UnknownCallbackExecution",
+            "contract-generation-obligation",
+            &unresolved.location,
+            AttributionMechanism::ObligationIdentity,
+            UnresolvedClaimDomains {
+                reactive_reads: false,
+                returns: false,
+                callbacks: true,
+                owner_requirements: false,
+                async_behavior: false,
+            },
+            &marked,
+        );
+    }
+    // Decided against the export set as generation left it, before any of the
+    // marking below moves it: whether another channel already carries an
+    // obligation must not depend on which obligation happened to be attributed
+    // first.
+    let attributable = program
+        .static_defects
+        .iter()
+        .filter(|defect| {
+            defect.kind.is_unresolved_obligation()
+                && !defect.kind.refused_through_generation_obligations()
+                && !parameter_member_row_covers(unresolved_export_index, defect, &exports)
         })
-    {
-        return Err(format!(
-            "emit package contract: unresolved parameter behavior in {} parameter {} ({}) at {}:{}: {}; required behavior: {}; edit this schema-v1 stub and review its evidence: {}",
-            unresolved.function,
-            unresolved.parameter,
-            unresolved.parameter_type,
-            unresolved.location.path,
-            unresolved.location.start_byte,
-            unresolved.message,
-            unresolved.required_execution,
-            unresolved.contract_stub
-        )
-        .into());
+        .collect::<Vec<_>>();
+    for defect in attributable {
+        mark_unresolved_export_claims(
+            unresolved_export_index,
+            defect,
+            unresolved_claim_domains(&defect.kind),
+            &mut exports,
+        );
     }
     let contract = solid_reactive_ir::PackageContract {
         schema_version: 1,
@@ -1034,28 +1733,28 @@ fn attach_generated_owner_requirements(
     let Some(operations) = operations else {
         return summary;
     };
+    let Some(owner_requirements) = summary.owner_requirements.known_mut() else {
+        // An inherited/re-exported unknown remains unknown. Adding the local
+        // positive rows would not prove that the list is complete.
+        return summary;
+    };
     for operation in operations {
-        if !summary
-            .owner_requirements
+        if !owner_requirements
             .iter()
             .any(|existing| existing.operation == *operation)
         {
-            summary
-                .owner_requirements
-                .push(solid_reactive_ir::ContractOwnerRequirement {
-                    operation: *operation,
-                    evidence: None,
-                });
+            owner_requirements.push(solid_reactive_ir::ContractOwnerRequirement {
+                operation: *operation,
+                evidence: None,
+            });
         }
     }
-    summary
-        .owner_requirements
-        .sort_by_key(|requirement| match requirement.operation {
-            solid_reactive_ir::OwnerRequirementOperation::Effect => 0,
-            solid_reactive_ir::OwnerRequirementOperation::Cleanup => 1,
-            solid_reactive_ir::OwnerRequirementOperation::Boundary => 2,
-            solid_reactive_ir::OwnerRequirementOperation::SettledCleanup => 3,
-        });
+    owner_requirements.sort_by_key(|requirement| match requirement.operation {
+        solid_reactive_ir::OwnerRequirementOperation::Effect => 0,
+        solid_reactive_ir::OwnerRequirementOperation::Cleanup => 1,
+        solid_reactive_ir::OwnerRequirementOperation::Boundary => 2,
+        solid_reactive_ir::OwnerRequirementOperation::SettledCleanup => 3,
+    });
     summary
 }
 
@@ -1174,29 +1873,73 @@ fn unify_runtime_alias_summaries(
             } else if merged.kind.is_empty() {
                 merged.kind = summary.kind.clone();
             }
-            for read in &summary.reactive_reads {
-                if !merged.reactive_reads.contains(read) {
-                    merged.reactive_reads.push(read.clone());
+            match (&mut merged.reactive_reads, &summary.reactive_reads) {
+                (
+                    solid_reactive_ir::ContractClaim::Known(merged_reads),
+                    solid_reactive_ir::ContractClaim::Known(reads),
+                ) => {
+                    for read in reads {
+                        if !merged_reads.contains(read) {
+                            merged_reads.push(read.clone());
+                        }
+                    }
                 }
-            }
-            for callback in &summary.callbacks {
-                if !merged.callbacks.contains(callback) {
-                    merged.callbacks.push(callback.clone());
+                (_, solid_reactive_ir::ContractClaim::Unknown(unknown)) => {
+                    merged.reactive_reads =
+                        solid_reactive_ir::ContractClaim::Unknown(unknown.clone());
                 }
+                (solid_reactive_ir::ContractClaim::Unknown(_), _) => {}
             }
-            if merged.returns.is_none() {
-                merged.returns = summary.returns.clone();
+            match (&mut merged.callbacks, &summary.callbacks) {
+                (
+                    solid_reactive_ir::ContractClaim::Known(merged_callbacks),
+                    solid_reactive_ir::ContractClaim::Known(callbacks),
+                ) => {
+                    for callback in callbacks {
+                        if !merged_callbacks.contains(callback) {
+                            merged_callbacks.push(callback.clone());
+                        }
+                    }
+                }
+                (_, solid_reactive_ir::ContractClaim::Unknown(unknown)) => {
+                    merged.callbacks = solid_reactive_ir::ContractClaim::Unknown(unknown.clone());
+                }
+                (solid_reactive_ir::ContractClaim::Unknown(_), _) => {}
             }
-            if merged.async_behavior.is_empty() {
-                merged.async_behavior = summary.async_behavior.clone();
+            match (&mut merged.returns, &summary.returns) {
+                (
+                    solid_reactive_ir::ContractClaim::Known(merged_return),
+                    solid_reactive_ir::ContractClaim::Known(returned),
+                ) if merged_return.is_none() => *merged_return = returned.clone(),
+                (_, solid_reactive_ir::ContractClaim::Unknown(unknown)) => {
+                    merged.returns = solid_reactive_ir::ContractClaim::Unknown(unknown.clone());
+                }
+                _ => {}
+            }
+            match (&mut merged.async_behavior, &summary.async_behavior) {
+                (
+                    solid_reactive_ir::ContractClaim::Known(merged_behavior),
+                    solid_reactive_ir::ContractClaim::Known(behavior),
+                ) if merged_behavior.is_empty() => *merged_behavior = behavior.clone(),
+                (_, solid_reactive_ir::ContractClaim::Unknown(unknown)) => {
+                    merged.async_behavior =
+                        solid_reactive_ir::ContractClaim::Unknown(unknown.clone());
+                }
+                _ => {}
             }
         }
-        merged
-            .callbacks
-            .sort_by_key(|callback| (callback.parameter, callback.execution.clone()));
-        merged
-            .reactive_reads
-            .sort_by(|left, right| (&left.kind, &left.label).cmp(&(&right.kind, &right.label)));
+        if let Some(callbacks) = merged.callbacks.known_mut() {
+            callbacks.sort_by_key(|callback| (callback.parameter, callback.execution.clone()));
+        }
+        if let Some(reads) = merged.reactive_reads.known_mut() {
+            reads.sort_by(|left, right| {
+                (&left.kind, &left.parameter, &left.label).cmp(&(
+                    &right.kind,
+                    &right.parameter,
+                    &right.label,
+                ))
+            });
+        }
         for name in names {
             exports.insert(name.clone(), merged.clone());
         }
@@ -1317,6 +2060,47 @@ fn external_export_summary_for_file(
     None
 }
 
+/// The machine-readable half of a missing-dependency refusal.
+///
+/// Contract generation is demand-driven across package boundaries: when this
+/// entrypoint re-exports a package whose contract was not supplied, the
+/// generator (`ensureGeneratedDependencyContract` in
+/// packages/cli/scripts/generate-package-contract.mjs) generates exactly that
+/// installed dependency and retries. It needs the module specifier, and the
+/// only channel it has is this process's stderr.
+///
+/// Parsing that specifier back out of the human sentence couples the generator
+/// to prose: reword the message and the recursion silently stops, which
+/// surfaces only as an entrypoint the generator "refused" -- an outcome that
+/// exits 0. So the boundary emits one stable line of its own, in addition to
+/// the unchanged human message. Both sides pin the pairing:
+/// `package_generator_dependency_boundary_marker_drives_recursion` in
+/// rust/crates/solid-facts-backend/tests/contracts_process.rs feeds this
+/// binary's real stderr to the generator's real parser.
+const UNRESOLVED_DEPENDENCY_MODULE_MARKER: &str = "solid-checker:unresolved-dependency-module=";
+
+/// Refuse emission at a package boundary this process cannot cross, naming the
+/// dependency both machine-readably and in prose. A module specifier never
+/// contains a newline, so the marker is exactly one line.
+///
+/// The marker is written here, on the propagation path, rather than while the
+/// error value is built: a marker on stderr is a claim that this run *refused*,
+/// so it must be a side effect of actually refusing. Constructing the error is
+/// not refusing — a caller that recovered it would otherwise leave the marker
+/// behind on a run that exits 0, and the generator would recurse on a
+/// dependency this process never declined.
+fn refuse_unresolved_dependency_module<T>(
+    module: &str,
+    from: &Path,
+) -> Result<T, Box<dyn std::error::Error>> {
+    eprintln!("{UNRESOLVED_DEPENDENCY_MODULE_MARKER}{module}");
+    Err(format!(
+        "emit package contract: cannot statically expand external export-all {module:?} from {}; generate and pass its dependency contract with --contract",
+        from.display()
+    )
+    .into())
+}
+
 fn exported_names_for_file(
     facts: &solid_facts::ProjectFacts,
     path: &Path,
@@ -1345,16 +2129,11 @@ fn exported_names_for_file(
                 .as_deref()
                 .ok_or("export-all declaration has no module")?;
             if !module.starts_with('.') {
-                let contract = solid_reactive_ir::PackageContract::for_module(
-                    dependency_contracts,
-                    module,
-                )
-                .ok_or_else(|| {
-                        format!(
-                            "emit package contract: cannot statically expand external export-all {module:?} from {}; generate and pass its dependency contract with --contract",
-                            path.display()
-                        )
-                    })?;
+                let Some(contract) =
+                    solid_reactive_ir::PackageContract::for_module(dependency_contracts, module)
+                else {
+                    return refuse_unresolved_dependency_module(module, &path);
+                };
                 let exports = contract.exports_for_module(module).ok_or_else(|| {
                     format!(
                         "emit package contract: dependency contract for {} has no entrypoint matching {module:?}",

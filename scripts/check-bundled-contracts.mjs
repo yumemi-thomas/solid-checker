@@ -123,6 +123,22 @@ function modeApplies(entrypoint, mode) {
   return selected.some(condition => mode.conditions.includes(condition));
 }
 
+/**
+ * The callback rows a summary states, or none when the field is the schema's
+ * unknown sentinel.
+ *
+ * `{ "status": "unknown" }` is a valid schema-v1 value for `callbacks`, and it
+ * is the *opposite* of a row set: it claims nothing, so there is nothing to
+ * probe and no negative for discovery to contradict. Reading it as an array
+ * threw, which made the one honest encoding for a claim a contract cannot state
+ * unusable in a bundled artifact.
+ */
+const callbackRows = summary =>
+  Array.isArray(summary?.callbacks) ? summary.callbacks : [];
+
+const callbacksAreUnknown = summary =>
+  Boolean(summary?.callbacks) && !Array.isArray(summary.callbacks);
+
 function probeEvidence(resultsForClaim) {
   if (resultsForClaim.length === 0 || resultsForClaim.some(result => !result.ok)) {
     return undefined;
@@ -168,7 +184,7 @@ function writeProbeEvidence(summary, dialect, packageName, entrypoint, name, all
     );
   const next = { ...summary };
   const exportResults = [
-    ...(summary.callbacks ?? []).map(callback =>
+    ...callbackRows(summary).map(callback =>
       claimResults(`callbacks[${callback.parameter}]=${callback.execution}`),
     ),
     ...(summary.returns ? [claimResults(`returns=${summary.returns.kind}`)] : []),
@@ -177,7 +193,7 @@ function writeProbeEvidence(summary, dialect, packageName, entrypoint, name, all
   if (evidence && (!next.evidence || next.evidence.kind === "inferred")) {
     next.evidence = evidence;
   }
-  if (summary.callbacks) {
+  if (Array.isArray(summary.callbacks)) {
     next.callbacks = summary.callbacks.map(callback => {
       const callbackEvidence = probeEvidence(
         claimResults(`callbacks[${callback.parameter}]=${callback.execution}`),
@@ -550,7 +566,7 @@ for (const item of contracts) {
           continue;
         }
         const claims = [
-          ...(selected.callbacks ?? []).map(
+          ...callbackRows(selected).map(
             callback => `callbacks[${callback.parameter}]=${callback.execution}`,
           ),
           ...(selected.returns ? [`returns=${selected.returns.kind}`] : []),
@@ -589,13 +605,16 @@ for (const observation of observed.discoveredClaims) {
   const selected = summary && mode ? summaryForMode(summary, mode) : undefined;
   const declared = selected
     ? [
-        ...(selected.callbacks ?? []).map(
+        ...callbackRows(selected).map(
           callback => `callbacks[${callback.parameter}]=${callback.execution}`,
         ),
         ...(selected.returns ? [`returns=${selected.returns.kind}`] : []),
     ]
     : [];
   if (declared.includes(observation.claim)) continue;
+  // An unknown `callbacks` claims nothing, so an observed callback neither
+  // contradicts a negative nor disagrees with a stated row.
+  if (callbacksAreUnknown(selected) && observation.claim.startsWith("callbacks[")) continue;
   if (declared.some(claim => claimFamily(claim) === claimFamily(observation.claim))) {
     fail(
       `${target} observed ${observation.claim} in ${observation.mode} but the contract states a different ${claimFamily(observation.claim)} claim`,

@@ -43,12 +43,26 @@ dom-expressions-compiler = { git = "https://github.com/yumemi-thomas/dom-express
 # exactly one of them.
 # Pinned to `main` (the census branch is merged into it): the same fix as
 # above, plus the two upstream correctness fixes that apply to 1.x (the
-# linear deferred JSX pass and the directive-DCE type-only removal);
-# upstream's hydration-id
-# codegen change is deliberately absent because 1.x parity means matching
-# babel-plugin-jsx-dom-expressions@0.40.7 exactly.
-solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "79b9b63721c59b0acfd72348438bbb6e090ec81c", default-features = false }
-typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "479b74159f86e538cfecad327b508ff864d1d764" }
+# linear deferred JSX pass and the directive-DCE type-only removal).
+# Parity target is babel-plugin-jsx-dom-expressions@0.40.10. Upstream's
+# 0.40.7 -> 0.40.10 delta is four changes: the SSR attribute-position
+# template-quasi escape (an attribute-injection fix), the
+# `omitServerOnlyTemplates` option defaulting to true, `wrapConditionals`
+# applying to SSR component props, and the vendored-oracle bump. Upstream's
+# hydration-id codegen change remains deliberately absent -- none of those four
+# touches hydration-id allocation, so this target does not pull it in.
+# This rev also carries the two census/lowering reconciliation fixes the
+# ecosystem benchmark surfaced (see docs/precision-backlog.md): `style`/
+# `classList` decomposition now follows the same positional spread carve-out
+# lowering uses, and fragment children are classified from a span set instead of
+# a flag that leaked through attribute values. Both are census-only, so emitted
+# output is byte-identical across them.
+# The reactive-ownership trace this checker requires
+# (`SemanticTrace::ownership_sites`, consumed by
+# rust/dialects/solid-v1/compiler) sits on top of all of the above; an earlier
+# main briefly lacked it, so verify it is present before moving this rev again.
+solid1-dom-expressions-compiler = { package = "dom-expressions-compiler", git = "https://github.com/yumemi-thomas/solid-1x-compiler", rev = "ad2c9452041c757138bb972416d8abc4798ea6b9", default-features = false }
+typefacts = { git = "https://github.com/yumemi-thomas/solid-ts-facts", rev = "e2f7ac5ce2784f9e4f5bc53f4e100040f6fce3d4" }
 compact_str = { version = "0.9.1", features = ["serde"] }
 oxc_allocator = "0.118"
 oxc_ast = "0.118"

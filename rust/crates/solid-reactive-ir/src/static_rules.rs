@@ -63,30 +63,27 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                     crate::source_discovery::PropUse::Reactive => false,
                     crate::source_discovery::PropUse::Unknown => true,
                 };
-                draft.push_defect(
-                    "no-destructure",
-                    StaticDefect {
-                        kind: StaticDefectKind::ReactiveObjectDestructure {
-                            source: "props".into(),
-                            component_props: true,
-                        },
-                        location,
-                        analysis_context: component_binding_name(file, function)
-                            .map_or_else(String::new, |name| {
-                                file.source_text(name.span).unwrap_or_default().to_owned()
-                            }),
-                        fixes: component_props_parameter_fix(
-                            ctx.facts,
-                            file,
-                            function,
-                            parameter,
-                            ctx.entities,
-                        )
-                        .into_iter()
-                        .collect(),
-                        uncertain,
+                draft.push_defect(StaticDefect {
+                    kind: StaticDefectKind::ReactiveObjectDestructure {
+                        source: "props".into(),
+                        component_props: true,
                     },
-                );
+                    location,
+                    analysis_context: component_binding_name(file, function)
+                        .map_or_else(String::new, |name| {
+                            file.source_text(name.span).unwrap_or_default().to_owned()
+                        }),
+                    fixes: component_props_parameter_fix(
+                        ctx.facts,
+                        file,
+                        function,
+                        parameter,
+                        ctx.entities,
+                    )
+                    .into_iter()
+                    .collect(),
+                    uncertain,
+                });
             }
         }
         if !file
@@ -173,19 +170,16 @@ fn component_props_destructure(ctx: &AnalysisContext<'_>, draft: &mut ProgramDra
                 .and_then(|span| file.source_text(span))
                 .unwrap_or("reactive object")
                 .to_owned();
-            draft.push_defect(
-                "no-destructure",
-                StaticDefect {
-                    kind: StaticDefectKind::ReactiveObjectDestructure {
-                        source,
-                        component_props: props,
-                    },
-                    location,
-                    analysis_context: enclosing_function_label(file, binding.pattern),
-                    fixes: vec![],
-                    uncertain,
+            draft.push_defect(StaticDefect {
+                kind: StaticDefectKind::ReactiveObjectDestructure {
+                    source,
+                    component_props: props,
                 },
-            );
+                location,
+                analysis_context: enclosing_function_label(file, binding.pattern),
+                fixes: vec![],
+                uncertain,
+            });
         }
     }
 }
@@ -236,7 +230,8 @@ fn binding_initializes_reactive_store(
         .entities
         .get(&location(file.path.shared(), call.callee))
         .and_then(|symbol| ctx.contracted.get(symbol))
-        .and_then(|binding| binding.summary.returns.as_ref())
+        .and_then(|binding| binding.summary.returns.known())
+        .and_then(Option::as_ref)
         .is_some_and(|returned| returned.kind == "store-path");
     contracted_store
         || known_primitive(&primitive_name(
@@ -316,18 +311,15 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                     end_byte: call.end_byte,
                 };
                 reported_calls.insert((call.path.to_string(), call.start_byte, call.end_byte));
-                draft.push_defect(
-                    "reactive-read-after-await",
-                    StaticDefect {
-                        kind: StaticDefectKind::ReactiveReadAfterAwait {
-                            accessor: display.to_string(),
-                        },
-                        location: diagnostic_location,
-                        analysis_context: analysis_context.clone(),
-                        fixes: vec![],
-                        uncertain: false,
+                draft.push_defect(StaticDefect {
+                    kind: StaticDefectKind::ReactiveReadAfterAwait {
+                        accessor: display.to_string(),
                     },
-                );
+                    location: diagnostic_location,
+                    analysis_context: analysis_context.clone(),
+                    fixes: vec![],
+                    uncertain: false,
+                });
             }
             if let Some(site) = member_site {
                 member_reads_after_await(ctx, draft, site, &analysis_context);
@@ -384,18 +376,15 @@ fn reactive_read_after_await(ctx: &AnalysisContext<'_>, draft: &mut ProgramDraft
                             continue;
                         }
                         let display = callback_call.static_callee(&file.source).unwrap_or(name);
-                        draft.push_defect(
-                            "reactive-read-after-await",
-                            StaticDefect {
-                                kind: StaticDefectKind::ReactiveReadAfterAwait {
-                                    accessor: display.to_string(),
-                                },
-                                location: location(file.path.shared(), callback_call.callee),
-                                analysis_context: analysis_context.clone(),
-                                fixes: vec![],
-                                uncertain: false,
+                        draft.push_defect(StaticDefect {
+                            kind: StaticDefectKind::ReactiveReadAfterAwait {
+                                accessor: display.to_string(),
                             },
-                        );
+                            location: location(file.path.shared(), callback_call.callee),
+                            analysis_context: analysis_context.clone(),
+                            fixes: vec![],
+                            uncertain: false,
+                        });
                     }
                 }
             }
@@ -462,21 +451,18 @@ fn report_opaque_standard_callback(
     if !is_proven_array_filter(resolved, callability) {
         return;
     }
-    draft.push_defect(
-        "reactive-dispatch-unresolved",
-        StaticDefect {
-            kind: StaticDefectKind::ReactiveCallbackUnresolved {
-                callee: call
-                    .static_callee(&file.source)
-                    .unwrap_or("Array.prototype.filter")
-                    .to_owned(),
-            },
-            location: location(file.path.shared(), argument.span),
-            analysis_context: analysis_context.to_owned(),
-            fixes: vec![],
-            uncertain: false,
+    draft.push_defect(StaticDefect {
+        kind: StaticDefectKind::ReactiveCallbackUnresolved {
+            callee: call
+                .static_callee(&file.source)
+                .unwrap_or("Array.prototype.filter")
+                .to_owned(),
         },
-    );
+        location: location(file.path.shared(), argument.span),
+        analysis_context: analysis_context.to_owned(),
+        fixes: vec![],
+        uncertain: false,
+    });
 }
 
 /// The resolved location of an async function's member-read analysis: its
@@ -645,16 +631,13 @@ fn member_reads_after_await(
                     file.source_text(member.property).unwrap_or_default()
                 )
             });
-        draft.push_defect(
-            "reactive-read-after-await",
-            StaticDefect {
-                kind: StaticDefectKind::ReactiveReadAfterAwait { accessor },
-                location: location(file.path.shared(), member.span),
-                analysis_context: analysis_context.to_owned(),
-                fixes: vec![],
-                uncertain,
-            },
-        );
+        draft.push_defect(StaticDefect {
+            kind: StaticDefectKind::ReactiveReadAfterAwait { accessor },
+            location: location(file.path.shared(), member.span),
+            analysis_context: analysis_context.to_owned(),
+            fixes: vec![],
+            uncertain,
+        });
     }
 }
 
@@ -714,20 +697,16 @@ pub(crate) fn component_returns_conditionally(ctx: &AnalysisContext<'_>, draft: 
                 });
                 if reactive {
                     let location = location(file.path.shared(), *test);
-                    draft.push_defect(
-                        "components-return-once",
-                        StaticDefect {
-                            kind: StaticDefectKind::ComponentReturnsConditionally,
-                            location,
-                            analysis_context: file
-                                .source_text(name.span)
-                                .unwrap_or_default()
-                                .to_owned(),
-                            fixes: vec![],
-                            uncertain: component_status
-                                == crate::indexes::ComponentStatus::Uncertain,
-                        },
-                    );
+                    draft.push_defect(StaticDefect {
+                        kind: StaticDefectKind::ComponentReturnsConditionally,
+                        location,
+                        analysis_context: file
+                            .source_text(name.span)
+                            .unwrap_or_default()
+                            .to_owned(),
+                        fixes: vec![],
+                        uncertain: component_status == crate::indexes::ComponentStatus::Uncertain,
+                    });
                 }
             }
         }

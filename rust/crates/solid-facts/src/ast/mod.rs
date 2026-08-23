@@ -321,6 +321,13 @@ pub struct FunctionFact {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub method_name: Option<NamedSpan>,
     pub parameters: Vec<BindingFact>,
+    /// Whether the declaration ends in a rest parameter (`...rest`). The rest
+    /// binding is deliberately *not* one of `parameters`: it has no single
+    /// argument index. It absorbs every argument from index
+    /// `parameters.len()` onward, so a consumer reasoning about argument slots
+    /// must treat that tail as observable rather than as unnamed.
+    #[serde(default)]
+    pub rest_parameter: bool,
     pub r#async: bool,
     pub generator: bool,
     pub expression_body: bool,
@@ -767,6 +774,50 @@ impl AstFacts {
         })
     }
 
+    /// An all-empty fact table for a source that carries no JavaScript
+    /// syntax at all, such as a `.json` module.
+    ///
+    /// This is a proof, not an approximation: a JSON module's namespace is
+    /// data, so it certifiably contributes no call, no binding, no function,
+    /// no JSX, no read, no write -- every table is correctly empty because
+    /// there is nothing in the source for any of them to describe. Consumers
+    /// resolving a member or call against this file's exports terminate on a
+    /// proven "not a function" rather than falling back to the conservative
+    /// "unresolved import" path.
+    #[must_use]
+    pub fn empty(source: SourceIdentity) -> Self {
+        Self {
+            schema: AST_FACTS_SCHEMA,
+            source,
+            span_index: LazySpanIndex::default(),
+            calls: Vec::new(),
+            bindings: Vec::new(),
+            functions: Vec::new(),
+            imports: Vec::new(),
+            exports: Vec::new(),
+            identifiers: Vec::new(),
+            awaits: Vec::new(),
+            unconditional_awaits: Vec::new(),
+            returns: Vec::new(),
+            jsx_elements: Vec::new(),
+            jsx_fragments: Vec::new(),
+            transparent_wrappers: Vec::new(),
+            members: Vec::new(),
+            computed_members: Vec::new(),
+            parameter_properties: Vec::new(),
+            spreads: Vec::new(),
+            conditional_tests: Vec::new(),
+            conditional_expressions: Vec::new(),
+            logical_expressions: Vec::new(),
+            object_properties: Vec::new(),
+            template_literals: Vec::new(),
+            coercive_operands: Vec::new(),
+            assignments: Vec::new(),
+            if_regions: Vec::new(),
+            module_directives: Vec::new(),
+        }
+    }
+
     #[must_use]
     pub fn structural_seed_spans(&self) -> Vec<Span> {
         let mut spans = self
@@ -804,9 +855,33 @@ pub enum AstFactsError {
     Parse(String),
 }
 
+/// Whether `path`'s extension marks it as a JSON module rather than
+/// JavaScript or TypeScript.
+///
+/// A `.json` specifier is legitimate ESM (`import pkg from "./package.json"`,
+/// with or without a bundler-inferred `type: "json"` assertion): the module
+/// system resolves it to a real file, but that file has no JS grammar to
+/// speak of. This is a fact about the module *kind*, never about one
+/// filename -- `package.json`, `data.json`, and any other `.json` specifier
+/// all take the same inert path through [`extract`].
+#[must_use]
+pub fn is_json_module_path(path: &str) -> bool {
+    std::path::Path::new(path)
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("json"))
+}
+
 pub fn extract(path: impl Into<String>, source: &str) -> Result<AstFacts, AstFactsError> {
     let path = path.into();
     let identity = SourceIdentity::new(path.clone(), source)?;
+    if is_json_module_path(&path) {
+        // Enroll the JSON module as an analyzed file with a proven-empty
+        // fact table instead of asking Oxc's JS/TS parser to make sense of
+        // non-JS content, or failing the whole build closed on a source the
+        // module graph legitimately reaches. See [`AstFacts::empty`] for why
+        // "empty" here is a proof of inertness, not an approximation.
+        return Ok(AstFacts::empty(identity));
+    }
     let source_type = SourceType::from_path(&path).map_err(|error| AstFactsError::SourceType {
         path: path.clone(),
         message: error.to_string(),
@@ -1582,6 +1657,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                         )
                     })
                     .collect(),
+                rest_parameter: function.params.rest.is_some(),
                 r#async: function.r#async,
                 generator: function.generator,
                 expression_body: false,
@@ -1626,6 +1702,7 @@ impl<'a> Visit<'a> for Collector<'_, '_> {
                     )
                 })
                 .collect(),
+            rest_parameter: function.params.rest.is_some(),
             r#async: function.r#async,
             generator: false,
             expression_body: function.expression,
@@ -2836,6 +2913,48 @@ renamed();"#,
         assert!(matches!(
             extract("broken.tsx", "const = ;"),
             Err(AstFactsError::Parse(_))
+        ));
+    }
+
+    #[test]
+    fn a_json_import_target_is_certified_inert_rather_than_a_fatal_error() {
+        // A real dependency's ESM entrypoint reaching its own `package.json`
+        // (e.g. `@solidjs/start@2.0.3`'s `dist/shared/dev-toolbar/index.jsx`)
+        // used to make the whole build fail with an Oxc "unsupported source
+        // path" error, because Oxc's `SourceType` has no JSON source kind.
+        // `extract` must instead certify the JSON module as inert: every
+        // fact table empty, proven rather than assumed, and no error.
+        let facts = extract("package.json", r#"{"name": "demo", "version": "1.0.0"}"#).unwrap();
+        assert_eq!(facts.calls, Vec::new());
+        assert_eq!(facts.bindings, Vec::new());
+        assert_eq!(facts.functions, Vec::new());
+        assert_eq!(facts.imports, Vec::new());
+        assert_eq!(facts.exports, Vec::new());
+        assert_eq!(facts.identifiers, Vec::new());
+        assert_eq!(facts.jsx_elements, Vec::new());
+        assert_eq!(facts.members, Vec::new());
+    }
+
+    #[test]
+    fn json_module_detection_is_by_extension_not_by_filename() {
+        // The rule is the `.json` module kind, not the specific filename
+        // `package.json`: any `.json` specifier takes the inert path, and a
+        // non-JSON extension does not, even when it is not `package.json`.
+        assert!(is_json_module_path("package.json"));
+        assert!(is_json_module_path("/some/pkg/data.json"));
+        assert!(is_json_module_path("/some/pkg/DATA.JSON"));
+        assert!(!is_json_module_path("package.jsonc"));
+        assert!(!is_json_module_path("package.js"));
+    }
+
+    #[test]
+    fn a_genuinely_unsupported_extension_still_fails_closed() {
+        // The JSON fix must not become a blanket "skip anything we cannot
+        // parse": a source reached through some other unsupported extension
+        // is still a fatal AST facts error, exactly as before.
+        assert!(matches!(
+            extract("logo.svg", "<svg></svg>"),
+            Err(AstFactsError::SourceType { .. })
         ));
     }
 
