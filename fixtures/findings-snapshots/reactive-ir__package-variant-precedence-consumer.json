@@ -1,0 +1,25 @@
+{
+  "status": "violation",
+  "findings": [
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-variant-precedence-consumer/App.tsx",
+      "start": 9,
+      "end": 22,
+      "fixes": 0
+    },
+    {
+      "rule": "strict-read-untracked",
+      "code": "SC1001",
+      "kind": "violation",
+      "severity": "warning",
+      "path": "fixtures/reactive-ir/package-variant-precedence-consumer/App.tsx",
+      "start": 1219,
+      "end": 1229,
+      "fixes": 0
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "status": "uncertifiable",
+  "findings": [
+    {
+      "rule": "package-contract-incomplete",
+      "code": "SC9005",
+      "kind": "uncertifiable",
+      "severity": "error",
+      "path": "fixtures/reactive-ir/package-unknown-returns-consumer/App.ts",
+      "start": 20,
+      "end": 30,
+      "fixes": 0
+    }
+  ]
+}
