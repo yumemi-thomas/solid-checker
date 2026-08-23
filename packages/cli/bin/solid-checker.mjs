@@ -8,7 +8,23 @@ if (process.argv[2] === "contract") {
       "../scripts/generate-package-contract.mjs"
     );
     if (process.argv[3] === "generate") {
-      await generatePackageContract(process.argv.slice(4));
+      const args = process.argv.slice(4);
+      // Any `=` spelling routes here too. `--missing=1` used to miss this
+      // branch entirely and reach the single-package parser, which reported it
+      // as an unknown argument -- so the sweep's own "--missing takes no value"
+      // refusal, the message that says what the flag actually means, could
+      // never fire.
+      if (args.some(argument => argument === "--missing" || argument.startsWith("--missing="))) {
+        // The sweep enumerates packages from the contract report and owns its
+        // own exit code, so it is a separate entry point rather than a mode of
+        // the single-package generator.
+        const { generateMissingContracts } = await import(
+          "../scripts/generate-missing-contracts.mjs"
+        );
+        await generateMissingContracts(args);
+      } else {
+        await generatePackageContract(args);
+      }
     } else if (process.argv[3] === "probe") {
       // A fourth branch, and Node-only. It executes the package's own code, so
       // it is deliberately its own opt-in command rather than a flag on
