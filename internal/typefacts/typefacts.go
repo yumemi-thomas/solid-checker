@@ -371,6 +371,225 @@ type DeclarationOwner struct {
 	Location Location
 }
 
+// ModuleFormat is the compiler's emit module format for one included file, as
+// GetEmitModuleFormatOfFile computes it: the file's implied node format when
+// the configured module kind defers to it, and the configured module kind
+// otherwise. It is the runtime-meaningful half of `module`, not the option's
+// text.
+//
+// Only the three formats that describe a real runtime shape have a value.
+// Anything else — including the legacy AMD, UMD, and System kinds, and a
+// program with no module emit at all — is ModuleFormatUnknown, which is a
+// refusal to characterize rather than a claim about the file.
+type ModuleFormat string
+
+const (
+	ModuleFormatUnknown  ModuleFormat = ""
+	ModuleFormatCommonJS ModuleFormat = "commonjs"
+	ModuleFormatESM      ModuleFormat = "esm"
+	ModuleFormatPreserve ModuleFormat = "preserve"
+)
+
+// ProjectReferenceMapping is the compiler's own record pairing one input file
+// with the declaration file emitted from it. It exists only where a configured
+// `references` entry covers the file, and it is the **only** declaration-to-
+// implementation pairing TypeScript maintains.
+//
+// It is emphatically not available for the shape almost every published
+// package has: a hand-written or shipped `channel.d.ts` beside a
+// `channel.js`. Resolution selects the declaration file, never opens the
+// implementation, and records nothing joining them — so the two are unrelated
+// modules that happen to share a name on disk, and no field here will ever say
+// otherwise. Recovering that edge by matching file names is the substitution
+// this fact exists to avoid. See
+// docs/adr/0018-v1-attested-resolved-module-graph.md.
+//
+// Both fields are always populated; which one equals the module's own path
+// says whether the program holds the input or the output.
+type ProjectReferenceMapping struct {
+	Source    string `cbor:"source" json:"source"`
+	OutputDts string `cbor:"outputDts" json:"outputDts"`
+}
+
+// ModuleFact is one file the TypeScript program actually resolved and
+// included. The inventory of these facts is the program's own file list, so a
+// consumer that must record which bytes an analysis read has an attestation
+// rather than a reconstruction of it.
+type ModuleFact struct {
+	// Path is the cleaned absolute path the program holds the file under.
+	// For a module reached through a symlink this is the realpath, matching
+	// ModuleImportFact.ResolvedPath.
+	Path string `cbor:"path" json:"path"`
+	// DeclarationFile is the compiler's own IsDeclarationFile bit.
+	DeclarationFile bool `cbor:"declarationFile,omitempty" json:"declarationFile,omitempty"`
+	// Format is the emit module format; see ModuleFormat.
+	Format ModuleFormat `cbor:"format,omitempty" json:"format,omitempty"`
+	// ProjectReference is the compiler's input-to-declaration-output pairing
+	// for this file, and nil whenever no configured project reference covers
+	// it — which is almost always. See ProjectReferenceMapping.
+	ProjectReference *ProjectReferenceMapping `cbor:"projectReference,omitempty" json:"projectReference,omitempty"`
+	// RedirectTargets are the other paths the program resolved to this same
+	// file because they are the same name@version installed in more than one
+	// place (Program.GetRedirectTargets). It is the compiler's own duplicate-
+	// install record, never a path similarity.
+	RedirectTargets []string `cbor:"redirectTargets,omitempty" json:"redirectTargets,omitempty"`
+}
+
+// ModuleResolution names what the compiler's resolver recorded about the shape
+// of one resolution. Every value is read off module.ResolvedModule; none is
+// inferred from a path.
+type ModuleResolution string
+
+const (
+	// ModuleResolutionUnresolved means the program holds no resolution for
+	// this specifier. It is the only value with an empty ResolvedPath.
+	ModuleResolutionUnresolved ModuleResolution = "unresolved"
+	// ModuleResolutionRelative is a specifier the resolver treated as
+	// relative or rooted, so no package lookup participated.
+	ModuleResolutionRelative ModuleResolution = "relative"
+	// ModuleResolutionNodeModules is IsExternalLibraryImport: the resolver
+	// landed inside a node_modules tree.
+	ModuleResolutionNodeModules ModuleResolution = "nodeModules"
+	// ModuleResolutionNonRelative is a bare specifier that resolved outside
+	// every node_modules tree. A tsconfig `paths` or `baseUrl` mapping, a
+	// package self-name, a project-reference redirect, and an ambient module
+	// declaration all land here, and ResolvedModule does not record which, so
+	// this value never claims one. ModuleImportFact.PathsPattern answers the
+	// `paths` half on its own terms.
+	ModuleResolutionNonRelative ModuleResolution = "nonRelative"
+)
+
+// PackageIdentity is the owning package of a resolved file: the nearest
+// enclosing package.json found by the compiler's own package-scope lookup, and
+// that manifest's own name and version.
+//
+// Name and Version are empty when the manifest declares none, which is a fact
+// about the manifest and not a lookup failure — ManifestPath is populated in
+// that case too. The package directory is the manifest path's directory and is
+// not repeated here.
+type PackageIdentity struct {
+	ManifestPath string `cbor:"manifestPath" json:"manifestPath"`
+	Name         string `cbor:"name,omitempty" json:"name,omitempty"`
+	Version      string `cbor:"version,omitempty" json:"version,omitempty"`
+}
+
+// ResolverPackageID is the package identity the *resolver* recorded while
+// resolving one specifier (module.ResolvedModule.PackageId). It is a different
+// fact from PackageIdentity and the two can disagree: this one names the
+// package whose manifest the resolution consulted, which for a subpath export
+// or a nested workspace install is not always the nearest manifest above the
+// file that was selected. A consumer comparing a contract against a package
+// must say which of the two it means.
+type ResolverPackageID struct {
+	Name string `cbor:"name,omitempty" json:"name,omitempty"`
+	// Subpath is PackageId.SubModuleName: the path of the selected file
+	// relative to the package directory, as the resolver recorded it — the
+	// file it landed on, not the `exports` key that led there. It is empty
+	// when the package root's own entry was selected.
+	Subpath          string `cbor:"subpath,omitempty" json:"subpath,omitempty"`
+	Version          string `cbor:"version,omitempty" json:"version,omitempty"`
+	PeerDependencies string `cbor:"peerDependencies,omitempty" json:"peerDependencies,omitempty"`
+}
+
+// ModuleImportFact is the compiler's own answer for one module specifier: the
+// file the program included for it, and what the resolver recorded on the way.
+//
+// One fact is produced per specifier occurrence in SourceFile.Imports — import
+// declarations, export-from declarations, `import(...)` types, and require
+// calls alike — so a consumer joins these rows to its own syntax facts by
+// exact span rather than by matching specifier text.
+type ModuleImportFact struct {
+	// Specifier is the string-literal span, with Path naming the importing
+	// file.
+	Specifier Location `cbor:"specifier" json:"specifier"`
+	// Text is the specifier as written, after string-literal unescaping.
+	Text string `cbor:"text" json:"text"`
+	// Resolution names what the resolver recorded; see ModuleResolution.
+	Resolution ModuleResolution `cbor:"resolution" json:"resolution"`
+	// ResolvedPath is ResolvedModule.ResolvedFileName, cleaned: the file the
+	// resolver selected. When resolution walked a symlink it is the realpath.
+	ResolvedPath string `cbor:"resolvedPath,omitempty" json:"resolvedPath,omitempty"`
+	// IncludedPath is the file the program actually parses in place of
+	// ResolvedPath (Program.GetParseFileRedirect), populated only when the two
+	// differ. It is the compiler's own redirect record and the only mechanism
+	// by which a specifier that resolved to a declaration file is joined to an
+	// implementation: a configured project reference's declaration output is
+	// redirected to the input it was emitted from, and a symlinked equivalent
+	// of the same. Nothing redirects an ordinary shipped `.d.ts` to the `.js`
+	// beside it, so an empty IncludedPath is the usual and honest answer.
+	IncludedPath string `cbor:"includedPath,omitempty" json:"includedPath,omitempty"`
+	// SymlinkPath is ResolvedModule.OriginalPath, cleaned: the path the
+	// resolver had reached before taking its realpath. TypeScript populates it
+	// only when the two differ and only for a non-relative resolution under
+	// node_modules with preserveSymlinks off — which is exactly the pnpm and
+	// workspace-link shape — so an empty SymlinkPath means the resolver saw no
+	// divergence, not that none was looked for.
+	SymlinkPath string `cbor:"symlinkPath,omitempty" json:"symlinkPath,omitempty"`
+	// Extension is ResolvedModule.Extension, the extension the resolver
+	// selected (".ts", ".d.ts", ".js", ".json", …). It is how a consumer sees
+	// that a specifier landed on a declaration file.
+	Extension string `cbor:"extension,omitempty" json:"extension,omitempty"`
+	// TSExtension is ResolvedModule.ResolvedUsingTsExtension: the specifier
+	// named a TypeScript extension outright rather than having one substituted.
+	TSExtension bool `cbor:"tsExtension,omitempty" json:"tsExtension,omitempty"`
+	// PathsPattern is the configured `paths` key the compiler's own pattern
+	// matcher selects for Text, under the compiler's own eligibility rule
+	// (`paths` is non-empty and the specifier is not relative) and its own
+	// longest-prefix tie-break.
+	//
+	// It says the mapping *matched the specifier*, which is a fact about the
+	// configuration and the text. It does not say the resolution came through
+	// the mapping: TypeScript tries `paths` first and falls through to
+	// ordinary resolution when the mapped candidate does not exist, and
+	// ResolvedModule records no trace of which happened. Read together with
+	// Resolution it is nonetheless decisive for the case it exists to serve —
+	// a bare specifier that a `paths` key matches and that did *not* land in
+	// node_modules is not the installed package of that name.
+	PathsPattern string `cbor:"pathsPattern,omitempty" json:"pathsPattern,omitempty"`
+	// Package is the owning package of ResolvedPath. It is populated only when
+	// the request asked for package identities.
+	Package *PackageIdentity `cbor:"package,omitempty" json:"package,omitempty"`
+	// ResolverPackage is the identity the resolver itself recorded. It is
+	// populated only when the request asked for package identities and only
+	// when the resolver read a manifest during this resolution.
+	ResolverPackage *ResolverPackageID `cbor:"resolverPackage,omitempty" json:"resolverPackage,omitempty"`
+}
+
+// ModuleInventoryDemand selects how much of the resolved module graph one
+// answer carries. The module inventory itself is unconditional: it is the
+// operation's reason to exist.
+type ModuleInventoryDemand struct {
+	// Imports adds resolved import provenance. With no ImportPaths it covers
+	// every file in the program.
+	Imports bool `cbor:"imports,omitempty" json:"imports,omitempty"`
+	// ImportPaths scopes Imports to these importing files.
+	ImportPaths []string `cbor:"importPaths,omitempty" json:"importPaths,omitempty"`
+	// Packages adds Package and ResolverPackage to every import fact.
+	Packages bool `cbor:"packages,omitempty" json:"packages,omitempty"`
+}
+
+// ModuleInventory is one generation's resolved module graph.
+type ModuleInventory struct {
+	// Modules is every file the program included, ordered by path.
+	Modules []ModuleFact `cbor:"modules,omitempty" json:"modules,omitempty"`
+	// Imports are the requested files' specifier facts, ordered by importing
+	// path and then by specifier start byte.
+	Imports []ModuleImportFact `cbor:"imports,omitempty" json:"imports,omitempty"`
+	// UnknownImportPaths are requested import paths the program does not hold,
+	// ordered by path. They are reported rather than dropped so a consumer can
+	// tell "this file imports nothing" from "this file was never analyzed".
+	UnknownImportPaths []string `cbor:"unknownImportPaths,omitempty" json:"unknownImportPaths,omitempty"`
+}
+
+// ModuleGraphProvider answers for the resolved module graph of one configured
+// project. It is a compiler-resolution capability with no compiler-independent
+// approximation: a backend that cannot answer must say so rather than return a
+// partial graph, because an incomplete inventory presented as complete is the
+// exact defect an attested closure exists to remove.
+type ModuleGraphProvider interface {
+	ModuleGraph(context.Context, ModuleInventoryDemand) (ModuleInventory, error)
+}
+
 // ArgumentMappingStatus says whether TypeScript exposes one exact formal
 // parameter for a supplied argument.
 type ArgumentMappingStatus string
