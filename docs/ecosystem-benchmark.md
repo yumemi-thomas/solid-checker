@@ -564,6 +564,253 @@ family.
   a Solid 1.x and two Solid 2.x probes contributes three rows to every probe
   figure above.
 
+## Machine verification across the corpus
+
+Everything above stops at a generated draft. This section measures the whole
+RFC 0002 pipeline instead — `contract generate` → `contract probe --write` →
+`contract verify` — and answers the question a consumer actually asks: **how
+many real ecosystem packages machine-verify end to end?** It is RFC 0002's
+unresolved question 1, measured at corpus scale rather than argued.
+
+It also closes the "**probe drivability is not measured**" caveat above. It is
+now measured, and the answer is in "Drivability" below.
+
+> **This measurement executes package code.** `contract probe` imports and runs
+> each installed package, and its dependencies, in child processes — that is
+> exactly why it is a separate command from `contract generate`, which imports
+> nothing. The harness keeps every install and every execution inside temporary
+> directories under its own state directory, runs `npm install` with
+> `--ignore-scripts` so no package lifecycle script ever executes, and bounds
+> every probe with both a per-condition-mode child timeout and a whole-phase
+> wall budget. Run it where you would run those packages' own test suites.
+
+### Method
+
+`scripts/ecosystem-benchmark/verify-corpus.mjs` is a standalone harness. It
+reads the same pinned manifest and reuses `lib/install.mjs`, `lib/classify.mjs`
+and `lib/families.mjs`, but it is deliberately **not** `run.mjs`: that harness's
+checked-in reports measure contract *generation*, and folding a verification
+measurement into them would change what its numbers mean.
+
+Per manifest probe row it installs the exact package and Solid runtime versions
+into a throwaway project, generates the contract outside the install tree,
+probes it with discovery **on** (`contract verify` refuses a `--no-discovery`
+report outright, so turning it off would measure nothing), writes evidence, and
+verifies. Every completed row is appended to a journal, so an interrupted run
+resumes rather than redoing work, and `--aggregate-only` rebuilds the reports
+from an existing journal.
+
+```sh
+SOLID_CHECKER_NATIVE_BIN=... SOLID_TYPEFACTS_BIN=... \
+  node scripts/ecosystem-benchmark/verify-corpus.mjs --state-dir /path/to/scratch
+```
+
+Reports: `benchmarks/ecosystem/verification-report.json` and
+`verification-report.md`. They never overwrite `report.json`/`report.md`.
+
+**A timeout is never a verification result.** A row whose probe exceeded the
+wall budget is its own outcome class and is counted as neither verified nor
+refused.
+
+### Measured state (2026-08-23, full corpus, 416 probe rows)
+
+Binaries were **copied out of the repository before the run and used from the
+copies**, so a concurrent rebuild could not change the engine mid-measurement.
+The hash is the identity these numbers belong to:
+
+- native `solid-checker-rust`
+  `27edf9e078e65d78c5442d61b72485079a8f307636d8d496672de2740e0d5426`
+  (14,493,248 bytes, source `rust/target/release/solid-checker-rust`, mtime
+  2026-08-22T17:52:30Z)
+- `solid-typefacts`
+  `0fe187a2884a0326d07dd36520b856b0e5c272c41e63a8fd65282dfb256d31a7`
+  (28,369,538 bytes, source `bin/solid-typefacts`, mtime 2026-08-21T00:06:38Z)
+
+Budgets: install 240 s, generate 120 s, probe 20 s per condition mode and 120 s
+for the whole phase, verify 90 s; concurrency 6. No subsetting — every one of
+the manifest's 416 probe rows ran.
+
+| Figure | Count |
+| --- | --- |
+| Probe rows run | 416 |
+| Reached a generated contract | 409/416 (98.32%) |
+| **Reached `verified`** | **194/416 (46.63%)** |
+| Reached `verified`, of the rows that produced a contract | 194/409 (47.43%) |
+| Refused by `contract verify` | 210/416 (50.48%) |
+| Never reached verification | 3 install failures, 4 generation failures, 2 probe errors, 3 probe timeouts |
+
+Solid 1.x verifies at 70/168 (41.67%) and Solid 2.x at 124/248 (50.00%).
+
+### Per family
+
+| Family | Rows | Contracts | Verified | Refused | Dominant root cause |
+| --- | --- | --- | --- | --- | --- |
+| Official Solid | 23 | 23 | 7 (30.43%) | 14 | `kind-observed` 6, `probe-failed` 5, `closure-note` 2, `incompleteness` 1 |
+| Kobalte | 6 | 4 | 1 (16.67%) | 2 | `incompleteness` 2 |
+| Solid Primitives | 289 | 288 | 175 (60.55%) | 113 | `probe-failed` 53, `kind-observed` 33, `incompleteness` 27 |
+| Corvu | 28 | 28 | 7 (25.00%) | 21 | `incompleteness` 12, `kind-observed` 6, `probe-failed` 3 |
+| TanStack | 52 | 50 | 3 (5.77%) | 46 | `kind-observed` 26, `probe-failed` 20 |
+| Solid Devtools | 12 | 10 | 1 (8.33%) | 9 | `kind-observed` 9 |
+| Solid Recharts | 3 | 3 | 0 (0%) | 3 | `kind-observed` 2, `probe-failed` 1 |
+| Motion for Solid | 3 | 3 | 0 (0%) | 2 | `probe-failed` 2 |
+
+Solid Primitives is the clean end here too, for the same reason it is the clean
+end of generation: small, single-purpose, importable in a bare Node process.
+TanStack is the opposite end — 3 of 52 — and the cause is not its options-object
+callback pattern but its entrypoints, which either fail to import at all or
+export error classes the generator typed as values.
+
+### Why verification refuses
+
+`contract verify` raises every blocker it finds, so a row can carry several. The
+row counts are the number of refused rows raising each blocker at least once:
+
+| Blocker (RFC 0002 §3) | Rows raising it | Blocker lines |
+| --- | --- | --- |
+| `kind-observed` | 136 | 351 |
+| `probe-report-includes-evidence-write` | 122 | 122 |
+| `probe-failed` | 84 | 353 |
+| `incompleteness` | 60 | 1,091 |
+| `closure-note` | 7 | 32 |
+
+`probe-report-includes-evidence-write` is a **consequence, not a cause**:
+`contract probe --write` declines to write evidence once a probe failed or
+reported an incompleteness, so verification then sees passing claims that never
+reached the contract. Attributed to one root cause per row instead, the 210
+refusals are `probe-failed` 84, `kind-observed` 82, `incompleteness` 42,
+`closure-note` 2 — and **no row refused with the evidence-write blocker
+standing alone**, which is the check that the consequence really is one.
+
+Three blockers, in plain terms:
+
+- **`probe-failed` (84 rows)** — the package does not behave the way the
+  contract says. Real disagreements, and the most valuable output of the whole
+  measurement. 353 failed claims in all; the most on any single row is 102, on
+  `@tanstack/solid-db@0.2.37`. Of the 219 individual failures the report retains
+  (it keeps at most ten per row), 102 read `kind=value: runtime kind is
+  function` — an exported class the generator typed as a value — and 117 are
+  callback-execution disagreements such as `callbacks[0]=tracked: observed
+  inline`.
+- **`kind-observed` (82 rows as root cause)** — `kind` is the one claim schema
+  v1 has no unknown sentinel for, so verification requires a passing `kind`
+  observation in *every* mode an export is stated for. On 50 of those 82 rows
+  the entrypoint's module **throws on import** in at least one mode, and on 11
+  more the probe session died or timed out; only 21 are anything else.
+- **`incompleteness` (42 rows)** — discovery planted a callback where the
+  contract states none, and the package invoked it. A negative claim a probe
+  falsified is wrong, not incomplete, so this refuses rather than converting.
+
+### Drivability
+
+| Figure | Count |
+| --- | --- |
+| Claims planned across every probed contract | 11,444 |
+| Driven | 6,039 (52.77%) |
+| Passed | 5,686 (49.69%) |
+| Failed | 353 |
+| Undriven | 5,405 (47.23%) |
+| Incompleteness findings | 1,091 |
+
+The undriven half splits into two very different things. **2,393 claims have no
+probe form at all** — `reactiveReads` 1,122, `ownerRequirements` 527, parameter
+identity 386, nested return leaves 227, `asyncBehavior` 100, callback arguments
+25, store paths 23 — and no probe harness will ever reach them; they are static
+claims or claims schema v1 has no evidence slot for. The rest is environment:
+1,281 claims lost to an entrypoint that **threw on import**, 700 to a probe
+session whose process died, 354 to a synthesized call that threw, 255 to a
+synthesized call that never invoked the callback, 90 to a session that wrote no
+readable report, 53 to a per-mode timeout.
+
+56 rows had at least one entrypoint import throw. The largest causes were
+`ReferenceError: window is not defined` (432 claims),
+`ERR_MODULE_NOT_FOUND` for a peer the manifest does not install (@solidjs/web
+248, @solid-primitives/utils 94, `server-only` 60),
+`ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING` for an export map pointing at
+TypeScript source under `node_modules` (227), and
+`ERR_UNKNOWN_FILE_EXTENSION` for `.jsx` (27).
+
+### What a verified contract actually certifies
+
+This is the number that should govern how the 46.63% is read:
+
+| Figure | Count |
+| --- | --- |
+| Claim domains converted to unknown | 379 (`returns` 217, `callbacks` 152, `asyncBehavior` 10) |
+| Exports carrying an unknown in the verified rows, at generation | 150/880 (17.05%) |
+| Exports carrying an unknown in the verified rows, after verification | 431/880 (48.98%) |
+| Verified rows carrying at least one **probed behavioral row** | **6/194 (3.09%)** |
+| Probed behavioral row markers kept across the whole corpus | **12** |
+| Inferred row markers dropped by verification | 1,118 |
+| Probed markers discarded as unwitnessed by this run's report | 11 |
+
+Verification roughly triples the share of unknown-bearing exports in the
+contracts it promotes, which is the conversion rule working as designed. But of
+194 verified contracts, **six** carry any probed evidence about behavior at all,
+totalling twelve rows — `@kobalte/utils`, `@solid-primitives/filesystem` (all
+three probes), and `@solid-primitives/mutable` (both Solid 2 probes). A verified
+contract in this engine state is overwhelmingly `kind` observations, negative
+claims, and unknown sentinels; the behavioral rows the generator inferred are
+dropped rather than confirmed.
+
+### The composite a consumer feels
+
+Of all 9,015 exports the corpus's generated contracts describe:
+
+| State | Exports |
+| --- | --- |
+| (a) certified by a verified contract | 449 (4.98%) |
+| (b) honest unknown inside a verified contract | 431 (4.78%) |
+| (c) inside a contract that never reached `verified` | 8,135 (90.24%) |
+
+(c) is every export of a contract that was generated and then refused, timed
+out, or errored. Rows whose install or generation failed describe no exports and
+are in none of the three states.
+
+### What it costs
+
+| Phase | Rows | Median | p90 | Max |
+| --- | --- | --- | --- | --- |
+| `npm install` | 416 | 457 ms | 1,484 ms | 22,218 ms |
+| `contract generate` | 413 | 102 ms | 535 ms | 15,324 ms |
+| `contract probe` | 409 | 753 ms | 3,224 ms | 120,005 ms |
+| `contract verify` | 404 | 42 ms | 52 ms | 72 ms |
+| generate + probe + verify | 413 | **937 ms** | **3,964 ms** | 135,329 ms |
+| whole row, install included | 416 | 1,574 ms | 5,109 ms | 135,821 ms |
+
+Under a second at the median for the checker's own three phases. Install ran
+against a warm npm cache and is a lower bound. The whole 416-row corpus took
+6 m 30 s of wall clock at concurrency 6.
+
+The three probe timeouts — `@kobalte/core@0.13.13` (solid1),
+`@tanstack/solid-table@9.1.2` (solid1), `motion-solidjs@0.7.0-beta.4`
+(solid2 head) — are wide-surface packages whose probe plan exceeded the 120 s
+budget. They are not evidence that those packages cannot verify; they are
+evidence that the budget was too small for them, and they are recorded as their
+own class rather than as failures.
+
+### Caveats
+
+- **`verified` is not `reviewed`.** It certifies what a machine observed or
+  statically proved and converts everything else to the unknown sentinel. It is
+  a weaker claim than the human tier and a stronger one than the `inferred`
+  draft everything earlier in this document measures.
+- **The install environment was built for static generation.** The manifest
+  installs the probed package and the Solid runtime versions it selected — not
+  the package's full peer set. Several `ERR_MODULE_NOT_FOUND` import failures
+  above are that gap, not the package's. A probe-oriented manifest would install
+  more, and would move the drivability numbers.
+- **The probe worker is a bare Node process.** No DOM, no bundler, no JSX or
+  TypeScript loader. `window is not defined` is a fact about that environment as
+  much as about the package, and this measurement does not separate the two.
+- **Two rows could not be probed at all** because the manifest's probe
+  environment installs `@solidjs/signals` without `solid-js`, and probing
+  refuses rather than guessing a dialect.
+- **Pre-audit engine state.** Measured against one snapshotted release binary,
+  before the bundled-contract audit work; no result here was used to change a
+  rule or a contract.
+- **Per probe row, not per package**, exactly as everywhere else in this
+  document.
+
 ## Exit-code contract
 
 Benchmark mode (`run.mjs` without `--thresholds`) exits 0 whenever the
