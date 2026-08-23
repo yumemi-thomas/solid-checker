@@ -1,0 +1,13 @@
+{
+  "name": "class-expression-kind",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "bundled-dependency": "1.0.0"
+  },
+  "exports": {
+    ".": "./index.ts",
+    "./destructured": "./destructured.ts",
+    "./unresolvable": "./unresolvable.ts"
+  }
+}

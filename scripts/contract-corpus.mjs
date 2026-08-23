@@ -25,6 +25,12 @@ const defaultTypeFacts = join(root, "bin/solid-typefacts");
 const fixtures = [
   "torture-runtime-namespace",
   "torture-conditional-semantics",
+  // Also the one corpus pin on the callable *raise*: `getterFunction` is
+  // `Object.defineProperty(() => 1, …)`, so the declarator's initializer is a
+  // call and no function body is summarized for the export, yet the type is
+  // callable. Its `kind` is raised to `function` and `callbacks` therefore has
+  // to stay unknown -- publishing silence there is the negative claim "invokes
+  // no caller-supplied callback" about a body this run never read.
   "torture-getter-exports",
   "torture-deep-barrel",
   "torture-dts-disagreement",
@@ -132,7 +138,20 @@ const fixtures = [
   // merge. `conditional-returns-divergence` is the same shape on the `returns`
   // axis; without this entry a regression of the callbacks union shows up in
   // no gate.
-  "conditional-callback-conflict"
+  "conditional-callback-conflict",
+  // Pins the class shape a *published* package contains -- a bundler's `var C
+  // = class {}`, which carries no class-name span and truthfully answers
+  // `nonCallable` -- through the entry file, a `.js` barrel hop with no
+  // `.d.ts`, and an installed dependency's own artifact. Both kind sites are
+  // reached: `promote_callable_export` over the project export map decides the
+  // three local classes and, in the recursively generated dependency's own
+  // run, the two the parent then carries; `promote_entry_callable` decides the
+  // values and owns the refusals. And it pins both honest refusals -- an
+  // export whose kind no closed type answers, and one whose binding
+  // destructures a member of another value so nothing ruled out a class --
+  // against publishing a `value` summary, which is the maximal certified
+  // negative.
+  "class-expression-kind"
 ];
 
 const native = process.env.SOLID_CHECKER_NATIVE_BIN ?? defaultNative;

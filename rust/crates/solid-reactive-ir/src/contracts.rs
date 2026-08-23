@@ -1417,14 +1417,23 @@ fn value_contract_export() -> ContractExport {
 /// the callability answer alone makes the generator publish `kind: "value"`
 /// for a class and the probe contradict it.
 ///
-/// Two exact facts answer the real question, and neither is name-, text- or
+/// Three exact facts answer the real question, and none is name-, text- or
 /// type-text-based: the compiler's own declaration kind for the resolved
-/// symbol (`ast.IsClassDeclaration`), and this project's class-name spans from
-/// the syntax facts. The syntax fact is consulted first because it needs no
-/// symbol demand; the symbol declarations reach a class declared in another
-/// analyzed file.
+/// symbol (`ast.IsClassDeclaration`), this project's class-name spans, and
+/// this project's class-expression initializers. The syntax facts are
+/// consulted first because they need no symbol demand; the symbol
+/// declarations reach a class declared in another analyzed file.
+///
+/// The class-expression fact is what a published package actually presents.
+/// Rolldown, esbuild and tsdown all lower a `class C {}` declaration to
+/// `var C = class { … }`, so a `ClassFact` with *no name* and a variable
+/// declarator are all that survives in the artifact a consumer installs — no
+/// class-name span covers the exported binding, and `nonCallable` is the
+/// truthful callability of a class type. Every `kind: claimed value, observed
+/// function` row in the corpus measurement whose export is class-shaped had
+/// exactly this shape.
 pub fn binding_declares_class(facts: &ProjectFacts, target: &Location) -> bool {
-    if location_is_class_name(facts, target) {
+    if location_declares_class(facts, target) {
         return true;
     }
     let Some(entity) = entity_at(facts, target) else {
@@ -1450,7 +1459,7 @@ pub fn binding_declares_class(facts: &ProjectFacts, target: &Location) -> bool {
         };
         for declaration in fact.declarations() {
             if declaration.kind.as_ref() == "class"
-                || location_is_class_name(facts, &declaration.location)
+                || location_declares_class(facts, &declaration.location)
             {
                 return true;
             }
@@ -1466,24 +1475,40 @@ pub fn binding_declares_class(facts: &ProjectFacts, target: &Location) -> bool {
     false
 }
 
+/// The variable declarator whose whole pattern is exactly the name at
+/// `target`, in the file that declares it.
+///
+/// The shape gate is the point. `const { Query } = BaseQueryBuilder`
+/// destructures a *member* of the initializer, so neither the initializer's
+/// symbol nor its class-ness says anything about `Query`; only the plain
+/// identifier form binds the initializer's own runtime value.
+fn identifier_binding_at<'a>(
+    facts: &'a ProjectFacts,
+    target: &Location,
+) -> Option<(
+    &'a solid_facts::FileFacts,
+    &'a solid_facts::ast::BindingFact,
+)> {
+    let span = span_of(target);
+    let file = facts
+        .files
+        .iter()
+        .find(|file| file.path.as_str() == target.path.as_ref())?;
+    let binding = file.ast.bindings.iter().find(|binding| {
+        binding.shape == solid_facts::ast::BindingShape::Identifier
+            && binding.names.iter().any(|name| name.span == span)
+    })?;
+    Some((file, binding))
+}
+
 /// The symbol a `const Alias = Original` declaration copies its value from.
 ///
 /// Only the identifier form: an initializer that is a call, an object, or any
 /// other expression is a different runtime value, not this declaration under
 /// another name.
 fn binding_initializer_symbol(facts: &ProjectFacts, target: &Location) -> Option<String> {
-    let span = span_of(target);
-    let file = facts
-        .files
-        .iter()
-        .find(|file| file.path.as_str() == target.path.as_ref())?;
-    let initializer = file
-        .ast
-        .bindings
-        .iter()
-        .find(|binding| binding.names.iter().any(|name| name.span == span))?
-        .initializer_identifier
-        .as_ref()?;
+    let (file, binding) = identifier_binding_at(facts, target)?;
+    let initializer = binding.initializer_identifier.as_ref()?;
     let entity = entity_at(facts, &location(file.path.shared(), initializer.span))?;
     (!entity.symbol.is_empty()).then(|| entity.symbol.to_string())
 }
@@ -1495,12 +1520,49 @@ fn span_of(target: &Location) -> solid_facts::core::Span {
     )
 }
 
-fn location_is_class_name(facts: &ProjectFacts, target: &Location) -> bool {
+/// Whether the binding whose name is exactly `target` is syntactically a
+/// class: either the name a class declaration or named class expression binds,
+/// or a declarator initialized by a class expression that nothing rewrites.
+fn location_declares_class(facts: &ProjectFacts, target: &Location) -> bool {
     let span = span_of(target);
-    facts
+    if facts
         .files
         .iter()
         .any(|file| file.path.as_str() == target.path.as_ref() && file.ast.declares_class_at(span))
+    {
+        return true;
+    }
+    identifier_binding_at(facts, target).is_some_and(|(file, binding)| {
+        binding.initializer_class && !binding_is_reassigned(file, binding, span)
+    })
+}
+
+/// Whether the binding whose name is at `span` is written again after its
+/// declarator.
+///
+/// [`solid_facts::ast::BindingFact::initializer_class`] is a fact about the
+/// *initializer*, and a class-expression initializer proves
+/// `typeof C === "function"` only for as long as nothing rewrites `C`.
+/// `var C = class {}; C = { … }` holds an object at runtime, so a `function`
+/// claim there is contradicted by `contract probe` in the inverse direction to
+/// the defect this path exists to fix. A `const` declarator cannot be
+/// reassigned at all; otherwise the binder's own reference-to-declaration
+/// resolution answers it exactly. A *member* assignment such as
+/// `C.marker = true` — what a bundler's decorator and static-field lowering
+/// emits, and which leaves `C` a class — is not a reassignment: its target
+/// span is the member expression, which resolves to no declaration.
+fn binding_is_reassigned(
+    file: &solid_facts::FileFacts,
+    binding: &solid_facts::ast::BindingFact,
+    span: solid_facts::core::Span,
+) -> bool {
+    if binding.immutable {
+        return false;
+    }
+    file.ast
+        .assignments
+        .iter()
+        .any(|assignment| file.ast.reference_declaration(assignment.target) == Some(span))
 }
 
 fn entity_at<'a>(facts: &'a ProjectFacts, target: &Location) -> Option<&'a typefacts::EntityFact> {
@@ -1511,23 +1573,186 @@ fn entity_at<'a>(facts: &'a ProjectFacts, target: &Location) -> Option<&'a typef
     })
 }
 
-/// A class export's honest summary: `kind: "function"`, callbacks fail closed.
+/// The honest summary for an export *raised* to `kind: "function"`:
+/// callbacks fail closed.
 ///
-/// The generator summarizes function declarations, not construct signatures.
-/// Nothing here carries what a constructor — the class's own, or the one it
-/// inherits through `extends` — does with the arguments a caller passes, and
-/// an omitted `callbacks` list is a *negative* claim ("invokes no
-/// caller-supplied function"). A consumer reads `new Store(onChange)` through
-/// exactly the same contract path as `store(onChange)`, so publishing that
-/// silence would certify inertness the class can contradict. The sentinel is
-/// demand-sensitive at the consumer: constructing with no callable argument
-/// stays clean.
-pub fn class_contract_export(mut summary: ContractExport) -> ContractExport {
+/// An omitted `callbacks` list is a *negative* claim — "invokes no
+/// caller-supplied function" — and a consumer reads `new Store(onChange)`
+/// through exactly the same contract path as `store(onChange)`, so publishing
+/// that silence certifies an inertness the export can contradict. Every raise
+/// reaches here with a summary whose `kind` was still `value`, which is
+/// precisely the state in which no function body was summarized for it:
+///
+/// - a **class** never has one, because the generator summarizes function
+///   declarations, not construct signatures, so nothing carries what a
+///   constructor — the class's own, or the one it inherits through `extends` —
+///   does with its arguments;
+/// - a **callable** binding reaching a raise had no summary node either. Had
+///   its body been analyzed, the summary would already say `kind: "function"`
+///   and carry that analysis's claims, and no raise would happen. Leaving the
+///   domains absent here certified "invokes no caller-supplied callback" for a
+///   body this run never read.
+///
+/// The sentinel is demand-sensitive at the consumer: constructing or calling
+/// with no callable argument stays clean.
+pub fn raised_function_export(mut summary: ContractExport) -> ContractExport {
     summary.kind = "function".into();
     summary.callbacks = ContractClaim::Unknown(ContractUnknownClaim::new());
     summary
 }
 
+/// What this analysis can prove about an exported binding's runtime `kind`.
+///
+/// `kind` is the one field of an export summary schema v1 gives no unknown
+/// sentinel, and `validate_export` bars a `kind: "value"` summary from
+/// carrying *any* claim domain. A `value` summary is therefore the maximal
+/// certified negative — reads nothing reactive, returns nothing reactive,
+/// invokes no caller-supplied callback, requires no owner — so publishing one
+/// demands a proof that the export is not a function, not merely the absence
+/// of a proof that it is.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ExportKindProof {
+    /// A class. `typeof C === "function"`, and no construct signature is
+    /// summarized — see [`raised_function_export`].
+    Class,
+    /// Every constituent of the type has a call signature.
+    Callable,
+    /// No constituent of the type has a call signature.
+    ///
+    /// This is a `value` proof only insofar as class-ness was already ruled
+    /// out above, because a *class* type answers `NonCallable` too — that is
+    /// the whole reason [`binding_declares_class`] exists. Ruling it out is
+    /// syntactic and therefore incomplete: a class the artifact only reaches
+    /// through a value expression stays `NonCallable` here and publishes
+    /// `value`. `@solidjs/web@2.0.0-rc.1`'s `ResponseEnvelope`
+    /// (`const C = (() => { class C {…}; …; return C; })()`) and
+    /// `@tanstack/*-devtools`' `*DevtoolsCore` (`const C = pair[0]`, whose
+    /// element type is a class declared in another package) are the measured
+    /// counterexamples. Closing them needs a *constructability* fact —
+    /// `GetSignaturesOfType(…, SignatureKindConstruct)` — from the producer,
+    /// which would also subsume the syntactic search. See
+    /// docs/precision-backlog.md.
+    NonCallable,
+    /// No constituent has a call signature, and the binding is a
+    /// *destructuring pattern*, so nothing ruled out a class either.
+    ///
+    /// This is the same incompleteness as [`Self::NonCallable`] with the
+    /// syntactic search removed entirely rather than merely defeated.
+    /// [`identifier_binding_at`] deliberately refuses to follow a pattern —
+    /// `const { Inner } = Container` binds a *member* of `Container` and
+    /// `const { name } = class Named {}` binds a string, so neither the
+    /// initializer's symbol nor its class-ness says anything about the name —
+    /// which means for such a binding no class-ness question was even asked.
+    /// `NonCallable` therefore proves nothing about it, and the maximal
+    /// certified negative a `value` summary is may not be published on it.
+    /// `const { Inner } = Container` (a static class member) and
+    /// `const [Core] = pair` (a tuple element whose element type is a class)
+    /// are the measured shapes. The cost is a destructured binding whose type
+    /// is a *primitive*, which really is provably not a function and is
+    /// refused with them: separating those needs either the constructability
+    /// fact above or `primitive_value_domain` demanded at export-specifier
+    /// spans. See docs/precision-backlog.md.
+    DestructuredMember,
+    /// Type Facts closed no domain over this type. `Unknown` is `any`,
+    /// `unknown`, `never` or an error type; `Mixed` is a union with callable
+    /// *and* non-callable constituents. Either way `typeof` is not statically
+    /// determined, so neither `kind` is a claim this analysis can make.
+    Unresolvable(Callability),
+    /// No callability fact covers this location. `demand_plan` requests
+    /// callability exactly where it requests a type descriptor, so absence
+    /// here is missing evidence about the span, not an answer about the type.
+    Undemanded,
+}
+
+/// The `kind` proof for the binding at `target`.
+///
+/// Syntax first, because a class needs no type answer and gets the wrong one
+/// (see [`binding_declares_class`]). Callability decides the rest, and only
+/// its two closed answers decide anything — and `NonCallable` decides only
+/// where the syntactic class search could actually run, which a destructuring
+/// pattern is exactly the shape it cannot.
+pub fn export_kind_proof(facts: &ProjectFacts, target: &Location) -> ExportKindProof {
+    if binding_declares_class(facts, target) {
+        return ExportKindProof::Class;
+    }
+    match entity_at(facts, target).and_then(|entity| entity.callability) {
+        Some(Callability::Callable) => ExportKindProof::Callable,
+        Some(Callability::NonCallable) if destructured_binding_at(facts, target) => {
+            ExportKindProof::DestructuredMember
+        }
+        Some(Callability::NonCallable) => ExportKindProof::NonCallable,
+        Some(other) => ExportKindProof::Unresolvable(other),
+        None => ExportKindProof::Undemanded,
+    }
+}
+
+/// Whether the export at `target` resolves to a destructuring pattern.
+///
+/// The exact complement of [`binding_declares_class`], walked the same way and
+/// for the same reason: the span an export *specifier* carries is the specifier
+/// itself, so `const { Inner } = Container; export { Inner }` reaches the
+/// declarator only through the symbol the compiler resolved and the same
+/// initializer and alias hops. Where that walk ends on an object or array
+/// pattern the binding holds a *member* or *element* of the initializer, which
+/// [`identifier_binding_at`] deliberately refuses to reason about — so the
+/// class search returned `false` without having looked.
+fn destructured_binding_at(facts: &ProjectFacts, target: &Location) -> bool {
+    if location_destructures(facts, target) {
+        return true;
+    }
+    let Some(entity) = entity_at(facts, target) else {
+        return false;
+    };
+    if entity.symbol.is_empty() {
+        return false;
+    }
+    let mut pending = vec![entity.symbol.to_string()];
+    let mut visited = HashSet::new();
+    while let Some(symbol) = pending.pop() {
+        if !visited.insert(symbol.clone()) {
+            continue;
+        }
+        let Some(fact) = facts.typescript.symbol(&symbol) else {
+            continue;
+        };
+        for declaration in fact.declarations() {
+            if location_destructures(facts, &declaration.location) {
+                return true;
+            }
+            if let Some(next) = binding_initializer_symbol(facts, &declaration.location) {
+                pending.push(next);
+            }
+        }
+        let alias = fact.alias_target();
+        if !alias.is_empty() {
+            pending.push(alias.to_owned());
+        }
+    }
+    false
+}
+
+/// Whether an object or array binding pattern binds exactly the name at
+/// `target`.
+fn location_destructures(facts: &ProjectFacts, target: &Location) -> bool {
+    let span = span_of(target);
+    facts
+        .files
+        .iter()
+        .filter(|file| file.path.as_str() == target.path.as_ref())
+        .any(|file| {
+            file.ast.bindings.iter().any(|binding| {
+                binding.shape != solid_facts::ast::BindingShape::Identifier
+                    && binding.names.iter().any(|name| name.span == span)
+            })
+        })
+}
+
+/// Raises a `value` summary to what the binding at `span` is proven to be.
+///
+/// This is the project-wide analysis map (`Program::contract_exports`), not a
+/// published entrypoint: it cannot refuse, so an unprovable kind stays the
+/// `value` default here and the emission path
+/// (`promote_entry_callable` in the backend) is what refuses to publish it.
 fn promote_callable_export(
     facts: &ProjectFacts,
     file: &solid_facts::FileFacts,
@@ -1538,17 +1763,16 @@ fn promote_callable_export(
         return summary;
     }
     let target = location(file.path.shared(), span);
-    if binding_declares_class(facts, &target) {
-        return class_contract_export(summary);
+    match export_kind_proof(facts, &target) {
+        // Both raises carry `callbacks` unknown, and for the same reason: a
+        // summary still saying `value` here is one no function body was
+        // analyzed for. See `raised_function_export`.
+        ExportKindProof::Class | ExportKindProof::Callable => raised_function_export(summary),
+        ExportKindProof::NonCallable
+        | ExportKindProof::DestructuredMember
+        | ExportKindProof::Unresolvable(_)
+        | ExportKindProof::Undemanded => summary,
     }
-    let Some(entity) = entity_at(facts, &target) else {
-        return summary;
-    };
-    let mut summary = summary;
-    if entity.callability == Some(Callability::Callable) {
-        summary.kind = "function".into();
-    }
-    summary
 }
 
 #[cfg(test)]
@@ -1655,5 +1879,219 @@ mod callback_contradiction_tests {
         assert!(!callbacks_contradict_on_a_parameter(&rows));
         assert!(!callbacks_contradict_on_a_parameter(&[]));
         assert!(!callbacks_contradict_on_a_parameter(&[row(0, "inline")]));
+    }
+}
+
+/// The `kind` decision table, arm by arm, against synthetic facts.
+///
+/// The two process tests in
+/// rust/crates/solid-facts-backend/tests/contracts_process.rs pin what the
+/// *generator* publishes end to end; these pin the decision itself, including
+/// the arms no fixture reaches — `Callability::Mixed`, and an absent
+/// callability fact — and the exact syntactic gates the arms turn on.
+#[cfg(test)]
+mod export_kind_proof_tests {
+    use super::{ExportKindProof, ProjectFacts, export_kind_proof, raised_function_export};
+    use crate::{ContractClaim, ContractExport};
+    use solid_facts::FileFacts;
+    use solid_facts::TypeScriptTable;
+    use solid_facts::ast;
+    use solid_facts::compiler::{COMPILER_FACTS_PROTOCOL, ExecutionMap};
+    use solid_facts::core::{Generation, Span};
+    use typefacts::{Callability, EntityFact, Location, PrimitiveValueDomain};
+
+    const PATH: &str = "artifact.ts";
+
+    fn entity(span: Span, callability: Option<Callability>) -> EntityFact {
+        EntityFact {
+            location: Location {
+                path: PATH.into(),
+                start_byte: u64::from(span.start),
+                end_byte: u64::from(span.end),
+            },
+            symbol: "".into(),
+            symbol_unresolved: false,
+            type_descriptor: None,
+            resolved_call: None,
+            callability,
+            runtime_value_domain: None,
+            primitive_value_domain: PrimitiveValueDomain::default(),
+            call_result_domain: None,
+            constant_value: None,
+            array_shape: None,
+            tuple_shape: None,
+            library_types: None,
+            reference_space: None,
+            runtime_identity: "".into(),
+        }
+    }
+
+    /// The proof for the binding named `name` in `source`, with `callability`
+    /// standing in for what Type Facts answered at that exact span.
+    ///
+    /// The span is the *declarator's* name, which is what an export
+    /// declaration's specifier carries and what the syntactic facts key on. No
+    /// symbol is recorded, so every answer here comes from this file's own
+    /// syntax plus the one callability row — which is the point: it isolates
+    /// the gates from the symbol walk the process tests exercise.
+    fn proof(source: &str, name: &str, callability: Option<Callability>) -> ExportKindProof {
+        let ast = ast::extract(PATH, source).unwrap();
+        let start = u32::try_from(source.find(name).expect("name occurs in source")).unwrap();
+        let span = Span::new(start, start + u32::try_from(name.len()).unwrap());
+        let compiler = ExecutionMap {
+            compiler_facts_protocol: COMPILER_FACTS_PROTOCOL,
+            source_hash: ast.source.hash.clone(),
+            tracked_regions: Vec::new(),
+            untracked_regions: Vec::new(),
+            ownership_regions: Vec::new(),
+            callback_roles: Vec::new(),
+            jsx_operations: Vec::new(),
+        };
+        let generation = Generation::new(1).unwrap();
+        let file = FileFacts::new(generation, source, ast, compiler).unwrap();
+        let location = Location {
+            path: file.path.as_str().into(),
+            start_byte: u64::from(span.start),
+            end_byte: u64::from(span.end),
+        };
+        let facts = ProjectFacts {
+            generation,
+            project_id: "fixture".into(),
+            files: vec![file],
+            typescript: TypeScriptTable::from_parts(
+                3,
+                1,
+                "fixture",
+                Vec::new(),
+                vec![entity(span, callability)],
+                Vec::new(),
+                Vec::new(),
+            ),
+            typescript_changes: None,
+        };
+        export_kind_proof(&facts, &location)
+    }
+
+    #[test]
+    fn a_class_is_proven_by_syntax_before_any_type_answer() {
+        // Every class type truthfully answers `nonCallable`, so the syntax has
+        // to win: a declaration, a named class expression, and the anonymous
+        // class expression a bundler emits.
+        for source in [
+            "export class Widget {}",
+            "const Widget = class Named {};",
+            "var Widget = class {};",
+            "const Widget = class {} as unknown;",
+        ] {
+            assert_eq!(
+                proof(source, "Widget", Some(Callability::NonCallable)),
+                ExportKindProof::Class,
+                "{source}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_reassigned_class_expression_binding_is_not_a_class() {
+        // `initializer_class` describes the initializer, not the binding's
+        // whole life. Reassigned, the runtime value is whatever was written
+        // last, and the type's own answer decides.
+        let source = "var Widget = class {}; Widget = { notAFunction: true };";
+        assert_eq!(
+            proof(source, "Widget", Some(Callability::NonCallable)),
+            ExportKindProof::NonCallable
+        );
+        // A member write is not a reassignment: this is exactly the static
+        // patching a bundler emits, and `Widget` is still the class.
+        let source = "var Widget = class {}; Widget.marker = true;";
+        assert_eq!(
+            proof(source, "Widget", Some(Callability::NonCallable)),
+            ExportKindProof::Class
+        );
+        // A `const` cannot be reassigned at all, so no assignment scan can
+        // change the answer.
+        let source = "const Widget = class {};";
+        assert_eq!(
+            proof(source, "Widget", Some(Callability::NonCallable)),
+            ExportKindProof::Class
+        );
+    }
+
+    #[test]
+    fn only_the_two_closed_callability_answers_decide_a_non_class() {
+        let source = "export const value = host.create();";
+        assert_eq!(
+            proof(source, "value", Some(Callability::Callable)),
+            ExportKindProof::Callable
+        );
+        assert_eq!(
+            proof(source, "value", Some(Callability::NonCallable)),
+            ExportKindProof::NonCallable
+        );
+        // `any`, `unknown`, `never` or an error type. No `typeof` follows.
+        assert_eq!(
+            proof(source, "value", Some(Callability::Unknown)),
+            ExportKindProof::Unresolvable(Callability::Unknown)
+        );
+        // A union with callable and non-callable constituents. Reached by no
+        // fixture, and schema v1 cannot say "either".
+        assert_eq!(
+            proof(source, "value", Some(Callability::Mixed)),
+            ExportKindProof::Unresolvable(Callability::Mixed)
+        );
+        // Absence of the fact, not an answer about the type.
+        assert_eq!(proof(source, "value", None), ExportKindProof::Undemanded);
+    }
+
+    #[test]
+    fn a_destructured_binding_gets_no_value_proof_from_non_callability() {
+        // An object pattern binds a *member* and an array pattern an
+        // *element*, so the class search is gated off and `nonCallable` — a
+        // class type's own answer — proves nothing here.
+        for source in [
+            "const { Inner } = Container;",
+            "const [Inner] = pair;",
+            "export const { Inner } = Container;",
+        ] {
+            assert_eq!(
+                proof(source, "Inner", Some(Callability::NonCallable)),
+                ExportKindProof::DestructuredMember,
+                "{source}"
+            );
+        }
+        // Callable is still a proof: a call signature is a call signature
+        // wherever the binding came from.
+        assert_eq!(
+            proof(
+                "const { handler } = host;",
+                "handler",
+                Some(Callability::Callable)
+            ),
+            ExportKindProof::Callable
+        );
+        // And an unresolvable destructured binding is unresolvable for the
+        // older reason, which the message distinguishes.
+        assert_eq!(
+            proof(
+                "const { handler } = host;",
+                "handler",
+                Some(Callability::Unknown)
+            ),
+            ExportKindProof::Unresolvable(Callability::Unknown)
+        );
+    }
+
+    #[test]
+    fn every_raise_fails_closed_on_callbacks() {
+        // The asymmetry this replaced: the class raise marked callbacks
+        // unknown and the callable raise published silence, which is the
+        // negative claim "invokes no caller-supplied callback" about a body
+        // that was never analyzed.
+        let raised = raised_function_export(ContractExport {
+            kind: "value".into(),
+            ..ContractExport::default()
+        });
+        assert_eq!(raised.kind, "function");
+        assert!(matches!(raised.callbacks, ContractClaim::Unknown(_)));
     }
 }

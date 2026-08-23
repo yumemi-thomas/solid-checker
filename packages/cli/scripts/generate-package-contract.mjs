@@ -1282,6 +1282,7 @@ async function ensureGeneratedDependencyContract({
     { ...generationContext, quiet: true, ownsCacheDirectory: false }
   );
   generationContext.contractCache.set(key, output);
+  generationContext.generatedContracts.add(resolve(output));
   return output;
 }
 
@@ -1375,7 +1376,17 @@ async function analyzeTarget({
     // already allowed, so this can only add resolution, never remove it.
     const runtimeConditions = [...new Set([...conditions, ...selectedConditions, "import"])].sort();
     args.push("--runtime-conditions", runtimeConditions.join(","));
-    for (const contract of contracts) args.push("--contract", resolve(contract));
+    // A contract this run generated from the dependency's own sources had its
+    // `kind` decided by this exact rule, so the emitter may carry it across
+    // the package boundary; a discovered or user-supplied one is trusted for
+    // `kind` only when its own evidence records a review. `--contract` versus
+    // `--generated-contract` is the only channel that distinguishes them.
+    const contractFlag = path =>
+      generationContext.generatedContracts.has(path) ? "--generated-contract" : "--contract";
+    for (const contract of contracts) {
+      const path = resolve(contract);
+      args.push(contractFlag(path), path);
+    }
     // A dependency obligation names the exact package boundary the analyzer
     // could not cross. Generate only that installed artifact, then retry with
     // its contract. Newly revealed obligations repeat this loop; a cache keeps
@@ -1405,7 +1416,8 @@ async function analyzeTarget({
         });
         if (!contract) throw error;
         contracts.push(contract);
-        args.push("--contract", contract);
+        const generated = resolve(contract);
+        args.push(contractFlag(generated), generated);
       }
     }
     return {
@@ -1629,6 +1641,12 @@ async function generatePackageContractInternal(arguments_, context) {
   const generationContext = context ?? {
     active: new Set(),
     contractCache: new Map(),
+    // The contracts THIS run generated, by resolved path. Provenance the
+    // documents cannot carry: they are `inferred` like any generated contract,
+    // and the native emitter needs to tell them from a contract merely found
+    // at `node_modules/<dep>/solid-reactivity.json` before it will carry an
+    // export `kind` across the boundary unproved. See `--generated-contract`.
+    generatedContracts: new Set(),
     cacheDirectory: mkdtempSync(join(tmpdir(), "solid-checker-dependency-contracts-")),
     explicitContracts: options.contracts.map(contract => resolve(contract)),
     quiet: false,
@@ -2086,6 +2104,7 @@ export async function generatePackageContract(arguments_, { quiet = false } = {}
   const generationContext = {
     active: new Set(),
     contractCache: new Map(),
+    generatedContracts: new Set(),
     cacheDirectory,
     explicitContracts: options.contracts.map(contract => resolve(contract)),
     quiet,

@@ -1114,10 +1114,7 @@ impl PackageContractStatus {
 }
 
 fn contract_evidence_is_certifiable(contract: &PackageContract) -> bool {
-    matches!(
-        contract.evidence.kind.as_str(),
-        "verified" | "reviewed" | "trusted" | "attested"
-    ) && contract.claims_are_certifiable()
+    contract.evidence_is_certifiable() && contract.claims_are_certifiable()
 }
 
 #[derive(Deserialize)]

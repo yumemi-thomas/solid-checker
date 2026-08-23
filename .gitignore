@@ -27,6 +27,10 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/external-reexport/node_modules/**
 !fixtures/package-contracts/dialect-detection/node_modules/
 !fixtures/package-contracts/dialect-detection/node_modules/**
+!fixtures/package-contracts/class-expression-kind/node_modules/
+!fixtures/package-contracts/class-expression-kind/node_modules/**
+!fixtures/package-contracts/carried-value-kind/node_modules/
+!fixtures/package-contracts/carried-value-kind/node_modules/**
 # The bundled-contract consumer resolves a real package name; its stub is the
 # only thing that makes the installed-version and callback-timing proofs
 # reproducible from a clean checkout.

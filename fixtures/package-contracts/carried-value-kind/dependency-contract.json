@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "package": { "name": "untyped-dependency", "version": "1.0.0" },
+  "compilerFactsProtocol": 1,
+  "summaries": { "value-1": { "kind": "value" } },
+  "entrypoints": { ".": { "exports": { "value-1": ["hostValue"] } } },
+  "evidence": { "kind": "reviewed", "generator": "solid-checker reviewed test fixture" }
+}

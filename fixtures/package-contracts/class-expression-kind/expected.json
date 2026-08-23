@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "package": {
-    "name": "torture-getter-exports-package",
+    "name": "class-expression-kind",
     "version": "1.0.0"
   },
   "compilerFactsProtocol": 1,
@@ -17,26 +17,24 @@
     },
     "function-2": {
       "kind": "function",
-      "reactiveReads": [
-        {
-          "kind": "accessor",
-          "label": "memo result",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
+      "evidence": {
+        "kind": "inferred"
+      },
+      "callbacks": {
+        "status": "unknown"
+      }
+    },
+    "function-3": {
+      "kind": "function",
+      "evidence": {
+        "kind": "inferred"
+      }
+    },
+    "function-4": {
+      "kind": "function",
       "returns": {
-        "kind": "object",
-        "properties": {
-          "value": {
-            "kind": "accessor",
-            "label": "value",
-            "evidence": {
-              "kind": "inferred"
-            }
-          }
-        },
+        "kind": "argument",
+        "parameter": 0,
         "evidence": {
           "kind": "inferred"
         }
@@ -55,9 +53,24 @@
   "entrypoints": {
     ".": {
       "exports": {
-        "function-1": ["getterFunction"],
-        "value-1": ["getterObject"],
-        "function-2": ["getterResult"]
+        "function-2": [
+          "DependencyCache"
+        ],
+        "function-3": [
+          "dependencyFunction"
+        ],
+        "function-1": [
+          "InlineCache",
+          "LocalCache",
+          "SiblingCache"
+        ],
+        "value-1": [
+          "settings",
+          "siblingTable"
+        ],
+        "function-4": [
+          "siblingFunction"
+        ]
       }
     }
   },

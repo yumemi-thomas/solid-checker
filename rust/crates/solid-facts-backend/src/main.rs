@@ -36,6 +36,18 @@ struct Request {
     typefacts_args: Vec<String>,
     #[serde(default)]
     contract_paths: Vec<String>,
+    /// The subset of [`Request::contract_paths`] that *this generation run*
+    /// produced itself, from the dependency's own installed sources.
+    ///
+    /// Passed as `--generated-contract` by the package generator's
+    /// `ensureGeneratedDependencyContract`. It is provenance the document
+    /// cannot carry, and it is what
+    /// `PackageContract::kind_claims_are_trusted` needs: a contract merely
+    /// discovered at `node_modules/<dep>/solid-reactivity.json` may have been
+    /// written by any earlier solid-checker, so its `kind` is re-decided here
+    /// unless its evidence says a human or a verifier stood behind it.
+    #[serde(default)]
+    generated_contract_paths: BTreeSet<String>,
     #[serde(default)]
     presets: Vec<String>,
     #[serde(default)]
@@ -351,6 +363,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
     let mut typefacts = default_typefacts_executable();
     let mut dialect_id: Option<String> = None;
     let mut contract_paths = Vec::new();
+    let mut generated_contract_paths = BTreeSet::new();
     let mut presets = Vec::new();
     let mut enable_rules = Vec::new();
     let mut format = "default".to_owned();
@@ -383,6 +396,11 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         }
         if let Some(value) = argument.strip_prefix("--contract=") {
             contract_paths.push(value.into());
+            continue;
+        }
+        if let Some(value) = argument.strip_prefix("--generated-contract=") {
+            contract_paths.push(value.into());
+            generated_contract_paths.insert(value.into());
             continue;
         }
         if let Some(value) = argument.strip_prefix("--preset=") {
@@ -466,6 +484,11 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
             "--typefacts" => typefacts = args.next().ok_or("--typefacts needs a path")?,
             "--dialect" => dialect_id = Some(args.next().ok_or("--dialect needs an id")?),
             "--contract" => contract_paths.push(args.next().ok_or("--contract needs a path")?),
+            "--generated-contract" => {
+                let path = args.next().ok_or("--generated-contract needs a path")?;
+                contract_paths.push(path.clone());
+                generated_contract_paths.insert(path);
+            }
             "--preset" => presets.push(args.next().ok_or("--preset needs a name")?),
             "--enable-rule" => {
                 enable_rules.push(args.next().ok_or("--enable-rule needs a rule name")?)
@@ -559,6 +582,7 @@ fn request_from_args() -> Result<Request, Box<dyn std::error::Error>> {
         typefacts_executable: typefacts,
         typefacts_args: vec!["-project".into(), project.to_string_lossy().into_owned()],
         contract_paths,
+        generated_contract_paths,
         presets,
         enable_rules,
         format,
@@ -631,6 +655,11 @@ fn print_help() {
                                         missing, unverified, or stale (audited against a\n\
                                         version this project no longer installs)\n\
            --contract <PATH>            Override/discover a package contract (repeatable)\n\
+           --generated-contract <PATH>  Same, for a contract this generation run produced\n\
+                                        itself from the dependency's own sources. Only such\n\
+                                        a contract, or one whose evidence records a review,\n\
+                                        may carry an export `kind` across the boundary\n\
+                                        without it being re-proved here (repeatable)\n\
            --preset <NAME>              Enable a catalog preset (repeatable)\n\
            --enable-rule <NAME>         Explicitly enable one rule (repeatable)\n\
            --runtime-target <browser|node>\n\
@@ -1325,8 +1354,15 @@ fn emit_package_contract(
     let mut dependency_contracts = request
         .contract_paths
         .iter()
-        .map(|path| read_package_contract(Path::new(path)))
-        .collect::<Result<Vec<_>, _>>()?;
+        .map(|path| {
+            let mut contract = read_package_contract(Path::new(path))?;
+            // Provenance the document cannot carry, stamped where the argv
+            // that carries it is still in scope. See `Request::
+            // generated_contract_paths` and `kind_claims_are_trusted`.
+            contract.run_generated = request.generated_contract_paths.contains(path);
+            Ok(contract)
+        })
+        .collect::<Result<Vec<_>, BackendError>>()?;
     for package in dialect.bundled_packages {
         if dependency_contracts
             .iter()
@@ -1486,6 +1522,7 @@ fn emit_package_contract(
         },
         contract_hash: String::new(),
         source_path: String::new(),
+        run_generated: false,
     };
     contract.validate().map_err(|error| error.to_string())?;
     let mut encoded = encode_package_contract(&contract, true)?;
@@ -1508,7 +1545,13 @@ fn contract_exports_for_entry_file(
         generated_owner_requirements_by_symbol(facts, program, &symbol_aliases);
     let mut exports = BTreeMap::new();
     for name in names {
-        let summary = external_export_summary_for_file(
+        // `trusted_kind` says the summary's `kind` came from a dependency
+        // contract whose provenance licenses carrying it across the boundary,
+        // rather than from this project's analysis of its own files. A
+        // dependency contract with neither provenance carries every other
+        // claim and has its `kind` re-decided here, exactly like a local one.
+        // See `promote_entry_callable` and `kind_claims_are_trusted`.
+        let (summary, trusted_kind) = external_export_summary_for_file(
             facts,
             &entry_file,
             dependency_contracts,
@@ -1516,14 +1559,14 @@ fn contract_exports_for_entry_file(
             &mut HashSet::new(),
         )
         .or_else(|| {
-            program.contract_exports.get(&name).cloned()
+            program.contract_exports.get(&name).cloned().map(|summary| (summary, false))
         }).ok_or_else(|| {
             format!(
                 "emit package contract: entry file {} exports {name:?}, but no semantic summary was produced",
                 entry_file.display()
             )
         })?;
-        let summary = promote_entry_callable(facts, &entry_file, &name, summary);
+        let summary = promote_entry_callable(facts, &entry_file, &name, summary, trusted_kind)?;
         let summary = attach_generated_owner_requirements(
             facts,
             &symbol_aliases,
@@ -1758,28 +1801,78 @@ fn attach_generated_owner_requirements(
     summary
 }
 
+/// Decides the `kind` of one entry-file export, or refuses the entrypoint.
+///
+/// A bare `kind: "value"` summary is the maximal certified negative claim —
+/// `validate_export` bars it from carrying even an unknown domain — so it is
+/// publishable only against a proof that the export is not a function.
+/// `Callability::Unknown` (an `any`, `unknown`, `never` or error type, which is
+/// what an untyped dependency leaves behind in a published `.js` artifact) and
+/// `Callability::Mixed` are the absence of that proof, and treating either as
+/// `value` is how `@solid-devtools/locator@0.16.7` came to publish "invokes no
+/// caller-supplied callback" for `addClickInterceptor(fn)`. Refusing costs the
+/// entrypoint; publishing costs the claim, which is worse. See
+/// docs/package-contracts.md "Refused entrypoints versus failed generation".
+///
+/// `trusted_kind` marks a summary whose `kind` came from a *dependency
+/// contract* this analysis is entitled to take that one claim from unproved.
+/// The entitlement is about provenance and nothing else — see
+/// [`solid_reactive_ir::PackageContract::kind_claims_are_trusted`]: either this
+/// run generated the contract itself from the dependency's own sources under
+/// this exact rule, or its evidence records that a human or a verifier stood
+/// behind its claims. Re-deciding such a `kind` here — with the dependency's
+/// implementation outside the project and its specifier therefore typed `any` —
+/// would refuse exactly the entrypoints that already have the better answer.
+///
+/// A dependency contract with *neither* provenance is a document of unknown
+/// origin found on disk; its `kind` goes through this decision like any local
+/// claim, because it may have been generated by an earlier solid-checker whose
+/// `Unknown ⇒ value` defect is the one this rule exists to close. Any carried
+/// summary can still be *raised* by a local class or callability fact.
 fn promote_entry_callable(
     facts: &solid_facts::ProjectFacts,
     entry_file: &Path,
     name: &str,
-    mut summary: solid_reactive_ir::ContractExport,
-) -> solid_reactive_ir::ContractExport {
+    summary: solid_reactive_ir::ContractExport,
+    trusted_kind: bool,
+) -> Result<solid_reactive_ir::ContractExport, Box<dyn std::error::Error>> {
     if summary.kind != "value" {
-        return summary;
+        return Ok(summary);
     }
     let Some(entity) = entry_export_entity(facts, entry_file, name) else {
-        return summary;
+        return Ok(summary);
     };
-    // A class is `typeof === "function"` at runtime and `nonCallable` to the
-    // type system, which reads construct signatures as *not* call signatures.
-    // See `solid_reactive_ir::binding_declares_class`.
-    if solid_reactive_ir::binding_declares_class(facts, &entity.location) {
-        return solid_reactive_ir::class_contract_export(summary);
+    let refuse = |reason: String| -> Result<_, Box<dyn std::error::Error>> {
+        Err(format!(
+            "emit package contract: entry file {} exports {name:?}, {reason}; publishing kind \"value\" would certify it invokes no caller-supplied callback",
+            entry_file.display()
+        )
+        .into())
+    };
+    match solid_reactive_ir::export_kind_proof(facts, &entity.location) {
+        // A class is `typeof === "function"` at runtime and `nonCallable` to
+        // the type system, which reads construct signatures as *not* call
+        // signatures. See `solid_reactive_ir::binding_declares_class`. The
+        // callable raise is the same shape for the same reason: a summary
+        // still saying `value` here is one whose body was never analyzed, so
+        // its silence about callbacks is not a claim either. See
+        // `solid_reactive_ir::raised_function_export`.
+        solid_reactive_ir::ExportKindProof::Class
+        | solid_reactive_ir::ExportKindProof::Callable => {
+            Ok(solid_reactive_ir::raised_function_export(summary))
+        }
+        solid_reactive_ir::ExportKindProof::Unresolvable(callability) if !trusted_kind => refuse(
+            format!("whose runtime kind no closed type answers ({callability:?})"),
+        ),
+        solid_reactive_ir::ExportKindProof::DestructuredMember if !trusted_kind => refuse(
+            "which destructures a member of another value, so no fact here rules out a class"
+                .into(),
+        ),
+        solid_reactive_ir::ExportKindProof::NonCallable
+        | solid_reactive_ir::ExportKindProof::DestructuredMember
+        | solid_reactive_ir::ExportKindProof::Unresolvable(_)
+        | solid_reactive_ir::ExportKindProof::Undemanded => Ok(summary),
     }
-    if entity.callability == Some(typefacts::Callability::Callable) {
-        summary.kind = "function".into();
-    }
-    summary
 }
 
 fn entry_export_entity<'a>(
@@ -1952,24 +2045,33 @@ fn unify_runtime_alias_summaries(
     }
 }
 
+/// One dependency contract's summary for `name`, and whether its `kind` claim
+/// may be carried across the boundary without being re-proved.
+///
+/// The second half is the contract's provenance, not the summary's content:
+/// see [`solid_reactive_ir::PackageContract::kind_claims_are_trusted`]. Every
+/// other claim in the summary is used regardless — a contract is the only
+/// evidence there is about a package this project cannot see into.
 fn dependency_export_summary(
     dependency_contracts: &[solid_reactive_ir::PackageContract],
     module: &str,
     name: &str,
-) -> Option<solid_reactive_ir::ContractExport> {
-    solid_reactive_ir::PackageContract::for_module(dependency_contracts, module)
-        .and_then(|contract| contract.exports_for_module(module))
-        .and_then(|exports| exports.get(name))
-        .cloned()
+) -> Option<(solid_reactive_ir::ContractExport, bool)> {
+    let contract = solid_reactive_ir::PackageContract::for_module(dependency_contracts, module)?;
+    let summary = contract.exports_for_module(module)?.get(name)?.clone();
+    Some((summary, contract.kind_claims_are_trusted()))
 }
 
+/// The summary a *dependency contract* supplies for the export `name` of
+/// `path`, following this project's own re-export and import chains to reach
+/// the boundary, and whether that contract's `kind` claim is carried unproved.
 fn external_export_summary_for_file(
     facts: &solid_facts::ProjectFacts,
     path: &Path,
     dependency_contracts: &[solid_reactive_ir::PackageContract],
     name: &str,
     visiting: &mut HashSet<PathBuf>,
-) -> Option<solid_reactive_ir::ContractExport> {
+) -> Option<(solid_reactive_ir::ContractExport, bool)> {
     let path = path.canonicalize().ok()?;
     if !visiting.insert(path.clone()) {
         return None;
@@ -2166,14 +2268,22 @@ fn exported_names_for_file(
         if export.kind == solid_facts::ast::ExportKind::Default {
             names.insert("default".into());
         }
-        names.extend(
-            export
-                .specifiers
-                .iter()
-                .chain(export.declarations.iter())
-                .filter(|specifier| !specifier.type_only)
-                .map(|specifier| specifier.exported.to_string()),
-        );
+        for specifier in export
+            .specifiers
+            .iter()
+            .chain(export.declarations.iter())
+            .filter(|specifier| !specifier.type_only)
+        {
+            let name = specifier.exported.to_string();
+            // An unmarked re-export of a type is not a runtime export at all.
+            // Omitting it is what `export type { T }` already does one line
+            // above, through `type_only`; this proves the same thing for the
+            // spelling that carries no marker. See `export_is_type_only`.
+            if export_is_type_only(facts, &path, &name, &mut HashSet::new()) {
+                continue;
+            }
+            names.insert(name);
+        }
         for binding in file.ast.exported_bindings(export) {
             names.extend(binding.names.iter().filter_map(|name| {
                 file.source_text(name.span)
@@ -2184,6 +2294,127 @@ fn exported_names_for_file(
     }
     visiting.remove(&path);
     Ok(names)
+}
+
+/// Whether every export of `name` from `path` exists only in type space.
+///
+/// `export type { T }` and `export interface T {}` say so in their own syntax
+/// and are filtered by `type_only` before this is consulted. An **unmarked**
+/// re-export of a type — `import { Options } from "./types.js"; export
+/// { Options }`, or `export { Options } from "./types.js"`, both legal with no
+/// `type` modifier — says nothing at the export site, and no fact the producer
+/// offers at that span separates it from a value whose type is unresolvable:
+/// callability is `Unknown`, `runtime_identity` is empty, `reference_space` is
+/// structurally `Neither` (identifiers inside an import or export specifier are
+/// excluded from the reference index) and the declaration kind is the catch-all
+/// `"declaration"` for an interface and for a name whose module lies outside
+/// the project alike. Left to the `kind` decision the whole entrypoint refuses,
+/// costing every real export beside it, for a name that has no runtime
+/// existence to describe.
+///
+/// This project's own syntax at the *declaring* file does separate them.
+/// Walking the same relative re-export and import chain
+/// `external_export_summary_for_file` walks, a name whose every export is
+/// marked `type_only` somewhere along it binds nothing at runtime, so omitting
+/// it is exactly right — and exactly what the marked spelling already gets.
+///
+/// Fail-closed by construction: a chain that leaves this project (a bare
+/// specifier, an unresolvable relative path) or that this walk cannot see (a
+/// name declared locally without being exported as a declaration, so no
+/// `type_only` specifier covers it) proves nothing and returns `false`, which
+/// leaves the name to the `kind` decision and its refusal. Declaration merging
+/// is handled by requiring *every* export of the name to be type-only: an
+/// `export interface T {}` beside an `export const T` is a runtime export.
+fn export_is_type_only(
+    facts: &solid_facts::ProjectFacts,
+    path: &Path,
+    name: &str,
+    visiting: &mut HashSet<(PathBuf, String)>,
+) -> bool {
+    let Ok(path) = path.canonicalize() else {
+        return false;
+    };
+    if !visiting.insert((path.clone(), name.to_owned())) {
+        return false;
+    }
+    let Some(file) = facts
+        .files
+        .iter()
+        .find(|file| same_canonical_path(Path::new(file.path.as_str()), &path))
+    else {
+        return false;
+    };
+    let mut proven = false;
+    for export in &file.ast.exports {
+        for specifier in export
+            .specifiers
+            .iter()
+            .chain(export.declarations.iter())
+            .filter(|specifier| specifier.exported.as_str() == name)
+        {
+            if export.type_only || specifier.type_only {
+                proven = true;
+                continue;
+            }
+            let local_name = file
+                .source_text(specifier.local.span)
+                .unwrap_or(specifier.exported.as_str());
+            let type_only = match export.module.as_deref() {
+                Some(module) if module.starts_with('.') => {
+                    resolve_relative_export(facts, &path, module).is_ok_and(|target| {
+                        export_is_type_only(facts, &target, local_name, visiting)
+                    })
+                }
+                // A bare specifier leaves this project; the dependency's own
+                // contract describes its runtime exports and says nothing
+                // about its type-only ones, so nothing here is proof.
+                Some(_) => false,
+                None => local_import_is_type_only(facts, file, &path, local_name, visiting),
+            };
+            if !type_only {
+                return false;
+            }
+            proven = true;
+        }
+    }
+    proven
+}
+
+/// Whether the local name a bare `export { x }` specifier names is an import
+/// binding this project can follow to a type-only declaration.
+///
+/// Only the import chain: a name declared in this file and exported by
+/// specifier rather than as a declaration carries no `type_only` fact anywhere,
+/// so `interface T {} export { T }` is not provable here and stays with the
+/// refusal. Adding it needs a type-declaration fact in solid-facts.
+fn local_import_is_type_only(
+    facts: &solid_facts::ProjectFacts,
+    file: &solid_facts::FileFacts,
+    path: &Path,
+    local_name: &str,
+    visiting: &mut HashSet<(PathBuf, String)>,
+) -> bool {
+    for import in &file.ast.imports {
+        for binding in &import.bindings {
+            if file.source_text(binding.local.span) != Some(local_name) {
+                continue;
+            }
+            if import.type_only || binding.type_only {
+                return true;
+            }
+            let Some(imported) = binding.imported.as_deref().or_else(|| {
+                (binding.kind == solid_facts::ast::ImportKind::Default).then_some("default")
+            }) else {
+                return false;
+            };
+            if !import.module.starts_with('.') {
+                return false;
+            }
+            return resolve_relative_export(facts, path, &import.module)
+                .is_ok_and(|target| export_is_type_only(facts, &target, imported, visiting));
+        }
+    }
+    false
 }
 
 fn resolve_relative_export(

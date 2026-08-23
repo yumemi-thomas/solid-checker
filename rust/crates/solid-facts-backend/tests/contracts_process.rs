@@ -1169,6 +1169,101 @@ fn package_generator_states_an_exported_class_as_a_function_kind() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+/// The class shape a *published* package contains. A bundler lowers
+/// `export class C {}` to `var C = class { … }`, so no class-name span covers
+/// the exported binding and `nonCallable` is the truthful callability of a
+/// class type — which made the generator publish `kind: "value"` for 45 of the
+/// 53 failing kind claims in the corpus measurement. Also pins the honest
+/// outcome when no closed type answers `kind` at all: the entrypoint is
+/// refused, not published as the maximal certified negative that a bare
+/// `value` summary is.
+///
+/// See fixtures/package-contracts/class-expression-kind/README.md.
+#[test]
+fn package_generator_states_a_class_expression_export_as_a_function_kind() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/class-expression-kind");
+    let directory = temporary_directory("class-expression-kind-contract");
+    let output = directory.join("solid-reactivity.json");
+    let result = Command::new("node")
+        .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+        .args(["contract", "generate", "--package-root"])
+        .arg(&package)
+        .arg("--output")
+        .arg(&output)
+        .env(
+            "SOLID_CHECKER_NATIVE_BIN",
+            env!("CARGO_BIN_EXE_solid-checker-rust"),
+        )
+        .env("SOLID_TYPEFACTS_BIN", &typefacts)
+        .output()
+        .unwrap();
+    // A refused entrypoint costs its own entrypoint and nothing else.
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&result.stdout).to_string();
+    assert!(
+        stdout.contains("2 entrypoint(s) refused and omitted"),
+        "{stdout}"
+    );
+    let contract = expanded_contract(&output);
+    for refused in ["./unresolvable", "./destructured"] {
+        assert!(contract["entrypoints"].get(refused).is_none(), "{contract}");
+    }
+    let plan = fs::read_to_string(directory.join("solid-reactivity.review.md")).unwrap();
+    assert!(
+        plan.contains("./unresolvable: solid-checker-rust: emit package contract:")
+            && plan.contains("whose runtime kind no closed type answers (Unknown)"),
+        "{plan}"
+    );
+    // The other refusal: `nonCallable` is a class type's answer too, and for a
+    // destructuring pattern the class search never ran, so it proves nothing.
+    assert!(
+        plan.contains("./destructured: solid-checker-rust: emit package contract:")
+            && plan.contains(
+                "which destructures a member of another value, so no fact here rules out a class"
+            ),
+        "{plan}"
+    );
+    let exports = &contract["entrypoints"]["."]["exports"];
+    // Bound in the entry file, reached through a `.js` barrel hop with no
+    // `.d.ts` to answer for it, and reached through a bare-specifier
+    // `export *` into an installed dependency's own artifact.
+    for name in [
+        "LocalCache",
+        "InlineCache",
+        "SiblingCache",
+        "DependencyCache",
+    ] {
+        assert_eq!(exports[name]["kind"], "function", "{name}: {contract}");
+        assert_eq!(
+            exports[name]["callbacks"],
+            serde_json::json!({ "status": "unknown" }),
+            "{name}: {contract}"
+        );
+    }
+    for name in ["siblingFunction", "dependencyFunction"] {
+        assert_eq!(exports[name]["kind"], "function", "{name}: {contract}");
+        assert!(
+            exports[name].get("callbacks").is_none(),
+            "{name}: {contract}"
+        );
+    }
+    // The false-positive direction: real non-callable values whose binding is a
+    // plain identifier, so the syntactic class search did run and did answer.
+    for name in ["settings", "siblingTable"] {
+        assert_eq!(exports[name]["kind"], "value", "{name}: {contract}");
+    }
+    fs::remove_dir_all(directory).unwrap();
+}
+
 #[test]
 fn package_generator_describes_reactive_callback_arguments() {
     let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
@@ -2320,6 +2415,105 @@ fn package_generator_marks_shadowed_observer_semantics_unknown() {
         contract["entrypoints"]["."]["exports"]["shadowedResizeObserver"]["callbacks"],
         serde_json::json!({ "status": "unknown" })
     );
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// A dependency contract's own `kind: "value"` survives the boundary, and the
+/// same export refuses without it. The dependency has no type declarations, so
+/// inside *this* package's project the re-exported specifier is `any` and no
+/// closed type answers `kind` — which is a refusal when the answer would
+/// otherwise be this project's guess, and not one when the dependency's own
+/// contract already decided it against the dependency's own sources.
+///
+/// See fixtures/package-contracts/carried-value-kind/README.md.
+#[test]
+fn package_generator_keeps_a_dependency_contracts_value_kind_and_refuses_without_it() {
+    let typefacts = match env::var("SOLID_TYPEFACTS_BIN") {
+        Ok(value) => value,
+        Err(_) => return,
+    };
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let package = root.join("fixtures/package-contracts/carried-value-kind");
+    let directory = temporary_directory("carried-value-kind-contract");
+    let generate = |output: &Path, contract: Option<&Path>| {
+        let mut command = Command::new("node");
+        command
+            .arg(root.join("packages/cli/bin/solid-checker.mjs"))
+            .args(["contract", "generate", "--package-root"])
+            .arg(&package)
+            .arg("--output")
+            .arg(output);
+        if let Some(contract) = contract {
+            command.arg("--contract").arg(contract);
+        }
+        command
+            .env(
+                "SOLID_CHECKER_NATIVE_BIN",
+                env!("CARGO_BIN_EXE_solid-checker-rust"),
+            )
+            .env("SOLID_TYPEFACTS_BIN", &typefacts)
+            .output()
+            .unwrap()
+    };
+
+    let carried = directory.join("carried.json");
+    let result = generate(&carried, Some(&package.join("dependency-contract.json")));
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let contract = expanded_contract(&carried);
+    assert_eq!(
+        contract["entrypoints"]["."]["exports"]["hostValue"]["kind"], "value",
+        "{contract}"
+    );
+    // The laundering channel, closed: an `inferred` dependency contract found
+    // by `dependencyContracts()` at `node_modules/<dep>/solid-reactivity.json`
+    // -- no `--contract`, no review -- has its `kind` re-decided here like any
+    // local claim. `laundered-dependency` has no typings, so the wrong `value`
+    // it claims for `addClickInterceptor(fn)` is refused rather than
+    // republished.
+    assert!(
+        contract["entrypoints"].get("./laundered").is_none(),
+        "{contract}"
+    );
+    let plan = fs::read_to_string(directory.join("carried.review.md")).unwrap();
+    assert!(
+        plan.contains("./laundered: solid-checker-rust: emit package contract:")
+            && plan.contains(
+                "exports \"addClickInterceptor\", whose runtime kind no closed type answers (Unknown)"
+            ),
+        "{plan}"
+    );
+    // And re-deciding decides: the same unreviewed provenance over a
+    // dependency that *does* ship declarations corrects the wrong negative
+    // instead of refusing it.
+    let typed = &contract["entrypoints"]["."]["exports"]["addTypedInterceptor"];
+    assert_eq!(typed["kind"], "function", "{contract}");
+    assert_eq!(
+        typed["callbacks"],
+        serde_json::json!({ "status": "unknown" }),
+        "{contract}"
+    );
+
+    // Every entrypoint whose kind this project must decide for itself is
+    // refused, so generation fails and names the reason rather than writing a
+    // contract with entrypoints missing.
+    let refused = directory.join("refused.json");
+    let result = generate(&refused, None);
+    assert!(!result.status.success(), "{contract}");
+    let message = format!(
+        "{}{}",
+        String::from_utf8_lossy(&result.stdout),
+        String::from_utf8_lossy(&result.stderr)
+    );
+    assert!(
+        message
+            .contains("exports \"hostValue\", whose runtime kind no closed type answers (Unknown)"),
+        "{message}"
+    );
+    assert!(!refused.exists(), "{message}");
     fs::remove_dir_all(directory).unwrap();
 }
 
