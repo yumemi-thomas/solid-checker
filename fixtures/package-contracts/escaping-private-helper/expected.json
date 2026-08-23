@@ -34,6 +34,16 @@
         ]
       }
     },
+    "./builtin": {
+      "exports": {
+        "function-2": [
+          "App"
+        ],
+        "function-1": [
+          "Isolated"
+        ]
+      }
+    },
     "./called": {
       "exports": {
         "function-2": [
@@ -44,13 +54,41 @@
         ]
       }
     },
-    "./rendered": {
+    "./children": {
+      "sameAs": "./builtin"
+    },
+    "./closed": {
+      "sameAs": "./builtin"
+    },
+    "./intrinsic": {
+      "exports": {
+        "function-1": [
+          "App",
+          "Isolated"
+        ]
+      }
+    },
+    "./member-tag": {
       "exports": {
         "function-2": [
           "App",
           "Isolated"
         ]
       }
+    },
+    "./member-tag-children": {
+      "sameAs": "./member-tag"
+    },
+    "./prop-value": {
+      "exports": {
+        "function-2": [
+          "Held",
+          "Isolated"
+        ]
+      }
+    },
+    "./rendered": {
+      "sameAs": "./builtin"
     },
     "./returned": {
       "exports": {
@@ -59,6 +97,9 @@
           "makePanel"
         ]
       }
+    },
+    "./shadowed": {
+      "sameAs": "./builtin"
     }
   },
   "evidence": {

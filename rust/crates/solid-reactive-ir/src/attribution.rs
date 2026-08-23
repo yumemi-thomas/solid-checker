@@ -208,9 +208,13 @@ impl<'a> CallGraph<'a, '_> {
             return false;
         };
         let root = self.aliases.get(symbol).unwrap_or(symbol);
+        // References, not sites: this test asks whether every reference to the
+        // function is accounted for, and one render can write the component's
+        // name twice (`<Panel></Panel>`). The call graph still holds one edge
+        // per invocation.
         let known_call_sites = self
             .lookup
-            .function_call_sites(path, function)
+            .function_call_site_references(path, function)
             .into_iter()
             .map(|(caller, callee)| (caller.path.to_string(), callee.start, callee.end))
             .collect::<HashSet<_>>();
@@ -269,11 +273,30 @@ impl<'a> CallGraph<'a, '_> {
         // declaration export introduces. An `ExportNamedDeclaration`'s own span
         // covers the whole declaration, body included (solid-facts
         // `visit_export_named_declaration`), so testing containment accepted
-        // every reference written inside an exported function: `apply(Panel)`,
-        // `return Panel`, and `<Panel/>` all read as "export surface", and the
-        // escape they prove was lost. That is the unsound direction — the
-        // caller reads a true verdict as "the enumerated callers are all of
-        // them" and certifies exports that a value-escaped function can reach.
+        // every reference written inside an exported function: `apply(Panel)`
+        // and `return Panel` read as "export surface", and the escape they
+        // prove was lost. That is the unsound direction — the caller reads a
+        // true verdict as "the enumerated callers are all of them" and
+        // certifies exports that a value-escaped function can reach.
+        //
+        // `<Panel/>` is not in that list, and is not accepted here either: a
+        // rendered tag is a call site, so `known_call_sites` above already
+        // holds its span — both of its spans, for `<Panel></Panel>`, since the
+        // closing tag rides on the same edge. The acceptance is the call-graph
+        // edge, not a syntactic exception for tags, so a tag that resolves to
+        // nothing (an unresolved import) reaches none of these branches, which
+        // is the honest answer: something the graph cannot name renders it.
+        //
+        // A dotted tag is the case where the edge exists and the reference is
+        // still unaccounted for. `<ns.Panel/>` *does* resolve: TypeScript
+        // reports the symbol at the whole `ns.Panel` name span, so the graph
+        // emits an edge whose callee is that whole span. But the reference this
+        // test walks is the `Panel` property *inside* the name, and this set is
+        // a byte-exact span membership test, so the property does not match the
+        // whole name and the enumeration reports itself incomplete. That is the
+        // conservative direction; closing it means making the edge's callee and
+        // the walked reference name the same span, which is a resolution
+        // question rather than a widening one.
         if file.ast.exports.iter().any(|export| {
             export
                 .specifiers
