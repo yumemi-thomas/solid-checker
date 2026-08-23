@@ -34,6 +34,12 @@ import {
   scriptClosure,
   writeJsonAtomic,
 } from "./lib/gate-cache.mjs";
+import {
+  MEMO_FORMAT_VERSION,
+  memoInputDigest,
+  memoizedIntegrity,
+  readMemo,
+} from "./check-contract-pins.mjs";
 
 /**
  * A throwaway repository shaped like the real one: a gate script, a local
@@ -691,5 +697,189 @@ test("a tree digest orders by bytes, so no locale can change it", () => {
     // Distinct names that a locale comparator can call equal stay distinct.
     writeFileSync(join(unit, "A.tsx"), "export const n = 2;\n");
     assert.notEqual(hashTree(unit), digest);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The registry memo (scripts/check-contract-pins.mjs).
+//
+// The third cache under the same kill switch, and the one whose entries matter
+// most: it stores the *falsifier* -- the registry answer a bundled pin is
+// compared against -- so a replayed entry is not a stale result, it is a stale
+// answer to "can this pin still be falsified at all". These tests are the same
+// argument the gate cache's are: one input at a time, each demanding a miss.
+// ---------------------------------------------------------------------------
+
+const REGISTRY = "https://registry.npmjs.org/";
+const INTEGRITY = "sha512-OLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDOLDA==";
+const REPUBLISHED = "sha512-NEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWNEWA==";
+
+const withMemoFile = (body) => {
+  const directory = mkdtempSync(join(tmpdir(), "solid-checker-registry-memo-test-"));
+  try {
+    return body(join(directory, "registry-integrity.json"));
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+};
+
+const memoFile = (file, overrides) =>
+  writeJsonAtomic(file, {
+    formatVersion: MEMO_FORMAT_VERSION,
+    inputDigest: memoInputDigest({ registry: REGISTRY }),
+    entries: { "solid-js@1.9.14": INTEGRITY },
+    ...overrides,
+  });
+
+test("the memo's input digest covers the registry, the format, and this script's closure", () => {
+  const here = memoInputDigest({ registry: REGISTRY });
+  assert.match(here, /^[0-9a-f]{64}$/);
+  assert.equal(memoInputDigest({ registry: REGISTRY }), here);
+  // Warm against a mirror, switch back to npmjs: every entry must miss, because
+  // a mirror's answer is a different answer.
+  assert.notEqual(memoInputDigest({ registry: "https://mirror.example/" }), here);
+  // A different closure is a different meaning for every stored answer -- this
+  // is the class that covers "someone changed `registryIntegrity`".
+  assert.notEqual(
+    memoInputDigest({ registry: REGISTRY, scriptPath: join(import.meta.dirname, "coverage.mjs") }),
+    here,
+  );
+});
+
+test("a memo whose envelope is not exactly right is discarded whole", () => {
+  withMemoFile((file) => {
+    const digest = memoInputDigest({ registry: REGISTRY });
+    // The control: an entry this reader could have written is readable.
+    memoFile(file);
+    assert.deepEqual(readMemo(file, digest), { "solid-js@1.9.14": INTEGRITY });
+
+    for (const [what, overrides] of [
+      ["a foreign format version", { formatVersion: MEMO_FORMAT_VERSION + 1 }],
+      ["a foreign input digest", { inputDigest: "0".repeat(64) }],
+      ["no input digest", { inputDigest: undefined }],
+      ["entries as an array", { entries: [INTEGRITY] }],
+      ["entries as null", { entries: null }],
+      ["a non-string entry", { entries: { "solid-js@1.9.14": 7 } }],
+      ["an entry that is not an integrity", { entries: { "solid-js@1.9.14": "trust me" } }],
+      ["a key that is not name@version", { entries: { "solid-js": INTEGRITY } }],
+      ["an unrecognized top-level field", { note: "hand-edited" }],
+    ]) {
+      memoFile(file, overrides);
+      assert.deepEqual(readMemo(file, digest), {}, `${what} must be discarded`);
+    }
+
+    // ...and so is a file that is not an object at all, or not JSON.
+    writeJsonAtomic(file, [1, 2, 3]);
+    assert.deepEqual(readMemo(file, digest), {});
+    writeFileSync(file, "not json");
+    assert.deepEqual(readMemo(file, digest), {});
+    rmSync(file);
+    assert.deepEqual(readMemo(file, digest), {});
+  });
+});
+
+test("a memoized answer that would fail a pin is re-checked live before the verdict", () => {
+  // The memo may confirm a pin; it may not condemn one. A stale entry -- warmed
+  // before a republish, or hand-edited -- must not be able to invent a
+  // MISMATCH, so a disagreement means miss, live lookup, then verdict.
+  withMemoFile((file) => {
+    memoFile(file); // memo says INTEGRITY
+    const asked = [];
+    const memo = memoizedIntegrity(
+      (name, version) => {
+        asked.push(`${name}@${version}`);
+        return { integrity: REPUBLISHED };
+      },
+      { file, enabled: true, registry: REGISTRY },
+    );
+
+    // The pin the checked-in contract carries is the republished one; the memo
+    // disagrees, so the registry is asked and its answer is what comes back.
+    assert.deepEqual(memo.lookup("solid-js", "1.9.14", REPUBLISHED), { integrity: REPUBLISHED });
+    assert.deepEqual(asked, ["solid-js@1.9.14"]);
+    assert.match(memo.summary(), /1 memoized answer\(s\) re-checked live/);
+  });
+});
+
+test("a memoized answer that agrees with the pin is served without a lookup", () => {
+  withMemoFile((file) => {
+    memoFile(file);
+    let calls = 0;
+    const memo = memoizedIntegrity(
+      () => {
+        calls += 1;
+        return { integrity: REPUBLISHED };
+      },
+      { file, enabled: true, registry: REGISTRY },
+    );
+    assert.deepEqual(memo.lookup("solid-js", "1.9.14", INTEGRITY), { integrity: INTEGRITY });
+    assert.equal(calls, 0);
+    assert.match(memo.summary(), /1 hit\(s\), 0 live lookup\(s\)/);
+  });
+});
+
+test("an unresolvable registry, or the kill switch, disables the memo entirely", () => {
+  withMemoFile((file) => {
+    memoFile(file);
+    for (const [options, expected] of [
+      [{ file, enabled: true, registry: null }, /could not be resolved/],
+      [{ file, enabled: false }, /disabled \(SOLID_CHECKER_GATE_CACHE\)/],
+    ]) {
+      let calls = 0;
+      const memo = memoizedIntegrity(
+        () => {
+          calls += 1;
+          return { integrity: INTEGRITY };
+        },
+        options,
+      );
+      assert.deepEqual(memo.lookup("solid-js", "1.9.14", INTEGRITY), { integrity: INTEGRITY });
+      assert.equal(calls, 1, "a disabled memo must not replay");
+      assert.match(memo.summary(), expected);
+      // ...and must not write either.
+      memo.flush();
+      assert.deepEqual(readMemo(file, memoInputDigest({ registry: REGISTRY })), {
+        "solid-js@1.9.14": INTEGRITY,
+      });
+    }
+  });
+});
+
+test("an errored lookup is never memoized", () => {
+  withMemoFile((file) => {
+    const memo = memoizedIntegrity(() => ({ error: "registry lookup failed: ENOTFOUND" }), {
+      file,
+      enabled: true,
+      registry: REGISTRY,
+    });
+    assert.deepEqual(memo.lookup("solid-js", "1.9.14", INTEGRITY), {
+      error: "registry lookup failed: ENOTFOUND",
+    });
+    memo.flush();
+    assert.equal(existsSync(file), false, "a transient failure must not become a permanent state");
+  });
+});
+
+test("flushing merges a concurrent run's entries instead of overwriting them", () => {
+  withMemoFile((file) => {
+    const open = () =>
+      memoizedIntegrity((name) => ({ integrity: name === "solid-js" ? INTEGRITY : REPUBLISHED }), {
+        file,
+        enabled: true,
+        registry: REGISTRY,
+      });
+    // Two runs open the memo at the same moment, each learns a different answer.
+    const first = open();
+    const second = open();
+    first.lookup("solid-js", "1.9.14", INTEGRITY);
+    second.lookup("seroval", "1.3.2", REPUBLISHED);
+    first.flush();
+    second.flush();
+
+    // Last-writer-wins on the whole file would have dropped the first run's.
+    assert.deepEqual(Object.keys(readMemo(file, memoInputDigest({ registry: REGISTRY }))).sort(), [
+      "seroval@1.3.2",
+      "solid-js@1.9.14",
+    ]);
   });
 });
