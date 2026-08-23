@@ -1,10 +1,10 @@
 # Ecosystem Benchmark Report
 
-- Started: 2026-08-23T03:58:52.673Z
-- Finished: 2026-08-23T04:00:27.348Z
-- Duration: 94675 ms
-- Checker native binary: /private/tmp/claude-501/-Users-thomas-Documents-Github-solid-checker/0db6694f-29b2-49a3-8e91-8828cd043751/scratchpad/bin/solid-checker-rust
-- Type Facts binary: /private/tmp/claude-501/-Users-thomas-Documents-Github-solid-checker/0db6694f-29b2-49a3-8e91-8828cd043751/scratchpad/bin/solid-typefacts
+- Started: 2026-08-23T11:18:12.840Z
+- Finished: 2026-08-23T11:19:47.335Z
+- Duration: 94495 ms
+- Checker native binary: /private/tmp/claude-501/-Users-thomas-Documents-Github-solid-checker/0284cce1-b5a3-4bdc-98fc-13749b2e3f46/scratchpad/bins/solid-checker-rust.stage2
+- Type Facts binary: /private/tmp/claude-501/-Users-thomas-Documents-Github-solid-checker/0284cce1-b5a3-4bdc-98fc-13749b2e3f46/scratchpad/bins/solid-typefacts
 - Manifest generated at: 2026-08-22T07:44:17.857Z (rows: 305, probes: 416)
 - Scope: full corpus (416 probes run)
 
@@ -725,12 +725,12 @@ None.
 ## Contract content (what the emitted contracts claim)
 
 - Contracts measured: 409 probe(s) across 207 package(s)
-- Probes fully proven (no unknown claim, no refused entrypoint, no closure note): 229/409 (55.99%)
-- Packages fully proven (every one of their probes): 91/207 (43.96%)
-- Probes with at least one unknown claim: 177
+- Probes fully proven (no unknown claim, no refused entrypoint, no closure note): 205/409 (50.12%)
+- Packages fully proven (every one of their probes): 86/207 (41.55%)
+- Probes with at least one unknown claim: 201
 - Probes with at least one refused entrypoint: 3
 - Probes with at least one closure note: 7
-- Exports proven: 5477/8358 (65.53%) (with unknown: 2881, without a summary: 0)
+- Exports proven: 5410/8358 (64.73%) (with unknown: 2948, without a summary: 0)
 - Of those unknown exports: 528 unknown in ALL five domains (the generator said nothing about them at all), 2 unknown only inside a conditional variant (the default resolution is fully claimed)
 - Entrypoints: 850 emitted, 4 refused
 - Closure notes (block byte-attested verification): 32
@@ -739,34 +739,34 @@ None.
 
 | Domain | Exports carrying an unknown |
 | --- | --- |
-| callbacks | 1368 |
+| callbacks | 1472 |
 | reactiveReads | 2065 |
 | returns | 2182 |
 | ownerRequirements | 528 |
 | asyncBehavior | 529 |
-| **total** | **6672** |
+| **total** | **6776** |
 
-Read the five columns together, not separately: 528 of the 2881 unknown exports are unknown in every domain at once, so most of each column is the same exports counted five times.
+Read the five columns together, not separately: 528 of the 2948 unknown exports are unknown in every domain at once, so most of each column is the same exports counted five times.
 
 ### Positive behavioral rows (what a probe step would have to drive)
 
 | Row kind | Count |
 | --- | --- |
-| callbackExecution | 1764 |
+| callbackExecution | 1319 |
 | reactiveRead | 1198 |
 | returnTree | 1202 |
-| ownerRequirement | 548 |
+| ownerRequirement | 542 |
 | asyncBehavior | 100 |
 
 ### Contract content by family
 
 | Family | Contracts | Fully proven | With unknowns | With refusals | Exports proven | Unknown claims |
 | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 23 | 3/23 (13.04%) | 18 | 0 | 1120/1546 (72.45%) | 585 |
-| Kobalte | 4 | 0/4 (0%) | 4 | 0 | 364/1206 (30.18%) | 2266 |
-| Solid Primitives | 288 | 176/288 (61.11%) | 112 | 0 | 1684/2038 (82.63%) | 642 |
+| Official Solid | 23 | 3/23 (13.04%) | 18 | 0 | 1114/1546 (72.06%) | 601 |
+| Kobalte | 4 | 0/4 (0%) | 4 | 0 | 363/1206 (30.1%) | 2269 |
+| Solid Primitives | 288 | 152/288 (52.78%) | 136 | 0 | 1638/2038 (80.37%) | 693 |
 | Corvu | 28 | 23/28 (82.14%) | 5 | 0 | 229/266 (86.09%) | 74 |
-| TanStack | 50 | 24/50 (48%) | 25 | 3 | 1575/2124 (74.15%) | 990 |
+| TanStack | 50 | 24/50 (48%) | 25 | 3 | 1561/2124 (73.49%) | 1024 |
 | Solid Devtools | 10 | 3/10 (30%) | 7 | 0 | 206/233 (88.41%) | 60 |
 | Solid Recharts | 3 | 0/3 (0%) | 3 | 0 | 16/327 (4.89%) | 639 |
 | Motion for Solid | 3 | 0/3 (0%) | 3 | 0 | 283/618 (45.79%) | 1416 |
@@ -775,21 +775,21 @@ Read the five columns together, not separately: 528 of the 2881 unknown exports 
 
 | Package | Solid | Unknown claims | Exports with unknown / total | All five domains | Variant-only | Dominant cause |
 | --- | --- | --- | --- | --- | --- | --- |
-| @kobalte/core@2.0.0-alpha.0 | solid2 | 1387 | 395/526 | 199 | 0 | reactiveReads |
+| @kobalte/core@2.0.0-alpha.0 | solid2 | 1388 | 396/526 | 199 | 0 | reactiveReads |
 | motion-solidjs@0.7.0-beta.4 | solid2 | 1245 | 249/261 | 249 | 0 | all-domains |
-| @kobalte/core@0.13.13 | solid1 | 876 | 444/611 | 0 | 0 | returns |
+| @kobalte/core@0.13.13 | solid1 | 878 | 444/611 | 0 | 0 | returns |
 | solid-recharts@1.0.1 | solid1 | 215 | 103/109 | 0 | 2 | reactiveReads |
 | solid-recharts@2.0.0-beta.1 | solid2 | 212 | 104/109 | 0 | 0 | reactiveReads |
 | solid-recharts@2.0.0-beta.1 | solid2 | 212 | 104/109 | 0 | 0 | reactiveReads |
 | @tanstack/solid-router@2.0.0-rc.1 | solid2 | 209 | 102/120 | 0 | 0 | reactiveReads |
 | motion-solidjs@0.6.0 | solid1 | 167 | 82/96 | 0 | 0 | reactiveReads |
+| @tanstack/solid-query@6.0.0-rc.0 | solid2 | 117 | 47/57 | 0 | 0 | reactiveReads |
+| @tanstack/solid-query@6.0.0-rc.0 | solid2 | 117 | 47/57 | 0 | 0 | reactiveReads |
 | @tanstack/solid-router@1.170.29 | solid1 | 115 | 23/23 | 23 | 0 | all-domains |
+| solid-js@1.9.14 | solid1 | 114 | 80/202 | 3 | 0 | callbacks |
 | @tanstack/solid-db@0.2.37 | solid1 | 113 | 113/207 | 0 | 0 | callbacks |
-| @tanstack/solid-query@6.0.0-rc.0 | solid2 | 107 | 47/57 | 0 | 0 | reactiveReads |
-| @tanstack/solid-query@6.0.0-rc.0 | solid2 | 107 | 47/57 | 0 | 0 | reactiveReads |
-| solid-js@1.9.14 | solid1 | 106 | 77/202 | 3 | 0 | callbacks |
 | @tanstack/charts@0.14.0 | solid1 | 99 | 99/372 | 0 | 0 | callbacks |
-| @solid-primitives/utils@6.4.1 | solid1 | 83 | 35/75 | 0 | 0 | reactiveReads |
+| @solid-primitives/utils@6.4.1 | solid1 | 85 | 37/75 | 0 | 0 | reactiveReads |
 
 These figures describe the GENERATED DRAFT, not consumer findings. An unknown claim becomes a finding only when a consumer actually touches that surface, so a package with many unknowns on exports nobody imports costs a real project nothing. Nothing here has been reviewed or probed: every claim counted as proven is still inferred evidence awaiting review, and a closure note means the contract cannot be byte-attested at all.
 
@@ -797,8 +797,8 @@ These figures describe the GENERATED DRAFT, not consumer findings. An unknown cl
 
 ### Worker timings
 
-- Worker time: 674591 ms
-- Phases: install 482217 ms, generation 191520 ms, harness 854 ms
+- Worker time: 665456 ms
+- Phases: install 469187 ms, generation 195514 ms, harness 755 ms
 
 ### Top failure signatures
 

@@ -8,12 +8,12 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 > ran with `--ignore-scripts` so no package lifecycle script executed, and each probe ran
 > under both a per-mode timeout and a whole-phase wall budget.
 
-- Started: 2026-08-23T03:42:05.948Z
-- Finished: 2026-08-23T03:49:16.858Z
+- Started: 2026-08-23T11:10:42.836Z
+- Finished: 2026-08-23T11:17:52.412Z
 - Manifest generated at: 2026-08-22T07:44:17.857Z (rows: 305, probes: 416)
 - Probe rows run: 416
-- Checker native binary: `8dde96e824c41d3274453f446aa0ed876f65e5bd028cc51a4182a65dbf99c673` (14630032 bytes, mtime 2026-08-23T02:42:11.680Z)
-- Type Facts binary: `2bbdef833749ed8c9fdda60ed9245b54baeaa9ceb98b1a880853a2c90ac56f2d` (28389218 bytes, mtime 2026-08-23T02:42:11.693Z)
+- Checker native binary: `f0a80fc3240a72358d53fbe59b54d38b452f693f149d2b3cd7d73f4bf590cfb8` (14602048 bytes, mtime 2026-08-23T11:01:33.859Z)
+- Type Facts binary: `2bbdef833749ed8c9fdda60ed9245b54baeaa9ceb98b1a880853a2c90ac56f2d` (28389218 bytes, mtime 2026-08-23T11:01:33.885Z)
 - Budgets: install 240000 ms, generate 120000 ms, probe 20000 ms per condition mode / 90000 ms + 500 ms per planned claim, capped at 900000 ms, whole phase, verify 90000 ms; concurrency 6
 - Import-environment shim: enabled (client, development and production sessions only; server sessions never)
 
@@ -23,16 +23,16 @@ How many real ecosystem packages machine-verify end to end: `contract generate` 
 | --- | --- |
 | Probe rows run | 416 |
 | Reached a generated contract | 409/416 (98.32%) |
-| **Reached `verified`** | **222/416 (53.37%)** of all rows |
-| Reached `verified`, of rows that produced a contract | 222/409 (54.28%) |
-| Refused by `contract verify` | 185/416 (44.47%) |
+| **Reached `verified`** | **261/416 (62.74%)** of all rows |
+| Reached `verified`, of rows that produced a contract | 261/409 (63.81%) |
+| Refused by `contract verify` | 146/416 (35.10%) |
 
 Outcome classes, raw:
 
 | Outcome | Rows |
 | --- | --- |
-| `verified` | 222 |
-| `refused` | 185 |
+| `verified` | 261 |
+| `refused` | 146 |
 | `generate-failure` | 4 |
 | `install-failure` | 3 |
 | `no-runtime` | 2 |
@@ -41,73 +41,76 @@ Outcome classes, raw:
 
 | Family | Rows | Contracts | Verified | Refused | Claims driven | Claims passed | Conversions | Exports certified | Exports unknown |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Official Solid | 23 | 23 | 7/23 (30.43%) | 14 | 1595/3130 (50.96%) | 1565/1595 (98.12%) | 29 | 18 | 52 |
-| Kobalte | 6 | 4 | 1/6 (16.67%) | 3 | 900/1717 (52.42%) | 891/900 (99.00%) | 3 | 6 | 4 |
-| Solid Primitives | 289 | 288 | 193/289 (66.78%) | 95 | 2078/3411 (60.92%) | 1979/2078 (95.24%) | 388 | 540 | 474 |
-| Corvu | 28 | 28 | 7/28 (25.00%) | 21 | 294/426 (69.01%) | 287/294 (97.62%) | 0 | 21 | 0 |
-| TanStack | 52 | 50 | 11/52 (21.15%) | 39 | 1748/2827 (61.83%) | 1711/1748 (97.88%) | 175 | 141 | 269 |
+| Official Solid | 23 | 23 | 7/23 (30.43%) | 14 | 1564/3108 (50.32%) | 1554/1564 (99.36%) | 28 | 18 | 52 |
+| Kobalte | 6 | 4 | 1/6 (16.67%) | 3 | 892/1708 (52.22%) | 888/892 (99.55%) | 4 | 6 | 4 |
+| Solid Primitives | 289 | 288 | 221/289 (76.47%) | 67 | 1994/3264 (61.09%) | 1978/1994 (99.20%) | 557 | 714 | 713 |
+| Corvu | 28 | 28 | 16/28 (57.14%) | 12 | 289/426 (67.84%) | 289/289 (100.00%) | 25 | 56 | 20 |
+| TanStack | 52 | 50 | 13/52 (25.00%) | 37 | 1730/2743 (63.07%) | 1705/1730 (98.55%) | 125 | 198 | 293 |
 | Solid Devtools | 12 | 10 | 2/12 (16.67%) | 8 | 146/363 (40.22%) | 138/146 (94.52%) | 0 | 2 | 1 |
-| Solid Recharts | 3 | 3 | 0/3 (0.00%) | 3 | 136/366 (37.16%) | 110/136 (80.88%) | 0 | 0 | 0 |
-| Motion for Solid | 3 | 3 | 1/3 (33.33%) | 2 | 912/966 (94.41%) | 910/912 (99.78%) | 0 | 24 | 333 |
+| Solid Recharts | 3 | 3 | 0/3 (0.00%) | 3 | 124/366 (33.88%) | 124/124 (100.00%) | 0 | 0 | 0 |
+| Motion for Solid | 3 | 3 | 1/3 (33.33%) | 2 | 908/966 (94.00%) | 908/908 (100.00%) | 0 | 24 | 333 |
 
 | Solid target | Rows | Contracts | Verified | Refused |
 | --- | --- | --- | --- | --- |
-| solid1 | 168 | 163 | 83/168 (49.40%) | 80 |
-| solid2 | 248 | 246 | 139/248 (56.05%) | 105 |
+| solid1 | 168 | 163 | 98/168 (58.33%) | 65 |
+| solid2 | 248 | 246 | 163/248 (65.73%) | 81 |
 
 ## Why verification refuses
 
-185 rows were refused. `contract verify` raises every blocker it finds rather than stopping at the first, so the row counts below sum to more than the number of refused rows.
+146 rows were refused. `contract verify` raises every blocker it finds rather than stopping at the first, so the row counts below sum to more than the number of refused rows.
 
 | Blocker (RFC 0002 §3) | Rows raising it | Blocker lines |
 | --- | --- | --- |
-| `probe-report-includes-evidence-write` | 108 | 108 |
-| `kind-observed` | 107 | 358 |
-| `probe-failed` | 75 | 218 |
-| `incompleteness` | 59 | 1080 |
+| `kind-observed` | 106 | 357 |
+| `probe-report-includes-evidence-write` | 63 | 63 |
+| `incompleteness` | 45 | 734 |
+| `probe-failed` | 27 | 63 |
 | `closure-note` | 7 | 32 |
 
 Attributed to one root cause per row instead. `probe-report-includes-evidence-write` is a *consequence*: `contract probe --write` declines to write evidence once a probe failed or an incompleteness was reported, so verification then sees passing claims that never reached the contract. It is counted as a root cause only on a row where it stands alone.
 
 | Root cause | Refused rows |
 | --- | --- |
-| `probe-failed` | 75 |
-| `kind-observed` | 71 |
-| `incompleteness` | 37 |
+| `kind-observed` | 77 |
+| `incompleteness` | 40 |
+| `probe-failed` | 27 |
 | `closure-note` | 2 |
 
 ## Drivability
 
 | Figure | Count |
 | --- | --- |
-| Claims planned across every probed contract | 13206 |
-| Driven | 7809/13206 (59.13%) |
-| Passed | 7591/13206 (57.48%) |
-| Failed | 218 |
-| Undriven | 5397/13206 (40.87%) |
-| Incompleteness findings | 1080 |
+| Claims planned across every probed contract | 12944 |
+| Driven | 7647/12944 (59.08%) |
+| Passed | 7584/12944 (58.59%) |
+| Failed | 63 |
+| Undriven | 5297/12944 (40.92%) |
+| Incompleteness findings | 734 |
 
 Undriven claims by reason:
 
 | Reason | Claims |
 | --- | --- |
 | no probe form: reactiveReads | 1354 |
-| other | 835 |
-| entrypoint import threw | 651 |
+| other | 834 |
+| entrypoint import threw | 637 |
 | no probe form: ownerRequirements | 565 |
-| synthesized call threw | 444 |
 | no probe form: parameter identity | 421 |
-| synthesized call did not invoke the callback | 278 |
+| synthesized call threw | 335 |
 | no probe form: nested return leaf | 257 |
-| no plantable reactive source | 180 |
+| synthesized call did not invoke the callback | 222 |
+| no plantable reactive source | 213 |
 | no probe form: asyncBehavior | 100 |
 | probe session wrote no report | 91 |
 | no unambiguous summary for the mode | 85 |
-| probe session hit the per-mode timeout | 55 |
-| no probe form: callback arguments | 25 |
+| probe session hit the per-mode timeout | 56 |
+| runtime re-runs nothing in this mode | 49 |
+| callback ran more often than the call site | 25 |
 | no probe form: store path | 23 |
-| callback ownership ambiguous in the driver's read scope | 23 |
+| no probe form: callback arguments | 13 |
 | planted write was never re-read | 10 |
+| callback re-ran with nothing written | 6 |
+| callback ownership ambiguous in the driver's read scope | 1 |
 
 ## The probe environment
 
@@ -116,11 +119,11 @@ An entrypoint whose module cannot be imported yields no observation at all. 34 o
 | Import failure | Claims left undriven |
 | --- | --- |
 | Error [ERR_UNSUPPORTED_NODE_MODULES_TYPE_STRIPPING]: Stripping types is currently unsupported for files under node_modules, | 227 |
-| Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@solid-primitives/utils' imported from /private/t | 94 |
+| Error [ERR_MODULE_NOT_FOUND]: Cannot find package '@solid-primitives/utils' imported from /private/t | 84 |
 | Error [ERR_PACKAGE_PATH_NOT_EXPORTED]: Package subpath './web' is not defined by "exports" in <path> | 81 |
 | Error: [solid-devtools]: Debugger hasn't found the exposed Solid Devtools API | 66 |
 | Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'server-only' imported from <path> | 60 |
-| TypeError: Cannot read properties of null (reading '_depth') | 54 |
+| TypeError: Cannot read properties of null (reading '_depth') | 50 |
 | TypeError [ERR_UNKNOWN_FILE_EXTENSION]: Unknown file extension ".jsx" for <path> | 27 |
 | SyntaxError: The requested module 'solid-js' does not provide an export named 'onSe | 10 |
 | Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'react' imported from <path> | 6 |
@@ -169,9 +172,9 @@ A worker stops at its first throw and the mode is restarted for what is left —
 
 | Figure | Count |
 | --- | --- |
-| Worker processes started | 20367 |
-| Of those, restarts after a throw | 18784 |
-| Sessions that died (crash, timeout, unreadable output) | 78 |
+| Worker processes started | 20070 |
+| Of those, restarts after a throw | 18487 |
+| Sessions that died (crash, timeout, unreadable output) | 75 |
 
 ## The install environment
 
@@ -190,83 +193,80 @@ A package that **imports something it declares nowhere** — not a dependency, n
 
 A **failure** is the strongest thing this measurement produces. The contract states a claim, the probe drove it, and the package did something else — a generator bug or a package change, never an environment gap and never an unreachable claim. Verification refuses the whole contract on one of these, deliberately: converting a contradicted claim to the unknown sentinel would hide it.
 
-218 failing claim(s) across the corpus, by shape:
+63 failing claim(s) across the corpus, by shape:
 
 | Claim, claimed, observed | Claims |
 | --- | --- |
-| callbacks[n]: claimed tracked, observed inline | 99 |
 | kind: claimed value, observed function | 53 |
-| callbacks[n]: claimed deferred, observed inline | 34 |
-| callbacks[n]: claimed deferred, observed tracked | 17 |
-| returns: claimed accessor, observed array | 6 |
-| callbacks[n]: claimed inline, observed tracked | 4 |
-| callbacks[n]: claimed tracked, observed deferred | 3 |
-| callbacks[n]: claimed inline, observed deferred | 2 |
+| callbacks[n]: claimed inline, observed tracked | 3 |
+| callbacks[n]: claimed deferred, observed tracked | 3 |
+| callbacks[n]: claimed tracked, observed inline | 3 |
+| callbacks[n]: claimed deferred, observed inline | 1 |
 
-The first 60, in full (the JSON report carries all 218):
+The first 60, in full (the JSON report carries all 63):
 
 | Probe | Export | Claim | Observed | Modes |
 | --- | --- | --- | --- | --- |
-| `@solid-primitives/keyed@1.5.3|solid1|only` | `.:keyArray` | `callbacks[0]=deferred` | inline | server |
 | `@solid-primitives/pagination@0.5.2|solid1|only` | `.:createInfiniteScroll` | `callbacks[0]=deferred` | inline | client, development, production |
-| `@solid-primitives/range@0.2.5|solid1|only` | `.:mapRange` | `callbacks[2]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/range@1.0.0-next.3|solid2|floor` | `.:mapRange` | `callbacks[2]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/range@1.0.0-next.3|solid2|head` | `.:mapRange` | `callbacks[2]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/rootless@1.5.4|solid1|only` | `.:createBranch` | `callbacks[0]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/rootless@1.5.4|solid1|only` | `.:createDisposable` | `callbacks[0]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/rootless@1.5.4|solid1|only` | `.:createSubRoot` | `callbacks[0]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|floor` | `.:createBranch` | `callbacks[0]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|floor` | `.:createDisposable` | `callbacks[0]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|floor` | `.:createSubRoot` | `callbacks[0]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|head` | `.:createBranch` | `callbacks[0]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|head` | `.:createDisposable` | `callbacks[0]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|head` | `.:createSubRoot` | `callbacks[0]=deferred` | inline | client, development, production, server |
-| `@solid-primitives/static-store@0.1.4|solid1|only` | `.:createHydratableStaticStore` | `callbacks[1]=deferred` | inline | client, development, production |
-| `@solid-primitives/static-store@1.0.0-next.2|solid2|floor` | `.:createHydratableStaticStore` | `callbacks[1]=deferred` | inline | client, development, production |
-| `@solid-primitives/static-store@1.0.0-next.2|solid2|head` | `.:createHydratableStaticStore` | `callbacks[1]=deferred` | inline | client, development, production |
-| `@solid-primitives/utils@6.4.1|solid1|only` | `.:createHydratableSignal` | `callbacks[1]=deferred` | inline | client, development, production |
-| `@solid-primitives/utils@6.4.1|solid1|only` | `.:createHydrateSignal` | `callbacks[1]=deferred` | inline | client, development, production |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|floor` | `.:createHydratableSignal` | `callbacks[1]=deferred` | inline | client, development, production |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|floor` | `.:createHydrateSignal` | `callbacks[1]=deferred` | inline | client, development, production |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|head` | `.:createHydratableSignal` | `callbacks[1]=deferred` | inline | client, development, production |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|head` | `.:createHydrateSignal` | `callbacks[1]=deferred` | inline | client, development, production |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `.:effect` | `callbacks[1]=deferred` | inline | server |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `.:renderToString` | `callbacks[0]=deferred` | inline | server |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `./jsx-dev-runtime:effect` | `callbacks[1]=deferred` | inline | server |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `./jsx-runtime:effect` | `callbacks[1]=deferred` | inline | server |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | `.:effect` | `callbacks[1]=deferred` | inline | server |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | `.:renderToString` | `callbacks[0]=deferred` | inline | server |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | `./jsx-dev-runtime:effect` | `callbacks[1]=deferred` | inline | server |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | `./jsx-runtime:effect` | `callbacks[1]=deferred` | inline | server |
-| `solid-js@1.9.14|solid1|only` | `./web:use` | `callbacks[0]=deferred` | inline | client, development, production |
-| `solid-js@2.0.0-rc.1|solid2|floor` | `.:createComponent` | `callbacks[0]=deferred` | inline | client, production |
-| `solid-js@2.0.0-rc.1|solid2|head` | `.:createComponent` | `callbacks[0]=deferred` | inline | client, production |
-| `@corvu-next/utils@0.1.5|solid2|only` | `./dom:afterPaint` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `@corvu/utils@0.4.2|solid1|only` | `./dom:afterPaint` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `@solid-primitives/memo@2.0.0-next.2|solid2|floor` | `.:createWritableMemo` | `callbacks[0]=deferred` | tracked | client, development, production, server |
-| `@solid-primitives/memo@2.0.0-next.2|solid2|head` | `.:createWritableMemo` | `callbacks[0]=deferred` | tracked | client, development, production, server |
-| `@solid-primitives/timer@1.4.5-next.1|solid2|floor` | `.:createTimeoutLoop` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `@solid-primitives/timer@1.4.5-next.1|solid2|floor` | `.:createTimeoutLoop` | `callbacks[1]=deferred` | tracked | client, development, production |
-| `@solid-primitives/timer@1.4.5-next.1|solid2|head` | `.:createTimeoutLoop` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `@solid-primitives/timer@1.4.5-next.1|solid2|head` | `.:createTimeoutLoop` | `callbacks[1]=deferred` | tracked | client, development, production |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|floor` | `.:afterPaint` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|head` | `.:afterPaint` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `@solid-primitives/video@1.0.0-next.3|solid2|floor` | `.:createVideoFrameCallback` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `@solid-primitives/video@1.0.0-next.3|solid2|head` | `.:createVideoFrameCallback` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `@tanstack/table-devtools@9.2.0|solid1|only` | `.:subscribeTableDevtoolsTargets` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `@tanstack/table-devtools@9.2.0|solid1|only` | `./production:subscribeTableDevtoolsTargets` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `motion-solidjs@0.7.0-beta.4|solid2|head` | `.:createAnimationFrame` | `callbacks[0]=deferred` | tracked | client, development, production |
-| `motion-solidjs@0.7.0-beta.4|solid2|head` | `./v2:createAnimationFrame` | `callbacks[0]=deferred` | tracked | client, development, production |
+| `@solid-primitives/memo@2.0.0-next.2|solid2|floor` | `.:createWritableMemo` | `callbacks[0]=deferred` | tracked | client, development, production |
+| `@solid-primitives/memo@2.0.0-next.2|solid2|head` | `.:createWritableMemo` | `callbacks[0]=deferred` | tracked | client, development, production |
 | `solid-js@1.9.14|solid1|only` | `./jsx-dev-runtime:createSelector` | `callbacks[0]=deferred` | tracked | server |
-| `@solid-primitives/timer@1.4.5-next.1|solid2|floor` | `.:createTimer` | `callbacks[2]=inline` | deferred | client, development, production |
-| `@solid-primitives/timer@1.4.5-next.1|solid2|head` | `.:createTimer` | `callbacks[2]=inline` | deferred | client, development, production |
-| `@solid-primitives/timer@1.4.4|solid1|only` | `.:createTimer` | `callbacks[2]=inline` | tracked | client, development, production |
 | `solid-js@1.9.14|solid1|only` | `./jsx-dev-runtime:createComputed` | `callbacks[0]=inline` | tracked | server |
 | `solid-js@1.9.14|solid1|only` | `./jsx-dev-runtime:createMemo` | `callbacks[0]=inline` | tracked | server |
 | `solid-js@1.9.14|solid1|only` | `./jsx-dev-runtime:createRenderEffect` | `callbacks[0]=inline` | tracked | server |
-| `solid-js@1.9.14|solid1|only` | `.:onMount` | `callbacks[0]=tracked` | deferred | client, development, production |
-| `solid-js@1.9.14|solid1|only` | `./jsx-dev-runtime:onMount` | `callbacks[0]=tracked` | deferred | client, development, production |
-| `solid-js@1.9.14|solid1|only` | `./jsx-runtime:onMount` | `callbacks[0]=tracked` | deferred | client, development, production |
+| `@solid-primitives/date-difference@1.0.2|solid1|only` | `.:createDateNow` | `callbacks[0]=tracked` | inline | client, development, production |
+| `@solid-primitives/pagination@1.0.0-next.6|solid2|floor` | `.:createInfiniteScroll` | `callbacks[0]=tracked` | inline | client, development, production |
+| `@solid-primitives/pagination@1.0.0-next.6|solid2|head` | `.:createInfiniteScroll` | `callbacks[0]=tracked` | inline | client, development, production |
+| `@kobalte/core@0.13.13|solid1|only` | `.:ListCollection` | `kind=value` | function | client, development, production |
+| `@kobalte/core@0.13.13|solid1|only` | `.:ListKeyboardDelegate` | `kind=value` | function | client, development, production |
+| `@kobalte/core@0.13.13|solid1|only` | `.:Selection` | `kind=value` | function | client, development, production |
+| `@kobalte/core@0.13.13|solid1|only` | `.:SelectionManager` | `kind=value` | function | client, development, production |
+| `@solid-devtools/locator@0.16.7|solid1|only` | `.:addClickInterceptor` | `kind=value` | function | development |
+| `@solid-devtools/locator@0.16.7|solid1|only` | `.:addHighlightingSource` | `kind=value` | function | development |
+| `@solid-devtools/locator@0.16.7|solid1|only` | `.:addLocatorModeSource` | `kind=value` | function | development |
+| `@solid-devtools/locator@0.16.7|solid1|only` | `.:highlightedComponent` | `kind=value` | function | development |
+| `@solid-devtools/locator@0.16.7|solid1|only` | `.:highlightingEnabled` | `kind=value` | function | development |
+| `@solid-devtools/locator@0.16.7|solid1|only` | `.:locatorModeEnabled` | `kind=value` | function | development |
+| `@solid-devtools/locator@0.16.7|solid1|only` | `.:setTarget` | `kind=value` | function | development |
+| `@solid-devtools/locator@0.16.7|solid1|only` | `.:useLocator` | `kind=value` | function | development |
+| `@solid-primitives/map@1.0.0-next.2|solid2|floor` | `.:ReactiveMap` | `kind=value` | function | client, development, production, server |
+| `@solid-primitives/map@1.0.0-next.2|solid2|floor` | `.:ReactiveWeakMap` | `kind=value` | function | client, development, production, server |
+| `@solid-primitives/map@1.0.0-next.2|solid2|head` | `.:ReactiveMap` | `kind=value` | function | client, development, production, server |
+| `@solid-primitives/map@1.0.0-next.2|solid2|head` | `.:ReactiveWeakMap` | `kind=value` | function | client, development, production, server |
+| `@solid-primitives/set@1.0.0-next.2|solid2|floor` | `.:ReactiveSet` | `kind=value` | function | client, development, production, server |
+| `@solid-primitives/set@1.0.0-next.2|solid2|floor` | `.:ReactiveWeakSet` | `kind=value` | function | client, development, production, server |
+| `@solid-primitives/set@1.0.0-next.2|solid2|head` | `.:ReactiveSet` | `kind=value` | function | client, development, production, server |
+| `@solid-primitives/set@1.0.0-next.2|solid2|head` | `.:ReactiveWeakSet` | `kind=value` | function | client, development, production, server |
+| `@solid-primitives/trigger@3.0.0-next.2|solid2|floor` | `.:TriggerCache` | `kind=value` | function | client, development, production, server |
+| `@solid-primitives/trigger@3.0.0-next.2|solid2|head` | `.:TriggerCache` | `kind=value` | function | client, development, production, server |
+| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `.:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
+| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `./jsx-dev-runtime:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
+| `@solidjs/web@2.0.0-rc.1|solid2|floor` | `./jsx-runtime:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
+| `@solidjs/web@2.0.0-rc.1|solid2|head` | `.:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
+| `@solidjs/web@2.0.0-rc.1|solid2|head` | `./jsx-dev-runtime:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
+| `@solidjs/web@2.0.0-rc.1|solid2|head` | `./jsx-runtime:ResponseEnvelope` | `kind=value` | function | client, development, production, server |
+| `@tanstack/ai-devtools-core@0.5.6|solid1|only` | `.:AiDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/ai-devtools-core@0.5.6|solid1|only` | `./production:AiDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/devtools-a11y@0.2.2|solid1|only` | `./core:A11yDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/devtools-a11y@0.2.2|solid1|only` | `./core/production:A11yDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/devtools@0.14.2|solid1|only` | `.:TanStackDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/form-devtools@1.0.0-alpha.2|solid1|only` | `.:FormDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/form-devtools@1.0.0-alpha.2|solid1|only` | `./production:FormDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/hotkeys-devtools@0.9.0|solid1|only` | `.:HotkeysDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/hotkeys-devtools@0.9.0|solid1|only` | `./production:HotkeysDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/pacer-devtools@1.4.0|solid1|only` | `.:PacerDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/pacer-devtools@1.4.0|solid1|only` | `./production:PacerDevtoolsCore` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-hotkeys-devtools@0.7.0|solid1|only` | `.:HotkeysDevtoolsPanel` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./async-batcher:AsyncBatcher` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./async-debouncer:AsyncDebouncer` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./async-queuer:AsyncQueuer` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./async-rate-limiter:AsyncRateLimiter` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./async-throttler:AsyncThrottler` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./batcher:Batcher` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./debouncer:Debouncer` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./queuer:Queuer` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./rate-limiter:RateLimiter` | `kind=value` | function | client, development, production, server |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | `./throttler:Throttler` | `kind=value` | function | client, development, production, server |
 
 ## Conversion volume
 
@@ -274,25 +274,25 @@ A conversion replaces one export's whole claim domain with the `{"status":"unkno
 
 | Figure | Count |
 | --- | --- |
-| Claim domains converted to unknown | 595 |
-| Exports carrying an unknown in the verified rows, at generation | 797/1885 (42.28%) |
-| Exports carrying an unknown in the verified rows, after verification | 1133/1885 (60.11%) |
+| Claim domains converted to unknown | 739 |
+| Exports carrying an unknown in the verified rows, at generation | 939/2434 (38.58%) |
+| Exports carrying an unknown in the verified rows, after verification | 1416/2434 (58.18%) |
 
 How much a verified contract actually certifies from observation:
 
 | Figure | Count |
 | --- | --- |
-| Verified rows carrying at least one probed behavioral row | 15/222 (6.76%) |
-| Probed behavioral row markers kept across the whole corpus | 25 |
-| Inferred row markers dropped by verification | 2292 |
-| Probed markers discarded as unwitnessed by this run's report | 29 |
+| Verified rows carrying at least one probed behavioral row | 3/261 (1.15%) |
+| Probed behavioral row markers kept across the whole corpus | 3 |
+| Inferred row markers dropped by verification | 2955 |
+| Probed markers discarded as unwitnessed by this run's report | 105 |
 
 Converted domains by field:
 
 | Field | Conversions |
 | --- | --- |
-| `returns` | 316 |
-| `callbacks` | 267 |
+| `returns` | 407 |
+| `callbacks` | 320 |
 | `asyncBehavior` | 12 |
 
 ## The composite a consumer feels
@@ -301,9 +301,9 @@ Of every export the corpus's generated contracts describe:
 
 | State | Exports |
 | --- | --- |
-| (a) certified by a verified contract | 752/9015 (8.34%) |
-| (b) honest unknown inside a verified contract | 1133/9015 (12.57%) |
-| (c) inside a contract that never reached `verified` | 7130/9015 (79.09%) |
+| (a) certified by a verified contract | 1018/9015 (11.29%) |
+| (b) honest unknown inside a verified contract | 1416/9015 (15.71%) |
+| (c) inside a contract that never reached `verified` | 6581/9015 (73.00%) |
 
 (c) is every export of a contract that was generated and then refused, timed out, or errored before a probe report existed. Rows whose `npm install` or `contract generate` failed describe no exports at all and are in none of the three states.
 
@@ -311,12 +311,12 @@ Of every export the corpus's generated contracts describe:
 
 | Phase | Rows | Median | p90 | Max | Mean |
 | --- | --- | --- | --- | --- | --- |
-| install | 416 | 734 ms | 1575 ms | 19857 ms | 938 ms |
-| generate | 413 | 113 ms | 643 ms | 16399 ms | 459 ms |
-| probe | 407 | 661 ms | 3593 ms | 198058 ms | 3559 ms |
-| verify | 407 | 47 ms | 57 ms | 100 ms | 48 ms |
-| pipelineWithoutInstall | 413 | 892 ms | 4204 ms | 214508 ms | 4013 ms |
-| total | 416 | 1650 ms | 5650 ms | 216665 ms | 4960 ms |
+| install | 416 | 697 ms | 1556 ms | 15934 ms | 874 ms |
+| generate | 413 | 110 ms | 573 ms | 15611 ms | 435 ms |
+| probe | 407 | 664 ms | 3389 ms | 203034 ms | 3599 ms |
+| verify | 407 | 48 ms | 56 ms | 121 ms | 48 ms |
+| pipelineWithoutInstall | 413 | 908 ms | 4077 ms | 218698 ms | 4030 ms |
+| total | 416 | 1652 ms | 5752 ms | 221203 ms | 4909 ms |
 
 `install` may run against a warm npm cache, so it is a lower bound; `pipelineWithoutInstall` is the number that describes the checker's own cost.
 
@@ -356,29 +356,20 @@ Generation failures by class:
 
 | Probe | Family | Root cause | Blocker lines | Classes |
 | --- | --- | --- | --- | --- |
-| `@corvu-next/accordion@0.1.5|solid2|only` | corvu | `incompleteness` | 3 | incompleteness, probe-report-includes-evidence-write |
-| `@corvu-next/calendar@0.1.5|solid2|only` | corvu | `incompleteness` | 2 | incompleteness, probe-report-includes-evidence-write |
-| `@corvu-next/drawer@0.1.5|solid2|only` | corvu | `incompleteness` | 2 | incompleteness, probe-report-includes-evidence-write |
-| `@corvu-next/focus-trap@0.1.5|solid2|only` | corvu | `incompleteness` | 5 | incompleteness, probe-report-includes-evidence-write |
-| `@corvu-next/list@0.1.5|solid2|only` | corvu | `incompleteness` | 3 | incompleteness, probe-report-includes-evidence-write |
+| `@corvu-next/focus-trap@0.1.5|solid2|only` | corvu | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@corvu-next/otp-field@0.1.5|solid2|only` | corvu | `kind-observed` | 1 | kind-observed |
 | `@corvu-next/popover@0.1.5|solid2|only` | corvu | `kind-observed` | 1 | kind-observed |
 | `@corvu-next/resizable@0.1.5|solid2|only` | corvu | `kind-observed` | 1 | kind-observed |
 | `@corvu-next/tooltip@0.1.5|solid2|only` | corvu | `kind-observed` | 1 | kind-observed |
-| `@corvu-next/utils@0.1.5|solid2|only` | corvu | `probe-failed` | 12 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@corvu/accordion@0.2.5|solid1|only` | corvu | `incompleteness` | 5 | incompleteness, probe-report-includes-evidence-write |
-| `@corvu/calendar@0.1.2|solid1|only` | corvu | `probe-failed` | 8 | incompleteness, probe-failed, probe-report-includes-evidence-write |
-| `@corvu/dialog@0.2.4|solid1|only` | corvu | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
-| `@corvu/disclosure@0.2.2|solid1|only` | corvu | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
-| `@corvu/drawer@0.2.4|solid1|only` | corvu | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
+| `@corvu-next/utils@0.1.5|solid2|only` | corvu | `incompleteness` | 8 | incompleteness, kind-observed, probe-report-includes-evidence-write |
 | `@corvu/otp-field@0.1.4|solid1|only` | corvu | `kind-observed` | 1 | kind-observed |
-| `@corvu/popover@0.2.0|solid1|only` | corvu | `incompleteness` | 5 | incompleteness, kind-observed, probe-report-includes-evidence-write |
+| `@corvu/popover@0.2.0|solid1|only` | corvu | `kind-observed` | 1 | kind-observed |
 | `@corvu/resizable@0.2.5|solid1|only` | corvu | `kind-observed` | 1 | kind-observed |
-| `@corvu/tooltip@0.2.2|solid1|only` | corvu | `incompleteness` | 5 | incompleteness, kind-observed, probe-report-includes-evidence-write |
-| `@corvu/utils@0.4.2|solid1|only` | corvu | `probe-failed` | 8 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@kobalte/core@0.13.13|solid1|only` | kobalte | `probe-failed` | 113 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@kobalte/core@2.0.0-alpha.0|solid2|only` | kobalte | `incompleteness` | 88 | incompleteness, kind-observed, probe-report-includes-evidence-write |
-| `@kobalte/utils@0.9.2|solid1|only` | kobalte | `incompleteness` | 17 | incompleteness, kind-observed, probe-report-includes-evidence-write |
+| `@corvu/tooltip@0.2.2|solid1|only` | corvu | `kind-observed` | 1 | kind-observed |
+| `@corvu/utils@0.4.2|solid1|only` | corvu | `incompleteness` | 5 | incompleteness, kind-observed, probe-report-includes-evidence-write |
+| `@kobalte/core@0.13.13|solid1|only` | kobalte | `probe-failed` | 56 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
+| `@kobalte/core@2.0.0-alpha.0|solid2|only` | kobalte | `incompleteness` | 79 | incompleteness, kind-observed, probe-report-includes-evidence-write |
+| `@kobalte/utils@0.9.2|solid1|only` | kobalte | `incompleteness` | 11 | incompleteness, kind-observed, probe-report-includes-evidence-write |
 | `@solid-devtools/debugger@0.28.1|solid1|only` | solid-devtools | `kind-observed` | 3 | kind-observed |
 | `@solid-devtools/extension-adapter@0.12.1|solid1|only` | solid-devtools | `kind-observed` | 1 | kind-observed |
 | `@solid-devtools/frontend@0.15.4|solid1|only` | solid-devtools | `kind-observed` | 1 | kind-observed |
@@ -392,25 +383,21 @@ Generation failures by class:
 | `@solid-primitives/countdown@1.0.9|solid1|only` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/cursor@1.0.0-next.2|solid2|floor` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/cursor@1.0.0-next.2|solid2|head` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/date-difference@1.0.2|solid1|only` | solid-primitives | `probe-failed` | 3 | probe-failed, probe-report-includes-evidence-write |
+| `@solid-primitives/date-difference@1.0.2|solid1|only` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/date@2.1.8|solid1|only` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/date@3.0.0-next.3|solid2|floor` | solid-primitives | `incompleteness` | 25 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/date@3.0.0-next.3|solid2|head` | solid-primitives | `incompleteness` | 24 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/destructure@1.0.0-next.2|solid2|floor` | solid-primitives | `incompleteness` | 5 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/destructure@1.0.0-next.2|solid2|head` | solid-primitives | `incompleteness` | 5 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/date@3.0.0-next.3|solid2|floor` | solid-primitives | `incompleteness` | 16 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/date@3.0.0-next.3|solid2|head` | solid-primitives | `incompleteness` | 16 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/destructure@1.0.0-next.2|solid2|floor` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/destructure@1.0.0-next.2|solid2|head` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/drag-drop@0.1.0-next.0|solid2|floor` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/drag-drop@0.1.0-next.0|solid2|head` | solid-primitives | `kind-observed` | 1 | kind-observed |
-| `@solid-primitives/event-listener@3.0.0-next.3|solid2|floor` | solid-primitives | `probe-failed` | 14 | incompleteness, probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/event-listener@3.0.0-next.3|solid2|head` | solid-primitives | `probe-failed` | 14 | incompleteness, probe-failed, probe-report-includes-evidence-write |
+| `@solid-primitives/event-listener@3.0.0-next.3|solid2|floor` | solid-primitives | `incompleteness` | 13 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/event-listener@3.0.0-next.3|solid2|head` | solid-primitives | `incompleteness` | 13 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/favicon@1.0.0-next.1|solid2|floor` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/favicon@1.0.0-next.1|solid2|head` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/fetch@2.5.2|solid1|only` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/focus@1.0.0-next.4|solid2|floor` | solid-primitives | `probe-failed` | 4 | kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/focus@1.0.0-next.4|solid2|head` | solid-primitives | `probe-failed` | 4 | kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/form@1.0.0-next.2|solid2|floor` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/form@1.0.0-next.2|solid2|head` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/fullscreen@2.0.0-next.3|solid2|floor` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/fullscreen@2.0.0-next.3|solid2|head` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
+| `@solid-primitives/focus@1.0.0-next.4|solid2|floor` | solid-primitives | `kind-observed` | 1 | kind-observed |
+| `@solid-primitives/focus@1.0.0-next.4|solid2|head` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/graphql@3.0.0-next.0|solid1|only` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/history@0.2.5|solid1|only` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/history@1.0.0-next.3|solid2|floor` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
@@ -418,66 +405,42 @@ Generation failures by class:
 | `@solid-primitives/immutable@2.0.0-next.0|solid1|only` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/interaction@1.0.0-next.4|solid2|floor` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/interaction@1.0.0-next.4|solid2|head` | solid-primitives | `kind-observed` | 1 | kind-observed |
-| `@solid-primitives/keyed@1.5.3|solid1|only` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/keyed@3.0.0-next.2|solid2|floor` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/keyed@3.0.0-next.2|solid2|head` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/map@1.0.0-next.2|solid2|floor` | solid-primitives | `probe-failed` | 4 | kind-observed, probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/map@1.0.0-next.2|solid2|head` | solid-primitives | `probe-failed` | 4 | kind-observed, probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/mediastream@1.0.0-next.2|solid2|floor` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/mediastream@1.0.0-next.2|solid2|head` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/memo@1.5.1|solid1|only` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/memo@2.0.0-next.2|solid2|floor` | solid-primitives | `probe-failed` | 4 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/memo@2.0.0-next.2|solid2|head` | solid-primitives | `probe-failed` | 4 | probe-failed, probe-report-includes-evidence-write |
+| `@solid-primitives/memo@2.0.0-next.2|solid2|floor` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
+| `@solid-primitives/memo@2.0.0-next.2|solid2|head` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/mouse@4.0.0-next.3|solid2|floor` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/mouse@4.0.0-next.3|solid2|head` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/pagination@0.5.2|solid1|only` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/pagination@1.0.0-next.6|solid2|floor` | solid-primitives | `probe-failed` | 6 | incompleteness, probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/pagination@1.0.0-next.6|solid2|head` | solid-primitives | `probe-failed` | 6 | incompleteness, probe-failed, probe-report-includes-evidence-write |
+| `@solid-primitives/pagination@1.0.0-next.6|solid2|floor` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
+| `@solid-primitives/pagination@1.0.0-next.6|solid2|head` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/promise@1.1.4|solid1|only` | solid-primitives | `kind-observed` | 1 | kind-observed |
-| `@solid-primitives/range@0.2.5|solid1|only` | solid-primitives | `probe-failed` | 3 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/range@1.0.0-next.3|solid2|floor` | solid-primitives | `probe-failed` | 3 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/range@1.0.0-next.3|solid2|head` | solid-primitives | `probe-failed` | 3 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/refs@1.1.4|solid1|only` | solid-primitives | `probe-failed` | 8 | incompleteness, probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/refs@3.0.0-next.2|solid2|floor` | solid-primitives | `probe-failed` | 8 | incompleteness, probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/refs@3.0.0-next.2|solid2|head` | solid-primitives | `probe-failed` | 9 | incompleteness, probe-failed, probe-report-includes-evidence-write |
+| `@solid-primitives/refs@1.1.4|solid1|only` | solid-primitives | `incompleteness` | 7 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/refs@3.0.0-next.2|solid2|floor` | solid-primitives | `incompleteness` | 7 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/refs@3.0.0-next.2|solid2|head` | solid-primitives | `incompleteness` | 7 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/resize-observer@4.0.0-next.3|solid2|floor` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/resize-observer@4.0.0-next.3|solid2|head` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/rootless@1.5.4|solid1|only` | solid-primitives | `probe-failed` | 4 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|floor` | solid-primitives | `probe-failed` | 4 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/rootless@2.0.0-next.2|solid2|head` | solid-primitives | `probe-failed` | 4 | probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/scheduled@2.0.0-next.2|solid2|floor` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/scheduled@2.0.0-next.2|solid2|head` | solid-primitives | `kind-observed` | 1 | kind-observed |
-| `@solid-primitives/scroll@3.0.0-next.4|solid2|floor` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/scroll@3.0.0-next.4|solid2|head` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/set@1.0.0-next.2|solid2|floor` | solid-primitives | `probe-failed` | 4 | kind-observed, probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/set@1.0.0-next.2|solid2|head` | solid-primitives | `probe-failed` | 4 | kind-observed, probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/share@4.0.0-next.4|solid2|floor` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/share@4.0.0-next.4|solid2|head` | solid-primitives | `kind-observed` | 1 | kind-observed |
-| `@solid-primitives/signal-builders@0.2.4|solid1|only` | solid-primitives | `incompleteness` | 33 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/signal-builders@1.0.0-next.4|solid2|floor` | solid-primitives | `probe-failed` | 196 | incompleteness, probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/signal-builders@1.0.0-next.4|solid2|head` | solid-primitives | `probe-failed` | 200 | incompleteness, probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/sortable@1.0.0-next.0|solid2|floor` | solid-primitives | `incompleteness` | 5 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/sortable@1.0.0-next.0|solid2|head` | solid-primitives | `incompleteness` | 5 | incompleteness, probe-report-includes-evidence-write |
-| `@solid-primitives/spring@0.1.2|solid1|only` | solid-primitives | `probe-failed` | 3 | kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/spring@1.0.0-next.3|solid2|floor` | solid-primitives | `probe-failed` | 4 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/spring@1.0.0-next.3|solid2|head` | solid-primitives | `probe-failed` | 4 | probe-failed, probe-report-includes-evidence-write |
+| `@solid-primitives/signal-builders@0.2.4|solid1|only` | solid-primitives | `incompleteness` | 25 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/signal-builders@1.0.0-next.4|solid2|floor` | solid-primitives | `incompleteness` | 145 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/signal-builders@1.0.0-next.4|solid2|head` | solid-primitives | `incompleteness` | 148 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/sortable@1.0.0-next.0|solid2|floor` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
+| `@solid-primitives/sortable@1.0.0-next.0|solid2|head` | solid-primitives | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@solid-primitives/start@0.0.4|solid1|only` | solid-primitives | `kind-observed` | 1 | kind-observed |
-| `@solid-primitives/static-store@0.1.4|solid1|only` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/static-store@1.0.0-next.2|solid2|floor` | solid-primitives | `probe-failed` | 3 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/static-store@1.0.0-next.2|solid2|head` | solid-primitives | `probe-failed` | 3 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/timer@1.4.4|solid1|only` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/timer@1.4.5-next.1|solid2|floor` | solid-primitives | `probe-failed` | 4 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/timer@1.4.5-next.1|solid2|head` | solid-primitives | `probe-failed` | 4 | probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/trigger@3.0.0-next.2|solid2|floor` | solid-primitives | `probe-failed` | 3 | kind-observed, probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/trigger@3.0.0-next.2|solid2|head` | solid-primitives | `probe-failed` | 3 | kind-observed, probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/until@0.1.1|solid1|only` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/upload@1.0.0-next.4|solid2|floor` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/upload@1.0.0-next.4|solid2|head` | solid-primitives | `kind-observed` | 1 | kind-observed |
-| `@solid-primitives/utils@6.4.1|solid1|only` | solid-primitives | `probe-failed` | 5 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|floor` | solid-primitives | `probe-failed` | 8 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/utils@7.0.0-next.4|solid2|head` | solid-primitives | `probe-failed` | 8 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/video@1.0.0-next.3|solid2|floor` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@solid-primitives/video@1.0.0-next.3|solid2|head` | solid-primitives | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
 | `@solid-primitives/virtual@0.2.5|solid1|only` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/virtual@1.0.0-next.4|solid2|floor` | solid-primitives | `kind-observed` | 1 | kind-observed |
 | `@solid-primitives/virtual@1.0.0-next.4|solid2|head` | solid-primitives | `kind-observed` | 1 | kind-observed |
@@ -490,8 +453,8 @@ Generation failures by class:
 | `@solidjs/testing-library@0.8.10|solid1|only` | official-solid | `kind-observed` | 1 | kind-observed |
 | `@solidjs/vite-plugin@3.0.0-next.31|solid2|floor` | official-solid | `closure-note` | 1 | closure-note |
 | `@solidjs/vite-plugin@3.0.0-next.31|solid2|head` | official-solid | `closure-note` | 1 | closure-note |
-| `@solidjs/web@2.0.0-rc.1|solid2|floor` | official-solid | `probe-failed` | 42 | closure-note, incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@solidjs/web@2.0.0-rc.1|solid2|head` | official-solid | `probe-failed` | 42 | closure-note, incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
+| `@solidjs/web@2.0.0-rc.1|solid2|floor` | official-solid | `probe-failed` | 32 | closure-note, incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
+| `@solidjs/web@2.0.0-rc.1|solid2|head` | official-solid | `probe-failed` | 32 | closure-note, incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
 | `@tanstack/ai-devtools-core@0.5.6|solid1|only` | tanstack | `probe-failed` | 4 | kind-observed, probe-failed |
 | `@tanstack/ai-solid-ui@0.7.18|solid1|only` | tanstack | `kind-observed` | 1 | kind-observed |
 | `@tanstack/charts@0.14.0|solid1|only` | tanstack | `kind-observed` | 91 | closure-note, kind-observed |
@@ -503,11 +466,10 @@ Generation failures by class:
 | `@tanstack/hotkeys-devtools@0.9.0|solid1|only` | tanstack | `probe-failed` | 4 | kind-observed, probe-failed |
 | `@tanstack/pacer-devtools@1.4.0|solid1|only` | tanstack | `probe-failed` | 4 | kind-observed, probe-failed |
 | `@tanstack/solid-charts@0.14.0|solid1|only` | tanstack | `kind-observed` | 1 | kind-observed |
-| `@tanstack/solid-form@2.0.0-alpha.2|solid1|only` | tanstack | `incompleteness` | 8 | incompleteness, probe-report-includes-evidence-write |
+| `@tanstack/solid-form@2.0.0-alpha.2|solid1|only` | tanstack | `incompleteness` | 7 | incompleteness, probe-report-includes-evidence-write |
 | `@tanstack/solid-hotkeys-devtools@0.7.0|solid1|only` | tanstack | `probe-failed` | 3 | kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@tanstack/solid-hotkeys@0.10.0|solid1|only` | tanstack | `probe-failed` | 3 | probe-failed, probe-report-includes-evidence-write |
 | `@tanstack/solid-pacer-devtools@0.14.0|solid1|only` | tanstack | `kind-observed` | 2 | kind-observed |
-| `@tanstack/solid-pacer@0.22.0|solid1|only` | tanstack | `probe-failed` | 27 | kind-observed, probe-failed, probe-report-includes-evidence-write |
+| `@tanstack/solid-pacer@0.22.0|solid1|only` | tanstack | `probe-failed` | 21 | kind-observed, probe-failed, probe-report-includes-evidence-write |
 | `@tanstack/solid-query-devtools@5.101.4|solid1|only` | tanstack | `kind-observed` | 1 | kind-observed |
 | `@tanstack/solid-query-persist-client@5.101.4|solid1|only` | tanstack | `kind-observed` | 1 | kind-observed |
 | `@tanstack/solid-query-persist-client@6.0.0-rc.0|solid2|floor` | tanstack | `kind-observed` | 1 | kind-observed |
@@ -526,19 +488,18 @@ Generation failures by class:
 | `@tanstack/solid-start@1.168.46|solid1|only` | tanstack | `kind-observed` | 10 | kind-observed |
 | `@tanstack/solid-start@2.0.0-rc.1|solid2|floor` | tanstack | `kind-observed` | 7 | kind-observed |
 | `@tanstack/solid-start@2.0.0-rc.1|solid2|head` | tanstack | `kind-observed` | 7 | kind-observed |
-| `@tanstack/solid-store@0.11.1|solid1|only` | tanstack | `incompleteness` | 5 | incompleteness, probe-report-includes-evidence-write |
+| `@tanstack/solid-store@0.11.1|solid1|only` | tanstack | `incompleteness` | 4 | incompleteness, probe-report-includes-evidence-write |
 | `@tanstack/solid-table-devtools@9.2.0|solid1|only` | tanstack | `probe-failed` | 3 | kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@tanstack/solid-table@9.1.2|solid1|only` | tanstack | `probe-failed` | 12 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `@tanstack/solid-virtual@3.13.37|solid1|only` | tanstack | `probe-failed` | 2 | probe-failed, probe-report-includes-evidence-write |
-| `@tanstack/table-devtools@9.2.0|solid1|only` | tanstack | `probe-failed` | 7 | kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `corvu@0.7.2|solid1|only` | corvu | `probe-failed` | 31 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `motion-solidjs@0.6.0|solid1|only` | motion-solidjs | `incompleteness` | 59 | incompleteness, probe-report-includes-evidence-write |
-| `motion-solidjs@0.7.0-beta.4|solid2|head` | motion-solidjs | `probe-failed` | 67 | incompleteness, probe-failed, probe-report-includes-evidence-write |
+| `@tanstack/solid-table@9.1.2|solid1|only` | tanstack | `incompleteness` | 9 | incompleteness, kind-observed, probe-report-includes-evidence-write |
+| `@tanstack/table-devtools@9.2.0|solid1|only` | tanstack | `probe-failed` | 5 | kind-observed, probe-failed, probe-report-includes-evidence-write |
+| `corvu@0.7.2|solid1|only` | corvu | `kind-observed` | 4 | kind-observed |
+| `motion-solidjs@0.6.0|solid1|only` | motion-solidjs | `incompleteness` | 19 | incompleteness, probe-report-includes-evidence-write |
+| `motion-solidjs@0.7.0-beta.4|solid2|head` | motion-solidjs | `incompleteness` | 31 | incompleteness, probe-report-includes-evidence-write |
 | `solid-devtools@0.34.5|solid1|only` | solid-devtools | `kind-observed` | 1 | kind-observed |
-| `solid-js@1.9.14|solid1|only` | official-solid | `probe-failed` | 39 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `solid-js@2.0.0-rc.1|solid2|floor` | official-solid | `probe-failed` | 51 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `solid-js@2.0.0-rc.1|solid2|head` | official-solid | `probe-failed` | 51 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
-| `solid-recharts@1.0.1|solid1|only` | solid-recharts | `probe-failed` | 28 | kind-observed, probe-failed, probe-report-includes-evidence-write |
+| `solid-js@1.9.14|solid1|only` | official-solid | `probe-failed` | 35 | incompleteness, kind-observed, probe-failed, probe-report-includes-evidence-write |
+| `solid-js@2.0.0-rc.1|solid2|floor` | official-solid | `incompleteness` | 49 | incompleteness, kind-observed, probe-report-includes-evidence-write |
+| `solid-js@2.0.0-rc.1|solid2|head` | official-solid | `incompleteness` | 49 | incompleteness, kind-observed, probe-report-includes-evidence-write |
+| `solid-recharts@1.0.1|solid1|only` | solid-recharts | `kind-observed` | 1 | kind-observed |
 | `solid-recharts@2.0.0-beta.1|solid2|floor` | solid-recharts | `kind-observed` | 1 | kind-observed |
 | `solid-recharts@2.0.0-beta.1|solid2|head` | solid-recharts | `kind-observed` | 1 | kind-observed |
 
@@ -546,14 +507,23 @@ Generation failures by class:
 
 | Probe | Exports | Exports unknown | Conversions | Probed rows kept |
 | --- | --- | --- | --- | --- |
+| `@corvu-next/accordion@0.1.5|solid2|only` | 8 | 0 | 0 | 0 |
+| `@corvu-next/calendar@0.1.5|solid2|only` | 1 | 1 | 0 | 0 |
 | `@corvu-next/dialog@0.1.5|solid2|only` | 10 | 0 | 0 | 0 |
 | `@corvu-next/disclosure@0.1.5|solid2|only` | 5 | 0 | 0 | 0 |
 | `@corvu-next/dismissible@0.1.5|solid2|only` | 2 | 0 | 0 | 0 |
+| `@corvu-next/drawer@0.1.5|solid2|only` | 1 | 0 | 0 | 0 |
+| `@corvu-next/list@0.1.5|solid2|only` | 2 | 0 | 0 | 0 |
 | `@corvu-next/persistent@0.1.5|solid2|only` | 1 | 0 | 0 | 0 |
 | `@corvu-next/presence@0.1.5|solid2|only` | 1 | 0 | 0 | 0 |
 | `@corvu-next/prevent-scroll@0.1.5|solid2|only` | 1 | 0 | 0 | 0 |
 | `@corvu-next/transition-size@0.1.5|solid2|only` | 1 | 0 | 0 | 0 |
-| `@kobalte/utils@2.0.0-alpha.0|solid2|only` | 10 | 4 | 3 | 1 |
+| `@corvu/accordion@0.2.5|solid1|only` | 8 | 3 | 6 | 0 |
+| `@corvu/calendar@0.1.2|solid1|only` | 9 | 9 | 5 | 0 |
+| `@corvu/dialog@0.2.4|solid1|only` | 10 | 1 | 2 | 0 |
+| `@corvu/disclosure@0.2.2|solid1|only` | 5 | 1 | 2 | 0 |
+| `@corvu/drawer@0.2.4|solid1|only` | 11 | 5 | 10 | 0 |
+| `@kobalte/utils@2.0.0-alpha.0|solid2|only` | 10 | 4 | 4 | 0 |
 | `@solid-devtools/overlay@0.33.5|solid1|only` | 1 | 1 | 0 | 0 |
 | `@solid-devtools/transform@0.10.4|solid1|only` | 2 | 0 | 0 | 0 |
 | `@solid-primitives/a11y@1.0.0-next.3|solid2|floor` | 7 | 2 | 2 | 0 |
@@ -601,9 +571,9 @@ Generation failures by class:
 | `@solid-primitives/devices@1.3.1|solid1|only` | 6 | 6 | 6 | 0 |
 | `@solid-primitives/devices@3.0.0-next.2|solid2|floor` | 4 | 4 | 4 | 0 |
 | `@solid-primitives/devices@3.0.0-next.2|solid2|head` | 4 | 4 | 4 | 0 |
-| `@solid-primitives/event-bus@1.1.4|solid1|only` | 11 | 5 | 2 | 2 |
-| `@solid-primitives/event-bus@3.0.0-next.3|solid2|floor` | 11 | 6 | 4 | 2 |
-| `@solid-primitives/event-bus@3.0.0-next.3|solid2|head` | 11 | 6 | 4 | 2 |
+| `@solid-primitives/event-bus@1.1.4|solid1|only` | 11 | 7 | 4 | 0 |
+| `@solid-primitives/event-bus@3.0.0-next.3|solid2|floor` | 11 | 8 | 6 | 0 |
+| `@solid-primitives/event-bus@3.0.0-next.3|solid2|head` | 11 | 8 | 6 | 0 |
 | `@solid-primitives/event-dispatcher@0.1.1|solid1|only` | 1 | 0 | 0 | 0 |
 | `@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|floor` | 1 | 0 | 0 | 0 |
 | `@solid-primitives/event-dispatcher@1.0.0-next.2|solid2|head` | 1 | 0 | 0 | 0 |
@@ -611,13 +581,17 @@ Generation failures by class:
 | `@solid-primitives/event-props@0.3.1|solid1|only` | 1 | 0 | 0 | 0 |
 | `@solid-primitives/event-props@1.0.0-next.2|solid2|floor` | 1 | 0 | 0 | 0 |
 | `@solid-primitives/event-props@1.0.0-next.2|solid2|head` | 1 | 0 | 0 | 0 |
-| `@solid-primitives/filesystem@1.3.4|solid1|only` | 15 | 5 | 5 | 3 |
-| `@solid-primitives/filesystem@3.0.0-next.3|solid2|floor` | 15 | 5 | 5 | 3 |
-| `@solid-primitives/filesystem@3.0.0-next.3|solid2|head` | 15 | 5 | 5 | 3 |
+| `@solid-primitives/filesystem@1.3.4|solid1|only` | 15 | 7 | 8 | 0 |
+| `@solid-primitives/filesystem@3.0.0-next.3|solid2|floor` | 15 | 7 | 8 | 0 |
+| `@solid-primitives/filesystem@3.0.0-next.3|solid2|head` | 15 | 7 | 8 | 0 |
 | `@solid-primitives/flux-store@0.1.1|solid1|only` | 4 | 3 | 2 | 0 |
 | `@solid-primitives/flux-store@1.0.0-next.2|solid2|floor` | 4 | 2 | 3 | 0 |
 | `@solid-primitives/flux-store@1.0.0-next.2|solid2|head` | 4 | 2 | 3 | 0 |
+| `@solid-primitives/form@1.0.0-next.2|solid2|floor` | 7 | 2 | 2 | 0 |
+| `@solid-primitives/form@1.0.0-next.2|solid2|head` | 7 | 2 | 2 | 0 |
 | `@solid-primitives/fullscreen@1.3.5|solid1|only` | 1 | 1 | 1 | 0 |
+| `@solid-primitives/fullscreen@2.0.0-next.3|solid2|floor` | 3 | 1 | 2 | 0 |
+| `@solid-primitives/fullscreen@2.0.0-next.3|solid2|head` | 3 | 1 | 2 | 0 |
 | `@solid-primitives/geolocation@1.5.5|solid1|only` | 2 | 2 | 1 | 0 |
 | `@solid-primitives/geolocation@3.0.0-next.2|solid2|floor` | 6 | 2 | 2 | 0 |
 | `@solid-primitives/geolocation@3.0.0-next.2|solid2|head` | 6 | 2 | 2 | 0 |
@@ -643,9 +617,10 @@ Generation failures by class:
 | `@solid-primitives/keyboard@1.3.7|solid1|only` | 6 | 2 | 1 | 0 |
 | `@solid-primitives/keyboard@2.0.0-next.5|solid2|floor` | 7 | 2 | 2 | 0 |
 | `@solid-primitives/keyboard@2.0.0-next.5|solid2|head` | 7 | 2 | 2 | 0 |
-| `@solid-primitives/lifecycle@0.1.2|solid1|only` | 3 | 2 | 2 | 0 |
-| `@solid-primitives/lifecycle@1.0.0-next.2|solid2|floor` | 3 | 2 | 2 | 0 |
-| `@solid-primitives/lifecycle@1.0.0-next.2|solid2|head` | 3 | 2 | 2 | 0 |
+| `@solid-primitives/keyed@1.5.3|solid1|only` | 6 | 6 | 4 | 0 |
+| `@solid-primitives/lifecycle@0.1.2|solid1|only` | 3 | 2 | 1 | 0 |
+| `@solid-primitives/lifecycle@1.0.0-next.2|solid2|floor` | 3 | 2 | 1 | 0 |
+| `@solid-primitives/lifecycle@1.0.0-next.2|solid2|head` | 3 | 2 | 1 | 0 |
 | `@solid-primitives/list-state@1.0.0-next.2|solid2|floor` | 2 | 2 | 2 | 0 |
 | `@solid-primitives/list-state@1.0.0-next.2|solid2|head` | 2 | 2 | 2 | 0 |
 | `@solid-primitives/list@0.1.2|solid1|only` | 2 | 2 | 2 | 0 |
@@ -665,10 +640,11 @@ Generation failures by class:
 | `@solid-primitives/media@2.3.6|solid1|only` | 6 | 3 | 0 | 0 |
 | `@solid-primitives/media@4.0.0-next.2|solid2|floor` | 6 | 0 | 0 | 0 |
 | `@solid-primitives/media@4.0.0-next.2|solid2|head` | 6 | 0 | 0 | 0 |
+| `@solid-primitives/memo@1.5.1|solid1|only` | 12 | 12 | 9 | 0 |
 | `@solid-primitives/mouse@2.1.7|solid1|only` | 8 | 8 | 1 | 0 |
 | `@solid-primitives/mutable@1.1.1|solid1|only` | 2 | 2 | 0 | 0 |
-| `@solid-primitives/mutable@3.0.0-next.2|solid2|floor` | 2 | 1 | 1 | 1 |
-| `@solid-primitives/mutable@3.0.0-next.2|solid2|head` | 2 | 1 | 1 | 1 |
+| `@solid-primitives/mutable@3.0.0-next.2|solid2|floor` | 2 | 2 | 2 | 0 |
+| `@solid-primitives/mutable@3.0.0-next.2|solid2|head` | 2 | 2 | 2 | 0 |
 | `@solid-primitives/mutation-observer@1.2.4|solid1|only` | 2 | 2 | 0 | 0 |
 | `@solid-primitives/mutation-observer@3.0.0-next.2|solid2|floor` | 2 | 2 | 0 | 0 |
 | `@solid-primitives/mutation-observer@3.0.0-next.2|solid2|head` | 2 | 2 | 0 | 0 |
@@ -688,9 +664,9 @@ Generation failures by class:
 | `@solid-primitives/pointer@0.3.6|solid1|only` | 7 | 7 | 0 | 0 |
 | `@solid-primitives/pointer@1.0.0-next.2|solid2|floor` | 7 | 4 | 1 | 0 |
 | `@solid-primitives/pointer@1.0.0-next.2|solid2|head` | 7 | 4 | 1 | 0 |
-| `@solid-primitives/presence@0.1.4|solid1|only` | 1 | 1 | 2 | 0 |
-| `@solid-primitives/presence@1.0.0-next.2|solid2|floor` | 1 | 1 | 2 | 0 |
-| `@solid-primitives/presence@1.0.0-next.2|solid2|head` | 1 | 1 | 2 | 0 |
+| `@solid-primitives/presence@0.1.4|solid1|only` | 1 | 1 | 1 | 0 |
+| `@solid-primitives/presence@1.0.0-next.2|solid2|floor` | 1 | 1 | 1 | 0 |
+| `@solid-primitives/presence@1.0.0-next.2|solid2|head` | 1 | 1 | 1 | 0 |
 | `@solid-primitives/promise@2.0.0-next.2|solid2|floor` | 7 | 3 | 4 | 0 |
 | `@solid-primitives/promise@2.0.0-next.2|solid2|head` | 7 | 3 | 4 | 0 |
 | `@solid-primitives/props@3.2.4|solid1|only` | 6 | 3 | 2 | 0 |
@@ -701,14 +677,22 @@ Generation failures by class:
 | `@solid-primitives/raf@2.3.5|solid1|only` | 4 | 4 | 5 | 0 |
 | `@solid-primitives/raf@4.0.0-next.2|solid2|floor` | 4 | 4 | 5 | 0 |
 | `@solid-primitives/raf@4.0.0-next.2|solid2|head` | 4 | 4 | 5 | 0 |
+| `@solid-primitives/range@0.2.5|solid1|only` | 6 | 6 | 2 | 0 |
+| `@solid-primitives/range@1.0.0-next.3|solid2|floor` | 7 | 6 | 6 | 0 |
+| `@solid-primitives/range@1.0.0-next.3|solid2|head` | 7 | 6 | 6 | 0 |
 | `@solid-primitives/reducer@0.0.101|solid1|only` | 1 | 1 | 2 | 0 |
 | `@solid-primitives/resize-observer@2.2.0|solid1|only` | 7 | 4 | 2 | 0 |
 | `@solid-primitives/resource@0.4.3|solid1|only` | 8 | 7 | 1 | 0 |
+| `@solid-primitives/rootless@1.5.4|solid1|only` | 8 | 8 | 7 | 0 |
+| `@solid-primitives/rootless@2.0.0-next.2|solid2|floor` | 8 | 8 | 8 | 0 |
+| `@solid-primitives/rootless@2.0.0-next.2|solid2|head` | 8 | 8 | 8 | 0 |
 | `@solid-primitives/scheduled@1.5.3|solid1|only` | 6 | 5 | 5 | 0 |
 | `@solid-primitives/script-loader@2.3.2|solid1|only` | 1 | 0 | 0 | 0 |
 | `@solid-primitives/script-loader@3.0.0-next.2|solid2|floor` | 1 | 1 | 1 | 0 |
 | `@solid-primitives/script-loader@3.0.0-next.2|solid2|head` | 1 | 1 | 1 | 0 |
 | `@solid-primitives/scroll@2.1.6|solid1|only` | 5 | 2 | 1 | 0 |
+| `@solid-primitives/scroll@3.0.0-next.4|solid2|floor` | 6 | 2 | 2 | 0 |
+| `@solid-primitives/scroll@3.0.0-next.4|solid2|head` | 6 | 2 | 2 | 0 |
 | `@solid-primitives/selection@0.1.3|solid1|only` | 2 | 1 | 1 | 0 |
 | `@solid-primitives/selection@1.0.0-next.2|solid2|floor` | 2 | 1 | 1 | 0 |
 | `@solid-primitives/selection@1.0.0-next.2|solid2|head` | 2 | 1 | 1 | 0 |
@@ -716,12 +700,18 @@ Generation failures by class:
 | `@solid-primitives/sensors@1.0.0-next.3|solid2|head` | 10 | 6 | 7 | 0 |
 | `@solid-primitives/set@0.7.4|solid1|only` | 4 | 4 | 0 | 0 |
 | `@solid-primitives/share@2.2.5|solid1|only` | 35 | 2 | 2 | 0 |
-| `@solid-primitives/sse@0.0.103|solid1|only` | 10 | 1 | 2 | 0 |
-| `@solid-primitives/sse@1.0.0-next.2|solid2|floor` | 15 | 3 | 6 | 1 |
-| `@solid-primitives/sse@1.0.0-next.2|solid2|head` | 15 | 3 | 6 | 1 |
+| `@solid-primitives/spring@0.1.2|solid1|only` | 2 | 2 | 3 | 0 |
+| `@solid-primitives/spring@1.0.0-next.3|solid2|floor` | 3 | 3 | 5 | 0 |
+| `@solid-primitives/spring@1.0.0-next.3|solid2|head` | 3 | 3 | 5 | 0 |
+| `@solid-primitives/sse@0.0.103|solid1|only` | 10 | 1 | 1 | 0 |
+| `@solid-primitives/sse@1.0.0-next.2|solid2|floor` | 15 | 4 | 5 | 0 |
+| `@solid-primitives/sse@1.0.0-next.2|solid2|head` | 15 | 4 | 5 | 0 |
 | `@solid-primitives/state-machine@0.1.1|solid1|only` | 1 | 1 | 1 | 0 |
 | `@solid-primitives/state-machine@1.0.0-next.2|solid2|floor` | 1 | 1 | 1 | 0 |
 | `@solid-primitives/state-machine@1.0.0-next.2|solid2|head` | 1 | 1 | 1 | 0 |
+| `@solid-primitives/static-store@0.1.4|solid1|only` | 3 | 2 | 0 | 0 |
+| `@solid-primitives/static-store@1.0.0-next.2|solid2|floor` | 3 | 2 | 1 | 0 |
+| `@solid-primitives/static-store@1.0.0-next.2|solid2|head` | 3 | 2 | 1 | 0 |
 | `@solid-primitives/storage@4.4.0|solid1|only` | 11 | 8 | 0 | 0 |
 | `@solid-primitives/storage@5.0.0-next.4|solid2|floor` | 11 | 4 | 2 | 0 |
 | `@solid-primitives/storage@5.0.0-next.4|solid2|head` | 11 | 4 | 2 | 0 |
@@ -730,18 +720,26 @@ Generation failures by class:
 | `@solid-primitives/styles@1.0.0-next.2|solid2|floor` | 4 | 0 | 0 | 0 |
 | `@solid-primitives/styles@1.0.0-next.2|solid2|head` | 4 | 0 | 0 | 0 |
 | `@solid-primitives/throttle@1.2.0|solid1|only` | 1 | 1 | 1 | 0 |
-| `@solid-primitives/transition-group@1.1.2|solid1|only` | 2 | 2 | 3 | 0 |
-| `@solid-primitives/transition-group@2.0.0-next.2|solid2|floor` | 2 | 2 | 4 | 0 |
-| `@solid-primitives/transition-group@2.0.0-next.2|solid2|head` | 2 | 2 | 4 | 0 |
+| `@solid-primitives/timer@1.4.4|solid1|only` | 5 | 5 | 3 | 0 |
+| `@solid-primitives/timer@1.4.5-next.1|solid2|floor` | 5 | 5 | 4 | 0 |
+| `@solid-primitives/timer@1.4.5-next.1|solid2|head` | 5 | 5 | 4 | 0 |
+| `@solid-primitives/transition-group@1.1.2|solid1|only` | 2 | 2 | 2 | 0 |
+| `@solid-primitives/transition-group@2.0.0-next.2|solid2|floor` | 2 | 2 | 2 | 0 |
+| `@solid-primitives/transition-group@2.0.0-next.2|solid2|head` | 2 | 2 | 2 | 0 |
 | `@solid-primitives/trigger@1.2.4|solid1|only` | 3 | 2 | 1 | 0 |
 | `@solid-primitives/tween@1.4.1|solid1|only` | 2 | 2 | 2 | 0 |
-| `@solid-primitives/tween@2.0.0-next.2|solid2|floor` | 1 | 1 | 2 | 0 |
-| `@solid-primitives/tween@2.0.0-next.2|solid2|head` | 1 | 1 | 2 | 0 |
+| `@solid-primitives/tween@2.0.0-next.2|solid2|floor` | 1 | 1 | 1 | 0 |
+| `@solid-primitives/tween@2.0.0-next.2|solid2|head` | 1 | 1 | 1 | 0 |
 | `@solid-primitives/upload@0.1.5|solid1|only` | 3 | 3 | 3 | 0 |
 | `@solid-primitives/url@0.2.0-next.2|solid2|floor` | 12 | 4 | 1 | 0 |
 | `@solid-primitives/url@0.2.0-next.2|solid2|head` | 12 | 4 | 1 | 0 |
+| `@solid-primitives/utils@6.4.1|solid1|only` | 75 | 50 | 18 | 0 |
+| `@solid-primitives/utils@7.0.0-next.4|solid2|floor` | 99 | 34 | 27 | 0 |
+| `@solid-primitives/utils@7.0.0-next.4|solid2|head` | 99 | 34 | 27 | 0 |
 | `@solid-primitives/vibrate@1.0.0-next.2|solid2|floor` | 6 | 2 | 4 | 0 |
 | `@solid-primitives/vibrate@1.0.0-next.2|solid2|head` | 6 | 2 | 4 | 0 |
+| `@solid-primitives/video@1.0.0-next.3|solid2|floor` | 7 | 3 | 4 | 0 |
+| `@solid-primitives/video@1.0.0-next.3|solid2|head` | 7 | 3 | 4 | 0 |
 | `@solid-primitives/visibility-observer@2.0.1|solid1|only` | 2 | 1 | 1 | 0 |
 | `@solid-primitives/websocket@1.4.0|solid1|only` | 6 | 2 | 2 | 0 |
 | `@solid-primitives/websocket@2.0.0-next.3|solid2|floor` | 10 | 5 | 5 | 0 |
@@ -754,17 +752,19 @@ Generation failures by class:
 | `@solidjs/meta@0.29.4|solid1|only` | 9 | 7 | 2 | 0 |
 | `@solidjs/meta@1.0.0-next.2|solid2|floor` | 8 | 7 | 0 | 0 |
 | `@solidjs/meta@1.0.0-next.2|solid2|head` | 8 | 7 | 0 | 0 |
-| `@solidjs/router@2.0.0-next.17|solid2|only` | 30 | 29 | 26 | 0 |
+| `@solidjs/router@2.0.0-next.17|solid2|only` | 30 | 29 | 25 | 0 |
 | `@solidjs/universal@2.0.0-rc.1|solid2|only` | 1 | 0 | 0 | 0 |
 | `@tanstack/ai-solid@0.18.3|solid1|only` | 21 | 5 | 4 | 0 |
 | `@tanstack/solid-ai-devtools@0.2.70|solid1|only` | 4 | 0 | 0 | 0 |
-| `@tanstack/solid-db@0.2.37|solid1|only` | 207 | 127 | 18 | 2 |
+| `@tanstack/solid-db@0.2.37|solid1|only` | 207 | 128 | 20 | 0 |
 | `@tanstack/solid-devtools@0.8.12|solid1|only` | 1 | 0 | 0 | 0 |
 | `@tanstack/solid-form-devtools@1.0.0-alpha.2|solid1|only` | 1 | 0 | 0 | 0 |
+| `@tanstack/solid-hotkeys@0.10.0|solid1|only` | 64 | 16 | 8 | 0 |
 | `@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|floor` | 2 | 0 | 0 | 0 |
 | `@tanstack/solid-query-devtools@6.0.0-rc.0|solid2|head` | 2 | 0 | 0 | 0 |
-| `@tanstack/solid-query@5.101.4|solid1|only` | 57 | 43 | 43 | 1 |
-| `@tanstack/solid-query@6.0.0-rc.0|solid2|floor` | 57 | 47 | 55 | 1 |
-| `@tanstack/solid-query@6.0.0-rc.0|solid2|head` | 57 | 47 | 55 | 1 |
+| `@tanstack/solid-query@5.101.4|solid1|only` | 57 | 43 | 37 | 1 |
+| `@tanstack/solid-query@6.0.0-rc.0|solid2|floor` | 57 | 47 | 25 | 1 |
+| `@tanstack/solid-query@6.0.0-rc.0|solid2|head` | 57 | 47 | 25 | 1 |
 | `@tanstack/solid-router-ssr-query@1.167.2-pre.0|solid1|only` | 1 | 0 | 0 | 0 |
+| `@tanstack/solid-virtual@3.13.37|solid1|only` | 17 | 7 | 6 | 0 |
 | `motion-solidjs@0.7.0-beta.4|solid2|floor` | 357 | 333 | 0 | 0 |
