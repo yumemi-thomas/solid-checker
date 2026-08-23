@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://solid-checker.dev/schema/typefacts-v1.schema.json",
   "title": "TypeFactsSchema v1 (latest semantic vocabulary)",
-  "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. V1 is the sole active lifecycle schema and carries the latest semantic vocabulary, including exact-span primitiveValueDomain facts (with a numbersAreFinite guarantee) and tupleShape.exactLength on Wire table schema v13. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
+  "description": "Length-prefixed deterministic-CBOR request and response frames exchanged with solid-typefacts. Field names are the CBOR map keys. Optional fields are omitted, never null. Handshake protocol 2 adds the modules operation, which reports the resolved module graph of the accepted program. V1 is the sole active lifecycle schema and carries the latest semantic vocabulary, including exact-span primitiveValueDomain facts (with a numbersAreFinite guarantee) and tupleShape.exactLength on Wire table schema v13. The producer hashes this file and reports the digest in its startup handshake; both executables additionally ship in build-ID lockstep.",
   "oneOf": [
     { "$ref": "#/$defs/lifecycleRequest" },
     { "$ref": "#/$defs/lifecycleResponse" }
@@ -68,6 +68,80 @@
         "location": { "$ref": "#/$defs/location" }
       }
     },
+    "moduleInventoryDemand": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Selects how much of the resolved module graph one modules operation answers. The module inventory itself is unconditional. Imports with no importPaths covers every file the program included.",
+      "properties": {
+        "imports": { "type": "boolean" },
+        "importPaths": { "type": "array", "maxItems": 1000000, "items": { "type": "string", "minLength": 1 } },
+        "packages": { "type": "boolean" }
+      }
+    },
+    "projectReferenceMapping": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["source", "outputDts"],
+      "description": "The compiler's own pairing of one input file with the declaration file emitted from it. Present only where a configured project reference covers the file, and the only declaration-to-implementation pairing TypeScript maintains. A shipped .d.ts beside a .js never has one.",
+      "properties": {
+        "source": { "type": "string", "minLength": 1 },
+        "outputDts": { "type": "string", "minLength": 1 }
+      }
+    },
+    "moduleFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "description": "One file the TypeScript program resolved and included, as the program holds it. For a module reached through a symlink the path is the realpath.",
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "declarationFile": { "type": "boolean" },
+        "format": { "enum": ["commonjs", "esm", "preserve"] },
+        "projectReference": { "$ref": "#/$defs/projectReferenceMapping" },
+        "redirectTargets": { "type": "array", "maxItems": 1000000, "items": { "type": "string", "minLength": 1 } }
+      }
+    },
+    "packageIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifestPath"],
+      "description": "The nearest enclosing package.json found by the compiler's own package-scope lookup, and that manifest's own name and version. An absent name or version is a fact about the manifest, not a lookup failure.",
+      "properties": {
+        "manifestPath": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "resolverPackageId": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The package identity the resolver itself recorded while resolving one specifier. It can name a different package than the nearest enclosing manifest. subpath is the selected file's path within the package, not the exports key that led there.",
+      "properties": {
+        "name": { "type": "string" },
+        "subpath": { "type": "string" },
+        "version": { "type": "string" },
+        "peerDependencies": { "type": "string" }
+      }
+    },
+    "moduleImportFact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["specifier", "text", "resolution"],
+      "description": "One module specifier occurrence and what the compiler's resolver recorded for it. resolvedPath is empty exactly when resolution is unresolved. symlinkPath is populated only where the resolver's own realpath differed from the path it walked. includedPath is populated only where the program parses a different file than the one resolved, which happens for a configured project reference's declaration output and for nothing else.",
+      "properties": {
+        "specifier": { "$ref": "#/$defs/location" },
+        "text": { "type": "string" },
+        "resolution": { "enum": ["unresolved", "relative", "nodeModules", "nonRelative"] },
+        "resolvedPath": { "type": "string" },
+        "includedPath": { "type": "string" },
+        "symlinkPath": { "type": "string" },
+        "extension": { "type": "string" },
+        "tsExtension": { "type": "boolean" },
+        "pathsPattern": { "type": "string" },
+        "package": { "$ref": "#/$defs/packageIdentity" },
+        "resolverPackage": { "$ref": "#/$defs/resolverPackageId" }
+      }
+    },
     "symbolQuery": {
       "type": "object",
       "additionalProperties": false,
@@ -119,7 +193,7 @@
         "schema": { "const": 1 },
         "requestId": { "type": "integer", "minimum": 1 },
         "operation": {
-          "enum": ["open", "update", "analyze", "symbols", "sources", "cancel", "close"]
+          "enum": ["open", "update", "analyze", "symbols", "sources", "modules", "cancel", "close"]
         },
         "projectId": { "type": "string", "minLength": 1 },
         "generation": { "type": "integer", "minimum": 1 },
@@ -133,7 +207,8 @@
         "releaseAnalysis": { "type": "boolean" },
         "referenceChanges": { "type": "boolean" },
         "referencePaths": { "type": "array", "maxItems": 1000000, "items": { "type": "string", "minLength": 1 } },
-        "cancelRequestId": { "type": "integer", "minimum": 0 }
+        "cancelRequestId": { "type": "integer", "minimum": 0 },
+        "moduleGraph": { "$ref": "#/$defs/moduleInventoryDemand" }
       }
     },
     "timings": {
@@ -158,7 +233,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": ["schema", "requestId", "projectId", "generation", "ok"],
-      "description": "Analyze carries at most one opaque tableTransition. The transition proves its base project, generation, and state token and selects full or delta mode internally. An absent transition reuses the retained table.",
+      "description": "Analyze carries at most one opaque tableTransition. The transition proves its base project, generation, and state token and selects full or delta mode internally. An absent transition reuses the retained table. The modules operation instead carries modules, moduleImports, and unknownImportPaths as plain rows: the resolved module graph is a property of the accepted program rather than of a demand set, so it takes no part in retained table identity.",
       "properties": {
         "schema": { "const": 1 },
         "requestId": { "type": "integer", "minimum": 1 },
@@ -194,6 +269,24 @@
           "description": "Filesystem path to a temporary file holding every source body back to back, sliced by sourceLengths. Implies a producer and client that share a filesystem."
         },
         "sourceLengths": { "type": "array", "maxItems": 1000000, "items": { "type": "integer", "minimum": 0 } },
+        "modules": {
+          "type": "array",
+          "maxItems": 1000000,
+          "description": "Every file the program included, ordered by path. A modules operation always answers it.",
+          "items": { "$ref": "#/$defs/moduleFact" }
+        },
+        "moduleImports": {
+          "type": "array",
+          "maxItems": 1000000,
+          "description": "Resolved provenance for the requested files' module specifiers, ordered by importing path then by specifier start byte.",
+          "items": { "$ref": "#/$defs/moduleImportFact" }
+        },
+        "unknownImportPaths": {
+          "type": "array",
+          "maxItems": 1000000,
+          "description": "Requested import paths the program does not hold, ordered by path. Reported rather than dropped so a caller can tell a file with no imports from a file that was never analyzed.",
+          "items": { "type": "string", "minLength": 1 }
+        },
         "timings": { "$ref": "#/$defs/timings" },
         "error": {
           "type": "object",

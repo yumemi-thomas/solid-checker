@@ -28,6 +28,54 @@ func TestTypeFactsSchemaHashMatchesFrozenSchema(t *testing.T) {
 	}
 }
 
+// The handshake refuses on protocol, digest, and build id together, so a
+// producer and a client have always had to ship as a pair. This pins the two
+// halves the repository owns: the protocol number the operation set implies,
+// and the fact that the digest above is the schema file's. The third, the build
+// id, is stamped at link time and is covered by the Rust process tests.
+func TestHandshakeDeclaresTheOperationSetsProtocol(t *testing.T) {
+	if typefacts.TypeFactsHandshakeProtocol != 2 {
+		t.Fatalf(
+			"handshake protocol = %d, want 2: it moved to 2 when the modules operation joined the lifecycle set",
+			typefacts.TypeFactsHandshakeProtocol,
+		)
+	}
+}
+
+func TestLifecycleModulesIsAValidReadOnlyGenerationOperation(t *testing.T) {
+	request := typefacts.LifecycleRequest{
+		Schema:     typefacts.TypeFactsSchemaVersionV1,
+		RequestID:  1,
+		Operation:  typefacts.LifecycleModules,
+		ProjectID:  "/project/tsconfig.json",
+		Generation: 1,
+		ModuleGraph: &typefacts.ModuleInventoryDemand{
+			Imports:  true,
+			Packages: true,
+		},
+	}
+	if err := typefacts.ValidateLifecycleRequest(request); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A producer that predates the modules operation rejects the request outright
+// rather than answering an empty graph. The handshake refuses such a pair long
+// before this, but the operation validator must not be the thing that softens
+// it if it ever does not.
+func TestAnUnknownLifecycleOperationIsRefused(t *testing.T) {
+	request := typefacts.LifecycleRequest{
+		Schema:     typefacts.TypeFactsSchemaVersionV1,
+		RequestID:  1,
+		Operation:  typefacts.LifecycleOperation("moduleGraph"),
+		ProjectID:  "/project/tsconfig.json",
+		Generation: 1,
+	}
+	if err := typefacts.ValidateLifecycleRequest(request); err == nil {
+		t.Fatal("an unknown operation was accepted")
+	}
+}
+
 func TestLifecycleSourcesIsAValidReadOnlyGenerationOperation(t *testing.T) {
 	request := typefacts.LifecycleRequest{
 		Schema:     typefacts.TypeFactsSchemaVersionV1,

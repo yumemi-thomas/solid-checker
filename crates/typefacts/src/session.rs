@@ -17,10 +17,11 @@ use thiserror::Error;
 
 use crate::shared_transition_arena::SharedTransitionArena;
 use crate::{
-    FactTable, TypeFactsError, decode, decode_trusted, encode_sidecar_request, read_frame,
+    FactTable, ModuleGraph, ModuleGraphDemand, TypeFactsError, decode, decode_trusted,
+    encode_sidecar_request, read_frame,
     v3::{
-        self, EntityDemand, FileChange, Handshake, Operation, Request, Response, SlotOp,
-        SourceFile, SymbolQuery, TransitionMode, WireTableTransition,
+        self, EntityDemand, FileChange, Handshake, ModuleGraphRequest, Operation, Request,
+        Response, SlotOp, SourceFile, SymbolQuery, TransitionMode, WireTableTransition,
     },
     write_frame,
 };
@@ -948,6 +949,38 @@ impl Session {
         decode_sources(response)
     }
 
+    /// Reports the resolved module graph of the open generation: the files the
+    /// TypeScript program actually included, and — when asked for — where each
+    /// module specifier resolved and which package owns it.
+    ///
+    /// This is a read of the retained program, not of a fact table. It carries
+    /// no state token, edits no retained demand set, and leaves any
+    /// materialized analysis untouched, so it may be issued at any point in a
+    /// session's life without disturbing it.
+    ///
+    /// A backend that cannot report the graph fails the request rather than
+    /// answering a partial one: an inventory that omits files the analysis read,
+    /// presented as the complete list, is the defect an attested graph exists to
+    /// remove.
+    pub fn module_graph(
+        &mut self,
+        demand: &ModuleGraphDemand,
+    ) -> Result<ModuleGraph, SessionError> {
+        self.ensure_open()?;
+        let mut modules = request(Operation::Modules, &self.project_id, self.generation);
+        modules.module_graph = Some(ModuleGraphRequest {
+            imports: demand.imports,
+            import_paths: demand.import_paths.clone(),
+            packages: demand.packages,
+        });
+        let response = self.exchange(modules)?;
+        Ok(ModuleGraph {
+            modules: response.modules,
+            imports: response.module_imports,
+            unknown_import_paths: response.unknown_import_paths,
+        })
+    }
+
     pub fn close(&mut self) -> Result<(), SessionError> {
         if self.closed {
             return Ok(());
@@ -1519,6 +1552,7 @@ fn request(operation: Operation, project_id: &str, generation: u64) -> Request {
         reference_changes: false,
         reference_paths: Vec::new(),
         cancel_request_id: 0,
+        module_graph: None,
     }
 }
 
@@ -1933,6 +1967,9 @@ mod tests {
             source_lengths: Vec::new(),
             timings: None,
             error: None,
+            modules: Vec::new(),
+            module_imports: Vec::new(),
+            unknown_import_paths: Vec::new(),
             client_decode_ns: 0,
             client_response_bytes: 0,
             client_request_send_ns: 0,

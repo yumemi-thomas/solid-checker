@@ -225,3 +225,120 @@ func TestV3ResponseGoldenRoundTripsIdentically(t *testing.T) {
 		t.Fatalf("golden re-encoding changed: %x != %x", encoded, golden)
 	}
 }
+
+// moduleGraphGoldenFixtures builds the modules request and response the
+// fixtures under benchmarks/phase1 pin. Every optional field of every module
+// row is populated at least once across the two, so a drift in a field name,
+// an enum spelling, or an omission rule fails the cross-language pair rather
+// than surviving until a consumer reads a silently absent fact.
+func moduleGraphGoldenFixtures() (LifecycleRequest, LifecycleResponse) {
+	request := LifecycleRequest{
+		Schema:     TypeFactsSchemaVersionV1,
+		RequestID:  11,
+		Operation:  LifecycleModules,
+		ProjectID:  "/p/tsconfig.json",
+		Generation: 3,
+		ModuleGraph: &ModuleInventoryDemand{
+			Imports:     true,
+			ImportPaths: []string{"/p/src/index.ts"},
+			Packages:    true,
+		},
+	}
+	response := LifecycleResponse{
+		Schema:     TypeFactsSchemaVersionV1,
+		RequestID:  11,
+		ProjectID:  "/p/tsconfig.json",
+		Generation: 3,
+		OK:         true,
+		Modules: []ModuleFact{
+			{Path: "/p/lib/src/channel.ts", Format: ModuleFormatESM, ProjectReference: &ProjectReferenceMapping{
+				Source: "/p/lib/src/channel.ts", OutputDts: "/p/lib/dist/channel.d.ts",
+			}},
+			{Path: "/p/node_modules/.store/reactive@4.2.0/node_modules/reactive/index.d.ts",
+				DeclarationFile: true, Format: ModuleFormatCommonJS,
+				RedirectTargets: []string{"/p/vendor/reactive/index.d.ts"}},
+			{Path: "/p/src/index.ts", Format: ModuleFormatESM},
+			{Path: "/p/src/local-impl.ts", Format: ModuleFormatPreserve},
+		},
+		ModuleImports: []ModuleImportFact{
+			{
+				Specifier:    Location{Path: "/p/src/index.ts", StartByte: 30, EndByte: 48},
+				Text:         "reactive-package",
+				Resolution:   ModuleResolutionNonRelative,
+				ResolvedPath: "/p/src/local-impl.ts",
+				Extension:    ".ts",
+				PathsPattern: "reactive-package",
+			},
+			{
+				Specifier:    Location{Path: "/p/src/index.ts", StartByte: 70, EndByte: 80},
+				Text:         "reactive",
+				Resolution:   ModuleResolutionNodeModules,
+				ResolvedPath: "/p/node_modules/.store/reactive@4.2.0/node_modules/reactive/index.d.ts",
+				SymlinkPath:  "/p/node_modules/reactive/index.d.ts",
+				Extension:    ".d.ts",
+				Package: &PackageIdentity{
+					ManifestPath: "/p/node_modules/.store/reactive@4.2.0/node_modules/reactive/package.json",
+					Name:         "reactive",
+					Version:      "4.2.0",
+				},
+				ResolverPackage: &ResolverPackageID{Name: "reactive", Version: "4.2.0"},
+			},
+			{
+				Specifier:    Location{Path: "/p/src/index.ts", StartByte: 100, EndByte: 126},
+				Text:         "../lib/dist/channel.js",
+				Resolution:   ModuleResolutionRelative,
+				ResolvedPath: "/p/lib/dist/channel.d.ts",
+				IncludedPath: "/p/lib/src/channel.ts",
+				Extension:    ".d.ts",
+				TSExtension:  true,
+			},
+			{
+				Specifier:  Location{Path: "/p/src/index.ts", StartByte: 150, EndByte: 166},
+				Text:       "never-installed",
+				Resolution: ModuleResolutionUnresolved,
+			},
+		},
+		UnknownImportPaths: []string{"/p/src/absent.ts"},
+	}
+	return request, response
+}
+
+func TestModuleGraphGoldensRoundTripIdentically(t *testing.T) {
+	request, response := moduleGraphGoldenFixtures()
+	for _, fixture := range []struct {
+		name  string
+		value any
+		into  func() any
+	}{
+		{"typefacts-module-graph-request-golden.cbor", request, func() any { return new(LifecycleRequest) }},
+		{"typefacts-module-graph-response-golden.cbor", response, func() any { return new(LifecycleResponse) }},
+	} {
+		encoded, err := wirecbor.Marshal(fixture.value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if os.Getenv("TYPEFACTS_UPDATE_GOLDEN") != "" {
+			if err := os.WriteFile(v3GoldenPath(t, fixture.name), encoded, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		golden := readV3Golden(t, fixture.name)
+		if !bytes.Equal(encoded, golden) {
+			t.Fatalf("%s re-encoding changed:\n%x\n%x", fixture.name, encoded, golden)
+		}
+		decoded := fixture.into()
+		if err := wirecbor.Unmarshal(golden, decoded); err != nil {
+			t.Fatalf("%s: %v", fixture.name, err)
+		}
+		reencoded, err := wirecbor.Marshal(decoded)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !bytes.Equal(reencoded, golden) {
+			t.Fatalf("%s did not survive a decode/encode round trip", fixture.name)
+		}
+	}
+	if err := ValidateLifecycleRequest(request); err != nil {
+		t.Fatalf("golden modules request invalid: %v", err)
+	}
+}

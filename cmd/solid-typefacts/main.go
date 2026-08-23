@@ -446,7 +446,9 @@ type lifecycleResponseChunk struct {
 // only large field in a cold response, so the outer frame can be written
 // incrementally without a second complete 5+ MiB payload.
 func lifecycleResponseChunks(value typefacts.LifecycleResponse) ([][]byte, int, error) {
-	fields := make([]lifecycleResponseChunk, 0, 13)
+	// The inline CBOR map header written below encodes a count below 24, which
+	// bounds how far this may grow.
+	fields := make([]lifecycleResponseChunk, 0, 20)
 	add := func(key string, field any) error {
 		encodedKey, err := wirecbor.Marshal(key)
 		if err != nil {
@@ -487,6 +489,9 @@ func lifecycleResponseChunks(value typefacts.LifecycleResponse) ([][]byte, int, 
 		{len(value.ReferenceEvidence) != 0, "referenceEvidence", value.ReferenceEvidence},
 		{len(value.ChangedReferenceSymbols) != 0, "changedReferenceSymbols", value.ChangedReferenceSymbols},
 		{value.ReferenceChangesExact, "referenceChangesExact", value.ReferenceChangesExact},
+		{len(value.Modules) != 0, "modules", value.Modules},
+		{len(value.ModuleImports) != 0, "moduleImports", value.ModuleImports},
+		{len(value.UnknownImportPaths) != 0, "unknownImportPaths", value.UnknownImportPaths},
 		{value.Timings != nil, "timings", value.Timings},
 		{value.Error != nil, "error", value.Error},
 	}

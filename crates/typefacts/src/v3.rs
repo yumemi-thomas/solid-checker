@@ -6,9 +6,10 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ArgumentMapping, ArgumentMappingReason, ArgumentMappingStatus, ArrayShape, AsyncFunctionFact,
     CallKind, CallTargetSet, Callability, ConstantValue, ConstantValueKind, Declaration,
-    DeclarationOwner, EntityFact, FileFact, Location, ParameterFact, PrimitiveValueDomain,
-    ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration, RuntimeValueDomain,
-    SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact, TupleShape, TypeDescriptor,
+    DeclarationOwner, EntityFact, FileFact, Location, ModuleFact, ModuleImportFact, ParameterFact,
+    PrimitiveValueDomain, ReferenceSpace, ResolvedCall, ResolvedCallValidity, ResolvedDeclaration,
+    RuntimeValueDomain, SourceBinding, SourceCall, SourceFunction, SourceHash, SymbolFact,
+    TupleShape, TypeDescriptor,
 };
 
 pub const TYPE_FACTS_SCHEMA_V1: u64 = 1;
@@ -23,8 +24,13 @@ pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V11: u64 = 11;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V12: u64 = 12;
 pub(crate) const TYPE_FACTS_TABLE_SCHEMA_V13: u64 = 13;
 pub const TYPE_FACTS_SCHEMA_SHA256: &str =
-    "sha256:aa7f1b024da4c5dfa83d84a2af639ab02abe75b604862cd4c33ad53959a028c5";
-pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 1;
+    "sha256:4cd699bb6872dcfb6f9c2acd57b62217e174c3a4dc3a79477b21545c1e372802";
+/// 2 because the lifecycle operation set widened: `Operation::Modules` is an
+/// operation a peer must know about to be paired at all, where every earlier
+/// vocabulary change added a fact to an existing operation and moved the schema
+/// digest alone. The digest and the build id still move with it, and the
+/// handshake still refuses a producer that differs on any one of the three.
+pub const TYPE_FACTS_HANDSHAKE_PROTOCOL: u64 = 2;
 pub const TYPE_FACTS_BUILD_ID: &str = match option_env!("TYPEFACTS_BUILD_ID") {
     Some(value) => value,
     None => "dev",
@@ -46,6 +52,10 @@ pub enum Operation {
     Analyze,
     Symbols,
     Sources,
+    /// Answers for the resolved module graph of the open generation. Like
+    /// `Sources` it is a read of the retained program: it carries no state
+    /// token, edits no retained demand set, and advances no generation.
+    Modules,
     Cancel,
     Close,
 }
@@ -131,6 +141,23 @@ pub struct Request {
     pub reference_changes: bool,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub reference_paths: Vec<String>,
+    /// Selects how much of the resolved module graph a `Modules` request
+    /// answers. Read only by that operation; absent there answers the module
+    /// inventory alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub module_graph: Option<ModuleGraphRequest>,
+}
+
+/// The wire form of a module-graph demand.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ModuleGraphRequest {
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub imports: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub import_paths: Vec<String>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub packages: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
@@ -218,6 +245,15 @@ pub struct Response {
     pub timings: Option<ServerTimings>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub error: Option<Error>,
+    /// A `Modules` answer. The three fields are the flattened module graph;
+    /// the protocol keeps response payloads flat, as `sources` and
+    /// `symbol_evidence` already are.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub modules: Vec<ModuleFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub module_imports: Vec<ModuleImportFact>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unknown_import_paths: Vec<Arc<str>>,
     #[serde(skip)]
     pub client_decode_ns: u64,
     #[serde(skip)]

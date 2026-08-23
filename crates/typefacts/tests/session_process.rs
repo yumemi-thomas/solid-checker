@@ -2,8 +2,8 @@ use std::{fs, path::PathBuf, process::Command, sync::OnceLock};
 
 use typefacts::{
     AnalysisDemand, ArrayShape, CallKind, Callability, ConstantValue, ConstantValueKind,
-    DemandGroup, Location, PrimitiveValueDomain, Producer, ReferenceSpace, ResolvedCallValidity,
-    RuntimeValueDomain, Session,
+    DemandGroup, Location, ModuleGraphDemand, ModuleResolution, PrimitiveValueDomain, Producer,
+    ReferenceSpace, ResolvedCallValidity, RuntimeValueDomain, Session, SessionError,
     v3::{EntityDemand, FileChange},
 };
 
@@ -750,6 +750,326 @@ fn rust_owns_alias_and_reference_closure() {
             .symbol_ids
             .is_empty()
     );
+}
+
+/// The module graph end to end, over a project built to hold every shape the
+/// fact has to answer for at once: a relative import, a `paths` alias that
+/// shadows an installed package of the same name, a symlinked (pnpm-shaped)
+/// install, a declaration file beside a runtime file, and a specifier that
+/// resolves to nothing.
+#[test]
+fn module_graph_reports_what_the_compiler_resolved() {
+    let root = std::env::temp_dir().join(format!("typefacts-module-graph-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    // The producer resolves realpaths of its own for node_modules imports, so a
+    // symlinked temporary root would make every external import look symlinked
+    // and hide the one case that genuinely is.
+    let root = root.canonicalize().unwrap();
+
+    let write = |relative: &str, contents: &str| {
+        let path = root.join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, contents).unwrap();
+        path
+    };
+    let project = write(
+        "tsconfig.json",
+        r#"{
+  "compilerOptions": {
+    "strict": true, "noEmit": true, "module": "esnext", "target": "esnext",
+    "moduleResolution": "bundler", "allowJs": true,
+    "paths": { "reactive-package": ["./src/local-impl.ts"] }
+  },
+  "include": ["src/**/*.ts", "src/**/*.js"]
+}"#,
+    );
+    write(
+        "src/local-impl.ts",
+        "export function createReactive() { return 1; }\n",
+    );
+    write("src/nested/helper.ts", "export const helper = 1;\n");
+    write(
+        "src/channel.js",
+        "export function channelFor() { return 1; }\n",
+    );
+    write(
+        "src/channel.d.ts",
+        "export declare function channelFor(): number;\n",
+    );
+    // The installed package of the same name the `paths` alias shadows.
+    write(
+        "node_modules/reactive-package/package.json",
+        r#"{"name":"reactive-package","version":"4.2.0","main":"index.js","types":"index.d.ts"}"#,
+    );
+    write(
+        "node_modules/reactive-package/index.d.ts",
+        "export declare function createReactive(): number;\n",
+    );
+    // A pnpm-shaped install: one copy in a store, linked into node_modules.
+    let store = root.join("node_modules/.store/linked@1.0.0/node_modules/linked");
+    write(
+        "node_modules/.store/linked@1.0.0/node_modules/linked/package.json",
+        r#"{"name":"linked","version":"1.0.0","main":"index.js","types":"index.d.ts"}"#,
+    );
+    write(
+        "node_modules/.store/linked@1.0.0/node_modules/linked/index.d.ts",
+        "export declare const linked: number;\n",
+    );
+    let link = root.join("node_modules/linked");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&store, &link).unwrap();
+    #[cfg(not(unix))]
+    let _ = (&store, &link);
+
+    let index = write(
+        "src/index.ts",
+        concat!(
+            "import { createReactive } from \"reactive-package\";\n",
+            "import { helper } from \"./nested/helper\";\n",
+            "import { channelFor } from \"./channel.js\";\n",
+            "// @ts-expect-error nothing is installed under this name\n",
+            "import { missing } from \"never-installed\";\n",
+            "export const value = createReactive() + helper + channelFor() + missing;\n",
+        ),
+    );
+
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+
+    let index_path = index.to_string_lossy().into_owned();
+    let graph = session
+        .module_graph(
+            &ModuleGraphDemand::default()
+                .import_paths([index_path.clone()])
+                .with_packages(),
+        )
+        .unwrap();
+
+    // The inventory is the program's own file list, so it names the default
+    // library files the analysis opened as well as the project's own.
+    assert!(graph.is_complete());
+    assert!(graph.modules.len() > 5, "{:?}", graph.modules.len());
+    assert!(
+        graph
+            .modules
+            .windows(2)
+            .all(|pair| pair[0].path < pair[1].path)
+    );
+    for relative in ["src/index.ts", "src/local-impl.ts", "src/nested/helper.ts"] {
+        let path = root.join(relative);
+        assert!(
+            graph.module(&path.to_string_lossy()).is_some(),
+            "{relative} is not in the inventory"
+        );
+    }
+
+    let by_text = |text: &str| {
+        graph
+            .imports_from(&index_path)
+            .find(|fact| &*fact.text == text)
+            .unwrap_or_else(|| panic!("no import fact for {text}"))
+    };
+
+    // The `paths` alias resolves to project source, not to the installed
+    // package whose name it borrows. Both halves are needed to see that: the
+    // pattern matched, and the resolution did not land in node_modules.
+    let aliased = by_text("reactive-package");
+    assert_eq!(aliased.resolution, ModuleResolution::NonRelative);
+    assert_eq!(&*aliased.paths_pattern, "reactive-package");
+    assert_eq!(
+        &*aliased.resolved_path,
+        root.join("src/local-impl.ts").to_string_lossy()
+    );
+    assert!(
+        aliased
+            .package
+            .as_ref()
+            .is_none_or(|package| &*package.name != "reactive-package"),
+        "the alias was attributed to the package it shadows: {:?}",
+        aliased.package
+    );
+
+    let relative = by_text("./nested/helper");
+    assert_eq!(relative.resolution, ModuleResolution::Relative);
+    assert_eq!(&*relative.extension, ".ts");
+    assert!(relative.symlink_path.is_empty());
+    assert!(relative.paths_pattern.is_empty());
+
+    // A declaration file beside a runtime file: the compiler selects the
+    // declaration and records nothing joining it to the implementation.
+    let declaration = by_text("./channel.js");
+    assert_eq!(
+        &*declaration.resolved_path,
+        root.join("src/channel.d.ts").to_string_lossy()
+    );
+    assert_eq!(&*declaration.extension, ".d.ts");
+    assert!(
+        declaration.included_path.is_empty(),
+        "nothing redirects a shipped .d.ts to the .js beside it"
+    );
+    let runtime = graph
+        .module(&root.join("src/channel.js").to_string_lossy())
+        .expect("the runtime file is in the program as its own root");
+    assert!(!runtime.declaration_file);
+    assert!(runtime.project_reference.is_none());
+
+    let unresolved = by_text("never-installed");
+    assert_eq!(unresolved.resolution, ModuleResolution::Unresolved);
+    assert!(unresolved.resolved_path.is_empty());
+
+    // Asking about a file the program does not hold is answered, not dropped.
+    let scoped = session
+        .module_graph(
+            &ModuleGraphDemand::default()
+                .import_paths([root.join("src/absent.ts").to_string_lossy().into_owned()]),
+        )
+        .unwrap();
+    assert!(!scoped.is_complete());
+    assert_eq!(scoped.imports.len(), 0);
+    assert_eq!(
+        &*scoped.unknown_import_paths[0],
+        root.join("src/absent.ts").to_string_lossy()
+    );
+
+    // And the inventory alone carries no import rows at all.
+    let inventory = session
+        .module_graph(&ModuleGraphDemand::inventory())
+        .unwrap();
+    assert!(inventory.imports.is_empty());
+    assert_eq!(inventory.modules, graph.modules);
+
+    session.close().unwrap();
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// The symlinked-install leg, kept separate because Windows needs elevation to
+/// create a symlink and the rest of the graph must still be covered there.
+#[cfg(unix)]
+#[test]
+fn module_graph_reports_both_paths_of_a_symlinked_package() {
+    let root = std::env::temp_dir().join(format!("typefacts-module-link-{}", std::process::id()));
+    let _ = fs::remove_dir_all(&root);
+    fs::create_dir_all(&root).unwrap();
+    let root = root.canonicalize().unwrap();
+    let write = |relative: &str, contents: &str| {
+        let path = root.join(relative);
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(&path, contents).unwrap();
+        path
+    };
+    let project = write(
+        "tsconfig.json",
+        r#"{"compilerOptions":{"strict":true,"noEmit":true,"module":"esnext","target":"esnext","moduleResolution":"bundler"},"include":["src/**/*.ts"]}"#,
+    );
+    write(
+        "node_modules/.store/linked@1.0.0/node_modules/linked/package.json",
+        r#"{"name":"linked","version":"1.0.0","main":"index.js","types":"index.d.ts"}"#,
+    );
+    write(
+        "node_modules/.store/linked@1.0.0/node_modules/linked/index.d.ts",
+        "export declare const linked: number;\n",
+    );
+    let store = root.join("node_modules/.store/linked@1.0.0/node_modules/linked");
+    let link = root.join("node_modules/linked");
+    std::os::unix::fs::symlink(&store, &link).unwrap();
+    let index = write(
+        "src/index.ts",
+        "import { linked } from \"linked\";\nexport const value = linked;\n",
+    );
+
+    let mut session = Session::open(
+        Producer::at(producer()),
+        project.to_string_lossy(),
+        Vec::new(),
+    )
+    .unwrap();
+    let graph = session
+        .module_graph(
+            &ModuleGraphDemand::default()
+                .import_paths([index.to_string_lossy().into_owned()])
+                .with_packages(),
+        )
+        .unwrap();
+    let fact = &graph.imports[0];
+    assert_eq!(fact.resolution, ModuleResolution::NodeModules);
+    assert_eq!(
+        &*fact.resolved_path,
+        store.join("index.d.ts").to_string_lossy(),
+        "resolvedPath must be the realpath"
+    );
+    assert_eq!(
+        &*fact.symlink_path,
+        link.join("index.d.ts").to_string_lossy(),
+        "symlinkPath must be the path the resolver walked"
+    );
+    // The owning manifest is looked up from the realpath, so a contract bound
+    // to it names one copy of the package rather than one link into it.
+    let package = fact.package.as_ref().expect("owning package");
+    assert_eq!(
+        &*package.manifest_path,
+        store.join("package.json").to_string_lossy()
+    );
+    assert_eq!((&*package.name, &*package.version), ("linked", "1.0.0"));
+    assert!(graph.module(&fact.resolved_path).is_some());
+
+    session.close().unwrap();
+    let _ = fs::remove_dir_all(&root);
+}
+
+/// The handshake is the whole of the compatibility story: the two executables
+/// ship as a pair and refuse to talk otherwise. The module-graph addition moved
+/// the protocol number and the schema digest, and this pins that the refusal
+/// itself is unchanged — a producer differing on any one of the three is
+/// rejected before a single request is sent, rather than answering a half-
+/// understood protocol.
+#[test]
+fn a_producer_that_differs_on_any_handshake_field_is_refused() {
+    let output = repository_root()
+        .join("target/typefacts-test")
+        .join(if cfg!(windows) {
+            "solid-typefacts-mismatched.exe"
+        } else {
+            "solid-typefacts-mismatched"
+        });
+    fs::create_dir_all(output.parent().unwrap()).unwrap();
+    let status = Command::new("go")
+        .current_dir(repository_root())
+        .args([
+            "build",
+            "-ldflags",
+            "-X main.buildID=not-the-clients-build",
+            "-o",
+        ])
+        .arg(&output)
+        .arg("./cmd/solid-typefacts")
+        .status()
+        .expect("run go build for the mismatched producer");
+    assert!(status.success());
+
+    let opened = Session::open(
+        Producer::at(&output),
+        project().to_string_lossy(),
+        Vec::new(),
+    );
+    let message = match opened {
+        Err(SessionError::Handshake(message)) => message,
+        Err(other) => panic!("expected a handshake refusal, got {other:?}"),
+        Ok(_) => panic!("a producer built against a different identity was accepted"),
+    };
+    assert!(
+        message.contains("not-the-clients-build"),
+        "the refusal must name what differed: {message}"
+    );
+    // The client's own expectations are what it compared against, and both
+    // moved with this protocol addition.
+    assert!(message.contains(&typefacts::v3::TYPE_FACTS_HANDSHAKE_PROTOCOL.to_string()));
+    assert!(message.contains(typefacts::v3::TYPE_FACTS_SCHEMA_SHA256));
+    let _ = fs::remove_file(&output);
 }
 
 fn repository_root() -> PathBuf {

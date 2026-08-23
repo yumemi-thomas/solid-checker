@@ -1166,6 +1166,316 @@ fn collection_length(argument: u64) -> Result<usize, TypeFactsError> {
     Ok(length)
 }
 
+/// The compiler's emit module format for one included file, as
+/// `GetEmitModuleFormatOfFile` computes it: the file's implied node format
+/// where the configured module kind defers to it, and the configured kind
+/// otherwise.
+///
+/// Only formats that describe a real runtime shape have a variant. The legacy
+/// AMD, UMD, and System kinds, and a program with no module emit at all,
+/// answer [`ModuleFormat::Unknown`] — a refusal to characterize the file, not a
+/// claim about it.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModuleFormat {
+    Commonjs,
+    Esm,
+    /// `module: preserve`: import and export syntax is emitted as written.
+    Preserve,
+    /// The field was absent, which is how the producer reports a format this
+    /// vocabulary does not name. Producer and client ship in build-id
+    /// lockstep, so a *present* value outside this set is a protocol violation
+    /// and is rejected at decode rather than folded in here.
+    #[default]
+    Unknown,
+}
+
+/// The compiler's own pairing of one input file with the declaration file
+/// emitted from it.
+///
+/// It exists only where a configured `references` entry covers the file, and it
+/// is the **only** declaration-to-implementation pairing TypeScript maintains.
+/// In particular it is never available for the shape almost every published
+/// package has — a shipped `channel.d.ts` beside a `channel.js` — because
+/// resolution selects the declaration file, never opens the implementation, and
+/// records nothing joining the two. A consumer that needs that edge does not
+/// have it, and must not reconstruct it by matching file names.
+///
+/// Both fields are always populated; which one equals the module's own path
+/// says whether the program holds the input or the output.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ProjectReferenceMapping {
+    pub source: Arc<str>,
+    pub output_dts: Arc<str>,
+}
+
+/// One file the TypeScript program actually resolved and included.
+///
+/// The complete list of these is the program's own file list, so a consumer
+/// recording which bytes an analysis read holds an attestation rather than a
+/// reconstruction of one.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ModuleFact {
+    /// The cleaned absolute path the program holds the file under. For a module
+    /// reached through a symlink this is the realpath, matching
+    /// [`ModuleImportFact::resolved_path`].
+    pub path: Arc<str>,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub declaration_file: bool,
+    #[serde(default, skip_serializing_if = "module_format_is_unknown")]
+    pub format: ModuleFormat,
+    /// The compiler's input-to-declaration-output pairing, and `None` whenever
+    /// no configured project reference covers this file — which is almost
+    /// always. See [`ProjectReferenceMapping`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub project_reference: Option<ProjectReferenceMapping>,
+    /// Other paths the program resolved to this same file because they are the
+    /// same `name@version` installed in more than one place. The compiler's own
+    /// duplicate-install record, never a path similarity.
+    #[serde(default, skip_serializing_if = "is_empty_slice")]
+    pub redirect_targets: Arc<[Arc<str>]>,
+}
+
+/// What the compiler's resolver recorded about the shape of one resolution.
+/// Every variant is read off `module.ResolvedModule`; none is inferred from a
+/// path.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ModuleResolution {
+    /// The program holds no resolution for this specifier. The only variant
+    /// with an empty [`ModuleImportFact::resolved_path`].
+    #[default]
+    Unresolved,
+    /// A specifier the resolver treated as relative or rooted, so no package
+    /// lookup participated.
+    Relative,
+    /// `IsExternalLibraryImport`: the resolver landed inside a `node_modules`
+    /// tree.
+    NodeModules,
+    /// A bare specifier that resolved outside every `node_modules` tree. A
+    /// tsconfig `paths` or `baseUrl` mapping, a package self-name, a
+    /// project-reference redirect, and an ambient module declaration all land
+    /// here, and `ResolvedModule` does not record which, so this variant never
+    /// claims one. [`ModuleImportFact::paths_pattern`] answers the `paths` half
+    /// on its own terms.
+    NonRelative,
+}
+
+/// The owning package of a resolved file: the nearest enclosing `package.json`
+/// found by the compiler's own package-scope lookup, and that manifest's own
+/// name and version.
+///
+/// An empty `name` or `version` is a fact about the manifest, not a lookup
+/// failure — `manifest_path` is populated in that case too. The package
+/// directory is the manifest path's parent and is not repeated here.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PackageIdentity {
+    pub manifest_path: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub name: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub version: Arc<str>,
+}
+
+/// The package identity the *resolver* itself recorded while resolving one
+/// specifier.
+///
+/// This is a different fact from [`PackageIdentity`] and the two can disagree:
+/// this one names the package whose manifest the resolution consulted, which
+/// for a subpath export or a nested workspace install is not always the nearest
+/// manifest above the file that was selected. A consumer comparing a contract
+/// against a package must say which of the two it means.
+#[derive(Clone, Debug, Default, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResolverPackageId {
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub name: Arc<str>,
+    /// The selected file's path relative to the package directory, as the
+    /// resolver recorded it — the file it landed on, not the `exports` key that
+    /// led there. Empty when the package root's own entry was selected.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub subpath: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub version: Arc<str>,
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub peer_dependencies: Arc<str>,
+}
+
+/// The compiler's own answer for one module specifier: the file the program
+/// included for it, and what the resolver recorded on the way.
+///
+/// One fact is produced per specifier occurrence in the file's import list —
+/// import declarations, export-from declarations, `import(...)` types, and
+/// require calls alike — so a consumer joins these rows to its own syntax facts
+/// by exact span rather than by matching specifier text.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ModuleImportFact {
+    /// The string-literal span, with `path` naming the importing file.
+    pub specifier: Location,
+    /// The specifier as written, after string-literal unescaping.
+    pub text: Arc<str>,
+    pub resolution: ModuleResolution,
+    /// The file the resolver selected. When resolution walked a symlink this is
+    /// the realpath. Empty exactly when `resolution` is
+    /// [`ModuleResolution::Unresolved`].
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub resolved_path: Arc<str>,
+    /// The file the program actually parses in place of `resolved_path`,
+    /// populated only when the two differ.
+    ///
+    /// This is the compiler's own redirect record, and the only mechanism by
+    /// which a specifier that resolved to a declaration file is joined to an
+    /// implementation: a configured project reference's declaration output is
+    /// redirected to the input it was emitted from, and a symlinked equivalent
+    /// of the same. Nothing redirects an ordinary shipped `.d.ts` to the `.js`
+    /// beside it, so an empty value is the usual and honest answer.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub included_path: Arc<str>,
+    /// The path the resolver had reached before taking its realpath.
+    ///
+    /// TypeScript populates it only when the two differ and only for a
+    /// non-relative resolution under `node_modules` with `preserveSymlinks`
+    /// off — exactly the pnpm and workspace-link shape — so an empty value
+    /// means the resolver saw no divergence, not that none was looked for.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub symlink_path: Arc<str>,
+    /// The extension the resolver selected (`.ts`, `.d.ts`, `.js`, `.json`, …).
+    /// How a consumer sees that a specifier landed on a declaration file.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub extension: Arc<str>,
+    /// The specifier named a TypeScript extension outright rather than having
+    /// one substituted.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub ts_extension: bool,
+    /// The configured `paths` key the compiler's own pattern matcher selects
+    /// for `text`, under the compiler's eligibility rule (`paths` is non-empty
+    /// and the specifier is not relative) and its longest-prefix tie-break.
+    ///
+    /// It says the mapping *matched the specifier*, which is a fact about the
+    /// configuration and the text. It does not say the resolution came through
+    /// the mapping: TypeScript tries `paths` first and falls through to
+    /// ordinary resolution when the mapped candidate does not exist, and
+    /// `ResolvedModule` records no trace of which happened. Read with
+    /// `resolution` it is nonetheless decisive for the case it serves — a bare
+    /// specifier that a `paths` key matched and that did *not* land in
+    /// `node_modules` is not the installed package of that name.
+    #[serde(default, skip_serializing_if = "str::is_empty")]
+    pub paths_pattern: Arc<str>,
+    /// The owning package of `resolved_path`, present only when the request
+    /// asked for package identities.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub package: Option<PackageIdentity>,
+    /// The identity the resolver itself recorded, present only when the request
+    /// asked for package identities and the resolver read a manifest during
+    /// this resolution.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resolver_package: Option<ResolverPackageId>,
+}
+
+/// Selects how much of the resolved module graph one request answers. The
+/// module inventory itself is unconditional: it is the operation's reason to
+/// exist.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ModuleGraphDemand {
+    /// Ask for resolved import provenance. With no `import_paths` this covers
+    /// every file the program included.
+    pub imports: bool,
+    /// Scope `imports` to these importing files.
+    pub import_paths: Vec<String>,
+    /// Add `package` and `resolver_package` to every import fact.
+    pub packages: bool,
+}
+
+impl ModuleGraphDemand {
+    /// The inventory alone: every file the program included, and no import rows.
+    #[must_use]
+    pub fn inventory() -> Self {
+        Self::default()
+    }
+
+    /// The inventory plus every file's resolved import provenance.
+    #[must_use]
+    pub fn with_all_imports() -> Self {
+        Self {
+            imports: true,
+            ..Self::default()
+        }
+    }
+
+    /// Scope import provenance to these importing files. Setting it implies
+    /// [`Self::imports`].
+    #[must_use]
+    pub fn import_paths<I>(mut self, paths: I) -> Self
+    where
+        I: IntoIterator,
+        I::Item: Into<String>,
+    {
+        self.imports = true;
+        self.import_paths = paths.into_iter().map(Into::into).collect();
+        self
+    }
+
+    /// Also answer package identities on every import fact.
+    #[must_use]
+    pub const fn with_packages(mut self) -> Self {
+        self.packages = true;
+        self
+    }
+}
+
+/// One generation's resolved module graph, as the compiler holds it.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct ModuleGraph {
+    /// Every file the program included, ordered by path.
+    pub modules: Vec<ModuleFact>,
+    /// The requested files' specifier facts, ordered by importing path and then
+    /// by specifier start byte.
+    pub imports: Vec<ModuleImportFact>,
+    /// Requested import paths the program does not hold, ordered by path.
+    ///
+    /// They are reported rather than dropped, so a consumer can tell "this file
+    /// imports nothing" from "this file was never analyzed". A non-empty value
+    /// means the answer is scoped to less than what was asked for.
+    pub unknown_import_paths: Vec<Arc<str>>,
+}
+
+impl ModuleGraph {
+    /// The module fact for an exact path, if the program included it.
+    #[must_use]
+    pub fn module(&self, path: &str) -> Option<&ModuleFact> {
+        self.modules
+            .binary_search_by(|module| (*module.path).cmp(path))
+            .ok()
+            .map(|index| &self.modules[index])
+    }
+
+    /// Every import fact declared by one importing file, in source order.
+    pub fn imports_from<'a>(
+        &'a self,
+        path: &'a str,
+    ) -> impl Iterator<Item = &'a ModuleImportFact> + 'a {
+        self.imports
+            .iter()
+            .filter(move |fact| &*fact.specifier.path == path)
+    }
+
+    /// Whether every requested import path was answered. A `false` here is the
+    /// signal to fail closed: the graph describes fewer files than were asked
+    /// about.
+    #[must_use]
+    pub fn is_complete(&self) -> bool {
+        self.unknown_import_paths.is_empty()
+    }
+}
+
+const fn module_format_is_unknown(value: &ModuleFormat) -> bool {
+    matches!(value, ModuleFormat::Unknown)
+}
+
 const fn is_false(value: &bool) -> bool {
     !*value
 }
@@ -1257,6 +1567,7 @@ mod tests {
             reference_changes: false,
             reference_paths: Vec::new(),
             cancel_request_id: 2,
+            module_graph: None,
         };
         assert_eq!(
             encode_sidecar_request(&request).unwrap(),

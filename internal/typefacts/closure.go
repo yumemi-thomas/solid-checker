@@ -57,6 +57,13 @@ type symbolEvidenceBackend interface {
 	SymbolEvidence(context.Context, []SymbolQueryV6) ([]SymbolFact, error)
 }
 
+// ErrModuleGraphUnavailable is returned when the backend cannot report the
+// program's resolved module graph. There is deliberately no approximation: an
+// inventory that omits files the analysis read, presented as the complete list,
+// is the exact defect an attested closure exists to remove, so a backend that
+// cannot answer says so instead.
+var ErrModuleGraphUnavailable = errors.New("type facts backend reports no resolved module graph")
+
 // ClosureStats reports the cost of one generation's closed fact table.
 type ClosureStats struct {
 	BuildSequence    uint64           `json:"-"`
@@ -381,6 +388,26 @@ func (p *DemandClosure) SourceFiles(ctx context.Context) ([]SourceFile, error) {
 		return nil, errors.New("closure project is closed")
 	}
 	return p.backend.SourceFiles(ctx)
+}
+
+// ModuleGraph answers from the retained backend without materializing the
+// demand closure, exactly as SourceFiles does. The module graph is a property
+// of the accepted program, not of any demand set, so asking for it neither
+// builds a fact table nor disturbs one that exists.
+func (p *DemandClosure) ModuleGraph(
+	ctx context.Context,
+	demand ModuleInventoryDemand,
+) (ModuleInventory, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return ModuleInventory{}, errors.New("closure project is closed")
+	}
+	provider, ok := p.backend.(ModuleGraphProvider)
+	if !ok {
+		return ModuleInventory{}, ErrModuleGraphUnavailable
+	}
+	return provider.ModuleGraph(ctx, demand)
 }
 
 // resolveSymbolEvidence answers one Rust-owned closure worklist batch. It does

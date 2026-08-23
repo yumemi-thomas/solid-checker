@@ -346,6 +346,24 @@ func (s *Session) lifecycle(
 		response.SourceArena = arena
 		response.Sources = descriptors
 		response.SourceLengths = lengths
+	case LifecycleModules:
+		if request.Generation != generation {
+			return fail("generation-mismatch", ErrGenerationMismatch)
+		}
+		var demand ModuleInventoryDemand
+		if request.ModuleGraph != nil {
+			demand = *request.ModuleGraph
+		}
+		inventory, err := s.closure.ModuleGraph(ctx, demand)
+		if err != nil {
+			if ctx.Err() != nil {
+				return fail("analysis-cancelled", ctx.Err())
+			}
+			return fail("modules-failed", err)
+		}
+		response.Modules = inventory.Modules
+		response.ModuleImports = inventory.Imports
+		response.UnknownImportPaths = inventory.UnknownImportPaths
 	case LifecycleCancel:
 		// Cancellation is delivered through the active request's context by
 		// the transport adapter. This operation acknowledges that delivery.
