@@ -3392,6 +3392,26 @@ probe's incompleteness findings fell 35 → 23 rows and 10 → 6 distinct export
   kind, not a missing row — and were present before this change; they were
   invisible only because the earlier contract crashed the probe worker first.
 
+  **Re-measured 2026-08-23, after the execution-kind pass: four closed, four
+  still fail.** The three `onMount` claims (`.`, `./jsx-dev-runtime`,
+  `./jsx-runtime`) and `./web:use` no longer appear as failing claims at all —
+  the fold over the enclosing callback chain answers `deferred` for
+  `onMount(fn) { createEffect(() => untrack(fn)) }`, which is what the runtime
+  does; `./web:use` stops failing in the same stage, and what the emitted row now
+  says there was not separately read back. The four `./jsx-dev-runtime`
+  sub-entrypoint variants —
+  `./jsx-dev-runtime:createComputed`, `createMemo`, `createRenderEffect` and
+  `createSelector` — still fail in `server` mode with the identical claim text and
+  observed `tracked`, which is the "sub-entrypoint variants lag the root" bullet
+  above: their root-entrypoint counterparts are fixed and these summaries are
+  inherited through a dependency contract rather than analyzed in the
+  sub-entrypoint's own runtime target. They are four of the ten `callbacks`
+  failures left in the whole corpus. Note that these four are reached in a
+  `server` session and are *not* withdrawn by the new inert-runtime rule, because
+  `./jsx-dev-runtime` resolves unconditionally to `dist/solid.js` and re-runs
+  normally — the withdrawal is per runtime, not per mode, and this is the shape
+  that distinction exists for.
+
 ## Closed 2026-08-23: the probe environment was measuring itself
 
 The corpus-wide machine-verification measurement attributed a root cause to each
@@ -3521,12 +3541,18 @@ so `probe-failed` rises 65 → 75 as a root cause while `kind-observed` falls
   `reactiveReads` 1,354, `ownerRequirements` 565, parameter identity 421, nested
   return leaves 257, `asyncBehavior` 100, callback arguments 25, store paths 23.
   They are static claims, or claims schema v1 has no evidence slot for.
-- **Wrong execution kind is now the dominant visible defect class**: 155 of the
-  218 failing claims, once the 53 `kind: value → function` failures the class
-  fix removes are gone. `callbacks[n]: claimed tracked, observed inline` alone is
-  99. That is a generator defect and is tracked in "[Generated contracts
-  contradicted by the runtime probe](#generated-contracts-contradicted-by-the-runtime-probe-2026-08-23)"
-  above, not here.
+- **Wrong execution kind is now the dominant visible defect class**: **159** of
+  the 218 failing claims, once the 53 `kind: value → function` failures the class
+  fix removes are gone (the six `returns: accessor → array` failures are the
+  remaining balance; an earlier revision of this entry said 155, which does not
+  add up against the report's own shape table). `callbacks[n]: claimed tracked,
+  observed inline` alone is 99. That is a generator *and* a probe defect and is
+  tracked in "[Generated contracts contradicted by the runtime
+  probe](#generated-contracts-contradicted-by-the-runtime-probe-2026-08-23)"
+  above and in "[Closed 2026-08-23: execution-kind vocabularies, tracked-wrapper
+  schedules, and one parameter with two
+  executions](#closed-2026-08-23-execution-kind-vocabularies-tracked-wrapper-schedules-and-one-parameter-with-two-executions)"
+  below, not here. **Re-measured 2026-08-23: 159 → 10 of 63.**
 
 ## Closed 2026-08-23: `contract verify` refused without writing anything down
 
@@ -3577,3 +3603,378 @@ matching the line. Emitting the blocker *class* alongside each line would remove
 the last reason the corpus harness owns a text classifier at all; it is not done
 here because the classes live in `contract-verification.mjs` as a flat list and
 `collectBlockers` builds sentences rather than tagged records.
+
+## Closed 2026-08-23: execution-kind vocabularies, tracked-wrapper schedules, and one parameter with two executions
+
+Generator defects behind the largest visible class in the corpus verification
+measurement — 159 of the 218 failing claims are a wrong
+`callbacks[].execution` — the ones that are the generator's own fault rather
+than the probe's.
+
+**Measured 2026-08-23, staged.** The class is now **10 of 63** failing claims and
+the corpus verifies at **261/416 (62.74%)**, from 222/416. The two halves of the
+change set were measured separately, each a full 416-row run against a
+snapshotted release binary, with stage 1 built from `origin/main` (95270bee) plus
+only the three probe-side files: probe-side fixes **222 → 243** (+21 / −0,
+failing claims 218 → 106, execution-kind 159 → 47), generator-side fixes
+**243 → 261** (+18 / −0, failing claims 106 → 63, execution-kind 47 → 10). The
+full account, including what it cost, is in
+[ecosystem-benchmark.md](ecosystem-benchmark.md#the-staged-decomposition-2026-08-23).
+The cost is stated there and here: 445 `callbackExecution` rows and 67 proven
+exports withdrawn from the generated corpus, and 12 of the 15 verified rows that
+carried probed behavioral evidence lost it, because 22 of those 25 markers had
+been promoted from observations made in a runtime that re-runs nothing.
+
+### A clearing wrapper stays `inline`
+
+`interproc.rs`'s `primitive_callback_execution` labelled `untrack` and 2.0's
+`flush` `"deferred"`, and said so in a comment: a contract consumer reads
+`"deferred"` as "not tracked here", which is the meaning the summaries needed.
+But `"deferred"` also promises the callback does **not** run before the export
+returns, and all four of `untrack`, `createRoot`, `runWithOwner` and `flush` run
+it during the call. `docs/package-contracts.md` already stated the vocabulary
+the other way round — these primitives stay `inline` while clearing the
+listener, and the clearing travels separately through the dialect — so the two
+halves of the tree disagreed, invisibly, until `contract probe` began measuring
+timing.
+
+The reconciliation is three pieces:
+
+- `Dialect::runs_callback_synchronously`, a **derived** trait method rather than
+  a per-dialect table: exactly the members of `runs_callback_deferred` whose own
+  `callback_executions` rows are all `Execution::Inline`, so the two answers
+  cannot drift. `the_synchronous_clearing_set_is_the_inline_half_of_the_deferred_set`
+  pins the concrete sets — 1.x `{createRoot, runWithOwner, untrack}`, 2.0
+  `{createRevealOrder, createRoot, flush, runWithOwner, untrack}`.
+- `flush` earns its place on the rc runtime's bytes, not on its name:
+  `@solidjs/signals` `flush(fn)` is `syncDepth++; try { return fn() } finally {
+  … }`, so the callback is invoked and its value returned during the call
+  (2.0.0-rc dev bundle). The reviewed bundled contract for `solid-js@2.0.0-rc.0`
+  independently states `flush` `callbacks[0] = inline`.
+- a composition over the chain of enclosing callback positions, innermost
+  outward, replacing "the innermost classifiable wrapper" at both seams that
+  needed it: the direct-invocation ladder and the local-callee forwarding
+  ambient.
+
+### The ambient tracking scope is not the export-relative schedule
+
+The same composition fixes the opposite error. `onMount(fn) { createEffect(() =>
+untrack(fn)) }` published `tracked` because the derivation read the enclosing
+`createEffect` callback's lexical *tracking scope* and published it as the
+callback's *schedule*. The clearing wrapper means the callback is not tracked;
+the effect means it has not run when `onMount` returns. The fold answers
+`deferred`, which is what the repo's own reviewed semantics map states for
+`onMount` and what the runtime does.
+
+Order is load-bearing and the fold keeps it: `untrack(() => createMemo(fn))`
+stays `tracked`, because the memo subscribes what runs inside it and an outer
+`untrack` cannot undo that. A rule phrased as "any clearing wrapper anywhere
+means not tracked" answers `deferred` there and is wrong.
+
+### `Tracked` does not mean "later", and the dialect now says which
+
+The first version of the fold read a tracked wrapper above a clearing one as
+`deferred`, on the assumption that a tracked computation has not run when the
+creating call returns. **In 1.x that is false for four of the five tracked
+wrappers the schedule table can produce.** Against `solid-js@1.9.14`
+`dist/solid.js`: `createMemo` (`:244-256`), `createRenderEffect` (`:218-221`)
+and `createComputed` (`:214-217`) all call `updateComputation(c)` on the
+creating call; `mergeProps` (`:1329`) wraps every function-valued source in a
+`createMemo`, so it is eager at every index; `createResource`'s tracked source
+(`:283`) is a `createMemo` too. Only `createEffect` (`:222-229`) defers, via
+`Effects ? Effects.push(c) : updateComputation(c)` — and it defers exactly
+because a package export runs under an owner, where `createRoot`'s
+`runUpdates(updateFn, true)` (`:192`) has installed `Effects = []` (`:820`).
+
+Measured with the probe worker's own observation shape against the oracle
+install (`rust/target/tsc-oracle/v1`, `--conditions browser`), five shapes
+claimed `deferred` where the runtime and the probe answer `inline`:
+`createMemo(() => untrack(cb))`, `createMemo(() => createRoot(() => cb()))`,
+`createRenderEffect(() => untrack(cb))`,
+`createRenderEffect(() => createRoot(() => cb()))` and
+`mergeProps({a: 1}, () => untrack(cb))` — plus the same shape through the
+local-callee forwarding seam that solid-js's own `dist` goes through. These were
+not accidental leftovers: they were a *derived* `deferred`, which is worse.
+
+The fix is a third dialect fact, `Dialect::tracked_callback_timing(primitive,
+argument, argument_count) -> Option<TrackedCallbackTiming>`, established from
+the audited runtimes rather than from names:
+
+- 1.x eager (`DuringCall`): `createMemo`, `createRenderEffect`, `effect`
+  (`solid-js/web`'s alias for it), `createComputed`, `createResource`'s
+  two-argument source, `mergeProps`. Deferring (`AfterCall`): `createEffect`.
+- 2.0 eager: `createEffect` and `createRenderEffect` — both go through
+  `effect()`, which calls `recompute(node, true)` unconditionally
+  (`@solidjs/signals@2.0.0-rc.0` `dist/dev.js:4107-4121`) — plus `createMemo`
+  (`:4558-4560`), `createSignal(fn)` (`:4548-4552`), `createOptimistic`
+  (`:4778-4790`) and `createProjection` (`:5634-5675`), all of which build a
+  non-lazy `computed` and so hit `setupComputedNode`'s
+  `!options?.lazy && recompute(self, true)` (`:2845`). Deferring:
+  `createTrackedEffect`, which builds a `lazy` computed and only
+  `enqueue`s it (`:4253-4309`). **The two dialects disagree on
+  `createEffect`**, which is why this cannot be one shared table.
+- Unestablished, and therefore the unknown sentinel: 1.x `createSignal`/
+  `createStore` (the argument is stored, never invoked), 2.0 `createStore` and
+  `createOptimisticStore` (their derived overloads did not accept the probe's
+  call shape, so no measurement backs a claim), and every tracked primitive with
+  no schedule row in `primitive_callback_execution` at all.
+
+`the_tracked_callback_schedule_partitions_each_dialect` pins all three sets per
+dialect. The fold composes a detached callback under an eager wrapper to
+`inline`, under a deferring one to `deferred`, and under an unestablished one to
+the unknown sentinel — it returns `Option<&str>` now, and both ladder seams plus
+the forwarding seam treat its `None` as authoritative rather than falling back
+to the lexical answer. Where tracking is *not* cleared the answer stays
+`tracked` regardless of schedule: attribution is the claim there, and the
+wrapper's timing is not asked for.
+
+### The cross-target merge unioned contradictory callback rows
+
+The per-export contradiction sentinel below runs inside Rust, **once per
+analyzed target**. `mergeSummaries` in
+`packages/cli/scripts/generate-package-contract.mjs` then unions the targets'
+callback rows, with a comparator that broke ties on `execution` precisely
+because two executions per parameter were expected there. So the sentinel was
+bypassed for every conditional export, and `fixtures/package-contracts/
+conditional-callback-conflict` shipped a base carrying `parameter: 0` as
+`deferred` *and* `inline`. `returns` and `asyncBehavior` had been given the
+sentinel for this exact shape (`claimDomainsDiverge`); `callbacks` had not, in
+the same function.
+
+`callbackRowsContradict` now applies the same rule to the merged callback rows,
+reports the divergence through `onDiverge` so the review plan's
+`unknown-sentinel` item names both branches, and leaves the exact per-branch
+claims in `variants`. The fixture is registered in
+`scripts/contract-corpus.mjs`, so a regression of the union specifically fails a
+gate; before, no gate saw the base at all — the process test asserts only the
+variants.
+
+One-sided *presence* is deliberately not closed: a parameter with a row in one
+branch and none in the other is a positive against a certified negative, the
+same hole `claimDomainsDiverge` closed for `returns`. It needs its own
+measurement and is listed as unresolved below.
+
+### One parameter with two executions is one false claim
+
+One row is pushed per invocation site and `push_contract_callback` dedups only
+exactly-equal rows, so a parameter invoked twice with two schedules published
+both — `@solid-primitives/range`'s `mapRange` carried `callbacks[2]` as
+`deferred` *and* as `tracked`, and the report lists both as failing. Schema v1
+has one execution axis per parameter and the runtime has one behavior, so at
+least one row was false and a consumer picking either was guessing.
+`contract_export_function` now opens the per-export `callbacks` sentinel for a
+parameter carrying two different executions, in the same three lines the
+retained-callback fix extended. Rows that agree on `execution` and differ
+elsewhere are deliberately not contradictory.
+
+The documents that defined the vocabulary moved with the code, because the
+change makes contract emission a consumer that asks *when* a callback ran and
+both of them said nothing downstream does. `docs/package-contracts.md` and the
+`Execution` comment in `solid-dialect/src/lib.rs` now state the two axes
+explicitly — `tracked` is attribution, `inline`/`deferred` are the schedule of a
+callback the export does not subscribe — and name `startTransition` and
+`createResource` as the two places the readings diverge, along with the reason
+emission refuses them rather than restating their attribution as a schedule.
+
+Fixtures: `callback-untracked-wrapper` (a clearing wrapper is `inline`, with the
+tracked and deferred negatives), `callback-deferred-untracked-chain` (nesting
+and its order-sensitivity, the eager/deferring/unestablished partition, and the
+forwarding seam through a bootstrap-resolved local `untrack`),
+`multi-role-callback-parameter` (the intra-target sentinel and its width, with
+four negatives including two same-schedule sites),
+`conditional-callback-conflict` (the cross-target union). All four are in
+`scripts/contract-corpus.mjs`.
+
+**Still fail-closed or unresolved after this.**
+
+Two of these ship an *affirmative wrong claim* — not a lost fact, not a
+sentinel. Both are pre-existing and both are rows `contract probe` will fail;
+they are stated that way because "recorded" is not the same as "harmless".
+
+- **A package-local transparent wrapper around the real `untrack` publishes
+  `tracked`, and the truth is `deferred`.** A schema-v1 `callbacks` row carries
+  the execution word and no clearing column, so once a local callee's summary
+  crosses the forwarding edge an `untrack`-shaped wrapper and a transparent one
+  are indistinguishable and the enclosing tracked wrapper wins. Measured shape:
+
+  ```ts
+  import { createEffect, untrack } from "solid-js";
+  function runUntracked<T>(fn: () => T): T { return untrack(fn); }
+  export function mountThroughWrapper(handle: () => void): void {
+    createEffect(() => runUntracked(handle));   // published: "tracked"
+  }
+  ```
+
+  Against solid-js@1.9.14 the callback does not run during the call and its
+  reads subscribe nothing, so `classifyExecution` answers `deferred` and the
+  `tracked` claim fails — which is what the reviewed bundled contract states for
+  the identical `onMount` shape. Inside solid-js itself the wrapper *is* a
+  primitive and the composition sees it; an arbitrary package's own detaching
+  helper does not benefit. This is the one-line wrapper spelling most of the
+  ecosystem uses. `trackedThroughLocalHelper` in the chain fixture is the
+  *correct-answer* control for it (its `runNow` genuinely does not clear), so no
+  fixture pins the wrong case; adding one is cheap and would make the gap
+  visible instead of prose-only. Closing it needs a clearing column the schema
+  does not have, or transitive propagation of the clearing fact along forwarding
+  edges.
+- **A wrapper the fold cannot classify at all falls back to the lexical answer,
+  which can be a positive wrong claim.** `enclosing_callback_chain` refuses the
+  whole chain on the first position `callback_wrapper_at` cannot classify, and
+  the row then comes from `contract_callback_execution(semantic)` — the same
+  lexical answer this fold exists to replace. Only
+  `primitive_callback_execution`'s table classifies wrappers during generation
+  (the bundled solid-js contract is not reachable through
+  `contracts.callbacks` in a generation run), so the unclassifiable set is
+  large: `batch`, `startTransition`, `catchError`, `createComputed`, `onMount`,
+  `onError`, `createSelector`, `children`, `createDeferred`, `produce`, `from`,
+  `render`, `hydrate`. Measured, with runtime truth:
+
+  | export body | published | runtime |
+  | --- | --- | --- |
+  | `untrack(() => batch(() => cb()))` | `deferred` | **inline** |
+  | `batch(() => untrack(() => cb()))` | `deferred` | **inline** |
+  | `createComputed(() => createRoot(() => cb()))` | `deferred` | **inline** |
+  | `createComputed(() => untrack(() => cb()))` | `deferred` | **inline** |
+
+  All three are pre-existing RC3 residue and none is a regression. The honest
+  behavior is the sentinel rather than the lexical fallback, and the forwarding
+  seam shares it: `forwarded_callback_ambient_execution` now *names* the refusal
+  instead of laundering it through `unwrap_or_default()`, but still lets the
+  forwarding call's own position answer alone, which is deliberately
+  best-effort. Note that `createComputed` reaches this residue and not the
+  eagerness one — it has no schedule row, so the chain is refused a step earlier
+  than the fold.
+- **The contradiction sentinel carries no review-plan reason at the intra-target
+  seam.** The `unknown-sentinel` item is derived from the contract's bytes, and
+  the `because.attributions` block comes from an obligation marker whose label is
+  hardcoded as `UnknownCallbackExecution` / `contract-generation-obligation` in
+  `rust/crates/solid-facts-backend/src/main.rs`. A
+  `contradictory-callback-execution` reason needs that label plumbed from the
+  emitter; the sentinel itself is unconditional and does not depend on it. The
+  *cross-target* twin does carry a reason, through `mergeDivergences`.
+- **The contradiction sentinel is per export, which is wider than the
+  contradiction.** One contradicted parameter discards the other parameters'
+  undisputed rows (`contradictOnZeroOnly` in the multi-role fixture pins it).
+  Schema v1 offers no narrower spelling: the only granularity below
+  `{"status": "unknown"}` is a row's presence, and an absent row is a certified
+  *negative*, so dropping only the contradicted parameter's rows would trade one
+  contradiction for one affirmative false negative. Narrowing it needs a schema
+  change, and the pre-existing `escaped_parameters` sentinel has the same width
+  for the same reason.
+- **One-sided callback-row presence across conditional targets is not a
+  divergence yet.** `callbackRowsContradict` catches two executions for one
+  parameter; a row proven in one branch against a *proven absence* in the other
+  is the same class of hole `claimDomainsDiverge` closed for `returns`, and it
+  still hands the proving branch's positive to the environment-unaware base. It
+  needs its own measurement — the blast radius is every conditionally-exported
+  callback-taking function — and its own fixture pair.
+- **The wrong-execution-kind class is not closed, but it is now small and
+  named.** Ten `callbacks[].execution` claims still fail across the whole corpus,
+  measured 2026-08-23, and they are three groups:
+  - **`@solid-primitives/pagination` `createInfiniteScroll`, three rows** (0.5.2
+    `deferred → inline`; 1.0.0-next.6 floor and head `tracked → inline`). This is
+    the row already flagged as **possibly the import shim's doing** under
+    "[Closed 2026-08-23: the probe environment was measuring
+    itself](#closed-2026-08-23-the-probe-environment-was-measuring-itself)": the
+    fake `IntersectionObserver` never fires, so a callback a browser would run on
+    intersection ran only at setup. Unchanged by this pass and still the leading
+    candidate for a "a faked global could explain this" undriven rule.
+  - **`solid-js@1.9.14` `./jsx-dev-runtime`, four claims** — `createComputed`,
+    `createMemo`, `createRenderEffect`, `createSelector`. The sub-entrypoint
+    variant lag described above; their root-entrypoint counterparts are fixed.
+  - **Three single rows**: `@solid-primitives/memo@2.0.0-next.2`
+    `createWritableMemo` (`deferred → tracked`, both Solid 2 probes) and
+    `@solid-primitives/date-difference@1.0.2` `createDateNow`
+    (`tracked → inline`). Neither has been investigated; both are new to the
+    visible set only in the sense that they were previously buried under 149
+    others.
+
+  The `mergeProps` conservative-callable forwarding — a positive row for a
+  parameter the export was never proven to invoke — is still untouched, and the
+  probe-side noise it was waiting behind is now gone, so it is measurable.
+- **A `callbacks` sentinel silences the `returns` probe of the same export.**
+  Measured, and the one place this change set *lost* a finding instead of fixing
+  it. `@solid-primitives/utils`'s `createHydratableSignal` and
+  `createHydrateSignal` publish `returns: accessor` and really return a tuple;
+  the probe caught that in all four modes and the corpus reported six such failing
+  claims across three rows. After the contradiction sentinel opens `callbacks` on
+  those exports, the returns probe reports *"no plantable reactive source: proving
+  the returned value is an accessor needs a signal read inside a callback the
+  contract states, and this export states none"* — the claim goes undriven,
+  verification converts `returns` to unknown, and all three rows now verify.
+  Nothing false reaches a consumer, because the wrong `accessor` claim is
+  converted rather than promoted. But the generator defect is now invisible to the
+  measurement, and three of the generator stage's eighteen gains rest on it. The
+  driver plants a `returns: accessor` observation *through* a stated callback and
+  has no other way in; giving it a second one (a synthesized reactive argument, or
+  driving the accessor directly) is the fix, and it is not attempted here.
+- **The forwarding seam's unknown arm is wider than it needs to be.** When the
+  composed ambient execution is the sentinel, the emitter opens the
+  unknown-callback obligation without knowing whether the callee publishes an
+  `inline` row for the slot at all — so an export whose callee rows are all
+  `deferred` loses its `callbacks` domain unnecessarily. Reaching it needs an
+  unclassifiable-or-unestablished tracked wrapper above a clearing one above a
+  local callee, and the cost is precision, never a wrong claim.
+
+## Deferred: verification-suite speed work, robustness findings (2026-08-23)
+
+An adversarial review of the `verify-speed-execution-kinds` speed work raised 26
+findings. The stale-green and wrong-answer ones are fixed in that change set
+(the worker pool's result attribution and death paths, the coverage key's
+dialect-selection ancestor chain, the mid-run store guard, the registry memo's
+input digest, `verify-delta`'s gitignored-input basis and its `pkg/contracts/`
+row, the porcelain parse, the oracle base's symlink verification). These are the
+remainder: none can produce a wrong verdict, each is a claim the code or a
+document makes about itself that is narrower than it reads.
+
+Ordered as the review ordered them, most severe first.
+
+- **robustness — oracle case directories are a fixed path shared across
+  processes.** `scripts/lib/tsc-oracle-case.mjs:29` — `rust/target/tsc-oracle-cases/<dialect>/case-<index>`
+  has no per-process component, so two concurrent gate runs (`make tsc-oracle`
+  in one shell and `make verify` in another, or a re-run started before the
+  first finished) have worker threads rewriting the same `tsconfig.<pass>.json`
+  and source file while the other run's checker reads them. The path was shared
+  before the concurrency change too, but eight simultaneous writers make a bad
+  interleaving far likelier. Failure shape is a JSON parse error or a bogus
+  verdict, not a silent pass. A `process.pid` in `CASE_ROOT`, or a lock, closes
+  it.
+- **robustness — the provision short-circuit no longer heals a damaged
+  install.** `scripts/tsc-oracle.mjs:105-135` — `assertProvisioned` checks only
+  each top-level package's recorded `version`, so a missing transitive
+  dependency (`csstype`, `seroval`), a deleted `.d.ts`, or a half-wiped tree
+  passes and no `npm install` repairs it; the always-install path did. Direction
+  of failure is loud (an incomplete install adds TS2307-class errors that land
+  outside every case's `allow` set), and `--force` exists, but nothing tells a
+  reader when to reach for it and the `already provisioned` line does not
+  distinguish "verified complete" from "the two manifests I looked at agreed".
+- **robustness — one unit crash now suppresses every drift report.**
+  `scripts/coverage.mjs:286-334`, `scripts/contract-corpus.mjs:290-306` — compute
+  and compare are two phases, so a crash in unit 40's `analyze`/`generate` makes
+  `mapPool` throw before the comparison loop runs and drifts in units 0–39 are
+  never printed. They were printed before the crash when the two were
+  interleaved. Green/red is unaffected; the diagnostic value is lost on exactly
+  the runs that need it. `mapPoolSettled` already exists, is unused, and is the
+  right tool.
+- **robustness — the gate cache has no eviction.**
+  `scripts/lib/gate-cache.mjs:239, 291-298` — one `<key>.json` per (shared digest
+  × unit), never pruned, and every checker rebuild invalidates all 83 coverage
+  keys and writes 83 more files carrying full findings lists. `createdAt` is
+  stored and nothing reads it. Only `make clean` reclaims it. The growth
+  expectation is now stated in AGENTS.md; an age or count cap is not
+  implemented.
+- **robustness — no memory-aware cap on the oracle-gate fan-out.**
+  `scripts/lib/pool.mjs:29-31`, `scripts/tsc-oracle-gate.mjs:312-316` — each
+  worker thread carries its own `typescript` instance and runs two checker child
+  processes, each spawning a TypeFacts producer; `min(cores, 8)` multiplies all
+  of it. The cap bounds the process tree, nothing bounds resident memory. On a
+  memory-tight runner the failure is an OOM-killed thread, which now surfaces as
+  a `gate worker exited with code …` rejection rather than the hang it used to
+  cause — loud, but it reads like a gate failure rather than a resource one.
+
+The review's remaining test-coverage finding — the pool's death path being
+untested, and one self-referential assertion — is **not** deferred: it is closed
+by the four regression tests added to `scripts/pool.test.mjs` in the same change
+set (unattributable message, idle death, queued-task settling on close, fatal
+answer), and the self-referential `threadId` assertion is replaced. It is
+recorded here only so the review's numbering has no silent gaps.

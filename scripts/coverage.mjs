@@ -16,11 +16,16 @@
 // path, byte span, and whether a fix was offered. Messages and hints are
 // deliberately excluded -- rewording a hint should not churn 30 files.
 
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import process from "node:process";
+import { promisify } from "node:util";
 
+import { ancestorChainDigest, hashTree, openGateCache } from "./lib/gate-cache.mjs";
+import { gateConcurrency, mapPool } from "./lib/pool.mjs";
+
+const run = promisify(execFile);
 const root = resolve(import.meta.dirname, "..");
 const snapshots = join(root, "fixtures", "findings-snapshots");
 const update = process.argv.includes("--update");
@@ -57,8 +62,9 @@ function fixtureProjects() {
     if (!existsSync(base)) continue;
     for (const entry of readdirSync(base, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
-      const tsconfig = join(base, entry.name, "tsconfig.json");
-      if (existsSync(tsconfig)) found.push({ id: `${group}/${entry.name}`, tsconfig });
+      const directory = join(base, entry.name);
+      const tsconfig = join(directory, "tsconfig.json");
+      if (existsSync(tsconfig)) found.push({ id: `${group}/${entry.name}`, directory, tsconfig });
     }
   }
   return found.sort((a, b) => a.id.localeCompare(b.id));
@@ -226,8 +232,8 @@ function runtimeArguments(tsconfig) {
   return args;
 }
 
-function analyze(tsconfig, keepWording) {
-  const output = execFileSync(
+async function analyze(tsconfig, keepWording) {
+  const { stdout: output } = await run(
     checker,
     ["--format", "json", "--project", tsconfig, ...runtimeArguments(tsconfig)],
     {
@@ -262,12 +268,61 @@ if (projects.length === 0) {
   process.exit(2);
 }
 
+// A fixture project is self-contained in the ways that are easy to check: it
+// holds its own `tsconfig.json`, its own sources, its own `node_modules/solid-js`
+// dialect stub, and its own optional `.solid-checker/runtime.json`. None of them
+// `extends` a shared config or reaches outside the directory.
+//
+// It is *not* self-contained in one way, and the key has to say so. Dialect
+// selection walks ancestors: `resolved_solid_version`
+// (rust/crates/solid-facts-backend/src/dialect.rs) climbs `start.ancestors()`
+// unbounded, past this repository, to `/`, taking the nearest
+// `node_modules/solid-js/package.json` it finds. Roughly half these projects
+// ship no stub and rely on there being none above them -- which is true of the
+// checkout and says nothing about the directory containing it, or about `$HOME`.
+// So the absence of an ancestor stub is an input, and `ancestorChainDigest`
+// puts the whole chain in the key: a stray `npm install solid-js` one directory
+// up now misses instead of replaying pre-install findings while `checkDialectStubs`
+// (the thing that catches a substituted dialect) never runs.
+//
+// With that added, a project's findings are a function of exactly its tree, the
+// dialect-selection chain above it, the two binaries, and the environment --
+// which is what makes running the 83 of them concurrently sound.
+const cache = openGateCache({
+  gate: "coverage",
+  scriptPath: import.meta.filename,
+  binaries: [checker, typefacts, `${typefacts}.buildinfo`]
+});
+const concurrency = gateConcurrency();
+
+// A thunk, not an array: the digests below are of mutable state, so the cache
+// re-evaluates them after the checker has run and refuses to store a unit whose
+// tree moved underneath it. See `openGateCache().run`.
+const unitParts = (project) => () => [
+  `project:${project.id}`,
+  `wording:${KEEPS_WORDING.has(project.id)}`,
+  hashTree(project.directory),
+  ancestorChainDigest(project.directory, "node_modules/solid-js/package.json")
+];
+
+const computed = await mapPool(
+  projects,
+  (project) =>
+    cache.run(unitParts(project), () =>
+      analyze(project.tsconfig, KEEPS_WORDING.has(project.id))
+    ),
+  { concurrency }
+);
+
+// Comparison runs fresh, in project order, whether the analysis was replayed
+// or not: the snapshot on disk is never part of the cache key, so editing one
+// needs no cache awareness and a mismatch still fails on a warm cache.
 let changed = 0;
 let total = 0;
-for (const project of projects) {
+for (const [index, project] of projects.entries()) {
   const file = join(snapshots, `${project.id.replace("/", "__")}.json`);
-  const actual = `${JSON.stringify(analyze(project.tsconfig, KEEPS_WORDING.has(project.id)), null, 2)}\n`;
-  total += JSON.parse(actual).findings.length;
+  const actual = `${JSON.stringify(computed[index].value, null, 2)}\n`;
+  total += computed[index].value.findings.length;
 
   if (update) {
     writeFileSync(file, actual);
@@ -318,6 +373,7 @@ for (const entry of readdirSync(snapshots)) {
 
 const verb = update ? "recorded" : "compared";
 console.log(`${verb} ${projects.length} fixture projects, ${total} findings`);
+console.log(`${cache.summary()}; concurrency ${concurrency}`);
 if (changed > 0) {
   console.error(`${changed} project(s) differ -- re-run with --update if intended`);
   process.exit(1);

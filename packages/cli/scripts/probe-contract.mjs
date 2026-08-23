@@ -288,6 +288,13 @@ function spawnSession({ probes, session, worker, stagingDirectory, dialect, time
       return {
         completed: answer.completed !== false,
         environment: answer.environment,
+        // The capability the worker measured for the runtime that drove this
+        // mode's ordinary packages, or `null` when the process died before it
+        // could measure one. Per-claim attribution does not use it -- that is
+        // decided from the stamp on each observation, because one session holds
+        // more than one runtime -- but without it nothing in the report says a
+        // mode's withdrawals were measured rather than assumed.
+        runtime: answer.runtime ?? null,
         // Set when package code threw asynchronously -- a deferred callback, a
         // rejected promise -- somewhere outside every `try` the worker has.
         aborted: answer.aborted,
@@ -324,7 +331,18 @@ function spawnSession({ probes, session, worker, stagingDirectory, dialect, time
 /// an unexplained probe duration.
 export function runSessionWithRestarts({ session, spawn }) {
   const results = [];
-  const accounting = { mode: session.mode, started: 0, restarts: 0, failed: 0, completed: false };
+  const accounting = {
+    mode: session.mode,
+    started: 0,
+    restarts: 0,
+    failed: 0,
+    completed: false,
+    // The first process that measured the runtime settles the mode's record. A
+    // restart re-imports the same artifacts, so its answer is the same one; a
+    // process that died before importing `solid-js` measured nothing and leaves
+    // this `null` rather than claiming the runtime was inert.
+    runtime: null
+  };
   let environment;
   let aborted;
   let pending = session.probes;
@@ -337,6 +355,7 @@ export function runSessionWithRestarts({ session, spawn }) {
     // restart runs with the same request-level environment, and a session that
     // never produced readable output has none to report.
     environment ??= answer.environment;
+    accounting.runtime ??= answer.runtime ?? null;
     if (answer.aborted) aborted = answer.aborted;
     results.push(...answer.results);
     const answered = new Set(answer.results.map(result => result.id));

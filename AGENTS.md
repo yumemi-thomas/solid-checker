@@ -175,6 +175,52 @@ that same check; do not fan out into unrelated full-suite commands.
 | packages/cli or packages/wasm | `npm test --prefix packages/cli` (or `packages/wasm`) | universal set |
 | release or broad architectural work | — | `make verify` |
 
+`make verify-delta` mechanizes this table: it reads the changed paths (the
+merge-base diff against `origin/main` plus the working tree), prints the row it
+matched for every one of them, and runs those checks followed by the universal
+set. It fails closed — a path no row claims (`scripts/`, the `Makefile`,
+`schema/`, `rust/Cargo.*`, documentation, anything new) escalates the whole plan
+to the full `make verify` and says which path did it, because an unmapped path
+can change any answer here. Note what that does *not* include:
+`rust/crates/solid-dialect/` has no row, deliberately — the crate owns the
+shared `Dialect` interface that the IR and both dialect crates consume, so a
+change there escalates rather than being answered with a narrower check.
+`node scripts/verify-delta.mjs --dry-run` prints the plan without running it.
+**`make verify` remains the handoff authority**; `verify-delta` is the fast
+loop, and it is only ever as good as its mapping.
+
+**Fails closed for paths git reports — and git does not report everything.**
+The selection basis is a merge-base diff plus the working tree, so anything
+`.gitignore` hides is invisible to it. Two ignored classes are real inputs, and
+the plan prints both as caveats on every run:
+
+- **The build products under `/bin/` and `rust/target/`.** Above all
+  `bin/solid-typefacts`, the producer of every fact here: rebuilding it changes
+  every answer while `git status` stays silent. So `build-typefacts` — a stamp
+  check that no-ops when the binary is already at the pinned revision — is in
+  *every* plan, and a `bin/solid-typefacts.buildinfo` whose revision differs
+  from `rust/Cargo.toml`'s pin (or is absent) escalates the whole plan. A
+  hand-replaced binary at the right revision is still not detected.
+- **Ignored fixture inputs.** A `node_modules/solid-js` stub added to an
+  *already-tracked* fixture without its `.gitignore` exception lines is invisible
+  to `git status`, so no row selects coverage — and `checkDialectStubs`, which
+  catches a silently substituted dialect, lives inside coverage. This one is not
+  closed. After touching a fixture's `node_modules`, run coverage (or
+  `make verify`) rather than trusting a `verify-delta` plan.
+
+A row can also be narrower than its blast radius, which is a mapping bug rather
+than a basis one; `pkg/contracts/` is the case that already bit — it now carries
+`coverage` and `ownership-gate` because those contracts are compiled into the
+binary (see "Known traps").
+
+`make verify` prints each step's wall time as it completes and a summary table
+at the end, so a slowdown can be attributed rather than guessed at. Two
+environment variables tune the gates it runs: `SOLID_CHECKER_GATE_CONCURRENCY`
+overrides the default fan-out of min(cores, 8) for coverage, the oracle gate,
+and the contract corpus, and `SOLID_CHECKER_GATE_CACHE=0` disables the
+content-addressed result caches (see "Known traps" below) for both reading and
+writing.
+
 The named checks:
 
 ~~~sh
@@ -253,6 +299,44 @@ proportionality rules and the report format.
   rust/target/debug first, then run coverage/ownership with
   `SOLID_CHECKER_BIN="$PWD/rust/target/debug/solid-checker-rust"`. “No finding
   moved” from a run that used the previous binary is meaningless there too.
+- **The gate result caches key on inputs, not on verdicts.** coverage and the
+  contract corpus store each unit’s *computed result* under
+  rust/target/gate-cache/, keyed by a digest over the fixture tree as it sits on
+  disk (untracked files included), the dialect-selection chain *above* that tree
+  (every ancestor’s `node_modules/solid-js/package.json`, to the filesystem
+  root, because `dialect.rs` walks unbounded and roughly half the fixtures rely
+  on there being no stub above them), the checker and TypeFacts binaries plus
+  the producer’s `.buildinfo`, the gate script and every local module it can
+  reach plus all of scripts/lib/**, any tree the gate *executes* but does not own
+  (`packages/cli`, for the contract corpus’s generator), every `SOLID_*`
+  variable, the Node version, and a format constant — see
+  scripts/lib/gate-cache.mjs, whose header is the authoritative list. Snapshots
+  and `expected.json` are deliberately *not* in the key: comparison always runs
+  fresh, so editing an expectation needs no cache awareness and a mismatch still
+  fails on a warm cache. A unit whose tree moves *while the gate is running* is
+  computed but not stored: the key parts are a thunk, re-evaluated after the
+  unit runs, and a fixed array carrying a filesystem digest is refused outright
+  rather than trusted. What this means in practice: a stale green gate is the one
+  failure mode that matters, so widen the key rather than narrowing it, bump
+  `CACHE_FORMAT_VERSION` when an entry’s meaning changes, and reach for
+  `SOLID_CHECKER_GATE_CACHE=0` whenever a result looks impossible. `make clean`
+  wipes the cache with the rest of rust/target. Entries are never evicted — one
+  file per (shared digest × unit), and every checker rebuild writes a fresh set —
+  so `make clean` is also the only thing that reclaims the space.
+- **The registry memo stores the falsifier, so it is bound to its inputs.**
+  scripts/check-contract-pins.mjs memoizes registry integrity by `name@version`
+  under the same `SOLID_CHECKER_GATE_CACHE` switch, in
+  rust/target/registry-integrity.json. Entries carry a format version and a
+  digest of everything that determines the answer — the effective npm registry
+  (resolved the way npm resolves it, so a mirror’s answers never serve an npmjs
+  run), this script’s own closure, and the Node version — and anything that is
+  not exactly that envelope discards the file whole. A memoized answer that
+  *disagrees* with the pin it is compared against is never the verdict: it
+  misses, the registry is asked live, and the verdict follows the registry. It is
+  still a file in a user-writable build root, so an entry hand-edited to *agree*
+  with a pin is indistinguishable from a live answer that agrees — the memo is
+  not tamper-proof and does not claim to be. CI’s contracts job has no
+  rust/target, so every push still performs the live lookup for every pin.
 
 ## Fixtures, diagnostics, and snapshots
 

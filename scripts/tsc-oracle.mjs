@@ -87,9 +87,36 @@ const assertProvisioned = (dialect) => {
   return root;
 };
 
-const provision = (dialect) => {
+/**
+ * Install the audited versions for `dialect`, unless they are already there.
+ *
+ * The short-circuit is the *existing* verification, moved in front of the
+ * install instead of behind it. `assertProvisioned` is the only thing that ever
+ * decided whether the tree is usable, and it does not care how the tree got
+ * there -- so a tree that already passes it needs no `npm install`, and one
+ * that does not gets the full install exactly as before. Anything other than a
+ * clean pass falls through: a missing package, a drifted version, an
+ * unreadable manifest. The check is fail-closed by construction, because
+ * passing it is the whole definition of provisioned.
+ *
+ * `--force` reinstalls regardless, for a tree that satisfies the version check
+ * but is suspected of being damaged in some way the version check cannot see.
+ */
+const provision = (dialect, { force = false } = {}) => {
   const spec = dialectSpec(dialect);
   const root = join(ORACLE_ROOT, dialect);
+  if (!force) {
+    try {
+      assertProvisioned(dialect);
+      const versions = Object.fromEntries(
+        Object.keys(spec.expect).map((name) => [name, installedVersion(root, name)]),
+      );
+      console.error(`already provisioned ${dialect}: ${JSON.stringify(versions)}`);
+      return versions;
+    } catch {
+      // Not provisioned at the audited versions -- install below, then verify.
+    }
+  }
   mkdirSync(root, { recursive: true });
   writeFileSync(
     join(root, "package.json"),
@@ -305,7 +332,7 @@ const usage = () => {
   console.error(
     [
       "usage:",
-      "  node scripts/tsc-oracle.mjs provision [--dialect v1|v2|all]",
+      "  node scripts/tsc-oracle.mjs provision [--dialect v1|v2|all] [--force]",
       "  node scripts/tsc-oracle.mjs check --dialect v1|v2 (--file <path>... | --code <snippet>) [--json]",
       "  node scripts/tsc-oracle.mjs versions [--json]",
     ].join("\n"),
@@ -314,10 +341,11 @@ const usage = () => {
 };
 
 const parseArgs = (argv) => {
-  const options = { dialect: null, files: [], code: null, json: false, name: null };
+  const options = { dialect: null, files: [], code: null, json: false, name: null, force: false };
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index];
     if (arg === "--json") options.json = true;
+    else if (arg === "--force") options.force = true;
     else if (arg === "--dialect") options.dialect = argv[++index];
     else if (arg === "--file") options.files.push(argv[++index]);
     else if (arg === "--code") options.code = argv[++index];
@@ -333,7 +361,7 @@ const main = () => {
   if (command === "provision") {
     const dialects =
       !options.dialect || options.dialect === "all" ? Object.keys(manifest.dialects) : [options.dialect];
-    for (const dialect of dialects) provision(dialect);
+    for (const dialect of dialects) provision(dialect, { force: options.force });
     return;
   }
   if (command === "versions") {

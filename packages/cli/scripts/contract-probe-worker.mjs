@@ -368,6 +368,74 @@ function buildRuntime(solid) {
   };
 }
 
+/// Whether the runtime a session resolved can re-run anything at all.
+///
+/// Every callback observation in this file is a *differential* measurement: the
+/// probe writes a signal, settles, and reports which of the call site and the
+/// callback ran again. That measurement presupposes a runtime in which something
+/// can run again, and both audited Solid releases resolve `node` to a server
+/// build where nothing can: 1.9.14's `dist/server.js` returns `[() => value,
+/// setter]` from `createSignal` and has an empty `createEffect`, and
+/// 2.0.0-rc.1's makes `flush()` a no-op. In such a runtime `tracked` is
+/// structurally unobservable -- the probe's own scaffolding is inert -- so a
+/// `tracked` claim fails by construction and an `inline` or `deferred` claim
+/// passes for free.
+///
+/// So the runtime is asked, rather than assumed: create a memo over a signal,
+/// write, settle, and see whether the memo ran again. It is deliberately
+/// name-free. Nothing here tests for "server", "node", or a version, because the
+/// property that matters is not which mode was requested but whether the
+/// artifact that mode resolved is reactive -- and the two do not coincide (a
+/// `server` session probing `solid-js/jsx-dev-runtime` drives a fully reactive
+/// artifact, since that subpath resolves unconditionally to `dist/solid.js`).
+///
+/// It classifies nothing, exactly like the rest of this file: the boolean
+/// travels on each observation and `contract-probe-driver.mjs` decides that an
+/// unattributable observation is undriven.
+async function measureReruns(runtime) {
+  try {
+    return await runtime.root(async () => {
+      const [source, setSource] = runtime.createSignal(0);
+      let runs = 0;
+      const memo = runtime.createMemo(() => {
+        runs += 1;
+        return source();
+      });
+      memo();
+      await runtime.settle();
+      memo();
+      const before = runs;
+      runtime.write(setSource, 1);
+      await runtime.settle();
+      memo();
+      return { reruns: runs > before };
+    });
+  } catch (error) {
+    // A runtime whose primitives throw is a runtime that re-runs nothing, and
+    // saying so is the fail-closed answer. The throw travels because "the
+    // self-check could not run" and "the self-check ran and nothing re-ran" are
+    // different facts about the same session.
+    return { reruns: false, error: String(error).slice(0, 500) };
+  }
+}
+
+/// The capability of one runtime, measured once.
+///
+/// Per runtime and not per session, because a session can hold two runtimes with
+/// opposite answers. Measured, on solid-js@1.9.14 under `--conditions node`:
+/// `import "solid-js"` resolves to `dist/server.js` and re-runs nothing, while
+/// `import "solid-js/jsx-dev-runtime"` resolves to `dist/solid.js` -- the
+/// manifest gives that subpath a single unconditional target -- satisfies
+/// `drivesItself`, and re-runs normally. A per-session answer taken from either
+/// one is wrong about the other: from the project runtime it would discard the
+/// jsx-dev-runtime observations that are genuinely attributable, and from the
+/// self-driving namespace it would certify the server build's inert ones.
+const CAPABILITIES = new WeakMap();
+function runtimeCapability(runtime) {
+  if (!CAPABILITIES.has(runtime)) CAPABILITIES.set(runtime, measureReruns(runtime));
+  return CAPABILITIES.get(runtime);
+}
+
 const REACTIVE_PRIMITIVES = ["createSignal", "createMemo", "createRoot", "untrack"];
 
 /// Whether a namespace can drive its own probes.
@@ -479,6 +547,24 @@ async function callbackObservation(runtime, target, probe) {
   site();
   const runsBeforeWrite = runs;
   const siteRunsBeforeWrite = siteRuns;
+  // The control interval: one more settle, with **no write**.
+  //
+  // Without it the write interval is the only interval measured, so "the
+  // callback ran again" is read as "the write made it run again" -- and two
+  // common shapes make that false. A callback whose *first* run merely lands
+  // late runs during the write interval having never run before it: `afterPaint`
+  // is a double `requestAnimationFrame`, which this worker shims to nested
+  // timers, so its first run is two macrotasks out and the old counters said
+  // `tracked` about a callback that holds no subscription at all. A callback that
+  // reschedules *itself* -- `createTimeoutLoop` -- runs again across every
+  // interval whatever is written, and said `tracked` for the same reason.
+  //
+  // Measuring an interval in which nothing was written separates both from a
+  // subscription: what the control interval already produced cannot be
+  // attributed to a write that had not happened yet.
+  await runtime.settle();
+  site();
+  const runsAfterControl = runs;
   runtime.write(setSource, 1);
   await runtime.settle();
   site();
@@ -486,6 +572,7 @@ async function callbackObservation(runtime, target, probe) {
     ranDuringCall,
     forcedByAccessorRead,
     runsBeforeWrite,
+    runsAfterControl,
     runsAfterWrite: runs,
     siteRunsBeforeWrite,
     siteRunsAfterWrite: siteRuns,
@@ -583,6 +670,19 @@ async function returnsObservation(runtime, target, probe) {
 /// reported rather than inferred, and it is never attributed to a claim: nothing
 /// says which probe scheduled the work that threw.
 const results = [];
+/// The project runtime's capability, for the session envelope. `null` until it
+/// has been measured, because "not measured" and "measured, and nothing re-ran"
+/// are different facts and a session that died before importing `solid-js` is
+/// entitled to neither answer.
+///
+/// No verdict is decided from this. Attribution is decided per observation, from
+/// the capability of the runtime that produced it, because one session can hold
+/// two runtimes with opposite answers -- see `runtimeCapability`. This is the
+/// session-level record of the runtime that drove every ordinary package in it,
+/// and the parent carries it into the mode's accounting so the report can say
+/// which modes were measured inert rather than leaving that to be reconstructed
+/// from a pile of per-claim reasons.
+let sessionRuntime = null;
 let responded = false;
 function respond({ completed, aborted }) {
   if (responded) return;
@@ -595,6 +695,7 @@ function respond({ completed, aborted }) {
       // Answered on every session, including the ones that shimmed nothing, so
       // a reader never has to infer "no shim" from a missing field.
       environment,
+      runtime: sessionRuntime,
       completed,
       ...(aborted ? { aborted } : {}),
       results
@@ -619,6 +720,13 @@ async function main() {
   } catch (error) {
     runtimeError = String(error);
   }
+  // Measured once, eagerly, so the session envelope always carries the
+  // capability of the runtime that drives every ordinary package in it -- and so
+  // the memo is warm for the first probe. One extra settle per session, whatever
+  // the probe count. Outside the `try` above because a self-check that could not
+  // run is not a session without a probe runtime: `measureReruns` answers rather
+  // than throwing, and that answer is `reruns: false`.
+  if (projectRuntime) sessionRuntime = await runtimeCapability(projectRuntime);
   const namespaces = new Map();
   const importNamespace = async specifier => {
     if (!namespaces.has(specifier)) {
@@ -678,13 +786,24 @@ async function main() {
     const runtime = drivesItself(resolved.namespace)
       ? (resolved.runtime ??= buildRuntime(resolved.namespace))
       : projectRuntime;
+    // Every driven observation carries the capability of the runtime that
+    // produced it, because a differential measurement made in a runtime that
+    // re-runs nothing names no execution mode -- and the answer is per runtime,
+    // not per session.
+    const capability = await runtimeCapability(runtime);
     try {
       const observation = await runtime.root(() =>
         probe.type === "returns-accessor"
           ? returnsObservation(runtime, value, probe)
           : callbackObservation(runtime, value, probe)
       );
-      record({ ...base, outcome: "observed", observation, calls: observation.calls ?? 0 });
+      record({
+        ...base,
+        outcome: "observed",
+        observation,
+        calls: observation.calls ?? 0,
+        runtime: capability
+      });
     } catch (error) {
       record({ ...base, outcome: "threw", error: String(error) });
       halted = true;

@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   attachMergeDivergences,
+  callbackRowsContradict,
   narrowedAttributionNotes,
   unknownClaimAttributions
 } from "../scripts/generate-package-contract.mjs";
@@ -160,4 +161,36 @@ test("an existing generation attribution survives a merge divergence beside it",
   ]);
   assert.equal(item.because.attributions.length, 1);
   assert.equal(item.because.divergences.length, 1);
+});
+
+// The cross-target callback union. `contract_export_function` in
+// solid-reactive-ir opens this sentinel per *analyzed target*, and
+// `mergeSummaries` then unions the targets' rows, so this predicate is the only
+// thing standing between a conditional export and a base that states two
+// executions for one parameter. `conditional-callback-conflict` and
+// `torture-conditional-semantics` pin it end to end in the contract corpus;
+// these cases pin its edges, which no fixture reaches.
+test("two executions for one parameter is a divergence, naming the parameter", () => {
+  const shape = callbackRowsContradict([
+    { parameter: 0, execution: "deferred" },
+    { parameter: 0, execution: "inline" }
+  ]);
+  assert.match(shape, /different executions for parameter 0/);
+});
+
+test("rows that agree on execution are extra facts about one schedule, not a divergence", () => {
+  assert.equal(
+    callbackRowsContradict([
+      { parameter: 0, execution: "tracked" },
+      { parameter: 0, execution: "tracked", owner: "created" },
+      { parameter: 1, execution: "inline" }
+    ]),
+    ""
+  );
+});
+
+test("an already-unknown claim is not re-diverged, and neither is an absent one", () => {
+  assert.equal(callbackRowsContradict({ status: "unknown" }), "");
+  assert.equal(callbackRowsContradict(undefined), "");
+  assert.equal(callbackRowsContradict([]), "");
 });

@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use solid_dialect::Primitive;
+use solid_dialect::{Primitive, TrackedCallbackTiming};
 use solid_facts::ProjectFacts;
 use solid_facts::core::Span;
 use typefacts::{CallKind, Location, ResolvedCallValidity};
@@ -1082,7 +1082,7 @@ fn discover_interprocedural_graph(
                     ),
                     scheduler_parameter,
                     parameter,
-                    None,
+                    ForwardedAmbientExecution::Callee,
                 ));
                 forwarded_to_local_scheduler = true;
             }
@@ -1142,26 +1142,57 @@ fn discover_interprocedural_graph(
                 .functions_body_containing(call.span)
                 .min_by_key(|function| function.body.end - function.body.start)
                 .is_some_and(|innermost| innermost.body == nodes[callback_owner].body);
-            let execution = runtime_execution
-                .or_else(|| {
-                    contract_callback_execution(semantic)
-                        .filter(|execution| *execution != "inline" || call_in_owner_body)
-                })
-                .or_else(|| {
-                    function_escapes_through_return(
-                        file,
-                        &nodes[invocation_owner],
-                        &nodes[callback_owner],
-                        symbols.entities,
-                        lookup,
-                    )
-                    .then_some("deferred")
-                })
-                // Last resort, and only for a call written directly in the body
-                // of the function that declares the parameter. When no rung can
-                // classify the enclosing schedule, no row is written and the
-                // unknown-callback obligation opens the sentinel instead.
-                .or((call.direct_callee && call_in_owner_body).then_some("inline"));
+            // Every primitive callback position between this call and the
+            // declaring function's body, composed. This rung outranks the
+            // lexical role below it because the lexical role answers a
+            // different question: `semantic` reports the *tracking scope* the
+            // call is written in, and an execution row states the schedule
+            // relative to the export's return. The two disagree in both
+            // directions -- `untrack(() => cb())` is written outside tracking
+            // and runs during the call, `createEffect(() => untrack(cb))` is
+            // written inside a tracked region and runs after it -- and both
+            // disagreements were published as claims.
+            //
+            // The chain is only usable when its outermost wrapping call sits
+            // in the declaring function's own body: otherwise the closure
+            // holding the chain may itself never run, which is exactly the
+            // boundary the rungs below were added for.
+            //
+            // The outer `Option` is "is there a usable chain"; the inner one is
+            // the chain's own answer, and a `None` there is authoritative. A
+            // usable chain that composes to the unknown sentinel must not fall
+            // through to the rungs below: those answer the lexical question,
+            // which is the answer this rung exists to replace, so falling
+            // through would publish exactly the claim the chain just refused.
+            let chain_execution: Option<Option<&'static str>> =
+                enclosing_callback_chain(file, call.callee, &contracts, lookup)
+                    .filter(|chain| !chain.wrappers.is_empty())
+                    .filter(|chain| {
+                        callback_chain_reaches_owner_body(file, chain, &nodes[callback_owner])
+                    })
+                    .map(|chain| compose_callback_chain(&chain.wrappers));
+            let execution = match (runtime_execution, chain_execution) {
+                (Some(execution), _) => Some(execution),
+                (None, Some(composed)) => composed,
+                (None, None) => contract_callback_execution(semantic)
+                    .filter(|execution| *execution != "inline" || call_in_owner_body)
+                    .or_else(|| {
+                        function_escapes_through_return(
+                            file,
+                            &nodes[invocation_owner],
+                            &nodes[callback_owner],
+                            symbols.entities,
+                            lookup,
+                        )
+                        .then_some("deferred")
+                    })
+                    // Last resort, and only for a call written directly in the
+                    // body of the function that declares the parameter. When no
+                    // rung can classify the enclosing schedule, no row is
+                    // written and the unknown-callback obligation opens the
+                    // sentinel instead.
+                    .or((call.direct_callee && call_in_owner_body).then_some("inline")),
+            };
             if let Some(execution) = execution {
                 contribution.callbacks.push((
                     nodes[callback_owner].span,
@@ -1321,6 +1352,34 @@ fn discover_interprocedural_graph(
                 // Local calls are summarized transitively. If the parameter
                 // later reaches an unknown external call, that call creates
                 // the obligation at the actual escape point.
+                let ambient = forwarded_callback_ambient_execution(
+                    file,
+                    call,
+                    argument_index,
+                    &contracts,
+                    lookup,
+                );
+                // A chain that refuses to compose cannot restate the callee's
+                // `inline` rows in export-relative terms, so the sentinel opens
+                // here rather than in the propagation loop, which has no file
+                // or call to build an obligation from. It opens even when the
+                // callee turns out to publish no `inline` row for the slot --
+                // a precision cost in a shape that needs an unclassifiable
+                // tracked wrapper above a clearing one, and never a wrong
+                // claim.
+                if ambient == ForwardedAmbientExecution::Unknown {
+                    contribution.contract_generation_obligations.push((
+                        nodes[callback_owner].span,
+                        unknown_callback_obligation(
+                            file,
+                            &nodes[callback_owner],
+                            call.callee,
+                            parameter,
+                            location(file.path.shared(), call.callee),
+                            lookup,
+                        ),
+                    ));
+                }
                 contribution.callback_forwardings.push((
                     nodes[callback_owner].span,
                     nodes[target].symbol.clone().map_or(
@@ -1329,7 +1388,7 @@ fn discover_interprocedural_graph(
                     ),
                     argument_index,
                     parameter,
-                    enclosing_callback_execution(file, call.span, &contracts, lookup),
+                    ambient,
                 ));
                 continue;
             }
@@ -1340,16 +1399,69 @@ fn discover_interprocedural_graph(
                 call.arguments.len(),
                 lookup.dialect,
             ) {
-                contribution.callbacks.push((
-                    nodes[callback_owner].span,
-                    ContractCallback {
-                        parameter,
-                        execution: execution.into(),
-                        arguments: Vec::new(),
-                        owner: None,
-                        evidence: None,
-                    },
-                ));
+                // The primitive's own slot says how the callback runs relative
+                // to *this* call; the row says how it runs relative to the
+                // export. `onMount(fn) { createEffect(() => untrack(fn)) }` is
+                // the shape where those differ: `untrack`'s slot is inline,
+                // and the enclosing `createEffect` has not run it by the time
+                // `onMount` returns. Composing the enclosing chain answers the
+                // second question; an unclassifiable enclosing position leaves
+                // the slot's own answer standing, which is what this branch
+                // always published.
+                //
+                // Two levels of `Option`, and they mean different things. The
+                // outer one is "was there a usable chain to compose", and its
+                // `None` falls back to the slot's own answer. The inner one is
+                // the composition itself, and its `None` is the unknown
+                // sentinel -- a usable chain that refuses to answer must open
+                // the sentinel rather than fall back, because the slot's answer
+                // is relative to the wrapping call and the row is relative to
+                // the export.
+                let composed: Option<Option<&'static str>> =
+                    enclosing_callback_chain(file, call.span, &contracts, lookup)
+                        .filter(|chain| {
+                            chain.wrappers.is_empty()
+                                || callback_chain_reaches_owner_body(
+                                    file,
+                                    chain,
+                                    &nodes[callback_owner],
+                                )
+                        })
+                        .and_then(|chain| {
+                            let mut wrappers = vec![callback_wrapper_at(
+                                file,
+                                call,
+                                argument_index,
+                                &contracts,
+                                lookup,
+                            )?];
+                            wrappers.extend(chain.wrappers);
+                            Some(compose_callback_chain(&wrappers))
+                        });
+                if let Some(execution) = composed.unwrap_or(Some(execution)) {
+                    contribution.callbacks.push((
+                        nodes[callback_owner].span,
+                        ContractCallback {
+                            parameter,
+                            execution: execution.into(),
+                            arguments: Vec::new(),
+                            owner: None,
+                            evidence: None,
+                        },
+                    ));
+                } else {
+                    contribution.contract_generation_obligations.push((
+                        nodes[callback_owner].span,
+                        unknown_callback_obligation(
+                            file,
+                            &nodes[callback_owner],
+                            call.callee,
+                            parameter,
+                            location(file.path.shared(), call.callee),
+                            lookup,
+                        ),
+                    ));
+                }
                 continue;
             }
             // `splitProps` only creates property views. Its source and key
@@ -2053,42 +2165,288 @@ fn same_runtime_value(
         .is_some_and(|(left, right)| left == right)
 }
 
-fn enclosing_callback_execution(
+/// How one callback position schedules the code written inside it, relative to
+/// the call that owns that position.
+///
+/// Four answers rather than the contract's three, because "runs during the
+/// call" and "reads inside it subscribe the caller" are separate facts and the
+/// composition in [`compose_callback_chain`] needs both. The contract
+/// vocabulary collapses them: `untrack` and `batch` are both `inline` there,
+/// and only one of them stops an enclosing computation from tracking what runs
+/// inside.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum CallbackWrapper {
+    /// Runs during the wrapping call and leaves the caller's tracking scope in
+    /// place: 1.x `batch`, `startTransition`, `catchError`'s protected body,
+    /// 2.0 `latest`/`isPending`.
+    Transparent,
+    /// Runs during the wrapping call with the listener cleared: `untrack`,
+    /// `createRoot`, `runWithOwner`, 2.0 `flush` and `createRevealOrder`.
+    Detaching,
+    /// The wrapping call builds its own tracked computation around the code.
+    ///
+    /// The payload is when that computation runs relative to the wrapping
+    /// call's return, and it is not derivable from "tracked": 1.x `createMemo`
+    /// and `createRenderEffect` run it during the call while `createEffect`
+    /// queues it, and 2.0 disagrees with 1.x on `createEffect`. `None` is the
+    /// dialect refusing to say ([`solid_dialect::Dialect::tracked_callback_timing`]),
+    /// or a package contract row, whose `execution` word carries no schedule
+    /// column at all.
+    Tracked(Option<TrackedCallbackTiming>),
+    /// The wrapping call schedules the code to run after it returns.
+    Deferred,
+}
+
+/// The wrapper a callback position is, for contract emission.
+///
+/// `None` is not "transparent": it is "this analysis cannot say what the
+/// wrapping call does with the function it was handed", which is why
+/// [`enclosing_callback_chain`] refuses the whole chain on it rather than
+/// skipping the link.
+fn callback_wrapper_at(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+    contracts: &InterproceduralContracts<'_>,
+    lookup: &SemanticLookup<'_>,
+) -> Option<CallbackWrapper> {
+    let count = call.arguments.len();
+    let primitive = lookup
+        .call_index(file, call.span)
+        .and_then(|call_index| super::known_primitive(&lookup.primitives(file).calls[call_index]));
+    let execution = primitive_callback_execution(primitive, argument, count, lookup.dialect)
+        .map(std::borrow::Cow::Borrowed)
+        .or_else(|| {
+            let symbol = lookup.callee_symbol(file, call.callee)?;
+            contracts
+                .callbacks
+                .get(symbol)?
+                .iter()
+                .find(|callback| callback.parameter == argument)
+                .map(|callback| std::borrow::Cow::Owned(callback.execution.clone()))
+        })?;
+    Some(match execution.as_ref() {
+        "deferred" => CallbackWrapper::Deferred,
+        // A package contract row (`primitive` is `None` here) carries no
+        // schedule column, so its tracked wrapper has no established timing and
+        // the fold fails closed on it.
+        "tracked" => CallbackWrapper::Tracked(primitive.and_then(|primitive| {
+            lookup
+                .dialect
+                .tracked_callback_timing(primitive, argument, count)
+        })),
+        // Only a primitive answers the clearing question; a package contract
+        // row carries no such column, so an external `inline` stays
+        // transparent. `reports_untracked_reads_at` is consulted for the
+        // inline entry points that clear the listener without being in the
+        // synchronous-clearing set (1.x/2.0 `render` and `hydrate`).
+        _ if primitive.is_some_and(|primitive| {
+            lookup.dialect.runs_callback_synchronously(primitive)
+                || lookup
+                    .dialect
+                    .reports_untracked_reads_at(primitive, argument, count)
+        }) =>
+        {
+            CallbackWrapper::Detaching
+        }
+        _ => CallbackWrapper::Transparent,
+    })
+}
+
+/// The chain of callback positions between `nested` and the body of the
+/// function that lexically owns the chain, innermost first.
+///
+/// `outermost` is the span the walk stopped at -- the last wrapping call, or
+/// `nested` itself for an empty chain. Callers check that it sits in the
+/// declaring function's own body before believing the composition: a closure
+/// that is merely *returned* has an empty chain too, and reading an empty chain
+/// as "runs inline" is the promise `callback-execution-boundary` exists to
+/// prevent.
+struct CallbackChain {
+    wrappers: Vec<CallbackWrapper>,
+    outermost: Span,
+}
+
+/// `None` means a callback position exists that this analysis cannot classify,
+/// so no composition over the chain is honest. `Some` with empty `wrappers`
+/// means the walk found no callback position at all -- a different answer, and
+/// the reason this is not an `Option<Vec<_>>`.
+///
+/// [`direct_callback_contains`] resolves exactly one level, so the walk is
+/// iterative -- the same innermost-outward loop
+/// `semantic_write_execution_role_within` uses for write regions.
+fn enclosing_callback_chain(
     file: &solid_facts::FileFacts,
     nested: Span,
     contracts: &InterproceduralContracts<'_>,
     lookup: &SemanticLookup<'_>,
-) -> Option<String> {
-    let primitives = lookup.primitives(file);
-    let mut enclosing = file
-        .ast
-        .arguments_containing(nested)
-        .filter(|(call, argument)| {
-            direct_callback_contains(file, call.arguments[*argument].span, nested)
-        })
-        .collect::<Vec<_>>();
-    enclosing.sort_by_key(|(call, argument)| {
-        let span = call.arguments[*argument].span;
-        span.end - span.start
-    });
-    enclosing.into_iter().find_map(|(call, parameter)| {
-        let call_index = lookup.call_index(file, call.span)?;
-        if let Some(execution) = primitive_callback_execution(
-            super::known_primitive(&primitives.calls[call_index]),
-            parameter,
-            call.arguments.len(),
-            lookup.dialect,
-        ) {
-            return Some(execution.to_owned());
+) -> Option<CallbackChain> {
+    let mut wrappers = Vec::new();
+    let mut span = nested;
+    // Bounded like every other span walk in this module: a malformed or
+    // pathologically nested AST must not turn a summary into a hang.
+    for _ in 0..32 {
+        let mut enclosing = file
+            .ast
+            .arguments_containing(span)
+            .filter(|(call, argument)| {
+                direct_callback_contains(file, call.arguments[*argument].span, span)
+            })
+            .collect::<Vec<_>>();
+        if enclosing.is_empty() {
+            break;
         }
-        let symbol = lookup.callee_symbol(file, call.callee)?;
-        contracts
-            .callbacks
-            .get(symbol)?
-            .iter()
-            .find(|callback| callback.parameter == parameter)
-            .map(|callback| callback.execution.clone())
+        // Shortest argument span first: `f(g(() => x))` answers both calls for
+        // `x`, and the immediately wrapping one is `g`'s.
+        enclosing.sort_by_key(|(call, argument)| {
+            let span = call.arguments[*argument].span;
+            span.end - span.start
+        });
+        let (call, argument) = enclosing[0];
+        wrappers.push(callback_wrapper_at(
+            file, call, argument, contracts, lookup,
+        )?);
+        span = call.span;
+    }
+    Some(CallbackChain {
+        wrappers,
+        outermost: span,
     })
+}
+
+/// Whether the chain's outermost wrapping call is written in `owner`'s own
+/// body, which is what makes a composition over it a promise about `owner`.
+fn callback_chain_reaches_owner_body(
+    file: &solid_facts::FileFacts,
+    chain: &CallbackChain,
+    owner: &SummaryNode,
+) -> bool {
+    file.ast
+        .functions_body_containing(chain.outermost)
+        .min_by_key(|function| function.body.end - function.body.start)
+        .is_some_and(|innermost| innermost.body == owner.body)
+}
+
+/// The contract execution a callback carries when it runs synchronously at the
+/// innermost end of `wrappers`.
+///
+/// Read innermost outward, because the order is the whole answer:
+/// `untrack(() => createMemo(fn))` tracks `fn` -- the memo subscribes it and
+/// the surrounding `untrack` cannot undo that -- while
+/// `createEffect(() => untrack(fn))` does not, and defers instead. That second
+/// shape is solid-js's own `onMount`, which the generator used to publish as
+/// `tracked` because it read the lexical tracking scope rather than the
+/// schedule relative to the export's return.
+///
+/// `None` is the unknown sentinel: a wrapper in the chain has no established
+/// schedule, so no word is honest. It arises for exactly one shape -- a
+/// *detached* callback under a tracked wrapper whose
+/// [`solid_dialect::Dialect::tracked_callback_timing`] the dialect does not
+/// state. Once tracking is cleared, the tracked wrapper's remaining
+/// contribution is only its schedule, and reading `Tracked` as "runs later" is
+/// wrong for most of 1.x's tracked primitives: `createMemo(() => untrack(cb))`
+/// runs `cb` during the call (`dist/solid.js:244-256`), so `deferred` there was
+/// a claim the probe measures and fails. Where tracking is *not* cleared the
+/// answer stays `tracked` regardless of schedule -- the attribution is the
+/// claim, and every tracked computation eventually runs its compute.
+fn compose_callback_chain(wrappers: &[CallbackWrapper]) -> Option<&'static str> {
+    let mut detached = false;
+    let mut execution = "inline";
+    for wrapper in wrappers {
+        match wrapper {
+            CallbackWrapper::Transparent => {}
+            CallbackWrapper::Detaching => detached = true,
+            // A tracked wrapper subscribes what runs inside it -- unless a
+            // clearing wrapper already stands between them, in which case what
+            // is left of the wrapper is its schedule.
+            CallbackWrapper::Tracked(_) if !detached && execution != "deferred" => {
+                execution = "tracked";
+            }
+            // Detached under a tracked wrapper: the schedule is the whole
+            // remaining question, and only the dialect can answer it.
+            CallbackWrapper::Tracked(timing) if execution != "deferred" => {
+                execution = match timing {
+                    Some(TrackedCallbackTiming::DuringCall) => "inline",
+                    Some(TrackedCallbackTiming::AfterCall) => "deferred",
+                    None => return None,
+                };
+            }
+            CallbackWrapper::Tracked(_) => {}
+            // Sticky: no outer wrapper can make a callback that runs later run
+            // earlier.
+            CallbackWrapper::Deferred => execution = "deferred",
+        }
+    }
+    Some(execution)
+}
+
+/// What the wrappers around a forwarding call say about a callback the callee's
+/// own summary reports as `inline`.
+///
+/// Three answers, because "no chain fact" and "the chain refuses to answer" are
+/// opposites and collapsing them is how a refusal turns back into a claim.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub(crate) enum ForwardedAmbientExecution {
+    /// Nothing wraps the forwarding call that this analysis can read, so the
+    /// callee's own answer stands -- exactly as it did before this composition
+    /// existed. The ambient adjustment is an override, and there is nothing to
+    /// override with.
+    Callee,
+    /// The wrappers compose to this export-relative execution.
+    Composed(String),
+    /// A wrapper in the chain has no established schedule, so no
+    /// export-relative word is honest. The callee's `inline` rows must not be
+    /// republished and the unknown sentinel opens instead.
+    Unknown,
+}
+
+/// The ambient execution to apply to a callback forwarded into `call` at
+/// `argument`, when the callee's own summary says it invokes the callback
+/// inline.
+///
+/// The chain starts at the forwarding call's *own* position, not above it: for
+/// `createEffect(() => untrack(fn))` the callee is `untrack`, and "untrack
+/// clears the listener" is the fact that stops the enclosing `createEffect`
+/// from making `fn` tracked. Without that link the ambient answer was the
+/// enclosing computation's lexical role, which is the export's tracking scope
+/// rather than the callback's schedule.
+fn forwarded_callback_ambient_execution(
+    file: &solid_facts::FileFacts,
+    call: &solid_facts::ast::CallFact,
+    argument: usize,
+    contracts: &InterproceduralContracts<'_>,
+    lookup: &SemanticLookup<'_>,
+) -> ForwardedAmbientExecution {
+    let own = callback_wrapper_at(file, call, argument, contracts, lookup);
+    // `enclosing_callback_chain`'s `None` is "a callback position exists above
+    // this call that the analysis cannot classify" -- a different fact from
+    // "there is no wrapper above it", which is the whole reason
+    // [`CallbackChain`] is not an `Option<Vec<_>>`. So it is matched rather
+    // than `unwrap_or_default()`ed, which spelled the refusal as an empty
+    // chain: the refusal drops the *chain* from the composition and leaves the
+    // forwarding call's own position -- the one wrapper that was classified --
+    // to answer alone.
+    //
+    // That is deliberately best-effort rather than fail-closed, and it is this
+    // seam's pre-existing behavior, preserved here on purpose: an
+    // unclassifiable wrapper above the call can still defer a composition that
+    // reads `inline` or `tracked` from `own`. Recorded in
+    // docs/precision-backlog.md as the chain-refusal residue; closing it is a
+    // separate, measured change with its own fixtures, and it applies equally
+    // to the two ladder seams.
+    let above = match enclosing_callback_chain(file, call.span, contracts, lookup) {
+        Some(chain) => chain.wrappers,
+        None => Vec::new(),
+    };
+    if own.is_none() && above.is_empty() {
+        return ForwardedAmbientExecution::Callee;
+    }
+    let mut wrappers = own.into_iter().collect::<Vec<_>>();
+    wrappers.extend(above);
+    match compose_callback_chain(&wrappers) {
+        Some(execution) => ForwardedAmbientExecution::Composed(execution.to_owned()),
+        None => ForwardedAmbientExecution::Unknown,
+    }
 }
 
 /// The execution recorded for a callback forwarded into a primitive, in the
@@ -2096,12 +2454,31 @@ fn enclosing_callback_execution(
 ///
 /// The effect pair derives from the dialect, because its phases are the
 /// headline dialect difference: 2.0 has a deferred apply argument, 1.x has a
-/// tracked callback and a seed value. The other arms keep this module's own
-/// classification -- it deliberately labels `untrack`/`flush` callbacks
-/// "deferred" where the vocabulary calls them inline, because a contract
-/// consumer treats "deferred" as "not tracked here", which is the meaning
-/// these summaries need. Reconciling the two vocabularies is a contract-
-/// emission change with its own fixtures.
+/// tracked callback and a seed value.
+///
+/// `untrack` and 2.0's `flush` sit in the `"inline"` arm beside `createRoot`
+/// and `runWithOwner`, which is what the contract vocabulary means by the word:
+/// `inline` and `deferred` are the *schedule* axis and describe only callbacks
+/// the export does not subscribe, while the clearing fact travels separately
+/// through [`solid_dialect::Dialect::runs_callback_synchronously`]
+/// (docs/package-contracts.md, "one word over two axes"). This module used to
+/// answer `"deferred"` for the pair on the grounds that a consumer reads
+/// `"deferred"` as "not tracked here" -- but `"deferred"` is also a promise
+/// that the callback does *not* run before the export returns, and every one of
+/// these runs it during the call. `contract probe` measures the timing, so the
+/// divergence published claims the runtime contradicts. The "not tracked"
+/// half is now carried by [`callback_wrapper_at`], which reads the clearing
+/// fact from the dialect instead of encoding it in the word.
+///
+/// This table is also the *reach* of the wrapper-chain fold: a primitive with no
+/// row here cannot be classified as a wrapper at all, so a chain containing one
+/// is refused ([`enclosing_callback_chain`]) and the row falls back to the
+/// lexical answer. `startTransition` and `createResource` are deliberately
+/// absent for that reason -- their dialect `Execution` states attribution and
+/// not a schedule, and restating it as one is the mistake the fold exists to
+/// avoid. `batch`, `createComputed`, `onMount`, `catchError`, `children` and the
+/// rest are absent because nobody has established their schedule here yet,
+/// which is a precision residue recorded in docs/precision-backlog.md.
 fn primitive_callback_execution(
     primitive: Option<Primitive>,
     parameter: usize,
@@ -2145,11 +2522,8 @@ fn primitive_callback_execution(
             | P::Dynamic,
             0,
         ) => Some("tracked"),
-        (
-            P::OnSettled | P::Action | P::CreateReaction | P::Untrack | P::Flush | P::OnCleanup,
-            0,
-        ) => Some("deferred"),
-        (P::CreateRoot, 0) | (P::RunWithOwner, 1) => Some("inline"),
+        (P::OnSettled | P::Action | P::CreateReaction | P::OnCleanup, 0) => Some("deferred"),
+        (P::CreateRoot | P::Untrack | P::Flush, 0) | (P::RunWithOwner, 1) => Some("inline"),
         _ => None,
     }
 }
@@ -3334,7 +3708,7 @@ struct InterproceduralGraphAssembly<'a> {
     by_symbol: &'a HashMap<SymbolId, usize>,
     summaries: &'a mut [SummaryReads],
     callback_summaries: &'a mut [Vec<ContractCallback>],
-    callback_forwardings: &'a mut Vec<(usize, usize, usize, usize, Option<String>)>,
+    callback_forwardings: &'a mut Vec<(usize, usize, usize, usize, ForwardedAmbientExecution)>,
     dispatches: &'a mut Vec<(usize, Vec<usize>)>,
     contract_generation_obligations: &'a mut [Vec<ContractGenerationObligation>],
     contract_consumer_obligations: &'a mut Vec<StaticDefect>,
@@ -4465,12 +4839,21 @@ fn interprocedural_reads(
                 .cloned()
                 .collect::<Vec<_>>()
             {
+                // Only an `inline` callee row is relative to the callee's own
+                // call and therefore needs restating; `tracked` and `deferred`
+                // survive any wrapper. `Unknown` refuses to restate it, and the
+                // row is dropped rather than republished -- the obligation that
+                // came with the forwarding opens the sentinel for the export.
+                if callback.execution == "inline"
+                    && *ambient_execution == ForwardedAmbientExecution::Unknown
+                {
+                    continue;
+                }
                 let forwarded = ContractCallback {
                     parameter: *owner_parameter,
-                    execution: if callback.execution == "inline" {
-                        ambient_execution.clone().unwrap_or(callback.execution)
-                    } else {
-                        callback.execution
+                    execution: match (callback.execution.as_str(), ambient_execution) {
+                        ("inline", ForwardedAmbientExecution::Composed(ambient)) => ambient.clone(),
+                        _ => callback.execution,
                     },
                     arguments: callback.arguments.clone(),
                     owner: callback.owner.clone(),
@@ -5305,14 +5688,14 @@ mod tests {
     use std::collections::{HashMap, HashSet};
     use std::sync::Arc;
 
-    use solid_dialect::Primitive;
+    use solid_dialect::{Primitive, TrackedCallbackTiming};
     use typefacts::Location;
 
     use super::{
-        ContractCallback, SummaryRead, SummaryReads, SymbolId, add_interprocedural_dependency_user,
-        cached_reactive_source, equivalent_callbacks, equivalent_summary_reads,
-        primitive_callback_execution, reactive_source_order,
-        remove_interprocedural_dependency_user, retained_reactive_sources,
+        CallbackWrapper, ContractCallback, SummaryRead, SummaryReads, SymbolId,
+        add_interprocedural_dependency_user, cached_reactive_source, compose_callback_chain,
+        equivalent_callbacks, equivalent_summary_reads, primitive_callback_execution,
+        reactive_source_order, remove_interprocedural_dependency_user, retained_reactive_sources,
     };
     use crate::cache::InterproceduralResultDependency;
 
@@ -5497,15 +5880,20 @@ mod tests {
             primitive_callback_execution(Some(Primitive::CreateMemo), 0, 1, &dialect),
             Some("tracked")
         );
-        // The module deliberately labels `untrack`/`flush` "deferred" (see
-        // the function's doc comment) even though the dialect vocabulary
-        // calls them inline.
+        // `untrack` and `flush` run their callback before returning, so the
+        // contract word for both is `inline` -- the same word the reviewed
+        // bundled contract for solid-js@2.0.0-rc.0 uses for them. The
+        // listener-clearing half is a separate dialect fact, not this word.
         assert_eq!(
             primitive_callback_execution(Some(Primitive::Untrack), 0, 1, &dialect),
-            Some("deferred")
+            Some("inline")
         );
         assert_eq!(
             primitive_callback_execution(Some(Primitive::Flush), 0, 1, &dialect),
+            Some("inline")
+        );
+        assert_eq!(
+            primitive_callback_execution(Some(Primitive::OnCleanup), 0, 1, &dialect),
             Some("deferred")
         );
         assert_eq!(
@@ -5535,6 +5923,81 @@ mod tests {
             primitive_callback_execution(Some(Primitive::MergeProps), 3, 4, &solid1x),
             Some("tracked")
         );
+    }
+
+    /// The composition rule, innermost wrapper first. Each row is a real shape
+    /// the corpus measurement produced a wrong claim for.
+    #[test]
+    fn a_callback_chain_composes_detachment_and_schedule_in_order() {
+        use CallbackWrapper::{Deferred, Detaching, Tracked, Transparent};
+        // The tracked wrapper's schedule, which decides what a *detached*
+        // callback under it composes to. 1.x `createEffect` is the deferring
+        // one; 1.x `createMemo`/`createRenderEffect`/`mergeProps` and every
+        // 2.0 effect are eager; a package-contract row has neither.
+        const EAGER: CallbackWrapper = Tracked(Some(TrackedCallbackTiming::DuringCall));
+        const LATER: CallbackWrapper = Tracked(Some(TrackedCallbackTiming::AfterCall));
+        const UNKNOWN: CallbackWrapper = Tracked(None);
+
+        // `use(fn, el, arg) { return untrack(() => fn(el, arg)) }` --
+        // @solidjs/web. Runs before the export returns.
+        assert_eq!(compose_callback_chain(&[Detaching]), Some("inline"));
+        // `createSubRoot(fn) { return createRoot(d => fn(d)) }` --
+        // @solid-primitives/rootless. Same shape, same answer.
+        assert_eq!(
+            compose_callback_chain(&[Detaching, Transparent]),
+            Some("inline")
+        );
+        // `onMount(fn) { createEffect(() => untrack(fn)) }` -- solid-js. The
+        // clearing wrapper stops `tracked`; the effect still schedules.
+        assert_eq!(
+            compose_callback_chain(&[Detaching, LATER]),
+            Some("deferred")
+        );
+        // `createMemo(() => untrack(fn))`, and its `createRenderEffect` and
+        // `mergeProps` twins: the same chain shape with an *eager* tracked
+        // wrapper runs `fn` during the call. Measured against solid-js@1.9.14
+        // under `--conditions browser`: `ranDuringCall`, so a `deferred` claim
+        // here is one the probe fails.
+        assert_eq!(compose_callback_chain(&[Detaching, EAGER]), Some("inline"));
+        // No established schedule for the tracked wrapper: no word is honest,
+        // and the unknown sentinel is the answer rather than either guess.
+        assert_eq!(compose_callback_chain(&[Detaching, UNKNOWN]), None);
+        // Order is the answer: `untrack(() => createMemo(fn))` still tracks
+        // `fn`, because the memo subscribes it and the outer untrack cannot
+        // undo that. The wrapper's schedule is irrelevant once attribution
+        // decides, so even the unknown one answers `tracked` here.
+        assert_eq!(compose_callback_chain(&[EAGER, Detaching]), Some("tracked"));
+        assert_eq!(
+            compose_callback_chain(&[UNKNOWN, Detaching]),
+            Some("tracked")
+        );
+        // No clearing wrapper: the tracked claim survives untouched.
+        assert_eq!(compose_callback_chain(&[LATER]), Some("tracked"));
+        assert_eq!(compose_callback_chain(&[UNKNOWN]), Some("tracked"));
+        assert_eq!(
+            compose_callback_chain(&[Transparent, EAGER]),
+            Some("tracked")
+        );
+        // A transparent wrapper is exactly its call site.
+        assert_eq!(compose_callback_chain(&[Transparent]), Some("inline"));
+        // Deferral is sticky in both directions, and it outranks the sentinel:
+        // an inner wrapper that already runs later cannot be made earlier by
+        // anything above it, so the outer schedule is not asked for.
+        assert_eq!(compose_callback_chain(&[Deferred]), Some("deferred"));
+        assert_eq!(compose_callback_chain(&[Deferred, EAGER]), Some("deferred"));
+        assert_eq!(
+            compose_callback_chain(&[Deferred, Detaching, UNKNOWN]),
+            Some("deferred")
+        );
+        assert_eq!(compose_callback_chain(&[LATER, Deferred]), Some("deferred"));
+        assert_eq!(
+            compose_callback_chain(&[Detaching, LATER, Transparent]),
+            Some("deferred")
+        );
+        // Two tracked wrappers above a clearing one: the outer one's schedule
+        // is asked for too, so an unknown outer wrapper refuses even when the
+        // inner one is established.
+        assert_eq!(compose_callback_chain(&[Detaching, EAGER, UNKNOWN]), None);
     }
 
     #[test]

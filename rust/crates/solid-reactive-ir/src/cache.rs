@@ -229,7 +229,7 @@ pub(crate) struct InterproceduralGraphContribution {
         InterproceduralGraphTarget,
         usize,
         usize,
-        Option<String>,
+        crate::interproc::ForwardedAmbientExecution,
     )>,
     pub(crate) contract_generation_obligations: Vec<(Span, ContractGenerationObligation)>,
     pub(crate) contract_consumer_obligations: Vec<StaticDefect>,

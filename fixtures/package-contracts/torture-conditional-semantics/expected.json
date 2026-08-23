@@ -8,22 +8,9 @@
   "summaries": {
     "function-1": {
       "kind": "function",
-      "callbacks": [
-        {
-          "parameter": 0,
-          "execution": "deferred",
-          "evidence": {
-            "kind": "inferred"
-          }
-        },
-        {
-          "parameter": 0,
-          "execution": "inline",
-          "evidence": {
-            "kind": "inferred"
-          }
-        }
-      ],
+      "callbacks": {
+        "status": "unknown"
+      },
       "variants": [
         {
           "conditions": [

@@ -778,7 +778,9 @@ fn contract_export_function(
     // An omitted `callbacks` list is a negative claim. Where a caller-supplied
     // parameter escaped without being accounted for, the honest list is not the
     // rows that were proven -- it is "unknown".
-    let callbacks = if escaped_parameters.is_empty() {
+    let callbacks = if escaped_parameters.is_empty()
+        && !callbacks_contradict_on_a_parameter(&callback_summary)
+    {
         callback_summary.into()
     } else {
         ContractClaim::Unknown(ContractUnknownClaim::new())
@@ -797,6 +799,40 @@ fn contract_export_function(
             String::new().into()
         },
     }
+}
+
+/// Whether two rows claim different executions for the same parameter.
+///
+/// One row is pushed per *invocation site*, and `push_contract_callback` dedups
+/// only exactly equal rows, so a parameter invoked twice with two schedules
+/// publishes both -- `@solid-primitives/range`'s `mapRange` carried
+/// `callbacks[2]` as `deferred` and as `tracked` in the same summary. Schema v1
+/// has one execution axis per parameter, and the runtime has one behavior, so
+/// at least one of the two rows is false and a consumer choosing either is
+/// guessing. The per-export sentinel is the encoding schema v1 has for that.
+///
+/// Rows that agree on `execution` and differ elsewhere (argument descriptors,
+/// owner) are *not* contradictory: those are additional facts about the same
+/// schedule, and collapsing them would discard proven claims.
+///
+/// **The sentinel is per export, and that is wider than the contradiction.** One
+/// contradicted parameter discards the *other* parameters' undisputed rows too
+/// (`fixtures/package-contracts/multi-role-callback-parameter`'s
+/// `contradictOnZeroOnly` pins it). Schema v1 offers no narrower spelling: the
+/// only granularity below `{"status": "unknown"}` is whether a row is present,
+/// and an absent row is a certified *negative* — "never invokes a
+/// caller-supplied callback there" (docs/package-contracts.md, the
+/// "no callback execution row" review section). Dropping only the contradicted
+/// parameter's rows would therefore replace one contradiction with one
+/// affirmative false negative, and there is no encoding for "unknown at this
+/// parameter, proven at that one". The pre-existing `escaped_parameters`
+/// sentinel two lines up has exactly the same width for the same reason.
+///
+/// `callbacks` must already be sorted by parameter.
+fn callbacks_contradict_on_a_parameter(callbacks: &[ContractCallback]) -> bool {
+    callbacks.windows(2).any(|pair| {
+        pair[0].parameter == pair[1].parameter && pair[0].execution != pair[1].execution
+    })
 }
 
 fn resolve_local_reexport(
@@ -1571,5 +1607,53 @@ mod variant_selection_tests {
         let right = variant(&["node"], Some(2));
         let tied = [&left, &right];
         assert!(selected_variant(&tied).is_none());
+    }
+}
+
+#[cfg(test)]
+mod callback_contradiction_tests {
+    use super::{ContractCallback, callbacks_contradict_on_a_parameter};
+
+    fn row(parameter: usize, execution: &str) -> ContractCallback {
+        ContractCallback {
+            parameter,
+            execution: execution.into(),
+            arguments: Vec::new(),
+            owner: None,
+            evidence: None,
+        }
+    }
+
+    #[test]
+    fn two_executions_for_one_parameter_are_contradictory() {
+        // `@solid-primitives/range`'s `mapRange`: parameter 2 invoked in the
+        // export body and again inside the accessor it returns.
+        let rows = [row(2, "deferred"), row(2, "tracked")];
+        assert!(callbacks_contradict_on_a_parameter(&rows));
+        // `createDerivedSpring`: an inline site and a tracked site.
+        let rows = [row(0, "inline"), row(0, "tracked")];
+        assert!(callbacks_contradict_on_a_parameter(&rows));
+        // Three rows, with the disagreeing pair not adjacent by execution: all
+        // rows for one parameter are contiguous after the sort, so any pair of
+        // distinct executions produces at least one differing neighbour.
+        let rows = [row(0, "inline"), row(0, "inline"), row(0, "tracked")];
+        assert!(callbacks_contradict_on_a_parameter(&rows));
+    }
+
+    #[test]
+    fn agreeing_and_distinct_parameters_stay_known() {
+        // Different parameters may of course differ.
+        let rows = [row(0, "inline"), row(1, "tracked")];
+        assert!(!callbacks_contradict_on_a_parameter(&rows));
+        // Two invocation sites with the same schedule: `push_contract_callback`
+        // dedups identical rows, and rows that agree on `execution` while
+        // differing elsewhere are additional facts about one schedule, not a
+        // contradiction.
+        let mut accessor = row(0, "tracked");
+        accessor.arguments = vec![None];
+        let rows = [row(0, "tracked"), accessor];
+        assert!(!callbacks_contradict_on_a_parameter(&rows));
+        assert!(!callbacks_contradict_on_a_parameter(&[]));
+        assert!(!callbacks_contradict_on_a_parameter(&[row(0, "inline")]));
     }
 }

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { EXECUTION_UNATTRIBUTABLE } from "../../packages/cli/scripts/contract-probe-driver.mjs";
 import {
   ROOT_CAUSE_ORDER,
   blockerClass,
@@ -117,6 +118,18 @@ test("undrivenBucket separates a missing probe form from a failed observation", 
     "probe session failed (process died)"
   );
   assert.equal(undrivenBucket("a reason nobody has written yet"), "other");
+});
+
+test("every reason the probe driver can give for an unattributable observation has a bucket", () => {
+  // The distribution this feeds is how a corpus measurement is read, and a
+  // reason the buckets do not know lands in `other` together with everything
+  // else unrecognized -- which is worst exactly when a new withdrawal class is
+  // the largest one in the run. Asserting over the driver's own table rather
+  // than over a copied list is what makes the next reason string fail here
+  // instead of quietly widening `other`.
+  for (const [name, reason] of Object.entries(EXECUTION_UNATTRIBUTABLE)) {
+    assert.notEqual(undrivenBucket(reason), "other", name);
+  }
 });
 
 test("probeErrorBucket names the missing runtime rather than calling it unknown", () => {

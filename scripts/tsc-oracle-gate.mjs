@@ -36,29 +36,27 @@
 //
 // There is no silent skip -- an unprovisioned oracle or a missing binary fails
 // loudly, the same way `SOLID_TYPEFACTS_BIN`'s canary does.
-import { execFileSync } from "node:child_process";
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  symlinkSync,
-  writeFileSync,
-} from "node:fs";
+//
+// The 161 cases run concurrently, and the structure of this file is what keeps
+// that honest. Execution -- two TypeScript programs and two checker processes
+// per case -- happens in worker threads (`scripts/lib/tsc-oracle-case.mjs`),
+// which is where the whole cost is. Every *verdict* is drawn here, in one pass
+// over the cases in ledger order, so the failure list a run prints does not
+// depend on which case finished first.
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { createWorkerPool, gateConcurrency, mapPool } from "./lib/pool.mjs";
 import {
-  oracleCompilerOptions,
-  oracleProject,
-  oracleSubjectSpan,
-  runOracle,
-} from "./tsc-oracle.mjs";
+  canonicalRule,
+  catalogEntries,
+  prepareDialectBases,
+} from "./lib/tsc-oracle-case.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const LEDGER = join(ROOT, "fixtures/tsc-oracle/rule-cases.json");
-// Case projects live under the one ignored build root, beside the audited
-// installs they resolve against.
-const CASE_ROOT = join(ROOT, "rust/target/tsc-oracle-cases");
+const WORKER = join(ROOT, "scripts/lib/tsc-oracle-gate-worker.mjs");
 
 const json = process.argv.includes("--json");
 const report = process.argv.includes("--report");
@@ -66,24 +64,6 @@ const ledger = JSON.parse(readFileSync(LEDGER, "utf8"));
 
 const EXPECTATIONS = new Set(Object.keys(ledger.expectations));
 const CASE_COMPILER_OPTIONS = new Set(["verbatimModuleSyntax"]);
-
-// Both passes matter. "Only under `strict`" is not an exception the absolute
-// rule recognises, so a case is redundant if *either* pass reports it; a case
-// claiming silence has to be silent in both.
-const passes = (result) => [
-  ["strict", result.passes.strict],
-  ["loose", result.passes.loose],
-];
-
-const errorsOnly = (diagnostics) => diagnostics.filter((d) => d.category === "error");
-
-const canonicalRule = (testCase) =>
-  testCase.dialect === "v1" && !testCase.rule.startsWith("v1/")
-    ? `v1/${testCase.rule}`
-    : testCase.rule;
-const slug = (name) => name.replace(/[^a-z0-9]+/gi, "-");
-const sourceName = (testCase, index) =>
-  `${slug(testCase.rule)}-${index}.${testCase.sourceExtension ?? "tsx"}`;
 
 /** Fail loudly rather than skip -- the same contract the oracle's provisioning check keeps. */
 const locate = (variable, ...candidates) => {
@@ -103,122 +83,36 @@ const CHECKER = locate(
   join(ROOT, "rust/target/debug/solid-checker-rust"),
 );
 const TYPEFACTS = locate("SOLID_TYPEFACTS_BIN", join(ROOT, "bin/solid-typefacts"));
-const catalogEntries = [
-  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v1.json"), "utf8")).rules,
-  ...JSON.parse(readFileSync(join(ROOT, "packages/cli/lib/rules-solid-v2.json"), "utf8")).rules,
-];
-const catalogByName = new Map(catalogEntries.map((rule) => [rule.name, rule]));
-
-// One directory per dialect, holding a symlink to that dialect's audited
-// install. A symlink rather than a copy because the checker picks its dialect
-// from the nearest `node_modules/solid-js` above the project -- so the tree the
-// oracle compiles against is also the tree that decides which catalog runs --
-// and because the audited install must stay read-only.
-const prepared = new Map();
-const dialectBase = (dialect) => {
-  if (prepared.has(dialect)) return prepared.get(dialect);
-  const { root } = oracleProject(dialect);
-  const base = join(CASE_ROOT, dialect);
-  mkdirSync(base, { recursive: true });
-  const link = join(base, "node_modules");
-  if (!existsSync(link)) symlinkSync(join(root, "node_modules"), link, "dir");
-  const entry = { base };
-  prepared.set(dialect, entry);
-  return entry;
-};
-
-/**
- * Run the checker over one case, in its own project.
- *
- * Its own project, not one program over all of them: a case is a claim about
- * what the checker says on exactly these bytes, and project-level analysis --
- * source discovery, owner reachability, contract lookups -- can differ once
- * unrelated files join. The compiler options mirror the oracle's `strict` pass
- * so both halves of a case describe the same program.
- */
-const runChecker = (testCase, index, strict) => {
-  const { base } = dialectBase(testCase.dialect);
-  const dir = join(base, `case-${index}`);
-  mkdirSync(dir, { recursive: true });
-  const pass = strict ? "strict" : "loose";
-  const caseSourceName = sourceName(testCase, index);
-  const code = testCase.code.endsWith("\n") ? testCase.code : `${testCase.code}\n`;
-  writeFileSync(
-    join(dir, `tsconfig.${pass}.json`),
-    `${JSON.stringify(
-      {
-        compilerOptions: oracleCompilerOptions(
-          testCase.dialect,
-          strict,
-          testCase.compilerOptions,
-        ),
-        files: [caseSourceName],
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  writeFileSync(
-    join(dir, caseSourceName),
-    code,
-  );
-  const enablementArgs = [
-    ...(testCase.presets ?? []).flatMap((preset) => ["--preset", preset]),
-    ...(testCase.enableRules ?? []).flatMap((rule) => ["--enable-rule", rule]),
-  ];
-  const testedRule = canonicalRule(testCase);
-  if (
-    catalogByName.get(testedRule)?.defaultEnabled === false &&
-    !(testCase.enableRules ?? []).includes(testedRule)
-  ) {
-    enablementArgs.push("--enable-rule", testedRule);
-  }
-  const output = execFileSync(
-    CHECKER,
-    ["--format", "json", "--project", join(dir, `tsconfig.${pass}.json`), ...enablementArgs],
-    {
-      encoding: "utf8",
-      maxBuffer: 256 * 1024 * 1024,
-      env: { ...process.env, SOLID_TYPEFACTS_BIN: TYPEFACTS },
-    },
-  );
-  const snapshot = JSON.parse(output);
-  const findings = (snapshot.findings ?? []).map((finding) => {
-    const location = finding.primaryLocation;
-    const subject = oracleSubjectSpan(code, location.startByte, location.endByte, caseSourceName);
-    return {
-      id: finding.id,
-      rule: finding.rule,
-      kind: finding.kind,
-      startByte: location.startByte,
-      endByte: location.endByte,
-      subjectStartByte: subject.startByte,
-      subjectEndByte: subject.endByte,
-    };
-  });
-  return { findings };
-};
 
 const subjectsOverlap = (finding, diagnostic) =>
   finding.subjectStartByte < diagnostic.subjectEndByte &&
   diagnostic.subjectStartByte < finding.subjectEndByte;
 
-const failures = [];
-const results = [];
-
-for (const [index, testCase] of ledger.cases.entries()) {
+/**
+ * Everything about a case that can be judged without running anything.
+ *
+ * `skip: true` reproduces the original loop's `continue`: a case whose shape is
+ * wrong is not executed. The `presets`/`enableRules` check deliberately does
+ * *not* skip -- its `continue` only ever left the inner field loop, so such a
+ * case is still executed and still judged on both sides. Preserved as it was;
+ * a case with a malformed `presets` should fail for that reason without also
+ * losing its oracle verdict.
+ */
+const validate = (testCase, index) => {
   const label = `${testCase.rule} [${index}]`;
+  const failures = [];
+  const stop = (message) => {
+    failures.push(message);
+    return { failures, skip: true };
+  };
   if (testCase.dialect !== "v1" && testCase.dialect !== "v2") {
-    failures.push(`${label}: dialect must be exactly "v1" or "v2"`);
-    continue;
+    return stop(`${label}: dialect must be exactly "v1" or "v2"`);
   }
   if (testCase.dialect === "v2" && testCase.rule.startsWith("v1/")) {
-    failures.push(`${label}: a v2 case cannot name a v1/ catalog rule`);
-    continue;
+    return stop(`${label}: a v2 case cannot name a v1/ catalog rule`);
   }
   if (testCase.sourceExtension !== undefined && !["ts", "tsx"].includes(testCase.sourceExtension)) {
-    failures.push(`${label}: sourceExtension must be exactly "ts" or "tsx"`);
-    continue;
+    return stop(`${label}: sourceExtension must be exactly "ts" or "tsx"`);
   }
   if (testCase.compilerOptions !== undefined) {
     if (
@@ -226,22 +120,19 @@ for (const [index, testCase] of ledger.cases.entries()) {
       Array.isArray(testCase.compilerOptions) ||
       typeof testCase.compilerOptions !== "object"
     ) {
-      failures.push(`${label}: compilerOptions must be an object`);
-      continue;
+      return stop(`${label}: compilerOptions must be an object`);
     }
     const unsupported = Object.keys(testCase.compilerOptions).filter(
       (name) => !CASE_COMPILER_OPTIONS.has(name),
     );
     if (unsupported.length) {
-      failures.push(`${label}: unsupported compilerOptions ${unsupported.join(", ")}`);
-      continue;
+      return stop(`${label}: unsupported compilerOptions ${unsupported.join(", ")}`);
     }
     if (
       testCase.compilerOptions.verbatimModuleSyntax !== undefined &&
       typeof testCase.compilerOptions.verbatimModuleSyntax !== "boolean"
     ) {
-      failures.push(`${label}: compilerOptions.verbatimModuleSyntax must be boolean`);
-      continue;
+      return stop(`${label}: compilerOptions.verbatimModuleSyntax must be boolean`);
     }
   }
   for (const field of ["presets", "enableRules"]) {
@@ -250,34 +141,31 @@ for (const [index, testCase] of ledger.cases.entries()) {
       (!Array.isArray(testCase[field]) || testCase[field].some((value) => typeof value !== "string"))
     ) {
       failures.push(`${label}: ${field} must be an array of strings`);
-      continue;
     }
   }
-  const expectedRule = canonicalRule(testCase);
   if (!EXPECTATIONS.has(testCase.expect)) {
-    failures.push(`${label}: unknown expectation ${JSON.stringify(testCase.expect)}`);
-    continue;
+    return stop(`${label}: unknown expectation ${JSON.stringify(testCase.expect)}`);
   }
   if (!testCase.why || testCase.why.length < 20) {
-    failures.push(`${label}: every case needs a written 'why'`);
-    continue;
+    return stop(`${label}: every case needs a written 'why'`);
   }
-  const result = runOracle(
-    testCase.dialect,
-    [{ name: sourceName(testCase, index), code: testCase.code }],
-    testCase.compilerOptions,
-  );
-  const perPass = passes(result).map(([name, diagnostics]) => [name, errorsOnly(diagnostics)]);
+  return { failures, skip: false };
+};
+
+/**
+ * Judge one executed case: both declarations, the duplicate-subject audit, and
+ * TypeScript's own expectation.
+ *
+ * Pure -- it reads only the case and what the worker observed -- so the order
+ * of this file's failure list is the ledger's order and nothing else.
+ */
+const evaluate = (testCase, index, { perPass, checkerPasses }) => {
+  const label = `${testCase.rule} [${index}]`;
+  const failures = [];
+  const expectedRule = canonicalRule(testCase);
   const seen = [...new Set(perPass.flatMap(([, diagnostics]) => diagnostics.map((d) => d.code)))].sort(
     (a, b) => a - b,
   );
-  // The second half of the case: what the *checker* says about the same bytes.
-  // Without it a `silent` case proves only that TypeScript is quiet, which an
-  // over-narrowed rule that reports nothing at all satisfies just as well.
-  const checkerPasses = [
-    ["strict", runChecker(testCase, index, true)],
-    ["loose", runChecker(testCase, index, false)],
-  ];
   const targetByPass = checkerPasses.map(([name, observed]) => [
     name,
     observed.findings.filter((finding) => finding.rule === expectedRule),
@@ -285,7 +173,7 @@ for (const [index, testCase] of ledger.cases.entries()) {
   const observedRules = [
     ...new Set(checkerPasses.flatMap(([, observed]) => observed.findings.map((finding) => finding.rule))),
   ].sort();
-  results.push({
+  const result = {
     rule: testCase.rule,
     index,
     expect: testCase.expect,
@@ -297,7 +185,8 @@ for (const [index, testCase] of ledger.cases.entries()) {
     checkerPasses,
     codes: seen,
     perPass,
-  });
+  };
+  const done = () => ({ result, failures });
 
   if (testCase.checker !== "reports" && testCase.checker !== "silent") {
     failures.push(
@@ -372,7 +261,7 @@ for (const [index, testCase] of ledger.cases.entries()) {
         );
       }
     }
-    continue;
+    return done();
   }
 
   // The remaining expectations all require a diagnostic, and require it to be
@@ -381,7 +270,7 @@ for (const [index, testCase] of ledger.cases.entries()) {
   const allow = new Set(testCase.allow ?? []);
   if (!allow.size) {
     failures.push(`${label}: ${testCase.expect} requires 'allow' listing the diagnostic codes`);
-    continue;
+    return done();
   }
   if (!seen.length) {
     failures.push(
@@ -396,7 +285,7 @@ for (const [index, testCase] of ledger.cases.entries()) {
           "distinct-claim": `\n    The 'distinct-claim' allowance no longer describes anything.`,
         }[testCase.expect],
     );
-    continue;
+    return done();
   }
   const unexpected = seen.filter((code) => !allow.has(code));
   if (unexpected.length) {
@@ -405,6 +294,45 @@ for (const [index, testCase] of ledger.cases.entries()) {
         `${[...allow].map((c) => `TS${c}`).join("/")}); re-explain the case`,
     );
   }
+  return done();
+};
+
+// Phase 1: shape. A case that cannot be read is not executed, exactly as
+// before -- and an unprovisioned oracle fails here, once, rather than as N
+// identical worker errors.
+const validated = ledger.cases.map((testCase, index) => validate(testCase, index));
+const runnable = ledger.cases
+  .map((testCase, index) => ({ testCase, index }))
+  .filter(({ index }) => !validated[index].skip);
+
+prepareDialectBases();
+
+// Phase 2: execution, concurrent and order-independent.
+const concurrency = gateConcurrency();
+const pool = createWorkerPool({
+  workerPath: WORKER,
+  size: Math.min(concurrency, Math.max(1, runnable.length)),
+  workerData: { checker: CHECKER, typefacts: TYPEFACTS },
+});
+const executed = new Map();
+try {
+  const observed = await mapPool(runnable, ({ testCase, index }) => pool.run({ testCase, index }), {
+    concurrency,
+  });
+  for (const [position, { index }] of runnable.entries()) executed.set(index, observed[position]);
+} finally {
+  await pool.close();
+}
+
+// Phase 3: judgement, in ledger order.
+const failures = [];
+const results = [];
+for (const [index, testCase] of ledger.cases.entries()) {
+  failures.push(...validated[index].failures);
+  if (validated[index].skip) continue;
+  const judged = evaluate(testCase, index, executed.get(index));
+  results.push(judged.result);
+  failures.push(...judged.failures);
 }
 
 // The mechanism that makes the rule permanent rather than documented: a catalog
@@ -532,7 +460,8 @@ if (json) {
   const keystones = [...keystoneByRule.values()].filter(Boolean).length;
   console.log(
     `tsc oracle gate: ${ledger.cases.length} case(s) hold on both sides` +
-      ` (TypeScript and the checker); ${keystones} rule(s) carry a silent-tsc/reporting-rule keystone`,
+      ` (TypeScript and the checker); ${keystones} rule(s) carry a silent-tsc/reporting-rule keystone` +
+      ` [concurrency ${concurrency}]`,
   );
 }
 

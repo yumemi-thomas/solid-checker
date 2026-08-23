@@ -277,6 +277,20 @@ export function undrivenBucket(reason) {
   if (text.startsWith("no plantable reactive source")) return "no plantable reactive source";
   if (text.startsWith("the synthesized call completed without invoking the callback"))
     return "synthesized call did not invoke the callback";
+  // The ways a driven callback observation names no execution mode, plus the one
+  // way a malformed one does. Every reason here is a string
+  // `EXECUTION_UNATTRIBUTABLE` owns; they are matched by their opening clause
+  // because that clause is the observation and the rest is the explanation.
+  if (text.startsWith("the callback re-ran across a settle interval in which nothing was written"))
+    return "callback re-ran with nothing written";
+  if (text.startsWith("the callback had not run by the time of the write"))
+    return "callback first ran after the write";
+  if (text.startsWith("the callback ran more times than the call site re-invoked the export"))
+    return "callback ran more often than the call site";
+  if (text.startsWith("the reactive runtime this observation was made in re-runs nothing"))
+    return "runtime re-runs nothing in this mode";
+  if (text.startsWith("the observation reports no count for the settle interval"))
+    return "observation reports no control interval";
   if (text.startsWith("the synthesized call threw")) return "synthesized call threw";
   if (text.startsWith("import of ")) return "entrypoint import threw";
   if (text.startsWith("the probe process exited") || text.startsWith("the probe process was killed"))

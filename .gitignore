@@ -114,6 +114,12 @@ fixtures/upstream-parity/.staging/
 !fixtures/package-contracts/conditional-returns-divergence/node_modules/**
 !fixtures/package-contracts/conditional-returns-divergence-both/node_modules/
 !fixtures/package-contracts/conditional-returns-divergence-both/node_modules/**
+!fixtures/package-contracts/callback-untracked-wrapper/node_modules/
+!fixtures/package-contracts/callback-untracked-wrapper/node_modules/**
+!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/
+!fixtures/package-contracts/callback-deferred-untracked-chain/node_modules/**
+!fixtures/package-contracts/multi-role-callback-parameter/node_modules/
+!fixtures/package-contracts/multi-role-callback-parameter/node_modules/**
 packages/wasm/browser.js
 packages/wasm/generated.d.ts
 packages/wasm/index.js
